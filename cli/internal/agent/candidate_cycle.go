@@ -75,6 +75,9 @@ type CandidateReviewResult struct {
 	Findings             []Finding
 	VerificationCommands []string
 	Classification       string
+	ReviewGroupID        string
+	ReviewerIndices      []int
+	ReviewerVerdicts     []string
 }
 
 // CandidateReviewer runs a read-only review pass against a committed candidate
@@ -233,7 +236,16 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	}
 
 	repairCycles := 0
+	cycleTrace := append([]ExecutionCycleTrace(nil), candidate.Report.CycleTrace...)
+	recordCycle := func(report *ExecuteBeadReport, review *CandidateReviewResult, finalDecision string) {
+		entry := executionCycleTraceFor(candidate, review, finalDecision)
+		cycleTrace = appendExecutionCycleTrace(cycleTrace, entry)
+		if report != nil {
+			report.CycleTrace = append([]ExecutionCycleTrace(nil), cycleTrace...)
+		}
+	}
 	var pinnedRefs []string
+	var cycleReview *CandidateReviewResult
 	for {
 		c.recordCandidateCycleState(candidate, CandidateCycleState{
 			Active:       true,
@@ -276,6 +288,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 					report.Error = checksErr.Error()
 				}
 				c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
+				recordCycle(&report, nil, report.Status)
 				return AttemptCycleResult{Report: report}, nil
 			}
 		}
@@ -293,6 +306,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			ReviewActive: true,
 		})
 		reviewResult, reviewErr := c.Reviewer.Review(ctx, c.ProjectRoot, candidate)
+		cycleReview = &reviewResult
 		if reviewErr != nil {
 			report := candidate.Report
 			report.Status = ExecuteBeadStatusReviewMalfunction
@@ -300,6 +314,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			report.ReviewVerdict = strings.TrimSpace(reviewResult.Verdict)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
 			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, ReviewFindingClassMalfunction, reviewErr.Error())
+			recordCycle(&report, cycleReview, report.Status)
 			return AttemptCycleResult{Report: report}, nil
 		}
 
@@ -326,14 +341,17 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			}
 			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, classification.Class, classification.Reason)
 			if !classification.AutomatedRepairEligible || c.Repair == nil {
+				recordCycle(&report, cycleReview, report.Status)
 				return AttemptCycleResult{Report: report}, nil
 			}
 			if repairCycles >= c.maxRepairCycles() {
 				report.Status = ExecuteBeadStatusRepairCycleExhausted
 				report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
 				report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+				recordCycle(&report, cycleReview, report.Status)
 				return AttemptCycleResult{Report: report}, nil
 			}
+			recordCycle(&candidate.Report, cycleReview, ExecuteBeadStatusReviewFixableGap)
 			prompt := BuildRepairPrompt(repairPromptInput(beadID, candidate, reviewResult, repairCycles+1))
 			c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, classification.Class)
 			c.recordCandidateCycleState(candidate, CandidateCycleState{
@@ -349,11 +367,13 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				report.Status = ExecuteBeadStatusExecutionFailed
 				report.Detail = "pre-land repair: " + repairErr.Error()
 				report.Error = repairErr.Error()
+				recordCycle(&report, cycleReview, report.Status)
 				return AttemptCycleResult{Report: report}, nil
 			}
 			repairCycles++
 			candidate = normalizeRepairedCandidate(candidate, repaired)
 			if candidate.Report.Status != ExecuteBeadStatusSuccess {
+				recordCycle(&candidate.Report, cycleReview, candidate.Report.Status)
 				return AttemptCycleResult{Report: candidate.Report}, nil
 			}
 			continue
@@ -380,6 +400,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		landed.CandidateRef = candidate.Report.CandidateRef
 		landed.CycleIndex = candidate.Report.CycleIndex
 	}
+	recordCycle(&landed, cycleReview, landed.Status)
 
 	result := AttemptCycleResult{Report: landed, Landed: true}
 
@@ -533,6 +554,9 @@ func normalizeRepairedCandidate(previous, repaired CandidateResult) CandidateRes
 	if repaired.Report.CycleIndex == 0 && repaired.CycleIndex != 0 {
 		repaired.Report.CycleIndex = repaired.CycleIndex
 	}
+	if len(repaired.Report.CycleTrace) == 0 && len(previous.Report.CycleTrace) > 0 {
+		repaired.Report.CycleTrace = append([]ExecutionCycleTrace(nil), previous.Report.CycleTrace...)
+	}
 	repaired.Report.CandidateRef = ""
 	repaired.Report.ReviewVerdict = ""
 	repaired.Report.ReviewRationale = ""
@@ -576,6 +600,39 @@ func (c *AttemptCycleCoordinator) appendRepairCycleStartedEvent(beadID string, c
 		Summary: class,
 		Body:    string(body),
 	})
+}
+
+func appendExecutionCycleTrace(trace []ExecutionCycleTrace, entry ExecutionCycleTrace) []ExecutionCycleTrace {
+	return append(trace, entry)
+}
+
+func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewResult, finalDecision string) ExecutionCycleTrace {
+	entry := ExecutionCycleTrace{
+		CycleIndex: candidate.CycleIndex,
+		AttemptID:  candidate.Report.AttemptID,
+		ResultRev:  candidate.Report.ResultRev,
+		ImplementerRoute: ExecutionCycleRouteFacts{
+			Harness:     candidate.Report.Harness,
+			Provider:    candidate.Report.Provider,
+			Model:       candidate.Report.Model,
+			ActualPower: candidate.Report.ActualPower,
+		},
+		FinalDecision: finalDecision,
+	}
+	if review == nil {
+		return entry
+	}
+	entry.ReviewGroupID = strings.TrimSpace(review.ReviewGroupID)
+	entry.ReviewerIndices = append([]int(nil), review.ReviewerIndices...)
+	entry.ReviewVerdicts = append([]string(nil), review.ReviewerVerdicts...)
+	entry.ReviewResult = ExecutionCycleReviewResult{
+		Verdict:        strings.TrimSpace(review.Verdict),
+		Rationale:      strings.TrimSpace(review.Rationale),
+		Classification: strings.TrimSpace(review.Classification),
+		PerAC:          append([]ReviewAC(nil), review.PerAC...),
+		Findings:       append([]Finding(nil), review.Findings...),
+	}
+	return entry
 }
 
 // WriteWorktreeCandidateCycleState updates cleanup metadata and, when a

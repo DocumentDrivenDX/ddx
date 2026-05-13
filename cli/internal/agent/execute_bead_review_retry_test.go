@@ -41,7 +41,7 @@ func seedReviewErrorEvents(t *testing.T, store *bead.Store, beadID, resultRev, c
 			Summary:   class,
 			Body:      ReviewErrorEventBody(class, i+1, resultRev, "prior failure"),
 			Actor:     "worker",
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		}))
 	}
@@ -125,7 +125,7 @@ func TestBoundedReviewRetry_FreshResultRevResetsCounter(t *testing.T) {
 		Summary: evidence.OutcomeReviewTransport,
 		Body:    ReviewErrorEventBody(evidence.OutcomeReviewTransport, 3, oldRev, "exhausted"),
 		Actor:   "worker",
-		Source:  "ddx agent execute-loop",
+		Source:  "ddx work",
 	}))
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
@@ -277,7 +277,7 @@ func TestTwoSlotReview_PerSlotRetryBudget(t *testing.T) {
 		Summary: evidence.OutcomeReviewProviderEmpty,
 		Body:    ReviewErrorEventBodyForSlot(evidence.OutcomeReviewProviderEmpty, 1, resultRev, 0, "prior slot 0 failure"),
 		Actor:   "worker",
-		Source:  "ddx agent execute-loop",
+		Source:  "ddx work",
 	}))
 
 	reviewer := beadReviewGroupFunc(func(_ context.Context, beadID, gotRev string, _ ImplementerRouting) (*ReviewGroupResult, error) {

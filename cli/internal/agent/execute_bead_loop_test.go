@@ -54,6 +54,48 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
+func TestExecutionTrace_BeadResultEventRetainsCompatibleFields(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:    "ddx-trace",
+		AttemptID: "attempt-trace-003",
+		Status:    ExecuteBeadStatusSuccess,
+		BaseRev:   "base-rev",
+		ResultRev: "result-rev",
+		CycleTrace: []ExecutionCycleTrace{
+			{
+				CycleIndex: 0,
+				AttemptID:  "attempt-trace-003",
+				ResultRev:  "result-rev",
+				ImplementerRoute: ExecutionCycleRouteFacts{
+					Harness:     "codex",
+					Provider:    "openai",
+					Model:       "gpt-5",
+					ActualPower: 70,
+				},
+				ReviewGroupID:   "rg-trace",
+				ReviewerIndices: []int{0, 1},
+				ReviewVerdicts:  []string{"BLOCK", "BLOCK"},
+				ReviewResult: ExecutionCycleReviewResult{
+					Verdict:        "REQUEST_CHANGES",
+					Rationale:      "missing coverage",
+					Classification: ReviewFindingClassFixableGap,
+				},
+				FinalDecision: ExecuteBeadStatusReviewFixableGap,
+			},
+		},
+	}
+
+	event := executeBeadLoopEvent(report, "worker", time.Now().UTC())
+	assert.Equal(t, "execute-bead", event.Kind)
+	assert.Equal(t, ExecuteBeadStatusSuccess, event.Summary)
+	assert.Contains(t, event.Body, "result_rev=result-rev")
+	assert.Contains(t, event.Body, "base_rev=base-rev")
+	assert.Contains(t, event.Body, "cycle_trace=")
+	assert.Contains(t, event.Body, `"review_group_id":"rg-trace"`)
+	assert.Contains(t, event.Body, `"reviewer_indices":[0,1]`)
+	assert.Contains(t, event.Body, `"final_decision":"review_fixable_gap"`)
+}
+
 // TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates
 // verifies that isValidImplementationAttempt and shouldSuppressNoProgress both
 // return false (no no-progress budget consumed) for every non-implementation
@@ -1756,6 +1798,8 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
+				BaseRev:            "base",
+				ResultRev:          "base",
 				NoChangesRationale: "status: open\nreason: retryable after stronger code search\nsuggested_action: retry with smart agent",
 			}, nil
 		}),
@@ -1772,8 +1816,9 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status, "autonomous no_changes must remain worker-runnable")
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.False(t, hasRetry, "smart-runnable no_changes must not set execute-loop-retry-after")
+	retryAfter, hasRetry := got.Extra["execute-loop-retry-after"]
+	require.True(t, hasRetry, "smart-runnable no_changes must set a short retry-after so watch workers drain other beads")
+	assert.Equal(t, r.Results[0].RetryAfter, retryAfter)
 	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
 	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
 	assert.Equal(t, NoChangesEventAutonomousRetry, got.Extra[bead.ExtraLastStatus])
@@ -1830,6 +1875,8 @@ func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
 				ActualPower:        power,
+				BaseRev:            "base",
+				ResultRev:          "base",
 				NoChangesRationale: "status: open\nreason: needs stronger model",
 			}, nil
 		}),
@@ -1846,6 +1893,8 @@ func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	// After JSON round-trip, int values in Extra come back as float64.
 	assert.Equal(t, float64(70), got.Extra[TriageTierHintKey], "first no_changes at power 50 must set hint to next step (70), not top of ladder (90)")
+	_, err = store.ClearCooldowns(nil)
+	require.NoError(t, err)
 
 	// Second run: no_changes at actualPower=70 → hint must advance by one more step to 90.
 	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
@@ -1933,7 +1982,7 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Equal(t, "AC conflicts with governing spec", meta.Reason)
 	assert.Equal(t, "choose whether to update the spec or cancel", meta.SuggestedAction)
-	assert.Equal(t, "ddx agent execute-loop", meta.Source)
+	assert.Equal(t, "ddx work", meta.Source)
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)

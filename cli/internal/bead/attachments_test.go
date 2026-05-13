@@ -21,14 +21,14 @@ func TestAttachmentClosingExternalizesEvents(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "to close"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "looks good"}))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "completed"}))
 
 	// Capture the row size before close so we can demonstrate AC3 shrinkage.
 	beforeRowBytes := len(beadRowBytes(t, s, b.ID))
 
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	// Sidecar exists.
 	attPath := s.eventsAttachmentPath(b.ID)
@@ -63,10 +63,10 @@ func TestAttachmentShowReadsTransparently(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "show me"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "model=opus"}))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "rationale"}))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	// Events() returns the externalized log transparently.
 	events, err := s.Events(b.ID)
@@ -77,7 +77,7 @@ func TestAttachmentShowReadsTransparently(t *testing.T) {
 
 	// LoadEventsInline replays the events into Extra["events"] so the JSON
 	// show path projects a single uniform shape.
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	require.NoError(t, s.LoadEventsInline(got))
@@ -100,10 +100,10 @@ func TestAttachmentExportInlinesEvents(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "export me"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "model=opus"}))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "ok"}))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	var buf bytes.Buffer
 	require.NoError(t, s.ExportTo(&buf))
@@ -138,21 +138,21 @@ func TestExportStreamsArchiveAndAttachmentEvents(t *testing.T) {
 
 	// Active open bead with no events — it must survive export.
 	open := &Bead{Title: "still open"}
-	require.NoError(t, s.Create(open))
+	require.NoError(t, s.Create(testCtx(), open))
 
 	// A closed bead with inline events. Migrate will externalize then archive it.
 	closed := &Bead{Title: "to archive"}
-	require.NoError(t, s.Create(closed))
+	require.NoError(t, s.Create(testCtx(), closed))
 	require.NoError(t, s.AppendEvent(closed.ID, BeadEvent{Kind: "routing", Summary: "model=opus"}))
 	require.NoError(t, s.AppendEvent(closed.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "ship"}))
-	require.NoError(t, s.Close(closed.ID))
+	require.NoError(t, s.Close(testCtx(), closed.ID))
 
 	stats, err := s.Migrate()
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, stats.Archived, 1, "migrate should archive the closed bead")
 
 	// Sanity: the closed bead is gone from the active collection.
-	activeBeads, err := s.ReadAll()
+	activeBeads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	for _, b := range activeBeads {
 		assert.NotEqual(t, closed.ID, b.ID, "archived bead must not remain in active store")
@@ -208,13 +208,13 @@ func TestAttachmentAppendEventAfterCloseAppendsToSidecar(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "post-close evt"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "first"}))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "audit", Summary: "post-close"}))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	_, hasInline := got.Extra["events"]
@@ -234,19 +234,19 @@ func TestAttachmentReopenInlinesEvents(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "reopen me"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "first"}))
 	// Use REQUEST_CHANGES (not APPROVE) so Reopen does not emit an accuracy-override event,
 	// keeping this test focused on the reopen-inlines-events mechanic.
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "review", Summary: "REQUEST_CHANGES", Body: "needs fixes"}))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	// Sanity: closed bead has the attachment.
 	require.FileExists(t, s.eventsAttachmentPath(b.ID))
 
 	require.NoError(t, s.Reopen(b.ID, "needs more work", ""))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	assert.Equal(t, StatusOpen, got.Status)
@@ -291,9 +291,9 @@ func TestAttachmentMissingSidecarFallback(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "lost sidecar"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "first"}))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	// Sanity: the sidecar exists post-close.
 	require.FileExists(t, s.eventsAttachmentPath(b.ID))
@@ -316,7 +316,7 @@ func TestAttachmentMissingSidecarFallback(t *testing.T) {
 
 	// LoadEventsInline must also tolerate the missing sidecar — it leaves
 	// Extra without an events array and clears the attachment ref.
-	bead, err := s.Get(b.ID)
+	bead, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	require.NotNil(t, bead)
 	require.NoError(t, s.LoadEventsInline(bead))

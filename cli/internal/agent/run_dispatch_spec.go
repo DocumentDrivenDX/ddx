@@ -66,7 +66,7 @@ var agentRunDispatchCLIFlags = map[string]string{
 }
 
 // AgentRunDispatchCLIFlagCategories returns the canonical classification used
-// to keep REST/MCP single-run dispatch in sync with the ddx agent run surface.
+// to keep REST/MCP single-run dispatch in sync with the legacy agent run surface.
 func AgentRunDispatchCLIFlagCategories() map[string]string {
 	return cloneStringMap(agentRunDispatchCLIFlags)
 }

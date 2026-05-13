@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260512T225953-65a9d7b5",
+  "bead_id": "ddx-4cd64068",
+  "base_rev": "ded064dbb096a892fb918ea100302f4febed8399",
+  "created_at": "2026-05-12T22:59:57.734183053Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4cd64068",
+    "title": "Story 16.2: Evidence tab — bundle-file list + download + whitelist inline view",
+    "description": "PROBLEM\nThe runs/[runId] page (built in S16.1) has no Evidence tab. Users cannot browse or download execution evidence files (manifest.json, result.json, stderr logs, etc.) from the run-detail view. Whitelisting logic for safe inline rendering must be enforced to avoid serving binary or executable content inline.\n\nROOT CAUSE\n- cli/internal/server/frontend/src/routes/runs/[runId]/+page.svelte (added by ddx-f04faa86) has no Evidence tab.\n- No bundleFiles[] or bundleFile(path) resolver exists yet for the run-detail page (that resolver is ddx-6d132f62, a dep).\n- No whitelist enforcement is implemented; any file could be rendered inline without size or extension checks.\n\nPROPOSED FIX\n- Add Evidence tab to runs/[runId]/+page.svelte (as a sibling tab to Overview/Prompt/Response/Tools/Session).\n- List every file in run's bundle with: path, size, mimeType.\n- Whitelist: *.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB — render inline as raw text.\n- Non-whitelisted or \u003e 64KB: download link only. No Markdown rendering, no syntax highlighting, no hex preview.\n- Evidence tab lazy-loads on activation.\n- Large files (\u003e 64KB): show size + download button only.\n- Bundle-root confinement enforced server-side on bundleFile(path) resolver.\n\nNON-SCOPE\n- Markdown rendering (deliberate: whitelist is raw-text only).\n- Syntax highlighting.\n- Hex preview of binary files.",
+    "acceptance": "1. Evidence tab appears in runs/[runId] tabbed page alongside Overview/Prompt/Response/Tools/Session.\n2. Tab lists every file in run's bundle with path + size + mimeType.\n3. Whitelisted text files \u003c 64KB render inline as raw text.\n4. Non-whitelisted or \u003e 64KB files show download link only.\n5. Evidence tab lazy-loads on tab activation (not on page load).\n6. test('evidence tab: whitelisted small file inlines', ...) Playwright e2e verifies inline rendering.\n7. test('evidence tab: large file download-only', ...) Playwright e2e verifies download link for \u003e 64KB.\n8. test('evidence tab: non-whitelisted extension download-only', ...) Playwright e2e verifies .go / .wasm etc. show download only.\n9. test('evidence tab: missing path 404', ...) verifies bundleFile(path) returns 404 for out-of-bundle paths.\n10. p95 dataset (30 evidence files) renders without crash.\n11. bun run test:e2e green.\n12. lefthook run pre-commit passes.",
+    "parent": "ddx-a8a18cb7",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T22:57:45Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3784393",
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Evidence tab appears in runs/[runId] tabbed page alongside Overview/Prompt/Response/Tools/Session.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Tab lists every file in run's bundle with path + size + mimeType.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Whitelisted text files \\u003c 64KB render inline as raw text.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Non-whitelisted or \\u003e 64KB files show download link only.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Evidence tab lazy-loads on tab activation (not on page load).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"test('evidence tab: whitelisted small file inlines', ...) Playwright e2e verifies inline rendering.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":7,\"text\":\"test('evidence tab: large file download-only', ...) Playwright e2e verifies download link for \\u003e 64KB.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"test('evidence tab: non-whitelisted extension download-only', ...) Playwright e2e verifies .go / .wasm etc. show download only.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":9,\"text\":\"test('evidence tab: missing path 404', ...) verifies bundleFile(path) returns 404 for out-of-bundle paths.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":10,\"text\":\"p95 dataset (30 evidence files) renders without crash.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":11,\"text\":\"bun run test:e2e green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":12,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-12T22:57:45.217206704Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.25 threshold=0.50 verifiable=3/12"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unsafe field \\\"title\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T22:59:25.335323557Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead is directionally usable, but it still misses several lint requirements: the title is story-style rather than imperative/subsystem-scoped, the AC do not name `Test*` symbols or a `go test -run` filter, the required `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` gate is absent, and the labels lack `area:*`, `kind:*`, and cross-reference facets. The description, parent/deps, and overall implementation intent are otherwise clear enough to refine rather than split.\",\"score\":4,\"suggested_fixes\":[\"Rewrite the title as an imperative subsystem scope, e.g. `frontend: add Evidence tab with whitelist-based inline evidence viewer`.\",\"Add at least one named test in AC, such as a Playwright `test('evidence tab: whitelisted small file inlines', ...)` or a `go test -run` filter.\",\"Add the required package gate to AC, e.g. `cd cli \\u0026\\u0026 go test ./internal/server/frontend/...`.\",\"Add or adjust labels to include `area:*`, `kind:*`, and any relevant cross-reference labels such as `story:16` or `spec:*`.\",\"Tighten the description with file:line citations for the current-state root cause and proposed fix locations.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T22:59:53.85183289Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=4"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T22:57:45.031771905Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T225953-65a9d7b5",
+    "prompt": ".ddx/executions/20260512T225953-65a9d7b5/prompt.md",
+    "manifest": ".ddx/executions/20260512T225953-65a9d7b5/manifest.json",
+    "result": ".ddx/executions/20260512T225953-65a9d7b5/result.json",
+    "checks": ".ddx/executions/20260512T225953-65a9d7b5/checks.json",
+    "usage": ".ddx/executions/20260512T225953-65a9d7b5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4cd64068-20260512T225953-65a9d7b5"
+  },
+  "prompt_sha": "e9f43a436df831cf991eb79c111fadcee56f0dcc64d3f0d2fed988045f43b708"
+}

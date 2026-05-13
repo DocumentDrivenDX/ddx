@@ -39,7 +39,7 @@ func LookupHarnessRateLimit(name string) (agent.RateLimitSignal, bool) {
 }
 
 // ProviderStatuses is the resolver for the providerStatuses field.
-// It mirrors the output of `ddx agent providers`, annotating each row with
+// It mirrors the output of `legacy agent providers`, annotating each row with
 // kind=ENDPOINT, a lastCheckedAt timestamp, and rolling usage derived from
 // the sessions index. Quota is populated when the upstream ProviderInfo
 // exposes token-level quota headers; null otherwise (FEAT-014 no-fabrication).

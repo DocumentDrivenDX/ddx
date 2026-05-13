@@ -101,7 +101,7 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("bead reader required")}
 		}
 
-		b, err := store.Get(beadID)
+		b, err := store.Get(ctx, beadID)
 		if err != nil {
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("load bead %s: %w", beadID, err)}
 		}
@@ -184,6 +184,7 @@ func buildPreDispatchLintPrompt(b *bead.Bead) (string, error) {
 	var sb strings.Builder
 	sb.WriteString("MODE: lint\n")
 	sb.WriteString("You are the bead-lifecycle skill. Score the bead below using lint mode and return exactly one JSON object matching LintResult.\n")
+	sb.WriteString("LintResult.rationale is a single string summary; suggested_fixes and waivers_applied are flat string lists.\n")
 	sb.WriteString("Return only JSON with these top-level fields.\n")
 	sb.WriteString("Required output shape example: {\"score\":0,\"rationale\":\"\",\"suggested_fixes\":[],\"waivers_applied\":[]}\n")
 	sb.WriteString("Do not wrap the answer in markdown or prose.\n\n")

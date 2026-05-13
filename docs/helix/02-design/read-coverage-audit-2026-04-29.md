@@ -51,21 +51,21 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 
 | CLI Command | HTTP Route | MCP Tool | Gap? |
 |---|---|---|---|
-| `ddx agent providers` | `GET /api/providers` | `ddx_provider_list` | — |
-| `ddx agent route-status` | `GET /api/providers/{harness}` | `ddx_provider_show` | — |
-| `ddx agent sessions` / `log` | `GET /api/agent/sessions` | `ddx_agent_sessions` | — |
-| `ddx agent models` | **MISSING** | **MISSING** | **G5** |
-| `ddx agent catalog show` | **MISSING** | **MISSING** | **G5** |
-| `ddx agent capabilities` | **MISSING** | **MISSING** | **G5** |
-| `ddx agent usage` | **MISSING** | **MISSING** | **G5** |
-| `ddx agent workers` | `GET /api/agent/workers` | **MISSING** | **G4** |
+| `legacy agent providers` | `GET /api/providers` | `ddx_provider_list` | — |
+| `legacy agent route-status` | `GET /api/providers/{harness}` | `ddx_provider_show` | — |
+| `legacy agent sessions` / `log` | `GET /api/agent/sessions` | `ddx_agent_sessions` | — |
+| `legacy agent models` | **MISSING** | **MISSING** | **G5** |
+| `legacy agent catalog show` | **MISSING** | **MISSING** | **G5** |
+| `legacy agent capabilities` | **MISSING** | **MISSING** | **G5** |
+| `legacy agent usage` | **MISSING** | **MISSING** | **G5** |
+| `legacy agent workers` | `GET /api/agent/workers` | **MISSING** | **G4** |
 | `ddx server workers list` | `GET /api/agent/workers` | **MISSING** | **G4** |
 | `ddx server workers show <id>` | `GET /api/agent/workers/{id}` | **MISSING** | **G4** |
 | `ddx server workers log <id>` | `GET /api/agent/workers/{id}/log` | **MISSING** | **G4** |
-| `ddx agent metrics tier-success` | **MISSING** | **MISSING** | **G7** |
-| `ddx agent metrics review-outcomes` | **MISSING** | **MISSING** | **G7** |
-| `ddx agent metrics cost-efficiency` | **MISSING** | **MISSING** | **G7** |
-| `ddx agent executions` | `GET /api/exec/runs` | `ddx_exec_history` | partial |
+| `legacy agent metrics tier-success` | **MISSING** | **MISSING** | **G7** |
+| `legacy agent metrics review-outcomes` | **MISSING** | **MISSING** | **G7** |
+| `legacy agent metrics cost-efficiency` | **MISSING** | **MISSING** | **G7** |
+| `legacy agent executions` | `GET /api/exec/runs` | `ddx_exec_history` | partial |
 
 ### Execution / Run Reads
 
@@ -112,8 +112,8 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 | `ddx bead list/show/ready/status` | HTTP + MCP | full |
 | `ddx doc graph/stale/show/deps/history/diff` | HTTP + MCP | full |
 | `ddx persona show <role>` | HTTP + MCP | full |
-| `ddx agent providers/route-status` | HTTP + MCP | full |
-| `ddx agent sessions` | HTTP + MCP | full |
+| `legacy agent providers/route-status` | HTTP + MCP | full |
+| `legacy agent sessions` | HTTP + MCP | full |
 | `ddx exec list/show/history` | HTTP + MCP | full |
 | `ddx metrics summary/cost/cycle-time/rework` | HTTP only | MCP gap → G7 |
 | `ddx checkpoint` | local only | git-level; out of scope |
@@ -150,7 +150,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 ### P2 — Configuration transparency
 
 **G5 · Agent models / catalog / capabilities HTTP + MCP**
-- CLI: `ddx agent models`, `ddx agent catalog show`, `ddx agent capabilities`, `ddx agent usage`
+- CLI: `legacy agent models`, `legacy agent catalog show`, `legacy agent capabilities`, `legacy agent usage`
 - HTTP: No route for models, catalog, or capabilities (providers/routing is covered)
 - MCP: No tools
 - Impact: High — there's no server-side way to discover available models, tier assignments, or capability metadata. Automated model selection and cost tiering depend on this. The endpoint-first routing redesign (memory: project_endpoint_routing_design) needs these surfaces.

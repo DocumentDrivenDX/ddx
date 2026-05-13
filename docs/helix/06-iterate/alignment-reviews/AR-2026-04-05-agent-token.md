@@ -30,11 +30,11 @@ The prior review (AR-2026-04-04-agent-beads.md) verified the agent service post-
 
 | Story | Criterion | Status | Evidence |
 |-------|-----------|--------|---------|
-| US-060 | `ddx agent run` sends prompt, captures response, writes session log | SATISFIED | `cli/internal/agent/runner.go:Run()`, `logSession()` |
+| US-060 | `legacy agent run` sends prompt, captures response, writes session log | SATISFIED | `cli/internal/agent/runner.go:Run()`, `logSession()` |
 | US-061 | Quorum mode: `--quorum=majority --harnesses=a,b` invokes both and computes consensus | SATISFIED | `cli/internal/agent/quorum.go` |
-| US-062 | `ddx agent list` shows installed and authenticated harnesses | SATISFIED | `cli/cmd/agent_cmd.go`, `agent/registry.go` |
-| US-063 | `ddx agent log` shows recent sessions | SATISFIED | `cli/cmd/log.go` |
-| US-064 | `ddx agent capabilities <harness>` reports available reasoning levels and models | SATISFIED | `cli/internal/agent/runner.go:Capabilities()`, `cli/cmd/agent_capabilities_test.go` |
+| US-062 | `legacy agent list` shows installed and authenticated harnesses | SATISFIED | `cli/cmd/agent_cmd.go`, `agent/registry.go` |
+| US-063 | `legacy agent log` shows recent sessions | SATISFIED | `cli/cmd/log.go` |
+| US-064 | `legacy agent capabilities <harness>` reports available reasoning levels and models | SATISFIED | `cli/internal/agent/runner.go:Capabilities()`, `cli/cmd/agent_capabilities_test.go` |
 
 ### Component Map
 
@@ -68,7 +68,7 @@ The prior review (AR-2026-04-04-agent-beads.md) verified the agent service post-
 | US-141 | codex: `input_tokens` and `output_tokens` captured (non-zero) | SATISFIED | `ExtractUsage("codex", ...)` parses `turn.completed` event from `--json` output (`runner.go:283`) |
 | US-141 | claude: `input_tokens`, `output_tokens`, `cost_usd` captured | SATISFIED | `ExtractUsage("claude", ...)` parses `--output-format json` envelope (`runner.go:306`) |
 | US-141 | Old session logs without new fields load without error | SATISFIED | `SessionEntry` uses `omitempty`; zero-value defaults apply |
-| US-140 | `ddx agent usage` shows per-harness table with sessions, tokens, cost, avg duration | SATISFIED | `cli/cmd/agent_usage.go:newAgentUsageCommand()` |
+| US-140 | `legacy agent usage` shows per-harness table with sessions, tokens, cost, avg duration | SATISFIED | `cli/cmd/agent_usage.go:newAgentUsageCommand()` |
 | US-140 | `--since today/7d/30d/YYYY-MM-DD` filters by time window | SATISFIED | `parseSince()` in `agent_usage.go` |
 | US-140 | `--format json` produces valid JSON | SATISFIED | `renderUsageJSON()` |
 | US-140 | `--format csv` produces CSV | SATISFIED | `renderUsageCSV()` |

@@ -78,15 +78,20 @@ type ExecuteBeadResult struct {
 	RatchetEvidence []RatchetEvidence `json:"ratchet_evidence,omitempty"`
 	RatchetSummary  string            `json:"ratchet_summary,omitempty"`
 
-	// NoChangesRationale is populated when outcome == task_no_changes and the
-	// agent wrote a rationale file to the execution bundle dir inside the
-	// worktree. It carries the agent's explanation of why no commits were made.
+	// NoChangesRationale is populated when the agent wrote a rationale file to
+	// the execution bundle dir inside the worktree. It carries the agent's
+	// explanation of why no commits were made, and is preserved even when a
+	// mixed commit + no_changes rationale is rejected.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 
 	// NoEvidencePaths names worktree paths that remained dirty when the agent
 	// exited without creating a commit or no_changes_rationale.txt. It helps
 	// operators diagnose silent commit failures before the worktree is cleaned up.
 	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
+
+	// CycleTrace records the append-only execution cycle trace in order.
+	// Each entry captures one implementation or repair cycle.
+	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
 
 	// ResourceExhausted captures the root and cleanup summary when execution
 	// stopped before a bead attempt because the host could not safely continue.
@@ -125,6 +130,41 @@ type ExecuteBeadResult struct {
 
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
+}
+
+// ExecutionCycleRouteFacts captures the implementer-side routing facts for
+// one execution cycle.
+type ExecutionCycleRouteFacts struct {
+	Harness         string `json:"harness,omitempty"`
+	Provider        string `json:"provider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ActualPower     int    `json:"actual_power,omitempty"`
+	RouteReason     string `json:"route_reason,omitempty"`
+	ResolvedBaseURL string `json:"resolved_base_url,omitempty"`
+}
+
+// ExecutionCycleReviewResult captures the reduced review outcome for one
+// execution cycle.
+type ExecutionCycleReviewResult struct {
+	Verdict        string     `json:"verdict,omitempty"`
+	Rationale      string     `json:"rationale,omitempty"`
+	Classification string     `json:"classification,omitempty"`
+	PerAC          []ReviewAC `json:"per_ac,omitempty"`
+	Findings       []Finding  `json:"findings,omitempty"`
+}
+
+// ExecutionCycleTrace records one implementation or repair cycle and its
+// durable review/final-decision metadata.
+type ExecutionCycleTrace struct {
+	CycleIndex       int                        `json:"cycle_index"`
+	AttemptID        string                     `json:"attempt_id,omitempty"`
+	ResultRev        string                     `json:"result_rev,omitempty"`
+	ImplementerRoute ExecutionCycleRouteFacts   `json:"implementer_route"`
+	ReviewGroupID    string                     `json:"review_group_id,omitempty"`
+	ReviewerIndices  []int                      `json:"reviewer_indices,omitempty"`
+	ReviewVerdicts   []string                   `json:"review_verdicts,omitempty"`
+	ReviewResult     ExecutionCycleReviewResult `json:"review_result,omitempty"`
+	FinalDecision    string                     `json:"final_decision,omitempty"`
 }
 
 // AttemptDiagnostic captures infrastructure state when an attempt cannot be
@@ -329,6 +369,8 @@ func executeBeadWorktreePath(projectRoot, beadID, attemptID string) string {
 	}
 	return filepath.Join(base, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
 }
+
+const mixedCommitAndNoChangesRationaleReason = "mixed_commit_and_no_changes_rationale"
 
 // RealGitOps implements GitOps via os/exec git commands.
 type RealGitOps struct{}
@@ -746,7 +788,7 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
-		Source:  "ddx agent execute-bead",
+		Source:  "legacy agent execute-bead",
 	})
 }
 
@@ -800,7 +842,7 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
-		Source:  "ddx agent execute-bead",
+		Source:  "legacy agent execute-bead",
 	})
 }
 
@@ -939,7 +981,7 @@ func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info R
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
-		Source:  "ddx agent execute-bead",
+		Source:  "legacy agent execute-bead",
 	})
 }
 
@@ -1412,10 +1454,25 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Classify worker outcome: task_succeeded / task_failed / task_no_changes /
 	// task_no_evidence. A clean agent exit with no commit is only a legitimate
 	// no_changes signal when the agent also wrote the explicit rationale file.
+	// If a rationale file appears alongside implementation commits, reject the
+	// mixed signal so the parent orchestrator does not see a clean success.
 	// The parent orchestrator (LandBeadResult + ApplyLandingToResult) will
 	// overwrite Outcome and Status with the landing decision before output.
 	agentReportedError := strings.TrimSpace(agentErrMsg) != ""
+	rationaleFile := filepath.Join(wtPath, artifacts.DirRel, "no_changes_rationale.txt")
+	rationaleText := ""
+	if data, readErr := os.ReadFile(rationaleFile); readErr == nil {
+		rationaleText = strings.TrimSpace(string(data))
+		if rationaleText != "" {
+			res.NoChangesRationale = rationaleText
+		}
+	}
+	mixedCommitAndRationale := resultRev != baseRev && rationaleText != ""
 	switch {
+	case mixedCommitAndRationale:
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.Reason = mixedCommitAndNoChangesRationaleReason
+		res.Error = mixedCommitAndNoChangesRationaleReason
 	case exitCode != 0 || agentReportedError:
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 	case resultRev == baseRev:
@@ -1424,15 +1481,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
 	}
 
-	// When the outcome is no_changes, attempt to read the agent's rationale file.
-	// The agent is instructed to write this file (relative to the worktree) when it
-	// determines the bead's work is already present. We read it before the deferred
-	// worktree cleanup removes the file.
+	// When the outcome is no_changes, the agent's rationale file becomes the
+	// canonical explanation for the no-op decision. We read it before the
+	// deferred worktree cleanup removes the file.
 	if res.Outcome == ExecuteBeadOutcomeTaskNoChanges {
-		rationaleFile := filepath.Join(wtPath, artifacts.DirRel, "no_changes_rationale.txt")
-		if data, readErr := os.ReadFile(rationaleFile); readErr == nil {
-			res.NoChangesRationale = strings.TrimSpace(string(data))
-		}
 		if res.NoChangesRationale == "" {
 			res.Outcome = ExecuteBeadOutcomeTaskNoEvidence
 			res.Reason = "agent exited without a commit or no_changes_rationale.txt"
@@ -1695,7 +1747,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 
 func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
 	store := bead.NewStore(filepath.Join(wtPath, ".ddx"))
-	b, err := store.Get(beadID)
+	b, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
 	}
@@ -2089,7 +2141,7 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 	}
 
 	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
-	depth := 0
+	depth := beadDecomposedChildDepth(b)
 	seen := map[string]struct{}{}
 	current := b
 	for current != nil {
@@ -2097,18 +2149,33 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 		if parentID == "" {
 			break
 		}
-		depth++
 		if _, ok := seen[parentID]; ok {
 			break
 		}
 		seen[parentID] = struct{}{}
-		parent, err := store.Get(parentID)
+		parent, err := store.Get(context.Background(), parentID)
 		if err != nil || parent == nil {
 			break
 		}
+		if beadDecomposedChildDepth(parent) == 0 {
+			break
+		}
+		depth++
 		current = parent
 	}
 	return depth
+}
+
+func beadDecomposedChildDepth(b *bead.Bead) int {
+	if b == nil || strings.TrimSpace(b.Parent) == "" {
+		return 0
+	}
+	for _, label := range b.Labels {
+		if strings.TrimSpace(label) == "decomposed" {
+			return 1
+		}
+	}
+	return 0
 }
 
 // promptSHA returns the hex-encoded sha256 of the rendered prompt bytes.

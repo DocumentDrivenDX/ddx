@@ -24,7 +24,7 @@ Rejected as out of scope for DDx core. Four reasons:
    - Quality gates: `ddx exec` and `ddx metric` run definitions
      (FEAT-010) already run post-agent checks with pass/fail scoring,
      and required-gate evaluation is wired into execute-bead landing.
-   - A/B testing: `ddx agent compare` / `quorum` / `grade` already
+   - A/B testing: `legacy agent compare` / `quorum` / `grade` already
      exist (FEAT-006).
    - Comparison architecture: FEAT-019 agent-evaluation is the
      formal home, pending Solution Design (`ddx-3b91ca7a`).
@@ -72,7 +72,7 @@ Our prompt engineering experiment (see [HELIX PR results](../../tests/PROMPT-ENG
 1. **No prompt templates**: `ddx prompts list/show` exist but no way to define templates with constraints
 2. **No quality gates**: Agent runs complete without validating output structure
 3. **No prompt versioning**: Can't track which prompt version produced which results
-4. **No A/B testing**: `ddx agent compare` exists but no integration with prompt versions
+4. **No A/B testing**: `legacy agent compare` exists but no integration with prompt versions
 5. **Scattered measurement**: Our measurement scripts exist in HELIX repo but not integrated into DDx
 
 ## Decision
@@ -142,7 +142,7 @@ ddx prompts version helix-frame --create v3 --from v2
 ddx prompts versions helix-frame
 
 # Run comparison across versions
-ddx agent compare \
+legacy agent compare \
   --scenario tests/scenarios/A \
   --prompt-versions helix-frame-v1,helix-frame-v2 \
   --post-run "bash tests/measures/completeness.sh"
@@ -178,13 +178,13 @@ ddx metric compare artifact-completeness \
 ### Phase 3: Prompt Versioning
 - [ ] Add `ddx prompts version` command
 - [ ] Add `ddx prompts versions` command
-- [ ] Integrate with `ddx agent compare`
+- [ ] Integrate with `legacy agent compare`
 - [ ] Add version metadata to metrics
 
 ### Phase 4: DDx Agent Configuration for External Models
 - [ ] Document bragi configuration for qwen3.5-27b
 - [ ] Add DDx Agent provider examples to config docs
-- [ ] Create `ddx agent doctor` checks for external models
+- [ ] Create `legacy agent doctor` checks for external models
 
 ## API Design
 

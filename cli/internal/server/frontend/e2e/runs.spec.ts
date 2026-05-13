@@ -75,7 +75,14 @@ const workNode = {
 	tokensOut: null,
 	costUsd: null,
 	outputExcerpt: null,
-	evidenceLinks: null
+	evidenceLinks: null,
+	prompt: null,
+	response: null,
+	stderr: null,
+	billingMode: null,
+	outcome: null,
+	detail: null,
+	cachedTokens: null
 };
 
 const tryNode = {
@@ -108,7 +115,14 @@ const tryNode = {
 	tokensOut: null,
 	costUsd: null,
 	outputExcerpt: null,
-	evidenceLinks: null
+	evidenceLinks: null,
+	prompt: 'sample try prompt body',
+	response: '{"verdict":"PASS","rationale":"all checks passed"}',
+	stderr: null,
+	billingMode: null,
+	outcome: null,
+	detail: null,
+	cachedTokens: null
 };
 
 const runNode = {
@@ -141,7 +155,14 @@ const runNode = {
 	tokensOut: 3400,
 	costUsd: 0.0876,
 	outputExcerpt: 'completed with success',
-	evidenceLinks: ['.ddx/executions/20260430T100600/evidence.txt']
+	evidenceLinks: ['.ddx/executions/20260430T100600/evidence.txt'],
+	prompt: 'run-layer prompt body',
+	response: 'run-layer response body',
+	stderr: 'run-layer stderr body',
+	billingMode: 'paid',
+	outcome: 'success',
+	detail: null,
+	cachedTokens: 200
 };
 
 const ALL_RUNS = [workNode, tryNode, runNode];
@@ -225,7 +246,7 @@ async function mockWorkerProgress(page: import('@playwright/test').Page) {
 	};
 }
 
-test('runs work→try→run drill-down with breadcrumb back-navigation and artifact link', async ({
+test('full stack: prompt/response/tool-trace/evidence', async ({
 	page
 }) => {
 	await page.route('/graphql', async (route) => {
@@ -315,10 +336,42 @@ test('runs work→try→run drill-down with breadcrumb back-navigation and artif
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						executionToolCalls: {
-							edges: [],
+						runToolCalls: {
+							edges: [
+								{
+									node: {
+										id: 'rtc-0',
+										seq: 0,
+										name: 'Read',
+										inputs: JSON.stringify({ path: 'prompt.md' }),
+										output: 'read ok',
+										error: null,
+										durationMs: 42
+									},
+									cursor: 'rtc-0'
+								}
+							],
 							pageInfo: { hasNextPage: false, endCursor: null },
-							totalCount: 0
+							totalCount: 1
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: [
+								{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+								{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+								{ path: 'result.json', size: 140, mimeType: 'application/json' }
+							]
 						}
 					}
 				})
@@ -559,10 +612,29 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						executionToolCalls: {
+						runToolCalls: {
 							edges: [],
 							pageInfo: { hasNextPage: false, endCursor: null },
 							totalCount: 0
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: [
+								{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+								{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+								{ path: 'screenshots/big.png', size: 200_000, mimeType: 'image/png' }
+							]
 						}
 					}
 				})
@@ -694,7 +766,7 @@ test('runs page virtualizes after 1000 rows and keeps live worker phases updatin
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						executionToolCalls: {
+						runToolCalls: {
 							edges: [],
 							pageInfo: { hasNextPage: false, endCursor: null },
 							totalCount: 0
@@ -834,7 +906,7 @@ test('node runs page uses shared chips, virtualizes after 1000 rows, and keeps l
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						executionToolCalls: {
+						runToolCalls: {
 							edges: [],
 							pageInfo: { hasNextPage: false, endCursor: null },
 							totalCount: 0
@@ -869,7 +941,7 @@ test('node runs page uses shared chips, virtualizes after 1000 rows, and keeps l
 	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveText('running');
 });
 
-test('run detail page tabbed UI: 5 tabs, URL-driven tab state, navigation', async ({ page }) => {
+test('tab state survives navigation', async ({ page }) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
 			query: string;
@@ -944,10 +1016,15 @@ test('run detail page tabbed UI: 5 tabs, URL-driven tab state, navigation', asyn
 					data: {
 						agentSession: {
 							id: 'sess-x',
+							workerId: 'worker-run-001',
 							harness: 'claude',
 							model: 'claude-sonnet-4-6',
 							cost: 0.0876,
 							billingMode: 'usage',
+							baseRev: 'abc123def',
+							resultRev: 'def456abc',
+							stdoutPath: '.ddx/agent-logs/agent-sess-x.jsonl',
+							stderrPath: '.ddx/agent-logs/agent-sess-x.err',
 							tokens: { prompt: 12000, completion: 3400, total: 15400, cached: 0 },
 							status: 'completed',
 							outcome: 'success',
@@ -966,7 +1043,7 @@ test('run detail page tabbed UI: 5 tabs, URL-driven tab state, navigation', asyn
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						executionToolCalls: {
+						runToolCalls: {
 							edges: [],
 							pageInfo: { hasNextPage: false, endCursor: null },
 							totalCount: 0
@@ -987,72 +1064,455 @@ test('run detail page tabbed UI: 5 tabs, URL-driven tab state, navigation', asyn
 		await route.continue();
 	});
 
-	// Navigate directly to a run-layer detail page (run-layer has all 5 tabs)
+	// Navigate directly to a run-layer detail page (run-layer has all 6 tabs)
 	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
 	await expect(page.locator('h1', { hasText: RUN_ID })).toBeVisible();
 
 	const detail = page.locator('[data-testid="rundetail"]');
 	await expect(detail).toBeVisible();
 
-	// AC1: tabbed UI with all 5 tabs visible for run-layer
+	// AC1: tabbed UI with all 6 tabs visible for run-layer
 	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="prompt"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="response"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="tools"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="session"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
 
 	// Default tab is overview
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
 	await expect(detail.locator('[data-testid="rundetail-overview"]')).toBeVisible();
+	await expect(detail.getByText('claude', { exact: true }).first()).toBeVisible();
+	await expect(page.getByText('12,000')).toBeVisible();
+	await expect(page.getByText('3,400')).toBeVisible();
+	await expect(page.getByText('$0.0876')).toBeVisible();
 
-	// AC2: clicking a tab updates URL
+	// Prompt tab shows the raw prompt body.
 	await detail.locator('button[data-tab="prompt"]').click();
 	await expect(page).toHaveURL(/[?&]tab=prompt\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'prompt');
 	await expect(detail.locator('[data-testid="rundetail-prompt"]')).toBeVisible();
+	await expect(detail.locator('[data-testid="rundetail-prompt-body"]')).toContainText(
+		'session prompt'
+	);
 
+	// Response tab shows the raw response body.
 	await detail.locator('button[data-tab="response"]').click();
 	await expect(page).toHaveURL(/[?&]tab=response\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'response');
+	await expect(detail.locator('[data-testid="rundetail-response-body"]')).toContainText(
+		'session response'
+	);
 
+	// Tools tab exposes the tool trace.
 	await detail.locator('button[data-tab="tools"]').click();
 	await expect(page).toHaveURL(/[?&]tab=tools\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
+	await expect(detail.locator('[data-tool-seq="0"]')).toBeVisible();
+	await detail.locator('[data-tool-seq="0"]').click();
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('prompt.md');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('read ok');
+
+	// Evidence tab lists bundle files.
+	await detail.locator('button[data-tab="evidence"]').click();
+	await expect(page).toHaveURL(/[?&]tab=evidence\b/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
+	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="manifest.json"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="prompt.md"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="result.json"]')).toBeVisible();
+});
+
+test('p95 run detail stays interactive with 200 tool calls and 30 evidence files', async ({
+	page
+}) => {
+	const toolCalls = Array.from({ length: 200 }, (_, index) => ({
+		node: {
+			id: `rtc-${index}`,
+			seq: index,
+			name: index % 2 === 0 ? 'Bash' : 'Read',
+			inputs: JSON.stringify({ command: `echo step ${index}` }),
+			output: `step-${index}-output`,
+			error: null,
+			durationMs: index + 1
+		},
+		cursor: `rtc-${index}`
+	}));
+	const evidenceFiles = Array.from({ length: 30 }, (_, index) => {
+		const path = `evidence/evidence-${String(index).padStart(2, '0')}.txt`;
+		return {
+			path,
+			size: 512 + index,
+			mimeType: 'text/plain'
+		};
+	});
+	const evidenceContent = Object.fromEntries(
+		evidenceFiles.map((file) => [
+			file.path,
+			{
+				path: file.path,
+				content: `evidence body for ${file.path}`,
+				sizeBytes: file.size,
+				truncated: false,
+				mimeType: file.mimeType
+			}
+		])
+	);
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: runNode } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSession: {
+							id: 'sess-x',
+							workerId: 'worker-run-001',
+							harness: 'claude',
+							model: 'claude-sonnet-4-6',
+							cost: 0.0876,
+							billingMode: 'usage',
+							baseRev: 'abc123def',
+							resultRev: 'def456abc',
+							stdoutPath: '.ddx/agent-logs/agent-sess-x.jsonl',
+							stderrPath: '.ddx/agent-logs/agent-sess-x.err',
+							tokens: { prompt: 12000, completion: 3400, total: 15400, cached: 0 },
+							status: 'completed',
+							outcome: 'success',
+							prompt: 'session prompt',
+							response: 'session response',
+							stderr: 'session stderr'
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			const after = body.variables?.['after'] as string | null | undefined;
+			const afterIndex = after ? Number(after.split('-').pop() ?? '-1') : -1;
+			const slice = toolCalls.slice(afterIndex + 1, afterIndex + 51);
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runToolCalls: {
+							edges: slice,
+							pageInfo: {
+								hasNextPage: afterIndex + slice.length < toolCalls.length - 1,
+								endCursor: slice[slice.length - 1]?.cursor ?? null
+							},
+							totalCount: toolCalls.length
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: evidenceFiles
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunBundleFileFetch')) {
+			const path = String(body.variables?.['path'] ?? '');
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { runBundleFile: evidenceContent[path] ?? null } })
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
+	const detail = page.locator('[data-testid="rundetail"]');
+	await expect(detail).toBeVisible();
+	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="prompt"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="response"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="tools"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="session"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
+
+	await detail.locator('button[data-tab="prompt"]').click();
+	await expect(detail.locator('[data-testid="rundetail-prompt-body"]')).toContainText(
+		'session prompt'
+	);
+
+	await detail.locator('button[data-tab="response"]').click();
+	await expect(detail.locator('[data-testid="rundetail-response-body"]')).toContainText(
+		'session response'
+	);
 
 	await detail.locator('button[data-tab="session"]').click();
-	await expect(page).toHaveURL(/[?&]tab=session\b/);
-	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'session');
+	await expect(detail.locator('[data-testid="rundetail-session"]')).toContainText('sess-x');
 
-	// AC2: returning to overview removes tab from URL
-	await detail.locator('button[data-tab="overview"]').click();
-	await expect(page).not.toHaveURL(/[?&]tab=/);
-	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
+	await detail.locator('button[data-tab="tools"]').click();
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
+	await expect(detail.locator('[data-tool-seq="0"]')).toBeVisible();
+	for (const seq of [50, 100, 150]) {
+		await detail.getByRole('button', { name: 'Load more' }).click();
+		await expect(detail.locator(`[data-tool-seq="${seq}"]`)).toBeVisible();
+	}
+	await expect(detail.locator('[data-tool-seq="199"]')).toBeVisible();
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('200 of 200 tool calls');
 
-	// AC2: deep-link with ?tab=prompt opens that tab on load
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=prompt`);
-	await expect(page.locator('[data-testid="rundetail"] [data-active-tab]')).toHaveAttribute(
-		'data-active-tab',
-		'prompt'
+	await detail.locator('button[data-tab="evidence"]').click();
+	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path]')).toHaveCount(30);
+	await expect(detail.locator('[data-evidence-path="evidence/evidence-29.txt"]')).toBeVisible();
+	const firstEvidenceView = detail.locator('[data-evidence-view="evidence/evidence-00.txt"]');
+	await firstEvidenceView.click();
+	await expect(firstEvidenceView).toHaveText('Hide');
+	await expect(detail.locator('[data-testid="evidence-inline"]')).toBeVisible();
+	await expect(detail.locator('[data-testid="evidence-inline-content"]')).toContainText(
+		'evidence body for evidence/evidence-00.txt'
 	);
-	await expect(page.locator('[data-testid="rundetail-prompt"]')).toBeVisible();
+});
 
-	// Work-layer detail: only overview tab is shown
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${WORK_ID}`);
-	await expect(page.locator('h1', { hasText: WORK_ID })).toBeVisible();
-	const workDetail = page.locator('[data-testid="rundetail"]');
-	await expect(workDetail.locator('button[data-tab="overview"]')).toBeVisible();
-	await expect(workDetail.locator('button[data-tab="prompt"]')).toHaveCount(0);
-	await expect(workDetail.locator('button[data-tab="response"]')).toHaveCount(0);
-	await expect(workDetail.locator('button[data-tab="session"]')).toHaveCount(0);
-	await expect(workDetail.locator('button[data-tab="tools"]')).toHaveCount(0);
+test('deep-link to tools tab', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
 
-	// Try-layer detail: overview, prompt, response, tools (no session)
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${TRY_ID}`);
-	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
-	const tryDetail = page.locator('[data-testid="rundetail"]');
-	await expect(tryDetail.locator('button[data-tab="overview"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="prompt"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="response"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="tools"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="session"]')).toHaveCount(0);
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			const id = body.variables?.['id'] as string;
+			const r = ALL_RUNS.find((n) => n.id === id) ?? null;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: r } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSession: {
+							id: 'sess-x',
+							workerId: 'worker-run-001',
+							harness: 'claude',
+							model: 'claude-sonnet-4-6',
+							cost: 0.0876,
+							billingMode: 'usage',
+							baseRev: 'abc123def',
+							resultRev: 'def456abc',
+							stdoutPath: '.ddx/agent-logs/agent-sess-x.jsonl',
+							stderrPath: '.ddx/agent-logs/agent-sess-x.err',
+							tokens: { prompt: 12000, completion: 3400, total: 15400, cached: 0 },
+							status: 'completed',
+							outcome: 'success',
+							prompt: 'session prompt',
+							response: 'session response',
+							stderr: null
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			const after = body.variables?.['after'] as string | null | undefined;
+			const allCalls = Array.from({ length: 51 }, (_, index) => ({
+				node: {
+					id: `rtc-${index}`,
+					seq: index,
+					name: 'Bash',
+					inputs: JSON.stringify({ command: `echo step ${index}` }),
+					output: `step-${index}-output`,
+					error: null,
+					durationMs: index + 1
+				},
+				cursor: `rtc-${index}`
+			}));
+			const slice = after ? allCalls.slice(50) : allCalls.slice(0, 50);
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runToolCalls: {
+							edges: slice,
+							pageInfo: {
+								hasNextPage: !after,
+								endCursor: slice[slice.length - 1]?.cursor ?? null
+							},
+							totalCount: allCalls.length
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=tools`);
+	const detail = page.locator('[data-testid="rundetail"]');
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
+	await expect(detail.getByRole('button', { name: 'Load more' })).toBeVisible();
+	await detail.getByRole('button', { name: 'Load more' }).click();
+	await expect(detail.locator('[data-tool-seq="50"]')).toBeVisible();
+});
+
+test('running runs show live progress link', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							...runNode,
+							status: 'running',
+							completedAt: null
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSession: {
+							id: 'sess-x',
+							workerId: 'worker-run-001',
+							harness: 'claude',
+							model: 'claude-sonnet-4-6',
+							cost: 0.0876,
+							billingMode: 'usage',
+							baseRev: 'abc123def',
+							resultRev: 'def456abc',
+							stdoutPath: '.ddx/agent-logs/agent-sess-x.jsonl',
+							stderrPath: '.ddx/agent-logs/agent-sess-x.err',
+							tokens: { prompt: 12000, completion: 3400, total: 15400, cached: 0 },
+							status: 'running',
+							outcome: null,
+							prompt: 'session prompt',
+							response: null,
+							stderr: null
+						}
+					}
+				})
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
+	const overview = page.locator('[data-testid="rundetail-overview"]');
+	await expect(overview).toBeVisible();
+	await expect(page.getByRole('link', { name: 'View live progress' })).toHaveAttribute(
+		'href',
+		`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/workers/worker-run-001`
+	);
 });

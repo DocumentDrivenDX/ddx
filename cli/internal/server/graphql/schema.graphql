@@ -1003,7 +1003,7 @@ type ComparisonResult {
 Execution represents one execute-bead attempt bundle stored under
 `.ddx/executions/<ts>-<hash>/`. It joins bead, session, prompt, verdict,
 and tool-call stream together as the canonical record of a single
-ddx agent execute-bead attempt.
+legacy agent execute-bead attempt.
 """
 type Execution implements Node {
   """Stable ID, equal to the bundle directory name (e.g. 20260423T002311-2ebaa669)."""
@@ -1765,8 +1765,8 @@ type ProviderQuota {
 }
 
 """ProviderStatus is the live connectivity status of a configured endpoint provider
-or subprocess harness, mirroring the output of `ddx agent providers` and
-`ddx agent list` / `ddx agent doctor`."""
+or subprocess harness, mirroring the output of `legacy agent providers` and
+`legacy agent list` / `legacy agent doctor`."""
 type ProviderStatus {
   """Provider/harness name from agent config"""
   name: String!
@@ -2891,13 +2891,13 @@ type Query {
     name: String!
   ): Provider
 
-  """List configured API providers with live connectivity status (mirrors `ddx agent providers`)"""
+  """List configured API providers with live connectivity status (mirrors `legacy agent providers`)"""
   providerStatuses: [ProviderStatus!]!
 
-  """List subprocess harnesses with live reachability, kind=HARNESS. Equivalent surface to `ddx agent list` + `ddx agent doctor`."""
+  """List subprocess harnesses with live reachability, kind=HARNESS. Equivalent surface to `legacy agent list` + `legacy agent doctor`."""
   harnessStatuses: [ProviderStatus!]!
 
-  """Show which provider/model the default model-ref resolves to (mirrors `ddx agent route-status`)"""
+  """Show which provider/model the default model-ref resolves to (mirrors `legacy agent route-status`)"""
   defaultRouteStatus: DefaultRouteStatus
 
   """Return cached model discovery for one provider or harness. Cached for 60s with a single in-flight fetch per (name, kind). Use refreshProviderModels to force a refresh."""
@@ -3270,7 +3270,7 @@ type Mutation {
   """Start a project execute-loop worker."""
   startWorker(input: StartWorkerInput!): WorkerDispatchResult!
 
-  """Stop a running worker through the same path as ddx agent workers stop."""
+  """Stop a running worker through the same path as legacy agent workers stop."""
   stopWorker(id: ID!): WorkerLifecycleResult!
 
   """Dispatch a plugin install/update/uninstall action."""

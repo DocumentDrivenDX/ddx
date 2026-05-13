@@ -296,7 +296,7 @@ func (s *Server) handleWorkerBackfill(w http.ResponseWriter, r *http.Request) {
 }
 
 // workerIngestView is the wire shape returned by GET /api/workers — a
-// flattened snapshot of the runtime registry used by `ddx agent doctor`
+// flattened snapshot of the runtime registry used by `legacy agent doctor`
 // (ADR-022 step 6). The on-disk .ddx/workers/<id>/status.json layout
 // remains the fallback source for one alpha release.
 type workerIngestView struct {

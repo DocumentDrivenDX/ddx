@@ -1,0 +1,2 @@
+status: blocked
+reason: `bun run test:e2e` is red on unrelated existing failures outside this bead's run-detail coverage. The suite finished with 38 failures across a11y, app, screenshots, sessions, federation, scale-fixture, and provider tests; the new `e2e/runs.spec.ts` p95 test passed both in isolation and within the suite before the run exited nonzero.

@@ -134,8 +134,8 @@ that exercise the new code:
   `git merge --ff-only` or `--no-ff`; never squash/rebase/filter.
 - **Running passthrough pins without a reason**: power-bound dispatch lets the
   agent choose an appropriate route. Use `--harness`, `--provider`, `--model`,
-  or `--profile` only for explicit operator constraints, bug repros, or
-  controlled tests.
+  or `--profile` only for explicit operator constraints, bug
+  repros, or controlled tests.
 - **Parallel workers on the same claimed bead**: the tracker
   guards against this via claim semantics, but don't try to defeat
   it — each claim represents an in-flight attempt.

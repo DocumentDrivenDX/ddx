@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -10,8 +11,8 @@ import (
 func (f *CommandFactory) newWorkClearCooldownsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "clear-cooldowns",
-		Short: "Bulk-clear execute-loop cooldowns",
-		Long: `clear-cooldowns scans beads with an active execute-loop cooldown and clears
+		Short: "Bulk-clear queue-drain cooldowns",
+		Long: `clear-cooldowns scans beads with an active queue-drain cooldown and clears
 them in one pass. Use after a systemic issue (e.g., a push-layer failure) is
 resolved so blocked beads re-enter the execution queue without per-bead --unset loops.
 
@@ -27,8 +28,8 @@ Requires --all or --status to prevent accidental bulk clears.`,
 		Args: cobra.NoArgs,
 		RunE: f.runWorkClearCooldowns,
 	}
-	cmd.Flags().Bool("all", false, "Clear cooldowns on every bead with execute-loop-retry-after set")
-	cmd.Flags().String("status", "", "Clear only beads where execute-loop-last-status matches this value")
+	cmd.Flags().Bool("all", false, "Clear cooldowns on every bead with retry-after set")
+	cmd.Flags().String("status", "", "Clear only beads where last-status matches this value")
 	cmd.Flags().Bool("dry-run", false, "Print what would be cleared without modifying state")
 	return cmd
 }
@@ -58,7 +59,7 @@ func (f *CommandFactory) runWorkClearCooldowns(cmd *cobra.Command, _ []string) e
 	}
 
 	if dryRun {
-		allBeads, err := store.ReadAll()
+		allBeads, err := store.ReadAll(context.Background())
 		if err != nil {
 			return err
 		}

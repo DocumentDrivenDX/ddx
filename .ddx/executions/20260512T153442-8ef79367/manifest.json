@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260512T153442-8ef79367",
+  "bead_id": "ddx-5c6492cf",
+  "base_rev": "0f8426197a28cdab0522a6465e978e7470cbac9c",
+  "created_at": "2026-05-12T15:34:45.048929957Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5c6492cf",
+    "title": "ddx integration: remove ModelRef and --model-ref from Fizeau call sites",
+    "description": "Fizeau review of fizeau-32e533bb found the Fizeau coordination bead was closed without verifiable DDx-side migration. Current DDx still has production hits for --model-ref / ModelRef and cli/go.mod pins github.com/easel/fizeau v0.12.0 rather than the stated v0.11 handoff.\n\nProblem:\nDDx should pass Fizeau route constraints through using the current Policy/Model vocabulary and must not keep old ModelRef or --model-ref call sites after Fizeau ADR-009 removed that public surface.\n\nIn scope:\n- DDx CLI/internal call sites that mention ModelRef or --model-ref when invoking Fizeau\n- tests proving DDx uses current Fizeau request fields\n- go.mod/go.sum update only if needed to align with current Fizeau API\n\nOut of scope:\n- Fizeau repository changes; this is the upstream DDx side of fizeau-32e533bb.",
+    "acceptance": "1. rg -n \"ModelRef|model-ref|--model-ref\" cli --glob \"*.go\" --glob \"*.md\" returns no production or help-text hits except historical changelog/migration notes explicitly marked removed.\n2. cd cli \u0026\u0026 go test ./internal/... ./cmd/... -run \"Fizeau|Route|Model|Policy\" -count=1 passes.\n3. cd cli \u0026\u0026 go test ./... -count=1 passes.",
+    "labels": [
+      "area:fizeau",
+      "area:routing",
+      "kind:cleanup",
+      "refiled-from:fizeau-32e533bb"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T15:33:50Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "2743080",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: The bead is not safely refinable as written. Repo evidence conflicts with the prompt: `cli/go.mod` is already on `github.com/easel/fizeau v0.12.1`, so the description’s `v0.12.0` handoff claim is stale. The scope also spans several distinct call sites and seams (`cli/cmd/run.go:55`, `cli/internal/agent/dispatch.go:79-109`, `cli/internal/agent/service_run.go:119-128`, `cli/internal/agent/preclaim_intake_hook.go:167-173`) without file:line anchors in the bead itself, and no named test functions to preserve. Rewriting this would require choosing whether the intended fix is to remove all `ModelRef` plumbing, only CLI flags, or only specific Fizeau request fields, which is a scope/acceptance decision that needs operator clarification.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T15:34:28.489219043Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Only the title clearly meets the rubric. The description does not give a file:line root-cause anchor, the acceptance criteria do not name any specific Test* symbols or include the required go test/lefthook gates, the labels are missing a phase facet, and parent/deps are absent, so the bead is not execution-ready.\",\"score\":1,\"suggested_fixes\":[\"Add a ROOT CAUSE section with concrete cli file:line evidence for the current ModelRef/--model-ref call sites and the go.mod pin.\",\"Rewrite acceptance to name specific Test* symbols or a unique go test -run filter, and include both a scoped `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` command and `lefthook run pre-commit`.\",\"Add a phase label and any needed cross-reference labels.\",\"Set an explicit parent and list deps or state `No deps.` in the bead body.\",\"Add a wired assertion that the updated Fizeau request fields are actually used in the call path.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T15:34:42.458208582Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=1"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T15:33:50.405862236Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T153442-8ef79367",
+    "prompt": ".ddx/executions/20260512T153442-8ef79367/prompt.md",
+    "manifest": ".ddx/executions/20260512T153442-8ef79367/manifest.json",
+    "result": ".ddx/executions/20260512T153442-8ef79367/result.json",
+    "checks": ".ddx/executions/20260512T153442-8ef79367/checks.json",
+    "usage": ".ddx/executions/20260512T153442-8ef79367/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5c6492cf-20260512T153442-8ef79367"
+  },
+  "prompt_sha": "65f876fee85a3846fb25965d3346116aa3e57550c7bd0509f811e07af0b98075"
+}

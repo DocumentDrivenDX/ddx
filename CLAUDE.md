@@ -8,13 +8,14 @@ DDx (Document-Driven Development eXperience) is the shared infrastructure platfo
 
 DDx is one layer in a three-project stack:
 - **DDx** (this repo) — platform services: document library, bead tracker, agent service, personas, templates, git sync
+ - **DDx** (this repo) — platform services: document library, bead tracker, execution primitives, personas, templates, git sync
 - **HELIX** (`~/Projects/helix`) — workflow methodology: phases, gates, supervisory dispatch, bounded actions
 - **Dun** (`~/Projects/dun`) — quality check runner: check discovery, execution, agent-friendly output
 
 ## Architecture
 
 This monorepo produces three artifacts:
-- **`ddx` CLI** (`/cli/`): Go binary — document library mgmt, bead tracker, agent dispatch, personas, templates, git sync
+- **`ddx` CLI** (`/cli/`): Go binary — document library mgmt, bead tracker, `run`/`try`/`work`, personas, templates, git sync
 - **`ddx-server`** (planned): Web server + MCP endpoints for document and bead access
 - **`ddx.github.io`** (`/website/`): Hugo promotional site
 
@@ -186,16 +187,13 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 - `ddx bead migrate` - Externalize closed-bead events to `.ddx/attachments/` and move eligible closed beads into `.ddx/beads-archive.jsonl`. Idempotent; safe to re-run.
 
 **Queue Work:**
-- `ddx work` - Drain the bead execution queue (alias for `ddx agent execute-loop`; all flags pass through)
+  - `ddx work` - Drain the bead execution queue
 
-**Agent Service:**
-- `ddx agent run --harness=<name> --prompt <file>` - Invoke an AI agent
-- `ddx agent run --quorum=majority --harnesses=a,b` - Multi-agent consensus
-- `ddx agent execute-bead <id> [--from <rev>] [--no-merge]` - Run agent in isolated worktree, merge or preserve result
-- `ddx agent execute-loop` - Drain bead queue (prefer `ddx work`)
-- `ddx agent list` - Show available harnesses
-- `ddx agent doctor` - Harness health check
-- `ddx agent log` - Session history
+**Execution:**
+- `ddx run --harness=<name> --prompt <file>` - Invoke the service once
+- `ddx try <id> [--from <rev>] [--no-merge]` - Run one bead in an isolated worktree
+- `ddx work` - Drain the bead queue
+- `ddx log` - Session history
 
 **Resource Commands:**
 - `ddx prompts list/show` - AI prompts

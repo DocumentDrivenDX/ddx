@@ -835,9 +835,9 @@ Bead 8 does the same for the server worker (which is what
     NewTestConfigForRun constructor`.
 18. `cmd/run: migrate ddx run dispatch + behavioral
     test`.
-19. `cmd/agent_compare: migrate ddx agent compare + behavioral
+19. `cmd/agent_compare: migrate legacy agent compare + behavioral
     test`.
-20. `cmd/agent_quorum: migrate ddx agent quorum + behavioral test`.
+20. `cmd/agent_quorum: migrate legacy agent quorum + behavioral test`.
 21. `agent/test: migrate RunOptions test sites (5-10 sites)`.
 22. `agent: retire RunOptions + Run legacy method`.
 

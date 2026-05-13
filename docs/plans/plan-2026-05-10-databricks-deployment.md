@@ -21,7 +21,7 @@ Not "ship ddx to Databricks" — the user has been explicit this is exploratory.
 
 ## What doesn't work, or only barely
 
-- **Git subtree / worktrees**: ~~`ddx update`/`ddx contribute`~~ subtree paths are now being removed (`ddx-a827d146`); `ddx agent execute-bead` still relies on real git semantics (worktrees, push). Databricks Repos route commits through Databricks' git proxy, not raw git. Worktrees on DBFS/Volumes mounts are broken-to-flaky (FUSE).
+- **Legacy sync / worktrees**: legacy sync paths are being removed (`ddx-a827d146`); `legacy agent execute-bead` still relies on real git semantics (worktrees, push). Databricks Repos route commits through Databricks' git proxy, not raw git. Worktrees on DBFS/Volumes mounts are broken-to-flaky (FUSE).
 - **Agent harnesses**: `claude`, `codex`, `opencode` CLIs need OAuth + token storage + egress to provider APIs. Production workspaces commonly restrict egress; auth flows that pop a browser don't work in notebooks.
 - **`execute-loop`**: long-running drain doesn't fit the notebook lifecycle. Packaging as a Databricks Job is possible but the job model (retries, parameters, idempotency) is awkward for a continuously-draining queue.
 - **Lefthook / pre-commit gates**: irrelevant in a Databricks Repo (commits don't go through local git).

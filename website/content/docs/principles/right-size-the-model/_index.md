@@ -49,9 +49,10 @@ See `docs/helix/00-discover/research/RSCH-006-right-size-the-model.md`.
 
 ## DDx response
 
-- **Harness configs declare capability tiers.** `ddx agent run
+- **Harness configs declare capability tiers.** `ddx run
   --harness=<name>` selects by capability, not by hardwired model;
-  harnesses can themselves cascade or quorum across models.
+  harnesses can themselves cascade or be compared across models with
+  `compare-prompts` and `adversarial-review`.
 - **The drain loop escalates on review failure.** Cheap models run
   first; failed reviews reopen the bead and route the retry to a
   stronger model, mirroring FrugalGPT's cascade directly.

@@ -332,12 +332,11 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 	root := filepath.Join("..", "..")
 	checks := map[string]string{
-		"ddx agent run":  filepath.Join(root, "cmd", "agent_cmd.go"),
+		"ddx run":        filepath.Join(root, "cmd", "run.go"),
+		"ddx try":        filepath.Join(root, "cmd", "try.go"),
+		"ddx work":       filepath.Join(root, "cmd", "work.go"),
 		"quorum":         filepath.Join(root, "internal", "agent", "compare_adapter.go"),
 		"compare":        filepath.Join(root, "internal", "agent", "compare_adapter.go"),
-		"execute-bead":   filepath.Join(root, "internal", "agent", "execute_bead.go"),
-		"execute-loop":   filepath.Join(root, "internal", "agent", "execute_bead_loop.go"),
-		"replay":         filepath.Join(root, "cmd", "agent_cmd.go"),
 		"service writer": filepath.Join(root, "internal", "agent", "service_run.go"),
 	}
 	for name, path := range checks {
@@ -351,13 +350,17 @@ func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 			if !strings.Contains(text, "AppendSessionIndex(") {
 				t.Fatalf("%s does not append the session index", name)
 			}
-		case "execute-bead":
-			if !strings.Contains(text, "dispatchViaResolvedConfig(") {
-				t.Fatalf("%s is not routed through the SD-024 dispatch seam", name)
+		case "ddx run":
+			if !strings.Contains(text, "RunWithConfigViaService") {
+				t.Fatalf("%s is not routed through RunWithConfigViaService", name)
 			}
-		case "execute-loop":
-			if !strings.Contains(text, "w.Executor.Execute(ctx, candidate.ID)") {
-				t.Fatalf("%s no longer invokes the execute-bead executor", name)
+		case "ddx try":
+			if !strings.Contains(text, "ExecuteBeadWithConfig") {
+				t.Fatalf("%s is not routed through ExecuteBeadWithConfig", name)
+			}
+		case "ddx work":
+			if !strings.Contains(text, "writeExecuteLoopResult(") {
+				t.Fatalf("%s does not own the execute-loop result writer", name)
 			}
 		default:
 			if !strings.Contains(text, "RunViaService") && !strings.Contains(text, "RunWithConfigViaService") {

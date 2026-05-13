@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -57,7 +58,7 @@ events in beads.jsonl. It does NOT read .ddx/executions/ directories.`,
 			projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
 			store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-			allBeads, err := store.ReadAll()
+			allBeads, err := store.ReadAll(context.Background())
 			if err != nil {
 				return fmt.Errorf("read beads: %w", err)
 			}

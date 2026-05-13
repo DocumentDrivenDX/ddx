@@ -974,7 +974,7 @@ type Evaluation struct {
 // Execution represents one execute-bead attempt bundle stored under
 // `.ddx/executions/<ts>-<hash>/`. It joins bead, session, prompt, verdict,
 // and tool-call stream together as the canonical record of a single
-// ddx agent execute-bead attempt.
+// legacy agent execute-bead attempt.
 type Execution struct {
 	// Stable ID, equal to the bundle directory name (e.g. 20260423T002311-2ebaa669).
 	ID string `json:"id"`
@@ -1787,8 +1787,8 @@ type ProviderQuota struct {
 }
 
 // ProviderStatus is the live connectivity status of a configured endpoint provider
-// or subprocess harness, mirroring the output of `ddx agent providers` and
-// `ddx agent list` / `ddx agent doctor`.
+// or subprocess harness, mirroring the output of `legacy agent providers` and
+// `legacy agent list` / `legacy agent doctor`.
 type ProviderStatus struct {
 	// Provider/harness name from agent config
 	Name string `json:"name"`

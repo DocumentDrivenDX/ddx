@@ -33,14 +33,14 @@ ddx:
 - Added Cancel SLA section (worker checks `cancel-requested` every N
   seconds during long attempts; default 10s mid-attempt poll)
 - Resolved `.ddx/workers/` contradiction: KEPT as compatibility writer
-  for `ddx agent doctor` until Gate D removes (one alpha release lag)
+  for `legacy agent doctor` until Gate D removes (one alpha release lag)
 - Resolved server address path: standardized as `~/.local/share/ddx/server.addr`
   (XDG-compliant, matches current code) NOT `~/.local/share/ddx/server.addr` (XDG-compliant, matches current code)
 - Removed C7 from "NOT FROZEN" list — C7 deletes the per-Run
   `attempted` map that rev 4 preserves; C7 is coordinated, not
   unfrozen
 - Expanded roadmap from 5 to 9 beads: added UI/GraphQL consumption,
-  `ddx agent doctor` update, FEAT-006 amendment, server-spawn path
+  `legacy agent doctor` update, FEAT-006 amendment, server-spawn path
   migration, backfill mechanism
 - Added derived-view contract: GraphQL schema fields, freshness
   indicators, stale-state markers, duplicate-worker display

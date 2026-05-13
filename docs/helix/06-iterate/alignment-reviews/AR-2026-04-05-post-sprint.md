@@ -47,7 +47,7 @@ to `ddx install`.
 
 Commands exist in the binary but aren't documented in FEAT-001:
 - `ddx bead evidence`
-- `ddx agent condense`
+- `legacy agent condense`
 - `ddx exec define`
 - `ddx metric` (top-level)
 - `ddx doc migrate`

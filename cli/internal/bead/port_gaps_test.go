@@ -15,11 +15,11 @@ import (
 func TestClaimRecordsMetadata(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Claimable"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	require.NoError(t, s.Claim(b.ID, "agent-1"))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 	assert.Equal(t, "agent-1", got.Owner)
@@ -30,12 +30,12 @@ func TestClaimRecordsMetadata(t *testing.T) {
 func TestUnclaimClearsMetadata(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "To unclaim"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Claim(b.ID, "agent-1"))
 
 	require.NoError(t, s.Unclaim(b.ID))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -46,7 +46,7 @@ func TestUnclaimClearsMetadata(t *testing.T) {
 func TestInProgressNotReady(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Claimed"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Claim(b.ID, "agent"))
 
 	ready, err := s.Ready()
@@ -57,7 +57,7 @@ func TestInProgressNotReady(t *testing.T) {
 func TestClaimRejectsNonOpenBead(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Closed", Status: StatusClosed}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	err := s.Claim(b.ID, "agent")
 	require.Error(t, err)
@@ -106,8 +106,8 @@ func (w *failWriter) Write(p []byte) (int, error) {
 
 func TestExportToChecksWriteErrors(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Create(&Bead{Title: "A"}))
-	require.NoError(t, s.Create(&Bead{Title: "B"}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "A"}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "B"}))
 
 	err := s.ExportTo(&failWriter{})
 	assert.Error(t, err)
@@ -127,7 +127,7 @@ func TestExportRoundTripPreservesFields(t *testing.T) {
 		Description: "A real bug",
 		Acceptance:  "Tests pass",
 	}
-	require.NoError(t, s.Create(orig))
+	require.NoError(t, s.Create(testCtx(), orig))
 
 	// Export
 	var buf bytes.Buffer
@@ -141,7 +141,7 @@ func TestExportRoundTripPreservesFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	got, err := s2.Get(orig.ID)
+	got, err := s2.Get(testCtx(), orig.ID)
 	require.NoError(t, err)
 	assert.Equal(t, orig.Title, got.Title)
 	assert.Equal(t, orig.IssueType, got.IssueType)
@@ -161,7 +161,7 @@ func TestUpdateStructuralFields(t *testing.T) {
 	require.NoError(t, os.WriteFile(s.File, []byte(jsonl+"\n"), 0o644))
 
 	// Update a structural field via Extra
-	err := s.Update("hx-struct01", func(b *Bead) {
+	err := s.Update(testCtx(), "hx-struct01", func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -170,7 +170,7 @@ func TestUpdateStructuralFields(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := s.Get("hx-struct01")
+	got, err := s.Get(testCtx(), "hx-struct01")
 	require.NoError(t, err)
 	assert.Equal(t, "FEAT-002", got.Extra["spec-id"])
 	assert.Equal(t, "hx-epic02", got.Parent)
@@ -181,7 +181,7 @@ func TestUpdateStructuralFields(t *testing.T) {
 func TestEvidenceAppendPreservesOrder(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Evidence"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "first", Actor: "alice"}))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "second", Actor: "bob"}))
@@ -198,11 +198,11 @@ func TestEvidenceAppendPreservesOrder(t *testing.T) {
 func TestEvidenceRoundTripsThroughExtra(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Evidence roundtrip"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "summary", Summary: "done", Actor: "agent"}))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	raw, ok := got.Extra["events"]
 	require.True(t, ok)

@@ -11,7 +11,7 @@ func TestEventsByKind(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "test bead"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Append a mix of event kinds.
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "provider=claude model=opus reason=config"}))
@@ -41,7 +41,7 @@ func TestEventsByKindEmptyBead(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "no events bead"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	events, err := s.EventsByKind(b.ID, "routing")
 	require.NoError(t, err)

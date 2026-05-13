@@ -7,6 +7,10 @@ const PROJECTS = [
 	{ id: 'proj-2', name: 'Project Beta', path: '/repos/beta' }
 ];
 
+function projectSelect(page: import('@playwright/test').Page) {
+	return page.getByLabel('Project');
+}
+
 /**
  * Intercept /graphql and respond with mock data based on query type.
  */
@@ -64,7 +68,7 @@ test('TC-004: project picker lists projects from GraphQL', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto('/');
 
-	const select = page.locator('select');
+	const select = projectSelect(page);
 	await expect(select).toBeVisible();
 
 	// Both project options must appear once loading is done
@@ -77,7 +81,7 @@ test('TC-005: project picker navigates to project URL on selection', async ({ pa
 	await mockGraphQL(page);
 	await page.goto('/');
 
-	const select = page.locator('select');
+	const select = projectSelect(page);
 	await expect(select.locator('option', { hasText: 'Project Alpha' })).toBeAttached();
 
 	await select.selectOption('proj-1');
@@ -234,7 +238,7 @@ test('TC-008: overview entry and DDx brand return to project home', async ({ pag
 	await expect(page.getByLabel('Queue summary')).toBeVisible();
 
 	// Now go into a sub-page and click the DDx brand to return home.
-	await page.goto('/nodes/node-abc/projects/proj-1/sessions');
+	await page.goto('/nodes/node-abc/projects/proj-1/beads');
 	const brand = page.locator('header a', { hasText: 'DDx' });
 	await expect(brand).toBeVisible();
 	await brand.click();

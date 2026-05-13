@@ -30,6 +30,18 @@ fails.
 These retired names are not active DDx routing APIs. They may appear only in
 lint fixtures, hard-error rejection paths, or migration/deprecation docs.
 
+In addition to the closed token lists, the analyzer also checks a few
+structural DDx routing-boundary regressions:
+
+- a new `Use: "agent"` public Cobra command surface
+- new DDx-owned subpackages beneath `cli/internal/agent/` beyond the
+  already-approved leaf packages in the root execution tree
+- `ServiceExecuteRequest` construction that normalizes or fuzzy-matches
+  `Harness`, `Provider`, or `Model`
+- `ServiceExecuteRequest` construction that sources `Harness`,
+  `Provider`, or `Model` from config accessors instead of explicit
+  operator passthrough values
+
 ## What it checks
 
 Two closed lists, both maintained as Go constants in
@@ -94,6 +106,12 @@ The exemption is **per-line**, not per-file or per-package. Adding it
 is a deliberate, reviewable signal that this specific occurrence is the
 rejection / migration path, not new compensating-routing logic.
 
+Historical exact literals such as `agentskills.io`, `legacy agent`,
+`Agent Service`, `cli/internal/agent`, and the deprecated
+`agent.routing.default_harness` / `agent.routing.profile_priority`
+strings are kept on an explicit allowlist for documentation and audit
+fixtures. They are not treated as regressions.
+
 ## Updating the closed lists
 
 If the cleanup ever needs to retire an additional helper or flag,
@@ -103,8 +121,10 @@ extend `forbiddenIdents` or `forbiddenLiterals` in
 `TestViolations` pins the new diagnostic.
 
 The analyzer is intentionally conservative: it matches identifiers
-exactly and string literals exactly. It does not pattern-match cost
-scoring or allow-list shapes structurally — those are caught at code
-review against the bullet list above. The closed-list approach keeps
-false positives close to zero and makes every regression a one-line
-fix or a one-line annotation, with the reviewer in the loop.
+exactly and string literals exactly, then layers a small set of
+structural checks for the DDx command / Fizeau request boundary. It
+does not pattern-match cost scoring or broader route-selection shapes
+structurally — those are caught at code review against the bullet list
+above. The closed-list approach keeps false positives close to zero
+and makes every regression a one-line fix or a one-line annotation,
+with the reviewer in the loop.

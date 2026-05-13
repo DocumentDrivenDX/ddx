@@ -35,8 +35,8 @@ type ACQualityResult struct {
 
 // BeadACQualityStore is the minimal store interface required by the AC quality gate.
 type BeadACQualityStore interface {
-	Get(id string) (*bead.Bead, error)
-	Update(id string, mutate func(*bead.Bead)) error
+	Get(args ...any) (*bead.Bead, error)
+	Update(args ...any) error
 	AppendEvent(id string, event bead.BeadEvent) error
 }
 
@@ -81,7 +81,7 @@ func CheckACQuality(acceptance string, threshold float64) ACQualityResult {
 // true, sets execution-eligible=false so the bead leaves ReadyExecution.
 // Safe to call more than once (idempotent label add; events are append-only).
 func MarkBeadACQualityLow(store BeadACQualityStore, beadID string, result ACQualityResult, block bool) error {
-	if err := store.Update(beadID, func(b *bead.Bead) {
+	if err := store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -130,7 +130,7 @@ func NewACQualityPreClaimGate(store BeadACQualityStore, mode string, threshold f
 				return PreClaimIntakeResult{}, err
 			}
 		}
-		b, err := store.Get(beadID)
+		b, err := store.Get(ctx, beadID)
 		if err != nil {
 			// Fail-open: delegate to inner hook on store read failure.
 			if inner != nil {

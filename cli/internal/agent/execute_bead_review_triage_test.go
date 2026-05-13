@@ -117,7 +117,7 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	assert.NotContains(t, got.Extra, "claimed-at")
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Contains(t, meta.Reason, "operator-required")
-	assert.Equal(t, "ddx agent execute-loop", meta.Source)
+	assert.Equal(t, "ddx work", meta.Source)
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
 	assert.Contains(t, ev.Summary, "operator_required")

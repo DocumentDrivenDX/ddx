@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 380" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13">
-  <title>Execute-loop flow</title>
-  <desc>The execute-loop drains the bead queue: claim a ready bead, render the prompt, run the agent in an isolated worktree, review the result, merge or push (with auto-recovery on race), then close the bead.</desc>
+  <title>Queue drain flow</title>
+  <desc>ddx work drains the bead queue: claim a ready bead, render the prompt, run the harness in an isolated worktree, review the result, merge or push (with auto-recovery on race), then close the bead.</desc>
 
   <defs>
     <marker id="el" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
@@ -8,7 +8,7 @@
     </marker>
   </defs>
 
-  <text x="430" y="34" text-anchor="middle" font-weight="700" font-size="16">Execute-loop</text>
+  <text x="430" y="34" text-anchor="middle" font-weight="700" font-size="16">Queue drain</text>
   <text x="430" y="54" text-anchor="middle" fill="#555">ddx work · drains the bead queue end-to-end</text>
 
   <!-- Steps in a row -->

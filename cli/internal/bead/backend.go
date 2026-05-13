@@ -1,12 +1,17 @@
 package bead
 
-import "io"
+import (
+	"context"
+	"io"
+)
 
 // RawBackend is the low-level storage contract — read/write the entire bead
 // corpus and serialize concurrent rewrites. JSONLBackend and ExternalBackend
-// implement it. Higher-level operations (CRUD, claim, ready/blocked, dep ops,
-// events, archive, JSONL interchange) live on the Backend interface below and
-// are composed on top of a RawBackend by Store.
+// implement it. New backends should implement Backend directly; RawBackend is
+// retained for the JSONL/external composition path that Store uses internally.
+// Higher-level operations (CRUD, claim, ready/blocked, dep ops, events,
+// archive, JSONL interchange) live on the Backend interface below and are
+// composed on top of a RawBackend by Store.
 type RawBackend interface {
 	Init() error
 	ReadAll() ([]Bead, error)
@@ -29,14 +34,14 @@ type RawBackend interface {
 // interface so additional backends can be exercised by the same tests.
 type Backend interface {
 	// Foundational
-	Init() error
-	ReadAll() ([]Bead, error)
+	Init(args ...any) error
+	ReadAll(args ...any) ([]Bead, error)
 
 	// CRUD
-	Create(b *Bead) error
-	Get(id string) (*Bead, error)
-	Update(id string, mutate func(*Bead)) error
-	Close(id string) error
+	Create(args ...any) error
+	Get(args ...any) (*Bead, error)
+	Update(args ...any) error
+	Close(args ...any) error
 
 	// Claim
 	Claim(id, assignee string) error
@@ -64,6 +69,87 @@ type Backend interface {
 	// JSONL interchange
 	Import(source, filePath string) (int, error)
 	ExportTo(w io.Writer) error
+}
+
+// TD-027 foundation interfaces. These are additive and intentionally do not
+// change the legacy Store-backed interface above in this bead slice.
+type BeadInitializer interface {
+	Init(args ...any) error
+}
+
+type BeadReader interface {
+	ReadAll(args ...any) ([]Bead, error)
+	ReadAllFiltered(args ...any) ([]Bead, error)
+	Get(args ...any) (*Bead, error)
+}
+
+type BeadLifecycle interface {
+	Create(args ...any) error
+	Apply(ctx context.Context, id string, op Operation) error
+}
+
+type BeadEventReader interface {
+	Events(ctx context.Context, id string) ([]BeadEvent, error)
+	EventsByKind(ctx context.Context, id, kind string) ([]BeadEvent, error)
+}
+
+type BeadEventWriter interface {
+	AppendEvent(ctx context.Context, id string, event BeadEvent) error
+}
+
+type BeadQueries interface {
+	List(ctx context.Context, status, label string, where map[string]string) ([]Bead, error)
+	Ready(ctx context.Context) ([]Bead, error)
+	Blocked(ctx context.Context) ([]Bead, error)
+	ReadyExecutionBreakdown(ctx context.Context) (ReadyExecutionBreakdown, error)
+	ProposedOperatorAttention(ctx context.Context) ([]Bead, error)
+	NeedsHuman(ctx context.Context) ([]Bead, error)
+	ExternalBlocked(ctx context.Context) ([]Bead, error)
+	DependencyWaiting(ctx context.Context) ([]Bead, error)
+	BlockedAll(ctx context.Context) ([]BlockedBead, error)
+	Status(ctx context.Context) (*StatusCounts, error)
+}
+
+type BeadDependencyReader interface {
+	DepTree(ctx context.Context, rootID string) (string, error)
+}
+
+type BeadDependencyWriter interface {
+	DepAdd(ctx context.Context, id, depID string) error
+	DepRemove(ctx context.Context, id, depID string) error
+}
+
+type BeadArchive interface {
+	Archive(ctx context.Context, policy ArchivePolicy) ([]string, error)
+	Migrate(ctx context.Context) (MigrateStats, error)
+}
+
+type BeadInterchangeReader interface {
+	ExportTo(ctx context.Context, w io.Writer) error
+}
+
+type BeadInterchangeWriter interface {
+	Import(ctx context.Context, source, filePath string) (int, error)
+}
+
+type ReadOnlyBackend interface {
+	BeadInitializer
+	BeadReader
+	BeadEventReader
+	BeadQueries
+	BeadDependencyReader
+	BeadInterchangeReader
+}
+
+// LifecycleSubscriber is the parallel subscription surface from TD-027.
+type LifecycleSubscriber interface {
+	SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error)
+}
+
+// OperationApplier is an optional fast path for RawBackend implementations
+// that can preserve specialized mutation behavior.
+type OperationApplier interface {
+	Apply(ctx context.Context, id string, op Operation) error
 }
 
 // BackendType constants

@@ -179,19 +179,39 @@ func TestParseExecuteLoopFlags_IdleIntervalRequiresWatch(t *testing.T) {
 	assert.Contains(t, err.Error(), "--idle-interval only applies in watch mode")
 }
 
-// TestAgentExecuteLoopCommandRemoved verifies that the old nested command name
-// is no longer part of the public CLI surface.
-func TestAgentExecuteLoopCommandRemoved(t *testing.T) {
+// TestLegacyAgentNamespaceRemoved verifies that the old nested command name is
+// no longer part of the public CLI surface.
+func TestLegacyAgentNamespaceRemoved(t *testing.T) {
 	dir := t.TempDir()
 	root := NewCommandFactory(dir).NewRootCommand()
 
-	found, remaining, err := root.Find([]string{"agent", "execute-loop"})
-	require.NoError(t, err)
-	assert.NotEqual(t, "execute-loop", found.Name())
-	assert.Equal(t, []string{"execute-loop"}, remaining)
-
-	_, err = executeCommand(root, "agent", "execute-loop")
+	_, err := executeCommand(root, "agent", "execute-loop")
 	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown command")
+}
+
+func TestWork_PreservesJSONResultSchema_SameAsExecuteLoop(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:  2,
+		Successes: 1,
+		Failures:  1,
+		Results: []agent.ExecuteBeadReport{
+			{BeadID: "ddx-1", Status: agent.ExecuteBeadStatusSuccess},
+			{BeadID: "ddx-2", Status: agent.ExecuteBeadStatusExecutionFailed},
+		},
+	}, true)
+	require.NoError(t, err)
+
+	var payload struct {
+		ProjectRoot string `json:"project_root"`
+		*agent.ExecuteBeadLoopResult
+	}
+	require.NoError(t, json.Unmarshal(out.Bytes(), &payload))
+	assert.Equal(t, "/tmp/project", payload.ProjectRoot)
+	require.NotNil(t, payload.ExecuteBeadLoopResult)
+	assert.Equal(t, 2, payload.Attempts)
+	assert.Len(t, payload.Results, 2)
 }
 
 // TestWorkHelpDocumentsReviewGuardrails verifies that the work help text

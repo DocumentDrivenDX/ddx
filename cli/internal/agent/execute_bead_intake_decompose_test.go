@@ -53,7 +53,8 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: candidate.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -102,6 +103,76 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	assert.True(t, foundDecomp, "triage-decomposed event must be appended to parent")
 }
 
+func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	candidate := &bead.Bead{
+		ID:          "ddx-decomp-hook-parent",
+		Title:       "Parent bead requiring hook split",
+		Acceptance:  "1. TestHookSplit covers split\n2. cd cli && go test ./internal/agent/... green",
+		Description: "PROBLEM\nToo broad.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42 does too much.\n",
+	}
+	require.NoError(t, store.Create(candidate))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run after pre-claim decomposition hook returns children")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+	decomp := &PreClaimDecomposition{
+		Rationale: "split broad foundation bead",
+		Children: []PreClaimDecompositionChild{
+			{Title: "Child from hook", Description: "PROBLEM\nChild scope.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n", Acceptance: "1. TestHookChild\n2. cd cli && go test ./internal/agent/..."},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. TestHookSplit covers split", Coverage: "covered by Child from hook AC 1"},
+			{ParentAC: "2. cd cli && go test ./internal/agent/... green", Coverage: "covered by Child from hook AC 2"},
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", MaxDecompositionDepth: 3}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	var hookCalls int32
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeTooLargeDecomposed,
+				Detail:  "too large; split required",
+			}, nil
+		},
+		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+			atomic.AddInt32(&hookCalls, 1)
+			return decomp, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hookCalls))
+	assert.Equal(t, 0, result.Attempts)
+
+	all, err := store.ReadAll()
+	require.NoError(t, err)
+	var children []bead.Bead
+	for _, b := range all {
+		if b.Parent == candidate.ID {
+			children = append(children, b)
+		}
+	}
+	require.Len(t, children, 1)
+	assert.Equal(t, "Child from hook", children[0].Title)
+
+	parent, err := store.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, parent.Status)
+	assert.Equal(t, []string{children[0].ID}, parent.DepIDs())
+}
+
 func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
@@ -139,7 +210,8 @@ func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: candidate.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -210,7 +282,8 @@ func TestIntake_DecompositionACMapRejectsDroppedAC(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: candidate.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -240,18 +313,19 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	// Create 3-level hierarchy. Root and child are closed so they don't appear
-	// in ReadyExecution; grandchild (depth 2) is open and will be selected.
+	// Create a hierarchy with two consecutive decomposed child layers. Ordinary
+	// epic ancestry does not count toward the cap, but decomposed descendants do.
 	root := &bead.Bead{ID: "ddx-dc-root", Title: "Root bead", Status: bead.StatusClosed}
 	require.NoError(t, store.Create(root))
 
-	child := &bead.Bead{ID: "ddx-dc-child", Title: "Child bead", Parent: "ddx-dc-root", Status: bead.StatusClosed}
+	child := &bead.Bead{ID: "ddx-dc-child", Title: "Child bead", Parent: "ddx-dc-root", Status: bead.StatusClosed, Labels: []string{"decomposed"}}
 	require.NoError(t, store.Create(child))
 
 	grandchild := &bead.Bead{
 		ID:     "ddx-dc-grand",
 		Title:  "Grandchild bead at depth 2",
 		Parent: "ddx-dc-child",
+		Labels: []string{"decomposed"},
 	}
 	require.NoError(t, store.Create(grandchild))
 
@@ -271,7 +345,8 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: grandchild.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			atomic.AddInt32(&intakeCalls, 1)
 			t.Errorf("intake hook must not be called when depth cap triggers (called for %s)", beadID)

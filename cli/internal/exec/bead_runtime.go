@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -35,7 +36,7 @@ func (s *Store) loadDefinitions() ([]Definition, *docgraph.Graph, error) {
 	}
 
 	if s.DefinitionCollection != nil {
-		beads, err := s.DefinitionCollection.ReadAll()
+		beads, err := s.DefinitionCollection.ReadAll(context.Background())
 		if err != nil {
 			return nil, nil, err
 		}
@@ -171,7 +172,7 @@ func (s *Store) loadRuns() ([]RunRecord, error) {
 	runs := make(map[string]RunRecord)
 
 	if s.RunCollection != nil {
-		beads, err := s.RunCollection.ReadAll()
+		beads, err := s.RunCollection.ReadAll(context.Background())
 		if err != nil {
 			return nil, err
 		}
@@ -239,7 +240,7 @@ func (s *Store) readLegacyRuns() ([]RunRecord, error) {
 
 func (s *Store) loadRunByID(runID string) (RunRecord, error) {
 	if s.RunCollection != nil {
-		beads, err := s.RunCollection.ReadAll()
+		beads, err := s.RunCollection.ReadAll(context.Background())
 		if err != nil {
 			return RunRecord{}, err
 		}
@@ -380,7 +381,7 @@ func (s *Store) saveDefinitionBead(def Definition) error {
 		return fmt.Errorf("exec definition collection not initialized")
 	}
 	return s.DefinitionCollection.WithLock(func() error {
-		beads, err := s.DefinitionCollection.ReadAll()
+		beads, err := s.DefinitionCollection.ReadAll(context.Background())
 		if err != nil {
 			return err
 		}
@@ -459,7 +460,7 @@ func (s *Store) saveRunRecord(rec RunRecord) error {
 		if err := syncPath(attachmentRoot); err != nil {
 			return err
 		}
-		beads, err := s.RunCollection.ReadAll()
+		beads, err := s.RunCollection.ReadAll(context.Background())
 		if err != nil {
 			return err
 		}

@@ -48,7 +48,7 @@ func commitOutcome(ctx context.Context, store ExecuteBeadLoopStore, beadID strin
 				Summary:   failure.operation + " failed",
 				Body:      failure.err.Error(),
 				Actor:     failure.assignee,
-				Source:    "ddx agent execute-loop",
+				Source:    "ddx work",
 				CreatedAt: time.Now().UTC(),
 			})
 			_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", failure.operation+": "+failure.err.Error(), "")

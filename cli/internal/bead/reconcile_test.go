@@ -25,7 +25,7 @@ func TestBeadReconcile_LatestSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{})
 	require.NoError(t, err)
@@ -37,7 +37,7 @@ func TestBeadReconcile_LatestSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 	plans, err = s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Extra, ExtraRetryAfter)
 	assert.NotContains(t, got.Extra, ExtraLastStatus)
@@ -59,14 +59,14 @@ func TestBeadReconcile_VerifiedNoChangesCanCloseAlreadySatisfied(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 	assert.True(t, plans[0].CloseSatisfied)
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status)
 	assert.NotContains(t, got.Extra, ExtraLastStatus)
@@ -87,8 +87,8 @@ func TestBeadReconcile_ParentEpicMarksNotExecutableOnlyWithChildEvidence(t *test
 		},
 	}
 	child := &Bead{ID: "ddx-child", Title: "child", Parent: parent.ID}
-	require.NoError(t, s.Create(parent))
-	require.NoError(t, s.Create(child))
+	require.NoError(t, s.Create(testCtx(), parent))
+	require.NoError(t, s.Create(testCtx(), child))
 
 	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
 	require.NoError(t, err)
@@ -96,7 +96,7 @@ func TestBeadReconcile_ParentEpicMarksNotExecutableOnlyWithChildEvidence(t *test
 	assert.Equal(t, parent.ID, plans[0].BeadID)
 	assert.Equal(t, false, plans[0].SetFields[ExtraExecutionElig])
 
-	got, err := s.Get(parent.ID)
+	got, err := s.Get(testCtx(), parent.ID)
 	require.NoError(t, err)
 	assert.Equal(t, false, got.Extra[ExtraExecutionElig])
 	assert.Equal(t, "parent/epic container; execute child beads first", got.Extra[ExtraExecutionReason])
@@ -118,11 +118,11 @@ func TestLifecycle_NoChangesVerified_ClosesAndLeavesQueue(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	_, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
 	require.NoError(t, err)
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status)
 	ready, err := s.ReadyExecution()
@@ -144,9 +144,9 @@ func TestLifecycle_UnjustifiedNoChanges_BadAttemptNotLongCooldown(t *testing.T) 
 			},
 		},
 	}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, got.Status)
 	assert.Contains(t, got.Labels, LabelNoChangesUnjustified)
@@ -161,7 +161,7 @@ func TestLifecycle_UnjustifiedNoChanges_BadAttemptNotLongCooldown(t *testing.T) 
 func TestLifecycle_TransientTransport_UsesCooldown(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-transient", Title: "transient transport"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	until := time.Now().UTC().Add(30 * time.Minute).Truncate(time.Second)
 	require.NoError(t, s.SetExecutionCooldown(b.ID, until, "execution_failed", "transport retryable", ""))
 
@@ -179,8 +179,8 @@ func TestLifecycle_ParentEpicNotOrdinaryExecutionReady(t *testing.T) {
 	s := newTestStore(t)
 	parent := &Bead{ID: "ddx-epic", Title: "EPIC: rollup", IssueType: "epic", Extra: map[string]any{ExtraNoChangesCount: 1}}
 	child := &Bead{ID: "ddx-epic-child", Title: "child", Parent: parent.ID}
-	require.NoError(t, s.Create(parent))
-	require.NoError(t, s.Create(child))
+	require.NoError(t, s.Create(testCtx(), parent))
+	require.NoError(t, s.Create(testCtx(), child))
 	_, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
 	require.NoError(t, err)
 
@@ -221,14 +221,14 @@ func TestReconcileCloseSkipsClosureGate(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
 	require.NoError(t, err)
 	require.Len(t, plans, 1)
 	assert.True(t, plans[0].CloseSatisfied)
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status)
 	assert.Empty(t, got.Extra["session_id"])

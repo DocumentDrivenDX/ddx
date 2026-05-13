@@ -37,11 +37,11 @@ and non-routing execution config. Outputs are the structured response (text or
 bytes), any side-effects the agent performed via tools, and run metadata
 (tokens, model, actual power, duration, exit status, session pointer).
 
-Layer 1 calls the upstream `ddx-agent` service contract directly. DDx does not
+Layer 1 calls the upstream execution-service contract directly. DDx does not
 reimplement agent routing or the invocation loop; it wraps one `Execute` call
-with provenance capture. Routing — model choice within power bounds, provider
-fallback, retry — lives in `ddx-agent`. DDx writes a layer-1 record per
-invocation.
+with provenance capture. Routing, model choice within power bounds, provider
+fallback, and retry live in the upstream service. DDx writes a layer-1 record
+per invocation.
 
 `ddx artifact regenerate <id>` is sugar for layer 1 (or layer 2, when the
 generator edits the repo directly) with `produces_artifact: <id>` metadata. It

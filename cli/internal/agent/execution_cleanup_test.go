@@ -935,12 +935,12 @@ func TestExecutionCleanup_PreservesActiveDirs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_evidence_dir"))
 }
 
-func TestExecutionCleanup_RetainDaysDefault7(t *testing.T) {
+func TestExecutionCleanup_DefaultRetainDays90WithoutConfig(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
 	assert.Equal(t, defaultEvidenceRetainDays, mgr.RetainDays)
-	assert.Equal(t, 7, mgr.RetainDays)
+	assert.Equal(t, 90, mgr.RetainDays)
 }
 
 func TestExecutionCleanup_RetainDaysZero_DisablesRetention(t *testing.T) {

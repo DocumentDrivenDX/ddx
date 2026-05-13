@@ -267,7 +267,8 @@ func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
 // TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim is AC #4:
 // Covers the post-claim outcomes when intake or lint rejects the bead:
 //   - infra error: fail-open, proceed to execution
-//   - operator_required: move bead to status=proposed and unclaim
+//   - operator_required during queue drain: warn and proceed to execution
+//   - operator_required during targeted execution: move bead to status=proposed and unclaim
 //   - lint-blocked: unclaim bead, no execution
 //   - actionable_atomic: proceed to implementation normally
 func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
@@ -301,14 +302,15 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, bead.StatusClosed, got.Status, "bead must be closed after successful execution")
 	})
 
-	t.Run("operator_required_proposes_and_unclaims", func(t *testing.T) {
+	t.Run("operator_required_warns_and_executes_during_queue_drain", func(t *testing.T) {
 		store, candidate, _ := newExecuteLoopTestStore(t)
 		var eventSink bytes.Buffer
+		var execCalled atomic.Int32
 		worker := &ExecuteBeadWorker{
 			Store: store,
 			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-				t.Fatal("executor must not run for terminal intake outcomes")
-				return ExecuteBeadReport{}, nil
+				execCalled.Add(1)
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
 			}),
 		}
 		opts := config.TestLoopConfigOpts{Assignee: "worker"}
@@ -327,18 +329,74 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		assert.Equal(t, 0, result.Attempts, "terminal intake outcome must not count as an attempt")
+		assert.Equal(t, int32(1), execCalled.Load(), "broad queue drain should attempt work despite intake uncertainty")
+		assert.Equal(t, 1, result.Attempts)
+		assert.Equal(t, 1, result.Successes)
 
-		// Bead must be unclaimed and moved to status-owned operator attention.
 		got, err := store.Get(candidate.ID)
 		require.NoError(t, err)
-		assert.Equal(t, bead.StatusProposed, got.Status, "bead must be operator-attention after terminal intake")
-		assert.Empty(t, got.Owner, "bead must be unclaimed after terminal intake")
+		assert.Equal(t, bead.StatusClosed, got.Status, "successful best-effort attempt should close normally")
+		assert.NotContains(t, got.Labels, bead.LabelNeedsHuman,
+			"best-effort intake warning must not rely on needs_human label parking")
+		assert.Empty(t, bead.GetNeedsHumanMeta(*got).Reason)
+
+		// An intake.warn event is still recorded as evidence for review/follow-up,
+		// but it does not park the bead in broad queue-drain mode.
+		events, err := store.Events(candidate.ID)
+		require.NoError(t, err)
+		var foundWarn bool
+		for _, ev := range events {
+			if ev.Kind != "intake.warn" {
+				continue
+			}
+			foundWarn = true
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, "readiness_best_effort", body["reason"])
+		}
+		assert.True(t, foundWarn, "an intake.warn event must be recorded as review evidence")
+
+		// The event stream must contain pre_claim_intake.blocked.
+		assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
+	})
+
+	t.Run("operator_required_targeted_proposes_and_unclaims", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatal("executor must not run for terminal intake outcomes in targeted mode")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			TargetBeadID: candidate.ID,
+			EventSink:    &eventSink,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeOperatorRequired,
+					Detail:  "missing root cause with file:line",
+				}, nil
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, 0, result.Attempts, "targeted terminal intake outcome must not count as an attempt")
+
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusProposed, got.Status, "targeted execution may park for operator attention")
+		assert.Empty(t, got.Owner, "bead must be unclaimed after targeted terminal intake")
 		assert.NotContains(t, got.Labels, bead.LabelNeedsHuman,
 			"terminal intake outcome must not rely on needs_human label parking")
-		assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "missing root cause")
+		assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 
-		// An intake.blocked event must be recorded on the bead.
 		events, err := store.Events(candidate.ID)
 		require.NoError(t, err)
 		var foundBlocked bool
@@ -351,20 +409,19 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
 			assert.Equal(t, string(PreClaimIntakeOperatorRequired), body["intake_outcome"])
 		}
-		assert.True(t, foundBlocked, "an intake.blocked event must be recorded when bead is parked")
-
-		// The event stream must contain pre_claim_intake.blocked.
+		assert.True(t, foundBlocked, "an intake.blocked event must be recorded when targeted execution parks")
 		assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
 	})
 
-	t.Run("lint_blocked_unclaims_without_execution", func(t *testing.T) {
+	t.Run("lint_blocked_warns_and_executes_during_queue_drain", func(t *testing.T) {
 		store, candidate, _ := newExecuteLoopTestStore(t)
 		var eventSink bytes.Buffer
+		var execCalled atomic.Int32
 		worker := &ExecuteBeadWorker{
 			Store: store,
 			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-				t.Fatal("executor must not run when lint blocks dispatch")
-				return ExecuteBeadReport{}, nil
+				execCalled.Add(1)
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
 			}),
 		}
 
@@ -384,12 +441,50 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		assert.Equal(t, 0, result.Attempts, "lint-blocked must not count as an attempt")
+		assert.Equal(t, int32(1), execCalled.Load(), "broad queue drain should attempt work despite lint uncertainty")
+		assert.Equal(t, 1, result.Attempts)
+		assert.Equal(t, 1, result.Successes)
 
-		// Bead must be back to open (unclaimed).
 		got, err := store.Get(candidate.ID)
 		require.NoError(t, err)
-		assert.Equal(t, bead.StatusOpen, got.Status, "bead must be unclaimed after lint block")
+		assert.Equal(t, bead.StatusClosed, got.Status, "successful best-effort attempt should close normally")
+
+		assert.Contains(t, eventSink.String(), "pre_dispatch_lint.blocked")
+	})
+
+	t.Run("lint_blocked_targeted_unclaims_without_execution", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatal("executor must not run when targeted lint blocks dispatch")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           "worker",
+			BeadQualityLintBlockThresholdScore: 7,
+		}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			TargetBeadID: candidate.ID,
+			EventSink:    &eventSink,
+			PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+				return LintResult{Score: 4, Rationale: "incomplete AC"}, nil
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, 0, result.Attempts, "targeted lint block must not count as an attempt")
+
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, got.Status, "targeted lint block should unclaim without parking")
 
 		assert.Contains(t, eventSink.String(), "pre_dispatch_lint.blocked")
 	})

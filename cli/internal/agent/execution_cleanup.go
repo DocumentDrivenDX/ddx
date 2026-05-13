@@ -19,7 +19,7 @@ import (
 const ExecutionCleanupMetadataFileName = "cleanup.json"
 
 const defaultExecutionCleanupScratchMinAge = 24 * time.Hour
-const defaultEvidenceRetainDays = 7
+const defaultEvidenceRetainDays = 90
 
 var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-test-",
@@ -192,7 +192,7 @@ type ExecutionCleanupManager struct {
 	Now             func() time.Time
 	Probe           ExecutionCleanupLivenessProbe
 	// RetainDays controls how many days of evidence dirs under
-	// .ddx/executions/ to retain. 0 disables the prune; default is 7.
+	// .ddx/executions/ to retain. 0 disables the prune; default is 90.
 	RetainDays int
 }
 
@@ -215,8 +215,8 @@ func executionCleanupRetainDays(projectRoot string) int {
 	if projectRoot != "" {
 		projectConfig := filepath.Join(projectRoot, ".ddx", "config.yaml")
 		cfg, err := config.LoadFromFile(projectConfig)
-		if err == nil && cfg != nil && cfg.Executions != nil && cfg.Executions.RetainDays > 0 {
-			return cfg.Executions.RetainDays
+		if err == nil && cfg != nil && cfg.Executions != nil {
+			return cfg.Executions.ResolveRetainDays()
 		}
 	}
 	return defaultEvidenceRetainDays

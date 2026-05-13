@@ -2,6 +2,7 @@ package bead
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,7 +35,7 @@ func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
 	s := NewStore(filepath.Join(dir, ".ddx"))
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(context.Background()))
 	return s
 }
 
@@ -45,7 +46,7 @@ func newConfiguredStore(t *testing.T, backend string) *Store {
 		writeStoreConfig(t, dir, backend)
 	}
 	s := NewStore(filepath.Join(dir, ".ddx"))
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(context.Background()))
 	return s
 }
 
@@ -73,7 +74,7 @@ bead:
 func TestInit(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(filepath.Join(dir, ".ddx"))
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(context.Background()))
 
 	_, err := os.Stat(s.File)
 	assert.NoError(t, err, "beads.jsonl should exist after init")
@@ -85,7 +86,7 @@ func TestInitUsesCollectionFile(t *testing.T) {
 	require.Equal(t, "exec-runs", s.Collection)
 	require.Equal(t, filepath.Join(dir, ".ddx", "exec-runs.jsonl"), s.File)
 	require.Equal(t, filepath.Join(dir, ".ddx", "exec-runs.lock"), s.LockDir)
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(context.Background()))
 
 	_, err := os.Stat(s.File)
 	assert.NoError(t, err, "collection file should exist after init")
@@ -201,20 +202,20 @@ func TestExternalBackendOpensBeadsArchiveWithFallback(t *testing.T) {
 	require.NotNil(t, backend.fallback, "non-default collection must have JSONL fallback")
 
 	// Init must not panic and must create the archive file under .ddx/.
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(testCtx()))
 	archivePath := filepath.Join(ddxDir, BeadsArchiveCollection+".jsonl")
 	_, err := os.Stat(archivePath)
 	require.NoError(t, err, "archive file should exist after Init")
 
 	// Empty read works.
-	got, err := s.ReadAll()
+	got, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Empty(t, got)
 
 	// Round-trip a bead through WriteAll/ReadAll without touching bd.
 	want := Bead{ID: "ddx-arch-1", Title: "archived item", Status: StatusClosed, IssueType: "task", Priority: 2}
 	require.NoError(t, s.WriteAll([]Bead{want}))
-	got, err = s.ReadAll()
+	got, err = s.ReadAll(testCtx())
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, want.ID, got[0].ID)
@@ -249,7 +250,7 @@ func TestCreateAndGet(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "Fix auth bug", IssueType: "bug", Priority: 1}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	assert.NotEmpty(t, b.ID)
 	assert.True(t, len(b.ID) > 3, "ID should have prefix + hex")
@@ -258,7 +259,7 @@ func TestCreateAndGet(t *testing.T) {
 	assert.Equal(t, 1, b.Priority)
 	assert.False(t, b.CreatedAt.IsZero())
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, b.Title, got.Title)
 	assert.Equal(t, b.IssueType, got.IssueType)
@@ -280,10 +281,10 @@ bead:
 `), 0o644))
 
 	s := NewStore(filepath.Join(tempDir, ".ddx"))
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(testCtx()))
 
 	b := &Bead{Title: "Configured prefix"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	assert.True(t, strings.HasPrefix(b.ID, "nif-"))
 }
@@ -305,10 +306,10 @@ bead:
 	t.Setenv("DDX_BEAD_PREFIX", "env")
 
 	s := NewStore(filepath.Join(tempDir, ".ddx"))
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(testCtx()))
 
 	b := &Bead{Title: "Env prefix"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	assert.True(t, strings.HasPrefix(b.ID, "env-"))
 }
@@ -317,7 +318,7 @@ func TestCreateDefaults(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "Simple task"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	assert.Equal(t, DefaultType, b.IssueType)
 	assert.Equal(t, DefaultStatus, b.Status)
@@ -330,17 +331,17 @@ func TestCreateValidation(t *testing.T) {
 	s := newTestStore(t)
 
 	// Empty title
-	err := s.Create(&Bead{})
+	err := s.Create(testCtx(), &Bead{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "title is required")
 
 	// Invalid priority
-	err = s.Create(&Bead{Title: "Bad priority", Priority: 9})
+	err = s.Create(testCtx(), &Bead{Title: "Bad priority", Priority: 9})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "priority")
 
 	// Invalid status
-	err = s.Create(&Bead{Title: "Bad status", Status: "invalid"})
+	err = s.Create(testCtx(), &Bead{Title: "Bad status", Status: "invalid"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid status")
 }
@@ -349,7 +350,7 @@ func TestUpdate(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "Original"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	err := s.UpdateWithLifecycleStatus(b.ID, StatusInProgress, LifecycleTransitionOptions{}, func(b *Bead) error {
 		b.Title = "Updated"
@@ -358,7 +359,7 @@ func TestUpdate(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated", got.Title)
 	assert.Equal(t, StatusInProgress, got.Status)
@@ -367,7 +368,7 @@ func TestUpdate(t *testing.T) {
 
 func TestUpdateNotFound(t *testing.T) {
 	s := newTestStore(t)
-	err := s.Update("nonexistent", func(b *Bead) {})
+	err := s.Update(testCtx(), "nonexistent", func(b *Bead) {})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
@@ -376,10 +377,10 @@ func TestClose(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "To close"}
-	require.NoError(t, s.Create(b))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status)
 }
@@ -387,10 +388,10 @@ func TestClose(t *testing.T) {
 func TestListFilters(t *testing.T) {
 	s := newTestStore(t)
 
-	require.NoError(t, s.Create(&Bead{Title: "Open task", Labels: []string{"backend"}}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Open task", Labels: []string{"backend"}}))
 	b2 := &Bead{Title: "Closed task", Labels: []string{"frontend"}}
-	require.NoError(t, s.Create(b2))
-	require.NoError(t, s.Close(b2.ID))
+	require.NoError(t, s.Create(testCtx(), b2))
+	require.NoError(t, s.Close(testCtx(), b2.ID))
 
 	// All
 	all, err := s.List("", "", nil)
@@ -414,9 +415,9 @@ func TestListWhereFilter(t *testing.T) {
 	s := newTestStore(t)
 
 	b1 := &Bead{Title: "Spec task"}
-	require.NoError(t, s.Create(b1))
+	require.NoError(t, s.Create(testCtx(), b1))
 	// Set spec-id in Extra via Update
-	require.NoError(t, s.Update(b1.ID, func(b *Bead) {
+	require.NoError(t, s.Update(testCtx(), b1.ID, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -424,8 +425,8 @@ func TestListWhereFilter(t *testing.T) {
 	}))
 
 	b2 := &Bead{Title: "Other task"}
-	require.NoError(t, s.Create(b2))
-	require.NoError(t, s.Update(b2.ID, func(b *Bead) {
+	require.NoError(t, s.Create(testCtx(), b2))
+	require.NoError(t, s.Update(testCtx(), b2.ID, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -459,8 +460,8 @@ func TestReadyAndBlocked(t *testing.T) {
 
 	a := &Bead{Title: "First"}
 	b := &Bead{Title: "Second"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
 	// B is blocked by A
@@ -475,7 +476,7 @@ func TestReadyAndBlocked(t *testing.T) {
 	assert.Equal(t, b.ID, blocked[0].ID)
 
 	// Close A, B becomes ready
-	require.NoError(t, s.Close(a.ID))
+	require.NoError(t, s.Close(testCtx(), a.ID))
 
 	ready, err = s.Ready()
 	require.NoError(t, err)
@@ -491,7 +492,7 @@ func TestDepAddValidation(t *testing.T) {
 	s := newTestStore(t)
 
 	a := &Bead{Title: "A"}
-	require.NoError(t, s.Create(a))
+	require.NoError(t, s.Create(testCtx(), a))
 
 	// Dep on nonexistent
 	err := s.DepAdd(a.ID, "nonexistent")
@@ -505,7 +506,7 @@ func TestDepAddValidation(t *testing.T) {
 
 	// Idempotent add
 	b := &Bead{Title: "B"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 	require.NoError(t, s.DepAdd(b.ID, a.ID)) // no error on duplicate
 }
@@ -515,15 +516,15 @@ func TestDepRemove(t *testing.T) {
 
 	a := &Bead{Title: "A"}
 	b := &Bead{Title: "B"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
-	got, _ := s.Get(b.ID)
+	got, _ := s.Get(testCtx(), b.ID)
 	assert.Contains(t, got.DepIDs(), a.ID)
 
 	require.NoError(t, s.DepRemove(b.ID, a.ID))
-	got, _ = s.Get(b.ID)
+	got, _ = s.Get(testCtx(), b.ID)
 	assert.NotContains(t, got.DepIDs(), a.ID)
 }
 
@@ -532,8 +533,8 @@ func TestDepTree(t *testing.T) {
 
 	a := &Bead{Title: "Root task"}
 	b := &Bead{Title: "Child task"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
 	tree, err := s.DepTree("")
@@ -548,11 +549,11 @@ func TestStatusCounts(t *testing.T) {
 	a := &Bead{Title: "A"}
 	b := &Bead{Title: "B"}
 	c := &Bead{Title: "C"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
-	require.NoError(t, s.Create(c))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Create(testCtx(), c))
 	require.NoError(t, s.DepAdd(c.ID, a.ID))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	counts, err := s.Status()
 	require.NoError(t, err)
@@ -572,7 +573,7 @@ func TestUnknownFieldPreservation(t *testing.T) {
 	require.NoError(t, os.WriteFile(s.File, []byte(jsonl+"\n"), 0o644))
 
 	// Read back
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	require.Len(t, beads, 1)
 
@@ -585,7 +586,7 @@ func TestUnknownFieldPreservation(t *testing.T) {
 
 	// Write back and verify round-trip
 	require.NoError(t, s.WriteAll(beads))
-	beads2, err := s.ReadAll()
+	beads2, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	require.Len(t, beads2, 1)
 	assert.Equal(t, "FEAT-001", beads2[0].Extra["spec-id"])
@@ -594,21 +595,21 @@ func TestUnknownFieldPreservation(t *testing.T) {
 
 func TestGetNotFound(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.Get("nonexistent")
+	_, err := s.Get(testCtx(), "nonexistent")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
 }
 
 func TestReadEmptyStore(t *testing.T) {
 	s := newTestStore(t)
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Nil(t, beads)
 }
 
 func TestReadNonexistentFile(t *testing.T) {
 	s := NewStore(filepath.Join(t.TempDir(), "nope"))
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Nil(t, beads)
 }
@@ -619,21 +620,21 @@ func TestUnclaimDoesNotReopenClosedBead(t *testing.T) {
 
 	// Create a bead
 	b := &Bead{ID: "test-unclaim-001", Title: "Test bead", IssueType: "task", Status: StatusOpen}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Claim and close it
 	require.NoError(t, s.Claim(b.ID, "worker"))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	// Verify it's closed
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status)
 
 	// Unclaim should NOT reopen it
 	require.NoError(t, s.Unclaim(b.ID))
 
-	got, err = s.Get(b.ID)
+	got, err = s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status, "unclaim must not reopen a closed bead")
 }
@@ -641,11 +642,11 @@ func TestUnclaimDoesNotReopenClosedBead(t *testing.T) {
 func TestClaimMetadataKeys_SharedByReopenAndUnclaim(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-ckmeta-001", Title: "Claim metadata key test", IssueType: "task", Status: StatusOpen}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Helper: populate all ClaimMetadataExtraKeys plus heartbeat and a survivor key.
 	populateClaimMeta := func(id string) {
-		require.NoError(t, s.Update(id, func(b *Bead) {
+		require.NoError(t, s.Update(testCtx(), id, func(b *Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
@@ -662,7 +663,7 @@ func TestClaimMetadataKeys_SharedByReopenAndUnclaim(t *testing.T) {
 	populateClaimMeta(b.ID)
 	require.NoError(t, s.Unclaim(b.ID))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	for _, k := range ClaimMetadataExtraKeys {
 		assert.NotContains(t, got.Extra, k, "Unclaim must clear %q", k)
@@ -674,11 +675,11 @@ func TestClaimMetadataKeys_SharedByReopenAndUnclaim(t *testing.T) {
 	// Close the bead so Reopen has something to reopen.
 	require.NoError(t, s.Claim(b.ID, "worker"))
 	populateClaimMeta(b.ID)
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	require.NoError(t, s.Reopen(b.ID, "test reopen", ""))
 
-	got, err = s.Get(b.ID)
+	got, err = s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	for _, k := range ClaimMetadataExtraKeys {
 		assert.NotContains(t, got.Extra, k, "Reopen must clear %q", k)
@@ -706,7 +707,7 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-hb-stale", Title: "Stale claim"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// First worker claims it normally.
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
@@ -721,7 +722,7 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	data, err := json.Marshal(staleRec)
 	require.NoError(t, err)
 	require.NoError(t, writeAtomicClaimFile(claimLivenessPath(s.Dir, b.ID), append(data, '\n')))
-	require.NoError(t, s.Update(b.ID, func(bd *Bead) {
+	require.NoError(t, s.Update(testCtx(), b.ID, func(bd *Bead) {
 		if bd.Extra == nil {
 			bd.Extra = map[string]any{}
 		}
@@ -732,7 +733,7 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 
 	// A fresh worker must be able to reclaim the stalled bead.
 	require.NoError(t, s.Claim(b.ID, "worker-b"))
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 	assert.Equal(t, "worker-b", got.Owner)
@@ -740,7 +741,7 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	// The ready-execution queue must surface the stale bead too.
 	s2 := newTestStore(t)
 	orig := &Bead{ID: "ddx-hb-stale-2", Title: "Stale claim 2"}
-	require.NoError(t, s2.Create(orig))
+	require.NoError(t, s2.Create(testCtx(), orig))
 	require.NoError(t, s2.Claim(orig.ID, "worker-a"))
 	staleLease := claimLivenessRecord{
 		BeadID:    orig.ID,
@@ -761,7 +762,7 @@ func TestReady_StaleClaimedInProgressIsReady(t *testing.T) {
 
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-stale-ready", Title: "Stale in_progress bead"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Claim it so status transitions to in_progress.
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
@@ -776,7 +777,7 @@ func TestReady_StaleClaimedInProgressIsReady(t *testing.T) {
 	data, err := json.Marshal(staleRec)
 	require.NoError(t, err)
 	require.NoError(t, writeAtomicClaimFile(claimLivenessPath(s.Dir, b.ID), append(data, '\n')))
-	require.NoError(t, s.Update(b.ID, func(bd *Bead) {
+	require.NoError(t, s.Update(testCtx(), b.ID, func(bd *Bead) {
 		if bd.Extra == nil {
 			bd.Extra = map[string]any{}
 		}
@@ -797,7 +798,7 @@ func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-hb-live", Title: "Live claim"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
 
@@ -819,7 +820,7 @@ func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, ready, 0)
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "worker-a", got.Owner)
 }
@@ -836,7 +837,7 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 	sReal := NewStore(filepath.Join(realRoot, ".ddx"))
 	sAlias := NewStore(filepath.Join(aliasRoot, ".ddx"))
 	b := &Bead{ID: "ddx-hb-alias", Title: "Live claim through alias"}
-	require.NoError(t, sReal.Create(b))
+	require.NoError(t, sReal.Create(context.Background(), b))
 	require.NoError(t, sReal.Claim(b.ID, "worker-a"))
 
 	deadline := time.Now().Add(150 * time.Millisecond)
@@ -853,7 +854,7 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, ready)
 
-	got, err := sReal.Get(b.ID)
+	got, err := sReal.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "worker-a", got.Owner)
 }
@@ -861,7 +862,7 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-hb-no-tracker", Title: "Heartbeat stays out of JSONL"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
 
 	before, err := os.ReadFile(s.File)
@@ -879,7 +880,7 @@ func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 func TestAtomicClaimUnderContention(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-atomic-claim", Title: "Only one wins"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	const n = 16
 	var wg sync.WaitGroup
@@ -900,7 +901,7 @@ func TestAtomicClaimUnderContention(t *testing.T) {
 
 	assert.Equal(t, int32(1), successes.Load(), "exactly one goroutine must win the race")
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 }
@@ -916,7 +917,7 @@ func TestConcurrentUpdates_DifferentBeads(t *testing.T) {
 	ids := make([]string, n)
 	for i := 0; i < n; i++ {
 		b := &Bead{Title: fmt.Sprintf("bead-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		ids[i] = b.ID
 	}
 
@@ -926,7 +927,7 @@ func TestConcurrentUpdates_DifferentBeads(t *testing.T) {
 		i := i
 		go func() {
 			defer wg.Done()
-			err := s.Update(ids[i], func(b *Bead) {
+			err := s.Update(testCtx(), ids[i], func(b *Bead) {
 				b.Notes = fmt.Sprintf("updated-by-goroutine-%d", i)
 			})
 			assert.NoError(t, err, "goroutine %d update must not error", i)
@@ -936,7 +937,7 @@ func TestConcurrentUpdates_DifferentBeads(t *testing.T) {
 
 	// All beads must have received their update.
 	for i := 0; i < n; i++ {
-		got, err := s.Get(ids[i])
+		got, err := s.Get(testCtx(), ids[i])
 		require.NoError(t, err, "bead %s must be readable after concurrent updates", ids[i])
 		assert.Equal(t, fmt.Sprintf("updated-by-goroutine-%d", i), got.Notes,
 			"bead %d must carry its update", i)
@@ -968,7 +969,7 @@ func TestPartialWriteCleanup(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "survivor"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Simulate a crashed writer: drop a stale .tmp-* file in the same dir.
 	staleContent := []byte(`{"id":"ghost","title":"ghost","type":"task","status":"open","priority":0,"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}` + "\n")
@@ -976,14 +977,14 @@ func TestPartialWriteCleanup(t *testing.T) {
 	require.NoError(t, os.WriteFile(staleTmp, staleContent, 0o644))
 
 	// Perform a normal update — should succeed regardless of the stale tmp file.
-	require.NoError(t, s.Update(b.ID, func(b *Bead) {
+	require.NoError(t, s.Update(testCtx(), b.ID, func(b *Bead) {
 		b.Notes = "after stale tmp"
 	}))
 
 	// The stale tmp file is not automatically removed by the store (it's left
 	// for the OS/operator), but the real file must be correct and not contain
 	// the ghost bead.
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	require.Len(t, beads, 1, "real file must contain exactly 1 bead")
 	assert.Equal(t, b.ID, beads[0].ID)
@@ -1004,7 +1005,7 @@ func TestAtomicRename_OriginalPreservedOnError(t *testing.T) {
 
 	// Write initial content.
 	original := &Bead{Title: "original"}
-	require.NoError(t, s.Create(original))
+	require.NoError(t, s.Create(testCtx(), original))
 
 	// Read the initial file content for later comparison.
 	beforeData, err := os.ReadFile(s.File)
@@ -1027,11 +1028,11 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 	t.Run("open bead transitions to proposed", func(t *testing.T) {
 		s := newTestStore(t)
 		b := &Bead{Title: "park open"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		require.NoError(t, s.ParkToProposed(b.ID, ParkConflictRecovery, nil))
 
-		got, err := s.Get(b.ID)
+		got, err := s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, StatusProposed, got.Status)
 	})
@@ -1039,12 +1040,12 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 	t.Run("in_progress bead transitions to proposed", func(t *testing.T) {
 		s := newTestStore(t)
 		b := &Bead{Title: "park in_progress"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		require.NoError(t, s.Claim(b.ID, "test-agent"))
 
 		require.NoError(t, s.ParkToProposed(b.ID, ParkReviewTerminal, nil))
 
-		got, err := s.Get(b.ID)
+		got, err := s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, StatusProposed, got.Status)
 	})
@@ -1052,7 +1053,7 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 	t.Run("mutate callback runs after transition", func(t *testing.T) {
 		s := newTestStore(t)
 		b := &Bead{Title: "park mutate order"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		var statusDuringMutate string
 		require.NoError(t, s.ParkToProposed(b.ID, ParkIntakeRejection, func(b *Bead) {
@@ -1063,14 +1064,14 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 
 	t.Run("reason and source match ParkReason mapping", func(t *testing.T) {
 		expected := map[ParkReason]parkReasonMeta{
-			ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "ddx agent execute-loop"},
-			ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "ddx agent execute-loop"},
-			ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "ddx agent execute-loop"},
-			ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
-			ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
-			ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "ddx agent execute-loop"},
-			ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "ddx agent execute-loop"},
-			ParkAutoRecoveryFailed:         {Reason: "automated recovery failed; operator review required", Source: "ddx agent execute-loop"},
+			ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "legacy agent execute-loop"},
+			ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "legacy agent execute-loop"},
+			ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "legacy agent execute-loop"},
+			ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "legacy agent execute-loop"},
+			ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "legacy agent execute-loop"},
+			ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "legacy agent execute-loop"},
+			ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "legacy agent execute-loop"},
+			ParkAutoRecoveryFailed:         {Reason: "automated recovery failed; operator review required", Source: "legacy agent execute-loop"},
 		}
 		assert.Equal(t, expected, parkReasonMetaMap)
 	})
@@ -1078,7 +1079,7 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 	t.Run("terminal bead is rejected", func(t *testing.T) {
 		s := newTestStore(t)
 		b := &Bead{Title: "park terminal"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		require.NoError(t, s.SetLifecycleStatus(b.ID, StatusClosed, LifecycleTransitionOptions{ManualClose: true}))
 
 		err := s.ParkToProposed(b.ID, ParkConflictRecovery, nil)

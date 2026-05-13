@@ -96,7 +96,7 @@ ddx:
 | Area | Classification | Planning Evidence | Implementation Evidence | Resolution Direction | Issue |
 |------|----------------|-------------------|------------------------|----------------------|-------|
 | Execution model / storage hardening | PARTIAL | FEAT-010, ADR-004, TD-010, TD-005, TP-010, TP-005 | `cli/cmd/exec.go`, `cli/internal/exec/store.go`, `cli/internal/metric/store.go`, `cli/internal/bead/backend_external.go` | close remaining build/test hardening tasks | `ddx-f9121a4c`, `ddx-21fda5a4`, `ddx-105e7afc` |
-| Executor coverage | PARTIAL | FEAT-010, FEAT-006 | `cli/internal/exec/store.go` | implement `agent` executor delegation through `ddx agent` | none |
+| Executor coverage | PARTIAL | FEAT-010, FEAT-006 | `cli/internal/exec/store.go` | implement `agent` executor delegation through `legacy agent` | none |
 
 ### Quality Findings
 
@@ -116,7 +116,7 @@ ddx:
 | Issue ID | Type | Labels | Goal | Dependencies | Verification |
 |----------|------|--------|------|--------------|-------------|
 | `ddx-f9121a4c` | task | `helix`, `phase:build`, `kind:implementation`, `area:exec`, `area:beads` | Finish migrating exec and metric metadata onto bead-backed runtime collections | none | Exec/metric stores use named collections and explicit migration behavior |
-| `ddx-53048c6c` | task | `helix`, `phase:build`, `kind:implementation`, `area:exec`, `area:agent` | Implement agent executor delegation from `ddx exec` through `ddx agent` | none | Delegated exec runs retain agent-session linkage and coherent inspection behavior |
+| `ddx-53048c6c` | task | `helix`, `phase:build`, `kind:implementation`, `area:exec`, `area:agent` | Implement agent executor delegation from `ddx exec` through `legacy agent` | none | Delegated exec runs retain agent-session linkage and coherent inspection behavior |
 | `ddx-21fda5a4` | task | `helix`, `phase:build`, `kind:testing`, `area:beads` | Harden external backend adapter coverage for runtime collections | none | Adapter tests assert logical collection propagation without prescribing backend layout |
 | `ddx-105e7afc` | task | `helix`, `phase:build`, `kind:testing`, `area:beads` | Enforce bead-record schema validation in the real CI path | none | CI fails deterministically on bead envelope drift |
 
@@ -142,4 +142,4 @@ ddx:
 
 | Decision | Why Open | Governing Artifacts | Recommended Owner |
 |----------|----------|---------------------|-------------------|
-| How `ddx exec` should delegate the `agent` executor kind to `ddx agent` while preserving one run/session identity | FEAT-010 requires `agent` executor support, but the current implementation still returns a not-yet-implemented error | `FEAT-010`, `FEAT-006`, `TD-010`, `TD-006` | `ddx-53048c6c` |
+| How `ddx exec` should delegate the `agent` executor kind to `legacy agent` while preserving one run/session identity | FEAT-010 requires `agent` executor support, but the current implementation still returns a not-yet-implemented error | `FEAT-010`, `FEAT-006`, `TD-010`, `TD-006` | `ddx-53048c6c` |

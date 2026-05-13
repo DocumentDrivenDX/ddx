@@ -118,7 +118,7 @@ func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
 			return nil, nil
 		}
 		store := bead.NewStore(filepath.Join(wd, ".ddx"))
-		b, err := store.Get(beadID)
+		b, err := store.Get(ctx, beadID)
 		if err != nil || b == nil {
 			return nil, nil
 		}

@@ -3,7 +3,7 @@
 // These tests MUST FAIL until an Efficacy view exists. The view aggregates
 // `kind:cost` + `kind:routing` evidence from closed beads, groups by
 // (harness, provider, model), and lets the operator dispatch
-// `ddx agent compare` A/B runs. Tests drive the implementation per TDD.
+// `legacy agent compare` A/B runs. Tests drive the implementation per TDD.
 
 import { expect, test } from '@playwright/test';
 

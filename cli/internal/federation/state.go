@@ -6,6 +6,7 @@ package federation
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -52,6 +53,7 @@ type SpokeRecord struct {
 	DDxVersion    string      `json:"ddx_version,omitempty"`
 	SchemaVersion string      `json:"schema_version,omitempty"`
 	Capabilities  []string    `json:"capabilities,omitempty"`
+	ProjectIDs    []string    `json:"project_ids,omitempty"`
 	RegisteredAt  time.Time   `json:"registered_at"`
 	LastHeartbeat time.Time   `json:"last_heartbeat"`
 	Status        SpokeStatus `json:"status"`
@@ -154,4 +156,36 @@ func (r *FederationRegistry) ReconcileLiveness(now time.Time, staleAfter time.Du
 			s.Status = StatusActive
 		}
 	}
+}
+
+// RouteMutationToProjectOwner returns the spoke registered as owning projectID.
+// A project may be owned by exactly one spoke. If no owner is registered, or if
+// multiple spokes claim the same project, the helper returns an error.
+func RouteMutationToProjectOwner(registry *FederationRegistry, projectID string) (*SpokeRecord, error) {
+	if registry == nil {
+		return nil, fmt.Errorf("federation: registry is nil")
+	}
+	projectID = strings.TrimSpace(projectID)
+	if projectID == "" {
+		return nil, fmt.Errorf("federation: project_id required")
+	}
+
+	var match *SpokeRecord
+	for i := range registry.Spokes {
+		spoke := &registry.Spokes[i]
+		for _, owned := range spoke.ProjectIDs {
+			if owned == projectID {
+				if match != nil {
+					return nil, fmt.Errorf("federation: project %q has multiple registered owners", projectID)
+				}
+				copy := *spoke
+				match = &copy
+				break
+			}
+		}
+	}
+	if match == nil {
+		return nil, fmt.Errorf("federation: no registered spoke owns project %q", projectID)
+	}
+	return match, nil
 }

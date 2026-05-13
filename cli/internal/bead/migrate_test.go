@@ -75,7 +75,7 @@ func TestMigrateExternalizesAndArchives(t *testing.T) {
 	require.NoError(t, statErr, "events sidecar must exist for ddx-c1")
 
 	// Active collection only contains the open bead.
-	active, err := s.ReadAll()
+	active, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	require.Len(t, active, 1)
 	assert.Equal(t, "ddx-open", active[0].ID)

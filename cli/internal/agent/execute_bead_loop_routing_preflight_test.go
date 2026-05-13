@@ -342,9 +342,10 @@ func TestLintHook_BlockMode_RefusesDispatchOnLowScore(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once:      true,
-		Log:       &log,
-		EventSink: &loop,
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		Log:          &log,
+		EventSink:    &loop,
 		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
 			return LintResult{
 				Score:          2,

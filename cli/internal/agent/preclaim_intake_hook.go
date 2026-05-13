@@ -506,6 +506,9 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 	case "":
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification")
 	default:
-		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown classification %q", out.Classification)
+		return PreClaimIntakeResult{}, fmt.Errorf(
+			"pre-claim intake: unknown classification %q: expected one of ready, needs_refine, needs_split, operator_required, system_unready",
+			out.Classification,
+		)
 	}
 }

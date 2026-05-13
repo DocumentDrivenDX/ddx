@@ -38,7 +38,7 @@ func TestLifecycleMigrate_NeedsHumanLabelBecomesProposed(t *testing.T) {
 	assert.Equal(t, 1, stats.ToProposed)
 	assert.True(t, stats.MarkerWritten)
 
-	got, err := s.Get("ddx-human")
+	got, err := s.Get(testCtx(), "ddx-human")
 	require.NoError(t, err)
 	assert.Equal(t, StatusProposed, got.Status)
 	assert.NotContains(t, got.Labels, LabelNeedsHuman)
@@ -70,7 +70,7 @@ func TestLifecycleMigrate_NeedsInvestigationSmartRunnableRemainsOpen(t *testing.
 	assert.Equal(t, 1, stats.LegacyNoChangesMetadataRows)
 	assert.Equal(t, 1, stats.ToOpen)
 
-	got, err := s.Get("ddx-smart")
+	got, err := s.Get(testCtx(), "ddx-smart")
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, got.Status)
 	assert.NotContains(t, got.Labels, LabelNeedsInvestigation)
@@ -97,7 +97,7 @@ func TestLifecycleMigrate_NeedsInvestigationOperatorRequiredBecomesProposed(t *t
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.ToProposed)
 
-	got, err := s.Get("ddx-operator")
+	got, err := s.Get(testCtx(), "ddx-operator")
 	require.NoError(t, err)
 	assert.Equal(t, StatusProposed, got.Status)
 	assert.NotContains(t, got.Labels, LabelNeedsInvestigation)
@@ -123,13 +123,13 @@ func TestLifecycleMigrate_ExternalBlockerBecomesBlocked(t *testing.T) {
 	assert.Equal(t, 1, stats.ToBlocked)
 	assert.Equal(t, 1, stats.ToOpen)
 
-	gotExternal, err := s.Get(external.ID)
+	gotExternal, err := s.Get(testCtx(), external.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusBlocked, gotExternal.Status)
 	assert.Equal(t, "blocked on upstream API credentials", gotExternal.Extra[ExtraLifecycleExternalBlockerReason])
 	assert.NotContains(t, gotExternal.Labels, LabelNeedsInvestigation)
 
-	gotWaiting, err := s.Get(waiting.ID)
+	gotWaiting, err := s.Get(testCtx(), waiting.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, gotWaiting.Status)
 	blocked, err := s.BlockedAll()
@@ -178,7 +178,7 @@ func TestLifecycleMigrate_ApplyWritesSchemaMarkerAndIsIdempotent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after), "marker must be preserved on idempotent apply")
 
-	got, err := s.Get("ddx-pseudo")
+	got, err := s.Get(testCtx(), "ddx-pseudo")
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, got.Status)
 }

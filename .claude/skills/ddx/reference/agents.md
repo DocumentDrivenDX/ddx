@@ -5,7 +5,7 @@
 DDx invokes task execution through the upstream Fizeau service. DDx does not
 choose harnesses, providers, endpoints, or models on the normal work path. It
 describes the work, forwards raw passthrough constraints for harness,
-provider, model, model-ref, and profile unchanged, requests an abstract power
+provider, model, and profile unchanged, requests an abstract power
 level, and lets Fizeau route. Fizeau owns concrete routing,
 provider/model discovery, alias resolution, fuzzy matching of raw model
 strings, transcript/session rendering, and all route-side errors.
@@ -38,7 +38,7 @@ normal work path or infer route selection from a catalog.
 
 ## Passthrough constraints
 
-`--harness`, `--provider`, `--model`, `--model-ref`, and `--profile` are
+`--harness`, `--provider`, `--model`, and `--profile` are
 allowed only as passthrough constraints:
 
 ```bash
@@ -164,7 +164,7 @@ See the personas README for the authoring quality bar.
 ddx run --min-power 10 --prompt task.md
 ddx run --top-power --prompt task.md
 ddx run --min-power 10 --max-power 20 --prompt task.md
-ddx run --min-power 10 --provider openrouter --model qwen36 --model-ref qwen/qwen3.6-27b --profile default --prompt task.md
+ddx run --min-power 10 --provider openrouter --model qwen36 --profile default --prompt task.md
 ddx run --persona code-reviewer --prompt review.md
 
 # Introspection

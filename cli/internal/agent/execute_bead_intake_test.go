@@ -49,7 +49,8 @@ func TestIntake_ActionableAtomic_ClaimsNormally(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			atomic.AddInt32(&intakeCalls, 1)
 			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
@@ -180,7 +181,8 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			atomic.AddInt32(&intakeCalls, 1)
 			return PreClaimIntakeResult{
@@ -203,7 +205,7 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "human clarification")
+	assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 }
 
 func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
@@ -328,6 +330,7 @@ func TestHardOperatorRequiredStillParksProposed(t *testing.T) {
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:               true,
+		TargetBeadID:       beadRef.ID,
 		PreClaimIntakeHook: intakeHook,
 	})
 	require.NoError(t, err)
@@ -341,6 +344,196 @@ func TestHardOperatorRequiredStillParksProposed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
+}
+
+func TestPreClaimIntakeOperatorOverridePreventsRepeatParking(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-override",
+				ResultRev: "override",
+			}, nil
+		}),
+	}
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"outcome":"operator_required","reason":"ambiguous scope","detail":"need human clarification"}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	firstResult, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       beadRef.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, firstResult)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "first operator_required intake must park the bead")
+
+	got, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+	assert.Empty(t, got.Owner)
+
+	require.NoError(t, inner.SetLifecycleStatus(beadRef.ID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		Reason: "operator accepted readiness decision",
+		Actor:  "reviewer",
+		Source: "test",
+	}))
+
+	secondResult, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       beadRef.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, secondResult)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "operator acceptance must suppress repeat parking for the same finding")
+
+	got, err = inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
+func TestPreClaimIntakeChangedBeadInvalidatesOverride(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-override-changed",
+				ResultRev: "override-changed",
+			}, nil
+		}),
+	}
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"outcome":"operator_required","reason":"ambiguous scope","detail":"need human clarification"}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       beadRef.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls))
+
+	require.NoError(t, inner.SetLifecycleStatus(beadRef.ID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		Reason: "operator accepted readiness decision",
+		Actor:  "reviewer",
+		Source: "test",
+	}))
+
+	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+		b.Acceptance += "\n3. require an explicit operator acknowledgement"
+		b.Description += "\n\nAdditional prompt-relevant detail."
+	}))
+
+	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       beadRef.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, int32(2), atomic.LoadInt32(&store.parkCalls), "changed prompt-relevant fields must invalidate the override")
+
+	got, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+
+	events, err := inner.Events(beadRef.ID)
+	require.NoError(t, err)
+	var fingerprints []string
+	for _, ev := range events {
+		if ev.Kind != "intake.blocked" {
+			continue
+		}
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		fingerprint, _ := body["fingerprint"].(string)
+		if fingerprint != "" {
+			fingerprints = append(fingerprints, fingerprint)
+		}
+	}
+	require.Len(t, fingerprints, 2, "override invalidation must park again with a new readiness fingerprint")
+	assert.NotEqual(t, fingerprints[0], fingerprints[1], "prompt changes must produce a different readiness fingerprint")
+}
+
+func TestIntakeBlockedEventIncludesStructuredDecisionFields(t *testing.T) {
+	inner, _, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run when intake parks the bead")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: "ddx-0001",
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeOperatorRequired,
+				Reason:  "ambiguous_scope",
+				Detail:  "ambiguous scope requires human review",
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	events, err := inner.Events("ddx-0001")
+	require.NoError(t, err)
+	var blocked *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "intake.blocked" {
+			blocked = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, blocked, "blocked intake must append durable evidence")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(blocked.Body), &body))
+	assert.Equal(t, "pre_claim_intake.operator_required", body["rule_id"])
+	assert.Equal(t, "ambiguous_scope", body["reason"])
+	assert.Equal(t, "pre_claim_intake", body["decision_source"])
+	assert.Equal(t, "block", body["policy_mode"])
+	assert.Equal(t, "park", body["decision"])
+	assert.Equal(t, "review intake result and accept, rewrite, split, block, or cancel", body["suggested_action"])
+	assert.NotEmpty(t, body["fingerprint"])
+	assert.NotEmpty(t, body["prompt_fingerprint"])
+	assert.Equal(t, body["fingerprint"], body["accepted_fingerprint"])
+	assert.Equal(t, "operator_required", body["intake_outcome"])
+	assert.Equal(t, "ambiguous scope requires human review", body["detail"])
 }
 
 func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
@@ -610,7 +803,7 @@ func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	require.True(t, found, "rewritten intake must record an intake-rewritten event")
 }
 
-func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
+func TestIntake_UnsafeRewriteWarnsAndExecutesOriginal(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n"
@@ -622,8 +815,12 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run for unsafe rewrites")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rejected-rewrite",
+				ResultRev: "rewrite-rejected",
+			}, nil
 		}),
 	}
 
@@ -648,38 +845,43 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Claim now happens before intake; for unsafe rewrites the bead is
-	// claimed then immediately unclaimed, so claimCalls == 1 but execution
-	// does not proceed and the bead description/acceptance must be unchanged.
+	// Claim happens before intake. If the lifecycle hook proposes an unsafe
+	// rewrite, the worker must ignore that rewrite, warn, and keep moving with
+	// the original bead instead of parking it for operator attention.
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim runs before intake check")
-	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
-	assert.Contains(t, eventSink.String(), "operator_required")
-	assert.Equal(t, 0, result.Attempts)
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
+	assert.Contains(t, eventSink.String(), "rewrite_rejected")
+	assert.NotContains(t, eventSink.String(), "pre_claim_intake.blocked")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status, "rejected rewrite must move bead to operator attention")
+	assert.Equal(t, bead.StatusClosed, got.Status, "rejected rewrite must not move bead to operator attention")
 	assert.NotContains(t, got.Description, "invented product semantics", "original description must be preserved")
 	assert.Equal(t, "1. preserve the original intent\n2. name the verification command", got.Acceptance)
-	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman, "operator parking must be status-owned, not needs_human label-owned")
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "acceptance criteria")
 
 	events, err := inner.Events(candidate.ID)
 	require.NoError(t, err)
 	var foundIntakeBlocked bool
+	var foundIntakeWarn bool
 	for _, ev := range events {
-		if ev.Kind != "intake.blocked" {
-			continue
+		switch ev.Kind {
+		case "intake.blocked":
+			foundIntakeBlocked = true
+		case "intake.warn":
+			foundIntakeWarn = true
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, "rewrite_rejected", body["reason"])
+			assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "acceptance criteria")
 		}
-		foundIntakeBlocked = true
-		var body map[string]any
-		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-		assert.Equal(t, "operator_required", body["intake_outcome"])
 	}
-	assert.True(t, foundIntakeBlocked, "rejected rewrite must append intake.blocked event to bead")
+	assert.False(t, foundIntakeBlocked, "rejected rewrite must not append intake.blocked event to bead")
+	assert.True(t, foundIntakeWarn, "rejected rewrite must append intake.warn evidence to bead")
 }
 
-func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
+func TestIntake_UnsafeRewriteDoesNotParkOrRemoveFromExecution(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
@@ -690,15 +892,19 @@ func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run for unsafe rewrites")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rewrite-warning",
+				ResultRev: "rewrite-warning",
+			}, nil
 		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
@@ -713,17 +919,18 @@ func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 
-	ready, err := inner.ReadyExecution()
+	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	for _, b := range ready {
-		if b.ID == candidate.ID {
-			t.Fatalf("parked bead %s must not appear in ReadyExecution after unsafe rewrite rejection", candidate.ID)
-		}
-	}
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.Contains(t, got.Description, "Do not change the API contract")
+	assert.NotContains(t, got.Description, "completely different description")
 }
 
-func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
+func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal problem text\n\nROOT CAUSE\ncli/internal/agent/preclaim.go:42\n\nNON-SCOPE\nDo not touch acceptance criteria\n"
@@ -735,8 +942,12 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run for description preservation failures")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-preservation-warning",
+				ResultRev: "preservation-warning",
+			}, nil
 		}),
 	}
 
@@ -760,30 +971,97 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status, "bead must move to operator attention after description preservation failure")
-	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman, "operator parking must be status-owned, not needs_human label-owned")
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "description")
+	assert.Equal(t, bead.StatusClosed, got.Status, "bead must keep moving after description preservation failure")
 	assert.Contains(t, got.Description, "original problem text", "original description must not be overwritten")
 
 	events, err := inner.Events(candidate.ID)
 	require.NoError(t, err)
 	var foundBlocked bool
+	var foundWarn bool
 	for _, ev := range events {
-		if ev.Kind != "intake.blocked" {
-			continue
+		switch ev.Kind {
+		case "intake.blocked":
+			foundBlocked = true
+		case "intake.warn":
+			foundWarn = true
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, "rewrite_rejected", body["reason"])
+			assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 		}
-		foundBlocked = true
-		var body map[string]any
-		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-		assert.Equal(t, "operator_required", body["intake_outcome"])
-		assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 	}
-	assert.True(t, foundBlocked, "description preservation failure must append intake.blocked event")
-	assert.Contains(t, logBuf.String(), "parking")
+	assert.False(t, foundBlocked, "description preservation failure must not append intake.blocked event")
+	assert.True(t, foundWarn, "description preservation failure must append intake.warn evidence")
+	assert.Contains(t, logBuf.String(), "continuing with original")
+	assert.NotContains(t, logBuf.String(), "parking")
+}
+
+func TestReadinessWarningEvidenceIncludesStructuredDecisionFields(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
+		b.Acceptance = "1. verify something\n2. run tests"
+	}))
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rewrite-warning",
+				ResultRev: "rewrite-warning",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "attempted to drop acceptance criteria",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\ninvented product semantics\n",
+					Acceptance:    "1. preserve the original intent",
+					ChangedFields: []string{"description", "acceptance"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var warned *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "intake.warn" {
+			warned = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, warned, "warning evidence must be appended without parking the bead")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(warned.Body), &body))
+	assert.Equal(t, "pre_claim_intake.rewrite_rejected", body["rule_id"])
+	assert.Equal(t, "rewrite_rejected", body["reason"])
+	assert.Equal(t, "pre_claim_intake", body["decision_source"])
+	assert.Equal(t, "warn-only", body["policy_mode"])
+	assert.Equal(t, "warn", body["decision"])
+	assert.Equal(t, "revise the rewrite so it preserves every explicit commitment", body["suggested_action"])
+	assert.NotEmpty(t, body["fingerprint"])
+	assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 }
 
 // TestReadinessHookEmptyOutput_DeduplicatesPrefix asserts that when the intake
@@ -846,7 +1124,8 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-			Once: true,
+			Once:         true,
+			TargetBeadID: candidate.ID,
 			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 				return PreClaimIntakeResult{
 					Outcome: PreClaimIntakeActionableButRewritten,
@@ -895,7 +1174,8 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-			Once: true,
+			Once:         true,
+			TargetBeadID: candidate.ID,
 			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 				return PreClaimIntakeResult{
 					Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -928,7 +1208,8 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-			Once: true,
+			Once:         true,
+			TargetBeadID: candidate.ID,
 			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 				return PreClaimIntakeResult{
 					Outcome: PreClaimIntakeOperatorRequired,
@@ -1010,7 +1291,8 @@ func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome: PreClaimIntakeActionableButRewritten,
@@ -1057,7 +1339,8 @@ func TestIntake_AmbiguousNeedsHuman_BlocksWithoutClaim(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome: PreClaimIntakeOperatorRequired,
@@ -1073,7 +1356,7 @@ func TestIntake_AmbiguousNeedsHuman_BlocksWithoutClaim(t *testing.T) {
 	got, err := inner.Get("ddx-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "bead must be moved to operator attention")
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "AC conflicts with non-scope")
+	assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 
 	events, err := inner.Events("ddx-0001")
 	require.NoError(t, err)

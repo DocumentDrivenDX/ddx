@@ -139,10 +139,16 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
 	}
 
+	if f.tryExecutorOverride == nil {
+		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
+			return err
+		}
+	}
+
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 
 	// Pre-flight: look up the bead.
-	target, err := store.Get(beadID)
+	target, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "bead not found: %s\n", beadID)
 		return &ExitError{Code: tryExitFailed, Message: ""}
@@ -247,6 +253,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
 
+	var gitOps agent.GitOps = &agent.RealGitOps{}
+	if f.executeBeadGitOverride != nil {
+		gitOps = f.executeBeadGitOverride
+	}
+	agent.RecoverOrphans(gitOps, projectRoot, beadID)
+
 	// Build the executor: either the test override or the real single-tier executor.
 	var executor agent.ExecuteBeadExecutor
 	if f.tryExecutorOverride != nil {
@@ -257,7 +269,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			requestMinPower := minPower
 			if autoInferTier {
 				var targetBead *bead.Bead
-				if b, getErr := store.Get(execBeadID); getErr == nil {
+				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
 					targetBead = b
 					inferredTier = escalation.InferTier(targetBead)
 				} else {
@@ -285,7 +297,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				loopOverrides.ProviderRequestTimeout = &requestTimeout
 			}
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
-			gitOps := &agent.RealGitOps{}
 			res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				FromRev:         fromRev,
 				Output:          cmd.OutOrStdout(),
@@ -303,7 +314,39 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
 			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				targetBead, _ := store.Get(execBeadID)
+				if wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps); ctxErr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate-context setup failed: %v (skipping required-gate eval)\n", ctxErr)
+				} else if wt != "" {
+					defer cleanup()
+					checksAbs := filepath.Join(projectRoot, res.ExecutionDir, "checks.json")
+					checksRel := filepath.Join(res.ExecutionDir, "checks.json")
+					anyFailed, ratchetFailed, evalErr := agent.EvaluateRequiredGatesForResult(wt, ids, res, projectRoot, checksAbs, checksRel)
+					if evalErr != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate evaluation failed: %v (skipping)\n", evalErr)
+					} else if anyFailed || ratchetFailed {
+						preserveRef := agent.PreserveRef(res.BeadID, res.BaseRev)
+						if upErr := gitOps.UpdateRef(projectRoot, preserveRef, res.ResultRev); upErr != nil {
+							agent.MarkResultLandError(projectRoot, res, upErr)
+						} else {
+							res.PreserveRef = preserveRef
+							res.Outcome = "preserved"
+							if ratchetFailed {
+								res.Reason = agent.RatchetPreserveReason
+							} else {
+								res.Reason = "post-run checks failed"
+							}
+							res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+							res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
+						}
+						_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
+						tierStr := ""
+						if inferredTier != "" {
+							tierStr = string(inferredTier)
+						}
+						return agent.ReportFromExecuteBeadResult(res, tierStr), nil
+					}
+				}
+				targetBead := target
 				landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 					ctx, projectRoot, targetBead, res,
 					func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
@@ -447,7 +490,7 @@ func unmetDeps(store *bead.Store, b *bead.Bead) []string {
 	}
 	var unmet []string
 	for _, depID := range depIDs {
-		dep, err := store.Get(depID)
+		dep, err := store.Get(context.Background(), depID)
 		if err != nil || dep.Status != bead.StatusClosed {
 			unmet = append(unmet, depID)
 		}

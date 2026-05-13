@@ -127,3 +127,30 @@ func TestEvidenceCapsContextBudget(t *testing.T) {
 		}
 	})
 }
+
+func TestApplyDefaultsRetainDays(t *testing.T) {
+	t.Run("defaults_to_90_when_unset", func(t *testing.T) {
+		cfg := &NewConfig{}
+		cfg.ApplyDefaults()
+		if cfg.Executions == nil || cfg.Executions.RetainDays == nil {
+			t.Fatalf("ApplyDefaults() did not initialize executions retain_days")
+		}
+		if got := *cfg.Executions.RetainDays; got != 90 {
+			t.Fatalf("RetainDays = %d, want 90", got)
+		}
+	})
+
+	t.Run("preserves_explicit_zero", func(t *testing.T) {
+		zero := 0
+		cfg := &NewConfig{
+			Executions: &ExecutionsConfig{RetainDays: &zero},
+		}
+		cfg.ApplyDefaults()
+		if cfg.Executions == nil || cfg.Executions.RetainDays == nil {
+			t.Fatalf("ApplyDefaults() cleared explicit zero retain_days")
+		}
+		if got := *cfg.Executions.RetainDays; got != 0 {
+			t.Fatalf("RetainDays = %d, want 0", got)
+		}
+	})
+}

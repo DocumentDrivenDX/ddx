@@ -89,17 +89,17 @@ bun run test:e2e
 
 ```bash
 # Frame: create specs and work items
-ddx agent run --harness claude --prompt frame-prompt.md
+ddx run --harness claude --prompt frame-prompt.md
 
 # Build: agent implements per specs, TDD, closes beads
-ddx agent run --harness claude --prompt build-prompt.md
+ddx try ddx-abc12345
 
 # Evolve: add a feature
-ddx agent run --harness claude --prompt evolve-prompt.md
+ddx work
 
 # Inspect
 ddx bead list          # all beads tracked
-ddx agent usage        # token consumption
+ddx log                 # history
 ddx doc history PRD-001  # spec evolution
 ddx metric list        # metric artifacts
 ddx metric show MET-001  # metric definition + recent history
@@ -120,8 +120,10 @@ bound to the metric artifact.
 | [Prose quality support](docs/prose-quality.md) | Guidance for `ddx doc prose --changed` and prose config |
 | `ddx bead create/list/ready` | Track work items |
 | `ddx metric list/show/validate/run/history/compare/trend` | Inspect metric artifacts and run history |
-| `ddx agent run` | Invoke an AI agent |
-| `ddx agent usage` | View token consumption |
+| `ddx run` | Invoke an AI agent once |
+| `ddx try` | Execute a specific bead |
+| `ddx work` | Drain the bead queue |
+| `ddx log` | View history |
 | `ddx persona bind` | Assign personas to roles |
 
 ## Ecosystem

@@ -378,6 +378,85 @@ func TestIntegration_Query_Runs(t *testing.T) {
 	}
 }
 
+func TestAuditEvent_RawTranscriptViewed(t *testing.T) {
+	workDir, store := setupIntegrationDir(t)
+	base := newTestStateProvider(workDir, store)
+	projID := base.projects[0].ID
+	beadID := "ddx-raw-transcript"
+	if err := store.Create(&bead.Bead{ID: beadID, Title: "Raw transcript audit target", Status: bead.StatusOpen}); err != nil {
+		t.Fatalf("seed audit bead: %v", err)
+	}
+
+	run := makeRun("run-raw-001", ddxgraphql.RunLayerRun, "success")
+	run.ProjectID = &projID
+	run.BeadID = &beadID
+	prompt := "prompt body"
+	response := "response body"
+	stderr := "stderr body"
+	run.Prompt = &prompt
+	run.Response = &response
+	run.Stderr = &stderr
+
+	provider := &runsTestProvider{
+		testStateProvider: base,
+		all:               []*ddxgraphql.Run{run},
+	}
+	h := newGQLHandler(provider, workDir, nil)
+
+	resp := gqlPost(t, h, `{ run(id: "run-raw-001") { id layer status artifactId } }`)
+	var headerOut struct {
+		Run *struct {
+			ID string `json:"id"`
+		} `json:"run"`
+	}
+	if err := json.Unmarshal(resp["data"], &headerOut); err != nil {
+		t.Fatalf("parse header query: %v", err)
+	}
+	if headerOut.Run == nil || headerOut.Run.ID != "run-raw-001" {
+		t.Fatalf("expected header query to resolve run, got %+v", headerOut.Run)
+	}
+	events, err := store.EventsByKind(beadID, "raw_transcript_viewed")
+	if err != nil {
+		t.Fatalf("get raw transcript events after header query: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("expected no raw_transcript_viewed events before transcript access, got %d", len(events))
+	}
+
+	resp = gqlPost(t, h, `{ run(id: "run-raw-001") { id prompt response stderr } }`)
+	var transcriptOut struct {
+		Run *struct {
+			ID       string  `json:"id"`
+			Prompt   *string `json:"prompt"`
+			Response *string `json:"response"`
+			Stderr   *string `json:"stderr"`
+		} `json:"run"`
+	}
+	if err := json.Unmarshal(resp["data"], &transcriptOut); err != nil {
+		t.Fatalf("parse transcript query: %v", err)
+	}
+	if transcriptOut.Run == nil || transcriptOut.Run.Prompt == nil || transcriptOut.Run.Response == nil || transcriptOut.Run.Stderr == nil {
+		t.Fatalf("expected transcript query to return prompt/response/stderr, got %+v", transcriptOut.Run)
+	}
+
+	events, err = store.EventsByKind(beadID, "raw_transcript_viewed")
+	if err != nil {
+		t.Fatalf("get raw transcript events: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected exactly 1 raw_transcript_viewed event, got %d", len(events))
+	}
+	if !strings.Contains(events[0].Body, "run_id=run-raw-001") {
+		t.Fatalf("raw transcript audit body missing run id: %q", events[0].Body)
+	}
+	if !strings.Contains(events[0].Body, "fields=prompt,response,stderr") {
+		t.Fatalf("raw transcript audit body missing transcript fields: %q", events[0].Body)
+	}
+	if !strings.Contains(events[0].Body, "visibility=project_membership") {
+		t.Fatalf("raw transcript audit body missing visibility marker: %q", events[0].Body)
+	}
+}
+
 // TestRunFilter_LayerFilter covers applyRunFilter edge cases.
 func TestRunFilter_LayerFilter(t *testing.T) {
 	work := ddxgraphql.RunLayerWork

@@ -32,7 +32,7 @@ import (
 )
 
 // CompareRuntime carries the per-invocation knobs for the
-// `ddx agent run --compare` dispatch path. Durable knobs (Model,
+// `legacy agent run --compare` dispatch path. Durable knobs (Model,
 // Effort, Permissions, Timeout) live on config.ResolvedConfig and are
 // passed via RunCompareWithConfigViaService's rcfg argument; only
 // non-serializable plumbing and per-invocation runtime intent remain.
@@ -49,7 +49,7 @@ type CompareRuntime struct {
 }
 
 // RunCompareWithConfigViaService is the production entry point for
-// `ddx agent run --compare`. It assembles a per-arm RunFunc backed by
+// `legacy agent run --compare`. It assembles a per-arm RunFunc backed by
 // dispatchViaResolvedConfig (which honors AgentRunRuntime overrides for
 // Harness/Model/Permissions) and delegates orchestration to
 // RunCompareWith.
@@ -354,7 +354,7 @@ func genCompareID() string {
 }
 
 // QuorumRuntime carries the per-invocation knobs for the
-// `ddx agent run --quorum` dispatch path. Durable knobs (Model,
+// `legacy agent run --quorum` dispatch path. Durable knobs (Model,
 // Effort, Permissions, Timeout) live on config.ResolvedConfig and are
 // passed via RunQuorumWithConfigViaService's rcfg argument; only
 // non-serializable plumbing and per-invocation runtime intent remain.
@@ -368,7 +368,7 @@ type QuorumRuntime struct {
 }
 
 // RunQuorumWithConfigViaService is the production entry point for
-// `ddx agent run --quorum`. It assembles a per-arm RunFunc backed by
+// `legacy agent run --quorum`. It assembles a per-arm RunFunc backed by
 // dispatchViaResolvedConfig (which honors AgentRunRuntime overrides for
 // Harness/Model/Permissions) and delegates orchestration to
 // RunQuorumWith.

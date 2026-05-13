@@ -24,14 +24,14 @@ type parkReasonMeta struct {
 }
 
 var parkReasonMetaMap = map[ParkReason]parkReasonMeta{
-	ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "ddx agent execute-loop"},
-	ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "ddx agent execute-loop"},
-	ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "ddx agent execute-loop"},
-	ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
-	ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
-	ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "ddx agent execute-loop"},
-	ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "ddx agent execute-loop"},
-	ParkAutoRecoveryFailed:         {Reason: "automated recovery failed; operator review required", Source: "ddx agent execute-loop"},
+	ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "legacy agent execute-loop"},
+	ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "legacy agent execute-loop"},
+	ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "legacy agent execute-loop"},
+	ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "legacy agent execute-loop"},
+	ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "legacy agent execute-loop"},
+	ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "legacy agent execute-loop"},
+	ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "legacy agent execute-loop"},
+	ParkAutoRecoveryFailed:         {Reason: "automated recovery failed; operator review required", Source: "legacy agent execute-loop"},
 }
 
 // ParkToProposed transitions the bead to proposed status for operator

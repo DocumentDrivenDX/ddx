@@ -12,21 +12,21 @@ import (
 func createBeadWithQueueRank(t *testing.T, s *Store, rank int) *Bead {
 	t.Helper()
 	b := &Bead{Title: "queue-rank test bead"}
-	require.NoError(t, s.Create(b))
-	require.NoError(t, s.Update(b.ID, func(bead *Bead) {
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Update(testCtx(), b.ID, func(bead *Bead) {
 		if bead.Extra == nil {
 			bead.Extra = make(map[string]any)
 		}
 		bead.Extra[queueRankKey] = rank
 	}))
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	return got
 }
 
 func assertQueueRank(t *testing.T, s *Store, id string, want int) {
 	t.Helper()
-	got, err := s.Get(id)
+	got, err := s.Get(testCtx(), id)
 	require.NoError(t, err)
 	rank, ok := parseQueueRank(got.Extra[queueRankKey])
 	if !ok {
@@ -73,7 +73,7 @@ func TestQueueRank_PreservedAcrossUnclaim(t *testing.T) {
 func TestQueueRank_PreservedAcrossClose(t *testing.T) {
 	s := newTestStore(t)
 	b := createBeadWithQueueRank(t, s, 5)
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 	assertQueueRank(t, s, b.ID, 5)
 }
 
@@ -81,7 +81,7 @@ func TestQueueRank_PreservedAcrossClose(t *testing.T) {
 func TestQueueRank_PreservedAcrossReopen(t *testing.T) {
 	s := newTestStore(t)
 	b := createBeadWithQueueRank(t, s, 5)
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 	require.NoError(t, s.Reopen(b.ID, "reopen reason", ""))
 	assertQueueRank(t, s, b.ID, 5)
 }
@@ -111,7 +111,7 @@ func TestQueueRank_PreservedAcrossMigrateLifecycle(t *testing.T) {
 func TestQueueRank_PreservedAcrossArchive(t *testing.T) {
 	s := newTestStore(t)
 	b := createBeadWithQueueRank(t, s, 5)
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	policy := migratePolicy() // statuses=[closed], MinAge=0, MinActiveCount=0
 	_, err := s.ArchiveWithEvents(policy)
@@ -126,7 +126,7 @@ func TestQueueRank_RoundTripViaJSONL(t *testing.T) {
 	s := newTestStore(t)
 	b := createBeadWithQueueRank(t, s, 7)
 	// Read back from disk (forces JSONL decode; int 7 will come back as float64(7)).
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	rank, ok := parseQueueRank(got.Extra[queueRankKey])
 	if !ok {
@@ -143,14 +143,14 @@ func TestQueueRank_RoundTripViaJSONL(t *testing.T) {
 func TestQueueRank_SetFlagStringRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "string queue-rank test"}
-	require.NoError(t, s.Create(b))
-	require.NoError(t, s.Update(b.ID, func(bead *Bead) {
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Update(testCtx(), b.ID, func(bead *Bead) {
 		if bead.Extra == nil {
 			bead.Extra = make(map[string]any)
 		}
 		bead.Extra[queueRankKey] = "5" // string, as produced by --set flag
 	}))
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	rank, ok := parseQueueRank(got.Extra[queueRankKey])
 	if !ok {

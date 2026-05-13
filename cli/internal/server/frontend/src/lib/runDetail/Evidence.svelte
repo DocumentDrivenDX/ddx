@@ -6,16 +6,29 @@
 	interface Props {
 		runId: string
 		files: BundleFile[]
+		loading?: boolean
 	}
-	let { runId, files }: Props = $props()
+	let { runId, files, loading = false }: Props = $props()
 
 	let viewing = $state<string | null>(null)
 	let viewedContent = $state<BundleFileContent | null>(null)
 	let viewLoading = $state(false)
 	let viewError = $state<string | null>(null)
 
+	const INLINE_MAX_BYTES = 64 * 1024
+	const INLINE_ALLOWED_BASENAMES = new Set(['manifest.json', 'prompt.md', 'result.json'])
+	const INLINE_ALLOWED_EXTENSIONS = new Set(['.txt', '.md'])
+
 	function downloadHref(path: string): string {
 		return `/api/runs/${encodeURIComponent(runId)}/bundle?path=${encodeURIComponent(path)}`
+	}
+
+	function isInlineAllowed(file: BundleFile): boolean {
+		if (file.size > INLINE_MAX_BYTES) return false
+		const base = file.path.split('/').pop()?.toLowerCase() ?? file.path.toLowerCase()
+		if (INLINE_ALLOWED_BASENAMES.has(base)) return true
+		const ext = base.includes('.') ? base.slice(base.lastIndexOf('.')) : ''
+		return INLINE_ALLOWED_EXTENSIONS.has(ext)
 	}
 
 	function formatBytes(n: number): string {
@@ -55,7 +68,13 @@
 </script>
 
 <div class="space-y-2" data-testid="rundetail-evidence">
-	{#if files.length === 0}
+	{#if loading}
+		<div
+			class="border-border-line bg-bg-surface text-body-sm text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted border p-3"
+		>
+			Loading evidence files…
+		</div>
+	{:else if files.length === 0}
 		<div
 			class="border-border-line bg-bg-surface text-body-sm text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted border p-3"
 		>
@@ -84,18 +103,20 @@
 						<td class="font-mono-code text-mono-code px-2 py-1">{f.mimeType}</td>
 						<td class="px-2 py-1">
 							<div class="flex gap-2">
-								<button
-									type="button"
-									data-action="view"
-									data-evidence-view={f.path}
-									class="border-border-line text-body-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface border px-2 py-0.5"
-									onclick={(e) => {
-										e.stopPropagation()
-										void viewFile(f.path)
-									}}
-								>
-									{viewing === f.path ? 'Hide' : 'View'}
-								</button>
+								{#if isInlineAllowed(f)}
+									<button
+										type="button"
+										data-action="view"
+										data-evidence-view={f.path}
+										class="border-border-line text-body-sm text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface border px-2 py-0.5"
+										onclick={(e) => {
+											e.stopPropagation()
+											void viewFile(f.path)
+										}}
+									>
+										{viewing === f.path ? 'Hide' : 'View'}
+									</button>
+								{/if}
 								<a
 									href={downloadHref(f.path)}
 									download={f.path.split('/').pop()}
@@ -106,7 +127,7 @@
 									Download
 								</a>
 							</div>
-							{#if viewing === f.path}
+							{#if viewing === f.path && isInlineAllowed(f)}
 								<div class="mt-2" data-testid="evidence-inline">
 									{#if viewLoading}
 										<div class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Loading…</div>

@@ -1,0 +1,3 @@
+status: open
+orchestrator_action: decompose
+reason: This bead is already at decomposition depth 3, but its current slice still mixes a p95 performance target with cross-cutting docs/spec updates and raw-transcript audit behavior. It needs a higher-level split before execution; the current worktree should not attempt implementation under this contract.

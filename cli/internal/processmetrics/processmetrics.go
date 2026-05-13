@@ -670,7 +670,7 @@ func (s *Service) beadStore() *bead.Store {
 }
 
 func (s *Service) loadInputs() ([]bead.Bead, []agent.SessionEntry, map[string]agent.SessionEntry, map[string]bool, error) {
-	beads, err := s.beadStore().ReadAll()
+	beads, err := s.beadStore().ReadAll(context.Background())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

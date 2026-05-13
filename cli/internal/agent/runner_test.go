@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -25,7 +26,12 @@ func TestRunLMStudioDispatchesThroughEmbeddedAgent(t *testing.T) {
 	// Isolate from the user's fizeau global config (~/.config/fizeau/config.yaml)
 	// so runAgentViaService does not make real HTTP connections to configured
 	// providers (which would block until TCP timeout).
-	t.Setenv("HOME", t.TempDir())
+	homeDir, err := os.MkdirTemp("", "ddx-home-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	t.Setenv("HOME", homeDir)
 	mock := &mockExecutor{output: "should not be called"}
 	r := newTestRunner(mock)
 
@@ -47,7 +53,12 @@ func TestRunLMStudioDispatchesThroughEmbeddedAgent(t *testing.T) {
 
 // Same check for openrouter — same root cause, same fix.
 func TestRunOpenRouterDispatchesThroughEmbeddedAgent(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	homeDir, err := os.MkdirTemp("", "ddx-home-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	t.Setenv("HOME", homeDir)
 	mock := &mockExecutor{output: "should not be called"}
 	r := newTestRunner(mock)
 

@@ -26,10 +26,10 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 - **Run substrate:** single on-disk shape; layer-2 and layer-3 add metadata. `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/` collapse.
 - **No run-type catalog beyond the three layers.** Comparison, replay, benchmark, etc. are skill compositions, never enshrined in Go core or specs.
 - **Loop ownership sharpened:** DDx owns mechanical queue drain (`ddx work`); content-aware supervisory decisions (e.g., "comparison failed → enqueue reconciliation beads") remain plugin/HELIX territory.
-- **CLI verbs:** `ddx run` / `ddx try` / `ddx work` promoted to top-level. Hard-deprecate `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop` (exit non-zero with bare redirect message — no aliases, no grace period).
+- **CLI verbs:** `ddx run` / `ddx try` / `ddx work` promoted to top-level. Hard-deprecate `legacy agent run`, `legacy agent execute-bead`, `legacy agent execute-loop` (exit non-zero with bare redirect message — no aliases, no grace period).
 - **Generate-artifact layer placement:** pure-return generators (agent returns bytes/text, DDx writes file) are layer-1. Repo-editing generators are layer-2 with bead-less worktree.
 - **Quorum dispatch:** moves to skill composition. `--quorum` flag goes away; replaced by `compare-prompts` skill.
-- **`ddx agent` passthrough is structural:** DDx imports the upstream agent module's Cobra root and mounts it under `ddx agent`. Notionally `cli(ddx).agent(load_cli(agent))`. DDx does not enumerate per-subcommand wrappers; the entire upstream tree is the source of truth.
+- **`legacy agent` passthrough is structural:** DDx imports the upstream agent module's Cobra root and mounts it under `legacy agent`. Notionally `cli(ddx).agent(load_cli(agent))`. DDx does not enumerate per-subcommand wrappers; the entire upstream tree is the source of truth.
 
 ## Three-layer architecture
 
@@ -62,10 +62,10 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 
 ### FEAT-001-cli.md
 - Promote `run` / `try` / `work` to top-level.
-- `ddx agent` mounts upstream Cobra root structurally; no DDx-defined leaf subcommands beneath it.
-- Hard-deprecation handlers for `ddx agent {run, execute-bead, execute-loop}`.
+- `legacy agent` mounts upstream Cobra root structurally; no DDx-defined leaf subcommands beneath it.
+- Hard-deprecation handlers for `legacy agent {run, execute-bead, execute-loop}`.
 - New namespaces: `ddx runs` (cross-layer evidence introspection), `ddx tries` (layer-2 specifically), `ddx work workers` (layer-3 worker management).
-- Remove FEAT-001:92 backward-compatibility clause for `ddx agent execute-loop`.
+- Remove FEAT-001:92 backward-compatibility clause for `legacy agent execute-loop`.
 
 ### FEAT-005-artifacts.md
 - Identity broadens to non-markdown via sidecar `.ddx.yaml`.
@@ -75,7 +75,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 
 ### FEAT-006-agent-service.md
 - Tighten to layer-1 consumer-side wrapper that powers `ddx run`.
-- `ddx agent` is structural passthrough (mount upstream Cobra root).
+- `legacy agent` is structural passthrough (mount upstream Cobra root).
 - Non-bead Profile/Permissions selection (artifact-keyed path).
 - Migration table: what stays in FEAT-006 (CONTRACT-003 boundary, profile/permissions), what moves to FEAT-010 (worktree, merge/preserve, evidence bundles, queue drain), what moves to FEAT-001 (CLI surface).
 - Session-log boundary clarified: DDx owns the envelope/pointer in evidence bundles; upstream owns inner log shape.
@@ -108,9 +108,9 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 ### FEAT-014, FEAT-013
 - One-sentence touches: cost attribution and concurrency for generate-artifact.
 
-## `ddx agent` subcommand fates
+## `legacy agent` subcommand fates
 
-`ddx agent` becomes a structural mount of the upstream agent CLI Cobra root. Per-file fate in DDx:
+`legacy agent` becomes a structural mount of the upstream agent CLI Cobra root. Per-file fate in DDx:
 
 **Delete with prejudice (upstream owns these via mounted subtree):**
 - `agent_list.go`
@@ -216,4 +216,4 @@ Per FEAT-011's path model: source at `skills/ddx/`, embedded at `cli/internal/sk
 
 ## Refinement provenance
 
-Refined through 3 rounds of adversarial review (codex via `ddx agent run --harness codex` + fresh-eyes general-purpose subagent in parallel) plus user-resolved questions Q1–Q12. Key user decisions: artifact authority (Q1), FEAT-019 child-of-010 (Q2), reads-matter-writes-case-by-case (Q3), check-in unconditionally (Q4), CONTRACT-003 amendments allowed (Q5), substrate unification (Q6), no run-type catalog (Q7), no v1-gate framing (Q8), FEAT-019 contracts (Q9), generate-artifact split layer-1/layer-2 (Q10), quorum-as-skill (Q11), structural passthrough not per-command (Q12 follow-up).
+Refined through 3 rounds of adversarial review (codex via `legacy agent run --harness codex` + fresh-eyes general-purpose subagent in parallel) plus user-resolved questions Q1–Q12. Key user decisions: artifact authority (Q1), FEAT-019 child-of-010 (Q2), reads-matter-writes-case-by-case (Q3), check-in unconditionally (Q4), CONTRACT-003 amendments allowed (Q5), substrate unification (Q6), no run-type catalog (Q7), no v1-gate framing (Q8), FEAT-019 contracts (Q9), generate-artifact split layer-1/layer-2 (Q10), quorum-as-skill (Q11), structural passthrough not per-command (Q12 follow-up).

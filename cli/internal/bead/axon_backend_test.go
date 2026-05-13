@@ -34,7 +34,7 @@ func newAxonStoreWithTransport(t *testing.T) (*Store, *fakeAxonGraphQLTransport)
 		WithAxonGraphQLTransport(transport),
 		WithAxonGraphQLClient(transport),
 	)
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(testCtx()))
 	return s, transport
 }
 
@@ -221,10 +221,10 @@ func TestAxonBackend_CreateAndGet(t *testing.T) {
 	s := newAxonStore(t)
 
 	b := &Bead{Title: "first", Description: "round-trip"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NotEmpty(t, b.ID)
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "first", got.Title)
 	assert.Equal(t, "round-trip", got.Description)
@@ -236,9 +236,9 @@ func TestAxonBackend_UpdateMutatesAndPersists(t *testing.T) {
 	s, transport := newAxonStoreWithTransport(t)
 
 	b := &Bead{Title: "to-update"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	require.NoError(t, s.Update(b.ID, func(bb *Bead) {
+	require.NoError(t, s.Update(testCtx(), b.ID, func(bb *Bead) {
 		bb.Notes = "added by update"
 		bb.Priority = 3
 	}))
@@ -250,7 +250,7 @@ func TestAxonBackend_UpdateMutatesAndPersists(t *testing.T) {
 		WithAxonGraphQLTransport(transport),
 		WithAxonGraphQLClient(transport),
 	)
-	got, err := s2.Get(b.ID)
+	got, err := s2.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "added by update", got.Notes)
 	assert.Equal(t, 3, got.Priority)
@@ -261,10 +261,10 @@ func TestAxonBackend_ClaimAndUnclaim(t *testing.T) {
 	s := newAxonStore(t)
 
 	b := &Bead{Title: "claimable"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	require.NoError(t, s.Claim(b.ID, "alice"))
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 	assert.Equal(t, "alice", got.Owner)
@@ -276,7 +276,7 @@ func TestAxonBackend_ClaimAndUnclaim(t *testing.T) {
 	require.Error(t, err)
 
 	require.NoError(t, s.Unclaim(b.ID))
-	got, err = s.Get(b.ID)
+	got, err = s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -288,11 +288,11 @@ func TestAxonBackend_DepAddRemoveAndTree(t *testing.T) {
 
 	root := &Bead{Title: "root"}
 	child := &Bead{Title: "child"}
-	require.NoError(t, s.Create(root))
-	require.NoError(t, s.Create(child))
+	require.NoError(t, s.Create(testCtx(), root))
+	require.NoError(t, s.Create(testCtx(), child))
 
 	require.NoError(t, s.DepAdd(child.ID, root.ID))
-	got, err := s.Get(child.ID)
+	got, err := s.Get(testCtx(), child.ID)
 	require.NoError(t, err)
 	require.Len(t, got.Dependencies, 1)
 	assert.Equal(t, root.ID, got.Dependencies[0].DependsOnID)
@@ -302,7 +302,7 @@ func TestAxonBackend_DepAddRemoveAndTree(t *testing.T) {
 	assert.Contains(t, tree, root.ID)
 
 	require.NoError(t, s.DepRemove(child.ID, root.ID))
-	got, err = s.Get(child.ID)
+	got, err = s.Get(testCtx(), child.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Dependencies)
 }
@@ -312,7 +312,7 @@ func TestAxonBackend_AppendEventSplitsIntoEventsCollection(t *testing.T) {
 	s, transport := newAxonStoreWithTransport(t)
 
 	b := &Bead{Title: "with-events"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	for i := 0; i < 3; i++ {
 		require.NoError(t, s.AppendEvent(b.ID, BeadEvent{
@@ -356,12 +356,12 @@ func TestAxonBackend_ListReadyBlocked(t *testing.T) {
 	blockedStatus := &Bead{Title: "blocked status", Status: StatusBlocked}
 	proposedStatus := &Bead{Title: "proposed status", Status: StatusProposed}
 	cancelledStatus := &Bead{Title: "cancelled status", Status: StatusCancelled}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
-	require.NoError(t, s.Create(c))
-	require.NoError(t, s.Create(blockedStatus))
-	require.NoError(t, s.Create(proposedStatus))
-	require.NoError(t, s.Create(cancelledStatus))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Create(testCtx(), c))
+	require.NoError(t, s.Create(testCtx(), blockedStatus))
+	require.NoError(t, s.Create(testCtx(), proposedStatus))
+	require.NoError(t, s.Create(testCtx(), cancelledStatus))
 	// b depends on a; c depends on a closed-bead-to-be.
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
@@ -391,11 +391,11 @@ func TestAxonBackend_CloseAndArchivePolicy(t *testing.T) {
 	s := newAxonStore(t)
 
 	b := &Bead{Title: "to-close"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "before-close", Summary: "x"}))
-	require.NoError(t, s.Close(b.ID))
+	require.NoError(t, s.Close(testCtx(), b.ID))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status, "closed beads stay in ddx_beads (TD-030 archive policy)")
 
@@ -418,8 +418,8 @@ func TestAxonBackend_JSONLImportExportRoundTrip(t *testing.T) {
 	// Seed a small corpus with deps + events.
 	a := &Bead{Title: "alpha"}
 	bb := &Bead{Title: "beta"}
-	require.NoError(t, src.Create(a))
-	require.NoError(t, src.Create(bb))
+	require.NoError(t, src.Create(context.Background(), a))
+	require.NoError(t, src.Create(context.Background(), bb))
 	require.NoError(t, src.DepAdd(bb.ID, a.ID))
 	require.NoError(t, src.AppendEvent(a.ID, BeadEvent{Kind: "k", Summary: "s"}))
 
@@ -437,11 +437,11 @@ func TestAxonBackend_JSONLImportExportRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, count)
 
-	gotA, err := dst.Get(a.ID)
+	gotA, err := dst.Get(context.Background(), a.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "alpha", gotA.Title)
 
-	gotB, err := dst.Get(bb.ID)
+	gotB, err := dst.Get(context.Background(), bb.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "beta", gotB.Title)
 	require.Len(t, gotB.Dependencies, 1)
@@ -455,7 +455,7 @@ func TestAxonBackend_AtomicWriteSnapshotIntact(t *testing.T) {
 	s := newAxonStore(t)
 
 	for i := 0; i < 5; i++ {
-		require.NoError(t, s.Create(&Bead{Title: fmt.Sprintf("b-%d", i)}))
+		require.NoError(t, s.Create(testCtx(), &Bead{Title: fmt.Sprintf("b-%d", i)}))
 	}
 
 	ax := s.backend.(*AxonBackend)
@@ -482,7 +482,7 @@ func TestAxonBackend_ConcurrentClaimsSerialised(t *testing.T) {
 	s := newAxonStore(t)
 
 	b := &Bead{Title: "race"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	const goroutines = 8
 	var (
@@ -505,7 +505,7 @@ func TestAxonBackend_ConcurrentClaimsSerialised(t *testing.T) {
 	wg.Wait()
 	assert.Equal(t, 1, successN, "exactly one claim must win the race")
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 }
@@ -533,7 +533,7 @@ func TestAxonBackend_OrphanEventsDropped(t *testing.T) {
 	s, transport := newAxonStoreWithTransport(t)
 
 	b := &Bead{Title: "live"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "k", Summary: "live-event"}))
 
 	// Manually append an orphan event for a bead that does not exist.
@@ -555,7 +555,7 @@ func TestAxonBackend_OrphanEventsDropped(t *testing.T) {
 	assert.Equal(t, "live-event", events[0].Summary)
 
 	// And there is no phantom bead with the orphan id.
-	_, err = s.Get("ddx-deadbeef")
+	_, err = s.Get(testCtx(), "ddx-deadbeef")
 	assert.Error(t, err)
 }
 

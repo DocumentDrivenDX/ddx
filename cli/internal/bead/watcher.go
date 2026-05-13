@@ -128,12 +128,12 @@ func (pw *projectWatcher) run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			pw.poll()
+			pw.poll(ctx)
 		}
 	}
 }
 
-func (pw *projectWatcher) poll() {
+func (pw *projectWatcher) poll(ctx context.Context) {
 	info, err := os.Stat(pw.store.File)
 	if err != nil {
 		return
@@ -143,7 +143,7 @@ func (pw *projectWatcher) poll() {
 	}
 	pw.lastMod = info.ModTime()
 
-	beads, err := pw.store.ReadAll()
+	beads, err := pw.store.ReadAll(ctx)
 	if err != nil {
 		return
 	}

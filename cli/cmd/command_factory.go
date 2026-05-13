@@ -560,7 +560,6 @@ PowerShell:
 	rootCmd.AddCommand(f.newExecCommand())
 	rootCmd.AddCommand(f.newMetricCommand())
 	rootCmd.AddCommand(f.newMetricsCommand())
-	rootCmd.AddCommand(f.newAgentCommand())
 	rootCmd.AddCommand(f.newAcCommand())
 	rootCmd.AddCommand(f.newDocCommand())
 	rootCmd.AddCommand(f.newCheckpointCommand())

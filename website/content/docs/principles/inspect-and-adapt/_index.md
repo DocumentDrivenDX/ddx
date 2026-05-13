@@ -69,9 +69,9 @@ See `docs/helix/00-discover/research/RSCH-010-inspect-and-adapt.md`.
   `<review-findings>` section — directly mirroring Self-Refine's
   critique-and-revise loop, but with the critic's output preserved as
   durable input to the next attempt.
-- **Multi-model `--quorum` and codex-plus-opus plan-review** apply
-  the same pattern with independent critics, in line with REF-027's
-  evaluator-optimizer pattern.
+- **Multi-model review workflows** such as `compare-prompts` and
+  `adversarial-review` apply the same pattern with independent critics,
+  in line with REF-027's evaluator-optimizer pattern.
 - **The acceptance criteria are the anchor** that MAST identifies as
   load-bearing. Without them, the loop has nothing to inspect.
 - **Execution evidence aggregates into per-bead and per-harness

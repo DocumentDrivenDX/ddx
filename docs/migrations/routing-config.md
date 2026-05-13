@@ -22,7 +22,7 @@ normalizes, substitutes, widens, or fuzzy-matches explicit passthrough values.
 
 ## Remaining Search-Hit Audit
 
-The repository still contains historical `ddx agent`, `ddx-agent`,
+The repository still contains historical `legacy agent`, `ddx-agent`,
 `Agent Service`, and `cli/internal/agent` text in archived generated command
 pages, superseded technical designs, alignment reviews, literal code/package
 paths, fixtures, scripts, demos, generated website pages, and project-local

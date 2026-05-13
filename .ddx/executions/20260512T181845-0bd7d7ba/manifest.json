@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260512T181845-0bd7d7ba",
+  "bead_id": "ddx-d9a0ed42",
+  "base_rev": "f29684199a1f171bf7f0332a6aa42ffaf2eca8ac",
+  "created_at": "2026-05-12T18:18:48.589417522Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d9a0ed42",
+    "title": "agent: add downgrade-loop regression coverage",
+    "description": "PROBLEM\nThe downgrade-loop failure needs an end-to-end regression guard. Unit tests for individual helpers are not enough; a future change could still reintroduce an auto-downgrade across two ddx work/watch passes after operator promotion.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go:1037-1041 documents that terminal non-actionable readiness outcomes unclaim and park so the bead does not reappear in ReadyExecution until operator review.\n- cli/internal/agent/execute_bead_loop.go:1207-1226 implements that park path. Without a full loop test, a promoted open bead can be parked again by the same readiness result.\n- cli/cmd/agent_run_passthrough_test.go and cli/internal/agent/execute_bead_loop*_test.go contain readiness/proposed assertions today, but no test proves proposed -\u003e open operator acceptance survives repeated worker passes for the same finding while hard manual-required cases remain parked.\n\nPROPOSED FIX\nAdd regression coverage that exercises the real loop shape:\n- Create or seed an open bead.\n- Simulate/readiness-return a parkable finding and assert first pass parks to proposed with evidence.\n- Promote proposed -\u003e open through the supported bead lifecycle path.\n- Run at least two additional worker/readiness passes with the same finding and assert the bead does not re-enter proposed.\n- Run a separate hard manual-required scenario that must still park to proposed, so continuous-forward-progress does not become agent guessing.\n\nNON-SCOPE\n- No new production policy beyond what ddx-91898f19, ddx-cd69c24, and ddx-78ab5d61 implement.\n- No live Fizeau or external model calls; use existing test runner/hook stubs.\n- No changes to unrelated post-land review tests except updating expected event bodies if needed.\n\nPARENT/DEPS\nParent: ddx-cc0641a7. Depends on ddx-91898f19, ddx-cd69c24, and ddx-78ab5d61.",
+    "acceptance": "1. Add TestWorkLoopOperatorPromotedOpenDoesNotDowngradeAgain: first readiness pass parks an open bead to proposed, supported lifecycle promotion moves it back to open, and two later loop passes with the same finding leave it non-proposed.\n2. Add TestWorkLoopOperatorOverridePreservesCommitmentText asserting title, description, acceptance criteria, labels, parent, and deps are not lost or silently rewritten while honoring the override.\n3. Add TestWorkLoopHardManualRequiredStillParks asserting contradictory/unsafe operator_required readiness still parks to proposed even after the WARN-ONLY changes.\n4. The regression uses the same execute loop/readiness hook path as ddx work, not only a pure helper.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run \"TestWorkLoop(OperatorPromotedOpenDoesNotDowngradeAgain|OperatorOverridePreservesCommitmentText|HardManualRequiredStillParks)\"` passes.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-cc0641a7",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:tests",
+      "kind:test",
+      "prevention",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T18:17:42Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "2743080",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"too_large: The bead bundles multiple separable behaviors: the repeated-pass downgrade regression after operator promotion, a hard manual-required parking case, and prompt/metadata preservation. Existing coverage already exercises the operator-required parking path in `cli/internal/agent/execute_bead_loop_preclaim_serial_test.go`, and the shared parking helper is at `cli/internal/agent/execute_bead_loop.go:2907`, so the only clearly missing behavior is the repeated-pass regression. That makes the current bead non-atomic and better split into a focused regression bead plus any adjacent coverage bead(s).\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T18:18:32.220942679Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All eight rubric criteria pass: the title is imperative and scoped, the description includes PROBLEM/ROOT CAUSE with file:line evidence plus PROPOSED FIX and NON-SCOPE, the acceptance criteria are numbered and verifiable with named Test* symbols and go test filters, the loop-path assertions are wired to the described behavior, the required go test and lefthook commands are present, the labels cover phase/area/kind/cross-reference facets, and parent/deps are explicit. The bead is a sufficient sub-agent prompt without waivers.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T18:18:45.301187226Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T18:17:42.608450153Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260512T181845-0bd7d7ba",
+    "prompt": ".ddx/executions/20260512T181845-0bd7d7ba/prompt.md",
+    "manifest": ".ddx/executions/20260512T181845-0bd7d7ba/manifest.json",
+    "result": ".ddx/executions/20260512T181845-0bd7d7ba/result.json",
+    "checks": ".ddx/executions/20260512T181845-0bd7d7ba/checks.json",
+    "usage": ".ddx/executions/20260512T181845-0bd7d7ba/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d9a0ed42-20260512T181845-0bd7d7ba"
+  },
+  "prompt_sha": "23d95a998cf157e9ba4e97d5ccd353f0021240bec5e154261ee8fbfbf157f874"
+}

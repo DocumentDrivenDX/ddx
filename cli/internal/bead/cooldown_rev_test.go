@@ -69,13 +69,13 @@ func TestActiveRetryCooldown_NoBaseRevFallsBackToWallClock(t *testing.T) {
 func TestSetExecutionCooldown_WritesBaseRev(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "test bead"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	baseRev := "deadbeef1111111111111111111111111111111"
 	until := time.Now().UTC().Add(time.Hour)
 	require.NoError(t, s.SetExecutionCooldown(b.ID, until, "no_changes", "detail", baseRev))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, baseRev, got.Extra[ExtraCooldownBaseRev], "base-rev must be written to Extra")
 	assert.NotEmpty(t, got.Extra[ExtraRetryAfter])
@@ -91,12 +91,12 @@ func TestSetExecutionCooldown_ClearsBaseRevWhenEmpty(t *testing.T) {
 			ExtraCooldownBaseRev: "stale-rev",
 		},
 	}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	until := time.Now().UTC().Add(time.Hour)
 	require.NoError(t, s.SetExecutionCooldown(b.ID, until, "no_changes", "detail", ""))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Extra, ExtraCooldownBaseRev, "empty baseRev must remove stale base-rev from Extra")
 }

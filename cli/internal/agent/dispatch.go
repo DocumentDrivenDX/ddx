@@ -4,7 +4,7 @@ package agent
 // post-merge reviewer. It threads durable knobs from a sealed
 // config.ResolvedConfig with per-invocation plumbing/intent from an
 // AgentRunRuntime through the same service-or-runner routing used by
-// RunWithConfigViaService for `ddx agent run`.
+// RunWithConfigViaService for `legacy agent run`.
 
 import (
 	"context"

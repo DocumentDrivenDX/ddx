@@ -195,7 +195,7 @@ func TestExecuteBeadLoopLandConflict_BlockingResolver_Proposed(t *testing.T) {
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Contains(t, meta.Reason, "land conflict")
-	assert.Equal(t, "ddx agent try", meta.Source)
+	assert.Equal(t, "legacy agent try", meta.Source)
 	assert.NotContains(t, got.Extra, "execute-loop-retry-after", "proposed operator lane must not depend on cooldown")
 
 	events, err := store.Events(first.ID)

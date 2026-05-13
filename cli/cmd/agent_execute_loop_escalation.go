@@ -64,7 +64,6 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 }
 
 func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder, inferZeroConfig bool) (int, agent.ExecuteBeadReport, bool) {
-	// Numeric hint: written by the no-changes smart-retry path one step at a time.
 	if floor, ok := numericTierFloorHint(b); ok {
 		if baseMinPower > floor {
 			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
@@ -74,7 +73,6 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 		}
 		return floor, agent.ExecuteBeadReport{}, false
 	}
-	// Tier-name hint: written by the review-triage path; jump to highest viable for smart.
 	if tier, ok := triageTierHint(b); ok && tier == policyescalation.TierSmart {
 		floor, err := highestViableEscalationFloor(ladder)
 		if err != nil {
@@ -88,9 +86,6 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 		}
 		return floor, agent.ExecuteBeadReport{}, false
 	}
-	// Label-based tier hint: tier:hint=<name> sets the initial MinPower floor.
-	// --min-power flag composes as max(labelFloor, baseMinPower): the flag can
-	// raise the floor above the label but cannot lower it below.
 	if b != nil {
 		if tier, ok := policyescalation.ParseBeadTierHintLabel(b.Labels); ok {
 			labelFloor, hasFloor := resolveTierFloor(tier, ladder)
@@ -115,11 +110,6 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
-// resolveTierFloor maps an abstract tier to an initial MinPower floor using the
-// escalation ladder:
-//   - TierSmart    → highest viable floor (jump straight to the top tier)
-//   - TierStandard → second viable floor (skip the cheapest tier)
-//   - TierCheap    → 0 (unconstrained; same as having no label)
 func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFinder) (int, bool) {
 	switch tier {
 	case policyescalation.TierSmart:
@@ -138,20 +128,11 @@ func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFin
 			return first, true
 		}
 		return second, true
-	default: // TierCheap or unrecognized
+	default:
 		return 0, false
 	}
 }
 
-// zeroConfigInferredMinPower applies inferred zero-config tier floors to
-// operator-supplied floor constraints before dispatch.
-//
-//   - For TierCheap the floor remains unconstrained (0), matching the
-//     existing "cheap-by-default" behavior.
-//   - For TierStandard and TierSmart, this maps to the second and last viable
-//     ladder floors respectively via resolveTierFloor.
-//   - A non-zero explicit base floor from a flag or config still wins when it
-//     is above the inferred floor, preserving operator control.
 func zeroConfigInferredMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
 	tier := policyescalation.InferTier(b)
 	if tier == "" {
@@ -170,9 +151,6 @@ func zeroConfigInferredMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
-// numericTierFloorHint returns the numeric MinPower floor stored by the
-// no-changes smart-retry path, which advances one ladder step at a time.
-// Tier-name string hints (from the review-triage path) are not matched here.
 func numericTierFloorHint(b *bead.Bead) (int, bool) {
 	if b == nil || b.Extra == nil {
 		return 0, false
@@ -256,12 +234,11 @@ func runEscalatingSingleTierAttempts(
 		if report.Disrupted || isBudgetExhaustedFailure(report) || !policyescalation.ShouldEscalate(report.Status) || policyescalation.IsInfrastructureFailure(report.Status, report.Detail) {
 			return report, nil
 		}
-		// Check per-bead budget before escalating to the next tier.
 		if perBeadTracker != nil {
 			if detail, tripped := perBeadTracker.Tripped(); tripped {
 				report.Status = agent.ExecuteBeadStatusExecutionFailed
 				report.Detail = detail
-				report.CostUSD = perBeadTracker.Spent() // total for this bead
+				report.CostUSD = perBeadTracker.Spent()
 				return report, nil
 			}
 		}

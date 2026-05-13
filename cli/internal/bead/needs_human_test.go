@@ -12,7 +12,7 @@ func TestNeedsHumanMetadataRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "needs human attention"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	meta := NeedsHumanMeta{
 		Reason:          "agent loop exhausted retries",
@@ -22,12 +22,12 @@ func TestNeedsHumanMetadataRoundTrip(t *testing.T) {
 		Summary:         "bead returned no_changes 3 times",
 	}
 	// Add label and metadata via the mutate function.
-	require.NoError(t, s.Update(b.ID, func(bead *Bead) {
+	require.NoError(t, s.Update(testCtx(), b.ID, func(bead *Bead) {
 		bead.Labels = append(bead.Labels, LabelNeedsHuman)
 		SetNeedsHumanMeta(bead, meta)
 	}))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 
 	gotMeta := GetNeedsHumanMeta(*got)
@@ -43,7 +43,7 @@ func TestStoreNeedsHumanListsProposedOperatorAttentionSorted(t *testing.T) {
 
 	// Create a blocker so we can verify dep-waiting proposed beads are included.
 	blocker := &Bead{Title: "blocker", Priority: 0}
-	require.NoError(t, s.Create(blocker))
+	require.NoError(t, s.Create(testCtx(), blocker))
 
 	// Proposed beads at different priorities.
 	nh1 := &Bead{Title: "operator attention P1", Priority: 1, Status: StatusProposed}
@@ -56,14 +56,14 @@ func TestStoreNeedsHumanListsProposedOperatorAttentionSorted(t *testing.T) {
 	// Closed needs_human bead must be excluded.
 	closed := &Bead{Title: "closed needs-human", Labels: []string{LabelNeedsHuman}}
 
-	require.NoError(t, s.Create(nh1))
-	require.NoError(t, s.Create(nh2))
-	require.NoError(t, s.Create(nhDep))
-	require.NoError(t, s.Create(plain))
-	require.NoError(t, s.Create(legacy))
-	require.NoError(t, s.Create(closed))
+	require.NoError(t, s.Create(testCtx(), nh1))
+	require.NoError(t, s.Create(testCtx(), nh2))
+	require.NoError(t, s.Create(testCtx(), nhDep))
+	require.NoError(t, s.Create(testCtx(), plain))
+	require.NoError(t, s.Create(testCtx(), legacy))
+	require.NoError(t, s.Create(testCtx(), closed))
 	require.NoError(t, s.DepAdd(nhDep.ID, blocker.ID))
-	require.NoError(t, s.Close(closed.ID))
+	require.NoError(t, s.Close(testCtx(), closed.ID))
 
 	result, err := s.NeedsHuman()
 	require.NoError(t, err)
@@ -101,8 +101,8 @@ func TestReadyExecutionSkipsProposedButIgnoresLegacyNeedsHumanLabel(t *testing.T
 
 	legacy := &Bead{Title: "legacy needs-human open", Labels: []string{LabelNeedsHuman}}
 	proposed := &Bead{Title: "proposed attention", Status: StatusProposed}
-	require.NoError(t, s.Create(legacy))
-	require.NoError(t, s.Create(proposed))
+	require.NoError(t, s.Create(testCtx(), legacy))
+	require.NoError(t, s.Create(testCtx(), proposed))
 
 	// Worker drain ignores legacy lifecycle labels but skips proposed status.
 	executionReady, err := s.ReadyExecution()
@@ -135,17 +135,17 @@ func TestStatusCountsIncludeOperatorAttentionAndWorkerReady(t *testing.T) {
 	// Two plain open beads with no deps → both dep-ready and worker-ready.
 	a := &Bead{Title: "worker-ready A"}
 	b := &Bead{Title: "worker-ready B"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// One proposed bead with satisfied deps → operator-attention, not ready.
 	nh := &Bead{Title: "operator attention", Status: StatusProposed, Labels: []string{LabelNeedsHuman}}
-	require.NoError(t, s.Create(nh))
+	require.NoError(t, s.Create(testCtx(), nh))
 
 	// One closed bead.
 	c := &Bead{Title: "closed"}
-	require.NoError(t, s.Create(c))
-	require.NoError(t, s.Close(c.ID))
+	require.NoError(t, s.Create(testCtx(), c))
+	require.NoError(t, s.Close(testCtx(), c.ID))
 
 	counts, err := s.Status()
 	require.NoError(t, err)

@@ -128,7 +128,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 					Summary:   class,
 					Body:      body,
 					Actor:     in.Assignee,
-					Source:    "ddx agent execute-loop",
+					Source:    "ddx work",
 					CreatedAt: now().UTC(),
 				})
 				applyReviewOperatorRequiredParking(
@@ -146,7 +146,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 					Summary:   class,
 					Body:      body,
 					Actor:     in.Assignee,
-					Source:    "ddx agent execute-loop",
+					Source:    "ddx work",
 					CreatedAt: now().UTC(),
 				})
 			}
@@ -187,7 +187,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 						Summary:   "review-cost-deferred",
 						Body:      ReviewCostDeferredEventBody(report.ResultRev, slot.Result.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
 						Actor:     in.Assignee,
-						Source:    "ddx agent execute-loop",
+						Source:    "ddx work",
 						CreatedAt: now().UTC(),
 					})
 					if in.Log != nil {
@@ -239,7 +239,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Summary:   class,
 				Body:      body,
 				Actor:     in.Assignee,
-				Source:    "ddx agent execute-loop",
+				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
 			applyReviewOperatorRequiredParking(
@@ -262,7 +262,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Summary:   class,
 				Body:      body,
 				Actor:     in.Assignee,
-				Source:    "ddx agent execute-loop",
+				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
 		}
@@ -302,7 +302,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Summary:   "APPROVE",
 			Body:      AppendEventSummary(ReviewEventBody("APPROVE", reviewRes.Rationale, artifactPath), reviewSummary),
 			Actor:     in.Assignee,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: now().UTC(),
 		})
 		if reviewBudgetExceeded {
@@ -324,7 +324,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Summary:   "REQUEST_CHANGES",
 			Body:      AppendEventSummary(ReviewEventBody("REQUEST_CHANGES", reviewRes.Rationale, artifactPath), reviewSummary),
 			Actor:     in.Assignee,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: now().UTC(),
 		})
 		report.Status = ExecuteBeadStatusReviewRequestChanges
@@ -339,7 +339,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Summary:   "BLOCK without rationale",
 				Body:      AppendEventSummary(ReviewEventBody("BLOCK without rationale", "", artifactPath), reviewSummary),
 				Actor:     in.Assignee,
-				Source:    "ddx agent execute-loop",
+				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
 			report.Status = ExecuteBeadStatusReviewMalfunction
@@ -354,7 +354,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Summary:   "BLOCK",
 			Body:      AppendEventSummary(rationale, reviewSummary),
 			Actor:     in.Assignee,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: now().UTC(),
 		})
 		if classification.Class == ReviewFindingClassMalfunction {
@@ -363,7 +363,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Summary:   ReviewFindingClassMalfunction,
 				Body:      AppendEventSummary(classification.Reason, reviewSummary),
 				Actor:     in.Assignee,
-				Source:    "ddx agent execute-loop",
+				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
 			report.Status = ExecuteBeadStatusReviewMalfunction
@@ -414,7 +414,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Summary:   "REQUEST_CLARIFICATION",
 			Body:      AppendEventSummary(ReviewEventBody("REQUEST_CLARIFICATION", rationale, artifactPath), reviewSummary),
 			Actor:     in.Assignee,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: now().UTC(),
 		})
 		_ = in.Store.ParkToProposed(in.Bead.ID, bead.ParkReviewRequestClarification, nil)
@@ -626,7 +626,7 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 	case triage.ActionEscalateTier:
 		nextTier := nextEscalatedTier(currentTier)
 		body["tier_hint"] = string(nextTier)
-		_ = store.Update(beadID, func(b *bead.Bead) {
+		_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
@@ -645,7 +645,7 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 				Reason:          "review BLOCK triage reached operator-required rung",
 				Since:           now.UTC().Format(time.RFC3339),
-				Source:          "ddx agent execute-loop",
+				Source:          "ddx work",
 				SuggestedAction: "review the blocked attempt and accept, split, block, or cancel",
 				Summary:         "review BLOCK triage requires operator decision",
 			})
@@ -660,7 +660,7 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 		Summary:   string(triage.FailureModeReviewBlock) + ": " + string(action),
 		Body:      string(bodyJSON),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: now,
 	})
 }

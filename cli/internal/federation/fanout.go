@@ -408,3 +408,20 @@ func (c *FanOutClient) callOne(ctx context.Context, s SpokeRecord, body []byte) 
 		Duration:   c.now().Sub(start),
 	}
 }
+
+// ForwardMutation POSTs an arbitrary mutation envelope to the target spoke's
+// /graphql endpoint and preserves the supplied headers verbatim.
+func (c *FanOutClient) ForwardMutation(ctx context.Context, target *SpokeRecord, body []byte, headers map[string]string) (*http.Response, error) {
+	if target == nil {
+		return nil, fmt.Errorf("federation: target spoke is nil")
+	}
+	endpoint := strings.TrimRight(target.URL, "/") + "/graphql"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	return c.httpClient().Do(req)
+}

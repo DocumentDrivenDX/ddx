@@ -62,6 +62,38 @@ func TestLoop_StaysAliveWithEmptyQueue(t *testing.T) {
 		"loop must run until ctx cancellation; ran for %s, expected >= %s", elapsed, cancelAfter)
 }
 
+func TestLoop_BinaryRefreshStopsBeforeClaim(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run after binary refresh requests a restart")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	checks := 0
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode: executeloop.ModeDrain,
+		BinaryRefreshCheck: func(ctx context.Context) (bool, error) {
+			checks++
+			return true, nil
+		},
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, checks)
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, "BinaryRefresh", result.StopCondition)
+	assert.Equal(t, "binary_refresh", result.ExitReason)
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+}
+
 func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

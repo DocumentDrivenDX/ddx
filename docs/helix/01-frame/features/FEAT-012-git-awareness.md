@@ -434,6 +434,6 @@ capabilities as HTTP and MCP endpoints. The dependency runs FEAT-002 → FEAT-01
   governing requirement and FEAT-023 for the designated origin-sync command.
 - Merge conflict resolution (report conflicts, don't resolve them)
 - Git configuration management
-- Submodule or subtree operations (handled by existing `ddx update/contribute`)
+- Submodule operations and git-aware document writes (handled by existing DDx workflows)
 - **When to invoke execute-bead and what to do with the outcome** — DDx provides the git mechanics; workflow tools decide when to run execute-bead, whether to retry, and how to act on preserved vs landed iterations
 - **Conflict classification and escalation** — whether a merge conflict is resolvable or requires escalation is a workflow tool policy decision, not a DDx git operation

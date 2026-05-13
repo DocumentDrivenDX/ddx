@@ -71,7 +71,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 	tctx, cancel := context.WithTimeout(ctx, reframerDefaultTimeout)
 	defer cancel()
 
-	b, err := store.Get(beadID)
+	b, err := store.Get(ctx, beadID)
 	if err != nil {
 		return ReframeResult{Failed: true, Reason: "store_error"}
 	}
@@ -93,7 +93,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 	}
 
 	result, err := dispatchViaResolvedConfig(tctx, projectRoot, nil, runner, rcfg, runtime)
-	if err != nil {
+	if err != nil && result == nil {
 		if tctx.Err() != nil {
 			return ReframeResult{Failed: true, Reason: "timeout"}
 		}
@@ -121,7 +121,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		return ReframeResult{Failed: true, Reason: "invalid_output", CostUSD: result.CostUSD}
 	}
 
-	current, err := store.Get(beadID)
+	current, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		return ReframeResult{Failed: true, Reason: "store_error"}
 	}
@@ -153,11 +153,11 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		Rewrite: rewrite,
 	}
 
-	if err := applyPreClaimIntakeRewrite(store, beadID, "ddx agent execute-loop", intake, time.Now()); err != nil {
+	if err := applyPreClaimIntakeRewrite(store, beadID, "ddx work", intake, time.Now()); err != nil {
 		return ReframeResult{Failed: true, Reason: "apply_error"}
 	}
 
-	_ = store.Update(beadID, func(b *bead.Bead) {
+	_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		delete(b.Extra, consecutiveLadderExhaustionsKey)
 	})
@@ -171,8 +171,8 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		Kind:      "reframe-applied",
 		Summary:   strings.Join(changedFields, ","),
 		Body:      string(body),
-		Actor:     "ddx agent execute-loop",
-		Source:    "ddx agent execute-loop",
+		Actor:     "ddx work",
+		Source:    "ddx work",
 		CreatedAt: time.Now().UTC(),
 	})
 

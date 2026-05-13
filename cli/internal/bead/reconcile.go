@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"strings"
 	"time"
 )
@@ -119,7 +120,7 @@ func (s *Store) ReconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePl
 	if opts.Now.IsZero() {
 		opts.Now = time.Now().UTC()
 	}
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +247,7 @@ func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
 			Source:      "ddx bead reconcile",
 		}, mutate)
 	} else {
-		err = s.Update(p.BeadID, func(b *Bead) {
+		err = s.Update(context.Background(), p.BeadID, func(b *Bead) {
 			_ = mutate(b)
 		})
 	}

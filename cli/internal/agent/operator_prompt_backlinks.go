@@ -134,7 +134,7 @@ func recordOperatorPromptBacklinks(store ExecuteBeadLoopStore, originatorID stri
 			Summary:   "operator-prompt backlink",
 			Body:      body,
 			Actor:     actor,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: now,
 		}); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", id, err))
@@ -151,7 +151,7 @@ func recordOperatorPromptBacklinks(store ExecuteBeadLoopStore, originatorID stri
 		Summary:   "operator-prompt blast radius",
 		Body:      summaryBody,
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: now,
 	}); err != nil {
 		errs = append(errs, fmt.Sprintf("originator %s: %v", originatorID, err))

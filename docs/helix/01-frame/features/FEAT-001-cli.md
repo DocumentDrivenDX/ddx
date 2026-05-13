@@ -66,7 +66,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 
 DDx owns the public workflow verbs `ddx run`, `ddx try`, and `ddx work`.
 Fizeau owns routing, provider/model discovery, and concrete routing decisions.
-DDx does not mount the retired `ddx agent` workflow namespace, does not
+DDx does not mount the retired `legacy agent` workflow namespace, does not
 provide aliases for it, and does not keep any legacy workflow verbs under that
 namespace.
 

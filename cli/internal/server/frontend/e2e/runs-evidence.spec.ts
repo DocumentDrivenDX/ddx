@@ -7,7 +7,21 @@ let PROJECTS: Array<{ id: string; name: string; path: string }>;
 const RUN_ID = 'run-try-evidence-001';
 const BEAD_ID = 'ddx-evidence-test';
 
-const tryRun = {
+type BundleFileFixture = {
+	path: string;
+	size: number;
+	mimeType: string;
+};
+
+type RunBundleFileContentFixture = {
+	path: string;
+	content: string | null;
+	sizeBytes: number;
+	truncated: boolean;
+	mimeType: string;
+};
+
+const baseRun = {
 	id: RUN_ID,
 	layer: 'try',
 	status: 'success',
@@ -38,11 +52,13 @@ const tryRun = {
 	costUsd: null,
 	outputExcerpt: null,
 	evidenceLinks: null,
-	bundleFiles: [
-		{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
-		{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
-		{ path: 'screenshots/big.png', size: 200_000, mimeType: 'image/png' }
-	]
+	prompt: null,
+	response: null,
+	stderr: null,
+	billingMode: null,
+	outcome: null,
+	detail: null,
+	cachedTokens: null
 };
 
 async function getFixtureIds(
@@ -82,9 +98,21 @@ test.beforeEach(async ({ request }) => {
 	PROJECTS = [{ id: PROJECT_ID, name: ids.projectName, path: ids.projectPath }];
 });
 
-test('runs Evidence tab: list bundle files, inline view (whitelist+size), download', async ({
-	page
-}) => {
+function runDetailResponse() {
+	return {
+		...baseRun,
+		projectID: PROJECT_ID
+	};
+}
+
+async function installRunRoutes(
+	page: import('@playwright/test').Page,
+	options: {
+		bundleFiles: BundleFileFixture[];
+		bundleContent: Record<string, RunBundleFileContentFixture>;
+		evidenceRequests: string[];
+	}
+) {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
 			query: string;
@@ -106,34 +134,27 @@ test('runs Evidence tab: list bundle files, inline view (whitelist+size), downlo
 			});
 			return;
 		}
-		if (
-			body.query.includes('RunHeader') ||
-			body.query.includes('RunDetailExpand') ||
-			body.query.includes('RunDetail') ||
-			body.query.includes('RunExists')
-		) {
-			const id = body.variables?.['id'] as string;
-			const r = id === RUN_ID ? tryRun : null;
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({ data: { run: r } })
+				body: JSON.stringify({ data: { run: runDetailResponse() } })
 			});
 			return;
 		}
-		if (body.query.includes('ParentRunParent')) {
+		if (body.query.includes('RunEvidenceFiles')) {
+			options.evidenceRequests.push(String(body.variables?.['id'] ?? ''));
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({ data: { run: { parentRunId: null } } })
-			});
-			return;
-		}
-		if (body.query.includes('RunExecutionExpand')) {
-			await route.fulfill({
-				status: 200,
-				contentType: 'application/json',
-				body: JSON.stringify({ data: { execution: null } })
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: options.bundleFiles
+						}
+					}
+				})
 			});
 			return;
 		}
@@ -151,7 +172,7 @@ test('runs Evidence tab: list bundle files, inline view (whitelist+size), downlo
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						executionToolCalls: {
+						runToolCalls: {
 							edges: [],
 							pageInfo: { hasNextPage: false, endCursor: null },
 							totalCount: 0
@@ -162,43 +183,12 @@ test('runs Evidence tab: list bundle files, inline view (whitelist+size), downlo
 			return;
 		}
 		if (body.query.includes('RunBundleFileFetch')) {
-			const path = body.variables?.['path'] as string;
-			let payload: {
-				path: string;
-				content: string | null;
-				sizeBytes: number;
-				truncated: boolean;
-				mimeType: string;
-			};
-			if (path === 'prompt.md') {
-				payload = {
-					path,
-					content: '# Sample prompt\nbody text',
-					sizeBytes: 128,
-					truncated: false,
-					mimeType: 'text/markdown'
-				};
-			} else if (path === 'screenshots/big.png') {
-				payload = {
-					path,
-					content: null,
-					sizeBytes: 200_000,
-					truncated: true,
-					mimeType: 'image/png'
-				};
-			} else {
-				payload = {
-					path,
-					content: '{"ok":true}',
-					sizeBytes: 256,
-					truncated: false,
-					mimeType: 'application/json'
-				};
-			}
+			const path = String(body.variables?.['path'] ?? '');
+			const payload = options.bundleContent[path];
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({ data: { runBundleFile: payload } })
+				body: JSON.stringify({ data: { runBundleFile: payload ?? null } })
 			});
 			return;
 		}
@@ -212,43 +202,139 @@ test('runs Evidence tab: list bundle files, inline view (whitelist+size), downlo
 		}
 		await route.continue();
 	});
+}
 
-	// Navigate directly to evidence tab
-	await page.goto(
-		`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=evidence`
-	);
-	await expect(page.locator('h1', { hasText: RUN_ID })).toBeVisible();
+test('evidence tab: whitelisted small file inlines', async ({ page }) => {
+	const evidenceRequests: string[] = [];
+	await installRunRoutes(page, {
+		bundleFiles: [
+			{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+			{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+			{ path: 'screenshots/big.png', size: 200_000, mimeType: 'image/png' }
+		],
+		bundleContent: {
+			'manifest.json': {
+				path: 'manifest.json',
+				content: '{"attempt":"20260430T100000"}',
+				sizeBytes: 256,
+				truncated: false,
+				mimeType: 'application/json'
+			},
+			'prompt.md': {
+				path: 'prompt.md',
+				content: '# Sample prompt\nbody text',
+				sizeBytes: 128,
+				truncated: false,
+				mimeType: 'text/markdown'
+			},
+			'screenshots/big.png': {
+				path: 'screenshots/big.png',
+				content: null,
+				sizeBytes: 200_000,
+				truncated: true,
+				mimeType: 'image/png'
+			}
+		},
+		evidenceRequests
+	});
 
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
 	const detail = page.locator('[data-testid="rundetail"]');
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
+	await expect(evidenceRequests).toHaveLength(0);
 	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
-	await expect(detail.locator('[data-active-tab]')).toHaveAttribute(
-		'data-active-tab',
-		'evidence'
-	);
 
-	// AC1: list shows the three bundle files
+	await Promise.all([
+		page.waitForRequest((request) => request.postData()?.includes('RunEvidenceFiles') ?? false),
+		detail.locator('button[data-tab="evidence"]').click()
+	]);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
+
 	const evidence = page.locator('[data-testid="rundetail-evidence"]');
-	await expect(evidence).toBeVisible();
-	await expect(evidence.locator('[data-evidence-path="prompt.md"]')).toBeVisible();
 	await expect(evidence.locator('[data-evidence-path="manifest.json"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-path="prompt.md"]')).toBeVisible();
 	await expect(evidence.locator('[data-evidence-path="screenshots/big.png"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-view="prompt.md"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-view="manifest.json"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-view="screenshots/big.png"]')).toHaveCount(0);
 
-	// AC2: View whitelisted small text -> inline content visible
 	await evidence.locator('[data-evidence-view="prompt.md"]').click();
 	await expect(evidence.locator('[data-testid="evidence-inline-content"]')).toContainText(
 		'Sample prompt'
 	);
-
-	// AC2: View non-whitelisted (or oversize) -> truncated message, not content
-	await evidence.locator('[data-evidence-view="screenshots/big.png"]').click();
-	await expect(evidence.locator('[data-testid="evidence-inline-truncated"]')).toBeVisible();
-
-	// AC3: Download link points at the bundle download endpoint
-	const dl = evidence.locator('[data-evidence-download="prompt.md"]');
-	await expect(dl).toBeVisible();
-	await expect(dl).toHaveAttribute(
+	await expect(evidence.locator('[data-evidence-download="prompt.md"]')).toHaveAttribute(
 		'href',
 		`/api/runs/${encodeURIComponent(RUN_ID)}/bundle?path=${encodeURIComponent('prompt.md')}`
 	);
-	await expect(dl).toHaveAttribute('download', 'prompt.md');
+});
+
+test('evidence tab: large file download-only', async ({ page }) => {
+	await installRunRoutes(page, {
+		bundleFiles: [
+			{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+			{ path: 'screenshots/big.png', size: 200_000, mimeType: 'image/png' }
+		],
+		bundleContent: {
+			'manifest.json': {
+				path: 'manifest.json',
+				content: '{"attempt":"20260430T100000"}',
+				sizeBytes: 256,
+				truncated: false,
+				mimeType: 'application/json'
+			},
+			'screenshots/big.png': {
+				path: 'screenshots/big.png',
+				content: null,
+				sizeBytes: 200_000,
+				truncated: true,
+				mimeType: 'image/png'
+			}
+		},
+		evidenceRequests: []
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=evidence`);
+	const evidence = page.locator('[data-testid="rundetail-evidence"]');
+	await expect(evidence.locator('[data-evidence-path="screenshots/big.png"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-view="screenshots/big.png"]')).toHaveCount(0);
+	await expect(evidence.locator('[data-evidence-download="screenshots/big.png"]')).toHaveAttribute(
+		'href',
+		`/api/runs/${encodeURIComponent(RUN_ID)}/bundle?path=${encodeURIComponent('screenshots/big.png')}`
+	);
+	await expect(evidence.locator('[data-testid="evidence-inline"]')).toHaveCount(0);
+});
+
+test('evidence tab: non-whitelisted extension download-only', async ({ page }) => {
+	await installRunRoutes(page, {
+		bundleFiles: [
+			{ path: 'src/main.go', size: 432, mimeType: 'text/x-go' },
+			{ path: 'module.wasm', size: 12_345, mimeType: 'application/wasm' }
+		],
+		bundleContent: {
+			'src/main.go': {
+				path: 'src/main.go',
+				content: 'package main\n',
+				sizeBytes: 432,
+				truncated: false,
+				mimeType: 'text/x-go'
+			},
+			'module.wasm': {
+				path: 'module.wasm',
+				content: null,
+				sizeBytes: 12_345,
+				truncated: true,
+				mimeType: 'application/wasm'
+			}
+		},
+		evidenceRequests: []
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=evidence`);
+	const evidence = page.locator('[data-testid="rundetail-evidence"]');
+	await expect(evidence.locator('[data-evidence-path="src/main.go"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-path="module.wasm"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-view="src/main.go"]')).toHaveCount(0);
+	await expect(evidence.locator('[data-evidence-view="module.wasm"]')).toHaveCount(0);
+	await expect(evidence.locator('[data-evidence-download="src/main.go"]')).toBeVisible();
+	await expect(evidence.locator('[data-evidence-download="module.wasm"]')).toBeVisible();
 });

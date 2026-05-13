@@ -69,7 +69,7 @@ func applyTerminalReviewBlock(store ExecuteBeadLoopStore, beadID, actor string, 
 		Summary:   class,
 		Body:      reviewTerminalBlockEventBody(class, resultRev),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: now.UTC(),
 	})
 }
@@ -83,7 +83,7 @@ func applyReviewOperatorRequiredParking(store ExecuteBeadLoopStore, beadID, acto
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          reason,
 			Since:           now.UTC().Format(time.RFC3339),
-			Source:          "ddx agent execute-loop",
+			Source:          "ddx work",
 			SuggestedAction: suggestedAction,
 			Summary:         summary,
 		})

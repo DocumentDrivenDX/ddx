@@ -24,7 +24,7 @@ func TestChaos_MixedConcurrentOps(t *testing.T) {
 		seedIDs := make([]string, 0, seedCount)
 		for i := 0; i < seedCount; i++ {
 			b := &Bead{Title: fmt.Sprintf("seed-%d", i)}
-			require.NoError(t, s.Create(b))
+			require.NoError(t, s.Create(testCtx(), b))
 			seedIDs = append(seedIDs, b.ID)
 		}
 
@@ -45,15 +45,15 @@ func TestChaos_MixedConcurrentOps(t *testing.T) {
 					switch op {
 					case 0: // create new
 						nb := &Bead{Title: fmt.Sprintf("g%d-i%d", g, i)}
-						_ = s.Create(nb)
+						_ = s.Create(testCtx(), nb)
 					case 1: // claim
 						_ = s.Claim(id, fmt.Sprintf("agent-%d", g))
 					case 2: // close
-						_ = s.Close(id)
+						_ = s.Close(testCtx(), id)
 					case 3: // unclaim
 						_ = s.Unclaim(id)
 					case 4: // update title
-						_ = s.Update(id, func(b *Bead) {
+						_ = s.Update(testCtx(), id, func(b *Bead) {
 							b.Title = fmt.Sprintf("updated-by-g%d-i%d", g, i)
 						})
 					case 5: // append event
@@ -69,7 +69,7 @@ func TestChaos_MixedConcurrentOps(t *testing.T) {
 		wg.Wait()
 
 		// Invariants after all concurrent ops.
-		beads, err := s.ReadAll()
+		beads, err := s.ReadAll(testCtx())
 		require.NoError(t, err, "ReadAll must succeed after mixed concurrent ops")
 
 		validStatuses := allLifecycleStatusesForTests()
@@ -104,7 +104,7 @@ func TestChaos_ConcurrentClaimContention(t *testing.T) {
 
 		for round := 0; round < rounds; round++ {
 			b := &Bead{Title: fmt.Sprintf("contended-bead-round-%d", round)}
-			require.NoError(t, s.Create(b))
+			require.NoError(t, s.Create(testCtx(), b))
 			id := b.ID
 
 			var (
@@ -129,7 +129,7 @@ func TestChaos_ConcurrentClaimContention(t *testing.T) {
 				"round %d: exactly one goroutine must successfully claim the bead", round)
 
 			// Bead must be in_progress.
-			got, err := s.Get(id)
+			got, err := s.Get(testCtx(), id)
 			require.NoError(t, err, "round %d: bead must be readable after claim contention", round)
 			assert.Equal(t, StatusInProgress, got.Status,
 				"round %d: bead must be in_progress after successful claim", round)
@@ -152,7 +152,7 @@ func TestChaos_ConcurrentCreateCloseEvidence(t *testing.T) {
 			waveBeads := make([]string, 0, goroutinesPerWave)
 			for i := 0; i < goroutinesPerWave; i++ {
 				b := &Bead{Title: fmt.Sprintf("wave%d-seed-%d", wave, i)}
-				require.NoError(t, s.Create(b))
+				require.NoError(t, s.Create(testCtx(), b))
 				waveBeads = append(waveBeads, b.ID)
 			}
 
@@ -168,9 +168,9 @@ func TestChaos_ConcurrentCreateCloseEvidence(t *testing.T) {
 						switch rng.Intn(4) {
 						case 0: // new bead
 							nb := &Bead{Title: fmt.Sprintf("wave%d-g%d-i%d", wave, g, i)}
-							_ = s.Create(nb)
+							_ = s.Create(testCtx(), nb)
 						case 1: // close
-							_ = s.Close(id)
+							_ = s.Close(testCtx(), id)
 						case 2: // evidence
 							_ = s.AppendEvent(id, BeadEvent{
 								Kind:    "execution",
@@ -185,7 +185,7 @@ func TestChaos_ConcurrentCreateCloseEvidence(t *testing.T) {
 			wg.Wait()
 
 			// After each wave: parseable, no duplicates.
-			beads, err := s.ReadAll()
+			beads, err := s.ReadAll(testCtx())
 			require.NoError(t, err, "wave %d: ReadAll must succeed", wave)
 
 			seen := make(map[string]int)
@@ -208,7 +208,7 @@ func TestChaos_ConcurrentDepManagement(t *testing.T) {
 		pool := make([]string, 0, poolSize)
 		for i := 0; i < poolSize; i++ {
 			b := &Bead{Title: fmt.Sprintf("dep-pool-%d", i)}
-			require.NoError(t, s.Create(b))
+			require.NoError(t, s.Create(testCtx(), b))
 			pool = append(pool, b.ID)
 		}
 
@@ -242,7 +242,7 @@ func TestChaos_ConcurrentDepManagement(t *testing.T) {
 		wg.Wait()
 
 		// Verify no bead has a self-dependency.
-		beads, err := s.ReadAll()
+		beads, err := s.ReadAll(testCtx())
 		require.NoError(t, err)
 		for _, b := range beads {
 			for _, dep := range b.Dependencies {
@@ -262,7 +262,7 @@ func TestChaos_WriteAllUnderConcurrentReads(t *testing.T) {
 		beads := make([]Bead, 0, seed)
 		for i := 0; i < seed; i++ {
 			b := &Bead{Title: fmt.Sprintf("wa-seed-%d", i)}
-			require.NoError(t, s.Create(b))
+			require.NoError(t, s.Create(testCtx(), b))
 			beads = append(beads, *b)
 		}
 
@@ -280,7 +280,7 @@ func TestChaos_WriteAllUnderConcurrentReads(t *testing.T) {
 				for i := 0; i < iterations; i++ {
 					// Use Update to safely mutate one bead (this uses WithLock internally).
 					id := beads[w%len(beads)].ID
-					_ = s.Update(id, func(b *Bead) {
+					_ = s.Update(testCtx(), id, func(b *Bead) {
 						b.Notes = fmt.Sprintf("writer-%d-iter-%d", w, i)
 					})
 				}
@@ -294,7 +294,7 @@ func TestChaos_WriteAllUnderConcurrentReads(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for i := 0; i < iterations; i++ {
-					got, err := s.ReadAll()
+					got, err := s.ReadAll(testCtx())
 					if err != nil {
 						errCh <- err
 						continue
@@ -324,7 +324,7 @@ func TestChaos_WriteAllUnderConcurrentReads(t *testing.T) {
 func TestChaos_ImpossibleTransitionsNeverPersist(t *testing.T) {
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		b := &Bead{Title: "impossible-transitions"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		id := b.ID
 
 		invalidStatuses := []string{"pending", "done", "OPEN", "In_Progress", "", "null", "true", "1"}
@@ -336,13 +336,13 @@ func TestChaos_ImpossibleTransitionsNeverPersist(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				_ = s.Update(id, func(b *Bead) { b.Status = badStatus })
+				_ = s.Update(testCtx(), id, func(b *Bead) { b.Status = badStatus })
 			}()
 		}
 		wg.Wait()
 
 		// After all failed updates the bead must still have a valid status.
-		got, err := s.Get(id)
+		got, err := s.Get(testCtx(), id)
 		require.NoError(t, err)
 		assert.Contains(t, allLifecycleStatusesForTests(), got.Status,
 			"bead must have valid status after rejected invalid-status updates")
@@ -354,7 +354,7 @@ func TestChaos_ImpossibleTransitionsNeverPersist(t *testing.T) {
 func TestChaos_EventsNeverLostUnderConcurrentAppends(t *testing.T) {
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		b := &Bead{Title: "event-sink"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		id := b.ID
 
 		const goroutines = 5
@@ -413,7 +413,7 @@ func TestChaos_TruncatedJSONLRecovery(t *testing.T) {
 	validIDs := make([]string, 0, 5)
 	for i := 0; i < 5; i++ {
 		b := &Bead{Title: fmt.Sprintf("truncation-bead-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		validIDs = append(validIDs, b.ID)
 	}
 
@@ -424,7 +424,7 @@ func TestChaos_TruncatedJSONLRecovery(t *testing.T) {
 	_ = f.Close()
 
 	// ReadAll must not panic; valid beads should survive (warnings for the bad line).
-	beads, readErr := s.ReadAll()
+	beads, readErr := s.ReadAll(testCtx())
 	if readErr == nil {
 		byID := make(map[string]bool, len(beads))
 		for _, b := range beads {
@@ -472,7 +472,7 @@ func TestChaos_LargeScaleConcurrentCreateReadAll(t *testing.T) {
 						Priority: g % 5,
 						Labels:   []string{fmt.Sprintf("g%d", g)},
 					}
-					if err := s.Create(b); err != nil {
+					if err := s.Create(testCtx(), b); err != nil {
 						errsCh <- fmt.Errorf("g%d b%d: %w", g, i, err)
 						continue
 					}
@@ -492,7 +492,7 @@ func TestChaos_LargeScaleConcurrentCreateReadAll(t *testing.T) {
 		}
 		require.Empty(t, errs)
 
-		beads, err := s.ReadAll()
+		beads, err := s.ReadAll(testCtx())
 		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(beads), len(allIDs),
 			"ReadAll must return at least as many beads as were created")
@@ -599,7 +599,7 @@ func TestChaos_StatusCountsAfterChaos(t *testing.T) {
 	ids := make([]string, 0, count)
 	for i := 0; i < count; i++ {
 		b := &Bead{Title: fmt.Sprintf("status-count-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		ids = append(ids, b.ID)
 	}
 
@@ -619,7 +619,7 @@ func TestChaos_StatusCountsAfterChaos(t *testing.T) {
 				case 0:
 					_ = s.Claim(id, "agent")
 				case 1:
-					_ = s.Close(id)
+					_ = s.Close(testCtx(), id)
 				case 2:
 					_ = s.Unclaim(id)
 				case 3:
@@ -632,7 +632,7 @@ func TestChaos_StatusCountsAfterChaos(t *testing.T) {
 	wg.Wait()
 
 	// Count statuses manually from ReadAll.
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 
 	manualOpen, manualInProgress, manualClosed := 0, 0, 0
@@ -676,7 +676,7 @@ func TestChaos_ExtraFieldsRoundTripUnderChaos(t *testing.T) {
 				"custom-count": float64(0),
 			},
 		}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		id := b.ID
 
 		var wg sync.WaitGroup
@@ -689,7 +689,7 @@ func TestChaos_ExtraFieldsRoundTripUnderChaos(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for i := 0; i < 10; i++ {
-					_ = s.Update(id, func(b *Bead) {
+					_ = s.Update(testCtx(), id, func(b *Bead) {
 						b.Notes = fmt.Sprintf("updated-by-g%d-i%d", g, i)
 						// Also increment a custom counter in Extra.
 						if b.Extra == nil {
@@ -702,7 +702,7 @@ func TestChaos_ExtraFieldsRoundTripUnderChaos(t *testing.T) {
 		wg.Wait()
 
 		// Extra must still have the original fields.
-		got, err := s.Get(id)
+		got, err := s.Get(testCtx(), id)
 		require.NoError(t, err)
 		require.NotNil(t, got.Extra)
 
@@ -755,18 +755,18 @@ func TestChaos_JSONLFileAlwaysValidJSON(t *testing.T) {
 	// Build up state.
 	for i := 0; i < 10; i++ {
 		b := &Bead{Title: fmt.Sprintf("valid-json-bead-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		ids = append(ids, b.ID)
 	}
 	assertValidJSONLFile(t, s)
 
 	ops := []func(){
-		func() { _ = s.Close(ids[rng.Intn(len(ids))]) },
+		func() { _ = s.Close(testCtx(), ids[rng.Intn(len(ids))]) },
 		func() { _ = s.Claim(ids[rng.Intn(len(ids))], "agent") },
 		func() { _ = s.Unclaim(ids[rng.Intn(len(ids))]) },
 		func() {
 			nb := &Bead{Title: "new-bead"}
-			if err := s.Create(nb); err == nil {
+			if err := s.Create(testCtx(), nb); err == nil {
 				ids = append(ids, nb.ID)
 			}
 		},

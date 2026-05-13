@@ -51,7 +51,7 @@ func TestAppendBeadCostEvidenceRecordsPerAttemptCost(t *testing.T) {
 	if got.Event.Actor != "ddx" {
 		t.Fatalf("actor: got %q", got.Event.Actor)
 	}
-	if got.Event.Source != "ddx agent execute-bead" {
+	if got.Event.Source != "legacy agent execute-bead" {
 		t.Fatalf("source: got %q", got.Event.Source)
 	}
 

@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -77,6 +78,7 @@ func (s *Server) EnableHubMode(allowPlainHTTP bool) {
 	s.route("POST /api/federation/heartbeat", gate(s.handleFederationHeartbeat))
 	s.route("GET /api/federation/spokes", gate(s.handleFederationListSpokes))
 	s.route("DELETE /api/federation/spokes/{id}", gate(s.handleFederationDeregister))
+	s.route("POST /api/federation/projects/{project}/graphql", gate(s.handleFederationForwardMutation))
 }
 
 // HubFederationRegistrySnapshot returns a copy of the current registry, for
@@ -147,6 +149,7 @@ type federationRegisterRequest struct {
 	SchemaVersion        string   `json:"schema_version"`
 	GraphQLSchemaVersion string   `json:"graphql_schema_version,omitempty"`
 	Capabilities         []string `json:"capabilities,omitempty"`
+	ProjectIDs           []string `json:"project_ids,omitempty"`
 }
 
 // federationRegisterResponse is sent on a successful (200/201) registration.
@@ -239,6 +242,7 @@ func (s *Server) handleFederationRegister(w http.ResponseWriter, r *http.Request
 		DDxVersion:    req.DDxVersion,
 		SchemaVersion: req.SchemaVersion,
 		Capabilities:  append([]string(nil), req.Capabilities...),
+		ProjectIDs:    append([]string(nil), req.ProjectIDs...),
 		RegisteredAt:  now,
 		LastHeartbeat: time.Time{},
 		Status:        hs.Status,
@@ -331,6 +335,69 @@ func (s *Server) handleFederationDeregister(w http.ResponseWriter, r *http.Reque
 	}
 	s.persistFederationLocked()
 	writeJSON(w, http.StatusOK, map[string]string{"node_id": id, "status": "deregistered"})
+}
+
+func (s *Server) handleFederationForwardMutation(w http.ResponseWriter, r *http.Request) {
+	projectID := strings.TrimSpace(r.PathValue("project"))
+	if projectID == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "project required"})
+		return
+	}
+	if s.hub == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "federation hub unavailable"})
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body: " + err.Error()})
+		return
+	}
+	originIdentity := federationRequestIdentity(r)
+	if originIdentity == "" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: unable to verify origin identity"})
+		return
+	}
+	coordinatorIdentity := s.federationSelfIdentity()
+	if coordinatorIdentity == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "federation coordinator identity unavailable"})
+		return
+	}
+
+	s.hub.mu.Lock()
+	target, routeErr := federation.RouteMutationToProjectOwner(s.hub.registry, projectID)
+	s.hub.mu.Unlock()
+	if routeErr != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": routeErr.Error()})
+		return
+	}
+
+	headers := make(map[string]string, len(r.Header))
+	for k, values := range r.Header {
+		if len(values) == 0 {
+			continue
+		}
+		if strings.EqualFold(k, federationOriginIdentityHeader) || strings.EqualFold(k, federationCoordinatorIdentityHeader) {
+			continue
+		}
+		headers[k] = strings.Join(values, ",")
+	}
+	headers[federationOriginIdentityHeader] = originIdentity
+	headers[federationCoordinatorIdentityHeader] = coordinatorIdentity
+
+	resp, err := federation.NewFanOutClient().ForwardMutation(r.Context(), target, body, headers)
+	if err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "forward mutation: " + err.Error()})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	for k, values := range resp.Header {
+		for _, v := range values {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
 }
 
 // persistFederationLocked saves the registry to disk if a state path is set.

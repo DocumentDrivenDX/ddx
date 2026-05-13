@@ -63,6 +63,8 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 			"removed_run_state":           summary.RemovedRunStateFiles,
 			"removed_scratch_dirs":        summary.RemovedScratchDirs,
 			"removed_evidence_dirs":       summary.RemovedEvidenceDirs,
+			"removed_agent_logs":          summary.RemovedAgentLogs,
+			"removed_worker_dirs":         summary.RemovedWorkerDirs,
 			"preserved_scratch_dirs":      summary.PreservedActiveScratchDirs,
 			"bytes_reclaimed":             summary.BytesReclaimed,
 			"inodes_reclaimed":            summary.InodesReclaimed,
@@ -73,13 +75,15 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 		})
 	}
 	if meaningful && log != nil {
-		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d evidence dir(s), %d byte(s), %d inode(s)\n",
+		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d evidence dir(s), %d agent log(s), %d worker dir(s), %d byte(s), %d inode(s)\n",
 			reason,
 			summary.RemovedUnregisteredTempDirs,
 			summary.RemovedRegisteredWorktrees,
 			summary.RemovedRunStateFiles,
 			summary.RemovedScratchDirs,
 			summary.RemovedEvidenceDirs,
+			summary.RemovedAgentLogs,
+			summary.RemovedWorkerDirs,
 			summary.BytesReclaimed+summary.ScratchBytesReclaimed,
 			summary.InodesReclaimed+summary.ScratchInodesReclaimed,
 		)
@@ -98,6 +102,8 @@ func executionCleanupSummaryMeaningful(summary ExecutionCleanupSummary) bool {
 		summary.RemovedRunStateFiles > 0 ||
 		summary.RemovedScratchDirs > 0 ||
 		summary.RemovedEvidenceDirs > 0 ||
+		summary.RemovedAgentLogs > 0 ||
+		summary.RemovedWorkerDirs > 0 ||
 		summary.PreservedActiveScratchDirs > 0
 }
 

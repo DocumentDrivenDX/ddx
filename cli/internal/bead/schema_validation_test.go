@@ -60,7 +60,7 @@ func TestBeadRecordSchemaValidatesDDxCreatedRecord(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(testCtx(), b))
 
 	data, err := MarshalBead(*b)
 	require.NoError(t, err)

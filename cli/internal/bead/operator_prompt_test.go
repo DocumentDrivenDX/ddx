@@ -30,9 +30,9 @@ func TestStoreAcceptsOperatorPromptBead(t *testing.T) {
 	b := NewOperatorPromptBead("create a P2 bead titled 'demo'\nbody line two", 2)
 	require.Equal(t, IssueTypeOperatorPrompt, b.IssueType)
 	require.Equal(t, StatusProposed, b.Status)
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(testCtx(), b))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, IssueTypeOperatorPrompt, got.IssueType)
 	assert.Equal(t, StatusProposed, got.Status)
@@ -96,17 +96,17 @@ func TestStoreCreateRejectsOperatorPromptSelfMutation(t *testing.T) {
 
 	t.Setenv("DDX_ACTOR_ISSUE_TYPE", IssueTypeOperatorPrompt)
 	denied := NewOperatorPromptBead("nested prompt", 2)
-	err := store.Create(denied)
+	err := store.Create(testCtx(), denied)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "operator-prompt")
 
 	t.Setenv("DDX_ACTOR_ISSUE_TYPE", "task")
 	allowed := NewOperatorPromptBead("first prompt", 2)
-	require.NoError(t, store.Create(allowed))
+	require.NoError(t, store.Create(testCtx(), allowed))
 
 	t.Setenv("DDX_ACTOR_ISSUE_TYPE", "")
 	human := NewOperatorPromptBead("human-submitted prompt", 2)
-	require.NoError(t, store.Create(human))
+	require.NoError(t, store.Create(testCtx(), human))
 }
 
 // TestStoreRejectsInvalidStatus protects the validateBead enum boundary:
@@ -115,7 +115,7 @@ func TestStoreCreateRejectsOperatorPromptSelfMutation(t *testing.T) {
 func TestStoreRejectsInvalidStatus(t *testing.T) {
 	store := newTestStore(t)
 	b := &Bead{Title: "bad status", IssueType: "task", Priority: 2, Status: "weird"}
-	err := store.Create(b)
+	err := store.Create(testCtx(), b)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid status")
 }

@@ -62,14 +62,14 @@ func TestProperty_CreateGetRoundTrip(t *testing.T) {
 				return // skip empty-title cases; those are validation errors, not bugs
 			}
 
-			err := s.Create(b)
+			err := s.Create(testCtx(), b)
 			if err != nil && strings.Contains(err.Error(), "title is required") {
 				return
 			}
 			require.NoError(t, err, "Create must succeed for input %d", i)
 			require.NotEmpty(t, b.ID, "ID must be assigned on create")
 
-			got, err := s.Get(b.ID)
+			got, err := s.Get(testCtx(), b.ID)
 			require.NoError(t, err, "Get must succeed immediately after Create")
 
 			assert.Equal(t, b.ID, got.ID)
@@ -97,7 +97,7 @@ func TestProperty_OneRowPerID(t *testing.T) {
 	ids := make([]string, 0, baseCount)
 	for i := 0; i < baseCount; i++ {
 		b := &Bead{Title: fmt.Sprintf("base-bead-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		ids = append(ids, b.ID)
 	}
 
@@ -110,7 +110,7 @@ func TestProperty_OneRowPerID(t *testing.T) {
 	}
 
 	// Invariant: ReadAll returns exactly one row per ID.
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 
 	seen := make(map[string]int, len(beads))
@@ -132,29 +132,29 @@ func TestProperty_StatusMustBeValid(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "status-validity"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	id := b.ID
 
 	validStatuses := allLifecycleStatusesForTests()
 
 	// Attempt to set invalid status via Update — should be rejected.
-	err := s.Update(id, func(b *Bead) {
+	err := s.Update(testCtx(), id, func(b *Bead) {
 		b.Status = "invalid-status"
 	})
 	assert.Error(t, err, "Update with invalid status must be rejected")
 
 	// Bead must still have a valid status.
-	got, err := s.Get(id)
+	got, err := s.Get(testCtx(), id)
 	require.NoError(t, err)
 	assert.Contains(t, validStatuses, got.Status)
 
 	// Transition via Claim and Close.
 	require.NoError(t, s.Claim(id, "agent-1"))
-	got, _ = s.Get(id)
+	got, _ = s.Get(testCtx(), id)
 	assert.Equal(t, StatusInProgress, got.Status)
 
-	require.NoError(t, s.Close(id))
-	got, _ = s.Get(id)
+	require.NoError(t, s.Close(testCtx(), id))
+	got, _ = s.Get(testCtx(), id)
 	assert.Equal(t, StatusClosed, got.Status)
 }
 
@@ -173,14 +173,14 @@ func TestProperty_ClaimStateMachine(t *testing.T) {
 
 	rng := rand.New(rand.NewSource(9999))
 	b := &Bead{Title: "state-machine-target"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	id := b.ID
 
 	validStatuses := allLifecycleStatusesForTests()
 
 	for step := 0; step < 200; step++ {
 		// Read current status before deciding the operation.
-		current, err := s.Get(id)
+		current, err := s.Get(testCtx(), id)
 		require.NoError(t, err, "step %d: Get must succeed", step)
 
 		op := rng.Intn(4)
@@ -197,7 +197,7 @@ func TestProperty_ClaimStateMachine(t *testing.T) {
 			assert.NoError(t, s.Unclaim(id), "step %d: Unclaim must never error", step)
 
 		case 2: // Close: always succeeds (idempotent if already closed).
-			assert.NoError(t, s.Close(id), "step %d: Close must never error", step)
+			assert.NoError(t, s.Close(testCtx(), id), "step %d: Close must never error", step)
 
 		case 3: // Reopen through the lifecycle API: always succeeds for this state set.
 			assert.NoError(t, s.Reopen(id, "", ""),
@@ -205,7 +205,7 @@ func TestProperty_ClaimStateMachine(t *testing.T) {
 		}
 
 		// After every operation the bead must have a valid status.
-		got, getErr := s.Get(id)
+		got, getErr := s.Get(testCtx(), id)
 		require.NoError(t, getErr, "step %d: Get must succeed after op", step)
 		assert.Contains(t, validStatuses, got.Status,
 			"step %d: bead must have valid status after op %d, was %q", step, op, got.Status)
@@ -219,11 +219,11 @@ func TestProperty_UnclaimDoesNotReopenClosed(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "must-stay-closed-on-unclaim"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	id := b.ID
 
 	require.NoError(t, s.Claim(id, "agent"))
-	require.NoError(t, s.Close(id))
+	require.NoError(t, s.Close(testCtx(), id))
 
 	// Unclaim on closed bead: should not change status to open.
 	err := s.Unclaim(id)
@@ -231,7 +231,7 @@ func TestProperty_UnclaimDoesNotReopenClosed(t *testing.T) {
 	// What matters is the resulting status.
 	_ = err
 
-	got, err := s.Get(id)
+	got, err := s.Get(testCtx(), id)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, got.Status, "unclaiming a closed bead must not reopen it")
 }
@@ -242,7 +242,7 @@ func TestProperty_ClaimRequiresOpen(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "claim-guard"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	id := b.ID
 
 	// Claim succeeds from open.
@@ -253,7 +253,7 @@ func TestProperty_ClaimRequiresOpen(t *testing.T) {
 	assert.Error(t, err, "claiming an in_progress bead must error")
 
 	// Close it and verify claiming closed bead also fails.
-	require.NoError(t, s.Close(id))
+	require.NoError(t, s.Close(testCtx(), id))
 	err = s.Claim(id, "agent-3")
 	assert.Error(t, err, "claiming a closed bead must error")
 }
@@ -272,7 +272,7 @@ func TestProperty_DepCycleDetection(t *testing.T) {
 	var ids []string
 	for i := 0; i < 5; i++ {
 		b := &Bead{Title: fmt.Sprintf("dep-chain-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		ids = append(ids, b.ID)
 	}
 
@@ -290,7 +290,7 @@ func TestProperty_DepCycleDetection(t *testing.T) {
 	assert.Error(t, err, "self-dependency must be rejected")
 
 	// Verify the valid chain is intact.
-	b, err := s.Get(ids[len(ids)-1])
+	b, err := s.Get(testCtx(), ids[len(ids)-1])
 	require.NoError(t, err)
 	assert.True(t, b.HasDep(ids[len(ids)-2]), "dep chain must be preserved after cycle rejection")
 }
@@ -303,28 +303,28 @@ func TestProperty_DepRemoveAndReadd(t *testing.T) {
 
 	a := &Bead{Title: "dep-a"}
 	b := &Bead{Title: "dep-b"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Add dep: b depends on a.
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
-	got, _ := s.Get(b.ID)
+	got, _ := s.Get(testCtx(), b.ID)
 	assert.True(t, got.HasDep(a.ID))
 
 	// Remove dep.
 	require.NoError(t, s.DepRemove(b.ID, a.ID))
-	got, _ = s.Get(b.ID)
+	got, _ = s.Get(testCtx(), b.ID)
 	assert.False(t, got.HasDep(a.ID))
 
 	// Re-add.
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
-	got, _ = s.Get(b.ID)
+	got, _ = s.Get(testCtx(), b.ID)
 	assert.True(t, got.HasDep(a.ID))
 
 	// Adding same dep again must not duplicate.
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
-	got, _ = s.Get(b.ID)
+	got, _ = s.Get(testCtx(), b.ID)
 	count := 0
 	for _, d := range got.Dependencies {
 		if d.DependsOnID == a.ID {
@@ -355,11 +355,11 @@ func TestProperty_ReadyAndBlockedInvariants(t *testing.T) {
 	depB := &Bead{Title: "independentB"}
 	closedOne := &Bead{Title: "closed-one"}
 
-	require.NoError(t, s.Create(prereq))
-	require.NoError(t, s.Create(depA))
-	require.NoError(t, s.Create(depB))
-	require.NoError(t, s.Create(closedOne))
-	require.NoError(t, s.Close(closedOne.ID))
+	require.NoError(t, s.Create(testCtx(), prereq))
+	require.NoError(t, s.Create(testCtx(), depA))
+	require.NoError(t, s.Create(testCtx(), depB))
+	require.NoError(t, s.Create(testCtx(), closedOne))
+	require.NoError(t, s.Close(testCtx(), closedOne.ID))
 
 	require.NoError(t, s.DepAdd(depA.ID, prereq.ID))
 
@@ -400,7 +400,7 @@ func TestProperty_ReadyAndBlockedInvariants(t *testing.T) {
 	assert.True(t, readyIDs[depB.ID], "depB must be ready (no deps)")
 
 	// Close prereq: depA should become ready.
-	require.NoError(t, s.Close(prereq.ID))
+	require.NoError(t, s.Close(testCtx(), prereq.ID))
 
 	ready2, err := s.Ready()
 	require.NoError(t, err)
@@ -433,7 +433,7 @@ func TestProperty_ReadyPriorityOrder(t *testing.T) {
 			Title:    fmt.Sprintf("priority-bead-%d", i),
 			Priority: rng.Intn(5),
 		}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 	}
 
 	ready, err := s.Ready()
@@ -459,7 +459,7 @@ func TestProperty_EventsAreAppendOnly(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "evidence-target"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	id := b.ID
 
 	eventKinds := []string{"execution", "debug", "evidence", "info"}
@@ -504,8 +504,8 @@ func TestProperty_EventsOnMultipleBeadsIndependent(t *testing.T) {
 
 	a := &Bead{Title: "event-bead-a"}
 	b := &Bead{Title: "event-bead-b"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	require.NoError(t, s.AppendEvent(a.ID, BeadEvent{Kind: "debug", Summary: "a-event"}))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "debug", Summary: "b-event"}))
@@ -547,7 +547,7 @@ func TestProperty_RandomizedOpStream(t *testing.T) {
 				name: "create",
 				fn: func() {
 					b := &Bead{Title: fmt.Sprintf("rand-bead-%d", rng.Intn(10000))}
-					if err := s.Create(b); err == nil {
+					if err := s.Create(testCtx(), b); err == nil {
 						liveIDs = append(liveIDs, b.ID)
 					}
 				},
@@ -562,11 +562,11 @@ func TestProperty_RandomizedOpStream(t *testing.T) {
 				}},
 				op{name: "claim", fn: func() { _ = s.Claim(id, "agent") }},
 				op{name: "unclaim", fn: func() { _ = s.Unclaim(id) }},
-				op{name: "close", fn: func() { _ = s.Close(id) }},
+				op{name: "close", fn: func() { _ = s.Close(testCtx(), id) }},
 				op{name: "append-event", fn: func() {
 					_ = s.AppendEvent(id, BeadEvent{Kind: "debug", Summary: "rand-event"})
 				}},
-				op{name: "get", fn: func() { _, _ = s.Get(id) }},
+				op{name: "get", fn: func() { _, _ = s.Get(testCtx(), id) }},
 			)
 		}
 		return ops
@@ -579,7 +579,7 @@ func TestProperty_RandomizedOpStream(t *testing.T) {
 		chosen.fn()
 
 		// After each operation, verify invariants.
-		beads, err := s.ReadAll()
+		beads, err := s.ReadAll(testCtx())
 		require.NoError(t, err, "round %d (%s): ReadAll must succeed", round, chosen.name)
 
 		// One row per ID.
@@ -609,7 +609,7 @@ func TestProperty_MalformedJSONLRepair(t *testing.T) {
 	var ids []string
 	for i := 0; i < 5; i++ {
 		b := &Bead{Title: fmt.Sprintf("good-bead-%d", i)}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		ids = append(ids, b.ID)
 	}
 
@@ -628,7 +628,7 @@ func TestProperty_MalformedJSONLRepair(t *testing.T) {
 	_ = f.Close()
 
 	// ReadAll should still return the valid beads (repair triggers on warnings).
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	// If all valid lines survive (warnings about bad lines, but not fatal):
 	if err == nil {
 		byID := make(map[string]bool, len(beads))

@@ -2,6 +2,7 @@ package runtimelint_test
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -22,6 +23,7 @@ func TestRuntimelintCleanTree(t *testing.T) {
 
 	cmd := exec.Command("go", "run", "-buildvcs=false", "./tools/lint/runtimelint/cmd/runtimelint", "./...")
 	cmd.Dir = moduleRoot
+	cmd.Env = append(os.Environ(), "GOFLAGS=-buildvcs=false")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

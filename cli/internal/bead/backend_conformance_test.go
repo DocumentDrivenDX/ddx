@@ -55,10 +55,10 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		s := makeStore(t)
 
 		b := &Bead{Title: "first", Description: "round-trip"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		require.NotEmpty(t, b.ID)
 
-		got, err := s.Get(b.ID)
+		got, err := s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "first", got.Title)
 		assert.Equal(t, "round-trip", got.Description)
@@ -70,14 +70,14 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		s := makeStore(t)
 
 		b := &Bead{Title: "to-update"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
-		require.NoError(t, s.Update(b.ID, func(bb *Bead) {
+		require.NoError(t, s.Update(testCtx(), b.ID, func(bb *Bead) {
 			bb.Notes = "added by update"
 			bb.Priority = 3
 		}))
 
-		got, err := s.Get(b.ID)
+		got, err := s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "added by update", got.Notes)
 		assert.Equal(t, 3, got.Priority)
@@ -88,10 +88,10 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		s := makeStore(t)
 
 		b := &Bead{Title: "claimable"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		require.NoError(t, s.Claim(b.ID, "alice"))
-		got, err := s.Get(b.ID)
+		got, err := s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, StatusInProgress, got.Status)
 		assert.Equal(t, "alice", got.Owner)
@@ -102,7 +102,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		require.Error(t, err)
 
 		require.NoError(t, s.Unclaim(b.ID))
-		got, err = s.Get(b.ID)
+		got, err = s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, StatusOpen, got.Status)
 		assert.Empty(t, got.Owner)
@@ -114,11 +114,11 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 
 		root := &Bead{Title: "root"}
 		child := &Bead{Title: "child"}
-		require.NoError(t, s.Create(root))
-		require.NoError(t, s.Create(child))
+		require.NoError(t, s.Create(testCtx(), root))
+		require.NoError(t, s.Create(testCtx(), child))
 
 		require.NoError(t, s.DepAdd(child.ID, root.ID))
-		got, err := s.Get(child.ID)
+		got, err := s.Get(testCtx(), child.ID)
 		require.NoError(t, err)
 		require.Len(t, got.Dependencies, 1)
 		assert.Equal(t, root.ID, got.Dependencies[0].DependsOnID)
@@ -128,7 +128,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		assert.Contains(t, tree, root.ID)
 
 		require.NoError(t, s.DepRemove(child.ID, root.ID))
-		got, err = s.Get(child.ID)
+		got, err = s.Get(testCtx(), child.ID)
 		require.NoError(t, err)
 		assert.Empty(t, got.Dependencies)
 	})
@@ -138,7 +138,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		s := makeStore(t)
 
 		b := &Bead{Title: "with-events"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		for i := 0; i < 3; i++ {
 			require.NoError(t, s.AppendEvent(b.ID, BeadEvent{
@@ -156,8 +156,8 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 			assert.Equal(t, fmt.Sprintf("event-%d", i), e.Summary)
 		}
 
-		require.NoError(t, s.Close(b.ID))
-		got, err := s.Get(b.ID)
+		require.NoError(t, s.Close(testCtx(), b.ID))
+		got, err := s.Get(testCtx(), b.ID)
 		require.NoError(t, err)
 		assert.Equal(t, StatusClosed, got.Status)
 		events, err = s.Events(b.ID)
@@ -225,12 +225,12 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 					t.Parallel()
 					s := makeStore(t)
 					b := &Bead{Title: lc.name, Status: lc.fromStatus}
-					require.NoError(t, s.Create(b))
+					require.NoError(t, s.Create(testCtx(), b))
 
 					require.NoError(t, s.SetLifecycleStatus(b.ID, lc.toStatus, lc.opts),
 						"legal transition %s -> %s must succeed", lc.fromStatus, lc.toStatus)
 
-					got, err := s.Get(b.ID)
+					got, err := s.Get(testCtx(), b.ID)
 					require.NoError(t, err)
 					assert.Equal(t, lc.toStatus, got.Status, "status must be persisted after transition")
 					for k, want := range lc.wantExtra {
@@ -267,12 +267,12 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 					s := makeStore(t)
 
 					b := &Bead{Title: lc.name}
-					require.NoError(t, s.Create(b))
+					require.NoError(t, s.Create(testCtx(), b))
 					require.NoError(t, s.SetLifecycleStatus(b.ID, StatusBlocked, LifecycleTransitionOptions{
 						ExternalBlockerReason: "blocking reason",
 					}))
 
-					pre, err := s.Get(b.ID)
+					pre, err := s.Get(testCtx(), b.ID)
 					require.NoError(t, err)
 					require.NotNil(t, pre.Extra)
 					require.Equal(t, "blocking reason", pre.Extra[ExtraLifecycleExternalBlockerReason],
@@ -281,7 +281,7 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 					require.NoError(t, s.SetLifecycleStatus(b.ID, lc.toStatus, lc.opts),
 						"legal transition blocked -> %s must succeed", lc.toStatus)
 
-					got, err := s.Get(b.ID)
+					got, err := s.Get(testCtx(), b.ID)
 					require.NoError(t, err)
 					assert.Equal(t, lc.toStatus, got.Status, "status must be persisted")
 					// Extra may be nil after the last extra key is deleted — a nil map means
@@ -298,11 +298,11 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 			s := makeStore(t)
 
 			b := &Bead{Title: "reopen-claim-cleanup"}
-			require.NoError(t, s.Create(b))
+			require.NoError(t, s.Create(testCtx(), b))
 			require.NoError(t, s.Claim(b.ID, "worker"))
-			require.NoError(t, s.Close(b.ID))
+			require.NoError(t, s.Close(testCtx(), b.ID))
 
-			pre, err := s.Get(b.ID)
+			pre, err := s.Get(testCtx(), b.ID)
 			require.NoError(t, err)
 			require.Equal(t, StatusClosed, pre.Status)
 			require.NotNil(t, pre.Extra)
@@ -310,7 +310,7 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 
 			require.NoError(t, s.Reopen(b.ID, "reopen for test", ""))
 
-			got, err := s.Get(b.ID)
+			got, err := s.Get(testCtx(), b.ID)
 			require.NoError(t, err)
 			assert.Equal(t, StatusOpen, got.Status, "status must be open after Reopen")
 			assert.Empty(t, got.Owner, "owner must be cleared on Reopen")
@@ -356,12 +356,12 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 					t.Parallel()
 					s := makeStore(t)
 					b := &Bead{Title: fc.name, Status: fc.fromStatus}
-					require.NoError(t, s.Create(b))
+					require.NoError(t, s.Create(testCtx(), b))
 
 					err := s.SetLifecycleStatus(b.ID, fc.toStatus, fc.opts)
 					require.Error(t, err, "forbidden transition %s -> %s must return an error", fc.fromStatus, fc.toStatus)
 
-					got, getErr := s.Get(b.ID)
+					got, getErr := s.Get(testCtx(), b.ID)
 					require.NoError(t, getErr)
 					assert.Equal(t, fc.fromStatus, got.Status,
 						"status must not change after rejected transition")

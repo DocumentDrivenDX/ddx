@@ -38,7 +38,7 @@ func (r *mutationResolver) BeadClose(ctx context.Context, id string, reason *str
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	store := r.beadStore(ctx)
-	if err := store.Close(id); err != nil {
+	if err := store.Close(ctx, id); err != nil {
 		return nil, err
 	}
 	if reason != nil && strings.TrimSpace(*reason) != "" {
@@ -47,7 +47,7 @@ func (r *mutationResolver) BeadClose(ctx context.Context, id string, reason *str
 			Summary: "closed: " + strings.TrimSpace(*reason),
 		})
 	}
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1108,7 +1108,7 @@ func collectPaletteMatches(query string, workingDir string) []paletteMatch {
 	}
 
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
-	if beads, err := store.ReadAll(); err == nil {
+	if beads, err := store.ReadAll(context.Background()); err == nil {
 		for _, b := range beads {
 			if score, ok := paletteScore(query, b.ID, b.Title); ok {
 				out = append(out, paletteMatch{kind: "bead", id: b.ID, title: b.Title, score: score, sortKey: "bead:" + b.ID})

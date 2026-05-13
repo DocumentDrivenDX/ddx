@@ -43,7 +43,7 @@ const PLUGINS = [
 		version: '0.5.0',
 		installedVersion: '0.4.2',
 		type: 'plugin',
-		description: 'Cost-tiered routing policies for ddx agent',
+		description: 'Cost-tiered routing policies for legacy agent',
 		keywords: ['routing', 'cost'],
 		status: 'update-available',
 		registrySource: 'https://github.com/example/ddx-plugins',

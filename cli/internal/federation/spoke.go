@@ -136,6 +136,7 @@ type SpokeConfig struct {
 	SchemaVersion        string
 	GraphQLSchemaVersion string
 	Capabilities         []string
+	ProjectIDs           []string
 
 	// HeartbeatInterval defaults to DefaultHeartbeatInterval. Pass a small
 	// value (e.g. 50ms) in tests.
@@ -335,6 +336,7 @@ func (s *Spoke) register(ctx context.Context) error {
 		SchemaVersion:        s.cfg.SchemaVersion,
 		GraphQLSchemaVersion: s.cfg.GraphQLSchemaVersion,
 		Capabilities:         append([]string(nil), s.cfg.Capabilities...),
+		ProjectIDs:           append([]string(nil), s.cfg.ProjectIDs...),
 	}
 	resp, err := s.postJSON(ctx, "/api/federation/register", body)
 	if err != nil {
@@ -489,4 +491,5 @@ type federationRegisterRequest struct {
 	SchemaVersion        string   `json:"schema_version"`
 	GraphQLSchemaVersion string   `json:"graphql_schema_version,omitempty"`
 	Capabilities         []string `json:"capabilities,omitempty"`
+	ProjectIDs           []string `json:"project_ids,omitempty"`
 }

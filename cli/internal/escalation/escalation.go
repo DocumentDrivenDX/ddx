@@ -130,7 +130,7 @@ func AppendEscalationSummaryEvent(appender BeadEventAppender, beadID, actor stri
 		Summary:   fmt.Sprintf("winning_tier=%s attempts=%d total_cost_usd=%.4f wasted_cost_usd=%.4f", summary.WinningTier, len(attempts), summary.TotalCostUSD, summary.WastedCostUSD),
 		Body:      string(body),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "legacy agent execute-loop",
 		CreatedAt: createdAt,
 	})
 }

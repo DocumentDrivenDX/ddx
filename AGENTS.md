@@ -12,7 +12,7 @@ the user explicitly asks.
 | Mode | Trigger | Allowed | Prohibited |
 |---|---|---|---|
 | `queue_steward` | Broad DDx questions: "what's on the queue", "what's ready", "how am I doing", "do work" without an explicit worker directive | Read tracker and docs; report status; advise on bead quality; run `ddx bead list/ready/status/show` | Claiming or editing beads; starting `ddx work`/`ddx try` autonomously |
-| `bead_execution` | Explicit worker directive: `ddx work`, `ddx try <id>`, `ddx agent execute-bead`, or `execute-bead` harness invocation | Full execute-bead lifecycle per the bead body | Scope creep outside the named bead |
+| `bead_execution` | Explicit worker directive: `ddx work`, `ddx try <id>`, or an `execute-bead` harness invocation | Full execute-bead lifecycle per the bead body | Scope creep outside the named bead |
 | `direct_user_implementation` | User explicitly asks to edit code or docs ("fix this bug", "update this file") | Edit code and docs as instructed; commit to the current branch | Draining the bead queue autonomously |
 | `review` | User explicitly asks for a review ("review this PR", "grade this bead") | Read-only evidence-based review per §Reviewer Mode | Writing commits or claiming beads |
 
@@ -169,7 +169,7 @@ After modifying any of these paths, stage and commit them:
 
 ## Merge Policy
 
-Branches containing `ddx agent execute-bead` or `ddx work` commits
+Branches containing `ddx try` or `ddx work` commits
 carry a per-attempt execution audit trail:
 
 - `chore: update tracker (execute-bead <TIMESTAMP>)` — attempt heartbeats

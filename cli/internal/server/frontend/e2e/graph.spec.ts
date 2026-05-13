@@ -124,7 +124,7 @@ function ensureDdxBinary(): string {
 
 	const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ddx-graph-e2e-bin-'));
 	ddxBinary = path.join(binDir, process.platform === 'win32' ? 'ddx-e2e.exe' : 'ddx-e2e');
-	const result = spawnSync('go', ['build', '-o', ddxBinary, '.'], {
+	const result = spawnSync('go', ['build', '-buildvcs=false', '-o', ddxBinary, '.'], {
 		cwd: CLI_DIR,
 		env: process.env,
 		encoding: 'utf8'

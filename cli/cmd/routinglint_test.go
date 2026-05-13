@@ -1,9 +1,9 @@
 package cmd
 
 // routinglint_test.go: AST guard ensuring ResolveRoute is not called from
-// execution-path functions in agent_cmd.go. Fails if someone re-introduces
-// a ResolveRoute call inside newAgentRunCommand or newAgentExecuteLoopCommand
-// (CONTRACT-003 / ddx-da19756a).
+// execution-path functions in run.go, try.go, or work.go. Fails if someone
+// re-introduces a ResolveRoute call inside one of the top-level execution
+// entry points (CONTRACT-003 / ddx-da19756a).
 
 import (
 	"go/ast"
@@ -16,50 +16,47 @@ import (
 // routinglintExecutionFunctions are the CLI entry points that must NOT call
 // ResolveRoute. These are the "run/try/work" execution paths described in
 // the bead contract.
-var routinglintExecutionFunctions = []string{
-	"newAgentRunCommand",
-	"newAgentExecuteLoopCommand",
+var routinglintExecutionFunctions = []struct {
+	file string
+	fn   string
+}{
+	{file: "run.go", fn: "runRun"},
+	{file: "try.go", fn: "runTry"},
+	{file: "work.go", fn: "runWork"},
 }
 
 // TestRoutinglintNoResolveRouteInExecutionPaths verifies that execution-path
-// functions in agent_cmd.go do not call .ResolveRoute(). Status/debug
-// surfaces (newAgentRouteStatusCommand, etc.) are allowed to call ResolveRoute
-// and are not scanned by this lint.
+// functions do not call .ResolveRoute(). Status/debug surfaces are allowed to
+// call ResolveRoute and are not scanned by this lint.
 func TestRoutinglintNoResolveRouteInExecutionPaths(t *testing.T) {
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "agent_cmd.go", nil, 0)
-	if err != nil {
-		t.Fatalf("routinglint: parse agent_cmd.go: %v", err)
-	}
-
-	bannedSet := make(map[string]bool, len(routinglintExecutionFunctions))
-	for _, name := range routinglintExecutionFunctions {
-		bannedSet[name] = true
-	}
-
-	for _, decl := range f.Decls {
-		fn, ok := decl.(*ast.FuncDecl)
-		if !ok {
-			continue
+	for _, target := range routinglintExecutionFunctions {
+		fset := token.NewFileSet()
+		f, err := parser.ParseFile(fset, target.file, nil, 0)
+		if err != nil {
+			t.Fatalf("routinglint: parse %s: %v", target.file, err)
 		}
-		if !bannedSet[fn.Name.Name] {
-			continue
+
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name.Name != target.fn {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				if !ok {
+					return true
+				}
+				if sel.Sel.Name == "ResolveRoute" {
+					t.Errorf("routinglint: %s in %s calls .ResolveRoute() at %s — execution paths must pass operator constraints to Execute, not pre-resolve routes (CONTRACT-003 / ddx-da19756a)",
+						target.fn, target.file, fset.Position(call.Pos()))
+				}
+				return true
+			})
 		}
-		ast.Inspect(fn.Body, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			if sel.Sel.Name == "ResolveRoute" {
-				t.Errorf("routinglint: %s calls .ResolveRoute() at %s — execution paths must pass operator constraints to Execute, not pre-resolve routes (CONTRACT-003 / ddx-da19756a)",
-					fn.Name.Name, fset.Position(call.Pos()))
-			}
-			return true
-		})
 	}
 }
 
@@ -67,10 +64,9 @@ func TestRoutinglintNoResolveRouteInExecutionPaths(t *testing.T) {
 // cmd/ source files other than status/introspection surfaces do not call
 // .ResolveRoute().
 func TestRoutinglintNonStatusFilesDoNotCallResolveRoute(t *testing.T) {
-	// agent_cmd.go and agent_route_status.go host status/introspection surfaces.
+	// agent_route_status.go hosts the status/introspection surface.
 	// All other non-test .go files in cmd/ must not call ResolveRoute.
 	allowedFiles := map[string]bool{
-		"agent_cmd.go":          true,
 		"agent_route_status.go": true,
 	}
 

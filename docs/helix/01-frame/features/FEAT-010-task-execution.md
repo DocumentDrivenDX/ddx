@@ -212,10 +212,11 @@ The readiness assessment result is one of:
   file:line evidence, add an obvious test command, or wire deterministic
   labels/parent/deps. The mutation is recorded through `ddx bead` paths before
   claim, with before/after hashes and enough evidence to audit the replacement.
-- `too_large_decomposed` — DDx created child beads, mapped every parent AC to
-  child ACs or an explicit operator-required / `non_scope` marker, left the
-  parent `status=open` with dependency edges to the children, and did not
-  execute the parent.
+- `too_large_decomposed` — DDx created child, sibling, or replacement beads,
+  mapped every parent AC to generated ACs or an explicit operator-required /
+  `non_scope` marker, left the oversized bead `status=open` with dependency,
+  execution-eligibility, or supersession metadata that lets the queue advance,
+  and did not execute the oversized bead directly.
 - `ambiguous_requires_operator` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
   DDx moves the bead to `status=proposed` and does not claim it.
@@ -237,10 +238,14 @@ prompt fitness rather than raw length: expanding a one-line underspecified bead
 is safe when the added durable context is required for execution, and compressing
 a noisy bead is safe when explicit commitments remain preserved.
 
-Readiness must reject the rewrite and move the bead to `status=proposed` when
-preservation cannot be proven from durable anchors. It must not invent
-product behavior, choose between conflicting requirements, change scope, delete
-unresolved constraints, or guess a missing governing artifact.
+Readiness must reject the rewrite when preservation cannot be proven from
+durable anchors. Rejected rewrite does not by itself authorize operator
+attention: DDx next tries safe decomposition or replacement work when that can
+preserve explicit scope, and moves the bead to `status=proposed` only when the
+remaining ambiguity, missing governing artifact, or scope conflict requires
+operator judgment. It must not invent product behavior, choose between
+conflicting requirements, change scope, delete unresolved constraints, or guess
+a missing governing artifact.
 
 `PostAttemptTriageHook` runs after the attempt has produced its local evidence:
 agent result, commit/no-commit state, no-changes rationale if any, post-run
@@ -257,8 +262,10 @@ If post-attempt triage finds that an implementation attempt stopped because the
 bead was too large or the worker could not legally decompose inside its
 worktree/depth context, the layer-3 worker must invoke the same orchestrator
 decomposition path used by `BeadReadinessHook`. This is machine-actionable
-work: DDx files child beads, records the AC map, and blocks the parent unless
-the split is lossy, ambiguous, or at the queue-level decomposition depth cap.
+work: DDx files child, sibling, or replacement beads, records the AC map, and
+leaves the oversized bead open with dependency, execution-eligibility, or
+supersession metadata that lets the queue advance. Only lossy or ambiguous
+splits require operator attention.
 The operator is not required merely because the implementer could not split
 from inside the attempted execution.
 
@@ -432,8 +439,8 @@ create commits or modify worktree state.
 **Terminal dispositions** for a candidate-cycle attempt:
 - `landed` — candidate was approved and merged to the base branch.
 - `preserved` — candidate is approved but land was deferred; worktree retained.
-- `parked` — repair budget exhausted without approval; bead moved to
-  `status=proposed`.
+- `parked` — automatic repair, review retry, reframe, and decomposition paths
+  exhausted without an executable next step; bead moved to `status=proposed`.
 - `conflicted` — approved candidate failed to land due to merge conflict; bead
   returned to `open` for re-attempt with a fresh `base_rev`.
 - `budget-stopped` — drain-level cost or no-progress budget tripped; worktree
@@ -455,7 +462,9 @@ create commits or modify worktree state.
    `repair_max_cycles`: emit `repair-cycle-started`, run append-only repair in
    same worktree, return to step 3.
 8. On `repair_max_cycles` exhausted: emit `repair-cycle-exhausted`, preserve
-   worktree, move bead to `status=proposed`.
+   worktree, and return the bead to the TD-031 auto-recovery path. Move to
+   `status=proposed` only after automatic reframe/decompose/replacement cannot
+   produce executable follow-up work or the finding requires operator judgment.
 9. On approved candidate that fails to land (merge conflict): emit
    `approved-land-conflict`, release claim, return bead to `open`.
 
@@ -463,12 +472,15 @@ create commits or modify worktree state.
 no-progress budgets):
 
 - **`repair_max_cycles`** — maximum repair cycles per attempt. Exhaustion fires
-  `repair-cycle-exhausted` and moves the bead to `status=proposed`; it does not
-  consume the no-progress counter.
+  `repair-cycle-exhausted` and enters the TD-031 auto-recovery path; it moves
+  the bead to `status=proposed` only after automatic recovery fails or requires
+  operator judgment. It does not consume the no-progress counter.
 - **`review_max_retries_per_candidate`** — maximum reviewer retry attempts for a
-  single candidate ref when reviewer invocations fail. Exhaustion fires
-  `review-manual-required`. A new candidate ref (next repair cycle or fresh
-  `ddx try`) resets this counter independently; it is strictly per-candidate.
+  single candidate ref when reviewer invocations fail. Exhaustion returns to
+  automatic recovery unless the error class proves operator action is required;
+  only operator-required exhaustion fires `review-manual-required`. A new
+  candidate ref (next repair cycle or fresh `ddx try`) resets this counter
+  independently; it is strictly per-candidate.
 
 These axes do not interact with the drain-level cost cap (FEAT-014), the
 rate-limit retry budget internal to a single attempt, or the no-progress counter
@@ -487,10 +499,12 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    leave a clearer implementation prompt, expanding underspecified beads or
    compressing noisy/stale beads as the durable context requires; original text
    is preserved in readiness evidence for audit. Too-large work is decomposed
-   before an implementation attempt. Ambiguous or underspecified work moves to
+   before an implementation attempt, using sibling or replacement decomposition
+   when child depth is exhausted. Ambiguous or underspecified work moves to
    `status=proposed` only when the gate reaches a hard operator-required
-   condition; otherwise WARN-ONLY findings proceed on the open forward-progress
-   lane. Readiness infrastructure failure records evidence and follows the
+   condition after safe rewrite/decomposition options are exhausted; otherwise
+   WARN-ONLY findings proceed on the open forward-progress lane. Readiness
+   infrastructure failure records evidence and follows the
    configured fail-open/factory-mode policy; it never creates an unexplained
    cooldown.
 2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
@@ -515,14 +529,19 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    required repair context and optionally raising `MinPower`; it preserves the
    retry path and does not move the bead to `status=proposed`.
    `review_spec_gap`, `review_missing_acceptance`, `review_too_large`, and
-   non-mechanical unsafe or out-of-scope findings move the bead to
-   `status=proposed`, clear the active claim, and do not ask another implementer
-   to guess. Malformed, empty, context-overflow, and
-   transport reviewer failures emit `review-error` scoped to `result_rev` and
-   reviewer slot; after `review_max_retries_per_candidate` they emit
-   `review-manual-required`, clear the active claim, move the bead to
-   `status=proposed`, and do not close. The `review_fixable_gap` path stays on
-   the automatic retry track instead of converting into operator review.
+   non-mechanical unsafe or out-of-scope findings enter the TD-031
+   decomposition-first path: safe reframe, child decomposition, and
+   sibling/replacement decomposition are attempted when they can preserve
+   explicit scope. DDx moves the bead to `status=proposed` only when those paths
+   would be lossy or require operator judgment, and it does not ask another
+   implementer to guess. Malformed, empty, context-overflow, and transport
+   reviewer failures emit `review-error` scoped to `result_rev` and reviewer
+   slot; after `review_max_retries_per_candidate` they return to automatic
+   recovery unless the error class proves operator action is required. Only
+   operator-required review errors emit `review-manual-required`, clear the
+   active claim, move the bead to `status=proposed`, and prevent close. The
+   `review_fixable_gap` path stays on the automatic retry track instead of
+   converting into operator review.
 6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
    not model-capability failures. They emit structured evidence and either stay
@@ -564,7 +583,8 @@ Common fields:
 
 Layer extensions:
 - `layer1` — prompt reference, agent config, model id, token usage,
-  upstream session id, structured response pointer
+  upstream session id, structured response pointer, normalized
+  `ToolCallEntry` stream captured at drain time
 - `layer2` — bead id, base revision, worktree path, finalization mode
   (`merge` | `preserve`), child layer-1 run ids, evidence-bundle pointer
 - `layer3` — queue snapshot pointer, stop-condition evaluation log,
@@ -1215,6 +1235,36 @@ project-scoped identity of the inspection:
 | `actor` | Viewer identity derived from the authenticated project member |
 | `source` | `graphql:run` |
 | `body` | Single line: `project_id=<projectId> run_id=<runId> layer=<layer> visibility=project_membership` |
+
+### Run resolver contract
+
+The canonical deep loader for a run detail surface is `run(id:)`. It returns
+the run-layer fields used by FEAT-008:
+
+- `prompt`
+- `response`
+- `stderr`
+- `bundleFiles[]`
+
+The tool-call resolver is the `toolCalls(first, after)` stream exposed via
+`runToolCalls(id:, first:, after:)`. It returns the normalized tool-call
+stream as a paginated `RunToolCallConnection`, where each node projects the
+canonical drain-time `ToolCallEntry` shape:
+
+- `tool`
+- `input`
+- `output`
+- `duration_ms`
+- `error`
+
+`ToolCallEntry` is the normalized agent-side record of one tool execution. DDx
+persists the stream at drain time so the run substrate can page the stored
+sequence without rehydrating raw agent logs.
+
+The `bundleFile(path)` lookup is exposed via `runBundleFile(id:, path:)`. It
+is confined to the run's bundle root, rejects path traversal, absolute paths,
+and symlink escapes, and inlines content only for the whitelist of small text
+files documented by FEAT-008.
 
 ### Layer-to-substrate mapping for the Runs UI
 

@@ -42,9 +42,9 @@ func TestGenID_WorktreePrefix(t *testing.T) {
 	// worktree.  workingDir inside NewStore will be projectDir.
 	ddxDir := filepath.Join(projectDir, ".ddx")
 	s := NewStore(ddxDir)
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(testCtx()))
 
-	id, err := s.GenID()
+	id, err := s.GenID(testCtx())
 	require.NoError(t, err)
 
 	// Must be "ddx-<8 hex digits>", not ".execute-bead-wt-…-<hex>".

@@ -24,7 +24,7 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 }
 
 func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir, acCheckJSON string) (*ReviewGroupResult, error) {
-	b, err := r.BeadStore.Get(beadID)
+	b, err := r.BeadStore.Get(ctx, beadID)
 	if err != nil {
 		return nil, fmt.Errorf("review-group: get bead %s: %w", beadID, err)
 	}
@@ -58,7 +58,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 			Kind:      ReviewerEscalatedEventKind,
 			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
 			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 	}
@@ -123,7 +123,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 					Kind:      ReviewACOverrideEventKind,
 					Summary:   fmt.Sprintf("%d AC grade(s) diverge from ac-check.json (reviewer_index=%d)", count, slot.ReviewerIndex),
 					Body:      strings.Join(reasons, "\n"),
-					Source:    "ddx agent execute-loop",
+					Source:    "ddx work",
 					CreatedAt: time.Now().UTC(),
 				})
 			}
@@ -253,7 +253,7 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 			Kind:      ReviewPairingDegradedEventKind,
 			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
 			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower, resultRev),
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 	}

@@ -146,6 +146,29 @@ func TestAttempt_NoChangesOpen_ReturnsSmartRetryNoCooldown(t *testing.T) {
 	assert.Empty(t, out.Report.RetryAfter)
 }
 
+func TestAttempt_NoChangesBlockedInternalScopeStaysAutonomous(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:             beadID,
+				Status:             StatusNoChanges,
+				NoChangesRationale: "status: blocked\nreason: External blocker: cannot be satisfied inside this bead alone; requires a broader API migration outside this bead\nfollow_up_needed: split into executable children",
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	require.NotNil(t, out.NoChanges)
+	assert.Equal(t, NoChangesActionKeepOpenSmartRetry, out.NoChanges.Action)
+	assert.Equal(t, NoChangesEventAutonomousRetry, out.NoChanges.EventKind)
+	assert.Equal(t, "open", out.NoChanges.LifecycleStatus)
+	assert.Contains(t, out.NoChanges.SuggestedAction, "decompose")
+}
+
 func TestAttempt_NoChangesUnjustified_ReturnsBadAttemptNoLongCooldown(t *testing.T) {
 	store := &attemptStore{}
 

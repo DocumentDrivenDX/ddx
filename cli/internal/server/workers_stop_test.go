@@ -16,7 +16,7 @@ import (
 )
 
 // TestWorkerManagerStopSetsStoppedState covers the primary AC:
-// `ddx agent workers stop <id>` (via WorkerManager.Stop) gracefully
+// `legacy agent workers stop <id>` (via WorkerManager.Stop) gracefully
 // terminates a running worker and updates its state to "stopped", distinct
 // from "failed" and "exited".
 func TestWorkerManagerStopSetsStoppedState(t *testing.T) {
@@ -146,7 +146,7 @@ func TestWorkerManagerStopReleasesBeadClaim(t *testing.T) {
 }
 
 // TestWorkerManagerStopPersistsStoppedToDisk: the graceful path writes the
-// final record to disk so a later `ddx agent workers show <id>` (or the
+// final record to disk so a later `legacy agent workers show <id>` (or the
 // worker-list sweep) reports state=stopped even after the process exits.
 func TestWorkerManagerStopPersistsStoppedToDisk(t *testing.T) {
 	root := t.TempDir()

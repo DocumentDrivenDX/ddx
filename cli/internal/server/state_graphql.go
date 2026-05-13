@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -192,7 +193,7 @@ func (s *ServerState) forgetBeadLocation(id string) {
 
 func readBeadSnapshotFromProject(proj ProjectEntry, id string) (*ddxgraphql.BeadSnapshot, bool) {
 	store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
-	b, err := store.Get(id)
+	b, err := store.Get(context.Background(), id)
 	if err != nil {
 		return nil, false
 	}

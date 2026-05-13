@@ -32,6 +32,13 @@ export interface RunDetail {
 	costUsd: number | null
 	outputExcerpt: string | null
 	evidenceLinks: string[] | null
+	prompt: string | null
+	response: string | null
+	stderr: string | null
+	billingMode: string | null
+	outcome: string | null
+	detail: string | null
+	cachedTokens: number | null
 
 	bundleFiles?: BundleFile[]
 }
@@ -54,18 +61,23 @@ export interface ToolCall {
 	id: string
 	name: string
 	seq: number
-	ts: string | null
 	inputs: string | null
 	output: string | null
-	truncated: boolean | null
+	error: string | null
+	durationMs: number | null
 }
 
 export interface SessionDetail {
 	id: string
+	workerId: string | null
 	harness: string
 	model: string
 	cost: number | null
 	billingMode: string
+	baseRev: string | null
+	resultRev: string | null
+	stdoutPath: string | null
+	stderrPath: string | null
 	tokens: { prompt: number | null; completion: number | null; total: number | null; cached: number | null } | null
 	status: string
 	outcome: string | null

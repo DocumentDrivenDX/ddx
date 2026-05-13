@@ -92,13 +92,13 @@ func TestWorkMetricsBackfill_AddsRows(t *testing.T) {
 			"kind":       "cost",
 			"body":       `{"attempt_id":"20260110T120000-testabcd","harness":"claude","provider":"anthropic","model":"claude-sonnet-4-6","input_tokens":1000,"output_tokens":500,"total_tokens":1500,"cost_usd":1.5,"duration_ms":60000,"exit_code":0}`,
 			"created_at": now,
-			"source":     "ddx agent execute-bead",
+			"source":     "ddx try",
 		},
 		{
 			"kind":       "execute-bead",
 			"summary":    "task_succeeded",
 			"created_at": now,
-			"source":     "ddx agent execute-loop",
+			"source":     "ddx work",
 		},
 	}
 
@@ -142,13 +142,13 @@ func TestWorkMetricsBackfill_Idempotent(t *testing.T) {
 			"kind":       "cost",
 			"body":       `{"attempt_id":"20260110T120000-idemtest1","harness":"claude","total_tokens":100,"cost_usd":0.1,"duration_ms":1000,"exit_code":0}`,
 			"created_at": now,
-			"source":     "ddx agent execute-bead",
+			"source":     "ddx try",
 		},
 		{
 			"kind":       "execute-bead",
 			"summary":    "task_succeeded",
 			"created_at": now,
-			"source":     "ddx agent execute-loop",
+			"source":     "ddx work",
 		},
 	}
 	dir := writeBeadEventsFixture(t, "ddx-idemtest01", events)

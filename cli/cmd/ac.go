@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -129,7 +130,7 @@ Exits 1 if any check returns block or error.`,
 
 func loadBead(projectRoot, id string) (*bead.Bead, error) {
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-	return store.Get(id)
+	return store.Get(context.Background(), id)
 }
 
 func beadBaseRev(b *bead.Bead) string {

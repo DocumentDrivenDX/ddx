@@ -282,7 +282,7 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 
 	store := r.beadStore(ctx)
 	if id, ok := cache.Lookup(input.IdempotencyKey); ok {
-		existing, err := store.Get(id)
+		existing, err := store.Get(ctx, id)
 		if err == nil {
 			return &OperatorPromptSubmitResult{
 				Bead:         beadModelFromBead(existing),
@@ -298,7 +298,7 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 		tier = *input.Tier
 	}
 	b := bead.NewOperatorPromptBead(input.Prompt, tier)
-	if err := store.Create(b); err != nil {
+	if err := store.Create(ctx, b); err != nil {
 		return nil, err
 	}
 
@@ -383,7 +383,7 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 	}
 
 	// Re-read so the audit event materializes in the returned snapshot.
-	persisted, err := store.Get(b.ID)
+	persisted, err := store.Get(ctx, b.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -409,7 +409,7 @@ func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string)
 	}
 
 	store := r.beadStore(ctx)
-	existing, err := store.Get(id)
+	existing, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -436,7 +436,7 @@ func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string)
 	}); err != nil {
 		return nil, fmt.Errorf("operator-prompts: append approve audit event: %w", err)
 	}
-	persisted, err := store.Get(id)
+	persisted, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -471,7 +471,7 @@ func (r *mutationResolver) OperatorPromptCancel(ctx context.Context, id string) 
 	}
 
 	store := r.beadStore(ctx)
-	existing, err := store.Get(id)
+	existing, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -497,7 +497,7 @@ func (r *mutationResolver) OperatorPromptCancel(ctx context.Context, id string) 
 	}); err != nil {
 		return nil, fmt.Errorf("operator-prompts: append cancel audit event: %w", err)
 	}
-	persisted, err := store.Get(id)
+	persisted, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

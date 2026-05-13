@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260512T204334-1d5f3760",
+  "bead_id": "ddx-8e729130",
+  "base_rev": "748c42a1f6e5058a0a67b9fd606dfbca37edad88",
+  "created_at": "2026-05-12T20:43:38.234213307Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8e729130",
+    "title": "F (Foundation): Operation pattern + IDGenerator + sentinels + ctx access: part 4",
+    "description": "PROBLEM\nParent bead ddx-c6317784 is too broad for one execution pass. This child owns part 4 of 5 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nThe bead backend interface today (`cli/internal/bead/backend.go`) is JSONL-shaped: `RawBackend` requires whole-corpus `ReadAll`/`WriteAll`, and `Backend` declares only 22 of `*Store`'s 69 public methods. Per TD-027 (the canonical Bead Storage System and Lifecycle spec), the bead architecture needs:\n\n- A typed `Operation` pattern with `Apply(b *Bead) error` (CAS via error returns)\n- 11 LSP-clean storage sub-interfaces composing `Backend`\n- Pluggable `IDGenerator` and parallel `LifecycleSubscriber`\n- `context.Context` first-parameter discipline on every interface method\n- Sentinel errors (`ErrNotFound`, `ErrConflict`, `ErrInvalidID`, `ErrAlreadyClaimed`, `ErrNotClaimedByOwner`, `ErrUnsupported`)\n- The optional `OperationApplier` interface on `RawBackend` so JSONL backends can preserve heartbeat sidecar optimization\n- A canonical Bead data model (field enumeration + invariants + JSONL wire format + schema-versioning policy)\n\nThis bead lays the foundation that all per-concern beads (L/C/E/X/Q/D/A/MIG) depend on. It declares the event reader/writer interfaces but deliberately does not migrate `AppendEvent`, `Events`, or `EventsByKind`; the E bead owns event-method ctx threading and `*Store` event interface satisfaction.\n\n# ROOT CAUSE\n- `cli/internal/bead/backend.go:10-67` — `RawBackend` (4 whole-corpus methods) + `Backend` (22 high-level methods, incomplete).\n- `cli/internal/bead/store.go` — `*Store` exposes 69 public methods, none take `ctx context.Context`.\n- `cli/internal/bead/axon_backend.go:340-381` — `WriteAll` ships entire corpus per mutation (catastrophic for Postgres).\n- Operation pattern, IDGenerator, sentinel errors, context discipline — all absent.\n- Bead data model (the canonical schema of fields + invariants) — only implicit in the Go struct.\n\n# PROPOSED FIX\nImplement TD-027 §5–§13 foundation pieces that are required before the per-concern beads can execute.\n\n## New files\n\n1. `cli/internal/bead/operation.go` — `Operation` interface with `Apply(b *Bead) error`. `MutateFunc` adapter for ad-hoc mutations. Empty named-op section (per-concern beads add their op types).\n2. `cli/internal/bead/id.go` — `ValidateID`, format constants (`DefaultIDPrefix`, `MaxIDLength`, `MinIDLength`), `IDGenerator` interface, `RandomHexIDGenerator`, `SequentialIDGenerator`, `NewIDGenerator()` default.\n3. `cli/internal/bead/errors.go` — sentinel e\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Legacy format handling: beads with `schema_version` absent in JSONL read as `schema_version=1` per TD-027 §11.4. Test: `TestBead_LegacyFormat_ReadsAsV1`.\n- Every caller that uses Init/ReadAll/Get/Create/Update/Close/GenID passes ctx through. No `*Store.Init()` (no-ctx) calls remain in production code outside test fixtures. Event callers are intentionally excluded and handled by E.\n- `RawBackend` docstring updated with the warning text from TD-027 §6.2 directing new backends to implement `Backend` directly.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Legacy format handling: beads with `schema_version` absent in JSONL read as `schema_version=1` per TD-027 §11.4. Test: `TestBead_LegacyFormat_ReadsAsV1`.\n2. Every caller that uses Init/ReadAll/Get/Create/Update/Close/GenID passes ctx through. No `*Store.Init()` (no-ctx) calls remain in production code outside test fixtures. Event callers are intentionally excluded and handled by E.\n3. `RawBackend` docstring updated with the warning text from TD-027 §6.2 directing new backends to implement `Backend` directly.",
+    "parent": "ddx-c6317784",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:feature",
+      "kind:refactor",
+      "spec:FEAT-004",
+      "spec:TD-027",
+      "reliability",
+      "decomposed"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T20:42:31Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3784393",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"TestBead_LegacyFormat_ReadsAsV1\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T20:43:02.817399849Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead has a clear root cause, scoped non-scope, and at least one named test, but it is not fully execution-ready: the title is not imperative, acceptance criteria omit the required `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` and `lefthook run pre-commit` gates, and dependencies are left implicit instead of stated as `No deps.` or listed.\",\"score\":5,\"suggested_fixes\":[\"Rewrite the title as an imperative subsystem-scoped change.\",\"Add explicit dependencies or state `No deps.` in the bead body.\",\"Add acceptance criteria that name the package-level `cd cli \\u0026\\u0026 go test ./internal/bead/...` command and `lefthook run pre-commit`.\",\"Tighten the acceptance to explicitly assert the legacy-format reader path is exercised in the relevant test.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T20:43:34.304486455Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=5"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T20:42:31.986436796Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T204334-1d5f3760",
+    "prompt": ".ddx/executions/20260512T204334-1d5f3760/prompt.md",
+    "manifest": ".ddx/executions/20260512T204334-1d5f3760/manifest.json",
+    "result": ".ddx/executions/20260512T204334-1d5f3760/result.json",
+    "checks": ".ddx/executions/20260512T204334-1d5f3760/checks.json",
+    "usage": ".ddx/executions/20260512T204334-1d5f3760/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8e729130-20260512T204334-1d5f3760"
+  },
+  "prompt_sha": "4415c9fcbe056ff321499505fe9e4782c7f9f5afe7ec62ef6d4e626eaad1d43b"
+}

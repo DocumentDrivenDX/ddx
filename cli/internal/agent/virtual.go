@@ -125,7 +125,7 @@ func LookupEntry(dictDir, prompt string, patterns ...config.NormalizePattern) (*
 
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		return nil, fmt.Errorf("no recorded response for prompt (hash %s). Record one with: ddx agent run --harness <name> --record --prompt <file>", hash)
+		return nil, fmt.Errorf("no recorded response for prompt (hash %s). Record one with: legacy agent run --harness <name> --record --prompt <file>", hash)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("reading dictionary entry: %w", err)

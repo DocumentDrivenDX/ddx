@@ -15,7 +15,7 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 		s := newTestStore(t)
 
 		b := &Bead{Title: "test bead"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		// Simulate a BLOCK reviewer verdict event.
 		require.NoError(t, s.AppendEvent(b.ID, BeadEvent{
@@ -25,7 +25,7 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 		}))
 
 		// Operator manually closes despite BLOCK verdict.
-		require.NoError(t, s.Close(b.ID))
+		require.NoError(t, s.Close(testCtx(), b.ID))
 
 		// The override event must be present in the sidecar attachment.
 		events, err := s.Events(b.ID)
@@ -53,7 +53,7 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 		s := newTestStore(t)
 
 		b := &Bead{Title: "approved bead"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		require.NoError(t, s.AppendEvent(b.ID, BeadEvent{
 			Kind:    "review",
@@ -61,7 +61,7 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 			Body:    "all ACs pass",
 		}))
 
-		require.NoError(t, s.Close(b.ID))
+		require.NoError(t, s.Close(testCtx(), b.ID))
 
 		events, err := s.Events(b.ID)
 		require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 		s := newTestStore(t)
 
 		b := &Bead{Title: "reopen bead"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		// Simulate an APPROVE verdict followed by a close (using Store.Close
 		// to bypass ClosureGate for simplicity).
@@ -86,7 +86,7 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 			Summary: "APPROVE",
 			Body:    "all ACs pass",
 		}))
-		require.NoError(t, s.Close(b.ID))
+		require.NoError(t, s.Close(testCtx(), b.ID))
 
 		// Operator reopens after suspecting fake work.
 		require.NoError(t, s.Reopen(b.ID, "fake-work", "reopened for investigation"))
@@ -116,14 +116,14 @@ func TestReviewAccuracy_OperatorOverride_EmitsEvent(t *testing.T) {
 		s := newTestStore(t)
 
 		b := &Bead{Title: "block reopen bead"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 
 		require.NoError(t, s.AppendEvent(b.ID, BeadEvent{
 			Kind:    "review",
 			Summary: "BLOCK",
 			Body:    "AC3 not implemented",
 		}))
-		require.NoError(t, s.Close(b.ID))
+		require.NoError(t, s.Close(testCtx(), b.ID))
 
 		// When reopening after BLOCK (operator agrees with reviewer), no override.
 		require.NoError(t, s.Reopen(b.ID, "rework", ""))

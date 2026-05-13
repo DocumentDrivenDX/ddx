@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -373,6 +374,80 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 	}
 	if res.NoChangesRationale != rationale {
 		t.Errorf("NoChangesRationale mismatch\n got:  %q\nwant: %q", res.NoChangesRationale, rationale)
+	}
+}
+
+// TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence
+// verifies that a commit plus no_changes rationale is rejected as a mixed
+// signal while preserving the rationale text for downstream evidence.
+func TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence(t *testing.T) {
+	const beadID = "ddx-rationale-03"
+	const rationale = "status: blocked\nreason: external blocker"
+
+	projectRoot := setupGateTestProjectRoot(t)
+
+	const baseRev = "ddddddddeeeeeeee"
+	const resultRev = "ffffffff00000000"
+	gitOps := &gateTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     baseRev,
+		resultRev:   resultRev,
+		wtSetupFn: func(wtPath string) {
+			ddxDir := filepath.Join(wtPath, ".ddx")
+			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			store := bead.NewStore(ddxDir)
+			if err := store.Init(); err != nil {
+				t.Fatal(err)
+			}
+			b := &bead.Bead{ID: beadID, Title: "Mixed rationale bead"}
+			if err := store.Create(b); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	runner := &rationaleTestRunner{rationale: rationale}
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, gitOps)
+	if err != nil {
+		t.Fatalf("ExecuteBead returned error: %v", err)
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+		t.Fatalf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskFailed, res.Outcome)
+	}
+	if res.Status != ExecuteBeadStatusExecutionFailed {
+		t.Fatalf("expected status=%s, got %q", ExecuteBeadStatusExecutionFailed, res.Status)
+	}
+	if res.NoChangesRationale != rationale {
+		t.Fatalf("expected rationale preserved in result, got %q", res.NoChangesRationale)
+	}
+	if !strings.Contains(res.Detail, mixedCommitAndNoChangesRationaleReason) {
+		t.Fatalf("expected mixed result detail, got %q", res.Detail)
+	}
+	if res.ResultRev == baseRev {
+		t.Fatalf("expected synthesized result rev to differ from base rev")
+	}
+
+	report := ReportFromExecuteBeadResult(res, "standard")
+	if report.NoChangesRationale != rationale {
+		t.Fatalf("expected rationale preserved in report, got %q", report.NoChangesRationale)
+	}
+	if report.Detail != res.Detail {
+		t.Fatalf("report detail mismatch\n got:  %q\nwant: %q", report.Detail, res.Detail)
+	}
+
+	landing, err := LandBeadResult(projectRoot, res, &gateTestOrchestratorGitOps{}, BeadLandingOptions{})
+	if err != nil {
+		t.Fatalf("LandBeadResult returned error: %v", err)
+	}
+	if landing.Outcome != "preserved" {
+		t.Fatalf("expected mixed attempt to be preserved, got %q", landing.Outcome)
+	}
+	if landing.PreserveRef == "" {
+		t.Fatalf("expected preserve ref for mixed attempt")
 	}
 }
 

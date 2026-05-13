@@ -290,7 +290,7 @@ func HasBeadLabelPrefix(labels []string, prefix string) bool {
 
 // BeadReader can fetch a bead by ID. Implemented by *bead.Store.
 type BeadReader interface {
-	Get(id string) (*bead.Bead, error)
+	Get(args ...any) (*bead.Bead, error)
 }
 
 // BeadEventReader reads the event history recorded against a bead.
@@ -1108,11 +1108,22 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 		return CandidateReviewResult{}, groupErr
 	}
 	out := CandidateReviewResult{
-		Verdict:        string(review.Verdict),
-		Rationale:      review.Rationale,
-		PerAC:          append([]ReviewAC(nil), review.PerAC...),
-		Findings:       append([]Finding(nil), review.Findings...),
-		Classification: ClassifyReviewFindings(review).Class,
+		Verdict:          string(review.Verdict),
+		Rationale:        review.Rationale,
+		PerAC:            append([]ReviewAC(nil), review.PerAC...),
+		Findings:         append([]Finding(nil), review.Findings...),
+		Classification:   ClassifyReviewFindings(review).Class,
+		ReviewGroupID:    group.Bundle.GroupID,
+		ReviewerIndices:  make([]int, 0, len(group.Slots)),
+		ReviewerVerdicts: make([]string, 0, len(group.Slots)),
+	}
+	for _, slot := range group.Slots {
+		out.ReviewerIndices = append(out.ReviewerIndices, slot.ReviewerIndex)
+		if slot.Result == nil {
+			out.ReviewerVerdicts = append(out.ReviewerVerdicts, "")
+			continue
+		}
+		out.ReviewerVerdicts = append(out.ReviewerVerdicts, strings.TrimSpace(string(slot.Result.Verdict)))
 	}
 	if reduceErr != nil {
 		return out, reduceErr
@@ -1121,7 +1132,7 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 }
 
 func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir string) (*ReviewResult, error) {
-	b, err := r.BeadStore.Get(beadID)
+	b, err := r.BeadStore.Get(ctx, beadID)
 	if err != nil {
 		return nil, fmt.Errorf("reviewer: get bead %s: %w", beadID, err)
 	}
@@ -1213,7 +1224,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			Kind:      ReviewerEscalatedEventKind,
 			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
 			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 	}
@@ -1365,7 +1376,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			Kind:      ReviewPairingDegradedEventKind,
 			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
 			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower, resultRev),
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 	}

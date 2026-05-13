@@ -2,10 +2,12 @@ package graphql
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
 // workingDirKey is the context key used to thread a per-request WorkingDir
@@ -202,7 +204,20 @@ func (r *queryResolver) Bead(ctx context.Context, id string) (*Bead, error) {
 
 // DocStale is the resolver for the docStale field.
 func (r *queryResolver) DocStale(ctx context.Context) ([]*StaleReason, error) {
-	panic("not implemented")
+	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
+	if err != nil {
+		return nil, fmt.Errorf("building document graph: %w", err)
+	}
+	stale := graph.StaleDocs()
+	out := make([]*StaleReason, 0, len(stale))
+	for _, reason := range stale {
+		out = append(out, &StaleReason{
+			ID:      reason.ID,
+			Path:    reason.Path,
+			Reasons: append([]string(nil), reason.Reasons...),
+		})
+	}
+	return out, nil
 }
 
 // DocDeps is the resolver for the docDeps field.

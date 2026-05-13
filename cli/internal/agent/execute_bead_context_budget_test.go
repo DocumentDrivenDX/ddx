@@ -330,13 +330,26 @@ func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testi
 		ID:     "ddx-child",
 		Title:  "Child bead",
 		Parent: rootBead.ID,
+		Labels: []string{"decomposed"},
 	}
 	grandchildBead := &bead.Bead{
 		ID:     "ddx-grandchild",
 		Title:  "Grandchild bead",
 		Parent: childBead.ID,
+		Labels: []string{"decomposed"},
 	}
-	for _, b := range []*bead.Bead{rootBead, childBead, grandchildBead} {
+	epicChildBead := &bead.Bead{
+		ID:     "ddx-epic-child",
+		Title:  "Ordinary child under an epic",
+		Parent: rootBead.ID,
+	}
+	decomposedUnderEpicBead := &bead.Bead{
+		ID:     "ddx-decomposed-under-epic",
+		Title:  "Decomposed child under ordinary epic",
+		Parent: epicChildBead.ID,
+		Labels: []string{"decomposed"},
+	}
+	for _, b := range []*bead.Bead{rootBead, childBead, grandchildBead, epicChildBead, decomposedUnderEpicBead} {
 		if err := store.Create(b); err != nil {
 			t.Fatalf("store.Create(%s): %v", b.ID, err)
 		}
@@ -355,6 +368,7 @@ func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testi
 		{name: "root", bead: rootBead, wantCap: false},
 		{name: "child", bead: childBead, wantCap: false},
 		{name: "grandchild", bead: grandchildBead, wantCap: true},
+		{name: "ordinary nested child", bead: decomposedUnderEpicBead, wantCap: false},
 	}
 
 	for _, tc := range cases {

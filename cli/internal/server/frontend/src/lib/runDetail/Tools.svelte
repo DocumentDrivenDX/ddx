@@ -61,6 +61,12 @@
 				</button>
 				{#if open}
 					<div class="space-y-2 border-t border-border-line px-3 py-2 dark:border-dark-border-line">
+						<div class="flex flex-wrap items-center gap-3 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
+							<span>Tool: <span class="text-fg-ink dark:text-dark-fg-ink">{call.name}</span></span>
+							{#if call.durationMs != null}
+								<span>Duration: <span class="text-fg-ink dark:text-dark-fg-ink">{call.durationMs}ms</span></span>
+							{/if}
+						</div>
 						{#if call.inputs}
 							<div>
 								<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Inputs</div>
@@ -69,8 +75,14 @@
 						{/if}
 						{#if call.output}
 							<div>
-								<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Output{call.truncated ? ' (truncated)' : ''}</div>
+								<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Output</div>
 								<pre class="mt-1 max-h-56 overflow-auto bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg whitespace-pre-wrap">{call.output}</pre>
+							</div>
+						{/if}
+						{#if call.error}
+							<div>
+								<div class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Error</div>
+								<pre class="mt-1 max-h-56 overflow-auto bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg whitespace-pre-wrap">{call.error}</pre>
 							</div>
 						{/if}
 					</div>

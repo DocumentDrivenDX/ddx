@@ -15,9 +15,9 @@ import (
 func TestUpdateRejectsInvalidStatus(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Valid"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	err := s.Update(b.ID, func(b *Bead) {
+	err := s.Update(testCtx(), b.ID, func(b *Bead) {
 		b.Status = "garbage"
 	})
 	assert.Error(t, err)
@@ -27,9 +27,9 @@ func TestUpdateRejectsInvalidStatus(t *testing.T) {
 func TestUpdateRejectsEmptyTitle(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Valid"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	err := s.Update(b.ID, func(b *Bead) {
+	err := s.Update(testCtx(), b.ID, func(b *Bead) {
 		b.Title = ""
 	})
 	assert.Error(t, err)
@@ -39,9 +39,9 @@ func TestUpdateRejectsEmptyTitle(t *testing.T) {
 func TestUpdateRejectsInvalidPriority(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Valid"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	err := s.Update(b.ID, func(b *Bead) {
+	err := s.Update(testCtx(), b.ID, func(b *Bead) {
 		b.Priority = 99
 	})
 	assert.Error(t, err)
@@ -51,15 +51,15 @@ func TestUpdateRejectsInvalidPriority(t *testing.T) {
 func TestUpdateValidMutationSucceeds(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "Valid"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	err := s.Update(b.ID, func(b *Bead) {
+	err := s.Update(testCtx(), b.ID, func(b *Bead) {
 		b.Title = "Updated"
 	})
 	assert.NoError(t, err)
 	require.NoError(t, s.SetLifecycleStatus(b.ID, StatusInProgress, LifecycleTransitionOptions{}))
 
-	got, _ := s.Get(b.ID)
+	got, _ := s.Get(testCtx(), b.ID)
 	assert.Equal(t, "Updated", got.Title)
 	assert.Equal(t, StatusInProgress, got.Status)
 }
@@ -70,10 +70,10 @@ func TestCreateRejectsDuplicateID(t *testing.T) {
 	s := newTestStore(t)
 
 	b1 := &Bead{Title: "First"}
-	require.NoError(t, s.Create(b1))
+	require.NoError(t, s.Create(testCtx(), b1))
 
 	b2 := &Bead{ID: b1.ID, Title: "Duplicate"}
-	err := s.Create(b2)
+	err := s.Create(testCtx(), b2)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "duplicate id")
 }
@@ -101,7 +101,7 @@ exit 0`
 
 	// Create without explicit type — defaults should be applied before hook
 	b := &Bead{Title: "Hook test"}
-	err := s.Create(b)
+	err := s.Create(testCtx(), b)
 	assert.NoError(t, err)
 	assert.Equal(t, DefaultType, b.IssueType)
 }
@@ -123,7 +123,7 @@ func TestImportAllMalformedReportsError(t *testing.T) {
 
 func TestExportToWriter(t *testing.T) {
 	s := newTestStore(t)
-	require.NoError(t, s.Create(&Bead{Title: "Export test"}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Export test"}))
 
 	var buf bytes.Buffer
 	require.NoError(t, s.ExportTo(&buf))
@@ -146,7 +146,7 @@ func TestImportRejectsInvalidStatus(t *testing.T) {
 	assert.Equal(t, 0, n)
 	assert.Contains(t, err.Error(), "invalid lifecycle status")
 
-	_, err = s.Get("bx-bad00001")
+	_, err = s.Get(testCtx(), "bx-bad00001")
 	require.Error(t, err)
 }
 
@@ -161,7 +161,7 @@ func TestImportClampsPriority(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	got, err := s.Get("bx-pri00001")
+	got, err := s.Get(testCtx(), "bx-pri00001")
 	require.NoError(t, err)
 	assert.Equal(t, MaxPriority, got.Priority) // clamped
 }

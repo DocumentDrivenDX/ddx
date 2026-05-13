@@ -21,7 +21,7 @@ import (
 func (f *CommandFactory) newRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "run",
-		Short:        "Invoke an agent for a task (layer-1 Fizeau Execute call)",
+		Short:        "Invoke a task dispatcher for a prompt (layer-1 Fizeau Execute call)",
 		SilenceUsage: true,
 		Long: `run dispatches a single task to the upstream agent service via one Fizeau
 Execute call. It is the layer-1 primitive over which ddx try and ddx work add

@@ -101,7 +101,7 @@ func NewServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 }
 
 // NewStatusProbeServiceFromWorkDir constructs a service for status surfaces
-// without pre-filtering .ddx agent endpoints by /models reachability. The
+// without pre-filtering .legacy agent endpoints by /models reachability. The
 // returned service still probes when ListProviders is called, but unreachable
 // configured endpoints remain present in the result as unreachable rows.
 func NewStatusProbeServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {

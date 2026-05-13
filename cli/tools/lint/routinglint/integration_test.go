@@ -2,6 +2,7 @@ package routinglint_test
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -24,6 +25,7 @@ func TestRoutingLint_RunPathNeverSetsProfileDirectly(t *testing.T) {
 
 	cmd := exec.Command("go", "run", "-buildvcs=false", "./tools/lint/routinglint/cmd/routinglint", "./...")
 	cmd.Dir = moduleRoot
+	cmd.Env = append(os.Environ(), "GOFLAGS=-buildvcs=false")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

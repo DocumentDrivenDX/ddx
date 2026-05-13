@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260512T165922-eb4604e1",
+  "bead_id": "ddx-ea1ada47",
+  "base_rev": "f52035c48db57d9df1b4227ab4884e524b0f93d1",
+  "created_at": "2026-05-12T16:59:25.215109959Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ea1ada47",
+    "title": "S15-7d: Integration test — coordinator→client operatorPromptSubmit with identity attestation",
+    "description": "PROBLEM\nNo integration test verifies the end-to-end coordinator→client operatorPromptSubmit path with identity attestation. Unit tests for S15-7b and S15-7c cover individual components but leave the full two-server forwarding flow untested.\n\nROOT CAUSE\n- No existing test exercises a two-Server-instance setup where hub receives operatorPromptSubmit and routes it to the spoke that owns the project.\n- cli/internal/federation/ and cli/internal/server/ each have unit tests but no integration test wires them together.\n- The established two-node pattern (httptest.NewServer per node) exists in prior federation test commits for reference — check ddx-13e19750 / ddx-e59bff83 closed tests.\n\nPROPOSED FIX\n- Add an integration test under cli/internal/federation/ or cli/internal/server/:\n  - Spin up two in-process httptest.Server instances: one as --hub-mode coordinator, one as spoke.\n  - Register spoke with hub via the federation register endpoint.\n  - Drive operatorPromptSubmit at the coordinator for a project owned by the spoke.\n  - Assert: mutation arrives at spoke, identity headers reach spoke unchanged, resulting bead is created on the spoke, audit event of kind operator_prompt_submit recorded with correct origin identity.\n- Negative sub-tests (each as a separate t.Run):\n  - (a) Untrusted coordinator peer rejected at spoke (returns 403).\n  - (b) Missing X-DDx-Origin-Identity rejected (returns 403).\n  - (c) Tampered origin header rejected (header does not match peer attestation, returns 403).\n- Use //go:build integration tag or normal _test.go with httptest, matching existing federation two-node test pattern.\n\nNON-SCOPE\n- External network calls; httptest only.\n- Performance benchmarks.",
+    "acceptance": "1. TestFederation_OperatorPromptSubmit_CoordinatorToSpoke_IdentityUnchanged exercises full hub→spoke operatorPromptSubmit path with two in-process httptest servers.\n2. Positive case asserts: bead exists on spoke after mutation; audit event kind=operator_prompt_submit recorded with origin identity matching the initiating peer.\n3. TestFederation_OperatorPromptSubmit_UntrustedCoordinator returns 403.\n4. TestFederation_OperatorPromptSubmit_MissingOriginHeader returns 403.\n5. TestFederation_OperatorPromptSubmit_TamperedOriginHeader returns 403.\n6. Test runs under standard go test (no special harness required): cd cli \u0026\u0026 go test ./internal/federation/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-256af8b5",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:multi-node",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T16:56:47Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "2743080",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unsafe field \\\"title\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T16:59:00.809755562Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Verification, parent/deps, wired assertion, and sufficient-prompt criteria pass, but the title is descriptive rather than imperative, the description lacks file:line-grounded current-state evidence for the root cause, and the labels are missing an area facet and explicit cross-reference facet.\",\"score\":5,\"suggested_fixes\":[\"Rewrite the title as an imperative scope, e.g. 'Add federation integration test for coordinator-to-spoke operatorPromptSubmit identity attestation'.\",\"Add file:line references in ROOT CAUSE for the two-server forwarding path and the identity-header/attestation handling code.\",\"Add an area label and explicit cross-reference labels so the label set covers phase, area, kind, and cross-reference facets.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T16:59:21.985112114Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=5"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T16:56:47.317556631Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T165922-eb4604e1",
+    "prompt": ".ddx/executions/20260512T165922-eb4604e1/prompt.md",
+    "manifest": ".ddx/executions/20260512T165922-eb4604e1/manifest.json",
+    "result": ".ddx/executions/20260512T165922-eb4604e1/result.json",
+    "checks": ".ddx/executions/20260512T165922-eb4604e1/checks.json",
+    "usage": ".ddx/executions/20260512T165922-eb4604e1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ea1ada47-20260512T165922-eb4604e1"
+  },
+  "prompt_sha": "7e617aacd83d50740dfffcbcf95073d1ca1bcbdb251d3f780fd7dbaeca6b670e"
+}

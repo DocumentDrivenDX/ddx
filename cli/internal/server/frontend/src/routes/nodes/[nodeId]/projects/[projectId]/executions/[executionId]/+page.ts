@@ -1,13 +1,85 @@
 import type { PageLoad } from './$types';
-import { redirect } from '@sveltejs/kit';
+import { createClient } from '$lib/gql/client';
+import { gql } from 'graphql-request';
 
-// Execution detail has been merged into the layer-aware Runs row expansion.
-// We map the execution id to its synthetic try-layer run id ("exec-<bundleID>")
-// and 302-redirect into the Runs detail page with bundle expansion.
-export const load: PageLoad = ({ params }) => {
-	const runId = params.executionId.startsWith('exec-')
-		? params.executionId
-		: `exec-${params.executionId}`;
-	const target = `/nodes/${params.nodeId}/projects/${params.projectId}/runs/${runId}`;
-	throw redirect(302, target);
+const EXECUTION_DETAIL_QUERY = gql`
+	query ExecutionDetail($id: ID!) {
+		execution(id: $id) {
+			id
+			projectId
+			beadId
+			beadTitle
+			sessionId
+			workerId
+			harness
+			model
+			verdict
+			status
+			rationale
+			createdAt
+			startedAt
+			finishedAt
+			durationMs
+			costUsd
+			tokens
+			exitCode
+			baseRev
+			resultRev
+			bundlePath
+			promptPath
+			manifestPath
+			resultPath
+			agentLogPath
+			prompt
+			manifest
+			result
+		}
+	}
+`;
+
+export interface ExecutionDetail {
+	id: string;
+	projectId: string;
+	beadId: string | null;
+	beadTitle: string | null;
+	sessionId: string | null;
+	workerId: string | null;
+	harness: string | null;
+	model: string | null;
+	verdict: string | null;
+	status: string | null;
+	rationale: string | null;
+	createdAt: string;
+	startedAt: string | null;
+	finishedAt: string | null;
+	durationMs: number | null;
+	costUsd: number | null;
+	tokens: number | null;
+	exitCode: number | null;
+	baseRev: string | null;
+	resultRev: string | null;
+	bundlePath: string;
+	promptPath: string | null;
+	manifestPath: string | null;
+	resultPath: string | null;
+	agentLogPath: string | null;
+	prompt?: string | null;
+	manifest?: string | null;
+	result?: string | null;
+}
+
+interface ExecutionResult {
+	execution: ExecutionDetail | null;
+}
+
+export const load: PageLoad = async ({ params, fetch }) => {
+	const client = createClient(fetch as unknown as typeof globalThis.fetch);
+	const data = await client.request<ExecutionResult>(EXECUTION_DETAIL_QUERY, {
+		id: params.executionId
+	});
+	return {
+		nodeId: params.nodeId,
+		projectId: params.projectId,
+		execution: data.execution
+	};
 };

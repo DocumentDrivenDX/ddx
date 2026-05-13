@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	gqlgraphql "github.com/99designs/gqlgen/graphql"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
@@ -27,6 +28,7 @@ type RunDetailStateProvider interface {
 }
 
 const runDetailViewEventKind = "run_detail_view"
+const rawTranscriptViewedEventKind = "raw_transcript_viewed"
 
 // RunFilter holds the optional filter args for Query.runs.
 type RunFilter struct {
@@ -82,6 +84,9 @@ func (r *queryResolver) Run(ctx context.Context, id string) (*Run, error) {
 		return nil, nil
 	}
 	r.recordRunDetailView(ctx, run)
+	if runHasRawTranscriptSelection(ctx) {
+		r.recordRawTranscriptViewed(ctx, run)
+	}
 	return run, nil
 }
 
@@ -138,6 +143,83 @@ func (r *queryResolver) recordRunDetailView(ctx context.Context, run *Run) {
 	_ = store.AppendEvent(*run.BeadID, bead.BeadEvent{
 		Kind:    runDetailViewEventKind,
 		Summary: "run detail viewed",
+		Body:    body,
+		Actor:   identity.actor,
+		Source:  "graphql:run",
+	})
+}
+
+func runHasRawTranscriptSelection(ctx context.Context) bool {
+	if !gqlgraphql.HasOperationContext(ctx) {
+		return false
+	}
+	for _, field := range gqlgraphql.CollectAllFields(ctx) {
+		switch field {
+		case "prompt", "response", "stderr":
+			return true
+		}
+	}
+	return false
+}
+
+func rawTranscriptSelectionSummary(ctx context.Context) string {
+	if !gqlgraphql.HasOperationContext(ctx) {
+		return ""
+	}
+	selected := gqlgraphql.CollectAllFields(ctx)
+	ordered := make([]string, 0, 3)
+	for _, name := range []string{"prompt", "response", "stderr"} {
+		for _, field := range selected {
+			if field == name {
+				ordered = append(ordered, name)
+				break
+			}
+		}
+	}
+	return strings.Join(ordered, ",")
+}
+
+func (r *queryResolver) recordRawTranscriptViewed(ctx context.Context, run *Run) {
+	if run == nil || run.BeadID == nil || strings.TrimSpace(*run.BeadID) == "" {
+		return
+	}
+	if run.ProjectID == nil || strings.TrimSpace(*run.ProjectID) == "" {
+		return
+	}
+	wd := r.workingDir(ctx)
+	if wd == "" {
+		return
+	}
+	if projectID, ok := r.projectIDForWorkingDir(wd); !ok || projectID != strings.TrimSpace(*run.ProjectID) {
+		return
+	}
+
+	store := bead.NewStore(filepath.Join(wd, ".ddx"))
+	if existing, err := store.EventsByKind(*run.BeadID, rawTranscriptViewedEventKind); err == nil {
+		for _, ev := range existing {
+			if strings.Contains(ev.Body, "run_id="+run.ID) {
+				return
+			}
+		}
+	}
+
+	identity := operatorPromptIdentityInfo{kind: "unknown", actor: "anonymous"}
+	if httpReq := httpRequestFromContext(ctx); httpReq != nil {
+		identity = operatorPromptIdentity(httpReq)
+	}
+	fields := rawTranscriptSelectionSummary(ctx)
+	if fields == "" {
+		fields = "prompt,response,stderr"
+	}
+	body := fmt.Sprintf(
+		"project_id=%s run_id=%s fields=%s visibility=project_membership",
+		*run.ProjectID,
+		run.ID,
+		fields,
+	)
+	_ = store.AppendEvent(*run.BeadID, bead.BeadEvent{
+		Kind:    rawTranscriptViewedEventKind,
+		Summary: "raw transcript viewed",
 		Body:    body,
 		Actor:   identity.actor,
 		Source:  "graphql:run",
