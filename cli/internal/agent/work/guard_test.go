@@ -22,7 +22,7 @@ func TestGuard_PreClaim_TwoStrikesSkips(t *testing.T) {
 	store := &stubCooldownStore{}
 	guard := NewPreClaimGuard(func(ctx context.Context) error {
 		return errors.New("hook failed")
-	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second)
+	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
 
 	allowed1, reason1 := guard.Allow(context.Background(), "ddx-1")
 	if allowed1 {
@@ -41,6 +41,38 @@ func TestGuard_PreClaim_TwoStrikesSkips(t *testing.T) {
 	}
 	if store.calls != 1 {
 		t.Fatalf("cooldown should be written once on the second failure, got %d", store.calls)
+	}
+}
+
+func TestGuard_PreClaimTimeoutReturnsPromptly(t *testing.T) {
+	store := &stubCooldownStore{}
+	started := make(chan struct{}, 1)
+	guard := NewPreClaimGuard(func(ctx context.Context) error {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		<-ctx.Done()
+		return ctx.Err()
+	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 20*time.Millisecond)
+
+	start := time.Now()
+	allowed, reason := guard.Allow(context.Background(), "ddx-1")
+	elapsed := time.Since(start)
+
+	if allowed {
+		t.Fatalf("timed-out hook must not allow the bead")
+	}
+	if !strings.Contains(reason, "timed out") {
+		t.Fatalf("unexpected timeout reason: %q", reason)
+	}
+	if elapsed >= 200*time.Millisecond {
+		t.Fatalf("timed-out hook should return promptly, elapsed=%s", elapsed)
+	}
+	select {
+	case <-started:
+	default:
+		t.Fatalf("pre-claim hook never started")
 	}
 }
 

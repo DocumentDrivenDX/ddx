@@ -91,6 +91,7 @@ type ExecuteLoopSpec struct {
 	MaxCostUSD         float64  `json:"max_cost_usd,omitempty"`
 	MaxBeadCostUSD     float64  `json:"max_bead_cost_usd,omitempty"`
 	MaxRecoveryCostUSD float64  `json:"max_recovery_cost_usd,omitempty"`
+	PreClaimTimeout    Duration `json:"preclaim_timeout,omitempty"`
 	RequestTimeout     Duration `json:"request_timeout,omitempty"`
 	RateLimitMaxWait   Duration `json:"rate_limit_max_wait,omitempty"`
 	MinPower           int      `json:"min_power,omitempty"`
