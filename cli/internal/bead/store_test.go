@@ -808,6 +808,7 @@ func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 		require.NoError(t, s.TouchClaimHeartbeat(b.ID))
 		time.Sleep(5 * time.Millisecond)
 	}
+	require.NoError(t, s.TouchClaimHeartbeat(b.ID))
 
 	// The last heartbeat was just written — well within the TTL window.
 	// Worker B must NOT reclaim an actively-heartbeating bead.
@@ -845,6 +846,7 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 		require.NoError(t, sReal.TouchClaimHeartbeat(b.ID))
 		time.Sleep(5 * time.Millisecond)
 	}
+	require.NoError(t, sReal.TouchClaimHeartbeat(b.ID))
 
 	err := sAlias.Claim(b.ID, "worker-b")
 	require.Error(t, err)
