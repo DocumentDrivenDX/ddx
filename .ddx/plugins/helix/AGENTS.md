@@ -1,41 +1,87 @@
 # Agent Instructions
 
-This is the HELIX repository — the canonical source for the HELIX workflow
-methodology, action prompts, skills, CLI, and execution contract.
+This is the HELIX repository — the canonical source for the HELIX methodology,
+artifact-type catalog, and umbrella `helix` routing skill. HELIX is content +
+one public skill; execution lives in a runtime (DDx today, Databricks Genie and
+Claude Code in progress).
 
-This project uses the **built-in HELIX tracker** for issue tracking.
-Issues are stored in `.ddx/beads.jsonl` — one JSON object per line.
+The governing artifacts of HELIX-the-project live under `docs/helix/`.
+Methodology specifications and shared templates live under `workflows/`. Both
+are authoritative; the artifact-type catalog (`workflows/phases/*/artifacts/`)
+is the canonical shape, and `docs/helix/` is the worked example of HELIX
+applied to itself.
 
-The workflow definitions live under `workflows/`. Treat those docs as
-the source of truth for the workflow contract.
+This project uses the DDx tracker for execution work. Issues live in
+`.ddx/beads.jsonl` — one JSON object per line.
+
+## Direction note
+
+HELIX is collapsing in scope. The deliverable is methodology + artifact
+templates + one public `helix` skill that routes to folded workflow modes.
+The old `helix-*` skill directories have been folded into `skills/helix/`;
+queue control, beads, and execution belong to the runtime (DDx). See
+`docs/helix/00-discover/product-vision.md` and `docs/helix/01-frame/prd.md`
+for the target shape. The Quick Reference below is what works **today** while
+the collapse proceeds — many of those commands will be removed.
 
 ## Quick Reference
 
+DDx-owned (the runtime primitives — these stay):
+
 ```bash
 ddx bead ready           # Find available tracked work
-ddx bead ready --execution # Find execution-safe work for helix run
+ddx bead ready --execution # Find execution-safe work
 ddx bead show <id>       # View issue details
 ddx bead update <id> --claim  # Claim work
 ddx bead close <id>      # Complete work
-ddx bead status          # Check tracker health
-bash tests/helix-cli.sh       # Deterministic HELIX wrapper tests
-bash tests/validate-skills.sh # Deterministic HELIX skill package validation
-just test                     # Run all tests (CLI + skills)
-helix run                     # Run bounded HELIX execution loop
-helix frame [scope]           # Create product vision, PRD, feature specs
-helix design [scope]          # Create design document through iterative refinement
-helix build [selector]        # Run one bounded build pass
-helix check [scope]           # Decide next HELIX action
-helix review [scope]          # Fresh-eyes review of recent work
-helix measure [id|scope]      # Verify bead against acceptance criteria + gates
-helix report [id|scope]       # Analyze results, create follow-on beads, close cycle
-helix align [scope]           # Top-down reconciliation audit
-helix evolve "requirement"    # Thread a requirement through the artifact stack
-helix triage "Title"          # Create well-structured tracker issues
-helix commit [issue-id]       # Commit with HELIX format + build gate
-helix polish [scope]          # Refine issues before implementation
-helix next                    # Show recommended next issue
+ddx bead status          # Tracker health
+ddx agent execute-loop   # Primary queue-drain surface
+ddx agent execute-bead <id> # One bounded bead execution
+ddx doc prose            # Prose-quality check
 ```
+
+HELIX wrappers (transitional — most are slated for removal):
+
+```bash
+helix input "intent"          # Shape intent into governed work items
+helix align [scope]           # Top-down reconciliation audit  (survivor)
+helix frame [scope]           # Create vision, PRD, feature specs  (survivor candidate)
+helix design [scope]          # Iterative design through refinement  (survivor candidate)
+helix evolve "requirement"    # Thread a requirement through the artifacts  (survivor candidate)
+helix review [scope]          # Fresh-eyes review of recent work  (survivor candidate)
+
+# Legacy / slated for removal — these wrap DDx queue control:
+helix run                     # Wrapper over ddx agent execute-loop
+helix build [selector]        # Wrapper over ddx agent execute-bead
+helix check [scope]           # Queue-drain decision wrapper
+helix triage "Title"          # Wrapper over ddx bead create
+helix worker                  # Background-process wrapper
+helix commit [issue-id]       # Commit + build gate wrapper
+helix polish [scope]          # Issue-refinement wrapper
+helix next                    # Show recommended next issue
+helix measure / report        # Execution-evidence wrappers
+```
+
+Validation and build:
+
+```bash
+just test                     # Run all tests (CLI + skills + state rules + digests)
+bash tests/helix-cli.sh       # Deterministic HELIX wrapper tests
+bash tests/validate-state-rules.sh
+bash tests/validate-context-digests.sh
+bash tests/validate-demo-fixtures.sh
+bash tests/validate-pages-demo-recording.sh
+bash tests/validate-skills.sh
+
+python3 scripts/generate-reference.py  # Regenerate /artifact-types/ and /concerns/ from workflows/
+python3 scripts/publish-artifacts.py   # Publish docs/helix/ into /artifacts/
+python3 scripts/publish-resources.py   # Publish docs/resources/ into /research/
+bash website/scripts/serve-local.sh    # Serve the microsite at http://eitri:1315/helix/
+```
+
+The local microsite review server must use the `/helix` base path. Do not
+restart it at the domain root; paths such as
+`http://eitri:1315/artifact-types/...` are invalid for local review.
 
 ## Operational Guide
 
@@ -85,6 +131,10 @@ ddx bead close hx-old
   `lefthook run pre-commit` before pushing (Phase 8 in implementation.md).
 - **Skill YAML front matter** — quote values containing colons or pipes,
   otherwise codex's skill loader silently rejects them.
+- **`asciinema rec` masks child failures** — the recorder can exit `0` and
+  write a non-empty `.cast` even when the wrapped demo command fails. Pages
+  or demo validation must capture and assert the child exit status explicitly;
+  checking only the recorder exit code or `test -s` on the cast is not enough.
 - **Stale in-progress claims** — after a crashed run, unclaim manually:
   `ddx bead list --status in_progress --json | ddx jq -r '.[].id'`
   then `ddx bead update <id> --status open --assignee ""`
@@ -133,31 +183,15 @@ back into the planning helix. See `workflows/EXECUTION.md` for details.
 
 ## HELIX Skills
 
-Installed agent skills mirror CLI commands exactly:
+The installed HELIX agent skill is:
 
-- `helix-run` <-> `helix run`
-- `helix-build` <-> `helix build`
-- `helix-check` <-> `helix check`
-- `helix-align` <-> `helix align`
-- `helix-backfill` <-> `helix backfill`
-- `helix-design` <-> `helix design`
-- `helix-polish` <-> `helix polish`
-- `helix-evolve` <-> `helix evolve`
-- `helix-triage` <-> `helix triage`
-- `helix-next` <-> `helix next`
-- `helix-review` <-> `helix review`
-- `helix-measure` <-> `helix measure`
-- `helix-report` <-> `helix report`
-- `helix-experiment` <-> `helix experiment`
-- `helix-frame` <-> `helix frame`
-- `helix-commit` <-> `helix commit`
-- `helix-worker` — background run monitor (no matching CLI subcommand)
+- `helix` — routes natural HELIX requests to the correct folded workflow mode
 
-Rule: public skill names are `helix-<command>`, and `<command>` must match the
-CLI subcommand exactly.
+Rule: do not add separate public `helix-*` skills. Add or refine a route inside
+`skills/helix/SKILL.md` instead.
 Published `SKILL.md` files must declare `name` and `description`; add
-`argument-hint` when the mirrored CLI command accepts a trailing positional
-argument such as a scope, selector, issue ID, or goal.
+`argument-hint` when the skill accepts a trailing positional argument such as
+a scope, selector, issue ID, or goal.
 
 ## HELIX CLI
 
@@ -303,12 +337,47 @@ If you change any of the following, run the HELIX wrapper harness:
 - `workflows/EXECUTION.md`
 - other docs that materially change the HELIX execution contract
 
+If you change story/project state detection rules or examples, also run the
+state-rule validator:
+
+- `workflows/state-rules.yml`
+- `workflows/state-machine.yaml`
+- `tests/validate-state-rules.sh`
+- docs that materially change the HELIX state detection contract
+
 If you change published skill packaging or metadata, also run the skill package
 validator:
 
 - `skills/*/SKILL.md`
 - `.agents/skills`
 - docs that change the HELIX skill packaging contract
+
+If you change context-digest assembly or validation behavior, also run the
+context-digest validator:
+
+- `scripts/refresh_context_digests.py`
+- `scripts/validate_context_digests.py`
+- `workflows/references/context-digest.md`
+- `workflows/actions/input.md`
+- `workflows/actions/fresh-eyes-review.md`
+- `workflows/actions/reconcile-alignment.md`
+- docs that materially change the FEAT-006 context-digest propagation contract
+
+If you change demo scripts, replay agent fixtures, or demo validation wiring,
+also run the demo-fixture validator:
+
+- `docs/demos/*/demo.sh`
+- `docs/demos/*/agent-dictionary/*.json`
+- `tests/validate-demo-fixtures.sh`
+- `justfile` entries that wire demo validation into shared test lanes
+
+If you change the Pages demo-recording workflow or its deterministic validator,
+also run the Pages demo-recording validator:
+
+- `.github/workflows/pages.yml`
+- `.github/workflows/test.yml`
+- `scripts/record_pages_demos.sh`
+- `tests/validate-pages-demo-recording.sh`
 
 If you change docs that redefine how portable skills and the HELIX workflow
 contract are presented publicly, run both harnesses.
@@ -317,6 +386,10 @@ Required checks:
 
 ```bash
 bash tests/helix-cli.sh
+bash tests/validate-state-rules.sh
+bash tests/validate-context-digests.sh
+bash tests/validate-demo-fixtures.sh
+bash tests/validate-pages-demo-recording.sh
 bash tests/validate-skills.sh
 git diff --check
 ```

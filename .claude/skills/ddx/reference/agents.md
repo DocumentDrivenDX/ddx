@@ -127,14 +127,14 @@ ddx run --persona architect --prompt review.md
 
 ## Getting more capabilities
 
-`ddx install <name>` adds plugins to the project. Plugins can ship
+`ddx plugin install <name>` adds plugins to the project. Plugins can ship
 personas, prompts, patterns, templates, and workflow skills.
 
 ```bash
-ddx install helix              # HELIX workflow plugin
+ddx plugin install helix       # HELIX workflow plugin
 ddx search <term>              # discover available plugins
-ddx installed                  # list installed plugins
-ddx uninstall <name>           # remove
+ddx plugin list                # list installed plugins
+ddx plugin uninstall <name>    # remove
 ```
 
 Custom personas go in `.ddx/plugins/<plugin>/personas/<name>.md`
@@ -180,11 +180,11 @@ ddx persona bind <role> <persona>
 ddx persona bindings
 
 # Plugin install
-ddx install <plugin>
+ddx plugin install <plugin>
 ddx search <term>
-ddx installed
-ddx uninstall <name>
+ddx plugin list
+ddx plugin uninstall <name>
 ```
 
 Full flag list: `ddx run --help`, `ddx persona --help`,
-`ddx install --help`.
+`ddx plugin --help`.

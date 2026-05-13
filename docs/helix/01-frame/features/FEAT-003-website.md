@@ -55,7 +55,7 @@ ddx:
 9. **Embedded terminal demos** — asciinema recordings of core workflows embedded in hero section and getting-started page:
    - Install DDx
    - `ddx init` + `ddx list` + `ddx doctor`
-   - `ddx install helix` (plugin bootstrap)
+   - `ddx plugin install helix` (plugin bootstrap)
    - One-shot project creation with HELIX
    - Feature evolution with HELIX
 10. **README** — animated GIF/SVG demos, badge row, plugin quick start, link to microsite. The README is the GitHub-facing landing page and must sell at a glance.
@@ -121,7 +121,7 @@ The `/why` summaries and `/docs/principles/<slug>/` deep pages are the user-faci
 **Acceptance Criteria:**
 - Given I visit the landing page, when it loads, then I see an embedded terminal recording in or near the hero section
 - Given I visit the getting-started page, then each step has a corresponding recording I can watch
-- Given I visit the ecosystem page, then I see a recording of `ddx install helix` bootstrapping the workflow plugin
+- Given I visit the ecosystem page, then I see a recording of `ddx plugin install helix` bootstrapping the workflow plugin
 
 ### US-024: Developer Evaluates DDx from GitHub README
 **As a** developer who finds DDx on GitHub

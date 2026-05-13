@@ -104,13 +104,14 @@ symlinked to global) so project worktrees can evolve independently.
 > **Retired (FEAT-015):** `ddx install --global` has been removed. Skills are
 > installed project-locally via `ddx init`. No home-directory writes occur.
 
-### Plugin-Declared Skills (`ddx install <plugin>`)
+### Plugin-Declared Skills (`ddx plugin install <plugin>`)
 
 Plugins may declare additional skills in their `package.yaml`. The
-installer materializes relative symlinks from `.agents/skills/` and
-`.claude/skills/` into the plugin's skill directories and prunes
-stale links from prior plugin versions (FEAT-015 AC-004 / AC-013,
-tracked by `ddx-20fe27c7`).
+registry installer materializes real files in `.agents/skills/` and
+`.claude/skills/`, while `ddx plugin install <plugin> --local <path>`
+materializes direct symlinks to the local checkout for developer overlays.
+Both modes prune stale plugin-owned skill entries from prior plugin versions
+(FEAT-015 AC-004 / AC-013, tracked by `ddx-20fe27c7`).
 
 ### Manual Management
 

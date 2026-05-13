@@ -93,7 +93,7 @@ to lefthook's `ci` group so they run locally and in CI.
 scripts/demos/
 ├── 01-install.sh          # curl install + verify
 ├── 02-init-explore.sh     # ddx init, list, doctor
-├── 03-plugin-install.sh   # ddx install helix
+├── 03-plugin-install.sh   # ddx plugin install helix
 ├── 04-project-create.sh   # one-shot task tracker via HELIX
 └── 05-evolve-feature.sh   # add feature to tracker via HELIX
 ```
@@ -146,13 +146,13 @@ on:
 3. Landing page: add recording below hero or replace static feature grid
    with a "See It In Action" section
 4. Getting-started page: embed recording for each step
-5. Ecosystem page: embed `ddx install helix` recording
+5. Ecosystem page: embed `ddx plugin install helix` recording
 
 ### README Changes
 
 1. Add animated GIF (rendered from `02-init-explore.cast`) below the tagline
 2. Add badge row: CI status, Go version, license
-3. Add plugin quick start section: `ddx install helix`
+3. Add plugin quick start section: `ddx plugin install helix`
 4. Add "See more" link to microsite
 
 ### Tagged Release Workflow
@@ -188,7 +188,7 @@ The key constraint is reproducibility: given only a tag, all release artifacts
 ## Dependencies
 
 - FEAT-009 (registry) must be implemented before demo scripts 03-05 can
-  record `ddx install helix`
+  record `ddx plugin install helix`
 - E2E smoke tests (task #1) can proceed immediately against existing commands
 - Demo scripts 01-02 can be built before FEAT-009
 

@@ -13,24 +13,25 @@ ddx:
 **Priority:** P0
 **Owner:** DDx Team
 
-> **Update 2026-04-29 (project-local install, no symlinks):** This feature
-> is amended to drop the global skill installation model entirely. DDx no
-> longer installs skills under `~/.agents/skills/` or `~/.claude/skills/`,
-> and `ddx install --global` is removed. `ddx init` and `ddx install
-> <plugin>` only touch the current `<projectRoot>`. The new project-local
-> tree (`<projectRoot>/.ddx/plugins/`, `<projectRoot>/.agents/skills/`,
-> `<projectRoot>/.claude/skills/`) is committed to git as real files.
-> **Zero symlinks are created by ddx install** — see the new
-> "Cross-platform invariant" section below for the Windows-compatibility
-> reasoning and how plugin-author symlinks are handled. Existing projects
-> with home-directory symlinks or stale `~/.ddx/installed.yaml` entries
-> are handled per the new "Migration" section. Plugin manifests whose
-> `Root.Target` begins with `~` are rejected with a non-zero exit.
-> Sections, bullets, and acceptance criteria below that describe
-> `ddx install --global`, `~/.ddx/skills/`, `~/.agents/skills/ddx-*`,
-> or `~/.claude/skills/ddx-*` should be read as historical context;
-> the amendment in this header and the two new sections are
-> authoritative.
+> **Update 2026-05-12 (single forward install model):** This feature is
+> amended to remove all global/home plugin and skill installation behavior.
+> The only DDx-managed file under a user's home directory is the DDx binary at
+> `~/.local/bin/ddx` (plus shell PATH/completion setup when performed by the
+> binary installer). DDx must not create or manage `~/.ddx`, `~/.agents`, or
+> `~/.claude`.
+>
+> Plugin lifecycle commands are project-scoped and live under the `plugin`
+> noun: `ddx plugin install`, `ddx plugin list`, `ddx plugin upgrade`, and
+> `ddx plugin uninstall`. Top-level `ddx install <plugin>`, `ddx update
+> <plugin>`, `ddx installed`, `ddx uninstall <plugin>`, `ddx outdated`,
+> `ddx verify`, and generic `ddx update` are not part of the forward public
+> interface.
+>
+> Registry plugin installs write real project files for clone portability.
+> Local developer plugin installs use symlinks intentionally: `.ddx/plugins/<name>`
+> links to the local checkout, and `.agents/skills/<skill>` plus
+> `.claude/skills/<skill>` link directly to that checkout's skill directory.
+> Local overlays never update the plugin version pin and never auto-commit.
 >
 > **Update 2026-04-17:** The skill roster referenced throughout this
 > document (ddx-bead, ddx-agent, ddx-install, ddx-status, ddx-review,
@@ -39,7 +40,7 @@ ddx:
 > `SKILL.md` + `reference/*.md` (progressive disclosure, agentskills.io
 > standard). The installation flow described below is still accurate
 > in structure — binary separate from library, `ddx init` copies skills
-> as real files, `ddx install <plugin>` adds plugin-scoped content —
+> as real files, `ddx plugin install <plugin>` adds plugin-scoped content —
 > but any reference to the 7-skill roster should be read as historical
 > context. Sections that specifically describe the bootstrap
 > allowlist are now ["ddx"] instead of ["ddx-doctor", "ddx-run"], and
@@ -51,93 +52,64 @@ ddx:
 ## Overview
 
 Redesign the DDx installation architecture with a clean separation of concerns:
-- **install.sh** — binary only (minimal attack surface, fast)
-- **ddx init** — project-local: writes `<projectRoot>/.ddx/`,
-  `<projectRoot>/.agents/skills/`, and `<projectRoot>/.claude/skills/`
-  as real files (copied, never symlinked). Touches no path outside the
-  project root.
-- **ddx install \<plugin\>** — project-local: plugin tarball extracted
-  into `<projectRoot>/.ddx/plugins/<name>/`, then plugin skills copied
-  as real files into `<projectRoot>/.agents/skills/` and
-  `<projectRoot>/.claude/skills/`. Touches no path outside the project
-  root. Creates zero symlinks (see "Cross-platform invariant").
-- All project-local install outputs (`<projectRoot>/.ddx/plugins/`,
-  `<projectRoot>/.agents/skills/`, `<projectRoot>/.claude/skills/`)
-  are intended to be committed to git so teammates and CI get the
-  same skills on clone without re-running `ddx install`.
 
-## Cross-platform invariant
+- **install.sh** — binary only: installs `ddx` to `~/.local/bin/ddx` and may
+  perform shell PATH/completion setup. It creates no DDx state directories.
+- **ddx upgrade** — binary only: upgrades `~/.local/bin/ddx`. It never mutates
+  project files, plugins, skills, beads, or docs.
+- **ddx init** — project bootstrap only: writes `<projectRoot>/.ddx/`,
+  `<projectRoot>/.agents/skills/`, `<projectRoot>/.claude/skills/`,
+  `AGENTS.md`, and `CLAUDE.md` as project files.
+- **ddx plugin install <name>** — registry plugin install: writes real project
+  files under `<projectRoot>/.ddx/plugins/<name>/`, installs plugin skill
+  project files, and records plugin state in `<projectRoot>/.ddx/plugins.yaml`.
+- **ddx plugin install <name> --local <path>** — developer overlay: symlinks
+  project-local plugin and skill paths to the local checkout. It never updates
+  the registry version pin and never auto-commits.
+- **ddx plugin list / upgrade / uninstall** — project plugin lifecycle only.
 
-**`ddx install` (and `ddx init`) creates zero symlinks.** Every file
-written is a real file copied from the binary's embedded tree or from
-an extracted plugin tarball.
+DDx does not install skills, plugins, or plugin state into `$HOME`.
 
-**Reasoning — Windows compatibility.** Symlinks on Windows require
-either Developer Mode, an elevated process, or specific filesystem
-features, and behave inconsistently across NTFS, ReFS, and shared
-filesystems. A single project-local layout that works identically on
-Linux, macOS, and Windows is worth the duplication cost of copied
-files.
+## Scope Invariant
 
-**Plugin-source symlinks are not materialized.** If a plugin tarball
-contains symlinks (e.g. an author symlinks `.claude/skills/foo` →
-`../.agents/skills/foo` inside their source tree), DDx does **not**
-materialize those symlinks on extract. Plugin authors are responsible
-for shipping each skill as a real directory in every target the
-plugin declares. A plugin that relies on tarball symlinks resolving
-on the install side is a malformed plugin.
+**Machine scope:** `install.sh` and `ddx upgrade` may write only the DDx binary
+to `~/.local/bin/ddx` and installer-owned shell integration. They must not
+write `~/.ddx`, `~/.agents`, or `~/.claude`.
 
-**Manifest validation.** Plugin manifests are scanned at install
-time. Any `Root.Target` (or equivalent install target) whose path
-begins with `~` is rejected and `ddx install` exits with a non-zero
-status. Targets must be project-relative paths under
-`<projectRoot>/`. This invariant is enforced even for plugins that
-worked under the pre-amendment global model.
+**Project scope:** DDx-managed project content lives under the repository:
+`.ddx/`, `.agents/skills/`, `.claude/skills/`, `AGENTS.md`, and `CLAUDE.md`.
 
-## Migration
+**Registry plugin installs:** install real files for clone portability and
+cross-platform safety.
 
-Pre-amendment installs may have left state in three places. This
-section describes how DDx heals or ignores each.
+**Local plugin overlays:** intentionally use symlinks because they are
+machine-local developer state. Local overlays are detected by
+`.ddx/plugins/<name>` being a symlink.
 
-- **Home-directory symlinked skills** (`~/.agents/skills/ddx-*`,
-  `~/.claude/skills/ddx-*` pointing into `~/.ddx/skills/` or a project
-  tree). `ddx update --force` (and `ddx init --force` inside an
-  existing project) heals the project by rewriting
-  `<projectRoot>/.agents/skills/` and `<projectRoot>/.claude/skills/`
-  as real files. DDx does **not** delete files outside the project
-  root; users may `rm -rf ~/.agents/skills/ddx-*
-  ~/.claude/skills/ddx-*` themselves if they want a clean home tree.
-  Long-running runtime entrypoints such as `ddx work`, `ddx try`, and
-  `ddx server` must detect this project-local legacy layout during
-  their lightweight startup preflight and print the same remediation
-  path before doing work: run `ddx update --force`, then run `ddx
-  doctor` to confirm the project-local skills are real files.
+**Manifest validation:** Plugin manifests whose install targets begin with
+`~` are invalid. Targets must be project-relative paths under `<projectRoot>/`.
 
-- **Stale `~/.ddx/installed.yaml` entries** from a prior global
-  install. These are treated as **no-op uninstalls**: `ddx
-  uninstall <name>` succeeds without touching the filesystem when
-  the recorded paths are outside the current project root, and the
-  entry is removed from `installed.yaml`. No error is raised for
-  missing files.
+## No Legacy Home Compatibility
 
-- **`~/.ddx/plugins/`** from a prior global install. DDx leaves this
-  directory in place as inert state — nothing reads from it under
-  the project-local model. Users may `rm -rf ~/.ddx/plugins/` at
-  their convenience; DDx will not recreate it.
+DDx does not migrate or read legacy home plugin state. Old `~/.ddx`,
+`~/.agents`, and `~/.claude` layouts are outside the forward contract and may
+be removed manually by users.
 
 ## Problem Statement
 
-Current behavior:
+Legacy behavior this feature replaces:
 - `install.sh` does too much (creates `~/.ddx/`, sets up symlinks)
-- `ddx install helix` clones to user home (`~/.ddx/plugins/`), not project-scoped
+- Top-level `ddx install helix` clones to user home (`~/.ddx/plugins/`), not project-scoped
 - Symlinks aren't tracked by git, so project-local `.agents/skills → .ddx/skills` breaks on clone
 - No separation between global installation and project-scoped plugin management
 
 Desired behavior:
 - `install.sh` does one thing: get the binary into PATH
-- `ddx install --global` owns global skill setup (home directory)
-- `ddx init` copies bootstrap skills as real files (git-trackable)
-- `ddx install <plugin>` is project-scoped, uses relative symlinks for `.agents/` and `.claude/`
+- `ddx upgrade` upgrades only the DDx binary
+- `ddx init` manages project bootstrap files
+- `ddx plugin install/list/upgrade/uninstall` owns plugin lifecycle
+- `ddx plugin install --local` creates a project-local symlink overlay for
+  developer iteration
 
 ## Requirements
 
@@ -153,24 +125,17 @@ Desired behavior:
    - Sets up shell completions
    - Does NOT create `~/.ddx/`, `~/.agents/`, or `~/.claude/`
 
-#### Global Installation (`ddx install --global`)
-
-2. **DDx Skills Extraction**
-   - Extracts embedded skills (ddx-bead, ddx-agent, ddx-install, ddx-status, ddx-review, ddx-run) to `~/.ddx/skills/`
-   - Creates `~/.agents/skills/ddx-*` symlinks → `~/.ddx/skills/ddx-*`
-   - Creates `~/.claude/skills/ddx-*` symlinks → `~/.agents/skills/ddx-*`
-
 #### Repository Initialization (`ddx init`)
 
 3. **Project Structure Creation**
    - Creates `.ddx/` directory with config.yaml and library structure
-   - Copies bootstrap skills (ddx-doctor, ddx-run) as **real files** to `.ddx/skills/`
-   - Copies bootstrap skills to `.agents/skills/` and `.claude/skills/` as **real files**
+   - Copies the bootstrap `ddx` skill as **real files** to `.ddx/skills/`
+   - Copies the bootstrap `ddx` skill to `.agents/skills/` and `.claude/skills/` as **real files**
    - All files are git-trackable (no symlinks for project-local skills)
 
 3a. **Bootstrap Skill Cleanup (Stale ddx-* Removal)**
    - Before copying bootstrap skills, scans each target directory (`.ddx/skills/`, `.agents/skills/`, `.claude/skills/`) for existing `ddx-*` subdirectories
-   - Any `ddx-*` directory containing a `SKILL.md` that is **not** in the current bootstrap allowlist (`ddx-doctor`, `ddx-run`) is removed
+   - Any `ddx-*` directory containing a `SKILL.md` that is **not** in the current bootstrap allowlist (`ddx`) is removed
    - Purpose: removes skills from older DDx versions that are no longer part of the bootstrap set
    - Only removes `ddx-*` prefixed directories; plugin skills (e.g., `helix-*`) are never touched
    - Silent: no user-visible output on cleanup; errors are ignored (non-fatal)
@@ -180,35 +145,48 @@ Desired behavior:
    - Verify `ddx` binary exists in PATH
    - If missing: warn user, suggest running install.sh
 
-#### Plugin Installation (`ddx install <plugin>`)
+#### Plugin Installation (`ddx plugin install <plugin>`)
 
 5. **Project-Scoped Plugin Install**
    - Default: downloads released tarball from plugin's GitHub releases
-   - Extracts to `$PROJECT/.ddx/plugins/<name>/`
-   - Creates relative symlinks from `.agents/skills/<skill>` → `.ddx/plugins/<name>/.agents/skills/<skill>`
-   - Creates relative symlinks from `.claude/skills/<skill>` → `.agents/skills/<skill>`
-   - Relative symlinks work across clone/checkout (no absolute paths)
-   - Fallback: `ddx install <plugin> --from-source` clones repo (for developers working on the plugin)
+   - Extracts real files to `$PROJECT/.ddx/plugins/<name>/`
+   - Copies plugin skills as project files into `.agents/skills/<skill>` and
+     `.claude/skills/<skill>`
+   - Records project-local plugin state in `.ddx/plugins.yaml`
+   - `ddx install <plugin>` is not the forward public interface and is not
+     retained as a compatibility alias
 
-5a. **Plugin Skill Stale Link Pruning**
-   - Before creating new skill symlinks, scans the target skills directory for existing entries not in the plugin's current skill list
-   - Removes a symlink only if **both** conditions hold: (a) it is a symlink (not a real file), and (b) its resolved target is within the plugin's installed root (`.ddx/plugins/<name>/`)
-   - Purpose: removes symlinks for skills that were removed in a plugin update
-   - Real files (e.g., bootstrap skills copied by `ddx init`) are never removed by this step
-   - Symlinks from other plugins (pointing outside this plugin's root) are never removed
-   - Runs during every `ddx install <plugin>` invocation
+5a. **Local Plugin Overlay (`ddx plugin install <plugin> --local <path>`)**
+   - Validates the local plugin checkout before writing project paths
+   - Replaces `.ddx/plugins/<name>` with a symlink to the absolute local
+     checkout path
+   - Replaces `.agents/skills/<skill>` and `.claude/skills/<skill>` with direct
+     symlinks to the local checkout skill directory
+   - Does not update `.ddx/plugins.yaml` version pin/state
+   - Never auto-commits
+   - Local overlay detection is `os.Lstat(".ddx/plugins/<name>")` returning a
+     symlink
 
-5b. **Stale Install File Removal**
+5b. **Plugin Skill Stale Entry Pruning**
+   - Before installing release skills, scans plugin-owned target skill entries
+     and removes entries absent from the new plugin release
+   - Removes only entries owned by the plugin being installed
+   - Real bootstrap skills and other plugins' skills are never removed
+
+5c. **Stale Install File Removal**
    - The plugin registry tracks the set of files written by each install
-   - On re-install (update), files from the previous install that are absent from the new install's file list are removed
-   - Applies to any file tracked in the plugin registry entry (e.g., extracted tarball contents)
-   - Runs during `ddx install <plugin>` when a prior install record exists
+   - On registry reinstall or plugin upgrade, files from the previous install
+     that are absent from the new install's file list are removed
+   - Cleanup must use `os.Lstat` and must not follow symlinked plugin roots into
+     a developer checkout
 
 6. **Plugin Manifest**
-   - Records installed plugins in `.ddx/plugins.yaml` or similar
+   - Records registry-installed plugins in `.ddx/plugins.yaml`
    - Tracks name, version, install source (release vs source), install date
-   - Enables `ddx installed` to show project-scoped plugins
-   - Enables `ddx outdated` to check for newer released versions
+   - Enables `ddx plugin list` to show project-scoped plugins
+   - Enables `ddx plugin upgrade` to check for newer released versions
+   - Local overlays are discovered from symlinked `.ddx/plugins/<name>` paths
+     and shown as `local` even when no state entry exists
 
 #### Version Tracking & Staleness Detection
 
@@ -238,9 +216,9 @@ Desired behavior:
       ```
       💡 Project skills from DDx v0.3.0 (you have v0.4.0). Run 'ddx init --force' to update.
       ```
-    - Plugin staleness: compare `~/.ddx/installed.yaml` entries vs `BuiltinRegistry()` → soft hint:
+    - Plugin staleness: compare `.ddx/plugins.yaml` entries vs `BuiltinRegistry()` → soft hint:
       ```
-      💡 helix 1.0.0 installed, 2.0.0 available. Run 'ddx install helix' to update.
+      💡 helix 1.0.0 installed, 2.0.0 available. Run 'ddx plugin upgrade helix' to update.
       ```
     - Runs in `PersistentPostRunE`, after existing update-available banner
     - Pure local comparisons — no network
@@ -260,11 +238,14 @@ Desired behavior:
    - After upgrade, next command in project shows staleness hint (correct: new binary > old `ddx_version`)
    - Dogfood installs of prereleases remain possible via explicit version selection, e.g. `DDX_VERSION=v0.3.0-rc1 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash`
 
-8. **Plugin Update (`ddx update <plugin>`)**
+8. **Plugin Upgrade (`ddx plugin upgrade [plugin]`)**
    - Checks plugin's GitHub releases for newer version
-   - Downloads new release tarball to `.ddx/plugins/<name>/`
-   - Re-establishes relative symlinks
-   - `ddx update <plugin> --from-source` re-clones from repo HEAD
+   - With a plugin name, upgrades that one registry-installed plugin
+   - Without a plugin name, upgrades all registry-installed plugins
+   - Downloads new release tarball to `.ddx/plugins/<name>/` as real files
+   - Reinstalls plugin skills as project files
+   - Skips symlinked local overlays with explicit output:
+     `helix is local-linked; skipped`
 
 ### Non-Functional
 
@@ -278,64 +259,41 @@ Desired behavior:
   `execute-bead` survive clones. Only the ignored runtime scratch paths
   listed in FEAT-006 (`.ddx/exec-runs.d/`, `.ddx/agent-logs/`,
   `.ddx/.execute-bead-wt-*/`) may be excluded from tracking.
-- **Relative Symlinks for Plugins:** work across machines, no absolute paths
-- **No Windows Targets:** relative symlinks are acceptable
+- **Local Symlinks Only:** symlinks are used only for `ddx plugin install --local`
 - **Offline-First:** bootstrap skills work without network; version gate is local-only
 - **Idempotent:** multiple runs of same command produce same result
-- **Separation of Concerns:** `.ddx/config.yaml` for user preferences, `.ddx/versions.yaml` for system-managed state, `~/.ddx/installed.yaml` for global plugin state
+- **Separation of Concerns:** `.ddx/config.yaml` for user preferences,
+  `.ddx/versions.yaml` for DDx binary compatibility, `.ddx/plugins.yaml` for
+  project-local plugin state
 
 ## Architecture
 
 ### Directory Structure
 
 ```
-# Global (via ddx install --global)
-~/.ddx/
-├── skills/
-│   ├── ddx-bead/
-│   ├── ddx-agent/
-│   ├── ddx-install/
-│   ├── ddx-status/
-│   ├── ddx-review/
-│   └── ddx-run/
-└── config.yaml
+# Machine (via install.sh / ddx upgrade)
+~/.local/bin/ddx
 
-~/.agents/skills/
-├── ddx-bead/ → ~/.ddx/skills/ddx-bead/
-├── ddx-agent/ → ~/.ddx/skills/ddx-agent/
-└── ...
-
-~/.claude/skills/
-├── ddx-bead/ → ~/.agents/skills/ddx-bead/
-└── ...
-
-# Project (via ddx init + ddx install helix)
+# Project (via ddx init + ddx plugin install helix)
 project/
 ├── .ddx/
 │   ├── config.yaml       (user preferences)
 │   ├── versions.yaml     (system-managed: ddx_version)
+│   ├── plugins.yaml      (project plugin state)
 │   ├── library/
 │   ├── skills/
-│   │   ├── ddx-doctor/   (real files, git-tracked)
-│   │   └── ddx-run/      (real files, git-tracked)
+│   │   └── ddx/          (real files, git-tracked)
 │   ├── executions/       (tracked execute-bead attempt bundles; see FEAT-006)
 │   │   └── <attempt-id>/ (prompt.md, manifest.json, result.json, ...)
 │   └── plugins/
-│       └── helix/        (cloned plugin)
-│           └── .agents/skills/
-│               ├── helix-align/
-│               ├── helix-build/
-│               └── ...
+│       └── helix/        (registry install: real files; local install: symlink)
+│           └── skills/helix/
 ├── .agents/skills/
-│   ├── ddx-doctor/       (real files, copied by ddx init)
-│   ├── ddx-run/          (real files, copied by ddx init)
-│   ├── helix-align/ → ../.ddx/plugins/helix/.agents/skills/helix-align
-│   ├── helix-build/ → ../.ddx/plugins/helix/.agents/skills/helix-build
-│   └── ...
+│   ├── ddx/              (real files, copied by ddx init)
+│   └── helix/            (registry: real files; local: symlink to checkout)
 ├── .claude/skills/
-│   ├── ddx-doctor/ → ../.agents/skills/ddx-doctor
-│   ├── helix-align/ → ../.agents/skills/helix-align
-│   └── ...
+│   ├── ddx/              (real files, copied by ddx init)
+│   └── helix/            (registry: real files; local: symlink to checkout)
 └── ...
 ```
 
@@ -343,29 +301,41 @@ project/
 
 | Command | Scope | What It Does |
 |---------|-------|--------------|
-| `curl install.sh \| bash` | Global | Binary to `~/.local/bin/ddx` + PATH |
-| `ddx install --global` | Global | Extract skills to `~/.ddx/`, symlink `~/.agents/`, `~/.claude/` |
-| `ddx init` | Project | `.ddx/` structure + copy bootstrap skills to `.agents/`, `.claude/` |
-| `ddx install helix` | Project | Clone to `.ddx/plugins/helix/`, relative symlinks in `.agents/`, `.claude/` |
-| `ddx upgrade` | Global | Update binary |
-| `ddx update <plugin>` | Project | Re-clone plugin, re-establish symlinks |
+| `curl install.sh \| bash` | Machine | Binary to `~/.local/bin/ddx` + PATH/completions |
+| `ddx upgrade` | Machine | Upgrade only the DDx binary |
+| `ddx init [--force]` | Project | `.ddx/` structure + built-in `ddx` skill + AGENTS/CLAUDE guidance |
+| `ddx plugin install <name>` | Project | Install registry plugin as real project files |
+| `ddx plugin install <name> --local <path>` | Project/dev | Symlink project plugin and skill paths to a local checkout |
+| `ddx plugin list` | Project | List project plugins and local overlays |
+| `ddx plugin upgrade [name]` | Project | Upgrade one or all registry-installed plugins; skip local overlays |
+| `ddx plugin uninstall <name>` | Project | Remove plugin root, plugin skills, and project plugin state |
 
 ### Key Design Decisions
 
-1. **Copy over symlink for ddx init**: Git doesn't track symlinks well. Bootstrap skills must survive `git clone` on a fresh machine.
+1. **Binary-only machine install**: The only DDx-owned home path is
+   `~/.local/bin/ddx`. Plugins, skills, and state are project-local.
 
-2. **Relative symlinks for plugins**: Plugin skills are installed via relative symlinks (e.g., `../.ddx/plugins/helix/.agents/skills/helix-align`). This works across machines without absolute paths. Acceptable since we're not targeting Windows.
+2. **Copy for project bootstrap and registry plugins**: `ddx init` and
+   registry plugin installs write real files so clones and CI are portable.
 
-3. **Project-scoped plugins**: Plugins install to the project, not globally. This lets different projects use different plugin versions and makes the project self-contained.
+3. **Symlink only for local plugin overlays**: `ddx plugin install --local`
+   symlinks to a developer checkout for live iteration. This is machine-local
+   state and is never a registry install artifact.
 
-4. **Minimal install.sh**: The curl script does one thing (install binary). Everything else is handled by `ddx` commands that have proper error handling, embedded assets, and testability.
+4. **Project-scoped plugins**: Plugins install to the project, not globally.
+   This lets different projects use different plugin versions and keeps plugin
+   state in `.ddx/plugins.yaml`.
+
+5. **Noun-owned plugin lifecycle**: `ddx plugin *` owns plugin install, list,
+   upgrade, and uninstall. `ddx upgrade` owns the DDx binary.
 
 ## Out of Scope
 
 - Windows-specific installation (future)
 - System package manager integration (apt, brew, etc.) (future)
 - Plugin publishing to registry (future)
-- Global plugin installation (future — currently project-scoped only)
+- Global plugin or skill installation
+- Home-scoped DDx plugin state
 
 ## Acceptance Criteria
 
@@ -378,46 +348,51 @@ ddx version          # → shows version
 ls ~/.ddx/ 2>&1      # → no such directory (install.sh doesn't create it)
 ```
 
-### AC-002: Global Skill Installation
-Post-consolidation (FEAT-011, 2026-04-17): the embedded tree is the
-single portable `ddx` skill. Adjust the example from the pre-consolidation
-`ddx-bead`/`ddx-agent`/etc. listing to match the current layout:
-
+### AC-002: No Home DDx State
 ```bash
 # After AC-001
-ddx install --global
-ls ~/.ddx/skills/ddx/           # → skill files exist (SKILL.md, reference/*.md)
-readlink ~/.agents/skills/ddx   # → ../../.ddx/skills/ddx
-readlink ~/.claude/skills/ddx   # → ../../.agents/skills/ddx
+test ! -e ~/.ddx
+test ! -e ~/.agents
+test ! -e ~/.claude
 ```
-
-Implementation: `cli/cmd/install_global.go`. Covered by
-`TestInstallGlobalExtractsSkillsAndChainsSymlinks` and the adjacent
-idempotency / safety tests.
 
 ### AC-003: Repository Initialization
 ```bash
 # In empty project directory
 ddx init
-ls .ddx/skills/ddx-doctor/   # → real files (not symlinks)
-ls .agents/skills/ddx-doctor/ # → real files (copied, not symlinked)
-ls .claude/skills/ddx-doctor/ # → real files or relative symlink to .agents
+ls .ddx/skills/ddx/         # → real files (not symlinks)
+ls .agents/skills/ddx/      # → real files (copied, not symlinked)
+ls .claude/skills/ddx/      # → real files (copied, not symlinked)
 git add .agents/ .claude/     # → works (real files tracked by git)
 ```
 
 ### AC-004: Plugin Installation (Project-Scoped)
 ```bash
 # In initialized project
-ddx install helix
-ls .ddx/plugins/helix/                        # → plugin cloned
-readlink .agents/skills/helix-align           # → ../.ddx/plugins/helix/.agents/skills/helix-align
-readlink .claude/skills/helix-align           # → ../.agents/skills/helix-align
+ddx plugin install helix
+test -d .ddx/plugins/helix
+test ! -L .ddx/plugins/helix
+test -f .agents/skills/helix/SKILL.md
+test ! -L .agents/skills/helix
+test -f .claude/skills/helix/SKILL.md
+test ! -L .claude/skills/helix
+test -f .ddx/plugins.yaml
+```
+
+### AC-004a: Local Plugin Overlay
+```bash
+# In initialized project with ../helix checked out locally
+ddx plugin install helix --local ../helix --force
+readlink .ddx/plugins/helix                    # → absolute path to ../helix
+readlink .agents/skills/helix                  # → absolute path to ../helix/skills/helix
+readlink .claude/skills/helix                  # → absolute path to ../helix/skills/helix
+git diff --cached --quiet                      # → local install does not auto-commit
 ```
 
 ### AC-005: Missing DDx Detection
 ```bash
-# Clone a project with .ddx/skills/ddx-doctor/ but no ddx binary
-# ddx-doctor skill detects missing binary and prompts install
+# Clone a project with .ddx/skills/ddx/ but no ddx binary
+# ddx skill guidance detects missing binary and prompts install
 ```
 
 ### AC-006: Version Tracking
@@ -449,7 +424,7 @@ ddx bead list            # → normal output + hint: "💡 Project skills from D
 # After staleness hint
 ddx init --force
 cat .ddx/versions.yaml   # → ddx_version updated to current
-cat .agents/skills/ddx-doctor/SKILL.md  # → overwritten with latest
+cat .agents/skills/ddx/SKILL.md  # → overwritten with latest
 ```
 
 ### AC-010: Dev Build Bypass
@@ -472,29 +447,51 @@ mkdir -p .agents/skills/ddx-old-skill
 echo "---" > .agents/skills/ddx-old-skill/SKILL.md
 ddx init
 ls .agents/skills/ddx-old-skill 2>&1  # → no such file or directory (removed)
-ls .agents/skills/ddx-doctor/         # → present (in bootstrap allowlist)
-ls .agents/skills/ddx-run/            # → present (in bootstrap allowlist)
+ls .agents/skills/ddx/                # → present (in bootstrap allowlist)
 # Plugin skills are untouched
-ls .agents/skills/helix-align 2>&1    # → unchanged (not a ddx-* prefix)
+ls .agents/skills/helix 2>&1          # → unchanged (not a ddx-* prefix)
 ```
 
-### AC-013: Plugin Skill Stale Link Pruning on `ddx install`
+### AC-013: Plugin Skill Stale Entry Pruning on `ddx plugin install`
 ```bash
 # Install plugin, then re-install after a skill is removed upstream
-ddx install helix                         # installs helix-align, helix-build
-# Simulate helix-build removed in new version (re-install with fewer skills)
-ddx install helix
-ls .agents/skills/helix-build 2>&1        # → no such file or directory (stale link removed)
-ls .agents/skills/helix-align             # → symlink present (still in plugin)
+ddx plugin install helix
+# Simulate a skill removed in a new version (re-install with fewer skills)
+ddx plugin install helix --force
+ls .agents/skills/removed-skill 2>&1      # → no such file or directory
+ls .agents/skills/helix/SKILL.md          # → present
 # Bootstrap skills are not removed
-ls .agents/skills/ddx-doctor/             # → unchanged (real file, not symlink)
+ls .agents/skills/ddx/                    # → unchanged
 ```
 
-### AC-014: Stale Install File Removal on Plugin Update
+### AC-014: Plugin Upgrade
 ```bash
-# Install plugin, verify old files removed on update
-ddx install helix@1.0.0
-# Files from 1.0.0 that don't exist in 1.1.0 are removed when updating
-ddx install helix@1.1.0
-# Files only in 1.0.0 are gone; files in 1.1.0 are present
+ddx plugin install helix
+ddx plugin upgrade helix
+# Files from the prior version that do not exist in the new version are gone
+# Files in the new version are present
+```
+
+### AC-015: Plugin List
+```bash
+ddx plugin list
+# Output includes name, version or "local", source/path, and status
+```
+
+### AC-016: Plugin Upgrade Skips Local Overlays
+```bash
+ddx plugin install helix --local ../helix --force
+ddx plugin upgrade helix
+# Output: helix is local-linked; skipped
+readlink .ddx/plugins/helix  # → still points at ../helix
+```
+
+### AC-017: Plugin Uninstall Removes Overlay Only
+```bash
+ddx plugin install helix --local ../helix --force
+ddx plugin uninstall helix
+test ! -e .ddx/plugins/helix
+test ! -e .agents/skills/helix
+test ! -e .claude/skills/helix
+test -d ../helix             # local checkout target is untouched
 ```

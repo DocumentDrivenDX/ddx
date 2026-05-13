@@ -29,6 +29,9 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 5. ~~`ddx mcp list/install`~~ — **deprecated**. Removed to avoid confusion
    with DDx's own MCP server (FEAT-002).
 6. `ddx doctor` — validate library structure, config, git setup, dependencies
+7. ~~`ddx update`~~ — **removed**. Use `ddx upgrade` for the binary,
+   `ddx init --force` for shipped project skill/bootstrap refresh, and
+   `ddx plugin upgrade` for plugins.
 9. `ddx upgrade` — self-upgrade binary
 10. `ddx status` / `ddx log` — show sync state and change history
 11. Meta-prompt injection into CLAUDE.md during init
@@ -96,18 +99,22 @@ namespace.
 37d. `ddx checkpoint <name> [--list] [--restore]` — lightweight git tag checkpoints (FEAT-012)
 
 **Package Registry (in progress — FEAT-009)**
-38. `ddx install <name>` — install packages from registries
+38. `ddx plugin install <name>` — install plugins from registries
 39. `ddx search <query>` — search available resources
-40. `ddx installed` — list installed packages
-41. `ddx verify` — check integrity of installed packages
+40. `ddx plugin list` — list installed project plugins and local overlays
+41. ~~`ddx verify`~~ — **removed**. Plugin integrity checks are covered by
+    `ddx doctor --plugins`.
+42. ~~`ddx installed` / `ddx uninstall` / `ddx outdated`~~ — **removed**.
+    Use `ddx plugin list`, `ddx plugin uninstall`, and staleness hints plus
+    `ddx plugin upgrade`.
 
 **Embedded Utilities**
 47. `ddx jq <filter> [file...]` — embedded jq processor (powered by gojq), eliminating external jq dependency for HELIX and other workflow tools. Supports standard jq flags: `-r`, `-c`, `-s`, `-n`, `-R`, `-e`, `-j`, `-S`, `--tab`, `--indent`, `--arg`, `--argjson`, `--slurpfile`. Reads from stdin or file arguments. Pure Go, no CGo.
 
 **DDx Skills (not started — FEAT-011)**
-42. DDx ships agent-facing skills (Claude Code slash commands) for its own CLI operations
-43. Skills are installed project-locally to `<projectRoot>/.agents/skills/ddx-*` and discoverable via `/ddx-<name>` (FEAT-015: home-directory targets retired)
-44. Core skills: `ddx-bead` (guided bead create/triage), `ddx` (guided task execution with `run` / `try` / `work` and Fizeau passthrough constraints), `ddx-install` (guided package installation)
+42. DDx ships one agent-facing `ddx` skill for its own CLI operations
+43. Skills are installed project-locally to `<projectRoot>/.agents/skills/ddx` and `<projectRoot>/.claude/skills/ddx` (FEAT-015: home-directory targets retired)
+44. Core skill: `ddx` routes bead, queue, review, execution, install, and status guidance
 45. Skills validate inputs, suggest flags, and provide contextual guidance that the raw CLI doesn't
 46. `ddx init` registers DDx skills alongside library content
 
