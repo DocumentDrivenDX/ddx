@@ -4,7 +4,7 @@ import { gql } from 'graphql-request';
 
 export const EXECUTIONS_QUERY = gql`
 	query ExecutionsPage($projectID: ID!, $first: Int, $after: String, $verdict: String) {
-		executions(projectID: $projectID, first: $first, after: $after, verdict: $verdict) {
+		executions(projectId: $projectID, first: $first, after: $after, verdict: $verdict) {
 			edges {
 				node {
 					id
