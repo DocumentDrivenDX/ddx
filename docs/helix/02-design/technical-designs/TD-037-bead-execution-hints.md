@@ -12,13 +12,22 @@ ddx:
 
 ## Purpose
 
-DDx needs a durable way to say that a bead needs a stronger agent than the
-default queue policy would infer. The mechanism must be portable across
-machines and providers, auditable after the fact, and hard to cargo-cult into
-concrete harness or model pins.
+DDx needs a durable way to say what level of agent effort a bead needs without
+turning the queue into a collection of model pins. The mechanism must be
+portable across machines and providers, auditable after the fact, and hard to
+cargo-cult into concrete harness or model choices.
 
 This design defines bead-level execution hints as abstract power intent. It
 does not let beads choose providers, harnesses, or concrete models.
+
+The governing policy is:
+
+1. Bias toward work getting done automatically.
+2. By default, use the cheapest and fastest available profile that is likely to
+   get the work done.
+3. Reserve the most powerful profiles for the most difficult work: bead
+   breakdown, debugging, high-risk reviews, architecture-sensitive work, or
+   retries with concrete lower-tier failure evidence.
 
 ## Current State
 
@@ -33,6 +42,10 @@ does not let beads choose providers, harnesses, or concrete models.
 - `InferTier` treats labels `tier:smart`, `tier:standard`, and `tier:cheap` as
   explicit tier overrides before falling back to priority, kind, and scope
   heuristics.
+- DDx has Fizeau profile snapshot helpers that can read `ListPolicies` and
+  `ListModels`, but implementation dispatch must use those helpers to select a
+  profile/policy for inferred tier intent instead of falling through to
+  Fizeau's default policy.
 
 That gives DDx a usable short-term path, but it is underspecified. It does not
 define when `tier:smart` is justified, how the choice is audited, or how to
@@ -50,9 +63,57 @@ DDx recognizes exactly one durable bead-level hint surface in v1:
 | `tier:standard` label | standard | Ordinary implementation or review work. |
 | `tier:smart` label | smart | High-judgment, broad, ambiguous, or architecture-sensitive work. |
 
-The label is a request for abstract execution power. It is not a model name.
-`tier:smart` maps to the current smart execution profile only at the DDx
-request-construction boundary; Fizeau still owns the concrete route.
+The label is a request for abstract execution power. It is not a model name,
+provider name, harness name, or Fizeau profile name. Fizeau may expose tier-like
+profile names as shortcuts, but those names are configurable and DDx must not
+treat them as canonical. At the DDx request-construction boundary, DDx maps the
+hint to a Fizeau profile/policy by inspecting Fizeau-owned profile metadata.
+Fizeau still owns the concrete route inside that profile.
+
+### Profile Selection Policy
+
+For `ddx try` and `ddx work`, when no explicit routing flags and no project
+routing configuration are present, DDx selects request-level profile intent as
+follows:
+
+1. Infer what the task needs: difficulty/power band, breadth, risk, likely
+   context size, need for tools, review/debug/breakdown role, and retry history.
+2. Fetch Fizeau profile and model metadata via `ListPolicies` and `ListModels`.
+3. Treat Fizeau profile names as opaque. Do not hard-code names such as
+   `cheap`, `standard`, `smart`, `frontier`, or provider-specific aliases.
+4. Classify candidate profiles by metadata: power range, availability,
+   auto-routable model coverage, cost/billing data, speed/perf signals,
+   locality policy, and later diversity signals when exposed.
+5. Choose the profile that best satisfies the task need while optimizing for
+   forward progress, then cost and speed. For default implementation work, this
+   normally means the weakest viable profile expected to complete the task.
+6. If the requested band has no viable profile but another free provider is
+   available, try the best available free/low-cost profile instead of blocking
+   the bead. Record the downgrade in routing-intent evidence.
+7. If no provider/profile is available at all, return an execution error. Do
+   not park the bead as a capability blocker.
+8. Escalate only after DDx-owned evidence shows the lower profile did not get
+   the work done.
+9. Break ties inside that band by preferring profiles that are cheaper and faster
+   while still available, auto-routable, and appropriate for default execution.
+10. Send only the selected Fizeau profile/policy name and abstract power bounds.
+   Do not send a concrete harness, provider, or model unless the operator
+   supplied that passthrough explicitly.
+
+For ordinary implementation work, DDx should select the medium/default band by
+metadata, not by a hard-coded Fizeau profile name. It should not drift to the
+highest-power profile merely because a stronger subscription model is
+available. The strongest band is appropriate when the bead carries an explicit
+strong-tier hint, the work is breakdown/debug/high-risk by policy, or prior
+attempt evidence shows a weaker profile could not meet acceptance criteria.
+
+If Fizeau profile metadata is unavailable, DDx may fall back to a `MinPower`
+floor. That fallback must preserve the same weak-first policy: ordinary
+implementation work uses a medium-band lower-bound floor, not the top available
+model. If that floor is unsatisfied but a weaker free/available provider exists,
+DDx should try it and record a degraded route rather than failing before
+attempting the bead. Escalation raises profile/power only after DDx-owned
+evidence shows the lower tier did not complete the work.
 
 DDx should not add bead-level `harness`, `provider`, `model`, or `model-ref`
 fields. Those remain operator-supplied CLI passthrough constraints for one
@@ -145,6 +206,7 @@ Minimum fields:
 | `attempt_id` | Attempt/run id. |
 | `routing_intent_source` | `cli`, `project_config`, `bead_hint`, `heuristic`, or `default`. |
 | `requested_tier` | `cheap`, `standard`, `smart`, or empty when not tier-based. |
+| `requested_profile` | Fizeau profile/policy name DDx requested, when selected. |
 | `requested_min_power` | Resolved `MinPower`, when available. |
 | `requested_max_power` | Resolved `MaxPower`, when available. |
 | `smart_justification` | Extracted justification text when `requested_tier=smart`. |
@@ -300,6 +362,7 @@ Acceptance:
 - No materialized metrics store in the first implementation.
 - No automatic promotion to `tier:smart` solely because a previous attempt used
   a particular harness or model.
+- No default use of the strongest profile for ordinary implementation work.
 
 ## Open Questions
 
@@ -308,5 +371,5 @@ Acceptance:
 - Should `tier:*` remain labels long term, or should DDx eventually expose a
   first-class `execution-tier` field while continuing to read labels for
   compatibility?
-- What exact power floor should each tier map to once Fizeau catalog power
-  numbers are stable enough to document?
+- Which additional Fizeau profile facts should participate in tie-breaking
+  after power, speed, cost, and availability are stable across providers?

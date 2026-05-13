@@ -98,8 +98,9 @@ carries the envelope around it.
 
 ## Power Intent
 
-DDx does not route. DDx chooses request-level power bounds and sends them to
-Fizeau as `MinPower` and optional `MaxPower`; Fizeau resolves harness,
+DDx does not choose concrete routes. DDx chooses request-level intent and sends
+it to Fizeau as a profile/policy name when one can be selected from Fizeau
+metadata, plus optional `MinPower` / `MaxPower` bounds. Fizeau resolves harness,
 provider, endpoint, model, health, quota, fallback, and route errors.
 
 Power is an abstract integer scale owned by the Fizeau contract. DDx treats
@@ -110,15 +111,32 @@ example, Fizeau may report:
 running with qwen 3.6-27b (power 10)
 ```
 
-DDx records requested `MinPower`/`MaxPower` and the actual model/power returned
-by Fizeau. DDx can use that evidence on a later retry to raise `MinPower`, but
-it still does not choose the next model.
+DDx records requested profile/policy, requested `MinPower`/`MaxPower`, and the
+actual model/power returned by Fizeau. DDx can use that evidence on a later
+retry to request a stronger profile or raise `MinPower`, but it still does not
+choose the next model.
 
-Fizeau also exposes its available model/power catalog. DDx may read that
-catalog to choose a `MinPower` threshold for "top model only" retries, for
-example by requesting a lower bound at or above the lowest power among the
-current top models. DDx must not use the catalog to pin a concrete
-model/provider on the normal execution path.
+Fizeau exposes available profiles/policies and model metadata. DDx may read
+that metadata to select a request profile or, if profiles are unavailable, a
+`MinPower` threshold. Profile names are Fizeau configuration, not DDx constants:
+names such as cheap/standard/smart are shortcuts when a Fizeau installation
+chooses to expose them, not canonical strings DDx should hard-code.
+
+Default selection is weak-first and progress-biased:
+
+- choose the cheapest and fastest available profile that DDx reasonably expects
+  can complete the task;
+- reserve the strongest profiles for breakdown, debugging, high-risk review,
+  architecture-sensitive work, or retries with concrete lower-tier failure
+  evidence;
+- if no profile satisfies the ideal power band but a free/available provider can
+  attempt the work, try it and record the route as degraded rather than blocking
+  the bead before execution;
+- fail with an execution/provider-availability error only when no provider is
+  available to attempt the work.
+
+DDx must not use profile or model metadata to pin a concrete model/provider on
+the normal execution path.
 
 DDx may also pass request facts such as estimated prompt size, whether tools are
 required, permissions, timeout values, and effort/reasoning intent. These facts
@@ -219,12 +237,12 @@ passthrough constraints, role/correlation metadata, and actual route facts
 returned by Fizeau. FEAT-010 owns whether a retry or review retry is
 scheduled. FEAT-014 owns normalized usage and cost signals.
 
-DDx may compute the next `MinPower` floor from catalog power numbers, but it
-must not translate that floor into a concrete model/provider or mutate
-operator-supplied passthrough values. Review pairing uses the same boundary:
-DDx can request stronger review and record `review-pairing-degraded` when the
-actual reviewer route converges with the implementer, but concrete reviewer
-selection remains inside Fizeau.
+DDx may compute the next profile intent or `MinPower` floor from profile/model
+metadata, but it must not translate that intent into a concrete model/provider
+or mutate operator-supplied passthrough values. Review pairing uses the same
+boundary: DDx can request stronger review and record `review-pairing-degraded`
+when the actual reviewer route converges with the implementer, but concrete
+reviewer selection remains inside Fizeau.
 
 ## Session Log Envelope Boundary
 

@@ -36,13 +36,13 @@ These are the internal engineering principles that shape how DDx is built. They 
 - **Tradeoff:** Repository size grows with execution count, and bundles must be pruned periodically. In exchange, every bead has reviewable provenance and review agents can read prior-attempt evidence directly from the repo.
 - **DDx feature it shapes:** `.ddx/executions/<timestamp>-<hash>/` bundles produced by `ddx try`, including the `no_changes_rationale.txt` convention for intentional non-commits.
 
-### 5. Cheap-Default Escalate on Failure
+### 5. Cheapest Viable, Escalate on Evidence
 
-- **Rule:** Start every attempt at the lowest viable requested power. Escalate by raising `MinPower` only when a review gate fails or the lower-power path provably cannot meet the acceptance criteria.
-- **Decision generated:** `ddx work` drains the bead queue by requesting power bounds and forwarding raw passthrough constraints unchanged to Fizeau. When a review finds blocking issues, the bead reopens and the next attempt may request a higher `MinPower` with the prior review findings threaded in; Fizeau still chooses the concrete route.
+- **Rule:** Start every attempt with the cheapest and fastest available profile that DDx reasonably expects can complete the task. Escalate only when review, runtime, or retry evidence shows the lower-power path cannot meet the acceptance criteria.
+- **Decision generated:** `ddx work` drains the bead queue by introspecting Fizeau's available profiles and model metadata, selecting request-level profile intent without hard-coding profile names, and forwarding raw passthrough constraints unchanged. When a review finds blocking issues, the bead reopens and the next attempt may request a stronger profile or higher `MinPower` with the prior review findings threaded in; Fizeau still chooses the concrete route.
 - **Alternative rejected:** Always run the strongest available model for correctness. Rejected because it burns budget on beads a cheap model would have closed cleanly and obscures which work actually needs heavy reasoning.
-- **Tradeoff:** Some beads incur a retry round-trip when the cheap attempt fails, adding latency. In exchange, total spend stays bounded and the system surfaces which beads genuinely require strong models.
-- **DDx feature it shapes:** The `ddx work` queue drainer with its review-gated escalation path, paired with Fizeau-owned route selection inside DDx-supplied power bounds.
+- **Tradeoff:** Some beads incur a retry round-trip when the cheaper attempt fails, adding latency. In exchange, total spend stays bounded and the system surfaces which beads genuinely require strong models.
+- **DDx feature it shapes:** The `ddx work` queue drainer with its review-gated escalation path, paired with Fizeau-owned route selection inside DDx-supplied profile/power intent.
 
 ### 6. Reversible Over Ergonomic
 
