@@ -1,0 +1,70 @@
+{
+  "attempt_id": "20260513T000856-c9a83172",
+  "bead_id": "ddx-73749d13",
+  "base_rev": "b720900c8df14e0a7f2d023363152ed0ff81b7a6",
+  "created_at": "2026-05-13T00:09:00.993917062Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-73749d13",
+    "title": "Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 2",
+    "description": "PROBLEM\nParent bead ddx-868ac26c is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-b4c5151a is too broad for one execution pass. This child owns part 1 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-70a432b5 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs are missing the documentation sections required to make the Story-16 run-detail page and its evidence browser official. Without spec updates, the run-detail page, trust boundary statement, and raw-transcript audit event are undocumented platform behaviors.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-*.md: missing a Run-detail-page subsection describing the trust boundary ('Anyone with project read access sees raw prompts, responses, stderr, tool args') and evidence browser whitelist (allowed extensions + 64KB cap).\n- docs/helix/01-frame/features/FEAT-010-*.md: Run resolver contract does not include prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, or normalized ToolCallEntry.\n- docs/helix/01-frame/features/FEAT-019-*.md: review surface does not point to /runs/[runId] deep page.\n- No 'raw transcript viewed' audit event exists in the server or schema.\n- Depends on ddx-f04faa86 (16.1 page) and ddx-4cd64068 (16.2 evidence tab).\n\nPROPOSED FIX\n- Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB; no Markdown rendering in evidence tab).\n- Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\n- Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\n- Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\n- Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\n\nNON-SCOPE\n- Frontend implementation (that is Story 16.1 and 16.2).\n- New auth or role-based access control beyond what the trust boundary statement documents.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n- b\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- bun run test:e2e green.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. bun run test:e2e green.\n2. cd cli \u0026\u0026 go test ./... passes.\n3. lefthook run pre-commit passes.",
+    "parent": "ddx-868ac26c",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "decomposed",
+      "needs-human-decomposition"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T00:08:35Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "301506",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"depth\":3,\"max\":3}",
+          "created_at": "2026-05-13T00:08:35.728403357Z",
+          "kind": "triage-overflow",
+          "source": "ddx work",
+          "summary": "depth cap exceeded"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"bead depth 3 reached max_decomposition_depth 3; operator must split\",\"fingerprint\":\"94c841f916ea8dd55f9c10e471020fe274d118cdf54d7997ef0f8baecea57445\",\"policy_mode\":\"warn-only\",\"reason\":\"decomposition_depth_cap\",\"rule_id\":\"pre_claim_intake.decomposition_depth_cap\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T00:08:35.896567348Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "decomposition_depth_cap"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Fails nearly every lint criterion: the title is not a clear imperative scope, the description is duplicated/truncated and lacks file:line-grounded current-state detail, acceptance criteria do not name Test* symbols or a unique go test -run filter, the required pkg-scoped go test command is missing, labels lack area/kind/cross-reference facets, deps are not listed, and the prompt is not yet a sufficient standalone sub-agent brief.\",\"score\":0,\"suggested_fixes\":[\"Rewrite the title as an imperative subsystem scope, e.g. \\\"Add raw-transcript audit event and Story 16 e2e coverage\\\".\",\"Condense the description into one PROBLEM / ROOT CAUSE / PROPOSED FIX / NON-SCOPE block and cite concrete file:line anchors for the current-state gaps.\",\"Replace the acceptance criteria with numbered, testable checks that name specific Test* symbols or a unique go test -run filter.\",\"Add the exact package-scoped command `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` alongside `lefthook run pre-commit`.\",\"Add labels covering phase, area, kind, and at least one cross-reference facet; move story-only metadata out of labels if it is not a facet.\",\"Populate deps explicitly in the bead record or state `No deps.` if none are required.\",\"Split or narrow the bead so one agent can execute it without needing the parent history or truncated context.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T00:08:56.550048934Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T00:08:35.529297632Z",
+      "execute-loop-last-detail": "local branch main has diverged from origin (local=a244463922181ab99525583d9f002a4524bfcdab origin=c2baf2fb2091f585064ca82eee2d93023456ff3e); reconcile manually before claiming",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-12T23:58:04Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260513T000856-c9a83172",
+    "prompt": ".ddx/executions/20260513T000856-c9a83172/prompt.md",
+    "manifest": ".ddx/executions/20260513T000856-c9a83172/manifest.json",
+    "result": ".ddx/executions/20260513T000856-c9a83172/result.json",
+    "checks": ".ddx/executions/20260513T000856-c9a83172/checks.json",
+    "usage": ".ddx/executions/20260513T000856-c9a83172/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-73749d13-20260513T000856-c9a83172"
+  },
+  "prompt_sha": "88aaa9c80089d83ea6f0cb7e8f177bbc7b18c0f15b05c49a3623fd9923bd4d7d"
+}
