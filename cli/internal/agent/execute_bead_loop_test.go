@@ -810,6 +810,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	store, first, _ := newExecuteLoopTestStore(t)
 	now := time.Now().UTC().Truncate(time.Second)
 	var triageCalls int
+	var sink bytes.Buffer
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
@@ -829,7 +830,8 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:      true,
+		EventSink: &sink,
 		PostAttemptTriageHook: func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
 			triageCalls++
 			return TriageResult{Classification: "needs_investigation"}, nil
@@ -840,16 +842,183 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	require.Len(t, result.Results, 1)
 	require.Equal(t, 0, triageCalls, "provider outage must bypass post-attempt triage")
 	assert.Equal(t, FailureModeNoViableProvider, result.Results[0].OutcomeReason)
-	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), result.Results[0].RetryAfter)
+	assert.True(t, result.Results[0].Disrupted, "no_viable_provider must be disrupted")
+	assert.Equal(t, "no_viable_provider", result.Results[0].DisruptionReason)
+	assert.Empty(t, result.Results[0].RetryAfter, "no per-bead cooldown for no_viable_provider")
+	assert.Contains(t, sink.String(), "loop.paused-infra", "worker must emit paused-infra event")
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
-	require.NotNil(t, got.Extra)
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.Extra["work-last-status"])
-	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), got.Extra["work-retry-after"])
+	assert.Empty(t, got.Extra["work-retry-after"], "no per-bead cooldown for no_viable_provider (P6 + ADR-024)")
+}
+
+// TestProviderConnectivityFailure_NoBeadCooldown: AC #1 — provider_connectivity
+// must NOT set a per-bead cooldown. The route-exclusion window (RouteExclusionWindow)
+// is the correct gate; SetExecutionCooldown would park the bead unnecessarily.
+func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	target := &bead.Bead{ID: "ddx-pc-nocool", Title: "Provider connectivity test"}
+	require.NoError(t, store.Create(target))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "dial tcp 127.0.0.1:11434: connect: connection refused",
+				Provider:  "lmstudio",
+				BaseRev:   "aaaa1111",
+				ResultRev: "aaaa1111",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, FailureModeProviderConnectivity, result.Results[0].OutcomeReason)
+	assert.True(t, result.Results[0].Disrupted)
+	assert.Equal(t, "provider_connectivity", result.Results[0].DisruptionReason)
+	assert.Empty(t, result.Results[0].RetryAfter, "no per-bead cooldown for provider_connectivity")
+
+	got, err := store.Get(target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.Empty(t, got.Extra["work-retry-after"], "SetExecutionCooldown must NOT fire for provider_connectivity")
+}
+
+// TestProviderConnectivityFailure_RouteExclusionStillRecorded: AC #2 — removing
+// the bead cooldown must NOT remove the work-failed-routes entry that prevents
+// the same (provider, model) from being re-selected by Fizeau routing.
+func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	target := &bead.Bead{ID: "ddx-pc-excl", Title: "Route exclusion regression"}
+	require.NoError(t, store.Create(target))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				Status:      ExecuteBeadStatusExecutionFailed,
+				Detail:      "dial tcp 10.0.0.1:1234: connect: connection refused",
+				Provider:    "local-ollama",
+				ActualPower: 50,
+				BaseRev:     "aaaa1111",
+				ResultRev:   "aaaa1111",
+			}, nil
+		}),
+		EscalationNextFloor: func(p int) (int, error) { return p + 10, nil },
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+
+	got, err := store.Get(target.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Extra["work-retry-after"], "no bead cooldown")
+	// work-failed-routes must be set — the exclusion mechanism is intact.
+	assert.NotNil(t, got.Extra["work-failed-routes"], "work-failed-routes must be recorded even when no bead cooldown is set")
+}
+
+// TestNoViableProvider_TransitionsToPausedInfra: AC #3 — a no_viable_provider outcome
+// must set no per-bead cooldown and must emit a loop.paused-infra event with a resume-at
+// timestamp. The worker transitions to paused-infra; beads stay immediately reclaimable.
+func TestNoViableProvider_TransitionsToPausedInfra(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	var sink bytes.Buffer
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "work: all powerClasses exhausted - no viable provider found",
+				BaseRev:   "aaaa1111",
+				ResultRev: "aaaa1111",
+			}, nil
+		}),
+		Now: func() time.Time { return now },
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:      true,
+		EventSink: &sink,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+
+	// No per-bead cooldown.
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Extra["work-retry-after"], "no per-bead cooldown for no_viable_provider")
+
+	// paused-infra event emitted with resume_at.
+	events := sink.String()
+	assert.Contains(t, events, "loop.paused-infra")
+	assert.Contains(t, events, "resume_at")
+	resumeExpected := now.Add(PausedInfraInterval).Format(time.RFC3339)
+	assert.Contains(t, events, resumeExpected, "resume_at must be now+PausedInfraInterval")
+}
+
+// TestWorkerIdle_AllInfraCooledDown_EntersPausedInfra: AC #4 — when nextCandidate
+// finds no ready work and every cooled bead carries an infra-fault status, the
+// worker emits loop.paused-infra instead of the normal loop.idle/NoReadyWork path.
+func TestWorkerIdle_AllInfraCooledDown_EntersPausedInfra(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b1 := &bead.Bead{ID: "ddx-ic-1", Title: "Infra cooled 1"}
+	b2 := &bead.Bead{ID: "ddx-ic-2", Title: "Infra cooled 2"}
+	require.NoError(t, store.Create(b1))
+	require.NoError(t, store.Create(b2))
+
+	until := time.Now().UTC().Add(2 * time.Minute)
+	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, FailureModeProviderConnectivity, "dial tcp: connection refused", ""))
+	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, FailureModeNoViableProvider, "no viable provider", ""))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not be called when all beads are in infra cooldown")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	var sink bytes.Buffer
+	// WakeCh pre-filled so the paused-infra sleep returns immediately.
+	wakeCh := make(chan struct{}, 1)
+	wakeCh <- struct{}{}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, _ := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		EventSink: &sink,
+		WakeCh:    wakeCh,
+	})
+
+	// Worker must not set NoReadyWork — it entered paused-infra.
+	assert.False(t, result.NoReadyWork, "worker must not report NoReadyWork when all cooldowns are infra-class")
+	assert.Contains(t, sink.String(), "loop.paused-infra", "worker must emit loop.paused-infra event")
+	assert.Contains(t, sink.String(), "all_infra_cooldowns", "paused-infra reason must be all_infra_cooldowns")
 }
 
 func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.T) {

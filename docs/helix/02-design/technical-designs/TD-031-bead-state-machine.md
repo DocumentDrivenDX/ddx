@@ -70,7 +70,7 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 - Raw `no_changes` is attempt evidence, not a durable bead queue state. The drain loop MUST translate it into one of the rows below before mutating the bead.
 - `work-retry-after` may be set only when retrying the same bead after time passes could plausibly succeed without human/spec/dependency changes.
   - **MUST NOT set retry-after** (cause is not time-resolvable by waiting): `push_failed`, `declined_needs_decomposition`, `review_spec_gap`, `review_missing_acceptance`, `review_too_large` at decomposition depth cap.
-  - **MAY set retry-after** (recheckable by waiting): `push_conflict` (15 min — remote advanced), `no_viable_provider` (15 min), `land_conflict` (15 min), transient infra/quota/transport (15 min).
+  - **MAY set retry-after** (recheckable by waiting): `push_conflict` (15 min — remote advanced), `land_conflict` (15 min), transient quota/transport (15 min). `no_viable_provider` MUST NOT set per-bead retry-after when alternate routing paths exist or when the worker can transition to `paused-infra`; a per-bead cooldown is only appropriate when no alternate route exists AND the condition is purely time-dependent with no other worker that could claim the bead.
   - Cooldown lifetime SHOULD match the recheckable window; 15 min is the ceiling for every current recheckable outcome. A 24 h cooldown is never appropriate.
 - Continuous forward progress is the default. Before a bead can move to
   `status=proposed`, the drain loop MUST exhaust every applicable automatic
@@ -174,6 +174,7 @@ Worker state is the in-process state of the drain loop. It is **distinct from be
 | `draining` | Worker is actively claiming and executing beads. | Default operating state. | Quota or rate-limit pause; explicit stop. |
 | `paused-quota` | Worker observed quota exhaustion on its harness. | `drain-paused-quota` event. | `drain-resumed-quota` after backoff or operator resume. |
 | `paused-rate-limit` | Worker is sleeping out a rate-limit retry window inside an attempt. | Rate-limit response from harness. | Wait window elapses; worker resumes the same attempt. |
+| `paused-infra` | Worker observed an infrastructure-class failure (`no_viable_provider`, all beads in infra-fault cooldowns). Beads are left immediately reclaimable — no per-bead `work-retry-after` is written. Worker sleeps `PausedInfraInterval` (2 min) then re-evaluates the full queue. | `loop.paused-infra` event with `resume_at` timestamp. See reliability-principles.md P6. | `resume_at` elapses or `WakeCh` fires; worker returns to `draining`. |
 | `exiting` | Worker is shutting down cleanly; will not claim more beads. | Operator stop or terminal failure. | Process exit. |
 
 Worker state is observable via the worker's stdout/log; it is not stored on any bead. Hygiene beads affecting worker state (QuotaPauseContract, RateLimitRetryContract) MUST NOT add new fields to the bead schema to represent these transient states.
