@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Section toggle (Availability/Performance) is URL-driven via ?section=, Performance table is populated via agentMetrics(groupBy: PROVIDER) with window chips, and provider rows drill into /nodes/[nodeId]/providers/[name]?window=<24h|7d|30d> matching the Story 8 chip schema.",
+  "findings": [
+    { "severity": "info", "summary": "perfWindow derives directly from ?window= without validating against {W24H,W7D,W30D}; an invalid value would render an unrecognized active chip and pass through to the query. Minor robustness nit.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte" }
+  ]
+}
+```

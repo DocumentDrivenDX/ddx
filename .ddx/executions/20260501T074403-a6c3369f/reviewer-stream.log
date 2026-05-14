@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata (manifest.json, result.json) — no screencast file under website/static/demos/, no homepage player reference change, and no archival of 07-quickstart.cast. None of the acceptance criteria can be verified from the changed files.",
+  "findings": [
+    { "severity": "block", "summary": "No .cast or screencast file added under website/static/demos/", "location": "website/static/demos/" },
+    { "severity": "block", "summary": "Homepage demo player not shown to reference the new demo file", "location": "website/" },
+    { "severity": "block", "summary": "Old 07-quickstart.cast not replaced or archived in the diff", "location": "website/static/demos/07-quickstart.cast" }
+  ]
+}
+```

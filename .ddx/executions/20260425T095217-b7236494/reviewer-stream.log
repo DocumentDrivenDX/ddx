@@ -1,0 +1,21 @@
+---
+## Review: ddx-b6cf025c iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Nav indicator visible everywhere | APPROVE | DrainIndicator.svelte mounted in NavShell (prior iter), still rendered |
+| 2 | Live updates ≤2s worker / ≤5s ready | APPROVE | DrainIndicator.svelte:113-138 — subscribeWorkerProgress per running worker + subscribeBeadLifecycle, 3s backstop |
+| 3 | queueAndWorkersSummary query | APPROVE | DrainIndicator.svelte:13-21 SUMMARY_QUERY |
+| 4 | Overview count control (+/−) | APPROVE | workers/+layout.svelte (prior iter) |
+| 5 | Default-spec + max_count gating | APPROVE | workers/+layout.svelte:64-71 atMaxCount + tooltip |
+| 6 | Playwright add/remove + indicator text | APPROVE | workers.spec.ts mock now correctly resolves WorkersByProject before QueueAndWorkersSummary |
+| 7 | No regressions | APPROVE | DrainIndicator only adds subscriptions; mock reorder is test-only |
+| 8 | Cross-references respected | APPROVE | uses workersByProject (ddx-05b4cc9d), coexists with per-worker controls |
+
+### Summary
+
+This iteration's narrow goal — converting the indicator from poll-only to subscription-driven — is implemented correctly. Per-worker `subscribeWorkerProgress` is rewired on bead-lifecycle events (which fire on claim, catching newly-spawned workers), the 3s poll is preserved as a backstop, and the e2e mock ordering bug that broke the workers-list assertion is fixed by matching the more specific `WorkersByProject` query first. Resolves the prior REQUEST_CHANGES on AC2.

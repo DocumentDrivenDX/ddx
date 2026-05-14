@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no source changes to execute_bead.go extracting shared instruction-block constants. AC1 and AC6 cannot be verified—no refactor is present.",
+  "findings": [
+    { "severity": "block", "summary": "No changes to cli/cmd/execute_bead.go or any source file; refactor required by AC1 (>=4 shared named constants) is absent from the diff.", "location": "cli/cmd/execute_bead.go" },
+    { "severity": "block", "summary": "Only artifact added is an execution result.json, which is insufficient evidence of byte-equivalent refactor (AC6).", "location": ".ddx/executions/20260502T115600-64bd7a2c/result.json" }
+  ]
+}
+```

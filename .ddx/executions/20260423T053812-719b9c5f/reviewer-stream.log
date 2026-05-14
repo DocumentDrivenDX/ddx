@@ -1,0 +1,27 @@
+---
+## Review: ddx-726bc5f2 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Sidebar entry for "Executions" | BLOCK | — not found in diff |
+| 2 | List route with paginated filterable table | BLOCK | — not found in diff |
+| 3 | Detail route with five tabs | BLOCK | — not found in diff |
+| 4 | Tool calls pane with virtualized list | BLOCK | — not found in diff |
+| 5 | GraphQL resolvers + schema | BLOCK | — not found in diff |
+| 6 | Cross-links (bead, session, commits) | BLOCK | — not found in diff |
+| 7 | Fixture + perf targets | BLOCK | — not found in diff |
+| 8 | Playwright e2e tests | BLOCK | — not found in diff |
+| 9 | Soft dependency handling for sessions | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only a single `result.json` file recording execution evidence for the attempt itself. None of the acceptance criteria — GraphQL schema/resolvers, SvelteKit routes, sidebar entry, cross-links, fixtures, or tests — are present in the diff.
+
+### Findings
+
+- **All AC items (1–9):** The diff adds `.ddx/executions/20260423T053812-719b9c5f/result.json`, which is execution metadata from the agent run that attempted this bead. It is not implementation code. No changes to `schema.graphql`, Go resolvers, Svelte components, route files, test files, or fixtures exist in this diff.
+- **Scope gap:** This appears to be a bookkeeping commit (`chore: add execution evidence`) rather than a feature implementation commit. The actual feature work from commit `fcb8a93c` ("feat: add Executions view") referenced in `result_rev` is not included in the reviewed diff range — the review should target that commit or the full branch diff instead.

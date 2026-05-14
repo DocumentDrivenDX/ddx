@@ -1,0 +1,18 @@
+---
+## Review: ddx-b2c9a245 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Tier inference engine reads labels/kind/scope | APPROVE | cli/internal/escalation/tierinfer.go:17 — `InferTier` inspects `tier:`, `kind:`, `priority:` labels, IssueType, and description length |
+| 2 | Returns a recommended ModelTier | APPROVE | tierinfer.go:17 — signature `InferTier(*bead.Bead) ModelTier`; returns Smart/Standard/Cheap |
+| 3 | Replaces 'always cheap' default in execute-loop | APPROVE | cli/cmd/agent_cmd.go:1624 (`autoInferTier` flag replaces `profile = "cheap"`) and :1837 calls `escalation.InferTier(b)` then passes inferred tier to `singleTierAttempt` |
+| 4 | Aligned with endpoint-first redesign (cheap-by-default + escalation) | APPROVE | tierinfer.go default branch returns `TierCheap`; only escalates on explicit metadata signals |
+| 5 | Tested | APPROVE | cli/internal/escalation/tierinfer_test.go (139 lines) covers explicit tier label, priority floors, kind dispatch, scope fallback |
+
+### Summary
+
+The implementation cleanly adds an `escalation.InferTier` engine with a sensible priority order (explicit `tier:` label → priority floor → kind → description-length scope heuristic) and wires it into `runAgentExecuteLoopImpl` only when zero-config auto-route is active, preserving operator overrides. Cheap-by-default semantics are kept, matching the endpoint-first redesign intent. Test coverage spans the major branches.

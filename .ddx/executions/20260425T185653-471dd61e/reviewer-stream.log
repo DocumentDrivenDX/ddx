@@ -1,0 +1,15 @@
+---
+## Review: ddx-bc330514 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | .disabled file removed | APPROVE | cli/internal/config/config_library_test.go.disabled — no-such-file confirmed |
+| 2 | go test -run 'ResolveLibrary' passes | APPROVE | cli/internal/config/config_library_test.go:1-115 — 5 fresh tests against ResolveLibraryResource (commit d6933742 result_rev recorded as task_succeeded) |
+
+### Summary
+
+Stage 4 test-debt cleanup completed cleanly: stale 497-line .disabled file deleted, replaced with 115 lines of focused tests covering absolute paths, config-driven resolution, env-var override, nonexistent resources, and the no-config fallback. Tests target the live `ResolveLibraryResource` API at config.go:180 as specified.

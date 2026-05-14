@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result metadata. None of the AC artifacts are present: no initial-violations.json, no children.json, no child-bead landings, no reach-backfill-summary.md, no code changes resolving violations, no final pass evidence.",
+  "findings": [
+    { "severity": "block", "summary": "AC1: missing .ddx/executions/<run-id>/initial-violations.json capturing the violation list", "location": ".ddx/executions/20260503T124553-282667f7/" },
+    { "severity": "block", "summary": "AC2: child beads referenced in notes (children.json with 21 per-package beads) are not in the diff", "location": ".ddx/executions/20260503T124553-282667f7/children.json" },
+    { "severity": "block", "summary": "AC3/AC5: no child landings and no evidence of final ddx ac run returning zero violations", "location": "cli/" },
+    { "severity": "block", "summary": "AC7: missing reach-backfill-summary.md", "location": ".ddx/executions/<final-run-id>/reach-backfill-summary.md" },
+    { "severity": "block", "summary": "Diff has zero source changes under cli/; the systematic backfill is not performed in this attempt", "location": "cli/" }
+  ]
+}
+```

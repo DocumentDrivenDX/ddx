@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution evidence (manifest.json, result.json) under .ddx/executions/. No FEAT-014 documentation change is present, so the acceptance task (one-sentence touch noting generate-artifact runs consume token budgets via FEAT-014) cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "No change to FEAT-014 spec/docs visible in diff; only execution artifacts changed.", "location": ".ddx/executions/20260429T232619-4d8bf62d/" }
+  ]
+}
+```

@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff at rev 4e289d72 contains only execution evidence (manifest.json, result.json, production-reachability.json). No source changes to cli/internal/agent/try/attempt.go, execute_bead_loop.go, or attempt_test.go are present, so ACs 1–5 cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "AC1 cannot be verified: no diff to cli/internal/agent/try/attempt.go showing RunConflictRecovery (or adapter) invocation", "location": "cli/internal/agent/try/attempt.go" },
+    { "severity": "block", "summary": "AC2 cannot be verified: execute_bead_loop.go:847 block is not shown as removed/replaced in this diff", "location": "cli/internal/agent/execute_bead_loop.go:847" },
+    { "severity": "block", "summary": "AC3/AC4 cannot be verified: TestAttempt_ConflictRecovered_ReturnsMergedOutcome and TestAttempt_ConflictUnresolvable_ReturnsPark are not present in the diff", "location": "cli/internal/agent/try/attempt_test.go" },
+    { "severity": "info", "summary": "Diff only contains execution-evidence artifacts under .ddx/executions/20260504T024713-0905ab3e/; the implementation commit (daeab076) is referenced in result.json but its source changes are not part of the reviewed diff", "location": ".ddx/executions/20260504T024713-0905ab3e/" }
+  ]
+}
+```

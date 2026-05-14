@@ -1,0 +1,17 @@
+---
+## Review: ddx-ec830159 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner references | APPROVE | cli/cmd/agent_execute_bead_test.go:1025-1049 — removed `fakeExecuteBeadGit`, `fakeAgentRunner`, `executeBeadGitOverride`, `executeBeadOrchestratorGitOverride`, `executeBeadLandingAdvancerOverride`, `fakeLandingAdvancerFromGit` |
+| 2 | Dispatches through real git + script harness | APPROVE | cli/cmd/agent_execute_bead_test.go:966-1015 — `git init`, seed commits via scrubbed-env `runGit`, real `agent.NewRunner(agent.Config{})`, `--harness script --model <directives>` drives script harness; no GitOps override ⇒ default RealLandingGitOps |
+| 3 | Targeted test green | APPROVE | commit message confirms `go test ./cmd -run '^TestExecuteBeadSynthesizesPromptAndArtifacts$' -count=1` passes; result.json records outcome=task_succeeded |
+| 4 | No other tests in file modified | APPROVE | diff is scoped to lines 962-1062 within `TestExecuteBeadSynthesizesPromptAndArtifacts`; no other test blocks touched |
+
+### Summary
+
+The migration cleanly replaces the fake GitOps + fake Runner with real git (init + two seed commits via GIT_*-scrubbed env), the real `agent.Runner`, and the script harness driven by a directive file. Assertions are preserved — the synthesized prompt is now read from the on-disk execution bundle path returned in the JSON result rather than captured from the fake runner's opts. Scope is tight; only the target test is modified.

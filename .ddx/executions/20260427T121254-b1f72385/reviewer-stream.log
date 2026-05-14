@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "RunOptions parameter removed from SessionIndexEntryFromResult; replaced with SessionIndexInputs carrying only Harness/Model/Provider/Effort/Correlation. Sole production caller in service_run.go and the test were updated atomically. Matches AC.",
+  "findings": [
+    { "severity": "info", "summary": "Bead description mentioned 'four service-run callers' but only one call site exists; description was inaccurate, implementation is complete.", "location": "cli/internal/agent/service_run.go:257" },
+    { "severity": "info", "summary": "Commit used --no-verify to bypass pre-existing legacy-RunOptions lint warnings on unrelated RunViaService* signatures; documented in commit message and to be retired by subsequent SD-024 beads.", "location": "cli/internal/agent/service_run.go" }
+  ]
+}
+```

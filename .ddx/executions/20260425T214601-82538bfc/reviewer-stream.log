@@ -1,0 +1,19 @@
+---
+## Review: ddx-c14f350e iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | SilenceUsage: true on agent run + agent doctor | APPROVE | cli/cmd/agent_cmd.go:93, :659 |
+| 2 | SilenceErrors left at default (false) | APPROVE | neither command sets SilenceErrors |
+| 3 | Regression test asserts non-nil err with "invalid timeout" | APPROVE | cli/cmd/agent_run_timeout_test.go:25-26 |
+| 4 | Test located outside agent_run_profile_test.go | APPROVE | new file agent_run_timeout_test.go |
+| 5 | `cd cli && go test -v ./cmd` passes | APPROVE | execution result.json: status=success, exit_code=0 |
+| 6 | Smoke: only error line, no Usage/Flags dump | APPROVE | test asserts output lacks "Usage:"/"Flags:" (agent_run_timeout_test.go:29-30) |
+
+### Summary
+
+Minimal, on-target fix: per-command `SilenceUsage` on both `agent run` and `agent doctor` matching the init.go/doc.go precedent, plus a focused regression test in a neutrally named file that also covers the optional polish (asserting suppressed Usage/Flags blocks). Tests pass per the recorded execution result.

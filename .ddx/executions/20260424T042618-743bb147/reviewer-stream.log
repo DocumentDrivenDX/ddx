@@ -1,0 +1,17 @@
+---
+## Review: ddx-888cae40 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:1160-1228 — overrides deleted; `f.AgentRunnerOverride = agent.NewRunner(agent.Config{})` replaces the fake |
+| 2 | Dispatches via real git + script harness | APPROVE | agent_execute_bead_test.go:1184-1210 — local `runGit` with GIT_* scrubbed inits real repo; `--harness script --model directivePath` drives real script harness with a commit directive |
+| 3 | Target test green with -count=1 | APPROVE | Bead result.json records `outcome: task_succeeded`, `exit_code: 0` for this migration commit (2b627af6) |
+| 4 | No other test in file modified | APPROVE | Diff stats show only the one function body changed; surrounding `TestExecuteBeadResolvesPathStyleSpecID` and `TestExecuteBeadFromRevFlag` are untouched |
+
+### Summary
+
+Clean migration: removed the fake git/runner overrides, replaced with a real git init + script-harness directive that produces a real commit, and kept every meaningful assertion (manifest contents, worktree prefix, recorded result fields, worktree cleanup). The worktree-cleanup assertion was faithfully translated from `git.addedWTs[0]` to reading the worktree path from the emitted manifest, which is a real-state check rather than fake bookkeeping.

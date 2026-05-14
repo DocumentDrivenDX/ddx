@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata. It does not show any code changes for the 15 `internal/testutils` symbols, no decisions log, and no evidence that deadcode or `go test ./...` requirements were satisfied.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 and AC3 are not implemented or evaluable: no production code or test files changed, so there is no evidence any of the 15 unreachable symbols were wired or deleted, nor that deadcode now reports zero remaining dead symbols in `internal/testutils`.",
+      "location": ".ddx/executions/20260507T023019-e5523916/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 is missing: the required `.ddx/executions/<run-id>/decisions.md` decisions log is not present in the changed files.",
+      "location": ".ddx/executions/20260507T023019-e5523916/result.json:1"
+    },
+    {
+      "severity": "warn",
+      "summary": "AC4 is unsupported by the diff: `result.json` records a successful attempt but does not provide reviewable test output demonstrating `cd cli && go test ./...` passed for this change.",
+      "location": ".ddx/executions/20260507T023019-e5523916/result.json:1"
+    }
+  ]
+}
+```

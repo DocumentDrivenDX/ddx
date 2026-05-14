@@ -1,0 +1,37 @@
+---
+## Review: ddx-9e0eff22 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Design note + policy decision recorded | BLOCK | — not found in diff |
+| 2 | Project-local persona directory | BLOCK | — not found in diff |
+| 3 | GraphQL additions | BLOCK | — not found in diff |
+| 4 | CLI parity | BLOCK | — not found in diff |
+| 5 | UI explainer copy | BLOCK | — not found in diff |
+| 6 | UI source badge | BLOCK | — not found in diff |
+| 7 | UI New/Edit/Delete for project personas | BLOCK | — not found in diff |
+| 8 | UI Fork library to project | BLOCK | — not found in diff |
+| 9 | No regressions | BLOCK | — not found in diff |
+| 10 | Empty project-local state | BLOCK | — not found in diff |
+
+### Summary
+
+The reviewed diff only adds execution evidence JSON under `.ddx/executions/20260423T031959-e177fccf/`. It contains no design note, persona implementation, GraphQL schema/resolver changes, CLI commands, UI changes, or tests required by the acceptance criteria.
+
+### Findings
+
+- Missing `docs/helix/02-design/` design note capturing D1/D2 policy and UI scope.
+
+- Missing project-local persona support in `cli/internal/persona`, including `.ddx/personas/*.md` discovery, source tagging, override precedence, and unit coverage.
+
+- Missing GraphQL schema and resolver additions for `personaCreate`, `personaUpdate`, and `personaDelete`.
+
+- Missing CLI commands `ddx persona new`, `ddx persona edit`, `ddx persona fork`, and `ddx persona delete`, plus shared operation plumbing with GraphQL.
+
+- Missing UI implementation for personas explainer copy, source badges, project persona lifecycle actions, library fork action, and empty project-local hint.
+
+- Missing Playwright and integration tests for the required UI, GraphQL, CLI, binding regression, and empty-state behavior.

@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence artifacts (manifest.json, result.json) under .ddx/executions/. No implementation of ddx_exec_run or ddx_exec_run_log MCP tools is present in the reviewable diff.",
+  "findings": [
+    { "severity": "block", "summary": "No MCP tool implementation visible in diff; only execution metadata files added", "location": ".ddx/executions/20260429T190405-009845f7/" }
+  ]
+}
+```

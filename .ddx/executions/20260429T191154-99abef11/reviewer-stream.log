@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review contains only execution manifest/result JSON artifacts. No MCP tool implementation (ddx_bead_blocked, ddx_bead_dep_tree) or tests are present in the changed files, so acceptance cannot be evaluated.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes adding ddx_bead_blocked or ddx_bead_dep_tree MCP tools are visible in this diff; only execution evidence files are included.", "location": ".ddx/executions/20260429T191154-99abef11/" }
+  ]
+}
+```

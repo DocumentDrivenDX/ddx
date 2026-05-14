@@ -1,0 +1,17 @@
+---
+## Review: ddx-b711930f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | New skill at skills/ddx/replay-bead/ | APPROVE | skills/ddx/replay-bead/SKILL.md:1 — frontmatter + workflow present |
+| 2 | Re-run bead with altered conditions | APPROVE | SKILL.md:62-97 — single-axis variation + `ddx try` dispatch |
+| 3 | Baseline diff | APPROVE | SKILL.md:120-175 — outcome/code/reasoning diff + report template |
+| 4 | Replaces `ddx agent replay` CLI | APPROVE | SKILL.md:188-204 — explicit old→new mapping table |
+
+### Summary
+
+The skill cleanly formalizes the 1-vs-baseline replay shape that the retired `ddx agent replay` CLI used to provide, composing `ddx try` with explicit baseline pinning, single-axis variation, and a code-diff-grounded report. Anti-patterns and CLI reference round it out. No governing docs and no formal AC list, so review is against the bead description, which is fully satisfied.

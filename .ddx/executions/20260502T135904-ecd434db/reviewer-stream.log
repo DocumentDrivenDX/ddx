@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only a result.json execution evidence file. No source changes for resolver, drain-time persistence, bundle-file confinement, whitelist enforcement, or unit tests. No AC item is implemented in this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No resolver changes exposing prompt/response/stderr/toolCalls/bundleFiles/bundleFile", "location": "cli/internal/server/" },
+    { "severity": "block", "summary": "No drain-time ToolCallEntry persistence changes in service_run.go / agent_runner_service.go", "location": "cli/internal/server/service_run.go" },
+    { "severity": "block", "summary": "No bundle-root confinement, whitelist, or 64KB cap logic added", "location": "cli/internal/server/" },
+    { "severity": "block", "summary": "No unit tests for traversal/symlink/absolute path/size cap/whitelist/persistence", "location": "cli/internal/server/" }
+  ]
+}
+```

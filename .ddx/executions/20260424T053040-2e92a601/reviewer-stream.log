@@ -1,0 +1,17 @@
+---
+## Review: ddx-96a933f1 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner in test | APPROVE | cli/cmd/agent_execute_bead_test.go:2249-2343 — test body uses `setupRepo` + `modelPassthroughCapture{inner: agent.NewRunner(...)}`; grep confirms remaining refs are in sibling tests/helpers |
+| 2 | Dispatches through real git + script harness | APPROVE | cli/cmd/agent_execute_bead_test.go:2264-2288 — real `git init/add/commit` via `exec.Command`, GIT_* env scrubbed; `--harness script` drives real script harness via passthrough capture wrapping `agent.NewRunner` |
+| 3 | Test passes | APPROVE | execution result.json shows `outcome=task_succeeded` for the execute-bead run that produced the commit |
+| 4 | No other test in file modified | APPROVE | git show d4d4a425 — only lines inside `TestExecuteBeadModelFlagPassthrough` and a new local helper type `modelPassthroughCapture` were added; 95+/17- confined to that region |
+
+### Summary
+
+Migration replaces the two fakes with a real temp git repo and a passthrough wrapper around the production `agent.NewRunner`, preserving both subtests' assertions on `opts.Model` while letting the real script harness run end-to-end. Scope is tight to the one test plus a small local helper type.

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no graph.e2e.ts test file or fixture changes are present. Cannot verify any AC (1-5).",
+  "findings": [
+    { "severity": "block", "summary": "No graph.e2e.ts file added at cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/" },
+    { "severity": "block", "summary": "Diff only includes .ddx/executions/.../result.json; no test or fixture code visible to evaluate AC2-AC5", "location": ".ddx/executions/20260502T141457-52fe30ca/result.json" }
+  ]
+}
+```

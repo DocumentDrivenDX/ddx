@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "outcome.go defines Outcome, Disposition, ParkReason, AllParkReasons, ParkReasonValid, and ToOutcome/FromOutcome adapters; tests cover round-trip across all dispositions/park reasons and the closed vocabulary; no external callers of try.Outcome yet.",
+  "findings": [
+    { "severity": "info", "summary": "FromOutcome drops RecordEvents (documented in code comment); inverse parity is preserved on canonical reports.", "location": "cli/internal/agent/try/outcome.go:165" },
+    { "severity": "info", "summary": "ParkReasons without dedicated status (cost_cap, loop_error, rate_limit_budget_exhausted, quota_paused, lock_contention) round-trip via ExecutionFailed+Detail; tests confirm parity.", "location": "cli/internal/agent/try/outcome.go:147" }
+  ]
+}
+```

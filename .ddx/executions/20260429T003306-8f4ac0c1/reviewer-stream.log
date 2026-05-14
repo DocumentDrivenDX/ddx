@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All six AC items implemented: new declined_needs_decomposition status, loop parks bead with 365d cooldown (terminal-for-loop equivalent), structured JSON decomposition-recommendation event, ddx bead cooldown show/clear, regression test, and CHANGELOG entry.",
+  "findings": [
+    { "severity": "info", "summary": "Bead status field is left as 'open' rather than 'blocked'; the long cooldown removes it from the dep-ready queue. AC #2 explicitly allows 'equivalent terminal-for-loop status', and the CHANGELOG documents this choice.", "location": "cli/internal/agent/execute_bead_loop.go:644" },
+    { "severity": "info", "summary": "Cooldown is hard-coded at 365 days; matches the push_failed long-park pattern.", "location": "cli/internal/agent/execute_bead_loop.go:683" }
+  ]
+}
+```

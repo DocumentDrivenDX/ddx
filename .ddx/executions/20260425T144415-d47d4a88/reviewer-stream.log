@@ -1,0 +1,16 @@
+---
+## Review: ddx-124afd5f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestResolveDeepCopy passes | APPROVE | cli/internal/config/resolved_test.go:340 — mutates `ResolvedLadder()`/`ReasoningLevels()` and source-side mutation, asserts isolation; deep-copy plumbed via per-type `Clone` in clone.go |
+| 2 | TestResolveNilCfg passes — no panic, defaults | APPROVE | cli/internal/config/resolved_test.go:304 — invokes `(*NewConfig)(nil).Resolve(overrides)`, asserts defaults (review retries=3, default ladder, default caps) and override layering |
+| 3 | All `internal/config/...` tests pass | APPROVE | Diff is purely additive (clone.go, clone_test.go, plus appended Resolve symbols/tests in resolved.go/resolved_test.go); no existing symbols mutated. `Config = NewConfig` alias (config.go:11) means receiver `*NewConfig` satisfies the SD's `(*Config).Resolve` requirement. (Couldn't shell out `go test` here; static read shows no breakage surface.) |
+
+### Summary
+
+Stage-1 foundation lands cleanly: `Resolve` + `CLIOverrides` defined, all five required `Clone` methods (AgentConfig, RoutingConfig, EvidenceCapsConfig, ExecutionsMirrorConfig, WorkersConfig) present and explicitly invoked from `Resolve`, nil-receiver path returns sealed defaults without panic, and deep-copy is verified by both source→clone and clone→source mutation assertions. Scope discipline respected (no LoadAndResolve, no new resolvers).

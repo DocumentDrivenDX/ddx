@@ -1,0 +1,19 @@
+---
+## Review: ddx-5b3629fb iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | 10 headlines with paragraphs and DDx response | APPROVE | docs/helix/01-frame/principles.md:38-228 — all 10 sections present with paragraph + DDx response |
+| 2 | Software-factory preface paragraph | APPROVE | principles.md:21-34 — "Preface: Factory-Floor Design Choices" |
+| 3 | Cross-link to engineering-principles.md | APPROVE | principles.md:19 |
+| 4 | depends_on RSCH-001 through RSCH-010 | APPROVE | principles.md:6-15 (frontmatter) |
+| 5 | `grep -c "^### "` returns 10 | APPROVE | verified: 10 |
+| 6 | No reference to Dun | APPROVE | verified: 0 matches (case-insensitive) |
+
+### Summary
+
+All 10 locked headlines are present with substantive ~150-word paragraphs and DDx response sections, the factory-floor preface frames them, the cross-link and RSCH-001–010 dependencies are wired, the headline count is exactly 10, and there is no mention of Dun.

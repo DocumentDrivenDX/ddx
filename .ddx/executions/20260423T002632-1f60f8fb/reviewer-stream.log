@@ -1,0 +1,30 @@
+Now I have a complete picture. Here's the review:
+
+---
+## Review: ddx-9ce6842a iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Perf harness exists and is reusable | APPROVE | `cli/internal/server/perf/harness.go` — table-driven targets, `fixtures.go` seeds N×M with real store, `report.go` writes JSON + markdown |
+| 2 | Baseline recorded | APPROVE | `docs/helix/06-iterate/perf/2026-04-22-baseline.json` + `.md` with hardware footer |
+| 3 | BeadsByProject scope fix | APPROVE | `state_graphql.go:GetBeadSnapshotsForProject` + `resolver_beads.go:40` calls it; `graphql_beads_scope_test.go:TestBeadsByProject_OpensOnlyTargetProjectStore` asserts via hook |
+| 4 | Filter pushdown | APPROVE | `bead/store.go:ReadAllFiltered` + `state_graphql.go:beadFilterPredicate`; `graphql_beads_scope_test.go:TestGetBeadSnapshots_PushdownFiltersStatusAtStoreLayer` validates |
+| 5 | Perf targets on fixture (5000 beads) | APPROVE | Baseline JSON shows all targets well within thresholds (beadsByProject p95=9.29ms HTTP vs 250ms ceiling; cross-project p95=75.8ms vs 500ms) |
+| 6 | Stale-read safety | APPROVE | `graphql_beads_stale_read_test.go` — `TestBeadsByProject_UpdateVisibleOnNextRequest` + `TestBeadsByProject_ConcurrentQueriesAndUpdates` (8 readers, 2 writers) |
+| 7 | CI posture (make bench-graphql) | APPROVE | `cli/Makefile` adds `bench-graphql` target; regression gate noted as follow-up |
+| 8 | Playwright smoke | REQUEST_CHANGES | `e2e/beads-smoke.spec.ts` exists with 1s/2s ceilings, but uses fully mocked GraphQL — tests frontend render time only, not the real server; routes hit per-project path for both tests instead of a cross-project route |
+| 9 | Cross-reference | REQUEST_CHANGES | `ddx-ad0db8fd` and `ddx-2ceb02fa` referenced in baseline `.md` and comments, but no bead notes update is visible in the diff |
+
+### Summary
+
+Solid implementation — the perf harness is well-structured and extensible, the scope fix and filter pushdown are correct, baseline numbers are excellent, and the stale-read concurrency tests are thorough. Two minor items prevent a full approve.
+
+### Findings
+
+- **AC §8 — Playwright cross-project test routes wrong path**: `beads-smoke.spec.ts:107` navigates to `/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/beads` for the "cross-project" test, which is the same per-project URL as the 1s test. A cross-project smoke test should hit the all-beads route (e.g., `/nodes/${NODE_INFO.id}/beads` or whatever the actual cross-project URL is) and mock the `beads` query, not `beadsByProject`. The mock for `beads` exists (lines 76-89) but is never exercised because both tests navigate to the project-scoped path.
+
+- **AC §9 — Bead notes cross-reference**: The acceptance criteria require this bead's notes to list `ddx-ad0db8fd` and `ddx-2ceb02fa`. The baseline `.md` and code comments mention them, but no `ddx bead update` call or notes update appears in the diff. If the notes were updated via a separate mechanism not captured in this branch, this finding can be dismissed.

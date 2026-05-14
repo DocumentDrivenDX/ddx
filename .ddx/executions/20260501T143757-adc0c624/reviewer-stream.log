@@ -1,0 +1,3 @@
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"All AC items satisfied: text-xs/font-semibold/tracking-widest replaced with font-label-caps/text-label-caps on both label lines; font-mono→font-mono-code, text-xs→text-mono-code, gray-500/400→fg-muted/dark-fg-muted on the ID line. text-lever already on accent-lever variant retained.","findings":[]}
+```

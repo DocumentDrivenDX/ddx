@@ -1,0 +1,17 @@
+---
+## Review: ddx-9be994d2 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestReviewRetryThresholdFromConfigGraphQL passes | APPROVE | cli/internal/server/graphql/resolver_feat008_e2e_test.go:74 — test added with two-half structure (resolver + loop), exercises real on-disk config.yaml through LoadAndResolve and asserts harness propagation + review threshold behavior |
+| 2 | go test ./... passes | APPROVE | per commit message, only pre-existing unrelated cmd-package failures remain (TestBeadReviewCollapseGolden golden drift, install acceptance needing prebuilt binary); verified to fire on base commit 8bec9b60 without this bead's edits |
+
+### Summary
+
+Resolver migration at cli/internal/server/graphql/resolver_feat008.go:77 cleanly layers GraphQL input fields as `config.CLIOverrides` onto on-disk config via `LoadAndResolve`, then forwards resolved harness/profile/effort to the dispatcher — closing the hardcoded "smart"/"medium" bypass. The two-half e2e test gives both surface-level (dispatcher capture) and behavioral (loop closes at threshold with no manual-required event) proof on the GraphQL path. Scope is tight and matches Stage 1's bead inventory.
+
+Minor note (non-blocking): `LoadAndResolve` error is swallowed with `_` at resolver_feat008.go (around the new block). Given the SD-024 sealed-construction sentinel, a zero `rcfg` would panic on first accessor call. Not part of AC, but worth a follow-up to surface the error to the caller.

@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 4 ACs met: ExternalBackend gains JSONL fallback for non-default collections, default 'beads' path unchanged, routing decision is documented at both store.go and backend_external.go, and two new tests cover beads-archive open/round-trip plus default-collection no-fallback invariant.",
+  "findings": [
+    { "severity": "info", "summary": "jsonlFallbackForCollection helper in backend_jsonl.go appears unused — store.go constructs NewJSONLBackend directly. Harmless but dead code.", "location": "cli/internal/bead/backend_jsonl.go:90" }
+  ]
+}
+```

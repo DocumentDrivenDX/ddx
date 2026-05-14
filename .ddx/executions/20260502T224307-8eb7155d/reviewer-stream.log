@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Snippet field added to artifacts query + TS interface; +page.svelte renders an extra row per edge with **…** converted to <mark> using yellow highlight; new Playwright spec covers body-match snippet rendering and back-nav URL preservation (q=fox).",
+  "findings": [
+    { "severity": "info", "summary": "Snippet rendering uses {@html} after escapeHtml + single regex replace of **…**; XSS-safe and matches resolver contract (single match per snippet).", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte:194" },
+    { "severity": "info", "summary": "Bead mentions running houdini:generate; diff doesn't show regenerated artifacts, but ARTIFACTS_QUERY and ArtifactEdge interface are updated. Assumed regen ran (test suite reportedly passing).", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.ts:19" }
+  ]
+}
+```

@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260510T232527-37b60853",
+  "bead_id": "ddx-c739d7ec",
+  "base_rev": "14d8dacf56e5be8d38714d07c9c6f4c1418d54eb",
+  "created_at": "2026-05-10T23:25:29.940316615Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c739d7ec",
+    "title": "feat(bead): ddx bead ac-check — mechanical per-AC verification tool (additive)",
+    "description": "PROBLEM\n  Three observed cases on 2026-05-10 of fake-work: implementer\n  models write aspirational commit messages but the actual diff\n  is minimal/absent. The reviewer rubber-stamps the attempt and\n  the bead closes with AC not satisfied.\n\n  Cases:\n    - ddx-1f774edf \"remove network I/O from Land()\" — claimed\n      PreClaimGitOps interface + LandingGitOps cleanup; diff\n      was 4 files / 30 lines.\n    - ddx-94a368b6 \"conformance transition-matrix coverage\" —\n      preserved on iteration ref, never landed.\n    - ddx-d22293ba \"wire RetainDays prune\" — claimed prune loop,\n      counters, 5 tests, agent-logs/workers scope; diff was 5\n      lines setting a default value.\n\n  The reviewer ALREADY emits per_ac[].grade + per_ac[].evidence\n  (cli/internal/agent/execute_bead_review.go:204-234). The\n  defect is that the evidence string is UNVERIFIED TEXT. A\n  rubber-stamping reviewer can write \"evidence\": \"types.go:42\"\n  for an AC it never checked. Strengthening reviewer prose\n  without a mechanical forcing function would create\n  false-positive BLOCKs on legitimate work (renamed tests,\n  negative AC, mechanical refactors, etc.) and still fail to\n  catch fake-work convincingly.\n\n  This bead is the FIRST of two: it adds a mechanical\n  AC-verification tool that both implementer (pre-commit\n  self-check) and reviewer (gate ratification) invoke with the\n  SAME inputs. Sister bead changes the reviewer behavior to\n  ratify this tool's output rather than re-grep the diff\n  independently.\n\nCURRENT STATE\n  - No CLI subcommand performs per-AC verification mechanically.\n  - The reviewer prompt asks for per-AC grading but provides no\n    structured input — reviewer must grep a possibly-30k-line\n    diff to find evidence, which scales poorly and invites\n    rubber-stamping.\n  - Implementer has no way to self-check whether its work would\n    pass review before committing — pure information\n    asymmetry.\n\nPROPOSED FIX\n  Implement `ddx bead ac-check \u003cid\u003e` (or `ddx bead check \u003cid\u003e`)\n  with the following behavior:\n\n  1. Inputs: bead ID; the working tree (or a specific rev\n     range, default: merge-base..HEAD).\n\n  2. Read b.Acceptance from the bead; parse into numbered AC\n     items.\n\n  3. Per-AC inspection pipeline. Classify each AC by\n     lightweight regex/heuristic, then mechanically resolve:\n\n     a. test-name AC (matches /Test[A-Z]\\\\w+/):\n        - Run `go test -run '^\u003cname\u003e$'` on relevant packages.\n        - Record pass/fail/missing.\n\n     b. build/gate AC (matches \"passes\", \"green\", \"lefthook\",\n        \"pre-commit\"):\n        - Invoke `lefthook run pre-commit` or `go test ./...`\n          per AC text.\n        - Record exit code.\n\n     c. negative AC (matches \"no calls to\", \"does not\",\n        \"remove\", \"no longer\"):\n        - `git grep` the named symbol on POST-IMAGE.\n        - Pass if 0 hits (or fewer than baseline).\n\n     d. symbol AC (matches `` `Foo.Bar()` `` or similar\n        backtick-quoted identifier):\n        - `git grep` the symbol; require ≥1 hit AND at least\n          one diff hunk touching it.\n\n     e. mechanical AC (matches \"rename\", \"doc\", \"comment\"):\n        - File existence / rename detection via `git\n          diff --name-status`.\n\n     f. prose AC (everything else):\n        - Emit `needs-judgment=true`. NEVER auto-pass, NEVER\n          auto-fail.\n\n  4. ACAliases support. The bead body may include an optional\n     `ACAliases:` map (e.g., `AC #3: TestFooBar -\u003e TestFoo/bar`)\n     so a legitimate refactor can declare its substitutions.\n     The tool reads it; the reviewer sees it.\n\n  5. Output. Both human-readable and machine-readable:\n     - Stdout: human-readable table per AC.\n     - File: `.ddx/executions/\u003cattempt-id\u003e/ac-check.json` with\n       structured per-AC results.\n\n     Example structured output:\n       {\n         \"schema_version\": 1,\n         \"attempt_id\": \"...\",\n         \"bead_id\": \"ddx-...\",\n         \"summary\": {\"pass\": 3, \"fail\": 1, \"needs_judgment\": 1},\n         \"items\": [\n           {\"ac\": 1, \"kind\": \"test-name\", \"name\": \"TestFoo\",\n            \"result\": \"pass\", \"evidence\": \"package x; test ran 0.04s\"},\n           {\"ac\": 4, \"kind\": \"symbol\", \"name\": \"RemovedExecutionDirs\",\n            \"result\": \"fail\",\n            \"evidence\": \"grep found 0 hits; AC requires symbol present\"},\n           {\"ac\": 3, \"kind\": \"prose\",\n            \"result\": \"needs_judgment\",\n            \"evidence\": \"no mechanical anchor; defer to reviewer\"}\n         ]\n       }\n\n  6. CLI: `ddx bead ac-check \u003cid\u003e [--rev-range \u003cbase\u003e..\u003chead\u003e]\n     [--package \u003cgo-package\u003e] [--json]`. Idempotent. No\n     side effects on the bead store.\n\n  7. Tests:\n     - TestACCheck_TestNameAC_Passes\n     - TestACCheck_TestNameAC_Renamed_WithAlias\n     - TestACCheck_TestNameAC_Missing_Fails\n     - TestACCheck_NegativeAC_FlagsResidue\n     - TestACCheck_NegativeAC_AbsenceConfirmed_Passes\n     - TestACCheck_SymbolAC_PresentInDiff_Passes\n     - TestACCheck_SymbolAC_NotInDiff_Fails\n     - TestACCheck_MechanicalAC_RenameDetection\n     - TestACCheck_ProseAC_NeedsJudgment_NeverAutoFail\n     - TestACCheck_ProseAC_NeedsJudgment_NeverAutoPass\n     - TestACCheck_JSONOutput_SchemaVersion1\n     - TestACCheck_RegressionFakeRetainDays: replay the\n       917cfbfa7 fake-work diff; assert ac-check yields\n       multiple `fail` results for the missing prune logic\n       and tests.\n\nNON-SCOPE\n  - Changing the reviewer prompt or gate behavior (sister bead).\n  - Wiring ac-check into execute-bead workflow (sister bead).\n  - Strictness modes by bead label (sister bead).\n  - New verdict types like REQUEST_CLARIFICATION (sister bead).\n\nINTERSECTIONS\n  - Sister bead \"fix(review): reviewer ratifies ac-check\" —\n    that bead consumes ac-check.json as the reviewer's primary\n    input and changes the gate semantics. THIS bead is purely\n    additive and can land independently.\n  - Existing reviewer per_ac[] structure (execute_bead_review.go:204-234)\n    is preserved; this tool produces structured input for it\n    rather than replacing it.",
+    "acceptance": "1. cli/cmd/bead_ac_check.go (or sibling) implements `ddx bead ac-check \u003cid\u003e` with --rev-range, --package, --json flags.\n2. The tool classifies AC items into: test-name, build/gate, negative, symbol, mechanical, prose.\n3. The tool runs mechanical verification per AC kind: `go test -run` for test-name; git grep for symbol/negative; file detection for mechanical.\n4. Prose AC items always result in `needs-judgment` — never auto-pass, never auto-fail.\n5. ACAliases declared in the bead body (e.g., `AC #1: TestFoo -\u003e TestFoo/bar`) are honored.\n6. The tool emits `.ddx/executions/\u003cattempt-id\u003e/ac-check.json` with schema_version=1 and structured per-AC items.\n7. The tool also prints a human-readable table to stdout.\n8. TestACCheck_TestNameAC_Passes, TestACCheck_TestNameAC_Renamed_WithAlias, TestACCheck_TestNameAC_Missing_Fails, TestACCheck_NegativeAC_FlagsResidue, TestACCheck_NegativeAC_AbsenceConfirmed_Passes, TestACCheck_SymbolAC_PresentInDiff_Passes, TestACCheck_SymbolAC_NotInDiff_Fails, TestACCheck_MechanicalAC_RenameDetection, TestACCheck_ProseAC_NeedsJudgment_NeverAutoFail, TestACCheck_ProseAC_NeedsJudgment_NeverAutoPass, TestACCheck_JSONOutput_SchemaVersion1, TestACCheck_RegressionFakeRetainDays all pass.\n9. cd cli \u0026\u0026 go test ./cmd/... ./internal/bead/... green.\n10. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "area:review",
+      "kind:fix",
+      "observed-failure",
+      "prevention",
+      "spec:ADR-024"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T23:24:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T23:25:27.651349685Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T23:24:21.418205408Z",
+      "queue-rank": "0"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T232527-37b60853",
+    "prompt": ".ddx/executions/20260510T232527-37b60853/prompt.md",
+    "manifest": ".ddx/executions/20260510T232527-37b60853/manifest.json",
+    "result": ".ddx/executions/20260510T232527-37b60853/result.json",
+    "checks": ".ddx/executions/20260510T232527-37b60853/checks.json",
+    "usage": ".ddx/executions/20260510T232527-37b60853/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c739d7ec-20260510T232527-37b60853"
+  },
+  "prompt_sha": "36f7a291bf9094e788138b10dc5941a7f8ccceaf3ef3944736304431857b9fb0"
+}

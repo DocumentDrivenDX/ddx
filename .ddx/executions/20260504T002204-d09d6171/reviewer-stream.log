@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 4 ACs satisfied: Ladder.Next in cli/internal/agent/escalation/ladder.go is MinPower-only (no vendor names); 11 unit tests cover viable transitions, exhaustion, nil/empty, partial viability, and skip-tier. NoViableProviderError is typed with Floor field; RoutingActual.Power input is asserted.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "AC4 test uses a local stand-in struct for RoutingActual rather than the upstream fizeau type — acceptable per bead notes that the real RoutingActual lands via a separate bead (agent-3bb96bf5/S10_1), so the contract is asserted by field name + int type only.",
+      "location": "cli/internal/agent/escalation/ladder_test.go:178"
+    },
+    {
+      "severity": "info",
+      "summary": "Implementation introduces ErrLadderExhausted (sentinel) in addition to the AC-required NoViableProviderError; this is a natural counterpart for 'no higher tier' vs 'next tier dead' and is well-tested.",
+      "location": "cli/internal/agent/escalation/ladder.go:21"
+    }
+  ]
+}
+```

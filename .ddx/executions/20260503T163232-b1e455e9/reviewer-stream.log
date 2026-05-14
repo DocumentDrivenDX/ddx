@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence (manifest.json, result.json) — no source code changes are visible. Cannot evaluate any of the 6 acceptance criteria from this diff alone.",
+  "findings": [
+    { "severity": "block", "summary": "No source changes in diff; only execution metadata files. Implementation lives in result_rev 4c171a78 but is not part of the changed-files under review.", "location": ".ddx/executions/20260503T163232-b1e455e9/" }
+  ]
+}
+```

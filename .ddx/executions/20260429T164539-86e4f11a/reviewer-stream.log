@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "WorkerSpec.Escalate field added (default false), workers.go:651 predicate updated to opt-in, --escalate plumbed through executeLoopWithServer, unit tests assert ResolveProfileLadder call count per Escalate value, migration doc updated. Matches all six AC items.",
+  "findings": [
+    {"severity": "info", "summary": "Operator pin (Harness/Model) preserved via existing predicate conjunction", "location": "cli/internal/server/workers.go:655"},
+    {"severity": "info", "summary": "Enabled subtest polls counter then Stops worker rather than waiting for natural exit — pragmatic given network I/O in tier loop", "location": "cli/internal/server/workers_test.go:1148"}
+  ]
+}
+```

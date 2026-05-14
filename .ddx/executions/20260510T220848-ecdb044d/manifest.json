@@ -1,0 +1,85 @@
+{
+  "attempt_id": "20260510T220848-ecdb044d",
+  "bead_id": "ddx-cccb4763",
+  "base_rev": "b23151fdf5d128c4a76cd79a2aab032cbd8d41f5",
+  "created_at": "2026-05-10T22:08:51.62059979Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized",
+    "min_power": 10
+  },
+  "bead": {
+    "id": "ddx-cccb4763",
+    "title": "fix(executions): actually implement RetainDays prune loop (ddx-d22293ba shipped fake)",
+    "description": "PROBLEM\n  ddx-d22293ba was filed and closed (commit 917cfbfa7) but the\n  implementation is fake. The commit message claims:\n    - Add RetainDays int field to ExecutionCleanupManager\n    - Implement pruneEvidenceDirs deletion loop\n    - Add RemovedEvidenceDirs counter\n    - Surface counter in telemetry\n    - Add 5 named tests\n    - ApplyDefaults sets RetainDays=7\n\n  The actual diff is 5 lines in cli/internal/config/types.go\n  setting a default value in NewConfig.ApplyDefaults. None of\n  the claimed implementation exists. The reviewer approved the\n  attempt; the closure gate did not catch the discrepancy.\n\n  Sister bead at queue-rank=36 strengthens the reviewer to\n  catch this pattern going forward. THIS bead does the actual\n  work that ddx-d22293ba was supposed to do, against the\n  amended scope (90-day default, executions + agent-logs +\n  workers).\n\nROOT CAUSE\n  - cli/internal/agent/execution_cleanup.go ExecutionCleanupManager.Cleanup\n    still has no prune loop. scanCompleteEvidenceDirs (line 453)\n    only emits observations.\n  - cli/internal/config/types.go now has a default RetainDays=7\n    (set by 917cfbfa7), but the value is never read.\n  - .ddx/agent-logs/ and .ddx/workers/ retention is entirely\n    absent.\n\nPROPOSED FIX\n  Implement what ddx-d22293ba's commit message claimed, against\n  the amended (correct) scope:\n\n  1. cli/internal/agent/execution_cleanup.go: implement\n     pruneOlderThan helper. For each of:\n       a. .ddx/executions/\u003cattempt-id\u003e/\n       b. .ddx/agent-logs/agent-*.jsonl (and svc-*.jsonl)\n       c. .ddx/workers/worker-\u003cid\u003e/\n     delete if mtime is older than ExecutionsConfig.RetainDays\n     days.\n\n  2. Skip active items across all three paths:\n       a. executions: skip if attempt_id is referenced by an\n          active run-state file.\n       b. agent-logs: skip if session_id is referenced by a\n          live worker (PID check or run-state cross-ref).\n       c. workers: skip if worker PID is still alive.\n\n  3. cli/internal/config/types.go ApplyDefaults:\n       - CHANGE default RetainDays from 7 to 90 (per ADR-024\n         P2 — the user explicitly chose 90 to balance reconstruct\n         capability vs disk usage).\n       - RetainDays=0 disables pruning.\n\n  4. cli/internal/agent/execution_cleanup.go ExecutionCleanupSummary\n     gains counters: RemovedExecutionDirs, RemovedAgentLogs,\n     RemovedWorkerDirs. Each surfaced in cleanup log.\n\n  5. Use git rm -rf for tracked file deletions (preserves git\n     state); fall back to os.RemoveAll for untracked.\n\n  Tests (the SAME tests ddx-d22293ba's commit message claimed\n  but didn't write):\n     - TestExecutionCleanup_DeletesOldExecutionDirs\n     - TestExecutionCleanup_DeletesOldAgentLogs\n     - TestExecutionCleanup_DeletesOldWorkerDirs\n     - TestExecutionCleanup_PreservesActiveItems (all three paths)\n     - TestExecutionCleanup_DefaultRetainDays90\n     - TestExecutionCleanup_RetainDaysZero_DisablesRetention\n     - TestExecutionCleanup_RecordsCounts (all three counters)\n\nNON-SCOPE\n  - The mirror backend (sister bead ddx-b2c6ae22).\n  - Gitignore flip (sister bead ddx-15617e59, already done).\n  - Metrics extraction (sister bead ddx-054b2449).\n  - One-shot bulk cleanup of existing dirs (operator can do\n    this manually before this bead lands).\n\nINTERSECTIONS\n  - Supersedes the partially-shipped ddx-d22293ba. That bead\n    set the default value; this bead delivers the actual prune\n    behavior.\n  - Sister bead at rank 36 (reviewer-strengthening) will catch\n    similar fake-work patterns going forward.\n  - Sister bead ddx-054b2449 (metrics extraction) SHOULD land\n    BEFORE this bead so metrics are captured before evidence\n    is pruned.",
+    "acceptance": "1. cli/internal/agent/execution_cleanup.go has a pruneOlderThan helper that deletes items in .ddx/executions/, .ddx/agent-logs/, .ddx/workers/ that are older than ExecutionsConfig.RetainDays days.\n2. Active items are skipped across all three paths (per the rules in PROPOSED FIX item 2).\n3. cli/internal/config/types.go ApplyDefaults sets RetainDays=90 (not 7).\n4. RetainDays=0 disables pruning.\n5. ExecutionCleanupSummary contains RemovedExecutionDirs, RemovedAgentLogs, RemovedWorkerDirs counters, all surfaced in cleanup log.\n6. TestExecutionCleanup_DeletesOldExecutionDirs, TestExecutionCleanup_DeletesOldAgentLogs, TestExecutionCleanup_DeletesOldWorkerDirs, TestExecutionCleanup_PreservesActiveItems, TestExecutionCleanup_DefaultRetainDays90, TestExecutionCleanup_RetainDaysZero_DisablesRetention, TestExecutionCleanup_RecordsCounts all pass.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/config/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:fix",
+      "observed-failure",
+      "prevention",
+      "spec:ADR"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T21:47:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T21:49:00.352305915Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-10T21:58:22.917510836Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T214900-56975502\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":54,\"output_tokens\":31765,\"total_tokens\":31819,\"cost_usd\":2.631989800000001,\"duration_ms\":560009,\"exit_code\":0}",
+          "created_at": "2026-05-10T21:58:22.984142626Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=31819 cost_usd=2.6320 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\",\"requested_min_power\":8}",
+          "created_at": "2026-05-10T22:08:46.070572098Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T215824-b4a5ba1d\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":49,\"output_tokens\":30345,\"total_tokens\":30394,\"cost_usd\":2.1541060499999993,\"duration_ms\":619616,\"exit_code\":0}",
+          "created_at": "2026-05-10T22:08:46.164520221Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=30394 cost_usd=2.1541 model=sonnet"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T21:47:54.145870718Z",
+      "queue-rank": "29"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T220848-ecdb044d",
+    "prompt": ".ddx/executions/20260510T220848-ecdb044d/prompt.md",
+    "manifest": ".ddx/executions/20260510T220848-ecdb044d/manifest.json",
+    "result": ".ddx/executions/20260510T220848-ecdb044d/result.json",
+    "checks": ".ddx/executions/20260510T220848-ecdb044d/checks.json",
+    "usage": ".ddx/executions/20260510T220848-ecdb044d/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-cccb4763-20260510T220848-ecdb044d"
+  },
+  "prompt_sha": "2e19bc37e9cbf26ec4a7a5f9dc4923f630b268ecefbdef2a5e96fafce9026c80"
+}

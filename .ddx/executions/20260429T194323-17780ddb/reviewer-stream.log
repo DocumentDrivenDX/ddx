@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution evidence files (manifest.json, result.json) under .ddx/executions/. No actual MCP tool implementation is present in the changed files to evaluate against acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No source code changes for ddx_metrics_summary/cost/cycle_time/rework MCP tools in the diff — only execution metadata files are shown.", "location": ".ddx/executions/20260429T194323-17780ddb/" }
+  ]
+}
+```

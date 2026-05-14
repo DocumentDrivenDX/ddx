@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All four AC items satisfied: verbose mode enriches llm.response (content, finish_reason, full usage with cache fields) and tool.call (input, output, duration_ms, error); schema documented in session_log_format.go; lean default preserved and asserted by test; verbose fixture verifies every required field.",
+  "findings": [
+    { "severity": "info", "summary": "Verbose tool.call deferral is a behavior change beyond strictly additive (acknowledged in doc comment); consumers tolerant of extra fields are unaffected.", "location": "cli/internal/agent/claude_stream.go:281" },
+    { "severity": "info", "summary": "llm.request event is documented in the schema but not actually emitted in this diff; bead's 'new event' was a 'possibly' suggestion, so not strictly required by AC.", "location": "cli/internal/agent/session_log_format.go:32" }
+  ]
+}
+```

@@ -1,0 +1,20 @@
+---
+## Review: ddx-250b570f iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | 0 axe violations on 6 routes x 2 modes | BLOCK | `.ddx/executions/20260422T094902-ee442f0d/result.json:6` — only generic success; no axe result evidence, and local `bun run test:a11y` failed before running axe |
+| 2 | No hard-coded hex in src/ | APPROVE | `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/documents/[...path]/+page.svelte:459` — markdown colors now use CSS vars; `rg` found no hex in `src/` |
+| 3 | All screenshot baselines committed | APPROVE | `cli/internal/server/frontend/e2e/screenshots.spec.ts:45` — light/dark matrix exists; 20 tracked light/dark snapshot PNGs are present |
+
+### Summary
+
+The color-token sweep appears complete for `src/`, and the expected screenshot baselines are present. The a11y acceptance item is still blocked because the reviewed evidence does not prove 0 axe violations, and the named test command could not be verified successfully in this run.
+
+### Findings
+
+- `cli/internal/server/frontend/playwright.config.ts:4` / `package.json:18`: `bun run test:a11y` must verify 0 axe violations, but the command failed before executing axe because `vite preview` could not start. The execution bundle also omits the referenced `.ddx/executions/20260422T094902-ee442f0d/checks.json`, so there is no committed per-route/per-mode axe evidence to evaluate.

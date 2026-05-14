@@ -1,0 +1,34 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no code, tests, deadcode output, or decisions log changes needed to satisfy any acceptance criterion.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation for wiring or deleting the 15 `internal/testutils` symbols is present, so the core reachability work required by AC1 is not shown.",
+      "location": ".ddx/executions/20260507T004052-6e72a13f/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence of any `wiring:pending` annotations or follow-up bead references, so AC2 cannot be satisfied or evaluated.",
+      "location": ".ddx/executions/20260507T004052-6e72a13f/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The diff includes no deadcode RTA output demonstrating zero remaining dead symbols in `internal/testutils`, so AC3 is unverified.",
+      "location": ".ddx/executions/20260507T004052-6e72a13f/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "No test changes or test run evidence are included, so AC4 (`cd cli && go test ./...`) is not demonstrated.",
+      "location": ".ddx/executions/20260507T004052-6e72a13f/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log file `.ddx/executions/<run-id>/decisions.md` is absent from the diff, so AC5 is not implemented.",
+      "location": ".ddx/executions/20260507T004052-6e72a13f/result.json:1"
+    }
+  ]
+}
+```

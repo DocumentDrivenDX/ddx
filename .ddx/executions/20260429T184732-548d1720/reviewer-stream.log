@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result metadata; the actual sidecar schema design document (referenced as cda66189 in result_rev) is not part of the changed files. Cannot evaluate AC against execution telemetry alone.",
+  "findings": [
+    { "severity": "block", "summary": "No design content in diff — only .ddx/executions/ telemetry files. The sidecar pairing rule, conflict rule, and orphan-check semantics required by the bead description are not present in the reviewable changes.", "location": ".ddx/executions/20260429T184732-548d1720/" }
+  ]
+}
+```

@@ -1,0 +1,16 @@
+---
+## Review: ddx-1a5e8786 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | ddx sync mentioned in primary docs with brief desc | APPROVE | website/content/docs/concepts/architecture.md:250-264 — new "Multi-Machine Sync" section describes one-shot and `--watch` modes |
+| 2 | Server section references FEAT-020 and FEAT-021 | APPROVE | website/content/docs/server/_index.md:138-160 — new "Node Identity and Multi-Node Dashboard" section cites both FEAT-020 and FEAT-021 |
+| 3 | `rg "ddx sync" website/content/docs/` ≥ 2 matches | APPROVE | 4 matches across architecture.md and server/_index.md |
+
+### Summary
+
+All three acceptance criteria are cleanly satisfied. The new content is well-placed (concept page for sync, server section for node/dashboard), cross-links between the two pages, and references the governing FEAT specs as required.

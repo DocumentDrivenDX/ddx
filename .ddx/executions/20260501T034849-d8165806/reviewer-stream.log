@@ -1,0 +1,12 @@
+All AC items met: nav has the 5 required entries, old entries removed, redirect map created.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "hugo.yaml nav now contains Why DDx, Features, Reference, Ecosystem, GitHub; old Docs/Concepts/CLI Reference/Skills/Plugins entries removed; website/data/redirects.yaml redirect map added covering old paths.",
+  "findings": [
+    { "severity": "info", "summary": "Self-mapping redirects (/docs/cli/ → /docs/cli/, /docs/ecosystem/ → /docs/ecosystem/) are no-ops; could be omitted but harmless.", "location": "website/data/redirects.yaml:23" }
+  ]
+}
+```

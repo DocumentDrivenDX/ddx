@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The merged change only adds a decisions log. It does not wire or delete any of the five listed symbols in this bead, and there is no landed evidence for the required deadcode or go test verification.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "The only landed file is the decisions log, which states the symbols are already absent; the merge contains no code change in `cli/internal/server/graphql` and therefore does not implement the required WIRE/DELETE work for the five flagged symbols.",
+      "location": ".ddx/executions/20260506T183424-db372b8a/decisions.md:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The bead record remains `in_progress` after the merge, and the landed diff includes no deadcode output or `go test ./...` evidence. AC3 and AC4 are therefore not satisfied by the reviewed change.",
+      "location": ".ddx/beads.jsonl:390"
+    }
+  ]
+}
+```

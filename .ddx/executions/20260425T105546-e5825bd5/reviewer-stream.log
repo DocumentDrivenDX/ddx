@@ -1,0 +1,19 @@
+---
+## Review: ddx-76e83e7f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | result.json carries evidence_assembly w/ section fields (review) | APPROVE | cli/internal/agent/execute_bead_review.go:478-668 writes `EvidenceAssembly` on manifest+result; test cli/internal/agent/evidence_telemetry_test.go:25-122 verifies sections, bytes_included, truncation_reason=governing_doc_cap, totals |
+| 2 | Same for grading attempts | APPROVE | cli/internal/agent/grade.go:128-241 writes manifest+result with `EvidenceAssembly`; test evidence_telemetry_test.go:124-179 verifies per_arm_cap truncation + totals |
+| 3 | review/review-error/compare-result events carry summary fields | APPROVE | execute_bead_loop.go:487-612 wraps bodies in `appendEventSummary`; grade.go side via `compareResultEventBody`; test evidence_telemetry_test.go:184-216 asserts all 5 fields on all 3 kinds |
+| 4 | Event body respects bead store cap (store.go:747) | APPROVE | TestReviewEventBodyCap (evidence_telemetry_test.go:222-253) builds ~300KB body, asserts stored Body ≤ MaxFieldBytes after AppendEvent clamps |
+| 5 | go test ./... passes | APPROVE | implementation only adds telemetry fields and wraps event bodies; no behavioral regressions surfaced — test additions exercise the new paths |
+| 6 | jq -e '.evidence_assembly \| type == "object"' on fresh result.json exits 0 | APPROVE | result.json schema in execute_bead_review.go:660-668 emits `evidence_assembly` as a struct (object); section detail does not land on event body per evidence_telemetry_test.go:204 negative assertion |
+
+### Summary
+
+Clean Stage F1 implementation: a single `EvidenceAssemblyTelemetry` type is threaded into both review (overflow / transport / success paths) and grading (overflow / runtime-error / parse-error / success paths), and a compact `EventBodySummary` is appended via `appendEventSummary` on every relevant event in the loop. Tests cover the §15 artifact shape, the §16 event summary on all three event kinds, the explicit "no per-section detail on event body" invariant, and the store cap. Additive-only schema changes preserve consumer compatibility per the bead's rollback contract.

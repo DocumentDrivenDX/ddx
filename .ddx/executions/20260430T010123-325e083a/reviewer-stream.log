@@ -1,0 +1,17 @@
+---
+## Review: ddx-653f6ac9 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Zero matches for compensating routing on default path | APPROVE | cli/tools/lint/routinglint/analyzer.go:74-95 — closed-list lint over all of cli/, exemptions only via per-line annotation |
+| 2 | Resolve* / workersByHarness reachable via --escalate only | APPROVE | analyzer.go:24-37 + commit msg — helpers and --escalate were deleted with prejudice in sibling bead ddx-3bd7396a; routinglint now enforces the stricter post-cleanup invariant (no reintroduction), documented in docs/dev/routing-lint.md:14-26 |
+| 3 | Dead-code detector in CI catches orphaned helpers | APPROVE | lefthook.yml:443-453 — `routing-lint-all` runs `go run ./tools/lint/routinglint/cmd/routinglint ./...` in the ci block; analyzer_test.go pins clean+violations fixtures |
+| 4 | CI step documented in CONTRIBUTING or docs/dev/ | APPROVE | docs/dev/routing-lint.md (full doc) + CONTRIBUTING.md:165-176 (structural-lints table row) |
+
+### Summary
+
+Implementation lands a focused `routinglint` analyzer with closed-list identifier and string-literal checks, a per-line `routinglint:legacy-rejection reason="..."` exemption mechanism (with its own missing-reason diagnostic), testdata-backed `analysispass` tests, lefthook ci wiring, and clear docs. AC#2 reads as superseded by ddx-3bd7396a (helpers deleted entirely rather than gated by `--escalate`); the analyzer correctly enforces the stricter invariant and the deviation is explicitly documented.

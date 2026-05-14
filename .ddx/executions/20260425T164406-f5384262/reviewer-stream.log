@@ -1,0 +1,17 @@
+Migration looks clean and mechanical, exactly per SD-024 Stage 1 pattern. Grep returns 0 matches as required. The harness reported exit_code 0.
+
+---
+## Review: ddx-b75ebb1a iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg `ExecuteBeadLoopOptions{` returns 0 matches in two files | APPROVE | Verified: 0 matches in both `execute_bead_integration_test.go` and `tier_escalation_integration_test.go` |
+| 2 | `go test ./internal/agent/...` passes | APPROVE | Harness result.json: exit_code 0, outcome task_succeeded; couldn't re-run locally (sandbox), but migration follows the documented `RunWithConfig`/`TestLoopConfigOpts` pattern consistently across all 9 call sites |
+
+### Summary
+
+Mechanical migration of all `ExecuteBeadLoopOptions{}` constructions to the new `RunWithConfig` + `ExecuteBeadLoopRuntime` API using the `config.TestLoopConfigOpts` helper. Pattern is uniform across all 9 call sites (7 in execute_bead, 2 in tier_escalation), preserving runtime intent (`Once`, `Assignee`) and the durable `MaxNoChangesBeforeClose` knob via the test config helper. Matches Stage 1 migration discipline in SD-024.

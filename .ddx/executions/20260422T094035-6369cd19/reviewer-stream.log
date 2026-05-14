@@ -1,0 +1,19 @@
+---
+## Review: ddx-b09a606b iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No mock fallbacks; smoke test each action works | BLOCK | — implementation not present in diff |
+
+### Summary
+
+The diff only adds execution evidence under `.ddx/executions/...` and does not include resolver or test changes. There is no basis to verify that Phase 2 stubs were replaced or that manual smoke coverage works against a real DDx instance.
+
+### Findings
+
+- `.ddx/executions/20260422T094035-6369cd19/manifest.json` and `result.json` are the only files added; no changes are shown for `cli/internal/server/graphql/resolver_feat008.go`, so `queueSummary`, `pluginsList`, `pluginDetail`, `personaBind`, `paletteSearch`, `efficacyRows`, `efficacyAttempts`, or `workerDispatch` cannot be evaluated.
+- No test changes are present, including `cli/internal/server/graphql/feat008_test.go`, so the required manual smoke behavior for each action is not demonstrated in this diff.

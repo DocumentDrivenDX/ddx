@@ -1,0 +1,21 @@
+---
+## Review: ddx-b09a606b iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No mock fallbacks remain | BLOCK | cli/internal/server/graphql/resolver_feat008.go:69 — `PluginDispatch` still returns a synthetic queued result; cli/internal/server/graphql/resolver_feat008.go:78 — `ComparisonDispatch` does the same |
+| 2 | Manual smoke test each action on real DDx | REQUEST_CHANGES | cli/internal/server/graphql/feat008_test.go:206 — test invokes actions, but does not assert dispatch results or prove real plugin/comparison behavior |
+
+### Summary
+
+Most listed query resolvers were replaced with real bead/config/registry-backed implementations, and the targeted FEAT-008 GraphQL test passes. The implementation still leaves action-level mock fallbacks in place, so it does not satisfy the “No mock fallbacks remain” acceptance criterion.
+
+### Findings
+
+- BLOCK: `cli/internal/server/graphql/resolver_feat008.go`, `PluginDispatch` returns `queued-plugin-...` without invoking any real plugin install/dispatch path or validating the requested action/scope.
+- BLOCK: `cli/internal/server/graphql/resolver_feat008.go`, `ComparisonDispatch` returns `queued-comparison-...` from `time.Now()` and `len(arms)` only; no real comparison job/record is created.
+- REQUEST_CHANGES: `cli/internal/server/graphql/feat008_test.go`, `TestIntegration_FEAT008BackendOperations` smoke-calls `pluginDispatch` and `comparisonDispatch` but does not assert their returned IDs/states or verify any real DDx side effect.

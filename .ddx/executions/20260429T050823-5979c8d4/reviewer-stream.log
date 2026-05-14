@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Both navigation.spec.ts (TC-006/007 + TC-002 brand fix) and layout.e2e.ts migrated to live fixture harness via runtime nodeInfo/projects lookup filtered to ddx-e2e-* workspaces. Demo config/spec untouched. Result reports task_succeeded with exit 0.",
+  "findings": [
+    { "severity": "info", "summary": "TC-002 and layout brand assertion narrowed from getByText('DDx') to getByRole('link', {name:'DDx'}) — minor scope creep beyond stated TC-006/TC-007 targets but justified to disambiguate svelte-announcer and within the spec file.", "location": "cli/internal/server/frontend/e2e/navigation.spec.ts:51" },
+    { "severity": "info", "summary": "Fixture lookup filters /api/projects by ddx-e2e-* path/name prefix, which correctly avoids picking up developer-local persisted projects per the rollback/cleanup guidance.", "location": "cli/internal/server/frontend/e2e/navigation.spec.ts:88" }
+  ]
+}
+```

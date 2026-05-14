@@ -1,0 +1,19 @@
+---
+## Review: ddx-d7b87162 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | (no acceptance criteria provided) | BLOCK | The bead has no `<acceptance/>` items, and the diff under review contains only execution-evidence JSON files (`manifest.json`, `result.json`) — none of the actual restyling changes to `executions/+page.svelte`, `executions/[id]/+page.svelte`, or `commits/+page.svelte` are present in the reviewable diff. |
+
+### Summary
+
+The diff under review (`d99b1c03`) is solely the coordinator's evidence-drop commit; the substantive restyling lives in `result_rev` `17e60317` ("feat(ui): restyle executions and commits views with design tokens"), which is not included here. With no acceptance criteria and no code changes visible, the implementation cannot be evaluated against the bead's stated scope (token application, mono hashes in accent-lever, terminal-bg timeline/log panes, sharp badges).
+
+### Findings
+
+- The diff supplied contains zero changes to the three target files (`cli/internal/server/frontend/src/routes/executions/+page.svelte`, `executions/[id]/+page.svelte`, `commits/+page.svelte`). Re-run review against the merge that includes `17e60317` so the actual Svelte changes are visible.
+- The bead description lists concrete styling expectations (mono-code hashes in accent-lever, terminal-bg panes for timeline/log, sharp badges) but no formal `<acceptance/>` items. Add explicit AC (e.g., "hash spans use `font-mono` + accent-lever token", "log/timeline pane uses `--terminal-bg`", "badges use `rounded-none` + token colors") so future iterations have a deterministic pass/fail.

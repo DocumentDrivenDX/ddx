@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution evidence (manifest.json, result.json) for the attempt; no MCP tool implementation (ddx_worker_list/show/log) is present in the changed files. Cannot evaluate AC against actual code changes.",
+  "findings": [
+    { "severity": "block", "summary": "No source code changes for MCP worker tools in the diff — only execution metadata files were added.", "location": ".ddx/executions/20260429T191744-2c90a8f1/" }
+  ]
+}
+```

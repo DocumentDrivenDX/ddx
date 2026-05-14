@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution result record and contains none of the required spec/documentation edits, so no acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes were made to ADR-023, FEAT-010, FEAT-004, FEAT-011, or TD-031, so the required readiness terminology and normative spec updates are entirely absent.",
+      "location": ".ddx/executions/20260506T182108-9f0a2b19/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The submitted diff is insufficient to evaluate the documentation-only waiver note or `lefthook run pre-commit` outcome because it contains only execution metadata, not implementation evidence.",
+      "location": ".ddx/executions/20260506T182108-9f0a2b19/result.json:1"
+    }
+  ]
+}
+```

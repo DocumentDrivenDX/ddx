@@ -1,0 +1,24 @@
+---
+## Review: ddx-915240dd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Config no longer names provider profiles | BLOCK | — no config changes in diff |
+| 2 | Cheap-only drains land at live endpoints | BLOCK | — no routing or endpoint changes in diff |
+| 3 | 32 fake-migration children make progress | BLOCK | — no evidence of child bead execution in diff |
+
+### Summary
+
+The diff contains only a single execution evidence file (`result.json`) recording that an agent session ran for ~10 minutes at $4.80. There are no code changes, no `go.mod` bump, no config migration, and no evidence that any of the 32 child beads executed successfully. The bead's three acceptance criteria are entirely unaddressed.
+
+### Findings
+
+- **No `cli/go.mod` update**: AC requires bumping to a new agent release with endpoint-first routing. The diff contains zero Go module changes.
+- **No `.ddx/config.yaml` migration**: AC requires migrating from named profiles to endpoint blocks. No config file appears in the diff.
+- **No routing/endpoint code changes**: No changes to `cli/internal/` or any source files whatsoever — only a metadata JSON file was added.
+- **No child bead progress**: AC requires the 32 fake-migration children (ddx-68c372a6 through ddx-27e2b5ce) to begin making progress. The execution evidence is for the parent bead itself, not any children, and contains no drain results.
+- **`result.json` claims `task_succeeded`** but the diff does not support that claim — the agent session produced no substantive changes.

@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no code, test, deadcode, or decisions-log changes needed to satisfy the bead’s acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation changes are present for any of the 5 `internal/exec` symbols, so there is no evidence they were wired into production reachability or deleted.",
+      "location": ".ddx/executions/20260506T184139-e699eea1/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log at `.ddx/executions/<run-id>/decisions.md` is not included, so the WIRE/DELETE/PENDING outcome for each symbol cannot be verified.",
+      "location": ".ddx/executions/20260506T184139-e699eea1/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence in the diff that deadcode RTA reports zero remaining dead symbols in `internal/exec` or that `cd cli && go test ./...` passed.",
+      "location": ".ddx/executions/20260506T184139-e699eea1/result.json:1"
+    }
+  ]
+}
+```

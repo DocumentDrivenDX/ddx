@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All four AC items satisfied: NavShell + page title/h1 renamed to 'Agent availability'; expandable inline per-provider model list with 10-item truncation and drilldown link; per-row refresh button wired to refreshProviderModels mutation.",
+  "findings": [
+    {"severity": "info", "summary": "Stray indentation change on the sparkline <td> (cosmetic).", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte:533"}
+  ]
+}
+```

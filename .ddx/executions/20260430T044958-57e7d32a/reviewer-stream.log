@@ -1,0 +1,22 @@
+---
+## Review: ddx-e60ed726 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Apply tokens to DrainIndicator.svelte | APPROVE | DrainIndicator.svelte:154 — gray-* → border-line/bg-surface, blue → accent-lever |
+| 2 | Apply tokens to Tooltip.svelte | APPROVE | Tooltip.svelte:90 — bg-gray-950 → bg-fg-ink, rounded-md → rounded-none |
+| 3 | Apply tokens to ProjectPicker.svelte | APPROVE | ProjectPicker.svelte:64 — gray-300/600 → border-line, rounded → rounded-none |
+| 4 | Apply tokens to ConfirmDialog.svelte | APPROVE | ConfirmDialog.svelte:46,120,127,158,161,171 — blue/red → accent-lever/error, gray → fg-ink/muted, bg-surface/canvas/elevated, rounded-* → rounded-none |
+| 5 | Apply tokens to TypedConfirmDialog.svelte | APPROVE | TypedConfirmDialog.svelte:74,84,90 — gray → fg-ink/muted, blue → accent-lever, rounded-md → rounded-none |
+| 6 | Replace gray-* with border-line/surface tokens | APPROVE | All 5 files — gray-200/300/600/700/800/900 systematically replaced |
+| 7 | Replace rounded-* with rounded-none | APPROVE | rounded, rounded-md replaced in all touched components |
+| 8 | Replace blue/primary with accent-lever | APPROVE | blue-500/600/700 → accent-lever in ConfirmDialog, DrainIndicator, TypedConfirmDialog |
+| 9 | No functional changes | APPROVE | Diff is class-attribute-only; commit message confirms; logic untouched |
+
+### Summary
+
+Clean, mechanical token migration across all 5 specified shell micro-components with consistent dark-mode parity (`dark:dark-*` variants). No functional changes; only class strings and one `$derived` computed class in ConfirmDialog were touched. Token usage is consistent with the requested vocabulary (border-line, bg-surface/canvas/elevated, fg-ink/muted, accent-lever, error, rounded-none).

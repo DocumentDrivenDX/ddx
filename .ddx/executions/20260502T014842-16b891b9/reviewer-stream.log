@@ -1,0 +1,18 @@
+---
+## Review: ddx-5089b1ec iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Zero-config default starts at cheap tier | APPROVE | cli/internal/agent/zero_config_escalation_integration_test.go:32-36 — asserts `InferTier` returns `TierCheap` and maps to `"cheap"` profile |
+| 2 | Transient failure on cheap retries within tier | APPROVE | zero_config_escalation_integration_test.go:43-58 — 502 classified as infra failure; tier unchanged after transient |
+| 3 | Substantive failure escalates cheap → standard | APPROVE | zero_config_escalation_integration_test.go:62-74 — `nextTier` after substantive yields `TierStandard` |
+| 4 | Substantive failure escalates standard → smart | APPROVE | zero_config_escalation_integration_test.go:76-82 — second escalation yields `TierSmart` |
+| 5 | Escalation summary records full ladder | APPROVE | zero_config_escalation_integration_test.go:84-105, 113-141 — `BuildEscalationSummary` + `AppendEscalationSummaryEvent` event with winning_tier=smart, all three tiers in body |
+
+### Summary
+
+The test file `cli/internal/agent/zero_config_escalation_integration_test.go` adds two integration tests that drive the real escalation primitives end-to-end through the cheap → standard → smart ladder, covering both the transient-defer and substantive-escalate branches called for in the bead description. Cost accounting, summary event emission, and the zero-config starting tier are all asserted.

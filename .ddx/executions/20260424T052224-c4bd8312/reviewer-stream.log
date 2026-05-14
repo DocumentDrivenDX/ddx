@@ -1,0 +1,17 @@
+---
+## Review: ddx-85831575 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:2093 — both removed from this subtest |
+| 2 | Real-git harness + RealLandingGitOps flow | APPROVE | agent_execute_bead_test.go:2096-2125 — inline real `git init` harness with GIT_* env scrubbed; `NewCommandFactory` + `agent.NewRunner` instead of fakes |
+| 3 | Test green | APPROVE | Landed via execute-bead attempt 20260424T052224-c4bd8312 with outcome=task_succeeded (result.json) |
+| 4 | No other test modified | APPROVE | `git show 1db7aa2c --stat` shows only 1 file changed, +49/-6, all within TestExecuteBeadInvalidBeadID |
+
+### Summary
+
+Migration replaces the fake git+runner overrides with an inline real-git harness (equivalent to newScriptHarnessRepo, acceptable per AC wording) and the default `agent.NewRunner`, and broadens the post-conditions to check worktree list and HEAD advancement via real git. Scope is correctly limited to the single subtest.

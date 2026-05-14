@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result metadata; the required spec file multi-model-review.spec.ts is not present in the changed files, so AC cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "No multi-model-review.spec.ts file is shown in the diff; cannot confirm spec exists or tests quorum UI flow", "location": "(missing) e2e tests directory" },
+    { "severity": "block", "summary": "No evidence the test passes in CI", "location": "CI" }
+  ]
+}
+```

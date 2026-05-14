@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "grade.go's single r.Run(RunOptions{}) call switched to r.runInternal(RunArgs{}) as specified. No RunOptions/CompareOptions/QuorumOptions references remain in the file. Change is exactly the ~1 LoC dispatch-seam swap described in the bead.",
+  "findings": [
+    { "severity": "info", "summary": "CompareOptions and QuorumOptions were not present in grade.go before this change; their AC removal is vacuously satisfied.", "location": "cli/internal/agent/grade.go" },
+    { "severity": "info", "summary": "Diff shown in review only includes result.json; the actual code change is in commit 79686945 (cli/internal/agent/grade.go:169).", "location": "cli/internal/agent/grade.go:169" }
+  ]
+}
+```

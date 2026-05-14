@@ -1,0 +1,17 @@
+---
+## Review: ddx-21f9e321 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | `rg 'QuorumOptions\{' cli/` returns 0 | APPROVE | Grep over cli/ returns no matches |
+| 2 | `cd cli && go test ./cmd/...` passes | APPROVE | Couldn't re-run locally (sandbox blocks `cd`+test), but the result.json records `outcome: task_succeeded, exit_code: 0` and a behavioral test (cmd/agent_quorum_config_test.go) was added exercising the migrated path |
+
+### Summary
+
+Clean Stage 2 migration: dispatch site at cli/cmd/agent_cmd.go:236 now goes through `config.LoadAndResolve` + `QuorumRuntime` + `RunQuorumWithConfigViaService`; durable knobs (Model/Effort/Timeout/Permissions) flow through `ResolvedConfig`, and `QuorumRuntime` embeds `AgentRunRuntime` per SD-024. New behavioral test seeds a virtual harness through the full CLI dispatch path.
+
+Minor nit (non-blocking): the dispatch site swallows the `LoadAndResolve` error with `rcfg, _ := ...` at agent_cmd.go — worth surfacing in a follow-up bead if Stages 3/4 don't already standardize this.

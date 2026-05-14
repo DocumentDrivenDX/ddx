@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only this attempt's own execution evidence (manifest.json, result.json). No code changes implement prompt_sha in manifest output, and no size-report fixture exists. The shown manifest.json itself lacks a prompt_sha field, contradicting AC7.",
+  "findings": [
+    { "severity": "block", "summary": "manifest.json in the diff has no prompt_sha field; AC7 requires every attempt's manifest to include it", "location": ".ddx/executions/20260502T115700-ab7bd6bd/manifest.json" },
+    { "severity": "block", "summary": "No source changes to manifest writer (e.g., cli/internal/agent/...) shown — prompt_sha is not actually being computed or emitted", "location": "cli/internal/agent" },
+    { "severity": "block", "summary": "No render-size test fixture / CI artifact wiring present in the diff", "location": "cli/" }
+  ]
+}
+```

@@ -1,0 +1,17 @@
+---
+## Review: ddx-4dab2bfd iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | concepts/software-factory.md exists | APPROVE | website/content/docs/concepts/software-factory.md:1 — file created |
+| 2 | Contains required sections | APPROVE | software-factory.md:10 (Definition), :30 (Lineage), :35 (inherits), :84 (adds), :109 (avoids) |
+| 3 | Cross-links to relevant REF artifacts | APPROVE | software-factory.md:39 (REF-007), :62 (REF-005), :65 (REF-006), and "Read next" :134-136 |
+| 4 | hugo builds successfully | APPROVE | Standard Hextra-style frontmatter + Markdown only; no shortcodes that could break build (could not invoke hugo locally to fully verify) |
+
+### Summary
+
+Page is well-structured, hits every required section, and cites all three REF documents inline plus in a "Read next" footer. Content stays consistent with the platform/workflow split documented elsewhere in CLAUDE.md and adds useful cross-links to bounded-context-execution and spec-first-development principles. Only caveat: hugo build was not executed in this review environment, but the file uses plain Markdown with standard frontmatter and should build cleanly.

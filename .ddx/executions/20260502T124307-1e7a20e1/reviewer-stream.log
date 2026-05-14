@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 6 AC satisfied: path-based .ddx/plugins/* skip added with unit tests, audit-before/after captured (duplicate_id eliminated, missing-dep gone, only pre-existing cycles remain), FEAT-005 prose amended to content-based-with-exclusion-list wording.",
+  "findings": [
+    { "severity": "info", "summary": "Two cycle issues (ADR-007↔FEAT-026; FEAT-002 chain) remain in audit-after but are pre-existing and out of scope for this bead.", "location": ".ddx/executions/20260502T124307-1e7a20e1/audit-after.txt" }
+  ]
+}
+```

@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution evidence files (manifest.json, result.json) for the epic bead. None of the 35 child stage beads, runtimelint analyzer, ResolvedConfig type, LoadAndResolve, or *Runtime migrations are present in this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes in cli/internal/agent/ or cli/internal/config/ — *Options families still exist; ResolvedConfig/LoadAndResolve not introduced", "location": "cli/internal/agent/" },
+    { "severity": "block", "summary": "runtimelint analyzer not present; no Lefthook/CI integration in diff", "location": "cli/" },
+    { "severity": "info", "summary": "Diff consists solely of execution evidence artifacts; epic acceptance requires all 35 child beads closed and substantial code migration", "location": ".ddx/executions/20260428T223313-c643cc45/" }
+  ]
+}
+```

@@ -1,0 +1,22 @@
+---
+## Review: ddx-43f6a6bc iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Identity broadens to non-markdown via sidecar .ddx.yaml | BLOCK | — diff contains no FEAT-005 edits |
+| 2 | Add media_type and generated_by fields | BLOCK | — diff contains no FEAT-005 edits |
+| 3 | Authority rule: identity present → artifact | BLOCK | — diff contains no FEAT-005 edits |
+| 4 | Terminology cleanup ('identity' not 'ddx: identity') | BLOCK | — diff contains no FEAT-005 edits |
+
+### Summary
+
+The diff under review (commit `7644847b`) only contains execution-evidence artifacts under `.ddx/executions/20260430T003507-fa58ca6f/` (manifest.json, result.json). None of the actual FEAT-005 spec changes called for by the bead description are present in this diff, so the acceptance items cannot be verified. The result.json points at a separate `result_rev` (`0237f4c2`) where the substantive doc edits presumably live, but those changes are out of scope for this review payload.
+
+### Findings
+
+- The reviewable diff does not include `docs/helix/01-frame/features/FEAT-005-*.md` (or wherever FEAT-005 lives). Re-run the review with the cumulative bead diff (base_rev `0a49f3d6` → result_rev `0237f4c2`) so the FEAT-005 content edits — sidecar `.ddx.yaml` identity, `media_type`/`generated_by` fields, authority rule, and terminology cleanup — can actually be graded.
+- No AC list was supplied on the bead itself; recommend the next pass either populate `acceptance` on the bead or have the review harness pass the full bead-scoped diff so reviewers see the artifact under change.

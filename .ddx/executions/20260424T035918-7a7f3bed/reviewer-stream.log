@@ -1,0 +1,17 @@
+---
+## Review: ddx-d2ed7112 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:640-731 — both removed; real git + agent.NewRunner used |
+| 2 | Uses real-git harness + script harness | APPROVE | cli/cmd/agent_execute_bead_test.go:660-685 (real git init/commits), :697-700 (script harness w/ directives), :701-710 (real agent.NewRunner) |
+| 3 | Target test passes (`go test -run ^TestExecuteBeadHiddenRefUniqueness$`) | APPROVE | execute-bead result.json records outcome=task_succeeded; test asserts preserve path outcomes + hidden-ref uniqueness via real rev-parse |
+| 4 | No other test in file modified | APPROVE | diff stats: 81+/16- confined to TestExecuteBeadHiddenRefUniqueness (lines 637–731); only ancillary change is removing unused `time` import |
+
+### Summary
+
+Clean migration: the test now builds a real git repo, forces a real merge conflict via a sibling commit, drives the script harness through a directive file to produce a real worker commit, and asserts both preserve refs exist in the repo and resolve to the recorded ResultRev. The assertion surface is preserved and strengthened (regex against real ref format + rev-parse equality).

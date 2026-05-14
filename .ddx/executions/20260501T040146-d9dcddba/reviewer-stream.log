@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no code or test changes are present to evaluate against any acceptance criterion.",
+  "findings": [
+    { "severity": "block", "summary": "No source/test changes in diff — cannot verify removal/gating of live harness tests, stub replacements, or that go test ./... avoids real harness binaries.", "location": ".ddx/executions/20260501T040146-d9dcddba/result.json" }
+  ]
+}
+```

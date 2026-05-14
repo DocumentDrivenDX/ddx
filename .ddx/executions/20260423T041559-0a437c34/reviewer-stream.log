@@ -1,0 +1,21 @@
+---
+## Review: ddx-6ff597ca iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Typed issue slice and required kinds | APPROVE | cli/internal/docgraph/docgraph.go:31 — required issue kinds; cli/internal/docgraph/docgraph.go:46 — `GraphIssue` fields |
+| 2 | GraphQL exposes issues, keeps warnings | APPROVE | cli/internal/server/graphql/schema.graphql:323 — deprecated warnings comment; cli/internal/server/graphql/schema.graphql:326 — `issues` field |
+| 3 | Docgraph unit tests cover issue kinds | APPROVE | cli/internal/docgraph/docgraph_test.go:640 — issue-kind tests start and cover all required kinds through line 781 |
+| 4 | Graph renders grouped Integrity panel | APPROVE | cli/internal/server/frontend/src/lib/components/IntegrityPanel.svelte:30 — grouping; line 149 — path/id/message row rendering |
+| 5 | Clean graph hides panel and badge | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte:21 — badge gated; line 36 — panel gated |
+| 6 | Duplicate repair affordance and stable ID | APPROVE | cli/internal/docgraph/docgraph.go:54 — deterministic suggestion; cli/internal/server/frontend/src/lib/components/IntegrityPanel.svelte:195 — copy button |
+| 7 | CLI audit grouped output and exit codes | APPROVE | cli/cmd/doc.go:67 — `doc audit`; line 98 — grouping; line 120 — exit 1 on issues |
+| 8 | Playwright fixture e2e coverage | APPROVE | cli/internal/server/frontend/e2e/graph.spec.ts:348 — fixture-backed issue test; line 390 — clean fixture test |
+
+### Summary
+
+The implementation satisfies the acceptance criteria across docgraph typing, GraphQL, UI, repair affordances, CLI parity, and tests. I also verified the targeted Go tests with `GOCACHE=/tmp/ddx-go-build-cache`; they pass.

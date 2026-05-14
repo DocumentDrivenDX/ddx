@@ -1,0 +1,3 @@
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"attempt.go exposes Attempt(ctx,store,beadID,opts) wrapping ExecuteBeadWithConfig+LandBeadResult+optional Reviewer; returns Outcome via ToOutcome; TestAttempt_WrapsLegacyExecutor present with executor stub; result.json shows tests passed; no production callers introduced.","findings":[{"severity":"info","summary":"store parameter intentionally unused at C2 (reserved for C3+); flagged with _ = store and documented.","location":"cli/internal/agent/try/attempt.go:66"}]}
+```

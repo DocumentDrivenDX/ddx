@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution manifest/result metadata; no skill files at skills/ddx/adversarial-review/ are present in the changed-files, so the bead's deliverable cannot be evaluated.",
+  "findings": [
+    { "severity": "block", "summary": "No skill content in diff — expected new files under skills/ddx/adversarial-review/ (e.g., SKILL.md). Only execution evidence JSON is shown.", "location": "skills/ddx/adversarial-review/" }
+  ]
+}
+```

@@ -1,0 +1,13 @@
+All 11 sections plus 5 hygiene-bead contracts present, status enum unchanged at canonical 6, naming matrix covers all observed names, future-change rule explicit, worker-state section present, depends_on set correctly.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "TD-031 contains all 11 required sections plus 5 per-hygiene-bead contract subsections; depends_on=[FEAT-004,SD-004,ADR-004]; persisted status locked to bd/br canonical 6; naming-role matrix covers all observed names; future-change rule and worker-state enumeration present.",
+  "findings": [
+    {"severity": "info", "summary": "Diff visible to reviewer only shows execution evidence; the TD doc itself was committed in f424244a (449 lines) which is the result_rev recorded in manifest.json — verified by inspecting that commit.", "location": ".ddx/executions/20260502T190445-bbf9f442/result.json"},
+    {"severity": "info", "summary": "AC item 7 (ddx doc audit clean) was not independently re-run during this review; relying on the recorded task_succeeded outcome.", "location": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md"}
+  ]
+}
+```

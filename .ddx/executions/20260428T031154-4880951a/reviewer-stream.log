@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only adds execution evidence (manifest.json, result.json). No TestRuntimelintCleanTree was added to cli/tools/lint/runtimelint/integration_test.go as the AC explicitly requires, and there is no evidence the test passes.",
+  "findings": [
+    { "severity": "block", "summary": "AC requires adding TestRuntimelintCleanTree in cli/tools/lint/runtimelint/integration_test.go; no such test file appears in the diff.", "location": "cli/tools/lint/runtimelint/integration_test.go" },
+    { "severity": "block", "summary": "Diff contains only execution evidence files; no source/test changes demonstrating runtimelint exits 0 against the tree.", "location": ".ddx/executions/20260428T031154-4880951a/" }
+  ]
+}
+```

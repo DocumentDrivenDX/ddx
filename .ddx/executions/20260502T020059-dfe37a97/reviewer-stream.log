@@ -1,0 +1,19 @@
+All AC items satisfied.
+
+---
+## Review: ddx-31158251 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | run-architecture.md exists, 3 layers, FEAT-010 ref | APPROVE | website/content/docs/concepts/run-architecture.md:8 (FEAT-010 ref); lines 13-15 list three layers |
+| 2 | architecture.md uses run/try/work; primaries retired | APPROVE | concepts/architecture.md updated (54 lines changed); sibling concept pages updated |
+| 3 | Homepage references three-layer model | APPROVE | website/layouts/index.html:199-200 — "three concentric layers" with run/try/work |
+| 4 | rg returns no matches in primary copy | APPROVE | rg over the specified paths returned zero matches |
+
+### Summary
+
+The implementation lands cleanly: a new `run-architecture.md` introduces the three-layer model with explicit FEAT-010 reference, sibling concept pages and the homepage layout adopt the new naming, and the acceptance grep over primary copy is clean. CLI reference pages remain untouched as intended.

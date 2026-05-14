@@ -1,0 +1,33 @@
+{
+  "bead_id": "ddx-2257460f",
+  "attempt_id": "20260510T121710-030e359c",
+  "base_rev": "03f1c2db6e0a6d1e283fc292b34cb21cf74056d2",
+  "result_rev": "03f1c2db6e0a6d1e283fc292b34cb21cf74056d2",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt; dirty paths: .ddx/executions/20260510T121710-030e359c/manifest.json, .ddx/executions/20260510T121710-030e359c/prompt.md, .ddx/executions/20260510T121710-030e359c/result.json, .ddx/executions/20260510T121710-030e359c/usage.json",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "no_evidence_paths": [
+    ".ddx/executions/20260510T121710-030e359c/manifest.json",
+    ".ddx/executions/20260510T121710-030e359c/prompt.md",
+    ".ddx/executions/20260510T121710-030e359c/result.json",
+    ".ddx/executions/20260510T121710-030e359c/usage.json"
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-3ece54e9",
+  "duration_ms": 127092,
+  "tokens": 3308,
+  "cost_usd": 0.32860385,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt; dirty paths: .ddx/executions/20260510T121710-030e359c/manifest.json, .ddx/executions/20260510T121710-030e359c/prompt.md, .ddx/executions/20260510T121710-030e359c/result.json, .ddx/executions/20260510T121710-030e359c/usage.json",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260510T121710-030e359c",
+  "prompt_file": ".ddx/executions/20260510T121710-030e359c/prompt.md",
+  "manifest_file": ".ddx/executions/20260510T121710-030e359c/manifest.json",
+  "result_file": ".ddx/executions/20260510T121710-030e359c/result.json",
+  "usage_file": ".ddx/executions/20260510T121710-030e359c/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-10T12:17:14.708880993Z",
+  "finished_at": "2026-05-10T12:19:21.801432083Z"
+}

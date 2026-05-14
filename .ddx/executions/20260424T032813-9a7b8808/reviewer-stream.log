@@ -1,0 +1,27 @@
+---
+## Review: ddx-a730058a iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | run-state.json written at start with required fields | BLOCK | diff contains no source changes — only evidence bundle |
+| 2 | run-state.json removed on normal completion | BLOCK | no source changes in diff |
+| 3 | run-state.json removed on error/crash path | BLOCK | no source changes in diff |
+| 4 | execute-loop writes/clears run-state correctly | BLOCK | no source changes in diff |
+| 5 | Unit test: write/read/cleanup cycle | BLOCK | no test files in diff |
+| 6 | Integration test: orphan-recovery cleans stale state | BLOCK | no test files in diff |
+
+### Summary
+
+The diff under review (fca9ba16) is the post-execution evidence chore commit — it adds only `.ddx/executions/20260424T032813-9a7b8808/manifest.json` and `result.json`. The actual implementation commit (588f1ae3 "feat(agent): write live run-state.json during execute-bead") is not included in the diff, so none of the acceptance criteria can be verified against source code.
+
+### Findings
+
+- Diff scope is wrong: only the evidence bundle (two JSON files under `.ddx/executions/`) is shown. To evaluate ACs 1–6, the review needs the implementation commit 588f1ae3, which presumably touches `cli/cmd/agent_execute_bead.go` / `agent_execute_loop.go` and associated `*_test.go` files.
+- No `.ddx/run-state.json` writer/remover code visible.
+- No unit test for write/read/cleanup cycle visible.
+- No integration test for orphan recovery of stale run-state visible.
+- Re-run the review with the diff range `a7427cae..fca9ba16` (or at minimum include 588f1ae3) so the source changes are present.

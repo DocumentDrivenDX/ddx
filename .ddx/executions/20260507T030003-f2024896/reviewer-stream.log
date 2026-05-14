@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata artifacts and does not modify the governing spec documents required by the bead, so none of the acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes were made to FEAT-010, SD-025, or reliability-principles; the diff contains only attempt metadata files, so AC1-AC4 are not implemented.",
+      "location": ".ddx/executions/20260507T030003-f2024896/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence in the diff that `lefthook run pre-commit` was run or passed, so AC5 is not satisfied.",
+      "location": ".ddx/executions/20260507T030003-f2024896/result.json:1"
+    }
+  ]
+}
+```

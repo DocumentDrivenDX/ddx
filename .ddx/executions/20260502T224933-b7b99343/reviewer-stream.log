@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json). No GraphQL mutation, resolver, validation, audit, or tests are present in the changed files. Cannot evaluate any AC item against the provided diff.",
+  "findings": [
+    { "severity": "block", "summary": "No implementation files in diff — operatorPromptSubmit mutation, CSRF/Origin checks, idempotency dedupe, audit fields, and integration tests are not visible in the changed-files list.", "location": ".ddx/executions/20260502T224933-b7b99343/" }
+  ]
+}
+```

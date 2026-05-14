@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json; no FEAT-005/TD-005 amendments and no library/artifacts/met/ bundle are present. None of the four AC items can be verified from the changed files.",
+  "findings": [
+    {"severity": "block", "summary": "AC1 not met: no FEAT-005 changes adding the metric: frontmatter block schema in the diff.", "location": "docs/helix/"},
+    {"severity": "block", "summary": "AC2 not met: no TD-005 changes referencing exec-runs collection in the diff.", "location": "docs/helix/"},
+    {"severity": "block", "summary": "AC3 not met: library/artifacts/met/{template,prompt,examples} bundle absent from changed files.", "location": "library/artifacts/met/"},
+    {"severity": "block", "summary": "AC4 not verifiable: no evidence ddx doc audit was run/clean.", "location": "n/a"}
+  ]
+}
+```

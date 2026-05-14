@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff for this bead contains only result.json (execution metadata) and the bead-range commits add only test files (artifacts_test.go) + evidence — no resolver, schema, or frontend changes required by the AC. mediaType wildcard, ArtifactSort enum, staleness arg, server-side search wiring, and cursor-reset are not implemented in this bead's diff (appear to live under separate bead ddx-0ac5f35d, commit 13896420).",
+  "findings": [
+    { "severity": "block", "summary": "AC requires resolver change to translate 'image/*' to HasPrefix; no change to resolver_artifacts.go in bead diff", "location": "cli/internal/server/graphql/resolver_artifacts.go" },
+    { "severity": "block", "summary": "AC requires adding ArtifactSort enum and staleness arg to schema; schema.graphql is unchanged in this bead", "location": "cli/internal/server/graphql/schema.graphql" },
+    { "severity": "block", "summary": "AC requires frontend to pass URL 'q' as GraphQL search arg and reset 'after' cursor; no frontend files changed in bead range", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/" },
+    { "severity": "info", "summary": "Bead range (2675f38b..16aaf8b2) contains a single commit that only adds artifacts_test.go and ac_evidence.md — implementation appears already merged via ddx-0ac5f35d (commit 13896420)", "location": "cli/internal/server/graphql/artifacts_test.go" },
+    { "severity": "info", "summary": "Provided <changed-files> lists only .ddx/executions/.../result.json, so the diff is insufficient to verify any AC item", "location": ".ddx/executions/20260502T133823-f8df7c6d/result.json" }
+  ]
+}
+```

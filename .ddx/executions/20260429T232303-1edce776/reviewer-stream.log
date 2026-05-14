@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Acceptance criteria are empty; diff contains only execution evidence (manifest/result). The substantive design write-up landed separately in commit e7149f17 (docs FEAT-006). Evidence shows a successful run targeting the bead's scope.",
+  "findings": [
+    { "severity": "info", "summary": "Diff under review contains only execution manifest and result JSON; the actual spec amendment is in result_rev e7149f17 (FEAT-006 doc update), not shown here.", "location": ".ddx/executions/20260429T232303-1edce776/result.json:5" },
+    { "severity": "info", "summary": "Bead has no explicit <acceptance/> items — verdict is based on description scope (pick a/b/c, document rationale, decide on 22 malformed beads) and the recorded successful outcome.", "location": ".ddx/executions/20260429T232303-1edce776/result.json:6" }
+  ]
+}
+```

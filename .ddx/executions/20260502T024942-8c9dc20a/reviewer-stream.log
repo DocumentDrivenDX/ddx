@@ -1,0 +1,17 @@
+---
+## Review: ddx-619643fe iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | quorum review badged 'framing' on features page | APPROVE | website/content/features/_index.md:73 — `## Multi-Model Review … {{< maturity "framing" >}}` |
+| 2 | plugin API badged 'not-started' on plugins page | APPROVE | website/content/docs/plugins.md:6 — `# Plugins {{< maturity "not-started" >}}` |
+| 3 | Server UI screenshots inventoried; placeholders labelled 'planned UI' | APPROVE | .ddx/executions/20260502T024942-8c9dc20a/site-image-inventory.md + 7 image captions updated to "planned UI" in features/_index.md |
+| 4 | `find website/static …` run as evidence | APPROVE | .ddx/executions/20260502T024942-8c9dc20a/site-image-inventory.txt — 15 entries from the find command |
+
+### Summary
+
+All four acceptance items are satisfied. The maturity shortcode was extended to support the new `framing` and `not-started` statuses with matching light/dark CSS, the two badges were applied to the correct pages, and the screenshot inventory is documented with both raw `find` output and a markdown summary. Image alt-text was consistently updated from "placeholder" to "planned UI" across all seven feature sections.

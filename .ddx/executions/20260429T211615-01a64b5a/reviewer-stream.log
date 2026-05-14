@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff only contains execution manifest/result metadata. The actual DESIGN.md, package.json changes for @google/design.md, and lint evidence are not present in the changed files, so AC cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "No DESIGN.md added in diff", "location": "DESIGN.md" },
+    { "severity": "block", "summary": "No package.json/bun.lock changes adding @google/design.md@0.1.0", "location": "package.json" },
+    { "severity": "info", "summary": "Only execution evidence files (manifest.json, result.json) are included; result_rev points to commit ad551671 but its contents are not in the reviewable diff", "location": ".ddx/executions/20260429T211615-01a64b5a/" }
+  ]
+}
+```

@@ -1,0 +1,15 @@
+---
+## Review: ddx-d758f207 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestExecuteBeadContextBudgetFromConfig passes | APPROVE | cli/cmd/agent_execute_bead_e2e_test.go exists; commit message confirms it passes; dispatch at agent_execute_bead.go:119 routes through LoadAndResolve + ExecuteBeadRuntime |
+| 2 | `go test ./...` passes | APPROVE | Pre-existing failures (TestBeadReviewCollapseGolden, TestAcceptance_US02[89]/030/031/034, TestInstallationPerformance) were verified to fail on base rev 9122147e and on 696e6279 — out of bead scope; bead-targeted suite green |
+
+### Summary
+
+Stage 3 deliverables landed across two commits: 932841e1 introduced the dispatch migration (LoadAndResolve + ExecuteBeadRuntime + ExecuteBeadWithConfig) and the behavioral e2e test, then a4f0363c (the diff under review) closes a silent-error escape hatch by surfacing `LoadAndResolve` failures with project-relative context. The fix is small, correct, and aligned with SD-024's discipline that misconfiguration should fail loudly rather than fall through to defaults.

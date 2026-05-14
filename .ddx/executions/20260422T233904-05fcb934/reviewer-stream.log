@@ -1,0 +1,29 @@
+---
+## Review: ddx-ad0db8fd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Benchmark/harness with p50/p95 fixture latency | BLOCK | — not found in diff |
+| 2 | Baseline recorded in bead notes | BLOCK | — not found in diff |
+| 3 | Fixed p95 within target budget | BLOCK | — not found in diff |
+| 4 | Write-then-read stale-read regression test | BLOCK | — not found in diff |
+| 5 | Concurrent queries and updates integration test | BLOCK | — not found in diff |
+| 6 | Playwright e2e sidepane opens within 1s | BLOCK | — not found in diff |
+
+### Summary
+
+The diff only adds execution evidence files under `.ddx/executions/...`; it does not include resolver changes, benchmarks, tests, baseline notes, or Playwright coverage. None of the acceptance criteria can be verified from this implementation diff.
+
+### Findings
+
+- Missing implementation change in `cli/internal/server/graphql/resolver.go`: `Bead(id:)` is not shown using a scoped lookup, cache, or index instead of scanning all bead snapshots.
+- Missing benchmark or scripted GraphQL latency harness for a fixture repo with at least 5 projects and 500 beads.
+- Missing bead-note update recording the baseline p50/p95 measured on the current `main` binary.
+- Missing post-fix performance evidence showing p95 within the required in-process or HTTP budget.
+- Missing write-then-read regression test covering `ddx bead update` followed by GraphQL `bead(id:)`.
+- Missing concurrent integration test interleaving `bead(id:)` queries with bead updates.
+- Missing Playwright e2e test for opening `/nodes/.../beads`, clicking a bead row, and rendering the sidepane title within 1s.

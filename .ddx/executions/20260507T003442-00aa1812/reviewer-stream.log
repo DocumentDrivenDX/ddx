@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file. It provides no code, decisions log, or verification artifacts needed to show any of the 8 symbols were wired/deleted or that deadcode and go test passed.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1-AC4 are not verifiable: the patch contains no changes under internal/config or any other production code, so there is no evidence that any listed symbol was wired into the call graph, deleted, or validated by deadcode/go test.",
+      "location": ".ddx/executions/20260507T003442-00aa1812/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 is not implemented in the provided diff: the required decisions log at .ddx/executions/<run-id>/decisions.md is not included, so there is no per-symbol WIRE|DELETE|PENDING record.",
+      "location": ".ddx/executions/20260507T003442-00aa1812/result.json:1"
+    }
+  ]
+}
+```

@@ -1,0 +1,3 @@
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"README addition documents the fixture-backed e2e harness: run command (bun run test:e2e), binary/go build prerequisite, fixture location and layout, extension guidance, and demarcation from the demo config. Both acceptance grep patterns match.","findings":[{"severity":"info","summary":"Scope respected — only frontend README touched; playwright config and demo files untouched.","location":"cli/internal/server/frontend/README.md"}]}
+```

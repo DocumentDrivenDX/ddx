@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json metadata file. No code changes implementing lock-contention retry, execution_failed escalation, or no_changes follow-up logic. No tests. AC1-4 cannot be evaluated as implemented.",
+  "findings": [
+    { "severity": "block", "summary": "No source code changes in diff — only a result.json artifact was added. Triage logic for lock_contention, execution_failed, and no_changes is not visible in this changeset.", "location": ".ddx/executions/20260502T132857-7e5c2228/result.json" },
+    { "severity": "block", "summary": "AC4 requires tests for lock-error retry success, backoff exhaustion, execution_failed escalation, and no_changes follow-up — none present in diff.", "location": "(missing)" }
+  ]
+}
+```

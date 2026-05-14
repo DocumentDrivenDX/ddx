@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Library check shipped with README, check.yaml template, Go implementation, and self-tests covering all required cases (unwired blocks, wired passes, pending-annotation against open/closed/missing beads, _test.go exclusion). Project opts in via .ddx/checks/production-reachability.yaml; per-attempt evidence written.",
+  "findings": [
+    {"severity": "info", "summary": "Evidence reports 'no non-test Go files changed' — the changed Go sources live in library/checks/... while the configured module-dir is cli/, so the check correctly degenerated to pass for this attempt; the dogfood signal will appear on cli/-touching beads.", "location": ".ddx/executions/20260503T123048-397071dc/production-reachability.json"},
+    {"severity": "info", "summary": "wiring:pending parser uses Fields(rest+\" \")[0] which works but is idiomatically odd; harmless.", "location": "library/checks/go-production-reachability/main.go:265"}
+  ]
+}
+```

@@ -1,0 +1,15 @@
+verification_command: cd cli && go test ./internal/bead/... -count=1
+
+All 7 acceptance criteria are already satisfied in the current HEAD (60bee3ffb):
+
+1. backend_axon.go — cli/internal/bead/axon_backend.go (18 KB, tracked in git)
+2. genqlient client — cli/internal/bead/axon/ with generated.go, schema.graphql, subscription.go, queries/
+3. Selectable via config — store.go:127 routes BackendAxon="axon" via .ddx/config.yaml beads.backend
+4. Default unchanged — store.go:94 defaults to BackendJSONL
+5. Tests pass against both backends — backend_conformance_test.go parametrizes jsonl and axon
+6. chaos_test.go — chaosBackends() runs both "jsonl" and "axon" paths
+7. WebSocket subscriptions — axon/subscription.go + axon/subscription_smoke_test.go
+
+All child beads (ddx-8bf23be0, ddx-9c5bca8f, ddx-29f02cf4, ddx-958b8fc3, ddx-8dd19492) are
+closed with reconciled:no-changes-state. The implementation was merged in a prior execution cycle.
+This attempt found no work remaining.

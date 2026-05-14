@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "hello.md was created at .ddx/executions/20260502T044406-19ebbeb6/hello.md with the go version line and committed in 2212ed7c, satisfying the in-repo evidence path requirement.",
+  "findings": [
+    { "severity": "info", "summary": "hello.md content: 'go version go1.26.2 linux/arm64'", "location": ".ddx/executions/20260502T044406-19ebbeb6/hello.md:1" }
+  ]
+}
+```

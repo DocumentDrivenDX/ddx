@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata (manifest.json, result.json). No cast file at website/static/demos/08-helix-quickstart.cast, no homepage player update in website/layouts/index.html, and 07-quickstart.cast not archived/replaced. None of the AC are verifiable.",
+  "findings": [
+    { "severity": "block", "summary": "Missing required cast file website/static/demos/08-helix-quickstart.cast covering ddx init → install helix → bead create → ddx work", "location": "website/static/demos/" },
+    { "severity": "block", "summary": "Homepage demo player data-src not updated to reference the new cast", "location": "website/layouts/index.html" },
+    { "severity": "block", "summary": "Old 07-quickstart.cast not replaced or archived", "location": "website/static/demos/07-quickstart.cast" }
+  ]
+}
+```

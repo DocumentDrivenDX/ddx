@@ -1,0 +1,31 @@
+outcome: B — gap already resolved in fizeau v0.12.0 (current go.mod pin)
+
+Investigation confirmed that the routing gap described in the bead (fizeau v0.10.3
+skipping the routing engine when Harness is set + Model empty + Profile/MinPower
+present) no longer exists. fizeau v0.12.0 — already pinned in cli/go.mod — contains:
+
+1. resolveExecuteRoute handles explicit Harness + empty Model + non-empty Policy/MinPower
+   by calling resolveExecuteRouteWithEngine within the harness's eligible models.
+   (~/go/pkg/mod/github.com/easel/fizeau@v0.12.0/service_execute.go, function
+   resolveExecuteRoute, empty-model routing guard block)
+
+2. TestExecute_ExplicitHarnessEmptyModelWithProfile_RoutesWithinHarness (AC4) and
+   TestExecute_ExplicitHarnessEmptyModelNoProfile_FailsClearly (AC5) already exist in
+   fizeau v0.12.0's service_execute_harness_pin_test.go:270,331 — both explicitly
+   reference ddx-1e516bc9 in their docstrings.
+
+3. Class 2 harness guard: TestExecute_Class2HarnessEmptyModelWithProfile_FailsClearly
+   at line 351 covers the gemini/opencode/pi AutoRoutingEligible=false path.
+
+4. cli/internal/agent/service_run.go:247-251 already carries the AC10 comment
+   documenting the well-formed request shape.
+
+5. go.mod already at v0.12.0 — no bump needed (AC3).
+
+AC6 (end-to-end verification) remains gated on ddx-cfedee8e / ddx-9228a484 C9
+supplying MinPower to Execute. This dependency is explicit in the bead description
+and is out of scope for this bead.
+
+Full investigation at .ddx/executions/20260511T025545-a3984070/fizeau-execute-routing-investigation.md
+
+verification_command: cd cli && go test ./internal/agent/... ./cmd/...

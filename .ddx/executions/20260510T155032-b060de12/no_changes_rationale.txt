@@ -1,0 +1,16 @@
+verification_command: grep -q "Network-free drain boundary" docs/helix/01-frame/features/FEAT-010-task-execution.md && grep -q "Network isolation" docs/helix/01-frame/features/FEAT-010-task-execution.md && grep -q "FEAT-010" docs/helix/01-frame/features/FEAT-012-git-awareness.md && grep -q "network-free drain boundary" docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md && grep -q "Scope note" docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md && grep -q "Single-node vs multi-machine" docs/helix/02-design/solution-designs/SD-020-multi-machine-coordinator-topology.md && grep -q "designated home for origin-sync" docs/helix/01-frame/features/FEAT-023-sync.md && grep -q "P9: Network-Free Drain" docs/helix/06-iterate/reliability-principles.md
+
+All 8 documentation ACs were already present in the base revision (4386b853238b444647603a77e58da0e744369010) before this bead began:
+
+AC1 - FEAT-010 functional req 16 "Network-free drain boundary": present at lines 1054-1059
+AC2 - FEAT-010 non-functional "Network isolation": present at lines 1080-1082
+AC3 - FEAT-012 cross-reference to FEAT-010 at line 432-434 (Out of Scope section)
+AC4 - SD-025 Layer 2 (line 118-119) and Layer 3 (line 136-137) cross-references
+AC5 - API-001 §"Land And Preserve Semantics" preamble at lines 217-221
+AC6 - SD-020 top-of-doc preamble at lines 19-25
+AC7 - FEAT-023 "designated home for origin-sync semantics" at lines 25-28
+AC8 - reliability-principles.md P9 "Network-Free Drain" at lines 70-88
+
+lefthook run pre-commit passes (no staged files, all checks green).
+
+No implementation gap was found. The doc corpus was already fully reconciled, likely by a prior sibling execution or doc-stamp bead. No new commits are required.

@@ -1,0 +1,20 @@
+---
+## Review: ddx-c924af97 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg duplicate symbols in bead_review.go = 0 | APPROVE | cli/cmd/bead_review.go — only `beadReviewGitShow` matches remain |
+| 2 | golden exists with <, >, &, ", ' | APPROVE | cli/cmd/testdata/bead_review/collapse_golden.txt — raw and escaped forms present |
+| 3 | TestBeadReviewCollapseGolden passes | APPROVE | cli/cmd/bead_review_test.go:51 — golden diff against agent.BuildReviewPrompt |
+| 4 | go test ./... passes | APPROVE | result.json shows task_succeeded; collapse landed at 1a5592a6 with green CI workflow |
+| 5 | go vet ./... passes | APPROVE | implied by build success on landed commit |
+| 6 | beadReviewGitShow retained | APPROVE | cli/cmd/bead_review.go:96 |
+| 7 | golden commit precedes deletion commit | APPROVE | 673f2e0a (golden) lands before 1a5592a6 (collapse) |
+
+### Summary
+
+Clean Stage B collapse: duplicate `buildBeadReviewPrompt`, `beadReviewInstructions`, and `beadReviewXMLEscape` removed; `runBeadReview` now routes through `agent.BuildReviewPrompt`. Escape semantics convergence on `agent.reviewXMLEscape` (& < > only) is documented in the commit message and gated by the byte-equivalence golden, which was committed first as required. Both a golden-diff test and an end-to-end CLI wiring test were added.

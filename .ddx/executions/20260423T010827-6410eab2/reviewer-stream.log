@@ -1,0 +1,26 @@
+---
+## Review: ddx-0a33bc5f iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Source change to sessions index | APPROVE | cli/internal/server/graphql/resolver_feat008.go:714 — reads `agent.ReadSessionIndex`; :784 builds rows from session entries |
+| 2 | Schema parity and nullable filters | APPROVE | cli/internal/server/graphql/schema.graphql:1385 — row fields unchanged; :1979 adds `since`, `until`, `projectId` |
+| 3 | Fixture and baseline recorded | APPROVE | cli/internal/server/graphql/efficacy_sessions_test.go:112 — seeds 10k; .ddx/beads.jsonl:35 — baseline + hardware/go footer |
+| 4 | First-pass perf targets | APPROVE | cli/internal/server/graphql/efficacy_sessions_test.go:123 — 10k/50k p95 thresholds enforced |
+| 5 | DB-decision protocol | APPROVE | .ddx/beads.jsonl:35 — notes in-place target pass and no DB substrate needed |
+| 6 | Completeness test | APPROVE | cli/internal/server/graphql/efficacy_sessions_test.go:23 — strict superset test with open/run/benchmark sessions |
+| 7 | Freshness within 2s | APPROVE | cli/internal/server/graphql/efficacy_sessions_test.go:81 — writes via index and polls resolver within 2s |
+| 8 | Playwright smoke with 10k fixture | REQUEST_CHANGES | cli/internal/server/frontend/e2e/efficacy.spec.ts:233 — smoke exists, but :234 uses mocked aggregate rows, not seeded 10k sessions |
+| 9 | Cross-reference dependency | APPROVE | .ddx/beads.jsonl:35 — dependency on `ddx-2ceb02fa` and no interim source noted |
+
+### Summary
+
+The backend rewrite is present and generally satisfies the session-index aggregation, schema, perf, freshness, completeness, and tracker-note requirements. The remaining gap is AC8: the Playwright smoke is mocked and does not exercise the required 10k-session fixture path.
+
+### Findings
+
+- `cli/internal/server/frontend/e2e/efficacy.spec.ts:233` — The Playwright smoke test does open `/efficacy`, renders rows, and clicks into attempt details, but it uses `mockEfficacy(page, { rows: TEN_K_SESSION_FIXTURE_ROWS })` at line 234. That is only 12 pre-aggregated mocked rows, not a seeded 10k session-index fixture, so it does not validate page behavior or navigation budget against the real backend fixture required by AC8.

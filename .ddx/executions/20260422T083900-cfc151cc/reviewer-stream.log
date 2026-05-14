@@ -1,0 +1,18 @@
+---
+## Review: ddx-698d48f2 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Priority sort defaults P0-first and toggles | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte:403 — sort is a button; priority ordering is applied at line 170 |
+| 2 | Status chip filters list and updates URL | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte:327 — status chips bind `aria-pressed`; `setFilter` writes URL at line 201 |
+| 3 | Multi-filter URL is bookmarkable | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.ts:73 — load reads URL params into active filter state |
+| 4 | Label chip from row updates label filter URL | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte:438 — row label chips use `data-testid="label-chip"` and toggle label filters |
+| 5 | Empty filtered result has clear-filters affordance | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/beads/+layout.svelte:472 — zero-state renders when filtered rows are empty; clear button at line 478 |
+
+### Summary
+
+The implementation satisfies the requested sort, filter-chip, URL-state, row metadata, and zero-state behavior. The prerequisite fixture bead `ddx-85dc2ab8` is closed, and the focused code paths line up with US-082g.a-e.

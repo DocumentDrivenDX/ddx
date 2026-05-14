@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata (manifest.json, result.json) — no HTTP routes, MCP tools, or implementation code for /api/agent/models, /api/agent/catalog, or /api/agent/capabilities. Insufficient to evaluate ACs.",
+  "findings": [
+    { "severity": "block", "summary": "No source code changes; only execution evidence files were added in this diff. The actual implementation (referenced commit 80b1fcf0) is not visible here.", "location": ".ddx/executions/20260429T192729-eeef7323/" }
+  ]
+}
+```

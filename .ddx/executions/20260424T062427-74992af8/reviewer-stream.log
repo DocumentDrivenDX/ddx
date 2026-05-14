@@ -1,0 +1,17 @@
+---
+## Review: ddx-de6a99a0 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_gates_test.go — both fakes removed from the test body; replaced by real `agent.NewRunner(agent.Config{})` and `nil` git passthrough |
+| 2 | Uses RealLandingGitOps + real-git harness | APPROVE | agent_execute_bead_gates_test.go:25-67 — `t.TempDir()` + `git init`/`add`/`commit`, baseSHA from `rev-parse`, `--harness script --model <directives>`, and factory with real agent runner (equivalent real-git harness per AC wording) |
+| 3 | Target test green | APPROVE | Execution result.json shows `"outcome":"task_succeeded"`, `"exit_code":0`; diff self-consistent (script harness directive file writes file and commits, gate `true` passes, merge path taken) |
+| 4 | No other tests in file modified | APPROVE | commit d61ba729 stat: single file, +60/-8, hunk confined to `TestExecuteBead_RequiredGatePass_Merges` only |
+
+### Summary
+
+Clean migration: the test now seeds bead + gate docs into a real git repo, commits them so the worker worktree at `baseSHA` materializes them, and drives a real script-harness commit via a per-attempt directive file. Fakes gone, assertions preserved (outcome, status, GateResults, ChecksFile), scope limited to the one target test.

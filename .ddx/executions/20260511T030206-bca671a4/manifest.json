@@ -1,0 +1,439 @@
+{
+  "attempt_id": "20260511T030206-bca671a4",
+  "bead_id": "ddx-1f774edf",
+  "base_rev": "1e2202d803465f598eb1353bf3e2722a33fc6fe6",
+  "created_at": "2026-05-11T03:02:08.773794346Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1f774edf",
+    "title": "agent/land: release withMainGitLock around network I/O (push, fetch, merge)",
+    "description": "PROBLEM\n  Land() in cli/internal/agent/execute_bead_land.go invokes git fetch\n  origin, git push --ff-only, and a push-race auto-recovery loop as part of\n  the core drain lifecycle. This couples Land() to remote I/O, holding\n  withMainGitLock for 30-120s on remote round-trips, which produced the\n  observed contention failures (ddx-08e90869, ddx-15a51f8c). Per the user's\n  architectural position and the sister doc-only bead amending FEAT-010,\n  Land() must perform ONLY the local worktree-merge into local main; origin\n  sync (fetch) and push are separate operations, never invoked from Land()\n  or the drain loop.\n\n  This bead removes all network I/O from Land() and from the LandingGitOps\n  interface. Origin-sync and push become operator responsibilities (raw\n  git commands today; a future ddx sync helper is downstream of multi-node\n  work and explicitly out of scope per operator direction).\n\nROOT CAUSE\n  - cli/internal/agent/execute_bead_land.go:27-29 file-header comment\n    declares \"If an origin remote exists — push the new target tip\" as\n    step 5 of the canonical Land flow.\n  - cli/internal/agent/execute_bead_land.go:1036-1043 Land() wraps the\n    entire landLocked() call under withMainGitLock, including push.\n  - cli/internal/agent/execute_bead_land.go:1146-1216 landLocked merge\n    path issues git fetch origin (FetchBranch), then git push (PushFFOnly),\n    then on push race calls landPushAutoRecover.\n  - cli/internal/agent/execute_bead_land.go:1479 landPush triggers\n    landPushAutoRecover on non-FF rejection.\n  - cli/internal/agent/execute_bead_land.go:1538-1580 landPushAutoRecover\n    runs fetch + temp-worktree merge + update-ref + push, all inside the\n    same lock.\n  - cli/internal/agent/execute_bead_land.go:239-297 LandingGitOps\n    interface includes FetchBranch, PushFFOnly, and FetchOriginAncestryCheck\n    methods that exist solely to support the in-Land network I/O path.\n  - LandResult fields PushFailed, PushConflict, PushRecovered, and the\n    fetchOriginError type all exist to communicate network-I/O outcomes\n    that Land() should no longer be responsible for.\n\nPROPOSED FIX\n  - Strip Land() to local-only operations:\n      a. fetch-origin call (FetchBranch) at the start of landLocked:\n         REMOVE.\n      b. FetchOriginAncestryCheck before merge: REMOVE (the merge proceeds\n         on local main as-is; if origin diverged, that is discovered when\n         the operator pushes, by raw git push rejecting non-FF, which is\n         the operator's problem).\n      c. PushFFOnly at end of landLocked: REMOVE.\n      d. landPushAutoRecover function: REMOVE entirely.\n  - Update LandingGitOps interface:\n      a. Remove FetchBranch method.\n      b. Remove PushFFOnly method.\n      c. Remove FetchOriginAncestryCheck method.\n      d. Keep merge / update-ref / worktree / commit methods.\n  - Update LandResult:\n      a. Remove PushFailed, PushConflict, PushRecovered fields.\n      b. Remove fetchOriginError type.\n      c. Keep merge / commit / preserve outcomes.\n  - Update the file-header comment at lines 27-29 to reflect the\n    network-free flow.\n  - Update Land() critical section: withMainGitLock now wraps only the\n    local-index slice (merge-or-update-ref + evidence commit + worktree\n    sync). Sub-second hold expected.\n  - Existing tests for push-race recovery (and any LandResult.PushFailed\n    assertions) MUST be removed or rewritten as no-network tests.\n  - Add a regression test TestLand_IsNetworkFree in\n    cli/internal/agent/execute_bead_land_test.go that wires a\n    LandingGitOps with no Fetch/Push methods (proving they are no longer\n    called) and asserts Land() succeeds.\n\n  Operator-side note (NOT in scope of this bead): users push with raw\n  `git push origin main` after a drain session. A future ddx sync helper\n  is downstream of multi-node coordination work and is explicitly\n  deferred.\n\nNON-SCOPE\n  - Designing/building a ddx sync helper (deferred until multi-node).\n  - Federation work (FEAT-026 / SD-020 build-out) will reintroduce\n    coordinated network I/O with its own design; this bead is single-node\n    only.\n  - Updating prompt templates / eval data / closed beads that reference\n    push_failed semantics (downstream impact; file separate beads if any\n    surface friction).\n  - Changing TD-031 bead state machine.\n  - Reducing the bead.Store WithLock primitive (different layer).\n\nINTERSECTIONS\n  - Depends on doc-only spec amendment bead ddx-3d5197d8 landing first.\n  - Sister chaos bead ddx-c019e48a (now scoped to local-only stale-lock\n    recovery) depends on this implementation landing.\n  - Sister chaos bead ddx-eab41b94 (push-race scenarios) is now obsolete\n    and should be cancelled.",
+    "acceptance": "1. cli/internal/agent/execute_bead_land.go Land() invokes no git fetch and no git push; LandingGitOps interface no longer declares FetchBranch, PushFFOnly, or FetchOriginAncestryCheck methods.\n2. cli/internal/agent/execute_bead_land.go file-header comment (formerly lines 27-29) describes a network-free flow with no push step.\n3. landPushAutoRecover function and any LandResult fields naming push outcomes (PushFailed, PushConflict, PushRecovered) are removed; fetchOriginError type is removed.\n4. withMainGitLock in Land() wraps only local-index operations (merge or update-ref + evidence commit + worktree sync); a unit test asserts the lock is released within 1s under a fake LandingGitOps with simulated 5s of post-Land work in the caller (proving the lock does not extend beyond Land() return).\n5. TestLand_IsNetworkFree in cli/internal/agent/execute_bead_land_test.go wires a fake LandingGitOps with no fetch/push methods (compile-time proof) and asserts Land() succeeds end-to-end.\n6. Existing tests that asserted push-race recovery (e.g. TestLandPushAutoRecover_*) are removed or rewritten; no test references LandResult.PushFailed.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "area:lock",
+      "kind:fix",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-11T03:01:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2741772",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T15:53:40.600366839Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-10T16:17:49.751230842Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T155340-a98a445b\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":110,\"output_tokens\":61834,\"total_tokens\":61944,\"cost_usd\":5.3517432,\"duration_ms\":1444867,\"exit_code\":0}",
+          "created_at": "2026-05-10T16:17:49.813224053Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=61944 cost_usd=5.3517 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\",\"requested_min_power\":8}",
+          "created_at": "2026-05-10T16:45:33.798801881Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T161751-3daedf26\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":143,\"output_tokens\":50404,\"total_tokens\":50547,\"cost_usd\":5.9540939,\"duration_ms\":1658637,\"exit_code\":0}",
+          "created_at": "2026-05-10T16:45:33.858933837Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=50547 cost_usd=5.9541 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\",\"requested_min_power\":10}",
+          "created_at": "2026-05-10T19:45:43.433460722Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T164535-9af19d37\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":150,\"output_tokens\":74874,\"total_tokens\":75024,\"cost_usd\":5.937929050000005,\"duration_ms\":10804051,\"exit_code\":-1}",
+          "created_at": "2026-05-10T19:45:43.499722332Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=75024 cost_usd=5.9379 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260510T164535-9af19d37\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T19:45:43.945808745Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "context deadline exceeded\nresult_rev=54f240913453b4f14675be546353d3ec8f2a97dd\nbase_rev=0246c70236616745e7002161ecfe40503e415c7b\noutcome_reason=timeout",
+          "created_at": "2026-05-10T19:46:18.184159694Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T19:47:15.043677629Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T19:47:15.20188537Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T19:47:15.260496361Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T19:47:15.382678988Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T19:51:01.570243719Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T19:51:01.735548409Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T19:51:01.798070896Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T19:51:01.925489953Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:00:59.548340789Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:00:59.706276985Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:00:59.770233555Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:00:59.890417367Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:05:43.949837711Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:05:44.112476654Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:05:44.177130306Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:05:44.300761824Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:15:41.875943353Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:15:42.036462253Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:15:42.103822898Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:15:42.230859829Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:20:26.663561686Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:20:26.824960506Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:20:26.886565395Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:20:27.008672758Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:30:24.061563277Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:30:24.225521195Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:30:24.282636554Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:30:24.392417235Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:35:08.926857265Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:35:09.100799756Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:35:09.168402521Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:35:09.299112473Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T20:45:06.597620551Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-10T20:45:06.779729493Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T20:45:06.842515513Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-10T20:45:06.977401835Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: policy \\\"air-gapped\\\" has no candidate satisfying local endpoint: 3 candidates rejected\"}",
+          "created_at": "2026-05-11T00:57:54.163714981Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260511T005757-ba01709e\",\"bead_id\":\"ddx-1f774edf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-11T00:57:59.76373021Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-bead context load: loading bead ddx-1f774edf from worktree snapshot: bead: not found: ddx-1f774edf: loading bead ddx-1f774edf from worktree snapshot: bead: not found: ddx-1f774edf\nresult_rev=567ed9f06ebf7ff7c6f74cbe654a85c96d2e30a4\nbase_rev=567ed9f06ebf7ff7c6f74cbe654a85c96d2e30a4\nretry_after=2026-05-11T06:58:32Z\noutcome_reason=unknown",
+          "created_at": "2026-05-11T00:58:32.113366686Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: policy \\\"air-gapped\\\" has no candidate satisfying local endpoint: 3 candidates rejected\"}",
+          "created_at": "2026-05-11T03:02:06.779996521Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-cooldown-base-rev": "567ed9f06ebf7ff7c6f74cbe654a85c96d2e30a4",
+      "execute-loop-heartbeat-at": "2026-05-11T03:01:02.597396171Z",
+      "execute-loop-last-detail": "execute-bead context load: loading bead ddx-1f774edf from worktree snapshot: bead: not found: ddx-1f774edf: loading bead ddx-1f774edf from worktree snapshot: bead: not found: ddx-1f774edf",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-11T06:58:32Z",
+      "queue-rank": "2"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260511T030206-bca671a4",
+    "prompt": ".ddx/executions/20260511T030206-bca671a4/prompt.md",
+    "manifest": ".ddx/executions/20260511T030206-bca671a4/manifest.json",
+    "result": ".ddx/executions/20260511T030206-bca671a4/result.json",
+    "checks": ".ddx/executions/20260511T030206-bca671a4/checks.json",
+    "usage": ".ddx/executions/20260511T030206-bca671a4/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1f774edf-20260511T030206-bca671a4"
+  },
+  "prompt_sha": "306c5367a465a43befa6dbee272d10de12adfe67b09d2cf5dfad55c1efab907c"
+}

@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All four ACs addressed: prune command + endpoint reaps dead PIDs/age-based, stop --bead handles stale disk entries, ReconcileStaleWorkers runs on startup, and PIDAlive is exposed in JSON output. Tests included for both CLI and server.",
+  "findings": [
+    { "severity": "info", "summary": "Implementation lives in commit e6aff1f6 (cli/cmd/agent_workers.go, cli/internal/server/workers.go, plus reap_{unix,windows}.go for PID liveness); reviewed via git show since the diff in the prompt only included execution evidence.", "location": "cli/internal/server/workers.go" }
+  ]
+}
+```

@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution evidence result.json; no GraphQL schema, resolver, cache, mutation, or auth code is present to evaluate against any AC item.",
+  "findings": [
+    { "severity": "block", "summary": "No providerModels query added in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "No 60s cache or refreshProviderModels mutation in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "No baseURL sanitization, in-flight guard, or requireTrusted gate visible", "location": "(missing)" }
+  ]
+}
+```

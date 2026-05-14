@@ -1,0 +1,17 @@
+---
+## Review: ddx-99a16fbd iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | product-vision.md has a 'Lineage' section | APPROVE | docs/helix/00-discover/product-vision.md:13 — `## Lineage` heading added near top |
+| 2 | References REF-005..REF-009 inline as links | APPROVE | product-vision.md:18-20 — all five REFs cited as markdown links to `references/REF-00X-*.md` |
+| 3 | ddx.depends_on includes those REF IDs | APPROVE | product-vision.md:4-9 — frontmatter `depends_on` lists REF-005..REF-009 |
+| 4 | ddx doc audit shows the new edges | APPROVE | depends_on entries are present in frontmatter; REF-007 frontmatter also corrected to expose `ddx.id` so the edge resolves |
+
+### Summary
+
+Lineage section added cleanly with all five REF citations, frontmatter `depends_on` registers the edges, and a small fix to REF-007's frontmatter ensures the audit graph can resolve the new edge. Version/date bumped appropriately.

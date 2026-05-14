@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Provenance panel renders run id, truncated prompt, and fresh/stale source-hash badge; producing-run link with disabled fallback when run not found; run detail shows 'Produced artifact' backlink. Artifact-local staleness model preserved (no depends_on cascade introduced).",
+  "findings": [
+    { "severity": "info", "summary": "AC5 (list staleness reflects source-hash, not cascade) is not modified by this diff — it relies on the existing backend `staleness` field semantics. Behavior depends on resolver, not on these frontend changes.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte:98" },
+    { "severity": "info", "summary": "Run-existence probe issues a second GraphQL request per artifact load; acceptable but adds a round-trip when generatedBy is present.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.ts:75" }
+  ]
+}
+```

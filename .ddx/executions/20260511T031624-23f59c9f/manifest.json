@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260511T031624-23f59c9f",
+  "bead_id": "ddx-9b080448",
+  "base_rev": "b7b6054a8e969745d07bda4320881ee8ae134658",
+  "created_at": "2026-05-11T03:16:26.883365106Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9b080448",
+    "title": "feat(escalation): add recovery circuit breaker, escape hatch, and integration tests",
+    "description": "PROBLEM\n  With reframe (ddx-ca3e0d37) and decompose (ddx-60bc5e9a) paths in place, two\n  gaps remain:\n  1. No circuit breaker: recovery hooks can run multiple times accumulating\n     unbounded cost before either succeeds or falls through to proposed.\n  2. No escape hatch wiring: when BOTH reframe and decompose fail (or are\n     skipped), the bead must park to status=proposed with an auto-recovery-failed\n     event. PersistentExecutionFailed class must try reframe first, then if\n     reframe fails, try decompose; only then escape.\n  3. Per-bead budget interaction: if the per-bead budget exhausts during a\n     recovery attempt, it must fall through to per_bead_budget_exhausted (not\n     status=proposed).\n\nROOT CAUSE\n  cli/internal/agent/recovery_hook.go (ddx-e012af90) stubs the hook without\n  a cost accumulator. No --max-recovery-cost flag or config key exists.\n  The two-path sequencing for PersistentExecutionFailed is not wired.\n\nPROPOSED FIX\n  1. Add circuit breaker to recovery_hook.go:\n     - Track cumulative recovery costUSD across both reframe and decompose attempts.\n     - If costUSD \u003e maxRecoveryCost (default $2.00, configurable via\n       ExecuteBeadLoopOptions.MaxRecoveryCostUSD), abort recovery and park to\n       status=proposed with event type \"auto-recovery-failed\" and reason\n       \"circuit-breaker\" plus total_cost_usd field.\n  2. Wire PersistentExecutionFailed two-stage sequencing:\n     - Stage 1: run reframer. If succeeds → done.\n     - Stage 2: if reframer fails, run decomposer. If succeeds → done.\n     - If both fail → escape hatch.\n  3. Escape hatch (both fail OR circuit-breaker not triggered): park to\n     status=proposed with event type \"auto-recovery-failed\" reason \"both_failed\".\n  4. Budget integration: pass per-bead budget remaining into runReframer and\n     runDecomposer; if budget exhaustion is detected during recovery, return\n     DecomposeResult/ReframeResult{budgetExhausted:true}; hook routes to\n     per_bead_budget_exhausted path instead of proposed.\n  5. Add --max-recovery-cost flag to execute-loop command (and\n     ExecuteBeadLoopOptions) defaulting to 2.00.\n  6. Integration tests in cli/internal/agent/recovery_integration_test.go.\n\nNON-SCOPE\n  Reframe implementation (ddx-ca3e0d37). Decompose implementation (ddx-60bc5e9a).\n  Hook infrastructure (ddx-e012af90).",
+    "acceptance": "1. ExecuteBeadLoopOptions has MaxRecoveryCostUSD float64 field (default 2.00) wired to --max-recovery-cost flag on the execute-loop command.\n2. Circuit breaker: when cumulative reframe+decompose costUSD \u003e MaxRecoveryCostUSD, bead parks to status=proposed; event \"auto-recovery-failed\" emitted with reason=\"circuit-breaker\" and total_cost_usd field.\n3. PersistentExecutionFailed two-stage: reframe attempted first; if reframe fails, decompose attempted; if decompose also fails, escape hatch fires.\n4. Escape hatch: both reframe and decompose failed → status=proposed; event \"auto-recovery-failed\" with reason=\"both_failed\".\n5. Budget integration: per-bead budget exhaustion during recovery routes to per_bead_budget_exhausted (not status=proposed).\n6. TestReframeFailure_FallsBackToDecompose passes: PersistentExecutionFailed, reframer stub returns failed=true; verifies decomposer is called next.\n7. TestBothFail_ParkProposed passes: both reframer and decomposer stubs return failed=true; verifies bead parks to proposed with auto-recovery-failed event reason=\"both_failed\".\n8. TestRecoveryEvents_StructuredOutput passes: verifies reframe-applied and decompose-applied events include costUSD field.\n9. TestRecoveryCircuitBreaker_AbortsAtCostCap passes: first attempt costs $1.50, second attempt costs $0.60; verifies circuit breaker fires before second attempt exceeds cap, event reason=\"circuit-breaker\" with total_cost_usd.\n10. TestPerBeadBudgetExhausted_TriggersAutoRecovery passes: per-bead budget hits 0 during recovery; verifies per_bead_budget_exhausted path taken, NOT status=proposed.\n11. cd cli \u0026\u0026 go test ./internal/agent/... green.\n12. lefthook run pre-commit passes.",
+    "parent": "ddx-63155d5c",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:feature",
+      "spec:ADR-024",
+      "reliability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-11T03:15:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-11T03:16:24.443091642Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-11T03:15:18.211462249Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260511T031624-23f59c9f",
+    "prompt": ".ddx/executions/20260511T031624-23f59c9f/prompt.md",
+    "manifest": ".ddx/executions/20260511T031624-23f59c9f/manifest.json",
+    "result": ".ddx/executions/20260511T031624-23f59c9f/result.json",
+    "checks": ".ddx/executions/20260511T031624-23f59c9f/checks.json",
+    "usage": ".ddx/executions/20260511T031624-23f59c9f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-9b080448-20260511T031624-23f59c9f"
+  },
+  "prompt_sha": "4c8c877feb08c93d784f345218e8a810ef9c76c6d9eff8116d798f2e18ea6eda"
+}

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Epic close-out is complete: FEAT-022 status flipped to Implemented in aa6236b6, all Stage A–G child beads closed, cli/internal/evidence/ ships full primitive set, and evidencelint analyzer is wired in CI. Diff under review is execution evidence only, consistent with an epic finalization.",
+  "findings": [
+    {"severity": "info", "summary": "Diff for this attempt contains only manifest.json/result.json; the substantive change (status flip) was committed at result_rev aa6236b6, which is the bead's intended close-out commit.", "location": ".ddx/executions/20260428T223115-54258d7e/result.json"},
+    {"severity": "info", "summary": "evidencelint analyzer present at cli/tools/lint/evidencelint/ rather than the spec-suggested path; functionally satisfies the CI lint AC.", "location": "cli/tools/lint/evidencelint/"}
+  ]
+}
+```

@@ -1,0 +1,27 @@
+---
+## Review: ddx-9ce6842a iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Perf harness exists and is reusable | BLOCK | Diff contains only execution manifest/result JSON; no harness code visible |
+| 2 | Baseline recorded in bead notes + docs/helix/04-observe/perf | BLOCK | No baseline markdown file present in diff |
+| 3 | BeadsByProject scope fix + unit test | BLOCK | No changes to resolver_beads.go / state_graphql.go in diff |
+| 4 | Filter pushdown at parse boundary | BLOCK | No filter pushdown code in diff |
+| 5 | Perf targets met on 10×500 fixture | BLOCK | No benchmark results in diff |
+| 6 | Stale-read safety test | BLOCK | No test added in diff |
+| 7 | `make bench-graphql` target | BLOCK | No Makefile changes in diff |
+| 8 | Playwright smoke for /beads pages | BLOCK | No Playwright spec in diff |
+| 9 | Cross-reference ddx-ad0db8fd and ddx-2ceb02fa in notes | BLOCK | No notes update captured in diff |
+
+### Summary
+
+The shown diff (commit 6865c0cf) is the execution-evidence chore commit only — it contains `manifest.json` and `result.json` under `.ddx/executions/20260423T234701-b5579c5c/` and nothing else. The actual implementation commit (9dc0a408 "fix: apply GraphQL bead perf harness review follow-ups") is not included in the review payload, so no acceptance criterion can be verified from this diff.
+
+### Findings
+
+- Review payload is insufficient: the only commit shown is the execution-evidence chore. Re-run the review against the full branch diff (commits `9dc0a408` and any predecessors introducing the harness, `BeadsByProject` scope fix, filter pushdown, `make bench-graphql`, baseline markdown, and Playwright specs) so each AC can be graded against real code.
+- Execution events in `manifest.json` also record a prior iter-1 finding (Playwright cross-project test in `beads-smoke.spec.ts:107` navigated to the per-project URL rather than the all-beads route) and a notes-cross-reference gap; confirm both are resolved in the full diff before approving AC §8 and §9.

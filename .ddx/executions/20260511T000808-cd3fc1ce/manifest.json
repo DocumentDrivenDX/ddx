@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260511T000808-cd3fc1ce",
+  "bead_id": "ddx-b2c6ae22",
+  "base_rev": "d177ec88bb0ab69c4101cace3fe69fd729f7ca29",
+  "created_at": "2026-05-11T00:08:09.885968535Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized",
+    "min_power": 8
+  },
+  "bead": {
+    "id": "ddx-b2c6ae22",
+    "title": "feat(executions): mirror hook-point archives local-tier bundle (executions + agent-logs + workers)",
+    "description": "PROBLEM\n  Per sister bead \"docs(ADR): formalize 3-tier evidence storage\",\n  the local-tier comprises three paths that share a lifecycle:\n    - .ddx/executions/\u003cattempt-id\u003e/ (full evidence bundle)\n    - .ddx/agent-logs/agent-*.jsonl (raw model session)\n    - .ddx/workers/worker-*/ (per-worker runtime state)\n\n  These three are pruned together (sister bead B29 RetainDays).\n  When operators want longer-term archival (beyond the 90-day\n  retention) they need a mirror — but the mirror must cover all\n  three paths together, not just executions/. Today's\n  ExecutionsMirrorConfig (cli/internal/config/types.go:253-259)\n  is unwired and was scoped to executions only.\n\nCURRENT STATE\n  - ExecutionsMirrorConfig: declared, unused, executions-only.\n  - No code path copies agent-logs or workers to any external\n    location.\n  - When B29 prunes locally, anything not archived is lost.\n\nPROPOSED FIX\n  Implement a mirror hook-point that operates on the local-tier\n  BUNDLE for each completed attempt.\n\n  1. Rename / generalize the config:\n     - cli/internal/config/types.go: add LocalEvidenceMirrorConfig\n       (or rename ExecutionsMirrorConfig). Fields:\n         kind: local-dir | none (default none; remote backends\n               like s3 are future scope)\n         path: target directory (for local-dir kind)\n         retention_days: independent of in-tree RetainDays\n         include_agent_logs: bool (default true)\n         include_workers: bool (default false; workers are\n                          large and rarely useful retrospectively)\n\n  2. Implement local-dir backend:\n     - cli/internal/agent/execute_bead_loop.go (or a new\n       cli/internal/agent/evidence_mirror.go): on attempt\n       finalization, copy:\n         a. The full .ddx/executions/\u003cattempt-id\u003e/ directory\n            to \u003cmirror-path\u003e/executions/\u003cattempt-id\u003e/.\n         b. The agent-log for the attempt's session_id (if\n            include_agent_logs) to \u003cmirror-path\u003e/agent-logs/.\n         c. The worker dir (if include_workers and attempt\n            corresponds to a worker) to \u003cmirror-path\u003e/workers/.\n     - Files are copied (not moved) so the local copies remain\n       for the RetainDays window.\n\n  3. Mirror retention:\n     - The mirror has its own retention_days independent of the\n       in-tree RetainDays.\n     - Pruning the mirror is a separate concern (a sibling\n       method, or an operator-run command). For v1, just\n       implement the copy; document that the mirror must be\n       pruned manually OR via an external retention policy.\n\n  4. Failure modes:\n     - Copy failure: log a warning, emit a structured event\n       (mirror-copy-failed), continue execution. Do NOT block\n       attempt finalization on mirror failure.\n     - Disk full at mirror destination: same — log + continue.\n     - Mirror path doesn't exist: log + continue (or auto-create\n       on first attempt, configurable).\n\n  Tests:\n     - TestMirror_CopiesExecutionDir\n     - TestMirror_CopiesAgentLog\n     - TestMirror_CopiesWorkerDirWhenIncluded\n     - TestMirror_SkipsWorkerDirWhenExcluded\n     - TestMirror_CopyFailure_DoesNotBlockFinalization\n     - TestMirror_PathAutoCreate\n\nNON-SCOPE\n  - Remote backends (S3, GCS, etc.) — deferred to follow-up bead.\n  - Mirror compression / tarball formats — deferred.\n  - Mirror pruning / retention automation — deferred (operators\n    manage mirror retention out-of-band for v1).\n  - Federation cross-machine sync — separate concern.\n\nINTERSECTIONS\n  - Sister bead \"docs(ADR)\" — defines the 3-tier architecture\n    this implements.\n  - Sister bead B29 (RetainDays) — copy MUST happen before the\n    prune deletes local content. Ordering: in-attempt\n    finalization → mirror copy → RetainDays runs on its own\n    cadence (cleanup loop).\n  - Sister bead \"feat(metrics)\" — metrics row extraction happens\n    independently of mirror; both fire on finalization.\n  - Sister bead \"refactor(vocab): rename run-id → attempt-id\" —\n    mirror dir naming follows the canonical attempt-id.",
+    "acceptance": "1. cli/internal/config/types.go contains LocalEvidenceMirrorConfig (or renamed ExecutionsMirrorConfig) with kind, path, retention_days, include_agent_logs, include_workers fields.\n2. Default config: kind=none (mirror disabled until operator opts in).\n3. cli/internal/agent/ (or a new file) implements a local-dir mirror that copies the local-tier bundle for each completed attempt: executions dir, agent-log (if include_agent_logs), worker dir (if include_workers).\n4. Mirror copy happens BEFORE B29's RetainDays prune (cleanup loop) so archived copies exist before any local delete.\n5. Copy failures do NOT block attempt finalization; they emit a \"mirror-copy-failed\" event and the drain continues.\n6. TestMirror_CopiesExecutionDir, TestMirror_CopiesAgentLog, TestMirror_CopiesWorkerDirWhenIncluded, TestMirror_SkipsWorkerDirWhenExcluded, TestMirror_CopyFailure_DoesNotBlockFinalization, TestMirror_PathAutoCreate all pass.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/config/... ./cmd/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:feature",
+      "observability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T23:54:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T23:55:58.427754954Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-11T00:08:06.19620686Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T235558-2a921c5c\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":70,\"output_tokens\":34099,\"total_tokens\":34169,\"cost_usd\":2.501801550000001,\"duration_ms\":725107,\"exit_code\":0}",
+          "created_at": "2026-05-11T00:08:06.259370467Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=34169 cost_usd=2.5018 model=sonnet"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T23:54:54.23104395Z",
+      "queue-rank": "31"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260511T000808-cd3fc1ce",
+    "prompt": ".ddx/executions/20260511T000808-cd3fc1ce/prompt.md",
+    "manifest": ".ddx/executions/20260511T000808-cd3fc1ce/manifest.json",
+    "result": ".ddx/executions/20260511T000808-cd3fc1ce/result.json",
+    "checks": ".ddx/executions/20260511T000808-cd3fc1ce/checks.json",
+    "usage": ".ddx/executions/20260511T000808-cd3fc1ce/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b2c6ae22-20260511T000808-cd3fc1ce"
+  },
+  "prompt_sha": "f0bdddd756052390a54accecae369d94a3de367aac4b939d07f76cdf3d946cb9"
+}

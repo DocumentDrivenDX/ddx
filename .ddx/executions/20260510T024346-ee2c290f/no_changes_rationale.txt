@@ -1,0 +1,39 @@
+status: blocked
+reason: AC #12 + AC #13 prerequisites unmet — ddx-ddacd4ff (C14) is open and the required function lifts are not in the codebase.
+
+Verified blockers:
+
+1. ddx-ddacd4ff (C14) status: open
+   AC #13 of this bead states: "This bead's full retirement step inherits those lifts as prerequisites."
+   ddx-ddacd4ff must be closed before ddx-d8474e0e can proceed.
+
+2. agent.RecoverOrphans NOT lifted into try/work path.
+   grep evidence: only call site is cli/cmd/agent_execute_bead.go:168.
+   Required destination (try.Attempt or ExecuteBeadWithConfig engine) has zero calls to RecoverOrphans.
+   Deleting agent_execute_bead.go before the lift would silently drop orphan recovery.
+
+3. agent.BuildLandingGateContext NOT in try path.
+   Called at cli/cmd/agent_execute_bead.go:206 but not in cli/cmd/try.go or try.Attempt.
+   cli/internal/server/workers.go:1747 does call it, so server path is covered,
+   but the cobra try surface does not invoke it.
+
+4. agent.ValidateForExecuteLoopViaService NOT in try path.
+   Called at cli/cmd/agent_execute_bead.go:161 and cli/cmd/agent_cmd.go:1515 (cobra wrappers)
+   and cli/internal/server/workers.go:382 (server), but not in cli/cmd/try.go or work.go.
+
+5. AC #10 required tests do not exist:
+   - TestTry_RecoversOrphanedWorktreesBeforeSpawn  → missing in cli/cmd/try_test.go
+   - TestTry_AppliesGateContextToLanding            → missing
+   - TestTry_PreservesJSONResultSchema_SameAsExecuteBead → missing
+   - TestWork_PreservesJSONResultSchema_SameAsExecuteLoop → missing
+   - TestTry_ExitCodeContract_0_1_2                 → missing
+   These tests must be written (by ddx-ddacd4ff or a sibling bead) before the
+   agent CLI surface can be retired.
+
+What needs to happen before this bead can execute:
+  a. Close ddx-ddacd4ff (C14): lift RecoverOrphans, BuildLandingGateContext,
+     and ValidateForExecuteLoopViaService into ExecuteBeadWithConfig or try.Attempt.
+  b. Add the five AC #10 tests in cli/cmd/try_test.go and cli/cmd/work_test.go.
+  c. Re-queue ddx-d8474e0e after ddx-ddacd4ff is merged.
+
+verification_command: ddx bead show ddx-ddacd4ff | grep -q 'Status:.*closed'

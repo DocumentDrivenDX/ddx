@@ -1,0 +1,22 @@
+---
+## Review: ddx-0b382233 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg 'ExecuteBeadOptions\{' returns 0 outside type defn | BLOCK | 12 non-definition occurrences remain across cli/cmd/agent_cmd.go:1738, cli/internal/server/workers.go:586, and 5 test files (artifacts/checkpoint/env_isolation/commit) |
+| 2 | `cd cli && go test ./...` passes | BLOCK | Not verified in diff; commit message admits a pre-existing failure but no run of the migrated suite is captured. More importantly, AC #1 fails so AC #2 is moot. |
+
+### Summary
+
+The migration only touched the two files explicitly enumerated in the bead description (`execute_bead_e2e_test.go` and `agent_execute_loop_test.go`), but the acceptance criteria demand zero `ExecuteBeadOptions{` matches across all of `cli/` outside the type definition. Two production call sites and five additional test files still use the old options type. The bead's narrow "in-scope" list and its broad acceptance gate are inconsistent — and the AC is what governs.
+
+### Findings
+
+- **Production sites not migrated** — `cli/cmd/agent_cmd.go:1738` and `cli/internal/server/workers.go:586` still construct `agent.ExecuteBeadOptions{...}`. SD-024's "all three dispatch sites must migrate together" principle plus this AC require these to move to `ExecuteBeadWithConfig` + `ExecuteBeadRuntime`.
+- **Test sites not migrated** — `cli/internal/agent/execute_bead_artifacts_test.go` (6 occurrences), `execute_bead_checkpoint_test.go` (2), `execute_bead_env_isolation_test.go` (1), `execute_bead_commit_test.go` (1) still construct `ExecuteBeadOptions{`. AC #1 explicitly covers these.
+- **Verification gap** — Re-run `rg 'ExecuteBeadOptions\{' cli/` after migration; only `cli/internal/agent/execute_bead.go:154` (the internal `opts := ExecuteBeadOptions{` inside the legacy shim) should remain, and only if that shim is "the type definition about to be retired." If the shim itself is in scope, it must also be removed.
+- **Scope-vs-AC mismatch** — The bead description listed only two files; the AC is repository-wide. Either the next iter expands scope to satisfy AC #1, or the bead needs a triage decision to narrow the AC. As written, AC #1 is unmet.

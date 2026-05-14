@@ -1,0 +1,14 @@
+---
+## Review: ddx-794b7a72 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | e2e/personas.spec.ts 4/4 green; screenshots committed. | APPROVE | `.ddx/executions/20260422T083934-aba4cdc8/result.json:6` — execution succeeded; `cli/internal/server/frontend/e2e/personas.spec.ts:75` — 4 US-097 tests; `cli/internal/server/frontend/e2e/screenshots.spec.ts:18` — personas screenshot target; `cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots/personas-light-linux.png` / `personas-dark-linux.png` committed |
+
+### Summary
+
+The result revision implements the requested personas card/detail/bind flow and includes light/dark persona screenshot baselines. I could not rerun Playwright locally because this sandbox rejects binding the preview server to `127.0.0.1:4173`, but the committed execution result reports success and the changed files line up with all four personas e2e cases.

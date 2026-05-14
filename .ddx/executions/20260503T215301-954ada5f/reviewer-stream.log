@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 5 hygiene beads' AC text substituted TD-NNN→TD-031 (verified in beads.jsonl). Migration survey at expected path enumerates statuses per repo + active/archive split. Only canonical statuses observed; survey explicitly states 'No migration needed.'",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Bead description named '~/Projects/agent (Fizeau bead store)'; agent surveyed '~/Projects/fizeau' and explicitly flagged the label slip in the survey doc. Reasonable interpretation, transparently documented.",
+      "location": ".ddx/executions/20260503T215301-954ada5f/migration-survey.md"
+    }
+  ]
+}
+```

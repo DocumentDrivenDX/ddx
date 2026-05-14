@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "AC #6 now satisfied: TestServerIngestion_RealWorkerCanRegister added in commit 23fdaefb spawns a real subprocess POSTing to /api/workers/register via httptest.Server and asserts the in-memory registry. Other ACs previously confirmed implemented.",
+  "findings": [
+    { "severity": "info", "summary": "Wired-in subprocess integration test added, exercising production HTTP path with real TCP client.", "location": "cli/internal/server/worker_ingest_test.go" }
+  ]
+}
+```

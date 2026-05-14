@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds DDx execution metadata files and contains no test-helper or package-test changes, so none of the requested backend-matrix conformance work is present or evaluable.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes were made under cli/internal/bead, so the required jsonl/axon backend subtests for the four chaos tests are not implemented.",
+      "location": ".ddx/executions/20260506T193917-468fb55f/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The package conformance helpers were not modified, so there is no evidence that backend selection was made explicit instead of defaulting silently.",
+      "location": ".ddx/executions/20260506T193917-468fb55f/checks/production-reachability.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "Because the diff contains only execution artifacts, there is no implementation evidence for the required test outcomes or pre-commit gate beyond self-reported metadata.",
+      "location": ".ddx/executions/20260506T193917-468fb55f/result.json:1"
+    }
+  ]
+}
+```

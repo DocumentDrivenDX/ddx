@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and does not include the required TD document or evidence for any acceptance criterion, so the implementation is not present and cannot be approved.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "The required design document `docs/helix/02-design/technical-designs/TD-<NNN>-artifact-search.md` is not added or modified in this diff, so the primary deliverable is missing.",
+      "location": ".ddx/executions/20260507T011649-18512b9a/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no documentation content in the diff defining search scope progression, size caps, binary handling, or performance budget; the only change is execution metadata.",
+      "location": ".ddx/executions/20260507T011649-18512b9a/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The diff provides no evidence that `ddx doc audit` was run clean, so the acceptance criterion requiring a clean audit is unmet.",
+      "location": ".ddx/executions/20260507T011649-18512b9a/result.json:1"
+    }
+  ]
+}
+```

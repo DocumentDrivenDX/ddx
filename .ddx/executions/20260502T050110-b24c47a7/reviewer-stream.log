@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence files (manifest.json, result.json). No implementation code, tests, or migration command changes are visible to evaluate against any AC item.",
+  "findings": [
+    { "severity": "block", "summary": "No source changes for the migrate command, archive API usage, or tests are present in the diff — cannot verify ACs 1-6.", "location": ".ddx/executions/20260502T050110-b24c47a7/" }
+  ]
+}
+```

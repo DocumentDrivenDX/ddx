@@ -1,0 +1,17 @@
+---
+## Review: ddx-9e2dad4b iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Test no longer references fakeExecuteBeadGit/fakeAgentRunner | APPROVE | cli/cmd/agent_execute_bead_test.go:2008-2079 — body uses real git via runGit + script harness; no fake refs in `TestExecuteBeadCompoundErrorAgentAndHeadRevFailure` |
+| 2 | Dispatches through real-git harness | APPROVE | agent_execute_bead_test.go:2058-2061 — `f.AgentRunnerOverride = agent.NewRunner(agent.Config{})` + `--harness script --model directives.txt`; real `git init/commit/rev-parse` build the repo |
+| 3 | go test -run ... -count=1 green | APPROVE | commit d96854fc landed via execute-bead with outcome=task_succeeded; sandbox blocks re-running, but landing gate requires green tests |
+| 4 | No other test in file modified | APPROVE | `git show d96854fc --stat` shows 1 file, +67/-9, all hunks within `TestExecuteBeadCompoundErrorAgentAndHeadRevFailure` |
+
+### Summary
+
+Clean, scoped migration. The compound-error path is now reproduced with real failures: a script directive corrupts `.git` so `git rev-parse HEAD` fails for real, while a second directive returns a synthetic agent error — together exercising the real RealLandingGitOps + agent dispatch code paths the original fakes were stubbing. Assertions were preserved in spirit (now matching real error strings instead of canned text).

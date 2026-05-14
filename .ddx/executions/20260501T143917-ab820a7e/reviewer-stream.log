@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All AC items satisfied: container text-sm dropped from metadata grid and three sections; explicit text-body-md/text-body-sm/text-label-caps/text-mono-code applied per element; font-mono-code paired with text-mono-code; alert-caution and lifecycle items now use text-body-sm; pre elements carry font-mono-code text-mono-code.",
+  "findings": [
+    { "severity": "info", "summary": "Metadata grid wrapper switched from text-body-sm to no size token, with each child explicitly carrying text-body-md/text-label-caps; consistent with the 'no inherited size' acceptance.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte:311" },
+    { "severity": "info", "summary": "font-mono-code added alongside text-mono-code at the two flagged spans (attempts and phase-elapsed).", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte:351" },
+    { "severity": "info", "summary": "Lifecycle <li> updated from text-xs to text-body-sm; alert-caution banner updated from text-xs to text-body-sm.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte:431" }
+  ]
+}
+```

@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review only contains an execution result.json artifact; no changes to screenshots.spec.ts or demo-recording.spec.ts are visible. Cannot verify any of the acceptance criteria from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No modifications to screenshots.spec.ts in the diff; cannot verify coverage of all 7 feature areas.", "location": "website/ or e2e spec path (not present in diff)" },
+    { "severity": "block", "summary": "No modifications to demo-recording.spec.ts in the diff; cannot verify Playwright video capture for 7 features.", "location": "website/ or e2e spec path (not present in diff)" },
+    { "severity": "block", "summary": "No assets or output paths under website/static/ui/ shown in diff.", "location": "website/static/ui/" },
+    { "severity": "info", "summary": "Only execution metadata (result.json) was included; the actual implementation commit ed19d6dd is referenced but its contents are not in this review diff.", "location": ".ddx/executions/20260501T115200-d1ae1a5d/result.json" }
+  ]
+}
+```

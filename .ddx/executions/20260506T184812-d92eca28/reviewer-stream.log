@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no code, tests, deadcode output, or decisions log changes needed to satisfy any acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No production wiring or deletion changes are present for any of the 14 `internal/metric` symbols, so the core reachability requirement is unimplemented.",
+      "location": ".ddx/executions/20260506T184812-d92eca28/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence of the required decisions log at `.ddx/executions/<run-id>/decisions.md`, nor any annotations or follow-up bead references for pending wiring decisions.",
+      "location": ".ddx/executions/20260506T184812-d92eca28/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The diff provides no deadcode RTA results and no `cd cli && go test ./...` evidence, so acceptance criteria 3 and 4 cannot be verified.",
+      "location": ".ddx/executions/20260506T184812-d92eca28/result.json:1"
+    }
+  ]
+}
+```
