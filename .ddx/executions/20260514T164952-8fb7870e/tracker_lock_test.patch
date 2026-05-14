@@ -1,0 +1,100 @@
+diff --git a/cli/internal/agent/tracker_lock_test.go b/cli/internal/agent/tracker_lock_test.go
+index 67ca60d52..70c8d8240 100644
+--- a/cli/internal/agent/tracker_lock_test.go
++++ b/cli/internal/agent/tracker_lock_test.go
+@@ -5,6 +5,7 @@ import (
+ 	"os"
+ 	"os/exec"
+ 	"path/filepath"
++	"runtime"
+ 	"strings"
+ 	"sync"
+ 	"testing"
+@@ -505,3 +506,87 @@ func TestTrackerLock_RecordsRetryCount(t *testing.T) {
+ 		t.Fatalf("LockDir = %q, want %q", got[0].LockDir, lockDir)
+ 	}
+ }
++
++// TestTrackerLock_StaleLockAfterPartialLocalLand asserts the local-only
++// stale-lock recovery path after a partial Land(): worker 1 acquired the
++// main-git lock, advanced local main via UpdateRefTo, then crashed without
++// releasing the lock. Worker 2 must observe the dead-owner lock, break it
++// via breakStaleTrackerLock (tracker_lock.go:218-240), and proceed with its
++// own Land() that fast-forwards over the local-ahead state — without
++// re-merging worker 1's commit or rolling main back to the original base.
++//
++// All timing is synchronous: the stale state is set up before Land() runs,
++// and breakStaleTrackerLock fires on the first Mkdir attempt. No sleeps.
++func TestTrackerLock_StaleLockAfterPartialLocalLand(t *testing.T) {
++	if runtime.GOOS == "windows" {
++		t.Skip("dead-PID detection unsupported on Windows (trackerProcessAlive always returns true); age-based fallback is covered by TestTrackerCommit_StaleLockRecovery")
++	}
++
++	r := newLandTestRepo(t)
++	c0 := r.baseSHA
++
++	// Stage 1: simulate worker 1's partial land — local main has been
++	// advanced to c1 via UpdateRefTo (the last write before the crash).
++	c1 := r.commitOn(c0, "worker1.txt", "worker1\n", "feat: worker1")
++	r.runGit("update-ref", "refs/heads/main", c1)
++	r.syncWorkTreeFrom(c0)
++
++	// Stage 2: leave behind a stale lock owned by a dead PID. We spawn a
++	// trivial child and immediately reap it so its PID is known-dead by the
++	// time we write the sidecar — no wall-clock waiting. acquired_at is
++	// fresh, so the age-based fallback cannot fire; only the dead-PID
++	// branch of breakStaleTrackerLock can clear this lock.
++	corpse := exec.Command("/bin/sh", "-c", "exit 0")
++	require.NoError(t, corpse.Run())
++	deadPID := corpse.Process.Pid
++	if deadPID <= 0 || deadPID == os.Getpid() {
++		t.Fatalf("could not synthesise a dead PID distinct from self: got %d", deadPID)
++	}
++
++	lockDir := trackerLockPath(r.dir)
++	require.NoError(t, os.MkdirAll(lockDir, 0o755))
++	require.NoError(t, os.WriteFile(filepath.Join(lockDir, "pid"),
++		[]byte(fmt.Sprintf("%d", deadPID)), 0o644))
++	require.NoError(t, os.WriteFile(filepath.Join(lockDir, "acquired_at"),
++		[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
++
++	// Stage 3: worker 2 builds its own commit on top of the local-ahead tip.
++	c2 := r.commitOn(c1, "worker2.txt", "worker2\n", "feat: worker2")
++
++	// Stage 4: worker 2 lands. withMainGitLock breaks the stale lock on its
++	// first attempt and Land() proceeds along the fast-forward path because
++	// currentTip == BaseRev (c1).
++	req := LandRequest{
++		WorktreeDir:  r.dir,
++		BaseRev:      c1,
++		ResultRev:    c2,
++		BeadID:       "ddx-stale-lock-partial",
++		AttemptID:    "20260514T000000-stale",
++		TargetBranch: "main",
++	}
++	land, err := Land(r.dir, req, RealLandingGitOps{})
++	require.NoError(t, err, "Land must recover from stale lock")
++
++	// Stage 5: assertions.
++	if land.Status != "landed" {
++		t.Fatalf("Status = %q (reason=%q), want \"landed\"", land.Status, land.Reason)
++	}
++	if land.Merged {
++		t.Fatalf("Merged = true, want false (FF expected over local-ahead state — no re-merge of worker 1)")
++	}
++	if land.NewTip != c2 {
++		t.Fatalf("NewTip = %s, want %s", land.NewTip, c2)
++	}
++	if got := r.resolveRef("refs/heads/main"); got != c2 {
++		t.Fatalf("main tip = %s, want %s", got, c2)
++	}
++	if !r.shaReachable("refs/heads/main", c1) {
++		t.Fatal("worker 1 commit c1 is not reachable from main after worker 2 Land — local-ahead state was rolled back")
++	}
++	if n := r.mergeCommitCount("refs/heads/main"); n != 0 {
++		t.Fatalf("merge-commit count = %d, want 0 (fast-forward expected)", n)
++	}
++	if _, statErr := os.Stat(lockDir); !os.IsNotExist(statErr) {
++		t.Fatalf("tracker lock dir not cleaned up after stale recovery: stat err = %v", statErr)
++	}
++}
