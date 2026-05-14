@@ -1,0 +1,76 @@
+{
+  "attempt_id": "20260514T154528-f0d9564a",
+  "bead_id": "ddx-b4edab35",
+  "base_rev": "b632aee039f1c451cba6ec4c83d597220fbe1ce7",
+  "created_at": "2026-05-14T15:45:32.327593836Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b4edab35",
+    "title": "bead review: reuse Vale-backed prose findings",
+    "description": "PROBLEM\nBead review should be able to use normalized Vale-backed prose findings without confusing prose advice with correctness review.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:264-283 requires prose findings and correctness review to stay separate. The plan also lists `ddx bead review --prose` reuse after the command engine lands at lines 356-359.\n\nSMART JUSTIFICATION: Review integration is policy-sensitive. A weak implementation could turn advisory prose checks into blocking correctness gates or mix style findings into acceptance-criterion verdicts.\n\nPROPOSED FIX\n- Add or update the `ddx bead review --prose` path to reuse normalized prose findings.\n- Attach prose evidence separately from acceptance/correctness review evidence.\n- Keep prose findings advisory by default.\n\nNON-SCOPE\n- Do not make prose findings block bead closure.\n- Do not run prose checks for non-doc changes.\n- Do not alter reviewer model routing.\n\nDEPS\nDepends on the Vale-backed public `ddx doc prose` command.",
+    "acceptance": "1. `TestBeadReviewProse_UsesNormalizedDocProseFindings` covers reuse of the Vale-backed findings.\n2. `TestBeadReviewProse_EvidenceSeparateFromCorrectnessReview` covers evidence separation.\n3. `TestBeadReviewProse_AdvisoryByDefault` proves findings do not block closure.\n4. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "adr:025",
+      "area:docprose",
+      "area:review",
+      "kind:integration",
+      "phase:2",
+      "prose-quality",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:smart"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T15:44:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "18574",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:33:44.101688572Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-b4edab35\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:33:44.155208945Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:33:44.256483491Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T15:44:31.501633337Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T154528-f0d9564a",
+    "prompt": ".ddx/executions/20260514T154528-f0d9564a/prompt.md",
+    "manifest": ".ddx/executions/20260514T154528-f0d9564a/manifest.json",
+    "result": ".ddx/executions/20260514T154528-f0d9564a/result.json",
+    "checks": ".ddx/executions/20260514T154528-f0d9564a/checks.json",
+    "usage": ".ddx/executions/20260514T154528-f0d9564a/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b4edab35-20260514T154528-f0d9564a"
+  },
+  "prompt_sha": "cf8b73a852f603ba4f6aa858115d94c2a7868a35672aabd48d0222850659f362"
+}
