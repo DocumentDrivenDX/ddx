@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260514T102840-d1f1476f",
+  "bead_id": "ddx-de278b8d",
+  "base_rev": "b54676fdb18f08f0e65d826e00c05badc6f2b3e7",
+  "created_at": "2026-05-14T10:28:53.84435454Z",
+  "requested": {
+    "harness": "claude",
+    "model": "opus",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-de278b8d",
+    "title": "review: GraphQL mutations + reviewSessionEvents (status + optional deltas)",
+    "description": "PROBLEM\nNo GraphQL mutations or subscription exist for review sessions. The review panel (Story 18) cannot start, respond to, or cancel a review session through the GraphQL API, and there is no way to stream review response deltas to the frontend.\n\nROOT CAUSE\n- cli/internal/server/graphql/schema.graphql: no reviewSessionStart, reviewSessionRespond, reviewSessionCancel mutations defined.\n- cli/internal/server/graphql/schema.graphql: no reviewSessionEvents subscription defined.\n- cli/internal/server/graphql_resolver.go: no resolver implementations for the above.\n- ddx-f7c3d512 (turn dispatcher, a dep) must land first — it provides the dispatch path that these mutations invoke.\n\nPROPOSED FIX\n- Add to schema.graphql:\n  - Mutation.reviewSessionStart(sessionId, artifactId, artifactSha, templateRef, promptRef, maxBillableUSD): ReviewSession\n  - Mutation.reviewSessionRespond(sessionId, turn): ReviewSession\n  - Mutation.reviewSessionCancel(sessionId): Boolean\n  - Subscription.reviewSessionEvents(sessionId): ReviewSessionEvent (streaming deltas optional; final-message required)\n- Add resolver implementations in graphql_resolver.go for each mutation + subscription.\n- Streaming deltas: optional (loosened per codex from strict streaming AC); final-message is required.\n\nNON-SCOPE\n- Reviewer routing and cost cap (ddx-f1e12904).\n- Turn dispatcher implementation (ddx-f7c3d512, a dep).",
+    "acceptance": "1. reviewSessionStart, reviewSessionRespond, reviewSessionCancel mutations in schema.graphql.\n2. reviewSessionEvents subscription in schema.graphql.\n3. All four resolver implementations present in graphql_resolver.go.\n4. Delta streaming optional; final-message required (verified by test).\n5. TestGraphQL_ReviewSessionStart verifies mutation creates a ReviewSession with correct fields.\n6. TestGraphQL_ReviewSessionRespond verifies turn appended to session.\n7. TestGraphQL_ReviewSessionCancel verifies session status set to cancelled.\n8. TestGraphQL_ReviewSessionEvents_FinalMessage verifies subscription delivers final message.\n9. cd cli \u0026\u0026 go test ./internal/server/... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "area:server",
+      "kind:feature",
+      "phase:2",
+      "story:18"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T10:27:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4085275",
+      "execute-loop-heartbeat-at": "2026-05-14T10:27:58.606610034Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T102840-d1f1476f",
+    "prompt": ".ddx/executions/20260514T102840-d1f1476f/prompt.md",
+    "manifest": ".ddx/executions/20260514T102840-d1f1476f/manifest.json",
+    "result": ".ddx/executions/20260514T102840-d1f1476f/result.json",
+    "checks": ".ddx/executions/20260514T102840-d1f1476f/checks.json",
+    "usage": ".ddx/executions/20260514T102840-d1f1476f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-de278b8d-20260514T102840-d1f1476f"
+  },
+  "prompt_sha": "dc5eb6bc85c96fcb30676ab361eeda4c138ec3fc9f0c32c8f4c019b7d0b7b90b"
+}
