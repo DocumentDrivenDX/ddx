@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260514T213233-0f31c238",
+  "bead_id": "ddx-777f4a09",
+  "base_rev": "152c01d388cefc467aa15d437d347f269ae0303f",
+  "created_at": "2026-05-14T21:32:45.486554383Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-777f4a09",
+    "title": "lefthook: scope ddx-validate pre-commit hook to changes that need validation",
+    "description": "PROBLEM\nThe ddx-validate pre-commit hook runs ddx doctor on every commit that touches .ddx.yml, templates/, patterns/, or prompts/. It rejects the commit if ddx doctor exits non-zero. Today this blocked a 1121-file rename commit because ddx doctor was flagging unrelated legacy skill symlinks under .agents/skills/helix and .claude/skills/helix — which were not part of the staged change. The operator had to remove the symlinks (or know about the doctor issue) to unblock an entirely unrelated commit. The hook scope is too coarse: it validates GLOBAL repo health, not the staged change.\n\nROOT CAUSE\nlefthook.yml ddx-validate hook (see scripts/) runs `ddx doctor` with no scoping. ddx doctor checks installation health, plugin layout, git config, skill symlinks, sync status, etc. — all repo-global, none of which are mutated by an arbitrary staged change touching .ddx.yml or templates. A skill-symlink issue (or any other doctor finding unrelated to the staged files) thus blocks unrelated commits.\n\nPROPOSED FIX\n- Replace the global `ddx doctor` invocation with a scoped validation that only checks the categories of state actually mutated by the staged change:\n  - If .ddx.yml staged → run config-only validation (parse + schema).\n  - If templates/, patterns/, prompts/ staged → run resource-only validation (the staged file's syntax/schema).\n- Add a ddx doctor --scope=staged or ddx doctor --paths \u003cfile\u003e... flag that takes a path list and only runs checks whose subject is in that list. Hook passes the staged path list.\n- Keep the full doctor available as an operator command; just don't run it on every commit.\n- Document the new scoping model in scripts/ or AGENTS.md.\n\nNON-SCOPE\n- Do not change what ddx doctor checks at the full-run level; only scope it for hook usage.\n- Do not change other lefthook hooks.\n\nDEPS\nNone.",
+    "acceptance": "1. TestDoctorScopedToConfigChange asserts that `ddx doctor --paths .ddx.yml` only runs config-related checks and exits 0 when other repo state (e.g. legacy skill symlinks) would have failed a full-scope doctor.\n2. TestDoctorScopedToResourceChange asserts the same for templates/, patterns/, prompts/.\n3. TestDoctorFullScopeStillFails asserts that `ddx doctor` with no --paths argument still surfaces the legacy-symlink finding (regression guard — the full check must still work).\n4. lefthook.yml ddx-validate hook is rewritten to pass `--paths \"$(git diff --cached --name-only | tr '\\n' ' ')\"` to ddx doctor. A unit test for the hook script (or an integration test that stages a rename and commits) confirms the hook does not invoke full-scope doctor.\n5. cd cli \u0026\u0026 go test ./cmd/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "area:lefthook",
+      "area:devx",
+      "kind:bug",
+      "phase:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T21:32:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "988202",
+      "work-heartbeat-at": "2026-05-14T21:32:33.17483299Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T213233-0f31c238",
+    "prompt": ".ddx/executions/20260514T213233-0f31c238/prompt.md",
+    "manifest": ".ddx/executions/20260514T213233-0f31c238/manifest.json",
+    "result": ".ddx/executions/20260514T213233-0f31c238/result.json",
+    "checks": ".ddx/executions/20260514T213233-0f31c238/checks.json",
+    "usage": ".ddx/executions/20260514T213233-0f31c238/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-777f4a09-20260514T213233-0f31c238"
+  },
+  "prompt_sha": "e36370642252b4cd38f4fcd715ba6d688633e87fe660f3058be6be69d62beda6"
+}
