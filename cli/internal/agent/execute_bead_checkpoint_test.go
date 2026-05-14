@@ -137,6 +137,10 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 	evidencePath := filepath.Join(projectRoot, evidenceRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
 	require.NoError(t, os.WriteFile(evidencePath, []byte(`{"attempt_id":"`+attemptID+`"}`+"\n"), 0o644))
+	metricsRel := filepath.Join(".ddx", "metrics", "attempts.jsonl")
+	metricsPath := filepath.Join(projectRoot, metricsRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n"), 0o644))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
@@ -148,6 +152,7 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 	assert.NotEqual(t, headBefore, headAfter, "HEAD must advance for checkpointed bookkeeping")
 	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json"), "allow")
 	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+evidenceRel), attemptID)
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+metricsRel), attemptID)
 }
 
 func TestCheckpointPreDispatchDirtRejectsImplementationPaths(t *testing.T) {

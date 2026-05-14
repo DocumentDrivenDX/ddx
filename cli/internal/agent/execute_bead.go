@@ -724,6 +724,8 @@ func preDispatchCheckpointAllowedPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/executions/"):
 		return true
+	case strings.HasPrefix(path, ".ddx/metrics/"):
+		return true
 	case strings.HasPrefix(path, ".ddx/runs/"):
 		return true
 	case strings.HasPrefix(path, ".ddx/run-state/"):
