@@ -1,0 +1,9 @@
+{
+  "attempt_id": "20260514T103301-bf90bdb4",
+  "harness": "claude",
+  "model": "opus",
+  "tokens": 10795,
+  "input_tokens": 40,
+  "output_tokens": 10755,
+  "cost_usd": 1.9863494999999995
+}
