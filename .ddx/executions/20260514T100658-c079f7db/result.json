@@ -1,0 +1,15 @@
+{
+  "bead_id": "ddx-701cdf39",
+  "attempt_id": "20260514T100658-c079f7db",
+  "base_rev": "717eb318cb2d54371cb643bdcf255f59ea9c4c07",
+  "result_rev": "717eb318cb2d54371cb643bdcf255f59ea9c4c07",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "loading bead ddx-701cdf39 from worktree snapshot: bead: not found: ddx-701cdf39",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "loading bead ddx-701cdf39 from worktree snapshot: bead: not found: ddx-701cdf39",
+  "failure_mode": "unknown",
+  "started_at": "0001-01-01T00:00:00Z",
+  "finished_at": "0001-01-01T00:00:00Z"
+}
