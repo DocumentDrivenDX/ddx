@@ -333,7 +333,7 @@ func TestSelectProfileForDispatch_ColdProjectCacheLoadsPolicySnapshot(t *testing
 
 	assert.Equal(t, "smart", got)
 	assert.Equal(t, 1, svc.profileCalls)
-	assert.Equal(t, 1, svc.modelCalls)
+	assert.Equal(t, 0, svc.modelCalls)
 }
 
 func resetProfileSnapshotCacheForTest(t *testing.T) {

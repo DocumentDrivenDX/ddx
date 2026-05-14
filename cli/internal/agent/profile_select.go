@@ -193,15 +193,8 @@ func fetchProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Prof
 	if err != nil {
 		return ProfileSnapshot{}, err
 	}
-	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
-	if err != nil {
-		return ProfileSnapshot{
-			Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
-		}, nil
-	}
 	return ProfileSnapshot{
 		Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
-		Models:   append([]agentlib.ModelInfo(nil), models...),
 	}, nil
 }
 
@@ -617,7 +610,7 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 	}
 	if coldCtx, cancel := profileSnapshotColdLoadContext(ctx); coldCtx != nil {
 		defer cancel()
-		snap, err := loadProfileSnapshot(coldCtx, key, selectedSvc)
+		snap, err := loadProfilePolicySnapshot(coldCtx, key, selectedSvc)
 		if err == nil {
 			startProfileSnapshotRefresh(key, selectedSvc)
 			return selector(snap)
@@ -625,6 +618,20 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 	}
 	startProfileSnapshotRefresh(key, selectedSvc)
 	return ""
+}
+
+func loadProfilePolicySnapshot(ctx context.Context, key string, svc agentlib.FizeauService) (ProfileSnapshot, error) {
+	profiles, err := svc.ListPolicies(ctx)
+	if err != nil {
+		return ProfileSnapshot{}, err
+	}
+	snap := ProfileSnapshot{Profiles: append([]agentlib.PolicyInfo(nil), profiles...)}
+	if key != "" {
+		profileSnapshotCacheMu.Lock()
+		profileSnapshotCache[key] = profileSnapshotCacheEntry{snap: cloneProfileSnapshot(snap), loadedAt: profileSnapshotNow()}
+		profileSnapshotCacheMu.Unlock()
+	}
+	return snap, nil
 }
 
 func profileSnapshotColdLoadContext(parent context.Context) (context.Context, context.CancelFunc) {
