@@ -58,6 +58,7 @@ type AgentRunRuntime struct {
 	PromptFile            string
 	PromptSource          string
 	Output                io.Writer // optional live service-event progress sink
+	WorkLogPhase          string    // optional phase label for live service-event progress
 	Correlation           map[string]string
 	Record                bool
 	Replay                bool

@@ -272,9 +272,13 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
+	workPhase := strings.TrimSpace(runtime.WorkLogPhase)
+	if workPhase == "" {
+		workPhase = "do"
+	}
 	renderer := NewWorkLogRenderer(WorkLogRendererOptions{
 		CurrentBeadID: runtime.Correlation["bead_id"],
-		WorkPhase:     "do",
+		WorkPhase:     workPhase,
 	})
 	watchdog := &drainWatchdog{
 		cancel:          cancel,

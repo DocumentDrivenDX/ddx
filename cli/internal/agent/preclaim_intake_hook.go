@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
@@ -149,6 +150,12 @@ func (p preClaimReadinessChecksPayload) Len() int {
 // bead-readiness decisions, so they return intake_error and let the loop use
 // its fail-open readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+	return NewPreClaimIntakeHookWithLog(projectRoot, store, rcfg, svc, runner, nil)
+}
+
+// NewPreClaimIntakeHookWithLog constructs the pre-claim intake hook and emits
+// the prompt plus live service progress to log when provided.
+func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -179,11 +186,15 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			Prompt:        prompt,
 			WorkDir:       projectRoot,
 			PromptSource:  PreClaimIntakePromptSource,
+			Output:        log,
+			WorkLogPhase:  "readiness",
+			Correlation:   map[string]string{"bead_id": beadID},
 			ClearProfile:  true,
 			ClearMinPower: true,
 			ClearMaxPower: true,
 		}
 		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectCheapestProfile)
+		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{
@@ -194,6 +205,53 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 
 		return decodePreClaimIntakePayloadResultWithMode(payload, rcfg.BeadQualityMode())
 	}
+}
+
+func logPreClaimIntakePrompt(w io.Writer, projectRoot, beadID, prompt string, runtime AgentRunRuntime) {
+	if w == nil {
+		return
+	}
+	logDir := ResolveLogDir(projectRoot, "")
+	_, _ = fmt.Fprintf(w, "readiness prompt %s: source=%s bytes=%d session_logs=%s\n", beadID, PreClaimIntakePromptSource, len(prompt), logDir)
+	if route := preClaimIntakeRouteSummary(runtime); route != "" {
+		_, _ = fmt.Fprintf(w, "readiness prompt %s: route %s\n", beadID, route)
+	}
+	_, _ = fmt.Fprintf(w, "readiness prompt %s begin\n%s", beadID, truncatePreClaimIntakePromptForLog(prompt))
+	if !strings.HasSuffix(prompt, "\n") {
+		_, _ = fmt.Fprintln(w)
+	}
+	_, _ = fmt.Fprintf(w, "readiness prompt %s end\n", beadID)
+}
+
+func preClaimIntakeRouteSummary(runtime AgentRunRuntime) string {
+	var fields []string
+	if runtime.ProfileOverride != "" {
+		fields = append(fields, "profile="+runtime.ProfileOverride)
+	}
+	if runtime.HarnessOverride != "" {
+		fields = append(fields, "harness="+runtime.HarnessOverride)
+	}
+	if runtime.ProviderOverride != "" {
+		fields = append(fields, "provider="+runtime.ProviderOverride)
+	}
+	if runtime.ModelOverride != "" {
+		fields = append(fields, "model="+runtime.ModelOverride)
+	}
+	return strings.Join(fields, " ")
+}
+
+func truncatePreClaimIntakePromptForLog(prompt string) string {
+	const limit = 32 * 1024
+	if len(prompt) <= limit {
+		return prompt
+	}
+	const marker = "\n...[readiness prompt truncated in worker log; full prompt is in the service session log]...\n"
+	head := (limit - len(marker)) / 2
+	tail := limit - len(marker) - head
+	if head <= 0 || tail <= 0 {
+		return prompt[:limit]
+	}
+	return prompt[:head] + marker + prompt[len(prompt)-tail:]
 }
 
 func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime *AgentRunRuntime, selector func(ProfileSnapshot) string) {

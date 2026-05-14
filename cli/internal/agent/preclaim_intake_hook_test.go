@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -161,6 +162,28 @@ func TestPreClaimIntakeHook_DispatchesWithCheapestProfileNoStrongPowerTrick(t *t
 	assert.Equal(t, "cheap", svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
+}
+
+func TestPreClaimIntakeHookWithLogEmitsPrompt(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+	}
+	var log bytes.Buffer
+
+	hook := NewPreClaimIntakeHookWithLog(root, store, intakeHookTestConfig(), svc, nil, &log)
+	got, err := hook(context.Background(), b.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	out := log.String()
+	assert.Contains(t, out, "readiness prompt "+b.ID+": source=bead-lifecycle-intake")
+	assert.Contains(t, out, "session_logs=")
+	assert.Contains(t, out, "readiness prompt "+b.ID+" begin")
+	assert.Contains(t, out, "MODE: intake")
+	assert.Contains(t, out, b.Title)
+	assert.Contains(t, out, "readiness prompt "+b.ID+" end")
 }
 
 func TestDecompositionHook_CatalogUnavailableUsesAutoRouteWithoutMagicPower(t *testing.T) {

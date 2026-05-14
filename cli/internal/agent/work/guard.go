@@ -11,7 +11,7 @@ import (
 
 // DefaultPreClaimTimeout bounds pre-claim readiness hooks when callers do not
 // provide an explicit timeout.
-const DefaultPreClaimTimeout = 30 * time.Second
+const DefaultPreClaimTimeout = 5 * time.Minute
 
 // Guard decides whether a bead may proceed. Callers use the returned reason
 // for skip telemetry and logs.
