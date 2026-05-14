@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260514T164555-a9bb4ec8",
+  "bead_id": "ddx-33acb746",
+  "base_rev": "a39bf3dcdcd82d5c058ab91b1eda52ce315a4c18",
+  "created_at": "2026-05-14T16:45:59.620335931Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-33acb746",
+    "title": "docs: run Vale-backed prose pass across DDx docs",
+    "description": "PROBLEM\nAfter the Vale-backed checker, skill, and workflow hook work, DDx docs need one measured cleanup pass that applies high-signal prose findings and records the before/after result.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:361-369 says full-doc cleanup must wait until checker, skill, and workflow evidence paths are working. The cleanup needs to record finding count and word-count delta instead of silently rewriting docs.\n\nSMART JUSTIFICATION: Corpus-scale editorial cleanup is high-judgment. The agent must preserve DDx technical meaning, commands, paths, IDs, acceptance criteria, and rationale while reducing filler and AI-slop constructions where safe.\n\nPROPOSED FIX\n- Run the Vale-backed `ddx doc prose` pass across `docs/**`.\n- Apply only high-signal findings.\n- Preserve DDx terminology, commands, paths, headings, tables, frontmatter, IDs, AC, and useful technical density.\n- Record before/after finding count and word-count delta in the bead evidence or close notes.\n\nNON-SCOPE\n- Do not tune checker rules in this bead.\n- Do not rewrite code comments outside docs.\n- Do not pursue low-confidence findings.\n\nDEPS\nDepends on workflow-hook evidence so cleanup uses the final integrated prose workflow.",
+    "acceptance": "1. `ddx doc prose docs` before cleanup records the baseline finding count.\n2. High-signal findings are edited without changing DDx commands, paths, IDs, frontmatter, headings, tables, or acceptance criteria.\n3. `ddx doc prose docs` after cleanup records the final finding count.\n4. Word-count delta is recorded, and any increases are justified by added specificity.\n5. `ddx doc audit` passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "adr:025",
+      "area:docs",
+      "kind:docs",
+      "phase:2",
+      "prose-quality",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:smart"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T16:45:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "225509",
+      "execute-loop-heartbeat-at": "2026-05-14T16:45:07.51027707Z",
+      "execute-loop-last-detail": "landing worktree has staged changes after waiting 2s:\nD\t.ddx/executions/20260514T155540-0f695a5e/checks/production-reachability.json\nD\t.ddx/executions/20260514T155540-0f695a5e/manifest.json\nD\t.ddx/executions/20260514T155540-0f695a5e/prompt.md\nD\t.ddx/executions/20260514T155540-0f695a5e/result.json\nD\t.ddx/executions/20260514T155540-0f695a5e/usage.json\nM\tcli/cmd/command_factory.go\nM\tcli/cmd/execute_loop_shared.go\nM\tcli/cmd/try.go\nD\tcli/cmd/try_prose_test.go\nM\tcli/internal/agent/execute_bead_loop.go\nD\tcli/internal/agent/prose_evidence.go",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-14T16:21:20Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T164555-a9bb4ec8",
+    "prompt": ".ddx/executions/20260514T164555-a9bb4ec8/prompt.md",
+    "manifest": ".ddx/executions/20260514T164555-a9bb4ec8/manifest.json",
+    "result": ".ddx/executions/20260514T164555-a9bb4ec8/result.json",
+    "checks": ".ddx/executions/20260514T164555-a9bb4ec8/checks.json",
+    "usage": ".ddx/executions/20260514T164555-a9bb4ec8/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-33acb746-20260514T164555-a9bb4ec8"
+  },
+  "prompt_sha": "30d3612e48c1ffc4b81e59e76641dd335a962c7de47c4b310585858ae2944e08"
+}
