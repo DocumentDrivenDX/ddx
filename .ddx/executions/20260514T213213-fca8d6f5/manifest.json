@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260514T213213-fca8d6f5",
+  "bead_id": "ddx-6a518fd9",
+  "base_rev": "f62fab52a9875e2f37fbff7066dcf4306d439801",
+  "created_at": "2026-05-14T21:32:18.271585801Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6a518fd9",
+    "title": "bead: route ddx bead create/update auto-commits through git-index-lock recovery",
+    "description": "PROBLEM\nddx bead create and ddx bead update each auto-commit a single tracker change (the bead's JSONL line plus events). When .git/index.lock is held by a transient external git process (notably the Claude Code statusline poller running `git diff --quiet` every second or two), the auto-commit fails with \"fatal: Unable to create '.git/index.lock': File exists. Another git process seems to be running in this repository, or the lock file may be stale\". Observed multiple times today: filing or updating a bead during routine session activity bounced on the statusline poll's transient lock and required a manual retry. The earlier fix (71699db95 fix(agent): recover stale .git/index.lock by owner liveness + age) added recoverGitIndexLock + runGitWithIndexLockRecovery, but those are only wired into the execute-loop's commitTrackerLocked and readTreeHeadWithRetry — not into the bead-create/update auto-commit path.\n\nROOT CAUSE\ncli/internal/bead/store.go (the auto-commit on bead mutation) invokes git add / git commit via the standard internalgit.Command wrapper without the index-lock recovery. cli/cmd/bead.go's `runBeadCreate`, `runBeadUpdate`, `runBeadClose`, `runBeadDep*` all funnel into the same Store.WithLock + Store auto-commit path. Today the recovery helper is package-private to cli/internal/agent (runGitWithIndexLockRecovery); the bead package cannot use it.\n\nPROPOSED FIX\n- Lift runGitWithIndexLockRecovery and recoverGitIndexLock from cli/internal/agent into a small shared package (e.g. cli/internal/gitlock) so both the agent and bead packages can call into it.\n- Wire the bead-mutation auto-commit path (Store.AutoCommit or equivalent in cli/internal/bead/store.go) to use the recovery helper for git add / git commit / git update-ref calls.\n- No retry budget escalation: the recovery is identical (3 attempts ~1s worst case), bead operations stay fast.\n- Migrate cli/internal/agent's call sites to use the shared package so we don't keep two copies.\n\nNON-SCOPE\n- Do not change bead-create or bead-update semantics. Recovery is transparent.\n- Do not change the index.lock recovery heuristic itself; just reuse it.\n- Do not change the ddx work execute-loop path (already covered).\n\nDEPS\nNone.",
+    "acceptance": "1. TestBeadCreate_StaleIndexLockSelfHeals asserts ddx bead create against a worktree with a stale .git/index.lock (mtime \u003e gitIndexLockStaleAge, no owner) succeeds without operator intervention. Regression guard for today's repeated lock-bounce friction.\n2. TestBeadUpdate_StaleIndexLockSelfHeals — same, for ddx bead update.\n3. TestBeadClose_StaleIndexLockSelfHeals — same, for ddx bead close.\n4. cli/internal/gitlock package exists, exports RecoverGitIndexLock and RunGitWithIndexLockRecovery, and is imported by both cli/internal/agent and cli/internal/bead.\n5. cli/internal/agent's existing runGitWithIndexLockRecovery callers (execute_bead_loop.go, execute_bead_land.go) compile against the shared package and existing tests in cli/internal/agent green.\n6. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "labels": [
+      "area:bead",
+      "area:git-resilience",
+      "kind:bug",
+      "phase:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T21:32:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "987627",
+      "work-heartbeat-at": "2026-05-14T21:32:13.851912322Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T213213-fca8d6f5",
+    "prompt": ".ddx/executions/20260514T213213-fca8d6f5/prompt.md",
+    "manifest": ".ddx/executions/20260514T213213-fca8d6f5/manifest.json",
+    "result": ".ddx/executions/20260514T213213-fca8d6f5/result.json",
+    "checks": ".ddx/executions/20260514T213213-fca8d6f5/checks.json",
+    "usage": ".ddx/executions/20260514T213213-fca8d6f5/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-6a518fd9-20260514T213213-fca8d6f5"
+  },
+  "prompt_sha": "77b5b96593d5f4b743b45ce946a65e5fa33f3fc0561e3020dd28c84113f1f164"
+}
