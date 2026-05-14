@@ -196,8 +196,8 @@ func TestBeadMigrateLifecycleDryRunReportsLegacyCounts(t *testing.T) {
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"]}`,
-		`{"id":"ddx-investigate","title":"investigate","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["triage:needs-investigation"],"execute-loop-last-detail":"rerun with smart agent"}`,
-		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","execute-loop-last-detail":"rerun with stronger model"}`,
+		`{"id":"ddx-investigate","title":"investigate","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["triage:needs-investigation"],"work-last-detail":"rerun with smart agent"}`,
+		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","work-last-detail":"rerun with stronger model"}`,
 	}, "\n") + "\n"
 	beadsPath := filepath.Join(workingDir, ".ddx", "beads.jsonl")
 	require.NoError(t, os.WriteFile(beadsPath, []byte(rows), 0o644))
@@ -255,7 +255,7 @@ func TestBeadMigrateLifecycleIsIdempotent(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
-		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","execute-loop-last-detail":"rerun with smart agent"}`,
+		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","work-last-detail":"rerun with smart agent"}`,
 	}, "\n") + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
 

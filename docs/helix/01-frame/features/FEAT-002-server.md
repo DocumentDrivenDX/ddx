@@ -26,7 +26,7 @@ UI — all from a single binary.
 `ddx-server` runs as a per-user host daemon: one server process per machine,
 scoped to one operating-system user. It holds its identity and project
 registry in user-level state — not inside any project — and supervises
-execute-loop workers for every project it has registered. The state file lives
+work workers for every project it has registered. The state file lives
 at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json`
 when set), and the last-known server URL is written to
 `~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple

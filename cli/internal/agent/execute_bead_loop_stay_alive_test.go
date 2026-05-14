@@ -146,8 +146,8 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
-	assert.Nil(t, gotFirst.Extra["execute-loop-retry-after"])
-	assert.Nil(t, gotSecond.Extra["execute-loop-retry-after"])
+	assert.Nil(t, gotFirst.Extra["work-retry-after"])
+	assert.Nil(t, gotSecond.Extra["work-retry-after"])
 
 	out := logBuf.String()
 	assert.Contains(t, out, "systemic; leaving beads untouched")

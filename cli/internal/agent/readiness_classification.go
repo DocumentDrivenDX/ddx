@@ -34,7 +34,7 @@ const (
 )
 
 // ReadinessClassificationResult is the deterministic bridge between the
-// bead-lifecycle readiness vocabulary and execute-loop scheduling semantics.
+// bead-lifecycle readiness vocabulary and work scheduling semantics.
 type ReadinessClassificationResult struct {
 	Classification       string
 	Reason               string

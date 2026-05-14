@@ -16,7 +16,7 @@ ddx:
 
 ## What happened
 
-Recent attempts failed for several different reasons, but the evidence is split across tracker events, execution bundles, and the execute-loop's own logging split between pre-claim intake and pre-dispatch lint paths. The result is that operators see a mix of:
+Recent attempts failed for several different reasons, but the evidence is split across tracker events, execution bundles, and the work's own logging split between pre-claim intake and pre-dispatch lint paths. The result is that operators see a mix of:
 
 - provider and transport failures
 - routing/preflight failures

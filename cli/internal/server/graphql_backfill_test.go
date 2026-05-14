@@ -110,7 +110,7 @@ func TestGraphQLWorkers(t *testing.T) {
 	startedAt := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
 	writeWorkerRecord(t, workDir, WorkerRecord{
 		ID:          "wk-test-001",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "exited",
 		ProjectRoot: workDir,
 		Harness:     "claude",
@@ -154,8 +154,8 @@ func TestGraphQLWorkers(t *testing.T) {
 	if node.ID != "wk-test-001" {
 		t.Errorf("expected id=wk-test-001, got %q", node.ID)
 	}
-	if node.Kind != "execute-loop" {
-		t.Errorf("expected kind=execute-loop, got %q", node.Kind)
+	if node.Kind != "work" {
+		t.Errorf("expected kind=work, got %q", node.Kind)
 	}
 	if node.State != "exited" {
 		t.Errorf("expected state=exited, got %q", node.State)
@@ -208,8 +208,8 @@ func TestGraphQLWorkers(t *testing.T) {
 	if resp3.Data.Worker.ID != "wk-test-001" {
 		t.Errorf("worker(id): expected id=wk-test-001, got %q", resp3.Data.Worker.ID)
 	}
-	if resp3.Data.Worker.Kind != "execute-loop" {
-		t.Errorf("worker(id): expected kind=execute-loop, got %q", resp3.Data.Worker.Kind)
+	if resp3.Data.Worker.Kind != "work" {
+		t.Errorf("worker(id): expected kind=work, got %q", resp3.Data.Worker.Kind)
 	}
 	if resp3.Data.Worker.State != "exited" {
 		t.Errorf("worker(id): expected state=exited, got %q", resp3.Data.Worker.State)
@@ -233,7 +233,7 @@ func TestGraphQLWorkersByProjectScopedByID(t *testing.T) {
 	startedAt := time.Date(2026, 4, 20, 10, 0, 0, 0, time.UTC)
 	writeWorkerRecord(t, workDirA, WorkerRecord{
 		ID:          "wk-scope-A",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		ProjectRoot: workDirA,
 		Harness:     "claude",
@@ -245,7 +245,7 @@ func TestGraphQLWorkersByProjectScopedByID(t *testing.T) {
 	// redirects a worker to another registered project.
 	writeWorkerRecord(t, workDirA, WorkerRecord{
 		ID:          "wk-scope-B",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		ProjectRoot: workDirB,
 		Harness:     "claude",

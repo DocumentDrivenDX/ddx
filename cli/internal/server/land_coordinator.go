@@ -87,7 +87,7 @@ type LandCoordinator struct {
 }
 
 // NewLocalLandCoordinator returns a process-local LandCoordinator for use
-// by CLI commands such as `ddx work` / `legacy agent execute-loop`. It has the same
+// by CLI commands such as `ddx work` / `legacy agent work`. It has the same
 // single-writer semantics as the server-hosted coordinator but its lifetime
 // is tied to the CLI invocation. Stop() should be called on function exit.
 func NewLocalLandCoordinator(projectRoot string, gitOps agent.LandingGitOps) *LandCoordinator {

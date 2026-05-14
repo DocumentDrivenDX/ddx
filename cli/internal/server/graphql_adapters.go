@@ -56,7 +56,7 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if kind != "execute-loop" {
+	if kind != "work" {
 		return nil, fmt.Errorf("unsupported worker kind %q", kind)
 	}
 
@@ -120,10 +120,10 @@ func rejectLegacyExecuteLoopWorkerArgs(raw []byte) error {
 		return fmt.Errorf("invalid worker args JSON: %w", err)
 	}
 	if _, ok := fields["poll_interval"]; ok {
-		return fmt.Errorf("poll_interval is not supported for execute-loop worker dispatch; use mode=\"watch\" and idle_interval")
+		return fmt.Errorf("poll_interval is not supported for work worker dispatch; use mode=\"watch\" and idle_interval")
 	}
 	if _, ok := fields["once"]; ok {
-		return fmt.Errorf("once is not supported for execute-loop worker dispatch; use mode=\"once\"")
+		return fmt.Errorf("once is not supported for work worker dispatch; use mode=\"once\"")
 	}
 	return nil
 }
@@ -142,7 +142,7 @@ func loadWorkersConfig(projectRoot string) *config.WorkersConfig {
 	return cfg.Workers
 }
 
-// countRunningDrainWorkers counts execute-loop workers currently in state
+// countRunningDrainWorkers counts work workers currently in state
 // "running" for projectRoot. Returns 0 on any error.
 func (a *workerDispatchAdapter) countRunningDrainWorkers(projectRoot string) int {
 	if a == nil || a.manager == nil {
@@ -154,7 +154,7 @@ func (a *workerDispatchAdapter) countRunningDrainWorkers(projectRoot string) int
 	}
 	count := 0
 	for _, rec := range recs {
-		if rec.Kind == "execute-loop" && rec.State == "running" && rec.ProjectRoot == projectRoot {
+		if rec.Kind == "work" && rec.State == "running" && rec.ProjectRoot == projectRoot {
 			count++
 		}
 	}
@@ -201,7 +201,7 @@ func (a *workerDispatchAdapter) StopWorker(ctx context.Context, id string) (*ddx
 	}
 	rec, err := a.manager.Show(id)
 	if err != nil {
-		return &ddxgraphql.WorkerLifecycleResult{ID: id, State: "stopping", Kind: "execute-loop"}, nil
+		return &ddxgraphql.WorkerLifecycleResult{ID: id, State: "stopping", Kind: "work"}, nil
 	}
 	return &ddxgraphql.WorkerLifecycleResult{
 		ID:    rec.ID,

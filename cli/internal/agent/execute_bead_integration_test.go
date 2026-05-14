@@ -1,7 +1,7 @@
 package agent
 
 // execute_bead_integration_test.go — PowerClass-2 integration tests for
-// execute-loop orchestration. Every test uses:
+// work orchestration. Every test uses:
 //   - a real git init'd temp repo (via newScriptHarnessRepo)
 //   - the script harness (not virtual/fakeAgentRunner)
 //   - real git commands to assert outcomes (via gitCommitCount, refExists, etc.)
@@ -142,7 +142,7 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 
 // TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker
 // reproduces the production failure behind ddx-7000e777 with the real
-// execute-loop stack: temp git repo, JSONL bead store, execute-bead worktree,
+// work stack: temp git repo, JSONL bead store, execute-bead worktree,
 // and script harness. The script does not observe context cancellation while it
 // sleeps, so the worker context is cancelled mid-attempt and the no_changes-like
 // result returns after cancellation. That must only release the claim; it must
@@ -209,9 +209,9 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 	assert.Empty(t, got.Owner)
 	assert.NotContains(t, got.Labels, NoChangesLabelUnjustified)
 	assert.NotContains(t, got.Labels, NoChangesLabelUnverified)
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
-	assert.NotContains(t, got.Extra, "execute-loop-last-status")
-	assert.NotContains(t, got.Extra, "execute-loop-no-changes-count")
+	assert.NotContains(t, got.Extra, "work-retry-after")
+	assert.NotContains(t, got.Extra, "work-last-status")
+	assert.NotContains(t, got.Extra, "work-no-changes-count")
 
 	events, err := store.Events(beadID)
 	require.NoError(t, err)
@@ -230,8 +230,8 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 		"no_changes_unjustified",
 		"loop-error",
 		"execution-routing-intent",
-		"execute-loop-retry-after",
-		"execute-loop-last-status",
+		"work-retry-after",
+		"work-last-status",
 	} {
 		assert.False(t, strings.Contains(tracker, forbidden), "tracker contains %q", forbidden)
 	}

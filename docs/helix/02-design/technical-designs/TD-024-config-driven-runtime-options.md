@@ -504,7 +504,7 @@ type TestLoopConfigOpts struct {
 
 // NewTestConfigForLoop returns a *Config that, when Resolve()d,
 // produces a ResolvedConfig matching opts exactly. Used by tests
-// for the execute-loop path.
+// for the work path.
 func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config
 
 // Sibling constructors for the other paths.
@@ -777,7 +777,7 @@ will receive. Bead IDs are assigned at `ddx bead create` time.
 
 **Loop production migration (one site per bead):**
 
-7. `cmd/work: migrate ddx work / execute-loop CLI dispatch to
+7. `cmd/work: migrate ddx work / work CLI dispatch to
    LoadAndResolve + RunWithConfig + behavioral e2e test for
    ReviewMaxRetries threshold`. Acceptance: behavioral test
    `TestReviewRetryThresholdFromConfigCLI` passes against a real

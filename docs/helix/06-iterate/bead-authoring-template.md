@@ -226,7 +226,7 @@ ACCEPTANCE
 
 ## 7. Power-hint label: `power:hint=<name>`
 
-Add a `power:hint=<name>` label to tell the execute-loop which power class to
+Add a `power:hint=<name>` label to tell the work which power class to
 start from. This is an operator-level hint for beads where the default
 cheap-first start is likely to waste a full cheap attempt.
 

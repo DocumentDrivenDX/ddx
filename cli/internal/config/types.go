@@ -35,7 +35,7 @@ type NewConfig struct {
 	EvidenceCaps    *EvidenceCapsConfig `yaml:"evidence_caps,omitempty" json:"evidence_caps,omitempty"`
 	Prose           *ProseConfig        `yaml:"prose,omitempty" json:"prose,omitempty"`
 	// ReviewMaxRetries caps reviewer attempts per committed result_rev before
-	// the execute-loop emits a terminal `review-manual-required` event and
+	// the work emits a terminal `review-manual-required` event and
 	// parks the bead (FEAT-022 §14). Zero or unset uses the binary default
 	// (3). Negative values are treated as unset.
 	ReviewMaxRetries *int `yaml:"review_max_retries,omitempty" json:"review_max_retries,omitempty"`
@@ -229,12 +229,12 @@ type WorkersConfig struct {
 	DefaultSpec *WorkerDefaultSpec `yaml:"default_spec,omitempty" json:"default_spec,omitempty"`
 	MaxCount    *int               `yaml:"max_count,omitempty" json:"max_count,omitempty"`
 	// NoProgressCooldown bounds how long a bead may sit without a phase
-	// transition before the execute-loop forces the worker to give up. Parsed
+	// transition before the work forces the worker to give up. Parsed
 	// via time.ParseDuration (e.g. "6h"). Empty string uses the built-in
 	// default (6h). See SD-024 §Config extensions §WorkersConfig.
 	NoProgressCooldown string `yaml:"no_progress_cooldown,omitempty" json:"no_progress_cooldown,omitempty"`
 	// MaxNoChangesBeforeClose caps the number of consecutive no_changes
-	// attempts the execute-loop tolerates before closing the bead as
+	// attempts the work tolerates before closing the bead as
 	// no-progress. Zero or unset uses the built-in default (3). Negative
 	// values are treated as unset.
 	MaxNoChangesBeforeClose *int `yaml:"max_no_changes_before_close,omitempty" json:"max_no_changes_before_close,omitempty"`
@@ -246,7 +246,7 @@ type WorkersConfig struct {
 }
 
 // Default values for WorkersConfig resolvers. These mirror the hardcoded
-// constants the execute-loop uses today; bead 6/7 of SD-024 wires the
+// constants the work uses today; bead 6/7 of SD-024 wires the
 // resolvers into the loop.
 const (
 	defaultNoProgressCooldown      = 6 * time.Hour

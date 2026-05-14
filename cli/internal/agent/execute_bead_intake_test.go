@@ -579,9 +579,9 @@ func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
-	assert.NotContains(t, got.Extra, "execute-loop-last-status")
-	assert.NotContains(t, got.Extra, "execute-loop-last-detail")
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, got.Extra, "work-last-status")
+	assert.NotContains(t, got.Extra, "work-last-detail")
+	assert.NotContains(t, got.Extra, "work-retry-after")
 }
 
 func TestIntake_LogsStartBeforeHookReturns(t *testing.T) {

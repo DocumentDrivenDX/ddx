@@ -660,14 +660,14 @@ func seedBeadEvidence(t *testing.T, dir string) {
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	t0, _ := time.Parse(time.RFC3339, "2026-04-04T15:00:00Z")
 	if err := store.AppendEvent("bx-001", bead.BeadEvent{
-		Kind:      "execute-loop",
+		Kind:      "work",
 		Summary:   "attempt completed",
 		Body:      "iteration 1",
 		Actor:     "test",
 		CreatedAt: t0,
 		Source:    "test",
 	}); err != nil {
-		t.Fatalf("AppendEvent execute-loop: %v", err)
+		t.Fatalf("AppendEvent work: %v", err)
 	}
 	routingBody := `{"resolved_provider":"anthropic","resolved_model":"claude-sonnet-4-6","route_reason":"primary","fallback_chain":["openai/gpt-5"],"base_url":"https://api.anthropic.com"}`
 	if err := store.AppendEvent("bx-001", bead.BeadEvent{
@@ -683,9 +683,9 @@ func seedBeadEvidence(t *testing.T, dir string) {
 		if b.Extra == nil {
 			b.Extra = map[string]any{}
 		}
-		b.Extra["execute-loop-retry-after"] = "2026-04-04T16:00:00Z"
-		b.Extra["execute-loop-last-status"] = "no-viable-provider"
-		b.Extra["execute-loop-last-detail"] = "all providers exhausted"
+		b.Extra["work-retry-after"] = "2026-04-04T16:00:00Z"
+		b.Extra["work-last-status"] = "no-viable-provider"
+		b.Extra["work-last-detail"] = "all providers exhausted"
 	}); err != nil {
 		t.Fatalf("Update cooldown: %v", err)
 	}
@@ -711,7 +711,7 @@ func TestBeadEvidenceEndpoint(t *testing.T) {
 	if len(events) != 2 {
 		t.Fatalf("expected 2 events, got %d: %+v", len(events), events)
 	}
-	if events[0].Kind != "execute-loop" || events[1].Kind != "routing" {
+	if events[0].Kind != "work" || events[1].Kind != "routing" {
 		t.Errorf("unexpected event kinds: %q %q", events[0].Kind, events[1].Kind)
 	}
 }
@@ -806,7 +806,7 @@ func TestMCPBeadEvidence(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &events); err != nil {
 		t.Fatalf("MCP bead_evidence not valid JSON: %v", err)
 	}
-	if len(events) != 2 || events[0].Kind != "execute-loop" {
+	if len(events) != 2 || events[0].Kind != "work" {
 		t.Fatalf("unexpected events payload: %+v", events)
 	}
 }
@@ -4316,7 +4316,7 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 	// Write a pre-canned worker record under project A (older).
 	writeTestWorkerRecord(t, rootA, "w-aaa111aaa111", WorkerRecord{
 		ID:          "w-aaa111aaa111",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "exited",
 		ProjectRoot: rootA,
 		StartedAt:   time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC),
@@ -4325,7 +4325,7 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 	// Write a pre-canned worker record under project B (newer).
 	writeTestWorkerRecord(t, rootB, "w-bbb222bbb222", WorkerRecord{
 		ID:          "w-bbb222bbb222",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "exited",
 		ProjectRoot: rootB,
 		StartedAt:   time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC),
@@ -4971,14 +4971,14 @@ func TestProjectScopedAgentWorkerRoutes(t *testing.T) {
 
 	writeTestWorkerRecord(t, rootA, "w-scoped-A", WorkerRecord{
 		ID:          "w-scoped-A",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "exited",
 		ProjectRoot: rootA,
 		StartedAt:   time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC),
 	})
 	writeTestWorkerRecord(t, rootB, "w-scoped-B", WorkerRecord{
 		ID:          "w-scoped-B",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "exited",
 		ProjectRoot: rootB,
 		StartedAt:   time.Date(2026, 1, 1, 11, 0, 0, 0, time.UTC),

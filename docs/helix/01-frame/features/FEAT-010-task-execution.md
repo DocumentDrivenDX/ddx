@@ -309,7 +309,7 @@ worker stops, receives SIGTERM/SIGINT, loses its child agent process, or honors
 operator cancel before a terminal bead mutation, it follows TD-027 §12.2: preserve
 evidence, record the interruption/disruption, release the claim, and leave the
 bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
-Shutdown is not itself a reason to park a bead on `execute-loop-retry-after`.
+Shutdown is not itself a reason to park a bead on `work-retry-after`.
 
 ## Agent Power and Retry
 
@@ -657,7 +657,7 @@ Stop-condition evaluation normally runs **between** `ddx try` invocations.
 `signal` is the exception: the first signal cancels an in-flight attempt
 cooperatively rather than waiting for the model to finish. The cancelled
 attempt is mechanically disrupted, not a model no-progress failure, and ordinary
-interrupt shutdown MUST NOT park the bead behind `execute-loop-retry-after`.
+interrupt shutdown MUST NOT park the bead behind `work-retry-after`.
 
 ### Execution Resource Cleanup
 
@@ -768,7 +768,7 @@ who want long-running watch behavior must pass `--watch`.
 
 #### Server-managed worker defaults
 
-Server-managed workers spawned via `POST /api/workers/execute-loop` default to
+Server-managed workers spawned via `POST /api/workers/work` default to
 **watch** mode with a **30s idle interval** when the request omits `mode` and
 `idle_interval`. The request vocabulary uses `mode` + `idle_interval` fields:
 

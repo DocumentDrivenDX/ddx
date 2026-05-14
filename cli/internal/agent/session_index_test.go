@@ -360,7 +360,7 @@ func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 			}
 		case "ddx work":
 			if !strings.Contains(text, "writeExecuteLoopResult(") {
-				t.Fatalf("%s does not own the execute-loop result writer", name)
+				t.Fatalf("%s does not own the work result writer", name)
 			}
 		default:
 			if !strings.Contains(text, "RunViaService") && !strings.Contains(text, "RunWithConfigViaService") {

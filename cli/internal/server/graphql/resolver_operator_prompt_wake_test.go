@@ -19,7 +19,7 @@ import (
 
 // recordingWaker captures every WakeProject(projectRoot) call. Used to
 // assert that operatorPromptApprove and operatorPromptSubmit (auto-approve)
-// signal the local execute-loop coordinator, satisfying the wake-on-approve
+// signal the local work coordinator, satisfying the wake-on-approve
 // AC of S15-5.
 type recordingWaker struct {
 	mu    sync.Mutex
@@ -87,7 +87,7 @@ func setupWakeHarness(t *testing.T, allowlist []string, waker ddxgraphql.Execute
 
 // AC: "Execute-loop wakes on approve event without waiting for next tick".
 // The resolver must call WakeProject after a successful manual approve so
-// the local execute-loop drops its idle-poll sleep and re-scans the queue.
+// the local work drops its idle-poll sleep and re-scans the queue.
 func TestOperatorPromptApprove_SignalsWake(t *testing.T) {
 	waker := &recordingWaker{}
 	h, _, token, workDir := setupWakeHarness(t, []string{ddxgraphql.OperatorPromptAllowlistLocalhostSentinel}, waker)

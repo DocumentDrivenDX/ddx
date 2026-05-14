@@ -336,7 +336,7 @@ beads advance the base branch.
 
 ### Disrupted vs no-progress cooldown policy (bead ddx-5b3e57f4)
 
-The execute-loop cooldown branch must distinguish *worker disruption* from
+The work cooldown branch must distinguish *worker disruption* from
 *model gave up*. A failed attempt where the model never had a chance to commit
 — context cancelled, executor killed by SIGTERM/SIGKILL, transport-class
 provider error, server restart, routing preflight rejection — is NOT evidence
@@ -476,7 +476,7 @@ Go compiler blocks external imports after agent v0.5.0 ships.
 ### Operator-prompt bead type (Story 15)
 
 Free-form prompts submitted from the web UI are persisted as beads with
-`issueType: operator-prompt` and drained by the standard execute-loop. The
+`issueType: operator-prompt` and drained by the standard work. The
 title is the prompt's first line, the body is the full prompt verbatim,
 default labels are `kind:operator-prompt,source:web-ui`, and the AC section
 is auto-generated from a template. These beads run with the same

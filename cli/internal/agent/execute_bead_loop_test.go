@@ -788,9 +788,9 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedRemainsRunnableAcrossRuns(t *testi
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Contains(t, gotFirst.Labels, NoChangesLabelUnjustified)
-	assert.NotContains(t, gotFirst.Extra, "execute-loop-last-status")
-	assert.NotContains(t, gotFirst.Extra, "execute-loop-last-detail")
-	assert.NotContains(t, gotFirst.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, gotFirst.Extra, "work-last-status")
+	assert.NotContains(t, gotFirst.Extra, "work-last-detail")
+	assert.NotContains(t, gotFirst.Extra, "work-retry-after")
 
 	secondRun, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
@@ -816,7 +816,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 			return ExecuteBeadReport{
 				BeadID:    beadID,
 				Status:    ExecuteBeadStatusExecutionFailed,
-				Detail:    "execute-loop: all powerClasses exhausted - no viable provider found",
+				Detail:    "work: all powerClasses exhausted - no viable provider found",
 				BaseRev:   "aaaa1111",
 				ResultRev: "aaaa1111",
 			}, nil
@@ -848,8 +848,8 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	assert.Empty(t, got.Owner)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	require.NotNil(t, got.Extra)
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.Extra["execute-loop-last-status"])
-	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), got.Extra["execute-loop-retry-after"])
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.Extra["work-last-status"])
+	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), got.Extra["work-retry-after"])
 }
 
 func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.T) {
@@ -887,7 +887,7 @@ func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Empty(t, gotFirst.Owner)
 	require.NotNil(t, gotFirst.Extra)
-	assert.NotContains(t, gotFirst.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, gotFirst.Extra, "work-retry-after")
 
 	gotSecond, err := store.Get(second.ID)
 	require.NoError(t, err)
@@ -940,7 +940,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	require.NotNil(t, got.Extra)
 	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, got.Extra, "work-retry-after")
 }
 
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
@@ -975,7 +975,7 @@ func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 
 	cooldownTask := &bead.Bead{ID: "ddx-task-002", Title: "Cooldown task", IssueType: "task", Priority: 1,
 		Extra: map[string]any{
-			"execute-loop-retry-after": time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
+			"work-retry-after": time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
 		},
 	}
 	require.NoError(t, store.Create(cooldownTask))
@@ -1588,7 +1588,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, got.Extra, "work-retry-after")
 }
 
 // TestExecuteBeadWorkerNoChangesDoesNotStarveQueue verifies that a bead with a
@@ -1816,7 +1816,7 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status, "autonomous no_changes must remain worker-runnable")
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
-	retryAfter, hasRetry := got.Extra["execute-loop-retry-after"]
+	retryAfter, hasRetry := got.Extra["work-retry-after"]
 	require.True(t, hasRetry, "smart-runnable no_changes must set a short retry-after so watch workers drain other beads")
 	assert.Equal(t, r.Results[0].RetryAfter, retryAfter)
 	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
@@ -2028,7 +2028,7 @@ func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	assert.NotContains(t, got.Labels, NoChangesLabelUnjustified)
 	if got.Extra != nil {
-		assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+		assert.NotContains(t, got.Extra, "work-retry-after")
 	}
 
 	events, err := store.Events(b.ID)
@@ -2076,8 +2076,8 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *te
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.False(t, hasRetry, "unjustified no_changes must not set execute-loop-retry-after by default")
+	_, hasRetry := got.Extra["work-retry-after"]
+	assert.False(t, hasRetry, "unjustified no_changes must not set work-retry-after by default")
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
 	require.Len(t, ready, 1)
@@ -2103,9 +2103,9 @@ func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 		ID:    "ddx-stale01",
 		Title: "Success after stale no_changes",
 		Extra: map[string]any{
-			"execute-loop-retry-after": "2020-01-01T00:00:00Z",
-			"execute-loop-last-status": "no_changes",
-			"execute-loop-last-detail": "agent made no commits",
+			"work-retry-after": "2020-01-01T00:00:00Z",
+			"work-last-status": "no_changes",
+			"work-last-detail": "agent made no commits",
 		},
 	}
 	require.NoError(t, store.Create(b))
@@ -2131,9 +2131,9 @@ func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
-	assert.NotContains(t, got.Extra, "execute-loop-last-status")
-	assert.NotContains(t, got.Extra, "execute-loop-last-detail")
+	assert.NotContains(t, got.Extra, "work-retry-after")
+	assert.NotContains(t, got.Extra, "work-last-status")
+	assert.NotContains(t, got.Extra, "work-last-detail")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
@@ -2196,8 +2196,8 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, got.Status, "bead stays open; execution-eligible=false removes it from queue")
-	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
-	require.Empty(t, retryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
+	retryAfter, _ := got.Extra["work-retry-after"].(string)
+	require.Empty(t, retryAfter, "declined_needs_decomposition must not set work-retry-after")
 	require.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "execution-eligible must be set to false")
 
 	// A structured decomposition-recommendation event must be appended.

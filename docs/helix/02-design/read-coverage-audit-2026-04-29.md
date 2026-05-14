@@ -192,7 +192,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 **G12 · Bead evidence + cooldown + routing HTTP + MCP**
 - CLI: `ddx bead evidence list <id>`, `ddx bead cooldown show <id>`, `ddx bead routing`
 - HTTP + MCP: No coverage
-- Impact: Low — operational details primarily used by the execute-loop itself; not on the agent-facing critical path.
+- Impact: Low — operational details primarily used by the work itself; not on the agent-facing critical path.
 
 ---
 

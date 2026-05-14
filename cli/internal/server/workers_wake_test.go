@@ -6,7 +6,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 )
 
-// AC: WakeProject signals every running execute-loop worker bound to a
+// AC: WakeProject signals every running work worker bound to a
 // project. The send must be non-blocking — even when the worker has not
 // yet received from its wake channel — and must coalesce: a second wake
 // while one is still pending is dropped (cap-1 buffer).

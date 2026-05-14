@@ -1030,7 +1030,7 @@ func TestOSExecutor_EarlyCancel(t *testing.T) {
 // --- ValidateForExecuteLoop tests ---
 
 // TestValidateForExecuteLoopUnknownHarness verifies that an unknown harness
-// returns an error immediately so execute-loop fails before claiming any beads.
+// returns an error immediately so work fails before claiming any beads.
 func TestValidateForExecuteLoopUnknownHarness(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
 	err := runnerValidateForExecuteLoop(r, "nonexistent", "", "")

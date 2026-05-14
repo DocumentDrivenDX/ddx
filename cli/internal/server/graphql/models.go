@@ -1474,7 +1474,7 @@ type OperatorPromptSubmitInput struct {
 	Priority *int `json:"priority,omitempty"`
 	// Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true).
 	IdempotencyKey string `json:"idempotencyKey"`
-	// When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the execute-loop without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false.
+	// When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the work without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false.
 	AutoApprove *bool `json:"autoApprove,omitempty"`
 }
 
@@ -2330,7 +2330,7 @@ type StaleReason struct {
 	Reasons []string `json:"reasons"`
 }
 
-// StartWorkerInput configures a project execute-loop worker.
+// StartWorkerInput configures a project work worker.
 type StartWorkerInput struct {
 	// Project identifier
 	ProjectID string `json:"projectId"`
@@ -2378,11 +2378,11 @@ type Window struct {
 	Since *string `json:"since,omitempty"`
 }
 
-// Worker represents an execute-loop worker process
+// Worker represents an work worker process
 type Worker struct {
 	// Unique worker identifier
 	ID string `json:"id"`
-	// Worker kind (e.g. "execute-loop")
+	// Worker kind (e.g. "work")
 	Kind string `json:"kind"`
 	// Current lifecycle state (e.g. "running", "idle", "stopped")
 	State string `json:"state"`

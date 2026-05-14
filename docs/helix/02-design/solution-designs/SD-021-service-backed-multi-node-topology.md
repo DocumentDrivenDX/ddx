@@ -129,7 +129,7 @@ but does not dictate which projects a node serves.
 
 ### 2. Worker Supervision
 
-- Hosts an in-process `WorkerManager` that supervises execute-loop workers
+- Hosts an in-process `WorkerManager` that supervises work workers
   for each registered project (see SD-019)
 - Workers run as goroutines within the `ddx-server` process, one worker per
   project context
@@ -145,7 +145,7 @@ but does not orchestrate workers across nodes.
 - Executes bead workers within isolated project worktrees (see FEAT-006)
 - Executes execution definitions and captures results to
   `.ddx/executions/<attempt-id>/` bundles
-- Maintains execute-loop coordination (fetch → run → land) per project
+- Maintains work coordination (fetch → run → land) per project
 
 **Contract**: Each node operates its own land coordinator per registered
 project (see SD-020). The central service may provide visibility but not

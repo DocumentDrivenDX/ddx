@@ -45,7 +45,7 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	}
 
 	adapter := &workerDispatchAdapter{manager: m}
-	result, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, nil)
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, nil)
 	if err != nil {
 		t.Fatalf("dispatch with empty args: %v", err)
 	}
@@ -125,7 +125,7 @@ library:
 	}
 
 	adapter := &workerDispatchAdapter{manager: m}
-	result, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, nil)
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, nil)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 	raw := string(rawBytes)
 
 	adapter := &workerDispatchAdapter{manager: m}
-	result, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, &raw)
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestGraphQL_WorkerDispatch_DefaultSpec(t *testing.T) {
 
 	raw := `{"mode":"once","opaque_passthrough":true}`
 	adapter := &workerDispatchAdapter{manager: m}
-	result, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, &raw)
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
 	if err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestGraphQL_WorkerDispatch_RejectsLegacyPollInterval(t *testing.T) {
 
 	raw := `{"poll_interval":"30s"}`
 	adapter := &workerDispatchAdapter{manager: m}
-	_, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, &raw)
+	_, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
 	if err == nil {
 		t.Fatal("expected legacy poll_interval error, got nil")
 	}

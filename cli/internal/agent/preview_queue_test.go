@@ -141,7 +141,7 @@ func TestPreviewQueue_LabelFilter(t *testing.T) {
 }
 
 // TestPreviewQueue_CooldownSkip verifies that a bead with an active
-// execute-loop-retry-after is excluded by ReadyExecution (and therefore absent
+// work-retry-after is excluded by ReadyExecution (and therefore absent
 // from the PreviewQueue result rather than listed as skipped). ReadyExecution
 // itself filters cooldown beads before they reach PreviewQueue.
 func TestPreviewQueue_CooldownSkip(t *testing.T) {
@@ -152,7 +152,7 @@ func TestPreviewQueue_CooldownSkip(t *testing.T) {
 	onCooldown := &bead.Bead{
 		ID:    "ddx-cooldown",
 		Title: "On cooldown",
-		Extra: map[string]any{"execute-loop-retry-after": future},
+		Extra: map[string]any{"work-retry-after": future},
 	}
 	eligible := &bead.Bead{ID: "ddx-eligible", Title: "Eligible bead"}
 	require.NoError(t, store.Create(onCooldown))

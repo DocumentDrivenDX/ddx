@@ -8,7 +8,7 @@ import (
 
 // TestReviewMaxRetriesConfig covers FEAT-022 §14: the review_max_retries
 // field in .ddx/config.yaml overrides the binary default (3) used by the
-// execute-loop's bounded reviewer-retry policy. Verified end-to-end: the
+// work's bounded reviewer-retry policy. Verified end-to-end: the
 // YAML loader populates the field, the resolver returns the override, and
 // the loop respects it via the same accessor (DefaultReviewMaxRetries
 // constant in cli/internal/agent kept in sync with this default).

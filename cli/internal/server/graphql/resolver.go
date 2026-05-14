@@ -59,7 +59,7 @@ type BeadLifecycleSubscriber interface {
 	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
 }
 
-// ExecuteLoopWaker signals running execute-loop workers bound to a project
+// ExecuteLoopWaker signals running work workers bound to a project
 // to skip their idle-poll sleep and re-scan the ready queue. The
 // operatorPromptApprove and operatorPromptSubmit (auto-approve) resolvers
 // call WakeProject after a successful proposed → open transition so the
@@ -130,7 +130,7 @@ type Resolver struct {
 	NodeID string
 	// ExecuteLoopWaker, when non-nil, is signalled by the operator-prompt
 	// approve / auto-approve resolvers immediately after a successful
-	// proposed → open transition so a running execute-loop worker bound to
+	// proposed → open transition so a running work worker bound to
 	// the project drops its idle-poll sleep and claims the bead in the
 	// current tick. Nil → resolver simply skips the wake (the next tick
 	// will pick the bead up after PollInterval).

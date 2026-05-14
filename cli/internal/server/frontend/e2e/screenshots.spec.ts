@@ -187,8 +187,8 @@ const FEATURE_AREAS: readonly FeatureArea[] = [
 		}
 	},
 	{
-		id: 'execute-loop',
-		file: 'feature-execute-loop.png',
+		id: 'work',
+		file: 'feature-work.png',
 		ready: 'h1',
 		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/workers`
 	},

@@ -69,7 +69,7 @@ func runPostMergeReviewRetryFixture(t *testing.T, store *bead.Store, first *bead
 // TestBoundedReviewRetry_NthFailureEmitsManualRequired covers FEAT-022 §14
 // case (a) for the retained legacy/manual helper: after N (default 3)
 // review-error events on the same result_rev, the helper emits a terminal
-// `review-manual-required` event and parks the bead. execute-loop no longer
+// `review-manual-required` event and parks the bead. work no longer
 // invokes this helper after a candidate has landed.
 func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)

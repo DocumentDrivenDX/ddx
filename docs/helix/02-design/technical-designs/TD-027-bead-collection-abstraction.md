@@ -724,7 +724,7 @@ The following table is normative: it specifies which Operations are permitted to
 | `cooldown.*` | `SetCooldown`, `ClearCooldownOp` |
 | `no_changes_count` | `IncrNoChangesCount` (drain-loop-driven; field policy described in TD-031); operator-cleared via `MutateFunc` |
 | `events` | `BeadEventWriter.AppendEvent` (append-only) |
-| `extra.*` | `MutateFunc` (specific keys per their owning subsystem — e.g. `extra.execute-loop-retry-after` is mutated by `SetCooldown`, `extra.children` by decomposition flows) |
+| `extra.*` | `MutateFunc` (specific keys per their owning subsystem — e.g. `extra.work-retry-after` is mutated by `SetCooldown`, `extra.children` by decomposition flows) |
 | `closed_at` | Storage layer sets automatically when `status` transitions to `closed` |
 | `updated_at` | Storage layer sets automatically on every mutation |
 
@@ -770,7 +770,7 @@ Claim metadata is advisory in the storage layer. `ClaimOp.Apply` returns `ErrAlr
 - If a terminal mutation (`closed`, `cancelled`, or `blocked`) was already applied, shutdown MUST NOT undo it. Best-effort worker-disconnect telemetry may be emitted, but bead state is authoritative.
 - Mechanical interruption (ctx cancel, SIGTERM, SIGINT) before terminal mutation: worker preserves available evidence, appends a structured interruption event, releases the claim, leaves the bead re-claimable unless an explicit blocker or cooldown was recorded.
 - Ungraceful worker death may strand an `in_progress` bead. The stale-claim sweep (drain-loop policy; see TD-031) is the recovery path.
-- Cooldown is NOT a shutdown-cleanup mechanism. A stopped or interrupted worker may set `execute-loop-retry-after` (cooldown) only when the recorded outcome is a retryable time-based condition.
+- Cooldown is NOT a shutdown-cleanup mechanism. A stopped or interrupted worker may set `work-retry-after` (cooldown) only when the recorded outcome is a retryable time-based condition.
 
 ### 12.3 Stale Claim Recovery (storage contract; drain-loop policy in TD-031)
 

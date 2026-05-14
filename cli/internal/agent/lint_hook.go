@@ -86,7 +86,7 @@ type lintPromptBead struct {
 }
 
 // NewPreDispatchLintHook constructs the bead-lifecycle lint hook used before
-// execute-loop dispatch.
+// work dispatch.
 func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (LintResult, error) {
 	return func(ctx context.Context, beadID string) (LintResult, error) {
 		if ctx != nil {
@@ -243,7 +243,7 @@ func lintPromptSkipCustomField(key string) bool {
 	case "events", "events_attachment", "session_id", "closing_commit_sha":
 		return true
 	}
-	for _, prefix := range []string{"claimed-", "execute-loop-", "cancel-"} {
+	for _, prefix := range []string{"claimed-", "work-", "cancel-"} {
 		if strings.HasPrefix(key, prefix) {
 			return true
 		}

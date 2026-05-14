@@ -10,7 +10,7 @@ ddx:
 ## Purpose
 
 Workers and Sessions describe different parts of the same execution story.
-Workers are long-lived execute-loop processes that drain a project's bead
+Workers are long-lived work processes that drain a project's bead
 queue. Sessions are immutable records of individual agent invocations produced
 by those workers or by ad-hoc runs.
 
@@ -25,7 +25,7 @@ The Workers page exposes the lifecycle controls that already exist in the CLI
 and server runtime:
 
 - Start worker: calls a GraphQL `startWorker` mutation that dispatches an
-  `execute-loop` worker through the same WorkerManager path used by `ddx work`
+  `work` worker through the same WorkerManager path used by `ddx work`
   / server-managed queue drains.
 - Stop: visible only for workers in `running` state. The mutation calls the
   same `WorkerManager.Stop` path reached by `legacy agent workers stop`, so claim
@@ -35,7 +35,7 @@ and server runtime:
 The proposed "cancel current bead without killing the loop" control is not
 implemented in this pass because there is no separate CLI/runtime primitive for
 abandoning only the in-flight bead while preserving the loop process. Adding it
-requires an execute-loop semantic change and remains out of scope for this
+requires an work semantic change and remains out of scope for this
 operator-surface pass.
 
 ## Navigation and Audit

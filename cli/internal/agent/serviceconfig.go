@@ -28,7 +28,7 @@ import (
 //
 // To override per-project, set agent.endpoints.<name>.request_timeout_seconds
 // in .ddx/config.yaml, or pass --request-timeout DURATION to execute-bead /
-// execute-loop for one-off debugging.
+// work for one-off debugging.
 const DefaultProviderRequestTimeout = 15 * time.Minute
 
 // DefaultProviderIdleReadTimeout bounds the maximum idle gap between stream

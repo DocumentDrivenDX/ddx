@@ -37,7 +37,7 @@ type ReviewVerdict struct {
 
 // ErrReviewVerdictUnparseable is the sentinel returned by ParseReviewVerdict
 // when the reviewer output cannot be decoded into a valid ReviewVerdict.
-// The execute-loop classifies it as evidence.OutcomeReviewUnparseable
+// The work classifies it as evidence.OutcomeReviewUnparseable
 // (retryable review-error) rather than mis-recording a BLOCK verdict.
 var ErrReviewVerdictUnparseable = errors.New("reviewer output: unparseable JSON verdict")
 

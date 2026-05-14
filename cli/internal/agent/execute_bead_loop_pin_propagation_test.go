@@ -54,7 +54,7 @@ func pinCapturingExecutor(spec pinPropagationSpec, captured *[]capturedRequest, 
 
 // alternatingReviewer returns REQUEST_CHANGES (or BLOCK) on the first call
 // and APPROVE on every subsequent call. It is retained for legacy/manual
-// post-land review helper coverage; execute-loop success no longer invokes it.
+// post-land review helper coverage; work success no longer invokes it.
 func alternatingReviewer(firstVerdict Verdict, calls *atomic.Int32) beadReviewerFunc {
 	return beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 		n := calls.Add(1)
@@ -76,7 +76,7 @@ func alternatingReviewer(firstVerdict Verdict, calls *atomic.Int32) beadReviewer
 
 // driveLoopAcrossIgnoredPostLandReview runs one successful loop iteration with
 // a legacy post-land reviewer installed. Candidate-cycle review owns close
-// eligibility now, so execute-loop must close directly and must not re-invoke
+// eligibility now, so work must close directly and must not re-invoke
 // the old reviewer/retry path.
 func driveLoopAcrossIgnoredPostLandReview(t *testing.T, firstVerdict Verdict, spec pinPropagationSpec) []capturedRequest {
 	t.Helper()
@@ -105,9 +105,9 @@ func driveLoopAcrossIgnoredPostLandReview(t *testing.T, firstVerdict Verdict, sp
 		firstVerdict)
 
 	require.Equal(t, int32(0), reviewCalls.Load(),
-		"legacy post-land reviewer must not be called from execute-loop")
+		"legacy post-land reviewer must not be called from work")
 	require.Equal(t, int32(1), execCalls.Load(),
-		"execute-loop should not retry after a legacy post-land %s review verdict", firstVerdict)
+		"work should not retry after a legacy post-land %s review verdict", firstVerdict)
 	require.Len(t, captured, 1)
 	return captured
 }

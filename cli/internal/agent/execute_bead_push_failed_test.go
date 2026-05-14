@@ -14,7 +14,7 @@ import (
 
 // TestClassifyExecuteBeadStatusPushFailed pins the contract that a merged
 // outcome whose reason carries the push-failure marker classifies as
-// push_failed (not success), so the execute-loop refuses to close the bead.
+// push_failed (not success), so the work refuses to close the bead.
 func TestClassifyExecuteBeadStatusPushFailed(t *testing.T) {
 	got := ClassifyExecuteBeadStatus("merged", 0, PushFailedReasonPrefix+" remote rejected: pre-receive hook declined")
 	assert.Equal(t, ExecuteBeadStatusPushFailed, got,
@@ -39,7 +39,7 @@ func TestClassifyExecuteBeadStatusPreservedNeedsReview(t *testing.T) {
 // TestExecuteBeadWorkerPushFailedStaysOpen asserts that push_failed:
 //   - does NOT close the bead (status remains open)
 //   - releases the claim (owner is empty)
-//   - does NOT set execute-loop-retry-after (no cooldown)
+//   - does NOT set work-retry-after (no cooldown)
 //   - surfaces the push stderr in a bead event
 func TestExecuteBeadWorkerPushFailedStaysOpen(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
@@ -71,7 +71,7 @@ func TestExecuteBeadWorkerPushFailedStaysOpen(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status, "push_failed must NOT close the bead")
 	assert.Empty(t, got.Owner, "push_failed must release the claim")
 
-	assert.Empty(t, got.Extra["execute-loop-retry-after"],
+	assert.Empty(t, got.Extra["work-retry-after"],
 		"push_failed must NOT park the bead — no cooldown should be set")
 
 	events, err := store.Events(first.ID)
@@ -121,10 +121,10 @@ func TestExecuteBeadWorkerPushConflictParksAndEmitsEvent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "push_conflict must NOT close the bead")
 	require.NotNil(t, got.Extra)
-	assert.Equal(t, "push_conflict", got.Extra["execute-loop-last-status"])
+	assert.Equal(t, "push_conflict", got.Extra["work-last-status"])
 
 	// Cooldown capped at 24h.
-	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
+	retryAfter, _ := got.Extra["work-retry-after"].(string)
 	require.NotEmpty(t, retryAfter)
 	parsed, perr := time.Parse(time.RFC3339, retryAfter)
 	require.NoError(t, perr)

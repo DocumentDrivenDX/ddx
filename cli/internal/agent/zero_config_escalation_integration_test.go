@@ -141,7 +141,7 @@ func TestZeroConfigEscalationSummaryEventBody(t *testing.T) {
 }
 
 // nextPowerClass advances one rung up the cheap -> standard -> smart ladder.
-// Mirrors the implicit ladder used by the execute-loop when escalating
+// Mirrors the implicit ladder used by the work when escalating
 // beyond a substantive failure. Smart is the top; further calls stay
 // at smart (callers exhaust escalation when ShouldEscalate fires at smart).
 func nextPowerClass(t escalation.PowerClass) escalation.PowerClass {

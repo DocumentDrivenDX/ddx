@@ -44,7 +44,7 @@
 - **Provider dashboard** is now specified in both FEAT-002 (requirements 26-27: `/api/providers` and `/api/providers/:harness`) and FEAT-008 (requirement 7: Provider/Harness Dashboard UI) with FEAT-014 governing field semantics, unknown-state rules, and the tooltip registry.
 - **Dashboard URL restructure** moves to the node-scoped model in FEAT-021 (`/nodes/:nodeId/projects/:projectId/...`) with FEAT-008 updated to reference FEAT-021 for the node-aware routing.
 - **Replay-backed fixture strategy**: FEAT-002 and FEAT-006 specify that execution attempt bundles at `.ddx/executions/<attempt-id>/` are the replay-backed source of truth for the server; the server does not own a separate transcript store.
-- **TP-002** was updated with six new test sections: TC-010 (project registry/scoped routing), TC-011 (host+user state/node identity), TC-012 (project isolation and concurrency), TC-013 (execute-loop worker lifecycle) — all PLANNED.
+- **TP-002** was updated with six new test sections: TC-010 (project registry/scoped routing), TC-011 (host+user state/node identity), TC-012 (project isolation and concurrency), TC-013 (work worker lifecycle) — all PLANNED.
 
 ## Planning Stack Findings
 

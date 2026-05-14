@@ -239,7 +239,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Sorted by priority, then by creation date
    - One-click claim (calls `beadClaim` mutation)
    - Single-ticket ready work is shown ahead of epics; open epics appear in a
-     separate epic lane rather than the ordinary execute-loop queue
+     separate epic lane rather than the ordinary work queue
 
    **Bead detail actions:**
 
@@ -723,7 +723,7 @@ thresholds.
 **E2E Test:** `beads.spec.ts` — full workflow: click New Bead → fill form → submit → verify bead appears in list → click status → transition to in_progress → verify list updated → open bead → add dependency → verify dependency link visible
 
 ### US-085b: Operator Tracks Live Worker Progress from Status Dashboard
-**As an** operator supervising a running execute-loop
+**As an** operator supervising a running work
 **I want** to see each worker's current execution phase in real time
 **So that** I can tell whether an agent is making progress, stalled, or done
 **without** leaving the browser

@@ -23,7 +23,7 @@ verifier for operator-prompt beads. Be specific and complete.
 ## Approval flow
 
 Operator-prompt beads are created in `proposed` status and excluded from
-`ddx work` / execute-loop drain until an operator approves them by
+`ddx work` / work drain until an operator approves them by
 transitioning the status to `open`. Allowed transitions out of `proposed`:
 
 - `proposed → open` — approve, queue for execution

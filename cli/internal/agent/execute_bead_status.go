@@ -339,7 +339,7 @@ const (
 	// status=proposed (operator lane) without blocking the drain queue.
 	ExecuteBeadStatusReviewRequestClarification = "review_request_clarification"
 
-	// ExecuteBeadStatusLandConflictUnresolvable is set when execute-loop
+	// ExecuteBeadStatusLandConflictUnresolvable is set when work
 	// attempted 3-way ort auto-resolution and (if configured) a focused
 	// conflict-resolve agent run for a preserved iteration, and both failed.
 	// The bead is parked under LandConflictCooldown for operator review.

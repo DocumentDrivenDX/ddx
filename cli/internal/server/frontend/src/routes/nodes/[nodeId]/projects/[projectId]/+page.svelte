@@ -11,7 +11,7 @@
 	import { onMount } from 'svelte';
 
 	type ActionId = 'drain' | 'align' | 'checks';
-	type WorkerKind = 'execute-loop' | 'realign-specs' | 'run-checks';
+	type WorkerKind = 'work' | 'realign-specs' | 'run-checks';
 	type IconComponent = typeof Play;
 
 	interface QueueSummary {
@@ -51,10 +51,10 @@
 	const ACTIONS: ProjectAction[] = [
 		{
 			id: 'drain',
-			kind: 'execute-loop',
+			kind: 'work',
 			label: 'Drain queue',
 			shortLabel: 'Drain',
-			description: 'Attempt ready beads with the project execute-loop worker.',
+			description: 'Attempt ready beads with the project work worker.',
 			Icon: Play,
 			accentClass:
 				'bg-accent-lever text-white hover:opacity-90 focus-visible:ring-accent-lever dark:bg-dark-accent-lever'

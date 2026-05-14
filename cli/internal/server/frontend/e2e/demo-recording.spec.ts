@@ -190,8 +190,8 @@ const FEATURE_CLIPS: readonly FeatureClip[] = [
 		}
 	},
 	{
-		id: 'execute-loop',
-		file: 'feature-execute-loop.webm',
+		id: 'work',
+		file: 'feature-work.webm',
 		walk: async (page, base) => {
 			await page.goto(`${base}/workers`);
 			await page.waitForSelector('h1');

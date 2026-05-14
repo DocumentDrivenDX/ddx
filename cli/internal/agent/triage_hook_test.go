@@ -493,7 +493,7 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
-	_, ok := got.Extra["execute-loop-retry-after"]
+	_, ok := got.Extra["work-retry-after"]
 	assert.False(t, ok)
 }
 

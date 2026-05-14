@@ -40,7 +40,7 @@ Out of scope:
 
 ## Topology Model
 
-Each machine that participates in execute-loop work runs one `ddx-server`
+Each machine that participates in work work runs one `ddx-server`
 process. That server hosts one land coordinator goroutine per registered
 project. The coordinator owns the fetch → (fast-forward or merge) → push
 sequence for all landings on that machine. When the target has not advanced
@@ -134,7 +134,7 @@ git reset --hard origin/<branch>          # realign local to origin
 ```
 
 After realignment, `ddx-server` can be restarted (or the coordinator
-re-enabled) and the execute-loop resumes from the current origin tip.
+re-enabled) and the work resumes from the current origin tip.
 
 ## Operator Commands
 

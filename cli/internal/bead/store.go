@@ -903,7 +903,7 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 			beads[i].UpdatedAt = now
 			beads[i].Extra["claimed-at"] = now.Format(time.RFC3339)
 			beads[i].Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
-			beads[i].Extra["execute-loop-heartbeat-at"] = now.Format(time.RFC3339Nano)
+			beads[i].Extra["work-heartbeat-at"] = now.Format(time.RFC3339Nano)
 			if machine != "" {
 				beads[i].Extra["claimed-machine"] = machine
 			}
@@ -957,7 +957,7 @@ func (s *Store) Heartbeat(id string) error {
 
 // claimLeaseIsStale returns true if the external claim lease is absent or
 // older than HeartbeatTTL. When no lease file exists, it falls back to the
-// legacy execute-loop-heartbeat-at tracker field for compatibility.
+// legacy work-heartbeat-at tracker field for compatibility.
 func claimLeaseIsStale(s *Store, extra map[string]any, id string) bool {
 	if s != nil {
 		if fresh, found, err := s.ClaimHeartbeatFresh(id); err == nil {
@@ -972,12 +972,12 @@ func claimLeaseIsStale(s *Store, extra map[string]any, id string) bool {
 }
 
 // heartbeatIsStale returns true if the given bead's Extra map has no
-// execute-loop-heartbeat-at or one older than HeartbeatTTL.
+// work-heartbeat-at or one older than HeartbeatTTL.
 func heartbeatIsStale(extra map[string]any) bool {
 	if extra == nil {
 		return true
 	}
-	raw, ok := extra["execute-loop-heartbeat-at"]
+	raw, ok := extra["work-heartbeat-at"]
 	if !ok {
 		return true
 	}
@@ -1033,12 +1033,12 @@ func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail,
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
-		b.Extra["execute-loop-retry-after"] = until.UTC().Format(time.RFC3339)
+		b.Extra["work-retry-after"] = until.UTC().Format(time.RFC3339)
 		if status != "" {
-			b.Extra["execute-loop-last-status"] = status
+			b.Extra["work-last-status"] = status
 		}
 		if detail != "" {
-			b.Extra["execute-loop-last-detail"] = detail
+			b.Extra["work-last-detail"] = detail
 		}
 		if baseRev != "" {
 			b.Extra[ExtraCooldownBaseRev] = baseRev
@@ -1048,8 +1048,8 @@ func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail,
 	})
 }
 
-// ClearCooldowns clears execute-loop cooldown fields for all beads matched by
-// filter. If filter is nil, every bead with execute-loop-retry-after set is
+// ClearCooldowns clears work cooldown fields for all beads matched by
+// filter. If filter is nil, every bead with work-retry-after set is
 // cleared. Returns the count of beads whose cooldowns were cleared. A
 // "cooldown-cleared" event with reason="operator-bulk-clear" is appended for
 // each cleared bead in the same pass.
@@ -1101,7 +1101,7 @@ func (s *Store) ClearCooldowns(filter func(Bead) bool) (int, error) {
 	return count, err
 }
 
-// IncrNoChangesCount increments the execute-loop no-changes counter for a bead
+// IncrNoChangesCount increments the work no-changes counter for a bead
 // and returns the new count. Used by the execute-bead worker to detect when a
 // bead should be auto-closed after repeated no-change attempts.
 func (s *Store) IncrNoChangesCount(id string) (int, error) {
@@ -1111,7 +1111,7 @@ func (s *Store) IncrNoChangesCount(id string) (int, error) {
 			b.Extra = make(map[string]any)
 		}
 		var count int
-		if v, ok := b.Extra["execute-loop-no-changes-count"]; ok {
+		if v, ok := b.Extra["work-no-changes-count"]; ok {
 			switch n := v.(type) {
 			case int:
 				count = n
@@ -1122,7 +1122,7 @@ func (s *Store) IncrNoChangesCount(id string) (int, error) {
 			}
 		}
 		count++
-		b.Extra["execute-loop-no-changes-count"] = count
+		b.Extra["work-no-changes-count"] = count
 		newCount = count
 	})
 	return newCount, err
@@ -1456,7 +1456,7 @@ func (s *Store) externalizeEvents(id string) error {
 // (closing_commit_sha, session_id, or an execute-bead success event in the
 // events history).
 //
-// Automated execute-loop paths (execute-bead + reviewer) always go through
+// Automated work paths (execute-bead + reviewer) always go through
 // CloseWithEvidence. The plain Store.Close remains as the manual
 // administration escape hatch — it bypasses the gate by design (ddx-e30e60a9
 // acceptance §1).
@@ -1843,7 +1843,7 @@ func unclosedDependencyIDs(b Bead, statusMap map[string]string) []string {
 }
 
 // activeRetryCooldown returns the retry-after time and whether the cooldown is
-// still active for bead b. When execute-loop-cooldown-base-rev is set and
+// still active for bead b. When work-cooldown-base-rev is set and
 // originHead has advanced past that rev (i.e., originHead != baseRev and both
 // are non-empty), the cooldown auto-clears regardless of wall-clock expiry —
 // the world-state that caused the cooldown has changed. See TD-031 §5 invariant.
@@ -2154,7 +2154,7 @@ func (s *Store) DependencyWaiting() ([]Bead, error) {
 
 // BlockedAll returns open beads that are currently not runnable, classified
 // by blocker kind. Dependency-blocked beads are emitted first (any unclosed
-// dep in their DAG); retry-parked beads whose execute-loop-retry-after is in
+// dep in their DAG); retry-parked beads whose work-retry-after is in
 // the future are emitted with blocker kind BlockerKindRetryCooldown. A bead
 // that is both dep-blocked and cooldown-parked is reported as dependency-
 // blocked, because deps are the stronger blocker.

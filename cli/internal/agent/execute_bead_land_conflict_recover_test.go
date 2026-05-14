@@ -1,7 +1,7 @@
 package agent
 
 // execute_bead_land_conflict_recover_test.go — regression coverage for
-// ddx-0097af14: execute-loop conflict-recovery path.
+// ddx-0097af14: work conflict-recovery path.
 //
 // AC #6a: mechanical conflict auto-resolves via ort -X ours → bead lands.
 // AC #6b: structural conflict escalates to focused-resolve agent.
@@ -128,7 +128,7 @@ func TestExecuteBeadLoopLandConflict_AutoRecoverFails_EscalatesResolver(t *testi
 	assert.Empty(t, got.Owner, "bead must be unclaimed")
 
 	// Cooldown must be set and within LandConflictCooldown window.
-	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
+	retryAfter, _ := got.Extra["work-retry-after"].(string)
 	require.NotEmpty(t, retryAfter, "land_conflict_unresolvable must park the bead")
 	parsed, perr := time.Parse(time.RFC3339, retryAfter)
 	require.NoError(t, perr)
@@ -196,7 +196,7 @@ func TestExecuteBeadLoopLandConflict_BlockingResolver_Proposed(t *testing.T) {
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Contains(t, meta.Reason, "land conflict")
 	assert.Equal(t, "legacy agent try", meta.Source)
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after", "proposed operator lane must not depend on cooldown")
+	assert.NotContains(t, got.Extra, "work-retry-after", "proposed operator lane must not depend on cooldown")
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
@@ -255,8 +255,8 @@ func TestExecuteBeadLoopExecutionFailed_WithPreservedCommit_AttemptsRecovery(t *
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must stay open")
 	assert.Empty(t, got.Owner, "bead must be unclaimed")
-	assert.NotEmpty(t, got.Extra["execute-loop-retry-after"],
-		"timeout-with-preserved-commit must park bead via execute-loop-retry-after")
+	assert.NotEmpty(t, got.Extra["work-retry-after"],
+		"timeout-with-preserved-commit must park bead via work-retry-after")
 }
 
 // TestExecuteBeadLoopExecutionFailed_NoPreserveRef_SkipsRecovery ensures that

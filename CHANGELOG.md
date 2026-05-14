@@ -33,7 +33,7 @@ interface introduced in FEAT-006 / CONTRACT-003.
   `ServiceExecuteRequest`, `Power int` on `ModelInfo`, and per-candidate
   `Components.Power` in `routing_decision` events.
 - `--min-power` / `--max-power` flags added to `ddx agent execute-bead` and
-  `ddx agent execute-loop` (alias `ddx work`). Values are passed to
+  `ddx agent work` (alias `ddx work`). Values are passed to
   `ServiceExecuteRequest.MinPower/MaxPower` unchanged; DDx does not interpret
   them — the agent owns model selection within the bounds.
 - `result.ActualPower` is now populated from the `routing_decision` event's
@@ -69,7 +69,7 @@ a tie-break preference on the resolution path (NOT a default override). See
 These fields and the `--escalate` / `--override-model` CLI flags are removed
 (bead ddx-3bd7396a). DDx refuses to load any config that still carries them.
 
-Migration: delete the fields. The default execute-loop path issues exactly one
+Migration: delete the fields. The default work path issues exactly one
 `ResolveRoute` call per bead; tier-ladder iteration is gone. See
 [docs/migrations/routing-config.md](docs/migrations/routing-config.md).
 
@@ -95,7 +95,7 @@ turn 2, (b) the second-turn latency excludes the prior turn and tool window,
 and (c) the sum of per-call latencies does not exceed the final event's
 `elapsed_ms`.
 
-### execute-loop: conflict-recovery for preserved iterations before discard
+### work: conflict-recovery for preserved iterations before discard
 
 Bead ddx-0097af14. When a land attempt produces a merge conflict the executor
 preserves the agent's commit under `refs/ddx/iterations/<bead>/<ts>-<tip>` and
@@ -161,7 +161,7 @@ Regression coverage:
   `ProjectRoot` bypasses recovery and preserves pre-patch `land_conflict`
   behavior for callers without a project root.
 
-### execute-loop: recoverable push races and a 24h cap on loop-set cooldowns
+### work: recoverable push races and a 24h cap on loop-set cooldowns
 
 Bead ddx-a458af7c. Two related fixes:
 
@@ -187,7 +187,7 @@ Bead ddx-a458af7c. Two related fixes:
    (`push_failed`, `declined_needs_decomposition`, `review-manual-required`)
    parked beads for 365 days, which effectively meant "never retry." That
    should be a deliberate operator decision via `ddx bead update --set
-   execute-loop-retry-after=...`, not an automatic loop output. A new
+   work-retry-after=...`, not an automatic loop output. A new
    constant `MaxLoopCooldown = 24h` and helper `capLoopCooldown` now clamp
    every `SetExecutionCooldown` call the loop makes. Operators extending a
    cooldown manually beyond 24h still works — the cap only governs
@@ -213,7 +213,7 @@ Regression coverage:
 - `TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead` was updated to
   assert the new 24h cap (previously asserted >180d).
 
-### execute-loop: structured `declined_needs_decomposition` outcome
+### work: structured `declined_needs_decomposition` outcome
 
 Adds a first-class outcome distinct from `no_changes` and `execution_failed`
 for executors that conclude a bead is too large to deliver in one pass and
@@ -228,16 +228,16 @@ The new contract:
   is a new value of the execute-bead status. Executors set it together with
   `DecompositionRecommendation []string` (recommended sub-bead titles) and
   optional `DecompositionRationale string` on `ExecuteBeadReport`.
-- The execute-loop responds by appending a structured
+- The work responds by appending a structured
   `decomposition-recommendation` event (JSON body carrying the rationale and
   recommended sub-beads) and parking the bead with a 365-day cooldown so
   subsequent loop iterations do not re-attempt it. The bead remains open;
   its status field is unchanged.
 - A first-class CLI for the cooldown surface lands as `ddx bead cooldown
   show <id>` and `ddx bead cooldown clear <id>`. Operators should reach for
-  these commands instead of editing the magic `execute-loop-retry-after`
+  these commands instead of editing the magic `work-retry-after`
   Extra key. The existing `ddx bead update --set/--unset
-  execute-loop-retry-after=...` workflow continues to work as a power-user
+  work-retry-after=...` workflow continues to work as a power-user
   override but is deprecated for the decomposition case — clearing a
   cooldown via the new command is the intended path.
 

@@ -84,7 +84,7 @@ func BuildLandingGateContext(projectRoot string, res *ExecuteBeadResult, gitOps 
 
 // EvaluateRequiredGatesForResult is the canonical "run gate evaluation and
 // write the bundle artifacts" sequence used by LandBeadResult and by upstream
-// callers (server execute-loop) that want gate eval before submitting through
+// callers (server work) that want gate eval before submitting through
 // the coordinator. It delegates to evaluateRequiredGates for the actual gate
 // scoring, then mutates res to set GateResults, RequiredExecSummary,
 // RatchetEvidence, and RatchetSummary, and writes checks.json into the

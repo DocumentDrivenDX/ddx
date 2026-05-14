@@ -146,7 +146,7 @@ library:
 }
 
 // TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel verifies
-// that server-managed execute-loop workers proceed through ExecuteBeadWithConfig
+// that server-managed work workers proceed through ExecuteBeadWithConfig
 // without consulting ResolveRoute, even when the worker spec pins a model.
 func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")

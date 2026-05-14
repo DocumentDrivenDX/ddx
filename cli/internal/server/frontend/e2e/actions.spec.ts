@@ -109,7 +109,7 @@ test('US-095.c: confirming dispatches a worker and surfaces it in the list', asy
 	await mockBase(page, {
 		dispatchFn: (req) => {
 			dispatched = req;
-			return { id: 'worker-drain-001', state: 'queued', kind: 'execute-loop' };
+			return { id: 'worker-drain-001', state: 'queued', kind: 'work' };
 		}
 	});
 
@@ -119,7 +119,7 @@ test('US-095.c: confirming dispatches a worker and surfaces it in the list', asy
 	await dialog.getByRole('button', { name: /confirm|start/i }).click();
 
 	await expect.poll(() => dispatched).not.toBeNull();
-	expect(dispatched).toMatchObject({ kind: 'execute-loop' });
+	expect(dispatched).toMatchObject({ kind: 'work' });
 
 	// Originating button should anchor to the new worker's detail page within 1s.
 	const link = page.getByRole('link', { name: /worker-drain-001/ });
@@ -131,7 +131,7 @@ test('ddx-05b4cc9d: Drain queue worker appears only in the selected project Work
 }) => {
 	const drainWorker = {
 		id: 'worker-drain-proj1',
-		kind: 'execute-loop',
+		kind: 'work',
 		state: 'running',
 		status: 'running',
 		harness: 'codex',
@@ -177,7 +177,7 @@ test('ddx-05b4cc9d: Drain queue worker appears only in the selected project Work
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: { workerDispatch: { id: drainWorker.id, state: 'running', kind: 'execute-loop' } }
+					data: { workerDispatch: { id: drainWorker.id, state: 'running', kind: 'work' } }
 				})
 			});
 		} else if (body.query.includes('WorkersByProject')) {
@@ -227,7 +227,7 @@ test('ddx-05b4cc9d: Drain queue worker appears only in the selected project Work
 
 test('US-095.d: dispatch errors are surfaced with remediation, not silent', async ({ page }) => {
 	await mockBase(page, {
-		dispatchFn: () => new Error('queue already has an active execute-loop worker')
+		dispatchFn: () => new Error('queue already has an active work worker')
 	});
 
 	await page.goto(BASE_URL);
@@ -239,7 +239,7 @@ test('US-095.d: dispatch errors are surfaced with remediation, not silent', asyn
 
 	const alert = page.getByRole('alert');
 	await expect(alert).toBeVisible();
-	await expect(alert).toContainText(/active execute-loop worker/);
+	await expect(alert).toContainText(/active work worker/);
 });
 
 test('US-095.e: disabled action surfaces the prerequisite reason in a tooltip', async ({

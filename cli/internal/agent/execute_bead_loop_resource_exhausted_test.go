@@ -142,8 +142,8 @@ func TestExecuteBeadWorkerResourceExhaustedUnclaimsAndNoCooldown(t *testing.T) {
 	assert.Equal(t, "open", got.Status)
 	assert.Empty(t, got.Owner)
 	if got.Extra != nil {
-		_, hasRetry := got.Extra["execute-loop-retry-after"]
-		assert.False(t, hasRetry, "resource exhaustion must not write execute-loop-retry-after")
+		_, hasRetry := got.Extra["work-retry-after"]
+		assert.False(t, hasRetry, "resource exhaustion must not write work-retry-after")
 	}
 }
 

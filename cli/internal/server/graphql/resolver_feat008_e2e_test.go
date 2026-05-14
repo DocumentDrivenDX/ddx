@@ -101,7 +101,7 @@ func (c *capturingActionDispatcher) DispatchPlugin(ctx context.Context, projectR
 }
 
 func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
-	return &WorkerLifecycleResult{ID: id, State: "stopped", Kind: "execute-loop"}, nil
+	return &WorkerLifecycleResult{ID: id, State: "stopped", Kind: "work"}, nil
 }
 
 // TestReviewRetryThresholdFromConfigGraphQL is the SD-024 Stage 1 configuration
@@ -119,7 +119,7 @@ func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (
 //  2. Loop-side: drive ExecuteBeadWorker.RunWithConfig with the same
 //     ResolvedConfig the production runWorker would produce from the same
 //     project root. Candidate-cycle pre-land review now owns close eligibility,
-//     so execute-loop must not invoke the legacy post-land reviewer/retry path.
+//     so work must not invoke the legacy post-land reviewer/retry path.
 //
 // Configured values:
 //   - .ddx/config.yaml: review_max_retries: 5
@@ -170,7 +170,7 @@ review_max_retries: 5
 	require.NotNil(t, res)
 	require.Len(t, dispatcher.calls, 1, "StartWorker must dispatch exactly once")
 	got := dispatcher.calls[0]
-	assert.Equal(t, "execute-loop", got.kind)
+	assert.Equal(t, "work", got.kind)
 	assert.Equal(t, projectRoot, got.projectRoot,
 		"resolver must dispatch against the resolved project root")
 	assert.Equal(t, harnessCfg, got.args["harness"],
@@ -213,7 +213,7 @@ review_max_retries: 5
 	require.NoError(t, runErr)
 
 	assert.Equal(t, 0, runner.ReviewCalls(),
-		"legacy post-land reviewer must not be invoked by execute-loop")
+		"legacy post-land reviewer must not be invoked by work")
 	assert.Equal(t, 1, runner.ExecCalls(),
 		"executor must be invoked once for the successful attempt")
 
@@ -239,16 +239,16 @@ review_max_retries: 5
 	}
 
 	assert.Equal(t, 0, reviewErrorCount,
-		"execute-loop must not emit legacy post-land review-error events")
+		"work must not emit legacy post-land review-error events")
 	assert.Equal(t, 0, reviewApproveCount,
-		"execute-loop must not emit legacy post-land review events")
+		"work must not emit legacy post-land review events")
 	assert.Equal(t, 0, manualRequiredCount,
-		"execute-loop must not emit legacy post-land review-manual-required events")
+		"work must not emit legacy post-land review-manual-required events")
 
 	gotBead, err := store.Get(beadID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", gotBead.Status,
-		"successful execute-loop attempt must close directly after candidate-cycle approval")
+		"successful work attempt must close directly after candidate-cycle approval")
 
 	// Defensive: a stale heartbeat ticker in the loop could outlive the
 	// final iteration. Give it a beat to settle so test cleanup is clean.

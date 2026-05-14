@@ -33,7 +33,7 @@ func writeFakeWorkerRecord(t *testing.T, m *WorkerManager, rec WorkerRecord) {
 
 // TestWorkerDispatchAdapterEnforcesMaxCount covers the workers.max_count
 // safety rail (ddx-b6cf025c). When max_count is set and the count of
-// running execute-loop workers is already at the cap, the adapter must
+// running work workers is already at the cap, the adapter must
 // refuse with a clear error rather than silently starting a new worker.
 func TestWorkerDispatchAdapterEnforcesMaxCount(t *testing.T) {
 	root := t.TempDir()
@@ -49,7 +49,7 @@ func TestWorkerDispatchAdapterEnforcesMaxCount(t *testing.T) {
 
 	writeFakeWorkerRecord(t, m, WorkerRecord{
 		ID:          "worker-pre-existing",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -57,7 +57,7 @@ func TestWorkerDispatchAdapterEnforcesMaxCount(t *testing.T) {
 	})
 
 	adapter := &workerDispatchAdapter{manager: m}
-	_, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, nil)
+	_, err := adapter.DispatchWorker(context.Background(), "work", root, nil)
 	if err == nil {
 		t.Fatal("expected error when max_count reached, got nil")
 	}
@@ -92,7 +92,7 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 
 	writeFakeWorkerRecord(t, m, WorkerRecord{
 		ID:          "worker-pre-existing",
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -100,7 +100,7 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 	})
 
 	adapter := &workerDispatchAdapter{manager: m}
-	result, err := adapter.DispatchWorker(context.Background(), "execute-loop", root, nil)
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, nil)
 	if err != nil {
 		t.Fatalf("dispatch under cap: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 }
 
 // TestCountRunningDrainWorkersFiltersByProjectAndKind verifies the helper
-// only counts execute-loop workers in state=running for the target
+// only counts work workers in state=running for the target
 // projectRoot — not other kinds, other projects, or stopped workers.
 func TestCountRunningDrainWorkersFiltersByProjectAndKind(t *testing.T) {
 	root := t.TempDir()
@@ -131,11 +131,11 @@ func TestCountRunningDrainWorkersFiltersByProjectAndKind(t *testing.T) {
 	adapter := &workerDispatchAdapter{manager: m}
 
 	writeFakeWorkerRecord(t, m, WorkerRecord{
-		ID: "w-drain-running", Kind: "execute-loop", State: "running",
+		ID: "w-drain-running", Kind: "work", State: "running",
 		ProjectRoot: root, StartedAt: time.Now().UTC(),
 	})
 	writeFakeWorkerRecord(t, m, WorkerRecord{
-		ID: "w-drain-stopped", Kind: "execute-loop", State: "stopped",
+		ID: "w-drain-stopped", Kind: "work", State: "stopped",
 		ProjectRoot: root, StartedAt: time.Now().UTC(),
 	})
 	writeFakeWorkerRecord(t, m, WorkerRecord{
@@ -143,7 +143,7 @@ func TestCountRunningDrainWorkersFiltersByProjectAndKind(t *testing.T) {
 		ProjectRoot: root, StartedAt: time.Now().UTC(),
 	})
 	writeFakeWorkerRecord(t, m, WorkerRecord{
-		ID: "w-other-project", Kind: "execute-loop", State: "running",
+		ID: "w-other-project", Kind: "work", State: "running",
 		ProjectRoot: "/different/project", StartedAt: time.Now().UTC(),
 	})
 

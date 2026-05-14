@@ -16,7 +16,7 @@ const RunRequeueEventKind = "run_requeue"
 
 // RunRequeue implements the runRequeue mutation: given a runId, look up the
 // originating bead, atomically dedupe by idempotencyKey, reopen the bead so
-// the execute-loop can claim it again, and append an audit event capturing
+// the work can claim it again, and append an audit event capturing
 // operator identity. Concurrent calls with the same idempotencyKey collapse
 // to a single re-queue (the second caller receives deduplicated=true and the
 // same bead).

@@ -180,15 +180,15 @@ type workerHandle struct {
 	// no-op and runWorker can preserve the "stopped" state across its final
 	// record write.
 	stopped bool
-	// wakeCh, when non-nil, signals an execute-loop worker's idle-poll
+	// wakeCh, when non-nil, signals an work worker's idle-poll
 	// sleep to return early so the loop re-scans the ready queue. The
 	// channel is buffered (cap 1) so a non-blocking send coalesces multiple
-	// wake calls into at most one extra tick. Set on execute-loop workers;
+	// wake calls into at most one extra tick. Set on work workers;
 	// nil on plugin-action workers.
 	wakeCh chan struct{}
 }
 
-// WorkerManager manages in-process execute-loop workers as goroutines.
+// WorkerManager manages in-process work workers as goroutines.
 type WorkerManager struct {
 	projectRoot string
 	rootDir     string
@@ -228,13 +228,13 @@ const (
 	defaultWatchdogKillGrace     = 30 * time.Second
 )
 
-// WakeProject signals every running execute-loop worker bound to projectRoot
+// WakeProject signals every running work worker bound to projectRoot
 // to skip its current idle-poll sleep and re-scan the ready queue. Used by
 // the operator-prompt approve / auto-approve mutations (Story 15) so a
 // freshly-approved bead is claimed immediately rather than after a full
 // PollInterval. The send is non-blocking and the per-worker wake channel is
 // buffered (cap 1), so multiple wakes within one tick coalesce. Returns the
-// number of workers signalled (0 when no execute-loop is running for the
+// number of workers signalled (0 when no work is running for the
 // project — submit/approve still succeeds, the next tick on a future worker
 // will pick the bead up).
 func (m *WorkerManager) WakeProject(projectRoot string) int {
@@ -272,7 +272,7 @@ func NewWorkerManager(projectRoot string) *WorkerManager {
 }
 
 func lifecycleStartDetail(spec ExecuteLoopWorkerSpec) string {
-	parts := []string{"kind=execute-loop"}
+	parts := []string{"kind=work"}
 	if spec.Harness != "" {
 		parts = append(parts, "harness="+spec.Harness)
 	}
@@ -380,7 +380,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	// the agent service; DDx must not pre-resolve or validate the route.
 	if !spec.OpaquePassthrough {
 		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider); err != nil {
-			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
+			return WorkerRecord{}, fmt.Errorf("work: %w", err)
 		}
 	}
 
@@ -416,7 +416,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 
 	record := WorkerRecord{
 		ID:           id,
-		Kind:         "execute-loop",
+		Kind:         "work",
 		State:        "running",
 		Status:       "running",
 		ProjectRoot:  effectiveRoot,
@@ -702,7 +702,7 @@ func appendPowerAttemptEvent(store agent.BeadEventAppender, beadID string, repor
 		Summary:   summary,
 		Body:      body,
 		Actor:     actor,
-		Source:    "legacy agent execute-loop",
+		Source:    "legacy agent work",
 		CreatedAt: createdAt,
 	})
 }

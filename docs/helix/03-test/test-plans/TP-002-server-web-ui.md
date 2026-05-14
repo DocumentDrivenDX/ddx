@@ -24,7 +24,7 @@ UI. Tests run against a live `ddx server` instance — a per-user host daemon
 holding its state at `~/.local/share/ddx/server-state.json` — with real
 project data (documents, beads, personas, execution definitions) from one or
 more project roots. Coverage includes host+user isolation across registered
-projects, concurrent project access, and execute-loop worker lifecycle
+projects, concurrent project access, and work worker lifecycle
 supervised by the in-process `WorkerManager`.
 
 ## Test Infrastructure
@@ -263,7 +263,7 @@ contract, not a UI surface.
 
 ### TC-013: Execute-Loop Worker Lifecycle
 
-Verifies that the in-process `WorkerManager` supervises execute-loop workers
+Verifies that the in-process `WorkerManager` supervises work workers
 as goroutines scoped to one project, per FEAT-002 and SD-019. These cases are
 owned by `cli/internal/server/workers_test.go`.
 

@@ -183,7 +183,7 @@ func (p preClaimReadinessChecksPayload) Len() int {
 }
 
 // NewPreClaimIntakeHook constructs the bead-intake complexity gate used
-// before claim in the work / execute-loop paths. The hook evaluates the bead
+// before claim in the work / work paths. The hook evaluates the bead
 // using the repository's triage prompt and returns one of the typed intake
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //

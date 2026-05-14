@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-// Phase is the typed execute-loop phase vocabulary.
+// Phase is the typed work phase vocabulary.
 type Phase string
 
 const (

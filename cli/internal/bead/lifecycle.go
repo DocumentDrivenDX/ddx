@@ -295,8 +295,8 @@ var ClaimMetadataExtraKeys = []string{
 	"claimed-worktree",
 }
 
-// ClaimHeartbeatExtraKey is the Extra key for the execute-loop heartbeat
+// ClaimHeartbeatExtraKey is the Extra key for the work heartbeat
 // timestamp. It is cleared by both Unclaim and Reopen but is kept separate
 // from ClaimMetadataExtraKeys because its cleanup semantics differ in some
 // call sites (e.g. SetExecutionCooldown does not touch it).
-const ClaimHeartbeatExtraKey = "execute-loop-heartbeat-at"
+const ClaimHeartbeatExtraKey = "work-heartbeat-at"

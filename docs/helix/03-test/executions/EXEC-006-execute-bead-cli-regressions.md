@@ -18,7 +18,7 @@ ddx:
 ---
 # Execute-Bead CLI Regressions
 
-Targeted regression coverage for the execute-bead / execute-loop lane.
+Targeted regression coverage for the execute-bead / work lane.
 
 This execution keeps the high-signal command small enough to run on routine
 docs-and-contract work without forcing the full CLI test suite.

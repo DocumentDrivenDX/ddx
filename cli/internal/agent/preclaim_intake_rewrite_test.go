@@ -62,7 +62,7 @@ func TestPreClaimIntakeRewrite_AllowsExpansionReplacement(t *testing.T) {
 	// Expanded replacement: adds PROBLEM/ROOT CAUSE/PROPOSED FIX structure with
 	// durable file:line anchors. Does not add any Test* functions or acceptance
 	// criteria — those belong in the acceptance field.
-	expandedDesc := "PROBLEM\nThe execute-loop dispatches beads without evaluating whether the " +
+	expandedDesc := "PROBLEM\nThe work dispatches beads without evaluating whether the " +
 		"description is a fit-for-purpose implementation prompt.\n\n" +
 		"ROOT CAUSE\ncli/internal/agent/execute_bead_loop.go:600 dispatches without readiness gate\n\n" +
 		"PROPOSED FIX\nAdd PreClaimIntakeHook wired in the loop at claim time\n\n" +

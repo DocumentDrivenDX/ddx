@@ -444,7 +444,7 @@ func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string)
 	return &OperatorPromptApproveResult{Bead: beadModelFromBead(persisted)}, nil
 }
 
-// signalExecuteLoopWake asks any running execute-loop worker bound to this
+// signalExecuteLoopWake asks any running work worker bound to this
 // project to skip the current idle-poll sleep and re-scan the ready queue.
 // Called immediately after a successful proposed → open transition (manual
 // approve or auto-approve on submit) so a freshly-eligible operator-prompt

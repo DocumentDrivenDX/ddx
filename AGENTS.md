@@ -59,7 +59,7 @@ into the description instead.
 
 ## Merge Policy
 
-Branches containing execute-bead or execute-loop commits carry a
+Branches containing execute-bead or work commits carry a
 per-attempt execution audit trail in their git history. This trail is
 load-bearing data, not noise:
 

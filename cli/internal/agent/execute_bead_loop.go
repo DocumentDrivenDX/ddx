@@ -147,10 +147,10 @@ const DefaultReviewMaxRetries = 3
 // to evaluate an empty diff is unjustified cost.
 const ReviewerSkippedEmptyDiffEventKind = "reviewer-skipped-empty-diff"
 
-// MaxLoopCooldown is the absolute upper bound the execute-loop will set for
-// any execute-loop-retry-after value. Year-scale parks effectively mean
+// MaxLoopCooldown is the absolute upper bound the work will set for
+// any work-retry-after value. Year-scale parks effectively mean
 // "never retry" and that should be a deliberate operator choice via
-// `ddx bead update --set execute-loop-retry-after=...`, not an automatic
+// `ddx bead update --set work-retry-after=...`, not an automatic
 // loop decision. Beyond this cap, the loop refuses to lengthen the cooldown
 // further; an operator extending it manually still works.
 const MaxLoopCooldown = 24 * time.Hour
@@ -448,7 +448,7 @@ type ExecuteBeadReport struct {
 	CostUSD float64 `json:"cost_usd,omitempty"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
-	// Profile routing telemetry. Populated when execute-loop uses a profile
+	// Profile routing telemetry. Populated when work uses a profile
 	// ladder rather than an explicit harness/model pin.
 	RequestedProfile   string `json:"requested_profile,omitempty"`
 	InferredPowerClass string `json:"inferred_power_class,omitempty"`
@@ -469,7 +469,7 @@ type ExecuteBeadReport struct {
 	// model-gave-up: the model was prevented from making progress by an
 	// external cause (context cancellation, executor SIGKILL/SIGTERM,
 	// transport-class provider error, server restart, routing preflight
-	// rejection). The execute-loop bypasses the no-progress cooldown for
+	// rejection). The work bypasses the no-progress cooldown for
 	// Disrupted reports so the bead is immediately re-claimable instead of
 	// being parked for hours on a transient outage. ddx-5b3e57f4.
 	Disrupted bool `json:"disrupted,omitempty"`
@@ -625,7 +625,7 @@ type ExecuteBeadWorker struct {
 	Now                func() time.Time
 	// Reviewer is retained for legacy/manual review helper tests. Automated
 	// close eligibility is owned by pre-land candidate-cycle review, so the
-	// execute-loop success path no longer calls this post-land reviewer.
+	// work success path no longer calls this post-land reviewer.
 	Reviewer BeadReviewer
 	// ComplexityGate, when non-nil, is consulted before a bead is claimed.
 	// The zero value fail-opens once and then allows.
@@ -2045,7 +2045,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			// Automated close eligibility is now owned by the pre-land
 			// candidate-cycle reviewer. The old post-land/pre-close reviewer
-			// remains available as a reusable/manual helper, but execute-loop
+			// remains available as a reusable/manual helper, but work
 			// must not run it after a candidate has already landed.
 			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
@@ -2876,7 +2876,7 @@ func oneLineGateSummary(detail string) string {
 // milestone in an execute-bead loop run. Entries use the same envelope as
 // the Fizeau harness (session_id/seq/type/ts/data) so existing event
 // consumers can parse the stream uniformly. Errors are swallowed:
-// structured logging must never break the core execute-loop.
+// structured logging must never break the core work.
 func writeLoopEvent(sink io.Writer, sessionID, eventType string, data map[string]any, ts time.Time) {
 	if sink == nil {
 		return
@@ -3434,10 +3434,10 @@ func addBeadLabel(ctx context.Context, store ExecuteBeadLoopStore, beadID, label
 }
 
 const (
-	executeLoopSmartRetryKey                = "execute-loop-smart-retry"
-	executeLoopSmartRetryReasonKey          = "execute-loop-smart-retry-reason"
-	executeLoopSmartRetrySuggestedActionKey = "execute-loop-smart-retry-suggested-action"
-	executeLoopSuggestedActionKey           = "execute-loop-suggested-action"
+	executeLoopSmartRetryKey                = "work-smart-retry"
+	executeLoopSmartRetryReasonKey          = "work-smart-retry-reason"
+	executeLoopSmartRetrySuggestedActionKey = "work-smart-retry-suggested-action"
+	executeLoopSuggestedActionKey           = "work-suggested-action"
 )
 
 func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome, actualPower int, nextFloorFn func(int) (int, error)) error {
@@ -3636,10 +3636,10 @@ func clearExecuteLoopNoChangesMetadata(ctx context.Context, store ExecuteBeadLoo
 		if b.Extra == nil {
 			return
 		}
-		delete(b.Extra, "execute-loop-retry-after")
+		delete(b.Extra, "work-retry-after")
 		delete(b.Extra, bead.ExtraCooldownBaseRev)
-		delete(b.Extra, "execute-loop-last-status")
-		delete(b.Extra, "execute-loop-last-detail")
+		delete(b.Extra, "work-last-status")
+		delete(b.Extra, "work-last-detail")
 		delete(b.Extra, executeLoopSuggestedActionKey)
 		clearSmartRetryMetadata(b)
 	})
@@ -3782,10 +3782,10 @@ func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
 // list to populate fallback_chain so post-hoc review can see what was
 // excluded; the power-hint nudge on the same bead biases fizeau's next
 // RouteRequest off the failed power tier when a ladder is available.
-const executeLoopFailedRoutesKey = "execute-loop-failed-routes"
+const executeLoopFailedRoutesKey = "work-failed-routes"
 
 // RouteExclusionWindow is the time window within which a recorded
-// execute-loop-failed-routes entry suppresses a (provider, model) pair in
+// work-failed-routes entry suppresses a (provider, model) pair in
 // the next RouteRequest.ExcludedRoutes payload. Entries older than this
 // window remain in the bead's audit list but do not constrain routing,
 // allowing recovery once the provider returns.

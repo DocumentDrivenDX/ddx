@@ -61,7 +61,7 @@ type PostMergeReviewOutput struct {
 // RunPostMergeReview executes the post-merge review state machine for a
 // successful bead attempt. When review is skipped (no reviewer or --no-review)
 // the bead is closed and the function returns Approved=true. When review is
-// active, the execute-loop asks the review coordinator to evaluate the
+// active, the work asks the review coordinator to evaluate the
 // close-eligible result before CloseWithEvidence runs; close only proceeds on
 // unanimous evidence-backed APPROVE. REQUEST_CHANGES and BLOCK record their
 // review events without reopening the bead.
@@ -675,7 +675,7 @@ func clearReviewTriageClaimMetadata(b *bead.Bead) {
 	delete(b.Extra, "claimed-machine")
 	delete(b.Extra, "claimed-session")
 	delete(b.Extra, "claimed-worktree")
-	delete(b.Extra, "execute-loop-heartbeat-at")
+	delete(b.Extra, "work-heartbeat-at")
 }
 
 // nextEscalatedPowerClass returns the next powerClass above `current`. An unrecognised or

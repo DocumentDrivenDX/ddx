@@ -29,7 +29,7 @@ gap by fetching and pushing DDx-managed state on demand or on a watch interval.
 
 Sync solves the multi-machine drift problem operators see when DDx is checked
 out on more than one machine: workers churn `beads.jsonl` every few minutes
-during execute-loop drains, the working tree is constantly dirty in tracked
+during work drains, the working tree is constantly dirty in tracked
 paths, and manually pulling/stashing/popping/committing/pushing is friction
 that gets skipped, causing tracker divergence.
 

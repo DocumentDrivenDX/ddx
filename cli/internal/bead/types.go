@@ -104,7 +104,7 @@ func IsCanonicalStatus(s string) bool {
 // IssueType constants
 const (
 	// IssueTypeOperatorPrompt is the bead type used for operator-submitted
-	// prompts that the execute-loop runs as instructions.
+	// prompts that the work runs as instructions.
 	IssueTypeOperatorPrompt = "operator-prompt"
 )
 
@@ -223,7 +223,7 @@ const (
 )
 
 // Blocker describes why an open bead is currently not runnable. Either
-// unclosed dependencies exist, or an execute-loop cooldown has parked the
+// unclosed dependencies exist, or an work cooldown has parked the
 // bead until NextEligibleAt.
 type Blocker struct {
 	Kind           string   `json:"kind"`

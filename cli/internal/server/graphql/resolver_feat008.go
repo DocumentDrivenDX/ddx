@@ -57,9 +57,9 @@ func (r *mutationResolver) BeadClose(ctx context.Context, id string, reason *str
 // WorkerDispatch is the resolver for the workerDispatch field.
 func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, projectID string, args *string) (*WorkerDispatchResult, error) {
 	switch kind {
-	case "execute-loop":
+	case "work":
 		if r.Actions == nil {
-			return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
+			return nil, fmt.Errorf("work worker dispatcher is not configured")
 		}
 		return r.Actions.DispatchWorker(ctx, kind, r.projectRoot(ctx, projectID), args)
 	case "realign-specs", "run-checks":
@@ -86,7 +86,7 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 // shadowed the on-disk config.
 func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInput) (*WorkerDispatchResult, error) {
 	if r.Actions == nil {
-		return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
+		return nil, fmt.Errorf("work worker dispatcher is not configured")
 	}
 	projectRoot := r.projectRoot(ctx, input.ProjectID)
 
@@ -134,13 +134,13 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 		return nil, err
 	}
 	rawArgs := string(raw)
-	return r.Actions.DispatchWorker(ctx, "execute-loop", projectRoot, &rawArgs)
+	return r.Actions.DispatchWorker(ctx, "work", projectRoot, &rawArgs)
 }
 
 // StopWorker is the resolver for the stopWorker field.
 func (r *mutationResolver) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
 	if r.Actions == nil {
-		return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
+		return nil, fmt.Errorf("work worker dispatcher is not configured")
 	}
 	return r.Actions.StopWorker(ctx, id)
 }

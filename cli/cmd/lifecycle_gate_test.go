@@ -19,7 +19,7 @@ func seedLegacyLifecycleQueue(t *testing.T, workingDir string) {
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"]}`,
-		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","execute-loop-last-detail":"rerun with smart agent"}`,
+		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","work-last-detail":"rerun with smart agent"}`,
 	}, "\n") + "\n"
 	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
 }

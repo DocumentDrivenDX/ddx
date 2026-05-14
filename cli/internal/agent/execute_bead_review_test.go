@@ -832,7 +832,7 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 }
 
 // TestExecuteBeadWorkerReviewBoundedByMaxPowerHint verifies the retired post-land
-// reviewer is unreachable from execute-loop success. Candidate-cycle review
+// reviewer is unreachable from work success. Candidate-cycle review
 // owns repair/retry now, so a success closes directly within one worker.Run.
 func TestExecuteBeadWorkerReviewBoundedByMaxPowerHint(t *testing.T) {
 	// Use a single-bead store so we can assert "exactly one attempt".
@@ -870,7 +870,7 @@ func TestExecuteBeadWorkerReviewBoundedByMaxPowerHint(t *testing.T) {
 	// The executor should have been called exactly once; the retired
 	// post-land review path should not run or trigger an in-loop retry.
 	assert.Equal(t, 1, executorCalls, "bead should be attempted exactly once within a single worker.Run call")
-	assert.Equal(t, 0, reviewerCalls, "legacy post-land reviewer must not run from execute-loop success")
+	assert.Equal(t, 0, reviewerCalls, "legacy post-land reviewer must not run from work success")
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
 

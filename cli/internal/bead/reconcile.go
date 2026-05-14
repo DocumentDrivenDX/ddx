@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	ExtraRetryAfter      = "execute-loop-retry-after"
-	ExtraLastStatus      = "execute-loop-last-status"
-	ExtraLastDetail      = "execute-loop-last-detail"
-	ExtraNoChangesCount  = "execute-loop-no-changes-count"
-	ExtraCooldownBaseRev = "execute-loop-cooldown-base-rev"
+	ExtraRetryAfter      = "work-retry-after"
+	ExtraLastStatus      = "work-last-status"
+	ExtraLastDetail      = "work-last-detail"
+	ExtraNoChangesCount  = "work-no-changes-count"
+	ExtraCooldownBaseRev = "work-cooldown-base-rev"
 	ExtraExecutionElig   = "execution-eligible"
 	ExtraExecutionReason = "execution-skip-reason"
 

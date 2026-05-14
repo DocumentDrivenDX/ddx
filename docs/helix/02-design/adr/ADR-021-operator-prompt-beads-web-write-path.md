@@ -47,11 +47,11 @@ safeguards every other write goes through).
 ## Decision
 
 **Every operator prompt submitted from the web UI becomes a bead with
-`issueType: operator-prompt`, drained by the existing execute-loop.**
+`issueType: operator-prompt`, drained by the existing work.**
 
 There is no synchronous in-process mutation path for prompts. The
 `operatorPromptSubmit` GraphQL mutation persists a bead and signals the
-project's execute-loop coordinator; the loop claims the bead, runs the
+project's work coordinator; the loop claims the bead, runs the
 harness in a fresh worktree, and lands changes through the standard
 land-coordinator pipeline.
 
@@ -148,7 +148,7 @@ the project's queue, not on the coordinator. The submission flow:
 
 1. The operator's browser submits to whichever node it is connected to.
 2. If that node owns the project's queue, it persists the bead locally and
-   wakes the local execute-loop.
+   wakes the local work.
 3. If the receiving node is a coordinator that does not own the queue, it
    forwards the submission to the owning client node, **carrying the
    originating trust attestation unchanged** (peer identity, request ID,
@@ -248,7 +248,7 @@ Operators may wait seconds-to-minutes between submit and the loop claiming
 the bead. Mitigations:
 
 - The `operatorPromptSubmit` resolver immediately wakes the local
-  execute-loop coordinator after persisting the bead.
+  work coordinator after persisting the bead.
 - The chat pane streams the resulting attempt's events (same
   `workers.recentEvents` shape used elsewhere in FEAT-008).
 - The UI shows a tail of recent operator-prompt beads with live status,

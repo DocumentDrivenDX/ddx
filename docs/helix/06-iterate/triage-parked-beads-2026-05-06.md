@@ -17,7 +17,7 @@ Observed patterns:
 |---|---:|---|---|
 | provider_unavailable | 23 | Latest actionable event was `execution_failed` with `all tiers exhausted` / `no viable provider found`. | Removed legacy migration label `triage:needs-investigation`; these are retryable transport outages. |
 | verification_red_elsewhere | 4 | Targeted work appeared complete, but a required broad gate was red in unrelated tests. | Leave parked until each bead is verified or AC is narrowed. |
-| stale_execute_loop_spec | 6 | Old `ExecuteLoopSpec` refactor beads with no execution event, manual triage label, and deprecated execute-loop vocabulary. | Leave parked; rewrite or supersede against current `ddx work` / Fizeau boundary design. |
+| stale_execute_loop_spec | 6 | Old `ExecuteLoopSpec` refactor beads with no execution event, manual triage label, and deprecated work vocabulary. | Leave parked; rewrite or supersede against current `ddx work` / Fizeau boundary design. |
 | decomposition_or_epic | 3 | Parent/umbrella work where children or decomposition already own execution. | Leave parked pending completed-epic closure/supersede policy. |
 | no_changes_unverified | 5 | Agent reported already-satisfied or no-changes with verification command. | Legacy migration note: these do not block `ddx work` unless paired with the old needs-investigation label; monitor for auto-verify/close. |
 | review_block_or_malfunction | 2 | Review blocked or malfunctioned on a no-changes/result path. | Leave parked pending review/triage cleanup. |
@@ -75,7 +75,7 @@ bead AC if the broad suite requirement is now too noisy.
 
 ### Stale ExecuteLoopSpec Refactor Beads
 
-These have no recent execution event and still describe `execute-loop` as a
+These have no recent execution event and still describe `work` as a
 future implementation target. Do not blindly retry. They should be rewritten or
 closed/superseded after reconciling with the current `ddx work` / `ddx try`
 surface and the no-agent cleanup decision.

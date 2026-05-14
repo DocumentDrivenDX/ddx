@@ -77,8 +77,8 @@ func TestCommitOutcome_StoreError_SchedulesCooldown_NotExit(t *testing.T) {
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
-	assert.Equal(t, "loop-error", got.Extra["execute-loop-last-status"])
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	assert.Equal(t, "loop-error", got.Extra["work-last-status"])
+	_, hasRetry := got.Extra["work-retry-after"]
 	assert.True(t, hasRetry, "cooldown timestamp must be persisted")
 
 	events, err := store.Events(candidate.ID)

@@ -58,7 +58,7 @@ var InfrastructureFailurePatterns = []string{
 // Returns false for statuses whose detail does not match any known
 // infrastructure pattern.
 //
-// Used by the execute-loop to decide whether to (a) defer the bead with a
+// Used by the work to decide whether to (a) defer the bead with a
 // retry-after and try the same powerClass later, or (b) burn through to the next
 // powerClass as the standard escalation policy.
 func IsInfrastructureFailure(status, detail string) bool {
@@ -77,8 +77,8 @@ func IsInfrastructureFailure(status, detail string) bool {
 	return false
 }
 
-// DefaultMaxCostUSD is the per-execute-loop dollar cap on accumulated billed
-// spend. Exceeding the cap halts further bead claiming so an execute-loop
+// DefaultMaxCostUSD is the per-work dollar cap on accumulated billed
+// spend. Exceeding the cap halts further bead claiming so an work
 // run cannot silently burn through arbitrary openrouter / pay-per-token
 // credits. Local LLMs and subscription-bundled providers do not count
 // toward the cap (see CountsTowardCostCap).
@@ -103,7 +103,7 @@ const DefaultMaxBeadCostUSD = 5.0
 const DefaultMaxRecoveryCostUSD = 2.0
 
 // PerBeadBudgetExhaustedReason is the detail-string prefix written into a
-// report when the per-bead budget is exceeded. The execute-loop detects this
+// report when the per-bead budget is exceeded. The work detects this
 // marker to handle the outcome correctly (unclaim, event, counter increment,
 // no cooldown).
 const PerBeadBudgetExhaustedReason = "per-bead budget exhausted"
@@ -137,7 +137,7 @@ func CountsTowardCostCap(isLocal, isSubscription bool, costClass string) bool {
 // "count by default" (the safe option for unknown harnesses).
 type HarnessBilledLookup func(harnessName string) bool
 
-// CostCapTracker accumulates billed cost for a single execute-loop run
+// CostCapTracker accumulates billed cost for a single work run
 // and reports when accumulated spend has reached the configured cap.
 // Safe for concurrent use across goroutines (workers may call Add and
 // Tripped concurrently).

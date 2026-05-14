@@ -464,11 +464,11 @@ type CommitConnection {
 # Workers
 # ============================================
 
-"""Worker represents an execute-loop worker process"""
+"""Worker represents an work worker process"""
 type Worker implements Node {
   """Unique worker identifier"""
   id: ID!
-  """Worker kind (e.g. "execute-loop")"""
+  """Worker kind (e.g. "work")"""
   kind: String!
   """Current lifecycle state (e.g. "running", "idle", "stopped")"""
   state: String!
@@ -1928,7 +1928,7 @@ type WorkerLifecycleResult {
   kind: String!
 }
 
-"""StartWorkerInput configures a project execute-loop worker."""
+"""StartWorkerInput configures a project work worker."""
 input StartWorkerInput {
   """Project identifier"""
   projectId: String!
@@ -2587,7 +2587,7 @@ type Query {
 
   """
   List workers reported via the worker_ingest derived view (ADR-022 §Worker-server interface).
-  Distinct from the `workers` query, which surfaces the in-process execute-loop registry.
+  Distinct from the `workers` query, which surfaces the in-process work registry.
   Each entry is classified connected/stale/disconnected by elapsed time since last_event_at
   per the rev-5 freshness state model.
   """
@@ -3265,7 +3265,7 @@ type Mutation {
 
   """Dispatch a project worker action."""
   workerDispatch(
-    """Worker kind: execute-loop, realign-specs, or run-checks"""
+    """Worker kind: work, realign-specs, or run-checks"""
     kind: String!,
     """Project identifier"""
     projectId: String!,
@@ -3273,7 +3273,7 @@ type Mutation {
     args: String
   ): WorkerDispatchResult!
 
-  """Start a project execute-loop worker."""
+  """Start a project work worker."""
   startWorker(input: StartWorkerInput!): WorkerDispatchResult!
 
   """Stop a running worker through the same path as legacy agent workers stop."""
@@ -3360,13 +3360,13 @@ type Mutation {
   """Submit an operator prompt as a proposed bead. Requires a valid CSRF token via the X-CSRF-Token request header (HTTP transport), and an idempotency key that dedupes repeated submissions within a 24-hour window. The resulting bead is in the proposed status (not auto-queued for execution); audit captures the originating identity (localhost user OR ts-net WhoIs)."""
   operatorPromptSubmit(input: OperatorPromptSubmitInput!): OperatorPromptSubmitResult!
 
-  """Approve a proposed operator-prompt bead, transitioning it from proposed → open so the execute-loop can claim it. Requires a valid CSRF token. The originating identity must be on the per-project auto-approve allowlist; ts-net identities are never permitted (locked decision). An audit event of kind operator_prompt_approve records the approver. Errors when the bead is missing, is not an operator-prompt, is not in the proposed status, or the caller is not on the allowlist."""
+  """Approve a proposed operator-prompt bead, transitioning it from proposed → open so the work can claim it. Requires a valid CSRF token. The originating identity must be on the per-project auto-approve allowlist; ts-net identities are never permitted (locked decision). An audit event of kind operator_prompt_approve records the approver. Errors when the bead is missing, is not an operator-prompt, is not in the proposed status, or the caller is not on the allowlist."""
   operatorPromptApprove(id: ID!): OperatorPromptApproveResult!
 
-  """Cancel a proposed operator-prompt bead, transitioning it from proposed → cancelled so it never enters the execute-loop. Requires a valid CSRF token. Any trusted identity (localhost OR ts-net) may cancel a proposal — the allowlist gates auto-approval, not rejection. An audit event of kind operator_prompt_cancel records the canceller. Errors when the bead is missing, is not an operator-prompt, or is not in the proposed status."""
+  """Cancel a proposed operator-prompt bead, transitioning it from proposed → cancelled so it never enters the work. Requires a valid CSRF token. Any trusted identity (localhost OR ts-net) may cancel a proposal — the allowlist gates auto-approval, not rejection. An audit event of kind operator_prompt_cancel records the canceller. Errors when the bead is missing, is not an operator-prompt, or is not in the proposed status."""
   operatorPromptCancel(id: ID!): OperatorPromptCancelResult!
 
-  """Requeue an existing run by reopening its originating bead so the execute-loop can claim it again. Atomic with respect to the mandatory idempotencyKey: concurrent calls with the same key dedupe to the originating bead and never enqueue twice. An audit event of kind run_requeue is appended to the originating bead capturing operator identity, run id, and the optional layer override."""
+  """Requeue an existing run by reopening its originating bead so the work can claim it again. Atomic with respect to the mandatory idempotencyKey: concurrent calls with the same key dedupe to the originating bead and never enqueue twice. An audit event of kind run_requeue is appended to the originating bead capturing operator identity, run id, and the optional layer override."""
   runRequeue(input: RunRequeueInput!): RunRequeueResult!
 
   """Start a new review session. Persists the session manifest and seeds an empty transcript so subsequent reviewSessionRespond calls can append turns."""
@@ -3455,7 +3455,7 @@ input OperatorPromptSubmitInput {
   priority: Int
   """Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true)."""
   idempotencyKey: String!
-  """When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the execute-loop without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false."""
+  """When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the work without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false."""
   autoApprove: Boolean
 }
 

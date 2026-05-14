@@ -41,9 +41,9 @@ func TestGraphQLQueueAndWorkersSummary(t *testing.T) {
 	projectID := state.projects[0].ID
 	state.workers = map[string][]*ddxgraphql.Worker{
 		projectID: {
-			{ID: "w1", State: "running", Kind: "execute-loop"},
-			{ID: "w2", State: "running", Kind: "execute-loop"},
-			{ID: "w3", State: "stopped", Kind: "execute-loop"},
+			{ID: "w1", State: "running", Kind: "work"},
+			{ID: "w2", State: "running", Kind: "work"},
+			{ID: "w3", State: "stopped", Kind: "work"},
 		},
 	}
 	h := newGQLHandler(state, workDir, nil)

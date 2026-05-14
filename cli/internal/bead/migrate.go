@@ -467,7 +467,7 @@ func clearClaimMetadata(b *Bead) {
 	delete(b.Extra, "claimed-machine")
 	delete(b.Extra, "claimed-session")
 	delete(b.Extra, "claimed-worktree")
-	delete(b.Extra, "execute-loop-heartbeat-at")
+	delete(b.Extra, "work-heartbeat-at")
 }
 
 func firstNonEmpty(values ...string) string {

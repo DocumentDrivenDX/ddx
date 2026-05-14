@@ -103,7 +103,7 @@ real data via GraphiQL, and every integration test passes.
 | 22 | Mutation resolver: `documentWrite` | S | new `cli/internal/server/graphql/resolver_mutation_docs.go` | **Manual**: in GraphiQL, `documentWrite(path: "...", content: "...")`, then verify the write landed via `ddx doc show <path>` OR by checking the resolved library path (not `.ddx/docs/` — the actual target is `s.libraryPath()` which resolves to the configured library). |
 | 23 | Subscription resolver: `workerProgress` | M | new `cli/internal/server/graphql/resolver_sub_worker.go`, `server.go` (graphql-ws transport wiring) | Wraps existing `WorkerManager.SubscribeProgress`. **Manual**: open GraphiQL, start `ddx work`, see events stream in GraphiQL. |
 | 24 | Subscription resolver: `beadLifecycle` + bead store event bus | M | new `cli/internal/server/graphql/resolver_sub_bead.go`, `cli/internal/bead/events.go` (new event bus if missing) | **Manual**: subscribe in GraphiQL, run `ddx bead update <id> --status ready` in a terminal, see the event arrive in GraphiQL. |
-| 25 | Subscription resolvers: `executionEvidence` + `coordinatorMetrics` | M | new `cli/internal/server/graphql/resolver_sub_exec.go`, land-coordinator event hook | **Manual**: subscribe to each; execute a bead and watch the evidence events; run an execute-loop and watch the coordinator metrics events. |
+| 25 | Subscription resolvers: `executionEvidence` + `coordinatorMetrics` | M | new `cli/internal/server/graphql/resolver_sub_exec.go`, land-coordinator event hook | **Manual**: subscribe to each; execute a bead and watch the evidence events; run an work and watch the coordinator metrics events. |
 | 26 | GraphQL integration tests: queries + mutations + subscriptions | **L** | new `cli/internal/server/graphql/integration_test.go` | Test file uses `t.TempDir()` + real bead store + real git. Tests cover: every Query resolver returns expected shape, every Mutation mutates real state (verified by calling the same store afterwards), at least one Subscription test opens a real WebSocket client and receives a real event. **Zero mocks** per DDx testing doctrine. **Accept when**: `go test ./cli/internal/server/graphql/... -count=1 -v` passes with all three test categories present. |
 
 **Stage 2 gate**: every operation demonstrably works in GraphiQL against real data.
@@ -162,7 +162,7 @@ and confirms.
 - **Stage 2**: 13 beads (1 L, 8 M, 4 S) → ~4 hours
 - **Stage 3**: 8 beads (1 L, 5 M, 2 S) → ~3 hours
 - **Stage 4**: 17 beads (3 L, 8 M, 6 S) → ~6 hours
-- **Total**: 51 beads, ~17 hours sonnet-time. Wall-clock at execute-loop pace:
+- **Total**: 51 beads, ~17 hours sonnet-time. Wall-clock at work pace:
   2-3 days.
 
 ## Risks

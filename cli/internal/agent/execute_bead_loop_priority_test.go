@@ -26,7 +26,7 @@ import (
 // readyFiltered(true) -> sortBeadsForQueue) is correct by construction —
 // sortBeadsForQueue at cli/internal/bead/store.go:1473 sorts by
 // Priority asc (0 first). The four "starved" P0 beads in the operator
-// reproducer were actually parked on execute-loop-retry-after, so they
+// reproducer were actually parked on work-retry-after, so they
 // were correctly EXCLUDED from ReadyExecution. This test exists to
 // guarantee that the priority contract holds and to catch any future
 // regression that quietly breaks it.

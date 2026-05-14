@@ -25,13 +25,13 @@ type CLIOverrides struct {
 	ContextBudget string
 	// ProviderRequestTimeout, when non-nil, overrides the per-request wall-clock
 	// cap applied to a single Chat/ChatStream call. Corresponds to --request-timeout
-	// on execute-bead and execute-loop. Zero pointer means "use config or model default".
+	// on execute-bead and work. Zero pointer means "use config or model default".
 	ProviderRequestTimeout *time.Duration
 	// MinPower and MaxPower are passthrough power-bounds for the upstream agent
 	// routing contract (CONTRACT-003 / FEAT-006). DDx passes these to
 	// ServiceExecuteRequest unchanged; the agent owns model selection within the
 	// bounds. Zero means no bound (unconstrained). Corresponds to --min-power and
-	// --max-power on execute-bead and execute-loop.
+	// --max-power on execute-bead and work.
 	MinPower int
 	MaxPower int
 	// OpaquePassthrough, when true, prevents Resolve from falling back to

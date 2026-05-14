@@ -147,7 +147,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	if !spec.OpaquePassthrough {
 		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider); err != nil {
-			return fmt.Errorf("execute-loop: %w", err)
+			return fmt.Errorf("work: %w", err)
 		}
 	}
 

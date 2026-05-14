@@ -439,7 +439,7 @@ between CLI and automated invocations
 one, with a gating test that proves byte-equivalence before the
 duplicate is deleted
 **So that** behavior does not silently drift between the CLI and the
-execute-loop review path
+work review path
 
 **Acceptance Criteria:**
 - Given a fixture bead plus a fixture result revision plus fixture

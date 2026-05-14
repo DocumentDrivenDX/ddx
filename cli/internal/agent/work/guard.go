@@ -27,7 +27,7 @@ type cooldownStore interface {
 	SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error
 }
 
-// PreClaimHook matches the execute-loop pre-claim hook signature.
+// PreClaimHook matches the work pre-claim hook signature.
 type PreClaimHook func(ctx context.Context) error
 
 // PreClaimGuard implements the two-strikes pre-claim policy. The first hook

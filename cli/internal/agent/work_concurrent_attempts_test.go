@@ -189,7 +189,7 @@ func TestWorkConcurrentAttempts_WorktreeLostLeavesBeadRetryable(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
 	if got.Extra != nil {
-		_, hasRetry := got.Extra["execute-loop-retry-after"]
+		_, hasRetry := got.Extra["work-retry-after"]
 		assert.False(t, hasRetry, "worktree_lost must remain immediately retryable")
 	}
 

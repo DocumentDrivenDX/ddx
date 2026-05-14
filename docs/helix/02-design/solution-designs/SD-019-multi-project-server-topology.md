@@ -22,7 +22,7 @@ Define the `ddx server` topology that runs as a per-user host daemon and
 hosts multiple project roots on one machine without collapsing back to a
 single-repo assumption. One `ddx-server` process serves one operating-system
 user on one machine, holds its identity and project registry in user-level
-state (FEAT-020), and supervises execute-loop workers for every registered
+state (FEAT-020), and supervises work workers for every registered
 project. The server remains local-first and git-native. The contract adds an
 explicit registry, request scoping, per-project isolation, an in-process
 worker boundary, and backward compatibility for today's single-project
@@ -216,7 +216,7 @@ project can be repaired without taking down the others.
 ## Worktrees And Worker Pools
 
 The host+user `ddx-server` process hosts an in-process `WorkerManager` that
-supervises execute-loop workers as goroutines. Worker lifecycle — start, live
+supervises work workers as goroutines. Worker lifecycle — start, live
 logs, stop, and on-disk record — is owned by the server, but every worker is
 scoped to one project context and the worktree and worker pools remain
 project-scoped.
@@ -388,7 +388,7 @@ This design should be covered by tests that verify:
   on adapters, caches, or worker records
 - UI routing lands on the correct project-specific route at
   `/nodes/:nodeId/projects/:projectId/...`
-- execute-loop workers supervised by `WorkerManager` start, stream logs, and
+- work workers supervised by `WorkerManager` start, stream logs, and
   stop cleanly, producing attempt artifacts under the owning project's
   `.ddx/executions/<attempt-id>/` directory
 - a worker running against one project cannot reach into another project's

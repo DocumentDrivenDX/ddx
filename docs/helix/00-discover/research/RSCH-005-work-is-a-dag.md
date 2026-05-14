@@ -59,7 +59,7 @@ that DAG is explicit and tooled or implicit and brittle.
 The DDx bead tracker is the explicit DAG for AI-assisted work. `ddx bead
 dep add` declares edges; `ddx bead ready` walks the graph to find beads
 whose dependencies are satisfied; `ddx bead blocked` is the historical command for derived dependency waiting while status remains `open`, and `ddx bead dep
-tree` makes the topology queryable. The execute-loop drains the ready set
+tree` makes the topology queryable. The work drains the ready set
 and can fan out parallel agents on independent branches, the same way
 Dask or Bazel do — because the graph is explicit, the scheduler does not
 have to guess. Beads carry critical-path information by virtue of their

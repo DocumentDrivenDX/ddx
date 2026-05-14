@@ -11,8 +11,8 @@ docs/dev/routing-lint.md	for _, field := range []string{"default_harness", "prof
 docs/migrations/routing-config.md	`profile_ladders`, `model_overrides`, `default_harness`, and the old	migration note for hard-rejected retired config keys
 website/content/docs/cli/commands/ddx_work.md	--profile string	generated current flag list; passthrough constraint, not DDx routing policy
 docs/helix/01-frame/features/FEAT-001-cli.md	~~`--quorum=majority --harnesses=a,b`~~ — **removed**	explicit removal requirement; compare-prompts replaces quorum flags
-docs/helix/01-frame/features/FEAT-001-cli.md	**Hard-deprecation handlers** for `legacy agent run`, `legacy agent execute-bead`, `legacy agent execute-loop`	explicit hard-deprecation requirement for removed command leaves
-docs/helix/01-frame/features/FEAT-006-agent-service.md	`legacy agent run`, `legacy agent execute-bead`, and `legacy agent execute-loop` are not	explicit hard-deprecation boundary
+docs/helix/01-frame/features/FEAT-001-cli.md	**Hard-deprecation handlers** for `legacy agent run`, `legacy agent execute-bead`, `legacy agent work`	explicit hard-deprecation requirement for removed command leaves
+docs/helix/01-frame/features/FEAT-006-agent-service.md	`legacy agent run`, `legacy agent execute-bead`, and `legacy agent work` are not	explicit hard-deprecation boundary
 docs/helix/01-frame/features/FEAT-006-agent-service.md	no preflight `ResolveRoute`	explicit prohibition on execution-path ResolveRoute
 docs/helix/01-frame/features/FEAT-006-agent-service.md	call `ResolveRoute` to work around the conflict, or loop on	explicit prohibition on DDx-side conflict routing
 docs/helix/01-frame/features/FEAT-006-agent-service.md	`ResolveRoute` is not part of normal execution	explicit status/debug-only boundary
@@ -20,9 +20,9 @@ docs/helix/01-frame/features/FEAT-006-agent-service.md	diagnostics. A `RouteDeci
 docs/helix/01-frame/features/FEAT-006-agent-service.md	`agent.routing.profile_ladders`, `agent.routing.model_overrides`,	explicit hard-rejection requirement for retired config keys
 docs/helix/01-frame/features/FEAT-010-executions.md	required; it does not remove pins, widen pins, call `ResolveRoute`, or retry in a	explicit prohibition on DDx-side route mutation during try
 docs/helix/01-frame/features/FEAT-010-executions.md	mutate the pins or call `ResolveRoute`	explicit prohibition on DDx-side route mutation during try
-docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	Hard-deprecate `legacy agent run`, `legacy agent execute-bead`, `legacy agent execute-loop`	approved plan explicitly removing legacy command leaves
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	Hard-deprecate `legacy agent run`, `legacy agent execute-bead`, `legacy agent work`	approved plan explicitly removing legacy command leaves
 docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	`--quorum` flag goes away	approved plan explicitly removing quorum flag
-docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	Remove FEAT-001:92 backward-compatibility clause for `legacy agent execute-loop`	approved plan explicitly removing backward compatibility
+docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	Remove FEAT-001:92 backward-compatibility clause for `legacy agent work`	approved plan explicitly removing backward compatibility
 docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	replaces `--quorum` flag and `agent benchmark`	approved plan moving comparison to skill composition
 docs/helix/02-design/plan-2026-04-29-artifact-and-run-architecture.md	codex via `legacy agent run --harness codex`	historical review-process note in approved plan
 docs/helix/02-design/plan-2026-04-04.md	Worktree-aware agent dispatch: `legacy agent run --worktree <name>`	historical plan already marked historical
@@ -55,5 +55,5 @@ website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx try	removed webs
 website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx work	removed website command cross-link
 website/content/docs/cli/commands/ddx_agent.md	Removed; use ddx run	removed website command cross-link
 website/content/docs/cli/commands/ddx_agent_execute-bead.md	## legacy agent execute-bead	removed website command page title
-website/content/docs/cli/commands/ddx_agent_execute-loop.md	## legacy agent execute-loop	removed website command page title
+website/content/docs/cli/commands/ddx_agent_work.md	## legacy agent work	removed website command page title
 website/content/docs/cli/commands/ddx_agent_run.md	## legacy agent run	removed website command page title

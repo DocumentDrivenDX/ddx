@@ -152,7 +152,7 @@ func (testActionDispatcher) StopWorker(ctx context.Context, id string) (*ddxgrap
 	return &ddxgraphql.WorkerLifecycleResult{
 		ID:    id,
 		State: "stopped",
-		Kind:  "execute-loop",
+		Kind:  "work",
 	}, nil
 }
 

@@ -33,7 +33,7 @@
 	// server honours .ddx/config.yaml workers.default_spec + workers.max_count.
 	const ADD_WORKER_MUTATION = gql`
 		mutation AddDrainWorker($projectId: String!) {
-			workerDispatch(kind: "execute-loop", projectId: $projectId) {
+			workerDispatch(kind: "work", projectId: $projectId) {
 				id
 				state
 				kind
@@ -54,10 +54,10 @@
 	let adding = $state(false);
 	let removing = $state(false);
 
-	// Drain workers: count of running execute-loop workers.
+	// Drain workers: count of running work workers.
 	const runningDrainCount = $derived(
 		data.workers.edges.filter(
-			(e) => e.node.state === 'running' && e.node.kind === 'execute-loop'
+			(e) => e.node.state === 'running' && e.node.kind === 'work'
 		).length
 	);
 
@@ -157,11 +157,11 @@
 
 	async function removeDrainWorker() {
 		actionError = null;
-		// Find the oldest running execute-loop worker (AC #4: "stops the oldest-
+		// Find the oldest running work worker (AC #4: "stops the oldest-
 		// running drain worker"). data.workers is sorted newest-first, so the
 		// last matching edge is oldest.
 		const runningDrain = data.workers.edges
-			.filter((e) => e.node.state === 'running' && e.node.kind === 'execute-loop')
+			.filter((e) => e.node.state === 'running' && e.node.kind === 'work')
 			.map((e) => e.node);
 		const target = runningDrain[runningDrain.length - 1];
 		if (!target) return;

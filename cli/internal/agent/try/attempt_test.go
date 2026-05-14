@@ -338,7 +338,7 @@ func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.
 	require.NotNil(t, out.Parking.Event)
 	assert.Equal(t, "decomposition-recommendation", out.Parking.Event.Kind)
 	assert.True(t, out.Parking.RetryAfter.IsZero(), "declined_needs_decomposition must not park with cooldown")
-	assert.Empty(t, out.Report.RetryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
+	assert.Empty(t, out.Report.RetryAfter, "declined_needs_decomposition must not set work-retry-after")
 	require.Len(t, store.events, 0)
 
 	var body struct {
@@ -359,7 +359,7 @@ func TestDeclinedNeedsDecomposition_NoCooldown(t *testing.T) {
 		}),
 	})
 	require.NoError(t, err)
-	assert.Empty(t, out.Report.RetryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
+	assert.Empty(t, out.Report.RetryAfter, "declined_needs_decomposition must not set work-retry-after")
 	require.NotNil(t, out.Parking)
 	assert.True(t, out.Parking.RetryAfter.IsZero(), "declined_needs_decomposition must not park with a time-based cooldown")
 	assert.Empty(t, store.cooldownStatus, "declined_needs_decomposition must not call SetExecutionCooldown")
@@ -467,7 +467,7 @@ func TestPushFailed_NoCooldown(t *testing.T) {
 	// unclaims the bead, making it immediately re-claimable.
 	assert.Equal(t, OutcomeReported, out.Disposition)
 	assert.Nil(t, out.Parking, "push_failed must not carry parking instructions")
-	assert.Empty(t, out.Report.RetryAfter, "push_failed must not set execute-loop-retry-after")
+	assert.Empty(t, out.Report.RetryAfter, "push_failed must not set work-retry-after")
 	assert.Empty(t, store.cooldownStatus, "push_failed must not call SetExecutionCooldown")
 }
 

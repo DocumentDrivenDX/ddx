@@ -24,7 +24,7 @@ interact with the same project. On each machine, `ddx server` runs as a
 per-user host daemon: one server process per machine, holding a host+user
 project registry in `~/.local/share/ddx/server-state.json` (FEAT-020) and
 serving every registered project from a single process. Inside that one
-daemon, the in-process `WorkerManager` supervises execute-loop workers in
+daemon, the in-process `WorkerManager` supervises work workers in
 goroutines, one worker per project context. This is not cluster
 orchestration. DDx stays local-first and git-native. But it must design for
 coordination at the edges: safe concurrent writes, observable state, and
@@ -230,7 +230,7 @@ to handle conflicts. That's workflow-level policy (HELIX). DDx provides:
 |------|--------|
 | FEAT-002 (Server) | Host+user daemon model, project-scoped request routing, bead write MCP tools, optional auth |
 | FEAT-004 (Beads) | Add machine/session identity and project identity to claims |
-| FEAT-006 (Agent) | Worktree-aware dispatch flag resolved within a selected project context; execute-loop workers supervised in the host+user server |
+| FEAT-006 (Agent) | Worktree-aware dispatch flag resolved within a selected project context; work workers supervised in the host+user server |
 | FEAT-020 (Node State) | Host+user state file and project auto-registration are the authoritative registry surface |
 
 ## Out of Scope

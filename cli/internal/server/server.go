@@ -967,7 +967,7 @@ func (s *Server) routes() {
 	legacy("POST /api/exec/run/{id}", s.handleExecDispatch)
 	legacy("POST /api/agent/run", s.handleAgentDispatch)
 	legacy("GET /api/agent/workers", s.handleAgentWorkers)
-	trusted("POST /api/agent/workers/execute-loop", s.handleStartExecuteLoopWorker)
+	trusted("POST /api/agent/workers/work", s.handleStartExecuteLoopWorker)
 	trusted("POST /api/agent/workers/prune", s.handlePruneAgentWorkers)
 	legacy("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
 	trusted("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
@@ -1694,9 +1694,9 @@ func (s *Server) handleBeadCooldown(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
 		return
 	}
-	retry, _ := b.Extra["execute-loop-retry-after"].(string)
-	lastStatus, _ := b.Extra["execute-loop-last-status"].(string)
-	lastDetail, _ := b.Extra["execute-loop-last-detail"].(string)
+	retry, _ := b.Extra["work-retry-after"].(string)
+	lastStatus, _ := b.Extra["work-last-status"].(string)
+	lastDetail, _ := b.Extra["work-last-detail"].(string)
 	writeJSON(w, http.StatusOK, struct {
 		BeadID     string `json:"bead_id"`
 		RetryAfter string `json:"retry_after,omitempty"`
@@ -3417,7 +3417,7 @@ func (s *Server) mcpTools() []mcpTool {
 		},
 		{
 			Name:        "ddx_bead_cooldown",
-			Description: "Show the execute-loop cooldown fields for a bead (retry-after, last-status, last-detail)",
+			Description: "Show the work cooldown fields for a bead (retry-after, last-status, last-detail)",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -5367,9 +5367,9 @@ func (s *Server) mcpBeadCooldown(workingDir, id string) mcpToolResult {
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
 	}
-	retry, _ := b.Extra["execute-loop-retry-after"].(string)
-	lastStatus, _ := b.Extra["execute-loop-last-status"].(string)
-	lastDetail, _ := b.Extra["execute-loop-last-detail"].(string)
+	retry, _ := b.Extra["work-retry-after"].(string)
+	lastStatus, _ := b.Extra["work-last-status"].(string)
+	lastDetail, _ := b.Extra["work-last-detail"].(string)
 	data, _ := json.Marshal(struct {
 		BeadID     string `json:"bead_id"`
 		RetryAfter string `json:"retry_after,omitempty"`

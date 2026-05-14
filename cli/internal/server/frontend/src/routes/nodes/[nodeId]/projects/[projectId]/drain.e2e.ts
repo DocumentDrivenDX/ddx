@@ -123,7 +123,7 @@ interface WorkerNode {
 function makeWorker(overrides: Partial<WorkerNode> = {}): WorkerNode {
 	return {
 		id: 'worker-drain-1',
-		kind: 'execute-loop',
+		kind: 'work',
 		state: 'running',
 		status: 'running',
 		harness: 'codex',
@@ -321,7 +321,7 @@ test('drain-queue golden: real-config endpoint shape, click Drain, worker row, n
 	await expect(drainCta).toBeEnabled();
 	await drainCta.click();
 
-	// 2. Confirm dialog dispatches the execute-loop worker.
+	// 2. Confirm dialog dispatches the work worker.
 	const startBtn = page.getByRole('button', { name: 'Start Drain queue' });
 	await expect(startBtn).toBeVisible();
 	const dispatchStartedAt = Date.now();

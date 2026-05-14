@@ -276,7 +276,7 @@ func TestReviewContextOverflow(t *testing.T) {
 		"pre-dispatch short-circuit must skip the provider call entirely")
 
 	// Drive the legacy/manual post-merge helper directly so we can assert the
-	// review-error event lands on the bead. execute-loop no longer invokes
+	// review-error event lands on the bead. work no longer invokes
 	// RunPostMergeReview after a candidate has landed.
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))

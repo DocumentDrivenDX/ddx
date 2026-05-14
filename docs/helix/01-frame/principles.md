@@ -146,7 +146,7 @@ ordering matters: deterministic at the top of the ladder, then review
 agents, then implementation agents. DDx routes by capability and budget,
 not by brand loyalty.
 
-**DDx response:** Harness configs declare capability tiers; execute-loop
+**DDx response:** Harness configs declare capability tiers; work
 escalates on review failure; deterministic checks (tests, lints) gate
 merge before any model gets a vote.
 

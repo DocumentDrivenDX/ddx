@@ -17,7 +17,7 @@ func TestNeedsHumanMetadataRoundTrip(t *testing.T) {
 	meta := NeedsHumanMeta{
 		Reason:          "agent loop exhausted retries",
 		Since:           time.Now().UTC().Format(time.RFC3339),
-		Source:          "execute-loop",
+		Source:          "work",
 		SuggestedAction: "review no_changes rationale",
 		Summary:         "bead returned no_changes 3 times",
 	}

@@ -27,7 +27,7 @@ func newIdleHandle(t *testing.T, m *WorkerManager, id string, beadID string, sta
 	h := &workerHandle{
 		record: WorkerRecord{
 			ID:          id,
-			Kind:        "execute-loop",
+			Kind:        "work",
 			State:       "running",
 			Status:      "running",
 			ProjectRoot: m.projectRoot,
@@ -405,7 +405,7 @@ func TestDrainProgressUpdatesLastPhaseTS(t *testing.T) {
 	defer m.StopWatchdog()
 
 	handle := &workerHandle{
-		record:      WorkerRecord{ID: "w-phase-ts", Kind: "execute-loop", State: "running"},
+		record:      WorkerRecord{ID: "w-phase-ts", Kind: "work", State: "running"},
 		lastPhaseTS: time.Time{},
 	}
 	ch := make(chan agent.ProgressEvent, 4)

@@ -340,7 +340,7 @@ test('TC-047: workers page shows empty state when no workers are returned', asyn
 	await expect(page.getByText('0 total')).toBeVisible();
 });
 
-test('workers page starts and stops an execute-loop worker with IA links', async ({ page }) => {
+test('workers page starts and stops an work worker with IA links', async ({ page }) => {
 	let workers: Record<string, unknown>[] = [...WORKERS.filter((worker) => worker.state !== 'running')];
 	let startCalled = false;
 	let stopCalled = false;
@@ -365,7 +365,7 @@ test('workers page starts and stops an execute-loop worker with IA links', async
 			startCalled = true;
 			const worker = {
 				id: 'worker-ui-started',
-				kind: 'execute-loop',
+				kind: 'work',
 				state: 'running',
 				status: 'running',
 				harness:
@@ -394,7 +394,7 @@ test('workers page starts and stops an execute-loop worker with IA links', async
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: { stopWorker: { id: body.variables?.id, state: 'stopped', kind: 'execute-loop' } }
+					data: { stopWorker: { id: body.variables?.id, state: 'stopped', kind: 'work' } }
 				})
 			});
 		} else if (body.query.includes('WorkersByProject')) {
@@ -705,7 +705,7 @@ test('workers overview shows drain count control, indicator, and +/- buttons', a
 			workers = [
 				{
 					id,
-					kind: 'execute-loop',
+					kind: 'work',
 					state: 'running',
 					status: 'running',
 					harness: 'codex',
@@ -721,7 +721,7 @@ test('workers overview shows drain count control, indicator, and +/- buttons', a
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
-				body: JSON.stringify({ data: { workerDispatch: { id, state: 'running', kind: 'execute-loop' } } })
+				body: JSON.stringify({ data: { workerDispatch: { id, state: 'running', kind: 'work' } } })
 			});
 		} else if (body.query.includes('StopWorker') || body.query.includes('stopWorker')) {
 			stopCalled = true;
@@ -732,7 +732,7 @@ test('workers overview shows drain count control, indicator, and +/- buttons', a
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({
-					data: { stopWorker: { id: body.variables?.id, state: 'stopped', kind: 'execute-loop' } }
+					data: { stopWorker: { id: body.variables?.id, state: 'stopped', kind: 'work' } }
 				})
 			});
 		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
@@ -790,7 +790,7 @@ test('workers overview respects workers.max_count cap on + Add worker', async ({
 	const workers = [
 		{
 			id: 'worker-cap-1',
-			kind: 'execute-loop',
+			kind: 'work',
 			state: 'running',
 			status: 'running',
 			harness: 'codex',
@@ -878,7 +878,7 @@ test('workers list is scoped to the currently-selected project', async ({ page }
 			},
 			{
 				id: 'worker-cccccccc',
-				kind: 'execute-loop',
+				kind: 'work',
 				state: 'running',
 				status: 'running',
 				harness: 'codex',

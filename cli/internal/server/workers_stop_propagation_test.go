@@ -25,7 +25,7 @@ import (
 // provider boundary.
 func TestWorkerManagerStopCancelsAgentExecution(t *testing.T) {
 	if testing.Short() {
-		t.Skip("requires execute-loop goroutine timing; too slow for -short")
+		t.Skip("requires work goroutine timing; too slow for -short")
 	}
 	root := t.TempDir()
 	setupBeadStoreWithReadyBead(t, root)

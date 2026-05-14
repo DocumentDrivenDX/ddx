@@ -1615,8 +1615,8 @@ func gitStageBlob(ctx context.Context, repoRoot string, stage int, path string) 
 // (retry-after, last-status, last-detail) in human or JSON form. `cooldown
 // clear` removes those three fields so the bead becomes execution-eligible
 // again at the next loop pass. This is the first-class operator-facing
-// surface for the underlying `execute-loop-retry-after` Extra key — the
-// `ddx bead update --set/--unset execute-loop-retry-after=...` workflow
+// surface for the underlying `work-retry-after` Extra key — the
+// `ddx bead update --set/--unset work-retry-after=...` workflow
 // continues to work as a power-user fallback, but operators should reach
 // for `cooldown clear` for the common case.
 func (f *CommandFactory) newBeadCooldownCommand() *cobra.Command {
@@ -1648,9 +1648,9 @@ Use this command instead of editing the magic Extra key directly:
 			if err != nil {
 				return err
 			}
-			retry, _ := b.Extra["execute-loop-retry-after"].(string)
-			lastStatus, _ := b.Extra["execute-loop-last-status"].(string)
-			lastDetail, _ := b.Extra["execute-loop-last-detail"].(string)
+			retry, _ := b.Extra["work-retry-after"].(string)
+			lastStatus, _ := b.Extra["work-last-status"].(string)
+			lastDetail, _ := b.Extra["work-last-detail"].(string)
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
@@ -1695,9 +1695,9 @@ Use this command instead of editing the magic Extra key directly:
 					return
 				}
 				for _, key := range []string{
-					"execute-loop-retry-after",
-					"execute-loop-last-status",
-					"execute-loop-last-detail",
+					"work-retry-after",
+					"work-last-status",
+					"work-last-detail",
 				} {
 					if _, ok := b.Extra[key]; ok {
 						delete(b.Extra, key)

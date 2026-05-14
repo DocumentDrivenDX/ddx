@@ -26,7 +26,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 - **Run substrate:** single on-disk shape; layer-2 and layer-3 add metadata. `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/` collapse.
 - **No run-type catalog beyond the three layers.** Comparison, replay, benchmark, etc. are skill compositions, never enshrined in Go core or specs.
 - **Loop ownership sharpened:** DDx owns mechanical queue drain (`ddx work`); content-aware supervisory decisions (e.g., "comparison failed → enqueue reconciliation beads") remain plugin/HELIX territory.
-- **CLI verbs:** `ddx run` / `ddx try` / `ddx work` promoted to top-level. Hard-deprecate `legacy agent run`, `legacy agent execute-bead`, `legacy agent execute-loop` (exit non-zero with bare redirect message — no aliases, no grace period).
+- **CLI verbs:** `ddx run` / `ddx try` / `ddx work` promoted to top-level. Hard-deprecate `legacy agent run`, `legacy agent execute-bead`, `legacy agent work` (exit non-zero with bare redirect message — no aliases, no grace period).
 - **Generate-artifact layer placement:** pure-return generators (agent returns bytes/text, DDx writes file) are layer-1. Repo-editing generators are layer-2 with bead-less worktree.
 - **Quorum dispatch:** moves to skill composition. `--quorum` flag goes away; replaced by `compare-prompts` skill.
 - **`legacy agent` passthrough is structural:** DDx imports the upstream agent module's Cobra root and mounts it under `legacy agent`. Notionally `cli(ddx).agent(load_cli(agent))`. DDx does not enumerate per-subcommand wrappers; the entire upstream tree is the source of truth.
@@ -63,9 +63,9 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 ### FEAT-001-cli.md
 - Promote `run` / `try` / `work` to top-level.
 - `legacy agent` mounts upstream Cobra root structurally; no DDx-defined leaf subcommands beneath it.
-- Hard-deprecation handlers for `legacy agent {run, execute-bead, execute-loop}`.
+- Hard-deprecation handlers for `legacy agent {run, execute-bead, work}`.
 - New namespaces: `ddx runs` (cross-layer evidence introspection), `ddx tries` (layer-2 specifically), `ddx work workers` (layer-3 worker management).
-- Remove FEAT-001:92 backward-compatibility clause for `legacy agent execute-loop`.
+- Remove FEAT-001:92 backward-compatibility clause for `legacy agent work`.
 
 ### FEAT-005-artifacts.md
 - Identity broadens to non-markdown via sidecar `.ddx.yaml`.
@@ -133,7 +133,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 - `agent_workers.go` → `work_workers.go`
 
 **DDx-side overrides on the mounted subtree:**
-- Deprecation handlers for `agent run` / `agent execute-bead` / `agent execute-loop`.
+- Deprecation handlers for `agent run` / `agent execute-bead` / `agent work`.
 - `agent condense` (DDx-specific output filter — keep as override or move upstream during impl pass).
 
 **`agent_cmd.go` itself thins to:** mount upstream Cobra root + register DDx overrides.

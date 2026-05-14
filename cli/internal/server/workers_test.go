@@ -384,7 +384,7 @@ func runCmd(t *testing.T, dir string, name string, args ...string) {
 // required fields: CurrentAttempt, RecentPhases, and LastAttempt.
 func TestWorkerRecordShape(t *testing.T) {
 	// Zero value — all new fields must be nil/empty (omitempty)
-	rec := WorkerRecord{ID: "w-1", Kind: "execute-loop", State: "running"}
+	rec := WorkerRecord{ID: "w-1", Kind: "work", State: "running"}
 	assert.Nil(t, rec.CurrentAttempt)
 	assert.Empty(t, rec.RecentPhases)
 	assert.Nil(t, rec.LastAttempt)
@@ -432,7 +432,7 @@ func TestDrainProgressUpdatesRecord(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	handle := &workerHandle{
-		record: WorkerRecord{ID: "w-test", Kind: "execute-loop", State: "running"},
+		record: WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
 	}
 	ch := make(chan agent.ProgressEvent, 10)
 
@@ -502,7 +502,7 @@ func TestRecentPhasesCap(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	handle := &workerHandle{
-		record: WorkerRecord{ID: "w-test", Kind: "execute-loop", State: "running"},
+		record: WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
 	}
 	ch := make(chan agent.ProgressEvent, 30)
 
@@ -545,7 +545,7 @@ func TestSubscribeProgress(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	handle := &workerHandle{
-		record: WorkerRecord{ID: "w-sub", Kind: "execute-loop", State: "running"},
+		record: WorkerRecord{ID: "w-sub", Kind: "work", State: "running"},
 	}
 	progressCh := make(chan agent.ProgressEvent, 10)
 	handle.progressCh = progressCh
@@ -766,7 +766,7 @@ func TestWorkerScopeToProject(t *testing.T) {
 // Failures=1.
 func TestWorkerLiveCounters(t *testing.T) {
 	if testing.Short() {
-		t.Skip("requires execute-loop goroutine timing; too slow for -short")
+		t.Skip("requires work goroutine timing; too slow for -short")
 	}
 	root := t.TempDir()
 	ddxDir := filepath.Join(root, ".ddx")
@@ -1118,7 +1118,7 @@ func TestStartExecuteLoopProjectRootOverride(t *testing.T) {
 }
 
 // TestExecuteLoopProjectRootViaHTTP verifies the end-to-end HTTP path:
-// submitting to POST /api/agent/workers/execute-loop with project_root set
+// submitting to POST /api/agent/workers/work with project_root set
 // routes the worker to the requested project, and an unregistered project
 // is rejected with 422.
 func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
@@ -1143,7 +1143,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 			"project_root": projectB,
 			"mode":         "once",
 		})
-		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop",
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work",
 			strings.NewReader(string(body)))
 		req.Header.Set("Content-Type", "application/json")
 		// Mark as trusted (localhost) so the handler doesn't reject it.
@@ -1169,7 +1169,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 			"project_root": unregistered,
 			"mode":         "once",
 		})
-		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop",
+		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work",
 			strings.NewReader(string(body)))
 		req.Header.Set("Content-Type", "application/json")
 		req.RemoteAddr = "127.0.0.1:12345"
@@ -1220,7 +1220,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		"spec_version":        executeloop.SpecCurrentVersion,
 		"future_server_hint":  "ignored",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(string(body)))
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
@@ -1271,7 +1271,7 @@ func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {
 	projectRoot := setupTestDir(t)
 	srv := New(":0", projectRoot)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(`{"poll_interval":"30s"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", strings.NewReader(`{"poll_interval":"30s"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
@@ -1295,7 +1295,7 @@ func TestRESTWorkerStart_UnknownSpecVersion(t *testing.T) {
 		"spec_version":       executeloop.SpecCurrentVersion + 1,
 		"unknown_field":      "tolerated",
 	})
-	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(string(body)))
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()

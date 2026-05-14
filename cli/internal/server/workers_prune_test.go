@@ -27,7 +27,7 @@ func TestWorkerManagerPruneReapsDeadPID(t *testing.T) {
 
 	stale := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -95,7 +95,7 @@ func TestWorkerManagerPruneByMaxAge(t *testing.T) {
 
 	stale := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -135,7 +135,7 @@ func TestWorkerManagerPruneByMaxAgeNoGoroutine(t *testing.T) {
 
 	stale := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -193,7 +193,7 @@ func TestWorkerManagerStopStaleDiskEntry(t *testing.T) {
 
 	stale := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -258,7 +258,7 @@ func TestWorkerManagerPIDAliveInList(t *testing.T) {
 
 	rec := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -298,7 +298,7 @@ func TestWorkerManagerPIDAliveNilForGoroutineWorker(t *testing.T) {
 
 	rec := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,
@@ -337,7 +337,7 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 
 	stale := WorkerRecord{
 		ID:          workerID,
-		Kind:        "execute-loop",
+		Kind:        "work",
 		State:       "running",
 		Status:      "running",
 		ProjectRoot: root,

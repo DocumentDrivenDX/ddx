@@ -116,7 +116,7 @@
 				const result = await client.request<{
 					workerDispatch: { id: string; state: string; kind: string }
 				}>(WORKER_DISPATCH_MUTATION, {
-					kind: 'execute-loop',
+					kind: 'work',
 					projectId,
 					args: argsString
 				})
@@ -567,7 +567,7 @@
 			{#if actionRun}
 				{actionMode === 'requeue'
 					? `Re-queue ${actionRun.layer} run ${actionRun.id}`
-					: `Start an execute-loop worker prefilled from work run ${actionRun.id}`}
+					: `Start an work worker prefilled from work run ${actionRun.id}`}
 			{/if}
 		</span>
 	{/snippet}

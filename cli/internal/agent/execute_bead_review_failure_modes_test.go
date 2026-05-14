@@ -15,7 +15,7 @@ import (
 // TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen covers ddx-738edf47
 // AC #3 for the retained legacy/manual helper: on any reviewer terminal
 // failure — nonzero exit, empty output, or unparseable output — the helper
-// records a failure event and leaves the bead un-closed. execute-loop no
+// records a failure event and leaves the bead un-closed. work no
 // longer invokes this helper after a candidate has landed.
 func TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 	tests := []struct {
@@ -82,7 +82,7 @@ func TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 // TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen is kept as a
 // compatibility anchor for callers that reference the old worker-level test
 // name. The covered behavior now belongs to the retained helper, not the
-// automated execute-loop close path.
+// automated work close path.
 func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 	TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen(t)
 }

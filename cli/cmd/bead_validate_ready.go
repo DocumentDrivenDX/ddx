@@ -47,7 +47,7 @@ type closeWithEvidenceDoc struct {
 }
 
 // closeWithEvidenceContract is the canonical description of what DDx requires
-// to close a bead via the automated execute-loop path. Mirrors the
+// to close a bead via the automated work path. Mirrors the
 // ClosureGate implementation in internal/bead/store.go.
 var closeWithEvidenceContract = closeWithEvidenceDoc{
 	Summary: "Automated closures must carry both a terminal verdict and execution evidence.",

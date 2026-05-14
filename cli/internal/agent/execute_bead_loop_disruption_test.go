@@ -88,9 +88,9 @@ func TestLoop_DisruptedExecution_NoCooldown(t *testing.T) {
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
-		_, hasRetry := got.Extra["execute-loop-retry-after"]
+		_, hasRetry := got.Extra["work-retry-after"]
 		assert.False(t, hasRetry,
-			"Disrupted bead must not have execute-loop-retry-after persisted")
+			"Disrupted bead must not have work-retry-after persisted")
 	}
 }
 
@@ -132,9 +132,9 @@ func TestLoop_GenuineNoProgress_NoDefaultCooldown(t *testing.T) {
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	_, hasRetry := got.Extra["work-retry-after"]
 	assert.False(t, hasRetry,
-		"unjustified no_changes bead must not have execute-loop-retry-after persisted")
+		"unjustified no_changes bead must not have work-retry-after persisted")
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 }
 
@@ -177,9 +177,9 @@ func TestLoop_PreflightRejection_NoCooldown(t *testing.T) {
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
-		_, hasRetry := got.Extra["execute-loop-retry-after"]
+		_, hasRetry := got.Extra["work-retry-after"]
 		assert.False(t, hasRetry,
-			"preflight-rejected bead must not have execute-loop-retry-after persisted")
+			"preflight-rejected bead must not have work-retry-after persisted")
 	}
 }
 
@@ -291,7 +291,7 @@ func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
 }
 
 // TestWorkInterrupt_DoesNotSetNoProgressCooldown verifies that interrupted
-// work stays off the execute-loop retry cooldown and does not increment the
+// work stays off the work retry cooldown and does not increment the
 // no-progress suppression path.
 func TestWorkInterrupt_DoesNotSetNoProgressCooldown(t *testing.T) {
 	store, candidate, result, err := runInterruptedWorkAttempt(t)
@@ -307,8 +307,8 @@ func TestWorkInterrupt_DoesNotSetNoProgressCooldown(t *testing.T) {
 
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.False(t, hasRetry, "interrupted work must not persist execute-loop-retry-after")
+	_, hasRetry := got.Extra["work-retry-after"]
+	assert.False(t, hasRetry, "interrupted work must not persist work-retry-after")
 }
 
 func TestWorkInterrupt_NoChangesLikeCanceledAttemptDoesNotWriteTrackerNoise(t *testing.T) {
@@ -343,9 +343,9 @@ func TestWorkInterrupt_NoChangesLikeCanceledAttemptDoesNotWriteTrackerNoise(t *t
 	assert.Empty(t, got.Owner)
 	assert.NotContains(t, got.Labels, NoChangesLabelUnjustified)
 	assert.NotContains(t, got.Labels, NoChangesLabelUnverified)
-	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
-	assert.NotContains(t, got.Extra, "execute-loop-last-status")
-	assert.NotContains(t, got.Extra, "execute-loop-no-changes-count")
+	assert.NotContains(t, got.Extra, "work-retry-after")
+	assert.NotContains(t, got.Extra, "work-last-status")
+	assert.NotContains(t, got.Extra, "work-no-changes-count")
 
 	events, err := store.Events(candidate.ID)
 	require.NoError(t, err)

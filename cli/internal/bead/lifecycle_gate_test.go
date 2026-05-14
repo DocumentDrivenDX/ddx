@@ -19,7 +19,7 @@ func TestLifecycleMigrationGateDetectsLegacyQueue(t *testing.T) {
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"]}`,
-		`{"id":"ddx-investigate","title":"investigate","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["triage:needs-investigation"],"execute-loop-last-detail":"rerun with smart agent"}`,
+		`{"id":"ddx-investigate","title":"investigate","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["triage:needs-investigation"],"work-last-detail":"rerun with smart agent"}`,
 		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
 	}, "\n") + "\n"
 	require.NoError(t, os.WriteFile(store.File, []byte(rows), 0o644))

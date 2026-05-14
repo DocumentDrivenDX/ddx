@@ -19,7 +19,7 @@ import (
 // Guards against reintroduction of the "19-burn" fan-out pattern: an empty
 // dispatch spec must drive exactly one executor invocation, never a per-powerClass
 // iteration. The deprecated profile_ladders / model_overrides fields are gone;
-// the default execute-loop path resolves to a single ResolveRoute call.
+// the default work path resolves to a single ResolveRoute call.
 //
 // gemini-binary handling: this test stubs the executor at the loop
 // boundary so no harness binary is ever shelled out.

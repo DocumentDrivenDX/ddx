@@ -8,7 +8,7 @@ type GqlBody = { query: string; variables?: Record<string, unknown> };
 const WORKERS = [
 	{
 		id: 'worker-001',
-		kind: 'execute-loop',
+		kind: 'work',
 		state: 'running',
 		status: 'running',
 		harness: 'claude',

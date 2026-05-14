@@ -39,7 +39,7 @@ func TestActiveRetryCooldown_SameRevStillActive(t *testing.T) {
 }
 
 // TestActiveRetryCooldown_NoBaseRevFallsBackToWallClock verifies backward
-// compatibility: legacy cooldowns without execute-loop-cooldown-base-rev still
+// compatibility: legacy cooldowns without work-cooldown-base-rev still
 // apply wall-clock logic regardless of the originHead value.
 func TestActiveRetryCooldown_NoBaseRevFallsBackToWallClock(t *testing.T) {
 	future := time.Now().UTC().Add(6 * time.Hour).Format(time.RFC3339)
@@ -65,7 +65,7 @@ func TestActiveRetryCooldown_NoBaseRevFallsBackToWallClock(t *testing.T) {
 }
 
 // TestSetExecutionCooldown_WritesBaseRev verifies that SetExecutionCooldown
-// writes execute-loop-cooldown-base-rev when a non-empty baseRev is passed.
+// writes work-cooldown-base-rev when a non-empty baseRev is passed.
 func TestSetExecutionCooldown_WritesBaseRev(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{Title: "test bead"}
@@ -82,7 +82,7 @@ func TestSetExecutionCooldown_WritesBaseRev(t *testing.T) {
 }
 
 // TestSetExecutionCooldown_ClearsBaseRevWhenEmpty verifies that passing an
-// empty baseRev removes any previously recorded execute-loop-cooldown-base-rev.
+// empty baseRev removes any previously recorded work-cooldown-base-rev.
 func TestSetExecutionCooldown_ClearsBaseRevWhenEmpty(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{

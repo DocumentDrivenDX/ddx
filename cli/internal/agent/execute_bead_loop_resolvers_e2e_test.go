@@ -83,8 +83,8 @@ workers:
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.False(t, hasRetry, "store must not persist execute-loop-retry-after for unjustified no_changes")
+	_, hasRetry := got.Extra["work-retry-after"]
+	assert.False(t, hasRetry, "store must not persist work-retry-after for unjustified no_changes")
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 	assert.Equal(t, "open", got.Status,
 		"bead must remain open after a single unjustified no_changes attempt")

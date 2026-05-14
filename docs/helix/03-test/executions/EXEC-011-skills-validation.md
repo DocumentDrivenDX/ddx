@@ -19,7 +19,7 @@ ddx:
 # Skills Validation
 
 Validates the shipped DDx skill packages that support execute-bead and
-execute-loop guidance.
+work guidance.
 
 This is merge-blocking for the current docs-and-skills lane because the queue
 relies on those skills to steer agent execution correctly.

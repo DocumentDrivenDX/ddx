@@ -1,1 +1,1 @@
-{"actor":"erik","body":"{\"detail\":\"acceptance criteria dropped or altered\",\"intake_outcome\":\"ambiguous_needs_human\"}","created_at":"2026-05-08T19:08:30.816511102Z","kind":"intake.blocked","source":"ddx agent execute-loop","summary":"ambiguous_needs_human"}
+{"actor":"erik","body":"{\"detail\":\"acceptance criteria dropped or altered\",\"intake_outcome\":\"ambiguous_needs_human\"}","created_at":"2026-05-08T19:08:30.816511102Z","kind":"intake.blocked","source":"ddx agent work","summary":"ambiguous_needs_human"}

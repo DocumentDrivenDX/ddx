@@ -458,7 +458,7 @@ func TestLegacyAgentNamespaceRemoved(t *testing.T) {
 	dir := t.TempDir()
 	root := NewCommandFactory(dir).NewRootCommand()
 
-	_, err := executeCommand(root, "agent", "execute-loop")
+	_, err := executeCommand(root, "agent", "work")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown command")
 }

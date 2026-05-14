@@ -35,7 +35,7 @@ ddx:
 2. **Quick start** — copy-pasteable installation command, 3-step getting started guide
 3. **Concepts pages** — explain document-driven development, document types, how DDx fits with agents and workflow tools. Includes:
    - `/docs/concepts/software-factory.md` — DDx as a document-driven software factory (lineage, what is inherited, what is added, what is intentionally not done)
-   - `/docs/concepts/run-architecture.md` — three-layer run model (`ddx run` / `ddx try` / `ddx work`); retires `execute-loop` / `execute-bead` from primary copy
+   - `/docs/concepts/run-architecture.md` — three-layer run model (`ddx run` / `ddx try` / `ddx work`); retires `work` / `execute-bead` from primary copy
    - Existing concept pages (architecture, document model, etc.) updated to use the new naming
 4. **Why DDx (`/why`)** — top-level page rewritten as 10 sections, one per **domain principle**. Each section has a 50–80 word summary linking to a deep page at `/docs/principles/<slug>/`. The 10 domain principles (locked):
    1. Spec-first development
@@ -64,7 +64,7 @@ ddx:
 
 - **Deprecated peer tools removed.** No references to deprecated peer tools anywhere in site copy, ecosystem diagrams, or glossary.
 - **Quorum de-emphasized.** Multi-model review (quorum) is no longer a primary capability and is removed from the features list. It is documented only in skill-level pages and badged as "framing" (matches `FEAT-013` status).
-- **Naming.** `ddx run` / `ddx try` / `ddx work` is the unified primary naming. `execute-loop` / `execute-bead` appear only inside the CLI reference, not in primary copy.
+- **Naming.** `ddx run` / `ddx try` / `ddx work` is the unified primary naming. `work` / `execute-bead` appear only inside the CLI reference, not in primary copy.
 - **Software factory framing.** The homepage, `docs/helix/00-discover/product-vision.md` (new "Lineage" section), and `docs/helix/01-frame/principles.md` (new preface) all frame DDx as a document-driven software factory.
 
 ### Information architecture

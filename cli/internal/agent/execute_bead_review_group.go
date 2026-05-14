@@ -14,7 +14,7 @@ import (
 // ReviewGroup reviews the same bead/result_rev with two reviewer slots.
 // The helper shares one evidence bundle and prompt file across both slots and
 // returns the structured reviewer results alongside the shared bundle
-// metadata. It does not change execute-loop close/block behavior.
+// metadata. It does not change work close/block behavior.
 func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
 	diff, err := r.gitShow(resultRev)
 	if err != nil {

@@ -226,7 +226,7 @@ Every bead's escalation and auto-recovery attempts are bounded by a configurable
 
 - When cumulative per-bead cost exceeds the configured limit, DDx records outcome `per_bead_budget_exhausted` (TD-031 §2), appends the total cost to the event body, releases the claim without cooldown, and leaves the bead `status=open` and re-claimable. The budget exhaustion is a recheckable signal, not a terminal state: an operator may raise the cap or the bead may be retried in a later drain when conditions change.
 - The per-bead cost cap is configured in `.ddx/config.yaml` under `escalation.per_bead_budget_usd`. The default is project-specific; missing config means no per-bead cap is enforced beyond the drain-level cap in FEAT-014.
-- Per-bead budget exhaustion MUST NOT set `execute-loop-retry-after`; the cause is not time-resolvable without explicit operator action or config change.
+- Per-bead budget exhaustion MUST NOT set `work-retry-after`; the cause is not time-resolvable without explicit operator action or config change.
 
 ### Operator Escape Hatches
 

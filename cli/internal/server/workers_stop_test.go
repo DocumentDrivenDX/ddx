@@ -110,7 +110,7 @@ func TestWorkerManagerStopReleasesBeadClaim(t *testing.T) {
 
 	// Manually register an idle handle with a claimed bead. This is the
 	// same trick the watchdog tests use to drive the termination path
-	// without running a full execute-loop.
+	// without running a full work.
 	now := time.Now().UTC()
 	h, cancelled := newIdleHandle(t, m, "worker-stop-claim", "ddx-stop-claim",
 		now.Add(-1*time.Second), now.Add(-1*time.Second))

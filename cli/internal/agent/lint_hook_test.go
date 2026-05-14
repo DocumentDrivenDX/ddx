@@ -160,7 +160,7 @@ func TestLintHook_PromptOmitsVolatileExecutionFields(t *testing.T) {
 			{"kind": "execute-bead", "body": strings.Repeat("large runtime event", 1000)},
 		}
 		bb.Extra["events_attachment"] = "ddx-lint-001/events.jsonl"
-		bb.Extra["execute-loop-last-detail"] = strings.Repeat("large last detail", 1000)
+		bb.Extra["work-last-detail"] = strings.Repeat("large last detail", 1000)
 		bb.Extra["claimed-at"] = "2026-05-07T04:00:00Z"
 	}))
 
@@ -180,7 +180,7 @@ func TestLintHook_PromptOmitsVolatileExecutionFields(t *testing.T) {
 	assert.Contains(t, prompt, `"spec-id": "FEAT-999"`)
 	assert.NotContains(t, prompt, `"events":`)
 	assert.NotContains(t, prompt, `"events_attachment":`)
-	assert.NotContains(t, prompt, `"execute-loop-last-detail":`)
+	assert.NotContains(t, prompt, `"work-last-detail":`)
 	assert.NotContains(t, prompt, `"claimed-at":`)
 	assert.NotContains(t, prompt, "large runtime event")
 }

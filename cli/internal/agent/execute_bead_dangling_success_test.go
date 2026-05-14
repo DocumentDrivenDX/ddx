@@ -255,7 +255,7 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
-		b.Extra["execute-loop-heartbeat-at"] = time.Now().Add(-2 * bead.HeartbeatTTL).Format(time.RFC3339Nano)
+		b.Extra["work-heartbeat-at"] = time.Now().Add(-2 * bead.HeartbeatTTL).Format(time.RFC3339Nano)
 	}))
 
 	// Verify the bead is in_progress before recovery.
@@ -321,7 +321,7 @@ func TestDanglingSuccess_AC1_NormalRetryWhenNoPriorSuccess(t *testing.T) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
-		b.Extra["execute-loop-heartbeat-at"] = time.Now().Add(-2 * bead.HeartbeatTTL).Format(time.RFC3339Nano)
+		b.Extra["work-heartbeat-at"] = time.Now().Add(-2 * bead.HeartbeatTTL).Format(time.RFC3339Nano)
 	}))
 
 	// No result.json exists — executor MUST be called.

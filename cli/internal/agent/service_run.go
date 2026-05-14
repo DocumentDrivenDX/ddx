@@ -79,7 +79,7 @@ func appendProviderTimeoutHint(errMsg string, providerTimeout time.Duration) str
 	return errMsg + fmt.Sprintf(
 		"; request_timeout=%s exceeded — override via"+
 			" agent.endpoints.<name>.request_timeout_seconds in .ddx/config.yaml"+
-			" or pass --request-timeout DURATION to execute-bead/execute-loop",
+			" or pass --request-timeout DURATION to execute-bead/work",
 		providerTimeout.Round(time.Second),
 	)
 }

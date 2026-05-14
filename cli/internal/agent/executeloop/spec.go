@@ -1,4 +1,4 @@
-// Package executeloop defines the canonical spec type for execute-loop workers.
+// Package executeloop defines the canonical spec type for work workers.
 // It is import-safe: no dependency on cobra, server, or transport packages.
 package executeloop
 
@@ -18,7 +18,7 @@ import (
 // client and server together.
 const SpecCurrentVersion = 1
 
-// Mode controls how the execute-loop terminates.
+// Mode controls how the work terminates.
 type Mode string
 
 const (
@@ -62,7 +62,7 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 }
 
 // ExecuteLoopSpec is the canonical, transport-agnostic specification for an
-// execute-loop worker. All transports (cobra, REST, GraphQL) map into this type
+// work worker. All transports (cobra, REST, GraphQL) map into this type
 // before persisting or dispatching.
 type ExecuteLoopSpec struct {
 	ProjectRoot string `json:"project_root,omitempty"`

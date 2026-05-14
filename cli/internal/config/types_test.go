@@ -8,7 +8,7 @@ import (
 // TestWorkersConfigResolvers covers SD-024 Stage 1: the three new
 // WorkersConfig fields (NoProgressCooldown, MaxNoChangesBeforeClose,
 // HeartbeatInterval) resolve to the documented defaults when unset and
-// to overrides when populated. The execute-loop is not yet wired to
+// to overrides when populated. The work is not yet wired to
 // these resolvers — that lands in beads 6/7.
 func TestWorkersConfigResolvers(t *testing.T) {
 	t.Run("NoProgressCooldown_default_when_nil_receiver", func(t *testing.T) {
