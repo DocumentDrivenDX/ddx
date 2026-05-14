@@ -185,6 +185,27 @@ func TestSelectImplementationProfile_DegradesToOnlyAvailableProfile(t *testing.T
 	assert.Contains(t, got.Note, "medium profile unavailable")
 }
 
+func TestSelectImplementationProfile_StandardFallsBackDownBeforeSmart(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "p-low", MinPower: 10, MaxPower: 20},
+			{Name: "p-balanced", MinPower: 50, MaxPower: 70},
+			{Name: "p-max", MinPower: 90, MaxPower: 100},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "low", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "balanced-offline", Power: 60, Available: false, AutoRoutable: true},
+			{ID: "max", Power: 95, Available: true, AutoRoutable: true},
+		},
+	}
+
+	got := SelectImplementationProfile(snap, escalation.TierStandard)
+
+	assert.Equal(t, "p-low", got.Name)
+	assert.True(t, got.Degraded)
+	assert.Contains(t, got.Note, "weaker available profile before smart")
+}
+
 func TestSelectImplementationProfileForMinPower_MovesOffWeakProfileOnRetry(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{

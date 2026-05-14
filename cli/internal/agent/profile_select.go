@@ -188,7 +188,7 @@ func selectImplementationProfile(snap ProfileSnapshot, tier escalation.ModelTier
 	if len(profiles) == 0 {
 		return ImplementationProfileSelection{}
 	}
-	selected, note := chooseImplementationCandidate(profiles, tier, floor)
+	selected, note := chooseImplementationCandidate(snap, profiles, tier, floor)
 	return ImplementationProfileSelection{
 		Name:     selected.Name,
 		MinPower: selected.MinPower,
@@ -215,7 +215,7 @@ func implementationCandidateProfiles(snap ProfileSnapshot, floor int) []agentlib
 	return out
 }
 
-func chooseImplementationCandidate(profiles []agentlib.PolicyInfo, tier escalation.ModelTier, floor int) (agentlib.PolicyInfo, string) {
+func chooseImplementationCandidate(snap ProfileSnapshot, profiles []agentlib.PolicyInfo, tier escalation.ModelTier, floor int) (agentlib.PolicyInfo, string) {
 	if floor > 0 && tier != escalation.TierSmart {
 		return profiles[0], ""
 	}
@@ -223,8 +223,8 @@ func chooseImplementationCandidate(profiles []agentlib.PolicyInfo, tier escalati
 	case escalation.TierSmart:
 		return profiles[len(profiles)-1], ""
 	case escalation.TierStandard:
-		if selected, ok := firstBandAboveLowest(profiles); ok {
-			return selected, ""
+		if selected, note, ok := standardProfileSelection(snap, profiles); ok {
+			return selected, note
 		}
 		return profiles[0], "medium profile unavailable; using only available profile"
 	case escalation.TierCheap, "":
@@ -245,6 +245,60 @@ func firstBandAboveLowest(profiles []agentlib.PolicyInfo) (agentlib.PolicyInfo, 
 		}
 	}
 	return agentlib.PolicyInfo{}, false
+}
+
+// standardProfileSelection prefers the configured medium band when available.
+// If that band has no live model, it falls back downward before burning the
+// strongest profile on ordinary implementation work.
+func standardProfileSelection(snap ProfileSnapshot, available []agentlib.PolicyInfo) (agentlib.PolicyInfo, string, bool) {
+	if len(available) == 0 {
+		return agentlib.PolicyInfo{}, "", false
+	}
+	desired, ok := desiredStandardProfile(snap)
+	if !ok {
+		if selected, ok := firstBandAboveLowest(available); ok {
+			return selected, "", true
+		}
+		return agentlib.PolicyInfo{}, "", false
+	}
+	for _, profile := range available {
+		if profile.Name == desired.Name {
+			return profile, "", true
+		}
+	}
+	var lower []agentlib.PolicyInfo
+	for _, profile := range available {
+		if profileMaxForSort(profile) <= profileMaxForSort(desired) {
+			lower = append(lower, profile)
+		}
+	}
+	if len(lower) > 0 {
+		return lower[len(lower)-1], "medium profile unavailable; using weaker available profile before smart", true
+	}
+	return available[0], "medium profile unavailable; using weakest available stronger profile", true
+}
+
+func desiredStandardProfile(snap ProfileSnapshot) (agentlib.PolicyInfo, bool) {
+	profiles := make([]agentlib.PolicyInfo, 0, len(snap.Profiles))
+	for _, profile := range snap.Profiles {
+		if profile.Name == "" || hasHardPolicyRequirement(profile) {
+			continue
+		}
+		if profile.MinPower == 0 && profile.MaxPower == 0 {
+			continue
+		}
+		profiles = append(profiles, profile)
+	}
+	sort.SliceStable(profiles, func(i, j int) bool {
+		if profileMaxForSort(profiles[i]) != profileMaxForSort(profiles[j]) {
+			return profileMaxForSort(profiles[i]) < profileMaxForSort(profiles[j])
+		}
+		if profiles[i].MinPower != profiles[j].MinPower {
+			return profiles[i].MinPower < profiles[j].MinPower
+		}
+		return profiles[i].Name < profiles[j].Name
+	})
+	return firstBandAboveLowest(profiles)
 }
 
 func hasHardPolicyRequirement(profile agentlib.PolicyInfo) bool {

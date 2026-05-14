@@ -214,11 +214,24 @@ func endpointProviderEntry(endpoint ddxconfig.AgentEndpoint, index int) (string,
 	}
 
 	name := endpointProviderName(providerType, baseURL, endpoint, index)
+	billing, includeByDefault := endpointRoutingDefaults(providerType)
 	return name, agentlib.ServiceProviderEntry{
-		Type:    providerType,
-		BaseURL: baseURL,
-		APIKey:  endpoint.APIKey,
+		Type:                providerType,
+		BaseURL:             baseURL,
+		APIKey:              endpoint.APIKey,
+		Billing:             billing,
+		IncludeByDefault:    includeByDefault,
+		IncludeByDefaultSet: true,
 	}, nil
+}
+
+func endpointRoutingDefaults(providerType string) (agentlib.BillingModel, bool) {
+	switch strings.ToLower(strings.TrimSpace(providerType)) {
+	case "lmstudio", "omlx", "ollama", "vllm", "rapid-mlx", "llama-server":
+		return agentlib.BillingModelFixed, true
+	default:
+		return agentlib.BillingModelUnknown, false
+	}
 }
 
 func inferEndpointProviderType(baseURL string, port int) string {

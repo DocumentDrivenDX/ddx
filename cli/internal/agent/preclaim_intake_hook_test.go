@@ -132,7 +132,7 @@ func intakeHookTestConfig() config.ResolvedConfig {
 	return cfg.Resolve(config.CLIOverrides{})
 }
 
-func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *testing.T) {
+func TestPreClaimIntakeHook_DispatchesWithCheapestProfileNoStrongPowerTrick(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -158,12 +158,12 @@ func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Equal(t, "smart", svc.lastReq.Policy)
+	assert.Equal(t, "cheap", svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
-func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t *testing.T) {
+func TestDecompositionHook_CatalogUnavailableUsesAutoRouteWithoutMagicPower(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -268,7 +268,7 @@ func TestLifecycleHooks_UnpinnedWorkersStillUseProfileSelection(t *testing.T) {
 	intake, err := intakeHook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, intake.Outcome)
-	assert.Equal(t, "smart", intakeSvc.lastReq.Policy)
+	assert.Equal(t, "cheap", intakeSvc.lastReq.Policy)
 	assert.Empty(t, intakeSvc.lastReq.Harness)
 	assert.Empty(t, intakeSvc.lastReq.Provider)
 	assert.Empty(t, intakeSvc.lastReq.Model)

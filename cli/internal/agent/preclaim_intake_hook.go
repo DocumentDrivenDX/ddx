@@ -144,7 +144,7 @@ func (p preClaimReadinessChecksPayload) Len() int {
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
 // The hook uses the normal service execution path. Unpinned workers get the
-// lifecycle hook's strongest-profile hint; explicitly pinned workers keep their
+// lifecycle hook's cheapest-profile hint; explicitly pinned workers keep their
 // operator route pins. Route failures are infrastructure failures, not
 // bead-readiness decisions, so they return intake_error and let the loop use
 // its fail-open readiness path.
@@ -183,7 +183,7 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			ClearMinPower: true,
 			ClearMaxPower: true,
 		}
-		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
+		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectCheapestProfile)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{

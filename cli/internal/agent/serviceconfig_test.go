@@ -58,9 +58,19 @@ agent:
 	for _, n := range names {
 		if strings.Contains(n, "lmstudio") {
 			hasLmstudio = true
+			entry, ok := sc.Provider(n)
+			require.True(t, ok)
+			assert.True(t, entry.IncludeByDefault, "configured local endpoint must participate in automatic routing")
+			assert.True(t, entry.IncludeByDefaultSet)
+			assert.Equal(t, "fixed", string(entry.Billing))
 		}
 		if strings.Contains(n, "omlx") {
 			hasOmlx = true
+			entry, ok := sc.Provider(n)
+			require.True(t, ok)
+			assert.True(t, entry.IncludeByDefault, "configured local endpoint must participate in automatic routing")
+			assert.True(t, entry.IncludeByDefaultSet)
+			assert.Equal(t, "fixed", string(entry.Billing))
 		}
 	}
 	assert.True(t, hasLmstudio, "unreachable lmstudio endpoint must be passed to service, not removed by DDx")
