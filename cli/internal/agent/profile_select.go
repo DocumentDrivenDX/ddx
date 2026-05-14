@@ -13,12 +13,15 @@ import (
 	agentlib "github.com/easel/fizeau"
 )
 
-const profileSnapshotCacheWindow = 30 * time.Second
+const (
+	profileSnapshotCacheWindow = 30 * time.Second
+)
 
 var (
-	profileSnapshotCacheMu sync.Mutex
-	profileSnapshotCache   = map[agentlib.FizeauService]profileSnapshotCacheEntry{}
-	profileSnapshotNow     = time.Now
+	profileSnapshotCacheMu     sync.Mutex
+	profileSnapshotCache       = map[agentlib.FizeauService]profileSnapshotCacheEntry{}
+	profileSnapshotNow         = time.Now
+	profileSnapshotLoadTimeout = 3 * time.Second
 )
 
 type profileSnapshotCacheEntry struct {
@@ -47,6 +50,9 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	if svc == nil {
 		return ProfileSnapshot{}, nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	key, cacheable := profileSnapshotCacheKey(svc)
 	now := profileSnapshotNow()
 
@@ -63,19 +69,25 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 		profileSnapshotCacheMu.Unlock()
 	}
 
-	profiles, err := svc.ListPolicies(ctx)
+	loadCtx, cancel := context.WithTimeout(ctx, profileSnapshotLoadTimeout)
+	defer cancel()
+
+	profiles, err := svc.ListPolicies(loadCtx)
 	if err != nil {
 		if hadLast {
 			return cloneProfileSnapshot(last.snap), nil
 		}
 		return ProfileSnapshot{}, err
 	}
-	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
+	models, err := svc.ListModels(loadCtx, agentlib.ModelFilter{})
 	if err != nil {
 		if hadLast {
 			return cloneProfileSnapshot(last.snap), nil
 		}
-		return ProfileSnapshot{}, err
+		// Model discovery is advisory for DDx profile selection. Fizeau still
+		// owns concrete routing and candidate filtering at dispatch time, so do
+		// not let a slow/stale model snapshot consume the readiness budget.
+		models = nil
 	}
 
 	snap := ProfileSnapshot{
