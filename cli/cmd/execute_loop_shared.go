@@ -396,6 +396,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if unavailable {
 				return unavailableReport, nil
 			}
+			if spec.Provider == "" && spec.Model == "" {
+				if learnedMinPower, learnedUnavailableReport, learned := recentProviderConnectivityMinPower(store, time.Now().UTC(), initialMinPower, spec.MaxPower, loadLadder()); learned {
+					if learnedUnavailableReport.Status != "" {
+						learnedUnavailableReport.BeadID = beadID
+						return learnedUnavailableReport, nil
+					}
+					if learnedMinPower > initialMinPower {
+						initialMinPower = learnedMinPower
+					}
+				}
+			}
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
 			if autoInferPowerClass {

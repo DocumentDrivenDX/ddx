@@ -523,6 +523,12 @@ func TestTry_HooksWired(t *testing.T) {
 	require.NoError(t, os.WriteFile(skillPath+"/SKILL.md", []byte("lint + triage"), 0o644))
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init())
+	require.NoError(t, os.WriteFile(env.Dir+"/.ddx/config.yaml", []byte(`version: "1.0"
+bead-quality:
+  mode: warn-only
+  lint:
+    block_threshold_score: 1
+`), 0o644))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    "hook-bead-001",
 		Title: "Hook wiring bead",

@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
@@ -108,6 +110,158 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 		return zeroConfigInferredMinPower(b, baseMinPower, maxPower, ladder)
 	}
 	return baseMinPower, agent.ExecuteBeadReport{}, false
+}
+
+func recentProviderConnectivityMinPower(store *bead.Store, now time.Time, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
+	if store == nil || ladder == nil {
+		return baseMinPower, agent.ExecuteBeadReport{}, false
+	}
+	beads, err := store.List("", "", nil)
+	if err != nil {
+		return baseMinPower, agent.ExecuteBeadReport{}, false
+	}
+	floor := baseMinPower
+	for _, b := range beads {
+		events, err := store.Events(b.ID)
+		if err != nil {
+			continue
+		}
+		if next, ok := recentProviderConnectivityMinPowerFromEvents(events, now, floor, maxPower, ladder); ok {
+			if next >= maxPower && maxPower > 0 {
+				return baseMinPower, smartRouteUnavailableReport(&b, next, maxPower, nil), true
+			}
+			if next > floor {
+				floor = next
+			}
+		}
+	}
+	if floor > baseMinPower {
+		return floor, agent.ExecuteBeadReport{}, true
+	}
+	return baseMinPower, agent.ExecuteBeadReport{}, false
+}
+
+func recentProviderConnectivityMinPowerFromEvents(events []bead.BeadEvent, now time.Time, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, bool) {
+	if len(events) == 0 || ladder == nil {
+		return baseMinPower, false
+	}
+	floor := baseMinPower
+	var last recentRouteEvent
+	for _, ev := range events {
+		if ev.CreatedAt.IsZero() || now.Sub(ev.CreatedAt) > agent.ProviderUnavailableCooldown || ev.CreatedAt.After(now.Add(time.Minute)) {
+			continue
+		}
+		if route, ok := routeEventFromBeadEvent(ev); ok {
+			last = route
+			continue
+		}
+		if ev.Kind == "route-failure" {
+			route, ok := routeFailureEventFromBeadEvent(ev)
+			if !ok {
+				continue
+			}
+			if next, ok := nextFloorForRecentConnectivity(route.ActualPower, maxPower, ladder); ok && next > floor {
+				floor = next
+			}
+			continue
+		}
+		if ev.Kind == "execute-bead" && strings.EqualFold(strings.TrimSpace(ev.Summary), "execution_failed") && isProviderConnectivityEventBody(ev.Body) && last.Provider != "" {
+			if next, ok := nextFloorForRecentConnectivity(last.ActualPower, maxPower, ladder); ok && next > floor {
+				floor = next
+			}
+		}
+	}
+	return floor, floor > baseMinPower
+}
+
+type recentRouteEvent struct {
+	Provider    string
+	Model       string
+	ActualPower int
+}
+
+func routeEventFromBeadEvent(ev bead.BeadEvent) (recentRouteEvent, bool) {
+	if ev.Kind != "routing" && ev.Kind != "execution-routing-intent" {
+		return recentRouteEvent{}, false
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(ev.Body), &body); err != nil {
+		return recentRouteEvent{}, false
+	}
+	route := recentRouteEvent{
+		Provider:    firstNonEmptyString(body["resolved_provider"], body["actual_provider"], body["provider"]),
+		Model:       firstNonEmptyString(body["resolved_model"], body["actual_model"], body["model"]),
+		ActualPower: intFromAny(body["actual_power"]),
+	}
+	if route.Provider == "" {
+		return recentRouteEvent{}, false
+	}
+	return route, true
+}
+
+func routeFailureEventFromBeadEvent(ev bead.BeadEvent) (recentRouteEvent, bool) {
+	var body map[string]any
+	if err := json.Unmarshal([]byte(ev.Body), &body); err != nil {
+		return recentRouteEvent{}, false
+	}
+	if reason := strings.TrimSpace(fmt.Sprint(body["outcome_reason"])); reason != "" && reason != agent.FailureModeProviderConnectivity {
+		return recentRouteEvent{}, false
+	}
+	route := recentRouteEvent{
+		Provider:    firstNonEmptyString(body["provider"]),
+		Model:       firstNonEmptyString(body["model"]),
+		ActualPower: intFromAny(body["actual_power"]),
+	}
+	if route.Provider == "" {
+		return recentRouteEvent{}, false
+	}
+	return route, true
+}
+
+func nextFloorForRecentConnectivity(actualPower, maxPower int, ladder escalationFloorFinder) (int, bool) {
+	next, err := nextEscalationFloor(ladder, actualPower)
+	if err != nil {
+		return 0, false
+	}
+	if maxPower > 0 && next >= maxPower {
+		return next, true
+	}
+	return next, next > 0
+}
+
+func isProviderConnectivityEventBody(body string) bool {
+	lower := strings.ToLower(body)
+	for _, marker := range []string{"dial tcp", "i/o timeout", "connection refused", "connection reset", "no route to host", "provider error"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func firstNonEmptyString(values ...any) string {
+	for _, value := range values {
+		if s := strings.TrimSpace(fmt.Sprint(value)); s != "" && s != "<nil>" {
+			return s
+		}
+	}
+	return ""
+}
+
+func intFromAny(value any) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	case json.Number:
+		i, _ := v.Int64()
+		return int(i)
+	default:
+		return 0
+	}
 }
 
 func resolvePowerFloor(powerClass policyescalation.PowerClass, ladder escalationFloorFinder) (int, bool) {
