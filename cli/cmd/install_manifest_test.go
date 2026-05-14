@@ -337,6 +337,17 @@ func TestAddLocalOverlayIgnoresCoversSymlinkAndDirectoryForms(t *testing.T) {
 	assert.Contains(t, text, ".ddx/plugins/helix/\n")
 }
 
+func TestAddLocalOverlayIgnoresCreatesMissingGitInfoDir(t *testing.T) {
+	repoRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755))
+
+	require.NoError(t, addLocalOverlayIgnores(repoRoot, []string{".ddx/plugins/helix"}))
+
+	data, err := os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), ".ddx/plugins/helix\n")
+}
+
 func TestPluginInstallLocalCopiesScriptOnlyWhenManifestDeclaresIt(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()

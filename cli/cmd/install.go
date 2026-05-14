@@ -685,6 +685,9 @@ func defaultString(value, fallback string) string {
 
 func addLocalOverlayIgnores(repoRoot string, paths []string) error {
 	excludePath := filepath.Join(repoRoot, ".git", "info", "exclude")
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return err
+	}
 	existing, _ := os.ReadFile(excludePath)
 	text := string(existing)
 
