@@ -510,6 +510,24 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 			return nil
 		}
 		if time.Now().After(deadline) {
+			// The index drifted from HEAD. Two causes are possible:
+			//   1. A prior land's post-merge SyncWorkTreeToHead failed
+			//      (e.g. transient .git/index.lock contention) and its
+			//      error was swallowed by the best-effort caller. The
+			//      index now matches a recent ancestor of HEAD —
+			//      reverting the most recent merges. Recovering by
+			//      running read-tree HEAD is safe and unblocks the queue.
+			//   2. The operator staged real work that does not match any
+			//      ancestor tree. Recovery here would silently destroy
+			//      their changes — refuse, surface the error, and let
+			//      the operator resolve it.
+			if matches, _ := indexMatchesRecentAncestorTree(dir, 20); matches {
+				if _, recErr := readTreeHeadWithRetry(dir); recErr == nil {
+					if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+						return nil
+					}
+				}
+			}
 			stagedOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-status").CombinedOutput()
 			staged := strings.TrimSpace(string(stagedOut))
 			if staged == "" {
@@ -519,6 +537,36 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+// indexMatchesRecentAncestorTree reports whether the current index's tree
+// matches the tree of any of the last `maxDepth` ancestors of HEAD. A
+// match means the index reflects a state we have already advanced past —
+// the signature of a swallowed SyncWorkTreeToHead failure — and is
+// therefore safe to overwrite by re-reading HEAD into the index.
+//
+// Operator-staged work introduces novel tree contents that will not
+// match any historical tree, so the heuristic preserves their work.
+func indexMatchesRecentAncestorTree(dir string, maxDepth int) (bool, error) {
+	out, err := internalgit.Command(context.Background(), dir, "write-tree").Output()
+	if err != nil {
+		return false, err
+	}
+	indexTree := strings.TrimSpace(string(out))
+	if indexTree == "" {
+		return false, nil
+	}
+	for depth := 1; depth <= maxDepth; depth++ {
+		ref := fmt.Sprintf("HEAD~%d^{tree}", depth)
+		treeOut, treeErr := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", ref).Output()
+		if treeErr != nil {
+			return false, nil
+		}
+		if strings.TrimSpace(string(treeOut)) == indexTree {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func checkoutSyncDirtyOverlapPaths(dir, fromRev string, dirtyPaths []string) ([]string, error) {
