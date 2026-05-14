@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	agentlib "github.com/easel/fizeau"
+
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
@@ -3782,6 +3784,13 @@ func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
 // RouteRequest off the failed power tier when a ladder is available.
 const executeLoopFailedRoutesKey = "execute-loop-failed-routes"
 
+// RouteExclusionWindow is the time window within which a recorded
+// execute-loop-failed-routes entry suppresses a (provider, model) pair in
+// the next RouteRequest.ExcludedRoutes payload. Entries older than this
+// window remain in the bead's audit list but do not constrain routing,
+// allowing recovery once the provider returns.
+const RouteExclusionWindow = time.Hour
+
 // FailedRouteEntry is the JSON shape persisted under executeLoopFailedRoutesKey.
 // Exported so external callers (test helpers, tooling) can decode it without
 // duplicating the schema.
@@ -3825,6 +3834,93 @@ func appendFailedRoute(b *bead.Bead, entry FailedRouteEntry) {
 		}
 	}
 	b.Extra[executeLoopFailedRoutesKey] = append(existing, entry)
+}
+
+// buildExcludedRoutes converts FailedRouteEntry values whose At timestamp
+// falls within [now-window, now] into agentlib.ExcludedRoute entries for
+// inclusion in a Fizeau RouteRequest.ExcludedRoutes payload. Entries outside
+// the window are omitted from the result; the caller's input slice is never
+// modified. An empty or nil input returns nil.
+func buildExcludedRoutes(failedRoutes []FailedRouteEntry, now time.Time, window time.Duration) []agentlib.ExcludedRoute {
+	if len(failedRoutes) == 0 {
+		return nil
+	}
+	var out []agentlib.ExcludedRoute
+	for _, r := range failedRoutes {
+		if r.Provider == "" || r.At == "" {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339, r.At)
+		if err != nil {
+			continue
+		}
+		if now.Sub(at) > window {
+			continue
+		}
+		out = append(out, agentlib.ExcludedRoute{
+			Provider: r.Provider,
+			Model:    r.Model,
+		})
+	}
+	return out
+}
+
+// CheckAndApplyRouteExclusions builds ExcludedRoutes from the bead's
+// failed-routes list, calls resolveRoute to verify a viable candidate
+// remains, and when none does escalates TriagePowerHintKey to the next
+// ladder floor (composing with the ddx-8a7a6843 ladder-exhaustion path).
+//
+// Returns (report, true) when dispatch should be skipped (all routes
+// excluded or resolveRoute returned an error); (zero, false) when the
+// caller may proceed with dispatch normally.
+// A nil resolveRoute is treated as a no-op and returns false.
+func CheckAndApplyRouteExclusions(
+	ctx context.Context,
+	store ExecuteBeadLoopStore,
+	beadID, actor string,
+	extra map[string]any,
+	now time.Time,
+	minPower int,
+	resolveRoute func(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error),
+	nextFloorFn func(int) (int, error),
+) (ExecuteBeadReport, bool) {
+	if resolveRoute == nil {
+		return ExecuteBeadReport{}, false
+	}
+	failedRoutes := readFailedRoutes(extra)
+	excluded := buildExcludedRoutes(failedRoutes, now, RouteExclusionWindow)
+	if len(excluded) == 0 {
+		return ExecuteBeadReport{}, false
+	}
+	req := agentlib.RouteRequest{
+		MinPower:       minPower,
+		ExcludedRoutes: excluded,
+	}
+	if _, routeErr := resolveRoute(ctx, req); routeErr == nil {
+		return ExecuteBeadReport{}, false
+	}
+	// No viable candidate at minPower with the current exclusions: escalate
+	// TriagePowerHintKey so the next attempt routes to a stronger tier.
+	nextFloor := minPower + 1
+	if nextFloorFn != nil {
+		if floor, err := nextFloorFn(minPower); err == nil {
+			nextFloor = floor
+		}
+	}
+	_ = store.Update(beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[TriagePowerHintKey] = nextFloor
+	})
+	detail := fmt.Sprintf(
+		"ResolveRoute: no viable routing candidate: all routes at power %d excluded by recent failures; escalating TriagePowerHintKey to %d",
+		minPower, nextFloor,
+	)
+	return ExecuteBeadReport{
+		BeadID:        beadID,
+		Status:        ExecuteBeadStatusExecutionFailed,
+		Detail:        detail,
+		OutcomeReason: FailureModeNoViableProvider,
+	}, true
 }
 
 // isOperatorRoutingPinned reports whether the resolved passthrough envelope
