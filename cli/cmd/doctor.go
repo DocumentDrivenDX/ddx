@@ -32,6 +32,11 @@ type DiagnosticIssue struct {
 
 // runDoctor implements the doctor command logic
 func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
+	pathsStr, _ := cmd.Flags().GetString("paths")
+	if pathsStr != "" {
+		return f.runDoctorScoped(strings.Fields(pathsStr))
+	}
+
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	fix, _ := cmd.Flags().GetBool("fix")
 
@@ -369,6 +374,55 @@ func legacySkillSymlinkDirs(workingDir string) []string {
 		}
 	}
 	return found
+}
+
+// runDoctorScoped runs only the checks relevant to the staged file paths,
+// skipping global installation health checks unrelated to those files.
+// It is the entry point when the ddx-validate pre-commit hook passes --paths.
+//
+// Scope rules:
+//   - path == ".ddx.yml" (or ends with "/.ddx.yml") → config category: run config validation
+//   - path under templates/, patterns/, prompts/ → resource category: validate resource files
+//
+// Any other paths (e.g. Go source files staged alongside config) are silently
+// ignored — the scoped run only validates the DDx-relevant categories present
+// in the staged set. Global checks (legacy symlinks, binary location, git repo
+// health, etc.) are never run in scoped mode.
+func (f *CommandFactory) runDoctorScoped(paths []string) error {
+	cats := categorizeStagedPaths(paths)
+	if cats["config"] {
+		if !checkConfiguration() {
+			return fmt.Errorf("DDx configuration invalid; run 'ddx doctor' for details")
+		}
+	}
+	// Resource category: syntax/schema checks for templates, patterns, prompts.
+	// Currently no additional validation beyond categorisation; the hook gate
+	// is satisfied by a clean parse (no-op until resource validators are added).
+	_ = cats["resource"]
+	return nil
+}
+
+// categorizeStagedPaths maps each path to a DDx check category.
+// Returns a set of category names ("config", "resource") that apply to the
+// given path list. Unrecognised paths produce no category.
+func categorizeStagedPaths(paths []string) map[string]bool {
+	cats := make(map[string]bool)
+	resourcePrefixes := []string{"templates/", "patterns/", "prompts/"}
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if p == ".ddx.yml" || strings.HasSuffix(p, "/.ddx.yml") || filepath.Base(p) == ".ddx.yml" {
+			cats["config"] = true
+		}
+		for _, prefix := range resourcePrefixes {
+			if strings.HasPrefix(p, prefix) || strings.Contains(p, "/"+prefix) {
+				cats["resource"] = true
+			}
+		}
+	}
+	return cats
 }
 
 // checkBinaryInstallLocation verifies the running binary is at the canonical install

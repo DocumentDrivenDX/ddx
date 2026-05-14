@@ -85,6 +85,72 @@ pin a specific ID when debugging (`ddx try <id>`) or
 when the queue ordering would pick the wrong bead and you need to
 override.
 
+## Starting and monitoring workers in the background
+
+When the user asks you to **start workers and watch progress**, do
+not invent your own `tail | grep` pipeline — the obvious shapes have
+all bitten in the field. Use these vetted patterns.
+
+### One worker, foreground drain
+
+If the user just wants to drain once and read the result at the end,
+run `ddx work` directly and let it print. Don't wrap with `head`,
+`tail`, or `tee` — pipes to those tools buffer stdout for the entire
+run, so the user sees nothing during execution and everything at the
+end.
+
+### One or more workers, watch live
+
+```bash
+# Start each worker, one log per worker:
+ddx work > /tmp/ddx-worker1.log 2>&1 &   # repeat for worker2, etc.
+
+# Stream with per-worker prefixes (drops the `==>` separator noise
+# that `tail -F` injects when switching files):
+(tail -F /tmp/ddx-worker1.log 2>/dev/null | awk '{print "w1: "$0; fflush()}' &
+ tail -F /tmp/ddx-worker2.log 2>/dev/null | awk '{print "w2: "$0; fflush()}' &
+ wait) | grep -E --line-buffered \
+  "^w[0-9]+: (▶|✗|✓|→ |worker exited|attempts:|failed:|landing worktree has|lock_contention|panic|FATAL|excluded|caller_excluded|ladder exhausted|escalation|TriagePowerHint|do route|i/o timeout|connection refused|provider error)"
+```
+
+Why those specific tokens — together they cover **every actionable
+event** in a drain:
+
+- `▶ <bead>` — a new bead was claimed. `✗` and `✓` close it.
+- `→` — outcome arrow, also follows a bead-state transition.
+- `worker exited` / `attempts:` / `failed:` — end-of-drain summary.
+- `landing worktree has` — pre-claim hook hit a stale index; queue
+  is jammed if recovery doesn't kick in.
+- `lock_contention`, `panic`, `FATAL` — infrastructure problems.
+- `excluded`, `caller_excluded`, `ladder exhausted`,
+  `escalation`, `TriagePowerHint` — the escalation path actually
+  firing; absence on a failed bead means the loop is silently
+  no-op'ing instead of climbing the ladder.
+- `do route` — the implementation-phase routing decision, surfaces
+  the provider/model that's about to be hit. Without this in the
+  alternation, the monitor goes quiet during the most interesting
+  window (provider call) and only resurfaces on success/failure.
+- `i/o timeout`, `connection refused`, `provider error` — transport
+  failures. Two in a row to the same `(provider, model)` is the
+  signature of routing that isn't honoring exclusions.
+
+### What NOT to do
+
+- **Don't wrap `ddx work` in `| tail -N`** to "see the last N
+  lines". The pipe buffers until the producer exits, so you see
+  nothing for the whole run. Redirect to a file and tail the file
+  separately.
+- **Don't grep `^==>` into the alternation.** Without the awk
+  prefix, `tail -F file1 file2` emits `==> filename <==` whenever
+  the active file switches — every switch becomes a noise event in
+  a Monitor pipeline. Strip those, or prefix lines with `awk`.
+- **Don't tail without `--line-buffered`/`fflush()`.** Pipe
+  buffering means events arrive in 4KB chunks (often minutes apart)
+  instead of as they happen. The `awk` form above flushes per line.
+- **Don't share one log file across workers.** Interleaved output
+  destroys attributability and any chance of debugging which worker
+  hit what.
+
 ## Verify independently before closing
 
 **Agents hallucinate successful completions.** Do not trust the
