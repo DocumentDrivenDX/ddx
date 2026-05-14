@@ -215,6 +215,18 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 		if report.Status == "" {
 			report.Status = StatusExecutionFailed
 		}
+		if ctx != nil && ctx.Err() != nil {
+			if err == nil {
+				err = ctx.Err()
+			}
+			if report.Error == "" {
+				report.Error = ctx.Err().Error()
+			}
+			if report.Detail == "" {
+				report.Detail = ctx.Err().Error()
+			}
+			return Outcome{Report: report, Disposition: OutcomeReported}, err
+		}
 
 		rateLimited := IsRateLimitReport(&report)
 		effectiveBudget := rateCfg.Budget

@@ -311,6 +311,53 @@ func TestWorkInterrupt_DoesNotSetNoProgressCooldown(t *testing.T) {
 	assert.False(t, hasRetry, "interrupted work must not persist execute-loop-retry-after")
 }
 
+func TestWorkInterrupt_NoChangesLikeCanceledAttemptDoesNotWriteTrackerNoise(t *testing.T) {
+	store, candidate, _ := newExecuteLoopTestStore(t)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, id string) (ExecuteBeadReport, error) {
+			cancel()
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusNoChanges,
+				Detail:    "context canceled",
+				BaseRev:   "abc1234",
+				ResultRev: "abc1234",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+	assert.True(t, result.Results[0].Disrupted)
+	assert.Equal(t, "context_canceled", result.Results[0].DisruptionReason)
+
+	got, err := store.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.NotContains(t, got.Labels, NoChangesLabelUnjustified)
+	assert.NotContains(t, got.Labels, NoChangesLabelUnverified)
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, got.Extra, "execute-loop-last-status")
+	assert.NotContains(t, got.Extra, "execute-loop-no-changes-count")
+
+	events, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		assert.NotContains(t,
+			[]string{"no_changes_unjustified", "execute-bead", "loop-error", "execution-routing-intent", "disruption_detected"},
+			ev.Kind,
+			"interrupted attempt must not write terminal/noise event %q", ev.Kind,
+		)
+	}
+}
+
 // TestWorkInterrupt_RemovesClaimLiveness verifies that cleanup removes the
 // external claim heartbeat so the bead can be reclaimed immediately.
 func TestWorkInterrupt_RemovesClaimLiveness(t *testing.T) {

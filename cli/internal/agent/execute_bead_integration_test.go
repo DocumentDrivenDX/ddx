@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -136,6 +138,103 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 	// The tracker may add 1, but the iteration itself adds 0.
 	assert.LessOrEqual(t, commitsAfter-commitsBefore, 1,
 		"no iteration commit should land when no changes were made")
+}
+
+// TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker
+// reproduces the production failure behind ddx-7000e777 with the real
+// execute-loop stack: temp git repo, JSONL bead store, execute-bead worktree,
+// and script harness. The script does not observe context cancellation while it
+// sleeps, so the worker context is cancelled mid-attempt and the no_changes-like
+// result returns after cancellation. That must only release the claim; it must
+// not record terminal/no_changes/loop-error queue noise.
+func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	ddxDir := filepath.Join(projectRoot, ".ddx")
+	const beadID = "ddx-int-0001"
+
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{
+		"sleep-ms 250",
+		"no-op",
+	})
+
+	store := makeLoopStore(t, ddxDir)
+	worker := &ExecuteBeadWorker{
+		Store:    store,
+		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}, 1)
+	go func() {
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "integration-worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{Once: true})
+		done <- struct {
+			result *ExecuteBeadLoopResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	require.Eventually(t, func() bool {
+		got, err := store.Get(context.Background(), beadID)
+		return err == nil && got.Status == bead.StatusInProgress && got.Owner == "integration-worker"
+	}, 5*time.Second, 10*time.Millisecond, "worker did not claim bead")
+
+	cancel()
+
+	var out struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}
+	select {
+	case out = <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("worker did not return after cancellation")
+	}
+	require.ErrorIs(t, out.err, context.Canceled)
+	require.NotNil(t, out.result)
+	require.Len(t, out.result.Results, 1)
+	assert.True(t, out.result.Results[0].Disrupted)
+	assert.Equal(t, "context_canceled", out.result.Results[0].DisruptionReason)
+
+	got, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.NotContains(t, got.Labels, NoChangesLabelUnjustified)
+	assert.NotContains(t, got.Labels, NoChangesLabelUnverified)
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, got.Extra, "execute-loop-last-status")
+	assert.NotContains(t, got.Extra, "execute-loop-no-changes-count")
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		assert.NotContains(t,
+			[]string{"no_changes_unjustified", "execute-bead", "loop-error", "execution-routing-intent", "disruption_detected"},
+			ev.Kind,
+			"interrupted integration attempt must not write terminal/noise event %q", ev.Kind,
+		)
+	}
+
+	rawTracker, err := os.ReadFile(filepath.Join(ddxDir, "beads.jsonl"))
+	require.NoError(t, err)
+	tracker := string(rawTracker)
+	for _, forbidden := range []string{
+		"no_changes_unjustified",
+		"loop-error",
+		"execution-routing-intent",
+		"execute-loop-retry-after",
+		"execute-loop-last-status",
+	} {
+		assert.False(t, strings.Contains(tracker, forbidden), "tracker contains %q", forbidden)
+	}
 }
 
 // ---------------------------------------------------------------------------

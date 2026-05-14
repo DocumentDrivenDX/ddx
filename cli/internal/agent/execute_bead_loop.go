@@ -1880,6 +1880,29 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				report.DisruptionReason = reason
 			}
 		}
+		if ctxErr := loopContextErr(ctx); ctxErr != nil && report.Status != ExecuteBeadStatusSuccess {
+			if report.Detail == "" || report.Detail == ExecuteBeadStatusDetail(report.Status, "", "") {
+				report.Detail = ctxErr.Error()
+			}
+			if report.Error == "" {
+				report.Error = ctxErr.Error()
+			}
+			report.Disrupted = true
+			if report.DisruptionReason == "" {
+				report.DisruptionReason, _ = classifyDisruption(ctx, err)
+			}
+			result.Attempts++
+			result.Results = append(result.Results, report)
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			if unclaimErr := w.Store.Unclaim(candidate.ID); unclaimErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt cleanup error (Unclaim %s): %v\n", candidate.ID, unclaimErr)
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt released %s without recording terminal outcome: %v\n", candidate.ID, ctxErr)
+			}
+			return result, ctxErr
+		}
 		if report.Disrupted {
 			reason := report.DisruptionReason
 			if reason == "" {
@@ -3674,6 +3697,18 @@ func classifyDisruption(ctx context.Context, executorErr error) (string, bool) {
 		return "transport_error", true
 	}
 	return "", false
+}
+
+func loopContextErr(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	switch err := ctx.Err(); err {
+	case context.Canceled, context.DeadlineExceeded:
+		return err
+	default:
+		return nil
+	}
 }
 
 // isTransportError returns true when err looks like a transport-class failure
