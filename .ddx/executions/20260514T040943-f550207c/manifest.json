@@ -1,0 +1,187 @@
+{
+  "attempt_id": "20260514T040943-f550207c",
+  "bead_id": "ddx-b4c5151a",
+  "base_rev": "15523680d55856c6a6f04524a6ebcb5d86a69571",
+  "created_at": "2026-05-14T04:09:50.20597843Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b4c5151a",
+    "title": "Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 3",
+    "description": "PROBLEM\nParent bead ddx-70a432b5 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs are missing the documentation sections required to make the Story-16 run-detail page and its evidence browser official. Without spec updates, the run-detail page, trust boundary statement, and raw-transcript audit event are undocumented platform behaviors.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-*.md: missing a Run-detail-page subsection describing the trust boundary ('Anyone with project read access sees raw prompts, responses, stderr, tool args') and evidence browser whitelist (allowed extensions + 64KB cap).\n- docs/helix/01-frame/features/FEAT-010-*.md: Run resolver contract does not include prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, or normalized ToolCallEntry.\n- docs/helix/01-frame/features/FEAT-019-*.md: review surface does not point to /runs/[runId] deep page.\n- No 'raw transcript viewed' audit event exists in the server or schema.\n- Depends on ddx-f04faa86 (16.1 page) and ddx-4cd64068 (16.2 evidence tab).\n\nPROPOSED FIX\n- Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB; no Markdown rendering in evidence tab).\n- Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\n- Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\n- Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\n- Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\n\nNON-SCOPE\n- Frontend implementation (that is Story 16.1 and 16.2).\n- New auth or role-based access control beyond what the trust boundary statement documents.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n- bun run test:e2e green.\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n2. bun run test:e2e green.\n3. lefthook run pre-commit passes.\n4. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "ac-quality:needs-refinement",
+      "decomposed",
+      "phase:2",
+      "story:16"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T04:08:38Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "2725763",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\",\"coverage\":\"covered by child 1: Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 1\"},{\"parent_ac\":\"bun run test:e2e green.\",\"coverage\":\"covered by child 1: Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 1\"},{\"parent_ac\":\"lefthook run pre-commit passes.\",\"coverage\":\"covered by child 2: Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 2\"},{\"parent_ac\":\"cd cli \\u0026\\u0026 go test ./... passes.\",\"coverage\":\"covered by child 2: Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 2\"}],\"child_ids\":[\"ddx-868ac26c\",\"ddx-f129bfaf\"],\"rationale\":\"deterministic fallback split after agent decomposer returned empty output\"}",
+          "created_at": "2026-05-12T23:35:26.621684479Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-868ac26c, ddx-f129bfaf"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:39:02.03421851Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:52:24.871627858Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:35:51.587906Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:50:48.513089818Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:33:34.896064287Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:50:56.092303383Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T22:57:26.366193208Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T23:12:17.603201693Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T23:54:29.298988828Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T00:06:27.768429734Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T00:24:08.581936222Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T02:36:53.631702308Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:37:03.271878867Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:28:47.45778502Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:34:20.605788877Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-b4c5151a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:02:45.506558703Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: policy \\\"air-gapped\\\" has no candidate satisfying local endpoint: 3 candidates rejected\"}",
+          "created_at": "2026-05-14T04:09:20.639352264Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T04:08:38.70319945Z",
+      "execute-loop-last-detail": "readiness check timed out after 30s (ddx-b4c5151a)",
+      "execute-loop-last-status": "timeout",
+      "execute-loop-retry-after": "2026-05-14T04:07:45Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T040943-f550207c",
+    "prompt": ".ddx/executions/20260514T040943-f550207c/prompt.md",
+    "manifest": ".ddx/executions/20260514T040943-f550207c/manifest.json",
+    "result": ".ddx/executions/20260514T040943-f550207c/result.json",
+    "checks": ".ddx/executions/20260514T040943-f550207c/checks.json",
+    "usage": ".ddx/executions/20260514T040943-f550207c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b4c5151a-20260514T040943-f550207c"
+  },
+  "prompt_sha": "75ad4e1d6efe191fd65a0defd3c9a0a17521599b6817605c0d3130a5ff49974b"
+}
