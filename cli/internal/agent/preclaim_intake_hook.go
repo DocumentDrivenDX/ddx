@@ -56,17 +56,17 @@ type preClaimReadinessPromptResult struct {
 }
 
 type preClaimReadinessClassificationPromptResult struct {
-	Classification    string                            `json:"classification"`
-	Tractability      string                            `json:"tractability,omitempty"`
-	Score             int                               `json:"score,omitempty"`
-	Rationale         string                            `json:"rationale,omitempty"`
-	Detail            string                            `json:"detail,omitempty"`
-	Reasoning         string                            `json:"reasoning,omitempty"`
-	ReadinessChecks   preClaimReadinessChecksPayload    `json:"readiness_checks,omitempty"`
-	SuggestedFixes    []preClaimReadinessSuggestedFix   `json:"suggested_fixes,omitempty"`
-	SuggestedChildren []preClaimReadinessSuggestedChild `json:"suggested_child_beads,omitempty"`
-	WaiversApplied    []preClaimReadinessWaiver         `json:"waivers_applied,omitempty"`
-	Rewrite           preClaimIntakePromptRewrite       `json:"rewrite,omitempty"`
+	Classification    string                                 `json:"classification"`
+	Tractability      string                                 `json:"tractability,omitempty"`
+	Score             int                                    `json:"score,omitempty"`
+	Rationale         string                                 `json:"rationale,omitempty"`
+	Detail            string                                 `json:"detail,omitempty"`
+	Reasoning         string                                 `json:"reasoning,omitempty"`
+	ReadinessChecks   preClaimReadinessChecksPayload         `json:"readiness_checks,omitempty"`
+	SuggestedFixes    preClaimReadinessSuggestedFixesPayload `json:"suggested_fixes,omitempty"`
+	SuggestedChildren []preClaimReadinessSuggestedChild      `json:"suggested_child_beads,omitempty"`
+	WaiversApplied    []preClaimReadinessWaiver              `json:"waivers_applied,omitempty"`
+	Rewrite           preClaimIntakePromptRewrite            `json:"rewrite,omitempty"`
 }
 
 type preClaimReadinessCheck struct {
@@ -79,6 +79,49 @@ type preClaimReadinessCheck struct {
 type preClaimReadinessSuggestedFix struct {
 	Target string `json:"target,omitempty"`
 	Fix    string `json:"fix,omitempty"`
+}
+
+type preClaimReadinessSuggestedFixesPayload []preClaimReadinessSuggestedFix
+
+func (p *preClaimReadinessSuggestedFixesPayload) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil
+	}
+	if trimmed[0] != '[' {
+		return fmt.Errorf("suggested_fixes must be a JSON array")
+	}
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	fixes := make([]preClaimReadinessSuggestedFix, 0, len(raw))
+	for _, item := range raw {
+		itemTrimmed := strings.TrimSpace(string(item))
+		if itemTrimmed == "" || itemTrimmed == "null" {
+			continue
+		}
+		switch itemTrimmed[0] {
+		case '"':
+			var fix string
+			if err := json.Unmarshal(item, &fix); err != nil {
+				return err
+			}
+			fixes = append(fixes, preClaimReadinessSuggestedFix{Fix: strings.TrimSpace(fix)})
+		case '{':
+			var fix preClaimReadinessSuggestedFix
+			if err := json.Unmarshal(item, &fix); err != nil {
+				return err
+			}
+			fix.Target = strings.TrimSpace(fix.Target)
+			fix.Fix = strings.TrimSpace(fix.Fix)
+			fixes = append(fixes, fix)
+		default:
+			return fmt.Errorf("suggested_fixes entries must be strings or objects")
+		}
+	}
+	*p = fixes
+	return nil
 }
 
 type preClaimReadinessSuggestedChild struct {
@@ -154,8 +197,14 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 }
 
 // NewPreClaimIntakeHookWithLog constructs the pre-claim intake hook and emits
-// the prompt plus live service progress to log when provided.
+// compact prompt metadata plus live service progress to log when provided.
 func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+	return NewPreClaimIntakeHookWithLogVerbose(projectRoot, store, rcfg, svc, runner, log, false)
+}
+
+// NewPreClaimIntakeHookWithLogVerbose constructs the pre-claim intake hook and
+// prints the full prompt only when promptVerbose is true.
+func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer, promptVerbose bool) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	WarmProfileSnapshotForProject(projectRoot, svc, runner)
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
@@ -194,7 +243,7 @@ func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg con
 			ClearMinPower: true,
 			ClearMaxPower: true,
 		}
-		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime)
+		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime, promptVerbose)
 		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
 		logPreClaimIntakeRoute(log, beadID, runtime)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
@@ -209,12 +258,15 @@ func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg con
 	}
 }
 
-func logPreClaimIntakePrompt(w io.Writer, projectRoot, beadID, prompt string, runtime AgentRunRuntime) {
+func logPreClaimIntakePrompt(w io.Writer, projectRoot, beadID, prompt string, runtime AgentRunRuntime, verbose bool) {
 	if w == nil {
 		return
 	}
 	logDir := ResolveLogDir(projectRoot, "")
-	_, _ = fmt.Fprintf(w, "readiness prompt %s: source=%s bytes=%d session_logs=%s\n", beadID, PreClaimIntakePromptSource, len(prompt), logDir)
+	_, _ = fmt.Fprintf(w, "readiness prompt %s: sent source=%s bytes=%d session_logs=%s\n", beadID, PreClaimIntakePromptSource, len(prompt), logDir)
+	if !verbose {
+		return
+	}
 	_, _ = fmt.Fprintf(w, "readiness prompt %s begin\n%s", beadID, truncatePreClaimIntakePromptForLog(prompt))
 	if !strings.HasSuffix(prompt, "\n") {
 		_, _ = fmt.Fprintln(w)
@@ -354,6 +406,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Do not rewrite bead fields in intake mode. If the bead is executable as written, classify it as ready even when the prose could be cleaner.\n")
 	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
+	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")
 	sb.WriteString("If the bead is not executable as written but can be made executable by a narrow, semantics-preserving metadata/AC rewrite, emit rewrite with changed_fields, description, and acceptance.\n")
 	sb.WriteString("Put prompt-quality improvements in suggested_fixes only; keep operator_required for actual blockers.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
@@ -418,15 +471,13 @@ func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, er
 
 func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var probe struct {
-		Classification  string                         `json:"classification"`
-		Outcome         string                         `json:"outcome"`
-		Tractability    string                         `json:"tractability"`
-		Rationale       string                         `json:"rationale"`
-		Score           *int                           `json:"score"`
-		ReadinessChecks preClaimReadinessChecksPayload `json:"readiness_checks"`
-		SuggestedFixes  []struct {
-			Target string `json:"target,omitempty"`
-		} `json:"suggested_fixes"`
+		Classification  string                                 `json:"classification"`
+		Outcome         string                                 `json:"outcome"`
+		Tractability    string                                 `json:"tractability"`
+		Rationale       string                                 `json:"rationale"`
+		Score           *int                                   `json:"score"`
+		ReadinessChecks preClaimReadinessChecksPayload         `json:"readiness_checks"`
+		SuggestedFixes  preClaimReadinessSuggestedFixesPayload `json:"suggested_fixes"`
 	}
 	if err := json.Unmarshal([]byte(payload), &probe); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)

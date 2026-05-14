@@ -234,7 +234,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if dispatch.JSON == "true" {
 		intakeLog = io.Discard
 	}
-	innerIntakeHook := agent.NewPreClaimIntakeHookWithLog(projectRoot, store, rcfg, nil, qualityRunner, intakeLog)
+	innerIntakeHook := agent.NewPreClaimIntakeHookWithLogVerbose(projectRoot, store, rcfg, nil, qualityRunner, intakeLog, f.viperInstance.GetBool("verbose"))
 	intakeHook := agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), innerIntakeHook)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 	decompositionHook := agent.NewPreClaimDecompositionHook(store, qualityRunner, rcfg, projectRoot)

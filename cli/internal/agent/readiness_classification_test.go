@@ -147,6 +147,14 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 	assert.Empty(t, refine.SystemReason)
 }
 
+func TestPreClaimReadiness_AcceptsStringSuggestedFixes(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"prompt polish only","readiness_checks":[{"reason":"missing_verification","verdict":"pass","evidence":"AC names tests"}],"suggested_fixes":["tighten title","add file:line evidence"],"waivers_applied":[]}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Empty(t, got.SystemReason)
+	assert.Contains(t, got.Detail, "prompt polish only")
+}
+
 func TestPreClaimReadiness_NormalizesSingletonReadinessChecksObject(t *testing.T) {
 	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}}`)
 	require.NoError(t, err)

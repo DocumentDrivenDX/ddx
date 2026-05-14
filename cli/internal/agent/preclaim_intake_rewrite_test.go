@@ -477,6 +477,8 @@ func TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement(t *testin
 
 	assert.Contains(t, lower, "prompt-quality improvements")
 	assert.Contains(t, lower, "suggested_fixes")
+	assert.Contains(t, lower, "suggested_fixes must be a json array")
+	assert.Contains(t, lower, "flat string list")
 	assert.Contains(t, lower, "tractability")
 	assert.Contains(t, lower, "score")
 	assert.Contains(t, lower, "rationale")

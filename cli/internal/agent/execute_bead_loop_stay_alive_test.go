@@ -94,6 +94,45 @@ func TestLoop_BinaryRefreshStopsBeforeClaim(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
 
+func TestWorkWatch_CheckpointDirtyReleasesClaimWithoutFailure(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			cancel()
+			return ExecuteBeadReport{}, fmt.Errorf("pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/execute_loop_shared.go; commit those files in the bead's [ddx-<id>] substantive commit before rerunning")
+		}),
+	}
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		Log:          &logBuf,
+		WakeCh:       make(chan struct{}),
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 0, result.Failures)
+	assert.Empty(t, result.Results)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+
+	out := logBuf.String()
+	assert.Contains(t, out, "watch: repo has uncommitted implementation changes; released ddx-0001")
+	assert.NotContains(t, out, "failed:")
+}
+
 func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

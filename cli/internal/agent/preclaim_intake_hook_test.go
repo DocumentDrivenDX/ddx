@@ -178,7 +178,28 @@ func TestPreClaimIntakeHookWithLogEmitsPrompt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	out := log.String()
-	assert.Contains(t, out, "readiness prompt "+b.ID+": source=bead-lifecycle-intake")
+	assert.Contains(t, out, "readiness prompt "+b.ID+": sent source=bead-lifecycle-intake")
+	assert.Contains(t, out, "session_logs=")
+	assert.NotContains(t, out, "readiness prompt "+b.ID+" begin")
+	assert.NotContains(t, out, "MODE: intake")
+	assert.NotContains(t, out, "readiness prompt "+b.ID+" end")
+}
+
+func TestPreClaimIntakeHookWithVerboseLogEmitsPromptBody(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+	}
+	var log bytes.Buffer
+
+	hook := NewPreClaimIntakeHookWithLogVerbose(root, store, intakeHookTestConfig(), svc, nil, &log, true)
+	got, err := hook(context.Background(), b.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	out := log.String()
+	assert.Contains(t, out, "readiness prompt "+b.ID+": sent source=bead-lifecycle-intake")
 	assert.Contains(t, out, "session_logs=")
 	assert.Contains(t, out, "readiness prompt "+b.ID+" begin")
 	assert.Contains(t, out, "MODE: intake")

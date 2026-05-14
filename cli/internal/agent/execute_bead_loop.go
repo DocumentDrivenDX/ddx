@@ -678,6 +678,14 @@ func randomProgressID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
 }
 
+func isPreExecuteCheckpointDirtyReport(report ExecuteBeadReport, err error) bool {
+	const marker = "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping"
+	if err != nil && strings.Contains(err.Error(), marker) {
+		return true
+	}
+	return strings.Contains(report.Detail, marker) || strings.Contains(report.Error, marker)
+}
+
 func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
 	if w.Store == nil {
 		return nil, fmt.Errorf("execute-bead loop: store is required")
@@ -1589,6 +1597,46 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
 		}
 		classifyLoopReportFailure(&report)
+		if loopMode == executeloop.ModeWatch && isPreExecuteCheckpointDirtyReport(report, err) {
+			if unclaimErr := w.Store.Unclaim(candidate.ID); unclaimErr != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, unclaimErr
+			}
+			detail := strings.TrimSpace(report.Detail)
+			if detail == "" && err != nil {
+				detail = err.Error()
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "watch: repo has uncommitted implementation changes; released %s and will retry after %s: %s\n", candidate.ID, idleInterval, detail)
+			}
+			emit("loop.watch_checkpoint_dirty", map[string]any{
+				"bead_id":       candidate.ID,
+				"detail":        detail,
+				"idle_interval": idleInterval.String(),
+			})
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				BeadID:    candidate.ID,
+				Phase:     "loop.idle",
+				Heartbeat: true,
+				TS:        now().UTC(),
+				Message:   "checkpoint_dirty",
+			})
+			if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
+				if exitReason == "" {
+					applyStop(work.StopInput{ContextErr: err})
+				}
+				return result, err
+			}
+			continue
+		}
 		if IsResourceExhaustedStatus(report.Status) {
 			result.Attempts++
 			setExit("ResourceExhausted", "resource_exhausted")
