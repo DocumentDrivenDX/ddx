@@ -324,6 +324,54 @@ Custom skill body.
 	assert.NoDirExists(t, filepath.Join(workDir, ".agents", "skills", "sample-plugin"))
 }
 
+// TestPluginInstallLocalDDxLibrarySymlinksSkills verifies the development
+// workflow documented in docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md:
+// pointing `ddx plugin install ddx --local library --force` at the in-repo
+// `library/` package root must symlink `library/skills/ddx` into both
+// `.agents/skills/ddx` and `.claude/skills/ddx`, not at the project root's own
+// `.agents/skills` tree.
+func TestPluginInstallLocalDDxLibrarySymlinksSkills(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	libraryRoot := filepath.Join(workDir, "library")
+	require.NoError(t, os.MkdirAll(libraryRoot, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(libraryRoot, "package.yaml"), []byte(`name: ddx
+version: 0.0.0-test
+description: DDx default library — test fixture
+type: plugin
+source: https://github.com/DocumentDrivenDX/ddx
+api_version: "1"
+install:
+  root:
+    source: .
+    target: .ddx/plugins/ddx
+  skills:
+    - source: skills/
+      target: .agents/skills/
+    - source: skills/
+      target: .claude/skills/
+`), 0o644))
+	skillDir := filepath.Join(libraryRoot, "skills", "ddx")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: ddx
+description: DDx skill fixture
+---
+
+Body.
+`), 0o644))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "ddx", "--local", "library", "--force")
+	require.NoError(t, err, output)
+
+	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "ddx"), libraryRoot)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "ddx"), skillDir)
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "ddx"), skillDir)
+}
+
 func TestAddLocalOverlayIgnoresCoversSymlinkAndDirectoryForms(t *testing.T) {
 	repoRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, ".git", "info"), 0o755))
