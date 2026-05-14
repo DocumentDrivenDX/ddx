@@ -1,0 +1,195 @@
+{
+  "attempt_id": "20260514T221622-d471c903",
+  "bead_id": "ddx-575cda17",
+  "base_rev": "d603c2ea9cccc9bc6e230896a00cea01c04431c4",
+  "created_at": "2026-05-14T22:16:36.810229859Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-575cda17",
+    "title": "prompts: FEAT-022 amendment (minimum-prompt rule)",
+    "description": "FEAT-022 amendment: 'minimum prompt that satisfies the contract' rule with explicit guardrail list.",
+    "acceptance": "1. FEAT-022 has minimum-prompt rule. 2. ddx doc audit clean.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "area:specs",
+      "kind:doc",
+      "phase:2",
+      "story:12"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T22:15:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1311878",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-575cda17)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:40:05.585592761Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-575cda17)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:54:04.159031521Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-575cda17)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:56:25.12848339Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-575cda17)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:02:02.02331292Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-575cda17)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:07:39.253299451Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:11:42.557222264Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:24:06.528717671Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T05:24:40.701897576Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description specifies the change concretely: Bead references a FEAT-022 'amendment' with a 'minimum-prompt rule' and 'explicit guardrail list' but provides no source text, no path to FEAT-022, no enumeration of the guardrails, and no file:line evidence. Acceptance criterion 1 is not verifiable without knowing what the rule must say; AC2 ('ddx doc audit clean') names a command but does not specify scope or file. No named test function. Description is a one-line restatement of the title and cannot stand alone as a sub-agent prompt.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T15:39:32.476018199Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:39:47.463138485Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-575cda17\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:39:47.518156108Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:39:47.627597272Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"feat-022 spec path identified: Bead lacks file:line evidence for FEAT-022 location, does not specify the exact 'guardrail list' content to add, and AC #2 ('ddx doc audit clean') references a command without confirming it exists or what it checks. A sub-agent cold-reading this bead cannot determine what text to write into FEAT-022 or where the amendment belongs within the document.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T17:20:01.847517128Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-rapid-mlx\",\"resolved_model\":\"mlx-community/Qwen3.6-27B-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T17:23:28.885975705Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-rapid-mlx model=mlx-community/Qwen3.6-27B-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"mlx-community/Qwen3.6-27B-8bit\",\"actual_power\":5,\"actual_provider\":\"grendel-rapid-mlx\",\"attempt_id\":\"20260514T172016-8b76385f\",\"bead_id\":\"ddx-575cda17\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T17:23:29.087426857Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=mlx-community/Qwen3.6-27B-8bit harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:8000/v1/chat/completions\\\": dial tcp 100.97.179.68:8000: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:8000/v1/chat/completions\\\": dial tcp 100.97.179.68:8000: i/o timeout\",\"harness\":\"fiz\",\"model\":\"mlx-community/Qwen3.6-27B-8bit\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel-rapid-mlx\"}",
+          "created_at": "2026-05-14T17:23:29.243008272Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel-rapid-mlx model=mlx-community/Qwen3.6-27B-8bit connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:8000/v1/chat/completions\": dial tcp 100.97.179.68:8000: i/o timeout\npowerClass=cheap\nresult_rev=e5e359e48f92a2dc69d7d4bcfff7dea6f9c5137c\nbase_rev=e5e359e48f92a2dc69d7d4bcfff7dea6f9c5137c\nretry_after=2026-05-14T17:38:29Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T17:23:29.373597152Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T17:23:29Z",
+          "model": "mlx-community/Qwen3.6-27B-8bit",
+          "provider": "grendel-rapid-mlx",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "work-heartbeat-at": "2026-05-14T22:15:24.885838698Z",
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl",
+      "work-last-status": "preclaim-hook-failed"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T221622-d471c903",
+    "prompt": ".ddx/executions/20260514T221622-d471c903/prompt.md",
+    "manifest": ".ddx/executions/20260514T221622-d471c903/manifest.json",
+    "result": ".ddx/executions/20260514T221622-d471c903/result.json",
+    "checks": ".ddx/executions/20260514T221622-d471c903/checks.json",
+    "usage": ".ddx/executions/20260514T221622-d471c903/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-575cda17-20260514T221622-d471c903"
+  },
+  "prompt_sha": "741b78f40b1bfa229c48196b0d043013ae1d5f5c45536f9eadffc6ada843e0e0"
+}
