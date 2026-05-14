@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260514T202757-74326a80",
+  "bead_id": "ddx-f9d10583",
+  "base_rev": "0889d7607c1a7b1834d687058a8e501470422f9b",
+  "created_at": "2026-05-14T20:28:01.26026668Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f9d10583",
+    "title": "triage: record empty post-attempt output as warning evidence",
+    "description": "PROBLEM\nWhen the runner-backed post-attempt triage hook produces no output, `ddx work` logs only `post-attempt triage error (\u003cbead\u003e execution_failed): triage hook: empty output (continuing)`. That fail-open behavior is correct, but the failure is not durable evidence on the bead and gives the operator no structured reason to distinguish malformed triage output from a transport/provider failure. Observed on 2026-05-14 while trying to run `fizeau-8134d6db`: after repeated provider timeouts, the post-attempt triage hook printed `empty output (continuing)` and the only durable event was the subsequent execute-bead failure.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/triage_hook.go:127-130` treats any `triageResultOutput` error as a hook error and returns it to the loop.\n- `cli/internal/agent/triage_hook.go:220-228` returns `fmt.Errorf(\"triage hook: empty output\")` when both `Result.CondensedOutput` and `Result.Output` are empty.\n- `cli/internal/agent/execute_bead_loop.go:340-345` logs hook errors and returns the original report without calling `recordPostAttemptTriageEvent`, so empty output leaves no `bead-quality.triage-warning` event.\n- By contrast, `cli/internal/agent/triage_hook.go:132-135` already turns non-empty-but-non-JSON output into a malformed warning result that is recorded durably.\n\nPROPOSED FIX\n- Treat empty triage output as malformed triage output, not as a hook transport error. Return a `TriageResult` with `Malformed=true` and a `DecodeWarnings` entry like field=`output`, warning=`empty output`.\n- Ensure `runPostAttemptTriage` logs it through the existing warning path (`post-attempt triage warning ...`) and `recordPostAttemptTriageEvent` persists a `bead-quality.triage-warning` event with the warning detail.\n- Reserve `post-attempt triage error` for actual dispatch/runtime errors where the triage hook could not run at all.\n\nNON-SCOPE\n- Do not change the triage classification schema.\n- Do not make triage failures fatal; the attempt must still fail open.\n- Do not change pre-claim intake empty-output handling in this bead.\n\nParent: ddx-a9d130d0. Dependencies: none.",
+    "acceptance": "1. Add `TestPostAttemptTriageHook_EmptyOutputRecordsWarningEvent` in `cli/internal/agent/triage_hook_test.go`: a hook/runner result with empty `CondensedOutput` and empty `Output` causes `ExecuteBeadWorker.Run` to leave the attempt status unchanged, append a `bead-quality.triage-warning` event, and include `\"empty output\"` in the event body.\n2. The same test asserts the worker log contains `post-attempt triage warning` and does not contain `post-attempt triage error` for empty triage output.\n3. Existing malformed non-JSON behavior remains covered by `TestTriageHook_WarningOnlyRecordsEvidenceWithoutOutcomeReason`; update it only if needed to share helper code.\n4. Dispatch errors still use the error path: `TestPostAttemptTriageHookErrorDoesNotOverwriteReport` or equivalent continues to assert actual hook errors are logged as `post-attempt triage error` and do not produce a false warning event.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestPostAttemptTriageHook_EmptyOutputRecordsWarningEvent|TestTriageHook_WarningOnlyRecordsEvidenceWithoutOutcomeReason|TestPostAttemptTriageHookError\" -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:beads",
+      "bead-quality",
+      "kind:bug",
+      "reliability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T20:26:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "545498",
+      "execute-loop-heartbeat-at": "2026-05-14T20:26:24.541080181Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T202757-74326a80",
+    "prompt": ".ddx/executions/20260514T202757-74326a80/prompt.md",
+    "manifest": ".ddx/executions/20260514T202757-74326a80/manifest.json",
+    "result": ".ddx/executions/20260514T202757-74326a80/result.json",
+    "checks": ".ddx/executions/20260514T202757-74326a80/checks.json",
+    "usage": ".ddx/executions/20260514T202757-74326a80/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f9d10583-20260514T202757-74326a80"
+  },
+  "prompt_sha": "e97ba70d9a8cc5333cd6e9ac014ae0999cf1c06c34d6c6683a965ba0fa8ff46c"
+}
