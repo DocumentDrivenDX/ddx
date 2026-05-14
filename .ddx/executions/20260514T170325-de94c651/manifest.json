@@ -1,0 +1,70 @@
+{
+  "attempt_id": "20260514T170325-de94c651",
+  "bead_id": "ddx-17388615",
+  "base_rev": "d8085be0596db14ee0a5531cb98894ff32e31948",
+  "created_at": "2026-05-14T17:03:39.136717697Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-17388615",
+    "title": "docs: normalize Story 16 run-detail specs across FEAT-008/010/019",
+    "description": "PROBLEM\nStory 16.3 needs the run-detail page, evidence whitelist, resolver contract, and review deep-link documented together. The current docs already cover parts of that surface, but the wording is split across three specs and still needs to be normalized into one coherent Story 16.3 contract.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-web-ui.md:835-841 documents the run-detail evidence whitelist and `run_detail_view`, but it does not present the Story 16.3 trust-boundary language as a dedicated subsection.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:1215-1236 defines `run_detail_view` audit semantics, but the run resolver contract and drain-time persistence notes need to be spelled out in the same place.\n- docs/helix/01-frame/features/FEAT-019-agent-evaluation.md:64-73 ties evaluation drill-down to the shared run-detail surface, but the review surface still needs an explicit `/runs/[runId]` deep-page link.\n\nPROPOSED FIX\n- FEAT-008: add or normalize the Run-detail-page subsection so the trust boundary and evidence whitelist are explicit.\n- FEAT-010: extend the run resolver contract text with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path), bundle-root confinement, and normalized ToolCallEntry persistence at drain time.\n- FEAT-019: point the review surface at `/runs/[runId]` so the deep page is called out directly.\n\nNON-SCOPE\n- Server implementation changes.\n- Playwright or Bun test work.\n- Any new auth or RBAC semantics.\n\nACCEPTANCE\n1. FEAT-008, FEAT-010, and FEAT-019 are updated in the repository and read as one consistent run-detail contract.\n2. The updated prose includes the trust boundary, evidence whitelist, resolver contract, drain-time persistence note, ToolCallEntry definition, and `/runs/[runId]` deep-page reference.\n3. `cd cli \u0026\u0026 go test ./...` green.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "area:docs",
+      "kind:spec",
+      "spec:FEAT-008",
+      "spec:FEAT-010",
+      "spec:FEAT-019"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T17:02:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "225509",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:36:21.139280522Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-17388615\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:36:21.193226298Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:36:21.295210125Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T17:02:27.454779389Z",
+      "execute-loop-last-detail": "landing worktree has staged changes after waiting 2s:\nD\t.ddx/executions/20260514T155540-0f695a5e/checks/production-reachability.json\nD\t.ddx/executions/20260514T155540-0f695a5e/manifest.json\nD\t.ddx/executions/20260514T155540-0f695a5e/prompt.md\nD\t.ddx/executions/20260514T155540-0f695a5e/result.json\nD\t.ddx/executions/20260514T155540-0f695a5e/usage.json\nM\tcli/cmd/command_factory.go\nM\tcli/cmd/execute_loop_shared.go\nM\tcli/cmd/try.go\nD\tcli/cmd/try_prose_test.go\nM\tcli/internal/agent/execute_bead_loop.go\nD\tcli/internal/agent/prose_evidence.go",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-14T16:21:24Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T170325-de94c651",
+    "prompt": ".ddx/executions/20260514T170325-de94c651/prompt.md",
+    "manifest": ".ddx/executions/20260514T170325-de94c651/manifest.json",
+    "result": ".ddx/executions/20260514T170325-de94c651/result.json",
+    "checks": ".ddx/executions/20260514T170325-de94c651/checks.json",
+    "usage": ".ddx/executions/20260514T170325-de94c651/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-17388615-20260514T170325-de94c651"
+  },
+  "prompt_sha": "f0ede3d22d4bdc81d334d35e9189b7b6f6399002d304cdc4f712ece3e6e19d74"
+}
