@@ -3893,6 +3893,10 @@ func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
 // RouteRequest off the failed power tier when a ladder is available.
 const executeLoopFailedRoutesKey = "work-failed-routes"
 
+// failedRoutesMaxEntries is the FIFO ring cap on the work-failed-routes list.
+// When the list is full, the oldest entry is evicted on insert.
+const failedRoutesMaxEntries = 32
+
 // RouteExclusionWindow is the time window within which a recorded
 // work-failed-routes entry suppresses a (provider, model) pair in
 // the next RouteRequest.ExcludedRoutes payload. Entries older than this
@@ -3909,10 +3913,12 @@ type FailedRouteEntry struct {
 	ActualPower int    `json:"actual_power,omitempty"`
 	Reason      string `json:"reason,omitempty"`
 	At          string `json:"at,omitempty"`
+	Count       int    `json:"count,omitempty"`
 }
 
 // readFailedRoutes decodes the failed-route list from a bead's Extra. Returns
-// nil when absent or malformed; never errors.
+// nil when absent or malformed; never errors. Transparently normalizes legacy
+// data: collapses duplicates by (provider, model) and caps at failedRoutesMaxEntries.
 func readFailedRoutes(extra map[string]any) []FailedRouteEntry {
 	if len(extra) == 0 {
 		return nil
@@ -3929,19 +3935,83 @@ func readFailedRoutes(extra map[string]any) []FailedRouteEntry {
 	if err := json.Unmarshal(encoded, &entries); err != nil {
 		return nil
 	}
-	return entries
+	return normalizeFailedRoutes(entries)
 }
 
-// appendFailedRoute records entry on b.Extra under executeLoopFailedRoutesKey
-// without duplicating (provider, model) tuples already in the list.
+// normalizeFailedRoutes collapses duplicate (provider, model) entries keeping
+// the newest At timestamp and summing counts, then caps the list at
+// failedRoutesMaxEntries by evicting oldest entries (FIFO). Used by
+// readFailedRoutes to transparently migrate legacy bead data on read.
+func normalizeFailedRoutes(entries []FailedRouteEntry) []FailedRouteEntry {
+	if len(entries) == 0 {
+		return entries
+	}
+	type key struct{ provider, model string }
+	index := make(map[key]int, len(entries))
+	collapsed := make([]FailedRouteEntry, 0, len(entries))
+	for _, e := range entries {
+		k := key{e.Provider, e.Model}
+		if i, ok := index[k]; ok {
+			existingCount := collapsed[i].Count
+			if existingCount == 0 {
+				existingCount = 1
+			}
+			ec := e.Count
+			if ec == 0 {
+				ec = 1
+			}
+			if e.At > collapsed[i].At {
+				collapsed[i] = FailedRouteEntry{
+					Provider:    e.Provider,
+					Model:       e.Model,
+					ActualPower: e.ActualPower,
+					Reason:      e.Reason,
+					At:          e.At,
+					Count:       existingCount + ec,
+				}
+			} else {
+				collapsed[i].Count = existingCount + ec
+			}
+		} else {
+			index[k] = len(collapsed)
+			c := e
+			if c.Count == 0 {
+				c.Count = 1
+			}
+			collapsed = append(collapsed, c)
+		}
+	}
+	if len(collapsed) > failedRoutesMaxEntries {
+		collapsed = collapsed[len(collapsed)-failedRoutesMaxEntries:]
+	}
+	return collapsed
+}
+
+// appendFailedRoute records entry on b.Extra under executeLoopFailedRoutesKey.
+// If an identical (provider, model) already exists, its At timestamp is updated
+// and its Count is incremented rather than appending a duplicate. When the list
+// is at failedRoutesMaxEntries capacity, the oldest entry is evicted (FIFO).
 func appendFailedRoute(b *bead.Bead, entry FailedRouteEntry) {
 	ensureBeadExtra(b)
 	existing := readFailedRoutes(b.Extra)
-	for _, e := range existing {
+	for i, e := range existing {
 		if e.Provider == entry.Provider && e.Model == entry.Model {
+			existing[i].At = entry.At
+			if entry.ActualPower != 0 {
+				existing[i].ActualPower = entry.ActualPower
+			}
+			if entry.Reason != "" {
+				existing[i].Reason = entry.Reason
+			}
+			existing[i].Count = e.Count + 1
+			b.Extra[executeLoopFailedRoutesKey] = existing
 			return
 		}
 	}
+	if len(existing) >= failedRoutesMaxEntries {
+		existing = existing[1:]
+	}
+	entry.Count = 1
 	b.Extra[executeLoopFailedRoutesKey] = append(existing, entry)
 }
 
