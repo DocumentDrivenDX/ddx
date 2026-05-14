@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -202,6 +204,60 @@ func TestWorkFocusEmptyQueueExitsSuccessfully(t *testing.T) {
 	assert.Contains(t, out, "Worker-ready summary")
 	assert.Contains(t, out, "Worker recommendation")
 	assert.Contains(t, out, "Unknowns")
+}
+
+// TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus verifies AC #5:
+// a fresh worker-status sidecar (last_activity_at within LivenessTTL) is
+// reported as an active worker by `ddx work focus`, even when the bead
+// tracker's claim timestamp has not moved. Without the sidecar, the same
+// bead would appear merely as in_progress + an "unknown liveness" hazard.
+func TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus(t *testing.T) {
+	b := &bead.Bead{
+		ID:    "ddx-focus-active-worker",
+		Title: "In-progress bead with live worker",
+	}
+	env := setupWorkFocusEnv(t, b)
+
+	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	require.NoError(t, store.Claim(b.ID, "test-worker"))
+
+	// Write a fresh worker status sidecar so the focus report can detect
+	// the live worker without consulting the (stale-by-design) tracker
+	// claim timestamp.
+	workerID := "wkr-focus-active"
+	require.NoError(t, workerstatus.WriteLiveness(env.Dir, workerID, workerstatus.LivenessRecord{
+		WorkerID:       workerID,
+		ProjectRoot:    env.Dir,
+		CurrentBead:    b.ID,
+		AttemptID:      "att-focus-001",
+		Phase:          "running",
+		Harness:        "claude",
+		Model:          "opus",
+		PID:            4242,
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	root := NewCommandFactory(env.Dir).NewRootCommand()
+	out, err := executeCommand(root, "work", "focus", "--json")
+	require.NoError(t, err)
+
+	var report WorkFocusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	require.Len(t, report.ActiveWorkers, 1,
+		"focus must surface the live worker sidecar even when the tracker claim timestamp has not changed")
+	assert.Equal(t, workerID, report.ActiveWorkers[0].WorkerID)
+	assert.Equal(t, b.ID, report.ActiveWorkers[0].CurrentBead)
+	assert.Equal(t, "att-focus-001", report.ActiveWorkers[0].AttemptID)
+	assert.Equal(t, "running", report.ActiveWorkers[0].Phase)
+
+	// The in_progress liveness "unknown" hazard must NOT be added when an
+	// active sidecar is present — otherwise the focus report would
+	// contradict itself.
+	for _, u := range report.Unknowns {
+		assert.NotContains(t, u, "worker process liveness",
+			"active sidecar must suppress the in_progress liveness unknown")
+	}
 }
 
 // TestWorkFocusJSONStableKeys verifies AC3: --json returns the five stable keys.

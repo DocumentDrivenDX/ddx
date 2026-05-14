@@ -22,7 +22,7 @@ func TestWithHeartbeat_TickerFiredBeforeReturn(t *testing.T) {
 	tickCh := make(chan time.Time, 1)
 	tickCh <- time.Now()
 
-	_, err := withHeartbeatCh(context.Background(), "bead-1", tickCh, store, func() (struct{}, error) {
+	_, err := withHeartbeatCh(context.Background(), "bead-1", tickCh, store, nil, func() (struct{}, error) {
 		time.Sleep(10 * time.Millisecond)
 		return struct{}{}, nil
 	})
@@ -43,7 +43,7 @@ func TestWithHeartbeat_CancelPropagates(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = withHeartbeatCh(ctx, "bead-1", tickCh, store, func() (struct{}, error) {
+		_, _ = withHeartbeatCh(ctx, "bead-1", tickCh, store, nil, func() (struct{}, error) {
 			cancel()
 			return struct{}{}, errors.New("fn error")
 		})

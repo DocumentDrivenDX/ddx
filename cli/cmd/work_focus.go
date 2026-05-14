@@ -4,10 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
+
+// WorkFocusActiveWorker is one entry in the active_workers section.
+type WorkFocusActiveWorker struct {
+	WorkerID       string `json:"worker_id"`
+	CurrentBead    string `json:"current_bead,omitempty"`
+	AttemptID      string `json:"attempt_id,omitempty"`
+	Phase          string `json:"phase,omitempty"`
+	LastActivityAt string `json:"last_activity_at,omitempty"`
+}
 
 // WorkFocusBead is one item in the operator-attention section.
 type WorkFocusBead struct {
@@ -33,11 +44,12 @@ type WorkFocusReadySummary struct {
 
 // WorkFocusReport is the structured result of "ddx work focus".
 type WorkFocusReport struct {
-	HumanRequired        []WorkFocusBead        `json:"human_required"`
-	BlockedOrPlanning    []WorkFocusBlockedBead `json:"blocked_or_planning"`
-	ReadySummary         WorkFocusReadySummary  `json:"ready_summary"`
-	WorkerRecommendation string                 `json:"worker_recommendation"`
-	Unknowns             []string               `json:"unknowns"`
+	HumanRequired        []WorkFocusBead         `json:"human_required"`
+	BlockedOrPlanning    []WorkFocusBlockedBead  `json:"blocked_or_planning"`
+	ReadySummary         WorkFocusReadySummary   `json:"ready_summary"`
+	ActiveWorkers        []WorkFocusActiveWorker `json:"active_workers,omitempty"`
+	WorkerRecommendation string                  `json:"worker_recommendation"`
+	Unknowns             []string                `json:"unknowns"`
 }
 
 // workerReadyDepthLabel returns a human-readable depth label for the ready count.
@@ -55,7 +67,14 @@ func workerReadyDepthLabel(count int) string {
 }
 
 // buildWorkFocusReport queries the store and returns a WorkFocusReport.
-func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
+//
+// projectRoot, when non-empty, enables the active_workers section: any
+// .ddx/workers/<id>/status.json sidecar with a last_activity_at within
+// workerstatus.LivenessTTL is reported as a live worker. This lets the
+// operator-facing view treat a long-running attempt as active even when the
+// bead tracker's claim timestamp has not changed (heartbeats are written
+// outside beads.jsonl to avoid tracker churn).
+func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusReport, error) {
 	// Collect operator-attention beads (status=proposed, any dep state).
 	operatorAttentionBeads, err := store.ProposedOperatorAttention()
 	if err != nil {
@@ -133,14 +152,22 @@ func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
 	}
 	inProgressCount := len(inProgressBeads)
 
-	// Conservative worker recommendation.
-	workerRec := buildWorkerRecommendation(readyCount, inProgressCount)
+	// Active worker sidecars: workers whose status.json was updated within
+	// workerstatus.LivenessTTL are treated as active even when the bead
+	// tracker claim timestamp is older. This is the operator-facing answer
+	// to "is the worker alive?" — the bead row alone cannot answer it
+	// because heartbeats are recorded outside beads.jsonl.
+	activeWorkers := collectActiveWorkers(projectRoot, time.Now())
+
+	// Conservative worker recommendation. Treat each active sidecar as
+	// observed capacity in addition to in_progress beads.
+	workerRec := buildWorkerRecommendation(readyCount, inProgressCount+len(activeWorkers))
 
 	// Unknowns: worker process liveness is not verifiable from the bead store.
 	var unknowns []string
-	if inProgressCount > 0 {
+	if inProgressCount > 0 && len(activeWorkers) == 0 {
 		unknowns = append(unknowns, fmt.Sprintf(
-			"worker process liveness: %d bead(s) are in_progress but active worker process presence cannot be verified from the bead store",
+			"worker process liveness: %d bead(s) are in_progress but no active worker sidecar is fresh; check `ddx work status` for live processes",
 			inProgressCount,
 		))
 	}
@@ -149,9 +176,38 @@ func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
 		HumanRequired:        humanRequired,
 		BlockedOrPlanning:    blockedOrPlanning,
 		ReadySummary:         readySummary,
+		ActiveWorkers:        activeWorkers,
 		WorkerRecommendation: workerRec,
 		Unknowns:             unknowns,
 	}, nil
+}
+
+// collectActiveWorkers reads .ddx/workers/*/status.json sidecars under
+// projectRoot and returns the ones whose last_activity_at is within
+// workerstatus.LivenessTTL. Empty projectRoot or a missing workers dir
+// yields nil.
+func collectActiveWorkers(projectRoot string, now time.Time) []WorkFocusActiveWorker {
+	if projectRoot == "" {
+		return nil
+	}
+	records, err := workerstatus.ListLiveness(projectRoot)
+	if err != nil {
+		return nil
+	}
+	var out []WorkFocusActiveWorker
+	for _, rec := range records {
+		if !rec.IsFresh(now) {
+			continue
+		}
+		out = append(out, WorkFocusActiveWorker{
+			WorkerID:       rec.WorkerID,
+			CurrentBead:    rec.CurrentBead,
+			AttemptID:      rec.AttemptID,
+			Phase:          rec.Phase,
+			LastActivityAt: rec.LastActivityAt.UTC().Format(time.RFC3339Nano),
+		})
+	}
+	return out
 }
 
 // buildWorkerRecommendation returns a conservative recommendation string.
@@ -214,7 +270,7 @@ func (f *CommandFactory) runWorkFocus(cmd *cobra.Command, _ []string) error {
 	ddxDir := f.WorkingDir + "/.ddx"
 	store := bead.NewStore(ddxDir)
 
-	report, err := buildWorkFocusReport(store)
+	report, err := buildWorkFocusReport(store, f.WorkingDir)
 	if err != nil {
 		return err
 	}
@@ -265,6 +321,18 @@ func printWorkFocusText(cmd *cobra.Command, r WorkFocusReport) error {
 	fmt.Fprintf(out, "\n=== Worker-ready summary ===\n")
 	fmt.Fprintf(out, "  %d bead(s) ready for worker execution (%s)\n", r.ReadySummary.Count, r.ReadySummary.Depth)
 
+	// Section: Active workers (sidecar-derived). Surfaced so an operator
+	// asking "is the worker alive?" gets a positive answer even when the
+	// bead tracker's claim timestamp has not advanced.
+	if len(r.ActiveWorkers) > 0 {
+		fmt.Fprintf(out, "\n=== Active workers (%d) ===\n", len(r.ActiveWorkers))
+		for _, w := range r.ActiveWorkers {
+			fmt.Fprintf(out, "  [%s] bead=%s attempt=%s phase=%s last=%s\n",
+				w.WorkerID, dashIfEmpty(w.CurrentBead), dashIfEmpty(w.AttemptID),
+				dashIfEmpty(w.Phase), w.LastActivityAt)
+		}
+	}
+
 	// Section: Worker recommendation
 	fmt.Fprintf(out, "\n=== Worker recommendation ===\n")
 	fmt.Fprintf(out, "  %s\n", r.WorkerRecommendation)
@@ -280,4 +348,11 @@ func printWorkFocusText(cmd *cobra.Command, r WorkFocusReport) error {
 	}
 
 	return nil
+}
+
+func dashIfEmpty(s string) string {
+	if s == "" {
+		return "-"
+	}
+	return s
 }

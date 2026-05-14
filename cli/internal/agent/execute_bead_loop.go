@@ -728,6 +728,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	wasIdle := false
 	lastIdleQueueSignature := ""
 
+	// Worker-side liveness sidecar. Updated on each heartbeat tick so an
+	// operator's `ddx work focus` / GraphQL panel can answer "is this worker
+	// alive and what is it doing?" without paying tracker rewrite cost. The
+	// sidecar is best-effort: write/sink failures do not interrupt the loop.
+	// The reporter is constructed here but does NOT emit until a bead is
+	// claimed — that order keeps loop.start as the first envelope on the
+	// EventSink so structured-event consumers continue to see it.
+	var liveness *work.SidecarLivenessReporter
+	if runtime.ProjectRoot != "" && runtime.SessionID != "" {
+		liveness = work.NewSidecarLivenessReporter(runtime.ProjectRoot, runtime.SessionID, runtime.SessionID, runtime.EventSink)
+	}
+
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
@@ -1601,7 +1613,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
 		attemptCtx := ctx
-		attemptOut, err := work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, func() (agenttry.Outcome, error) {
+		if liveness != nil {
+			liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), profile, harness, model, profile, 0)
+			// Tick once now so the sidecar shows the new attempt before the
+			// first heartbeat fires; long attempts otherwise wait one
+			// heartbeat interval before the sidecar reflects the current bead.
+			liveness.OnTick(now())
+		}
+		attemptOut, err := work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 				Bead:                candidate,
 				Executor:            tryExecutor(w.Executor),
@@ -1616,6 +1635,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Cooldown:            LandConflictCooldown,
 			})
 		})
+		if liveness != nil {
+			liveness.ClearAttempt()
+			liveness.OnTick(now())
+		}
 		report := fromTryReport(attemptOut.Report)
 		if report.BeadID == "" {
 			report.BeadID = candidate.ID
