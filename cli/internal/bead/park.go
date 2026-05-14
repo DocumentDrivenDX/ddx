@@ -8,14 +8,15 @@ import "fmt"
 type ParkReason string
 
 const (
-	ParkIntakeRejection            ParkReason = "intake_rejection"
-	ParkNoChangesOperatorRequired  ParkReason = "no_changes_operator_required"
-	ParkPostReviewMalfunction      ParkReason = "post_review_malfunction"
-	ParkReviewTerminal             ParkReason = "review_terminal"
-	ParkConflictRecovery           ParkReason = "conflict_recovery"
-	ParkReviewRequestClarification ParkReason = "review_request_clarification"
-	ParkLadderExhaustionManual     ParkReason = "ladder_exhaustion_manual"
-	ParkAutoRecoveryFailed         ParkReason = "auto_recovery_failed"
+	ParkIntakeRejection              ParkReason = "intake_rejection"
+	ParkNoChangesOperatorRequired    ParkReason = "no_changes_operator_required"
+	ParkPostReviewMalfunction        ParkReason = "post_review_malfunction"
+	ParkReviewTerminal               ParkReason = "review_terminal"
+	ParkConflictRecovery             ParkReason = "conflict_recovery"
+	ParkReviewRequestClarification   ParkReason = "review_request_clarification"
+	ParkLadderExhaustionManual       ParkReason = "ladder_exhaustion_manual"
+	ParkAutoRecoveryFailed           ParkReason = "auto_recovery_failed"
+	ParkProviderConnectivityRepeated ParkReason = "provider_connectivity_repeated"
 )
 
 type parkReasonMeta struct {
@@ -24,14 +25,15 @@ type parkReasonMeta struct {
 }
 
 var parkReasonMetaMap = map[ParkReason]parkReasonMeta{
-	ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "legacy agent execute-loop"},
-	ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "legacy agent execute-loop"},
-	ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "legacy agent execute-loop"},
-	ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "legacy agent execute-loop"},
-	ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "legacy agent execute-loop"},
-	ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "legacy agent execute-loop"},
-	ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "legacy agent execute-loop"},
-	ParkAutoRecoveryFailed:         {Reason: "automated recovery failed; operator review required", Source: "legacy agent execute-loop"},
+	ParkIntakeRejection:              {Reason: "pre-claim intake blocked execution", Source: "legacy agent execute-loop"},
+	ParkNoChangesOperatorRequired:    {Reason: "operator decision required before another automated attempt", Source: "legacy agent execute-loop"},
+	ParkPostReviewMalfunction:        {Reason: "review BLOCK triage reached operator-required rung", Source: "legacy agent execute-loop"},
+	ParkReviewTerminal:               {Reason: "terminal review block requires operator decision", Source: "legacy agent execute-loop"},
+	ParkConflictRecovery:             {Reason: "land conflict requires operator judgment", Source: "legacy agent execute-loop"},
+	ParkReviewRequestClarification:   {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "legacy agent execute-loop"},
+	ParkLadderExhaustionManual:       {Reason: "recovery:manual label set; operator review required", Source: "legacy agent execute-loop"},
+	ParkAutoRecoveryFailed:           {Reason: "automated recovery failed; operator review required", Source: "legacy agent execute-loop"},
+	ParkProviderConnectivityRepeated: {Reason: "provider unreachable on repeated attempts; operator review required", Source: "legacy agent execute-loop"},
 }
 
 // ParkToProposed transitions the bead to proposed status for operator
