@@ -120,6 +120,7 @@ Examples:
 
 	cmd.Flags().Bool("check", false, "Check for updates without applying")
 	cmd.Flags().Bool("force", false, "Force update even if already latest")
+	cmd.Flags().Bool("discard-local", false, "Overwrite uncommitted local changes (backs up originals to .ddx/update-backup/)")
 
 	return cmd
 }

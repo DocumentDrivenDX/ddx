@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
@@ -16,16 +20,17 @@ import (
 
 // UpdateOptions represents update command configuration
 type UpdateOptions struct {
-	Check       bool
-	Force       bool
-	Reset       bool
-	Sync        bool
-	Strategy    string
-	Backup      bool
-	Interactive bool
-	Abort       bool
-	DryRun      bool
-	Resource    string // selective update resource
+	Check        bool
+	Force        bool
+	Reset        bool
+	Sync         bool
+	Strategy     string
+	Backup       bool
+	Interactive  bool
+	Abort        bool
+	DryRun       bool
+	Resource     string // selective update resource
+	DiscardLocal bool   // discard local changes when overwriting
 }
 
 // ConflictInfo represents information about a detected conflict
@@ -65,6 +70,119 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 	return displayUpdateResult(cmd, result, opts)
 }
 
+// isUpdateTargetDirty returns true when filePath exists, is tracked by git,
+// and has uncommitted changes (staged or unstaged). Untracked files return false.
+// Returns false on any error (git unavailable, not a repo, etc.).
+func isUpdateTargetDirty(workingDir, filePath string) bool {
+	abs := filePath
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(workingDir, filePath)
+	}
+	if _, err := os.Stat(abs); os.IsNotExist(err) {
+		return false
+	}
+
+	rel, err := filepath.Rel(workingDir, abs)
+	if err != nil {
+		rel = filePath
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	cmd := gitpkg.Command(ctx, workingDir, "status", "--porcelain", "--", rel)
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if len(line) < 2 {
+			continue
+		}
+		// XY: X=index status, Y=worktree status. "??" = untracked — skip.
+		if line[:2] != "??" {
+			return true
+		}
+	}
+	return false
+}
+
+// enumerateSkillUpdateTargets returns the destination paths that
+// refreshShippedSkills would write to (files from the embedded ddx skill).
+func enumerateSkillUpdateTargets(workingDir string) []string {
+	var result []string
+	_ = fs.WalkDir(skills.SkillFiles, "ddx", func(p string, d fs.DirEntry, _ error) error {
+		if d == nil || d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel("ddx", filepath.FromSlash(p))
+		if err != nil {
+			return nil
+		}
+		for _, base := range []string{
+			filepath.Join(workingDir, ".agents", "skills", "ddx"),
+			filepath.Join(workingDir, ".claude", "skills", "ddx"),
+		} {
+			result = append(result, filepath.Join(base, rel))
+		}
+		return nil
+	})
+	return result
+}
+
+// collectDirtyUpdateTargets returns absolute paths of files that would be
+// overwritten by ddx update and currently have uncommitted git changes.
+// Returns nil, nil when the working dir is not a git repository.
+func collectDirtyUpdateTargets(workingDir string) ([]string, error) {
+	if !gitpkg.IsRepository(workingDir) {
+		return nil, nil
+	}
+
+	var candidates []string
+	candidates = append(candidates, enumerateSkillUpdateTargets(workingDir)...)
+
+	state, err := registry.LoadState()
+	if err == nil {
+		for _, entry := range state.Installed {
+			for _, f := range entry.Files {
+				expanded := registry.ExpandHome(f)
+				if !filepath.IsAbs(expanded) {
+					expanded = filepath.Join(workingDir, expanded)
+				}
+				candidates = append(candidates, expanded)
+			}
+		}
+	}
+
+	var dirty []string
+	for _, c := range candidates {
+		if isUpdateTargetDirty(workingDir, c) {
+			dirty = append(dirty, c)
+		}
+	}
+	return dirty, nil
+}
+
+// backupUpdateFile copies filePath to backupBase/<path-relative-to-workingDir>.
+func backupUpdateFile(workingDir, filePath, backupBase string) error {
+	abs := filePath
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(workingDir, filePath)
+	}
+	rel, err := filepath.Rel(workingDir, abs)
+	if err != nil {
+		rel = filepath.Base(abs)
+	}
+	dst := filepath.Join(backupBase, rel)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
+}
+
 // performUpdate checks GitHub for the latest version of each installed plugin
 // and updates any that are outdated (or all if --force). Always refreshes the
 // embedded `ddx` skill and the AGENTS.md block so projects that ran `ddx init`
@@ -73,6 +191,35 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 // update` must not replace a locally-built dogfood binary with the latest
 // public release.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
+	// Pre-check: detect dirty update targets before writing anything (atomic
+	// refuse — no file is mutated if any target is dirty without --discard-local).
+	dirtyFiles, _ := collectDirtyUpdateTargets(workingDir)
+	if len(dirtyFiles) > 0 && !opts.DiscardLocal {
+		var sb strings.Builder
+		sb.WriteString("ddx update: uncommitted changes in files that would be overwritten:\n")
+		for _, f := range dirtyFiles {
+			sb.WriteString("  ")
+			if rel, err := filepath.Rel(workingDir, f); err == nil {
+				sb.WriteString(rel)
+			} else {
+				sb.WriteString(f)
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\nCommit or stash these changes first, or use --force --discard-local to overwrite anyway.")
+		return nil, fmt.Errorf("%s", sb.String())
+	}
+
+	// Backup dirty files before overwriting when --discard-local is set.
+	var backupPath string
+	if len(dirtyFiles) > 0 && opts.DiscardLocal {
+		backupPath = filepath.Join(workingDir, ".ddx", "update-backup",
+			time.Now().UTC().Format("20060102T150405"))
+		for _, f := range dirtyFiles {
+			_ = backupUpdateFile(workingDir, f, backupPath)
+		}
+	}
+
 	// Refresh the shipped `ddx` skill copy + AGENTS.md block first, regardless
 	// of whether any plugins are installed. This is what lets older projects
 	// pick up new SKILL.md / reference/*.md content without re-init.
@@ -80,7 +227,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 
 	state, err := registry.LoadState()
 	if err != nil || len(state.Installed) == 0 {
-		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. No packages installed."}, nil
+		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. No packages installed.", BackupPath: backupPath}, nil
 	}
 
 	reg := registry.BuiltinRegistry()
@@ -124,13 +271,14 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	}
 
 	if len(updated) == 0 {
-		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. All packages are up to date."}, nil
+		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. All packages are up to date.", BackupPath: backupPath}, nil
 	}
 
 	return &UpdateResult{
 		Success:      true,
 		Message:      "Updated: " + strings.Join(updated, ", "),
 		UpdatedFiles: updated,
+		BackupPath:   backupPath,
 	}, nil
 }
 
@@ -169,6 +317,7 @@ func extractUpdateOptions(cmd *cobra.Command, args []string) (*UpdateOptions, er
 	opts.Interactive, _ = cmd.Flags().GetBool("interactive")
 	opts.Abort, _ = cmd.Flags().GetBool("abort")
 	opts.DryRun, _ = cmd.Flags().GetBool("dry-run")
+	opts.DiscardLocal, _ = cmd.Flags().GetBool("discard-local")
 
 	// Handle mine/theirs flags by converting to strategy
 	updateMine, _ := cmd.Flags().GetBool("mine")
