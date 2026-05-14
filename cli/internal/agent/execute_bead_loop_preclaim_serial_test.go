@@ -414,8 +414,8 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
 	})
 
-	t.Run("timeout_unclaims_and_continues_in_watch_mode", func(t *testing.T) {
-		store, first, second := newExecuteLoopTestStore(t)
+	t.Run("timeout_warns_and_executes_original_bead_in_watch_mode", func(t *testing.T) {
+		store, first, _ := newExecuteLoopTestStore(t)
 		var eventSink bytes.Buffer
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -424,9 +424,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		worker := &ExecuteBeadWorker{
 			Store: store,
 			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-				if beadID == first.ID {
-					t.Fatal("timed-out readiness bead must not reach execution")
-				}
+				assert.Equal(t, first.ID, beadID, "readiness timeout should not skip the claimed bead")
 				execCalled.Add(1)
 				cancel()
 				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
@@ -451,19 +449,13 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 		require.NotNil(t, result)
 
-		assert.Equal(t, int32(1), execCalled.Load(), "watch mode must continue to the next ready bead after a readiness timeout")
+		assert.Equal(t, int32(1), execCalled.Load(), "watch mode must attempt the original bead after a readiness timeout")
 		assert.Equal(t, 1, result.Successes)
 		assert.Equal(t, 1, result.Attempts)
 
 		gotFirst, err := store.Get(first.ID)
 		require.NoError(t, err)
-		assert.Equal(t, bead.StatusOpen, gotFirst.Status, "timed-out readiness bead must be released back to the queue")
-		assert.Empty(t, gotFirst.Owner)
-		assert.NotEmpty(t, gotFirst.Extra["execute-loop-retry-after"])
-
-		gotSecond, err := store.Get(second.ID)
-		require.NoError(t, err)
-		assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+		assert.Equal(t, bead.StatusClosed, gotFirst.Status, "successful best-effort attempt should close normally")
 		assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
 	})
 

@@ -1170,7 +1170,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						if strictIntakeBlocking() {
 							return "review the readiness timeout and retry the bead later"
 						}
-						return "unclaim and continue draining other ready work"
+						return "continue with implementation; review should create follow-up work for any readiness gaps"
 					}(),
 					map[string]any{
 						"bead_id":       candidate.ID,
@@ -1206,11 +1206,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				} else {
 					emit("pre_claim_intake.warn", eventBody)
 					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "timeout", timeoutDetail, now().UTC())
-					if err := w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "timeout", timeoutDetail, ""); err != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness cooldown error: %v\n", err)
-					}
-					_ = w.Store.Unclaim(candidate.ID)
-					continue
+					intakeOutcome = PreClaimIntakeActionableAtomic
 				}
 			}
 			switch {
