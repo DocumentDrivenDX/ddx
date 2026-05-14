@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	iofs "io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,7 +16,17 @@ import (
 // InstallPackage downloads the source release tarball and copies declared install mappings
 // into projectRoot. It records installed files (project-relative when possible) in the
 // returned InstalledEntry.
+//
+// Compatibility shim: this is the historical entrypoint that downloads from a
+// remote tarball. New callers should pick the explicit From* variant that
+// matches their source (Remote/Dir/FS).
 func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
+	return InstallPackageFromRemote(pkg, projectRoot)
+}
+
+// InstallPackageFromRemote downloads the source release tarball and installs
+// the package via the shared core install implementation.
+func InstallPackageFromRemote(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        pkg.Name,
 		Version:     pkg.Version,
@@ -31,6 +42,78 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
 	}
 
+	tmpDir, err := os.MkdirTemp("", "ddx-install-"+pkg.Name+"-*")
+	if err != nil {
+		return entry, fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	tarballURL := githubTarballURL(pkg.Source, pkg.Version)
+	extractedDir, err := downloadAndExtract(tarballURL, tmpDir)
+	if err != nil {
+		return entry, fmt.Errorf("downloading %s: %w", tarballURL, err)
+	}
+
+	return installFromExtractedDir(pkg, extractedDir, projectRoot, entry)
+}
+
+// InstallPackageFromDir installs the package from an already-extracted source
+// directory (e.g. a local checkout) via the shared core install implementation.
+// Network is not used.
+func InstallPackageFromDir(pkg *Package, sourceDir, projectRoot string) (InstalledEntry, error) {
+	entry := InstalledEntry{
+		Name:        pkg.Name,
+		Version:     pkg.Version,
+		Type:        pkg.Type,
+		Source:      pkg.Source,
+		InstalledAt: time.Now(),
+	}
+
+	if pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
+	}
+
+	return installFromExtractedDir(pkg, sourceDir, projectRoot, entry)
+}
+
+// InstallPackageFromFS installs the package from an in-memory or embedded
+// filesystem (e.g. //go:embed) rooted at the package directory. The FS is
+// materialized into a temporary directory and passed through the shared core
+// install implementation. Network is not used.
+func InstallPackageFromFS(pkg *Package, src iofs.FS, projectRoot string) (InstalledEntry, error) {
+	entry := InstalledEntry{
+		Name:        pkg.Name,
+		Version:     pkg.Version,
+		Type:        pkg.Type,
+		Source:      pkg.Source,
+		InstalledAt: time.Now(),
+	}
+
+	if src == nil {
+		return entry, fmt.Errorf("InstallPackageFromFS: source fs is nil")
+	}
+
+	if pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
+		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
+	}
+
+	tmpDir, err := os.MkdirTemp("", "ddx-install-fs-"+pkg.Name+"-*")
+	if err != nil {
+		return entry, fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	if err := materializeFS(src, tmpDir); err != nil {
+		return entry, fmt.Errorf("materializing embedded package: %w", err)
+	}
+
+	return installFromExtractedDir(pkg, tmpDir, projectRoot, entry)
+}
+
+// installFromExtractedDir is the shared core install routine used by the
+// Remote, Dir, and FS entrypoints. It assumes the package contents are
+// already present on disk at sourceDir.
+func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry InstalledEntry) (InstalledEntry, error) {
 	// Switch into projectRoot so relative install targets resolve against the
 	// project, not the caller's cwd. This keeps copyMapping, ExpandHome, and
 	// the recorded entry.Files paths project-relative.
@@ -45,20 +128,7 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 		}
 	}
 
-	// Download and extract the release tarball to a temp directory.
-	tmpDir, err := os.MkdirTemp("", "ddx-install-"+pkg.Name+"-*")
-	if err != nil {
-		return entry, fmt.Errorf("creating temp dir: %w", err)
-	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
-
-	tarballURL := githubTarballURL(pkg.Source, pkg.Version)
-	extractedDir, err := downloadAndExtract(tarballURL, tmpDir)
-	if err != nil {
-		return entry, fmt.Errorf("downloading %s: %w", tarballURL, err)
-	}
-
-	if manifestPkg, manifestMissing, manifestIssues, manifestErr := LoadPackageManifestWithFallback(extractedDir, pkg); manifestErr == nil || (os.IsNotExist(manifestErr) && manifestMissing) {
+	if manifestPkg, manifestMissing, manifestIssues, manifestErr := LoadPackageManifestWithFallback(sourceDir, pkg); manifestErr == nil || (os.IsNotExist(manifestErr) && manifestMissing) {
 		if manifestPkg != nil {
 			pkg = manifestPkg
 		}
@@ -83,14 +153,14 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
 	}
 
-	if issues := ValidatePackageStructure(extractedDir, pkg); len(issues) > 0 {
+	if issues := ValidatePackageStructure(sourceDir, pkg); len(issues) > 0 {
 		return entry, fmt.Errorf("validating package structure: %s", JoinValidationIssues(issues))
 	}
 
 	// Process Root mapping — copy the plugin tree into the project-local
 	// install location (e.g. .ddx/plugins/<name>/).
 	var installedRoot string
-	files, err := copyMapping(extractedDir, pkg.Install.Root)
+	files, err := copyMapping(sourceDir, pkg.Install.Root)
 	if err != nil {
 		return entry, fmt.Errorf("installing plugin root: %w", err)
 	}
@@ -109,7 +179,7 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	// into its declared target. No symlinks are ever created -- this is the
 	// cross-platform invariant that FEAT-015 relies on.
 	if len(pkg.Install.Skills) > 0 {
-		written, err := installMappings(extractedDir, pkg.Install.Skills)
+		written, err := installMappings(sourceDir, pkg.Install.Skills)
 		if err != nil {
 			return entry, fmt.Errorf("installing skills: %w", err)
 		}
@@ -126,7 +196,7 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 			fmt.Fprintf(os.Stderr, "notice: %s is a symlink → %s (developer mode, skipping copy)\n", dst, target)
 			entry.Files = append(entry.Files, dst)
 		} else {
-			srcDir := extractedDir
+			srcDir := sourceDir
 			if installedRoot != "" {
 				srcDir = installedRoot
 			}
@@ -167,6 +237,38 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	}
 
 	return entry, nil
+}
+
+// materializeFS writes every regular file in src into destDir, preserving the
+// relative path layout. Symlinks in the source FS (uncommon for embed.FS) are
+// skipped to keep the cross-platform invariant FEAT-015 relies on.
+func materializeFS(src iofs.FS, destDir string) error {
+	return iofs.WalkDir(src, ".", func(p string, d iofs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if p == "." {
+			return nil
+		}
+		target := filepath.Join(destDir, filepath.FromSlash(p))
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		data, readErr := iofs.ReadFile(src, p)
+		if readErr != nil {
+			return readErr
+		}
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
 }
 
 // installMappings applies each mapping relative to srcDir and returns the
