@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260514T080830-81b1dec2",
+  "bead_id": "ddx-d36ff666",
+  "base_rev": "6739be68b4b1ab36e4e12bae404a8a4b97c0f8ae",
+  "created_at": "2026-05-14T08:08:43.792743972Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d36ff666",
+    "title": "routing: avoid repeating a failing auto-routed provider",
+    "description": "PROBLEM\nA no-flag `ddx work` run now reaches implementation, but Fizeau repeatedly selected `fiz/bragi/qwen3.5-27b` under `policy=cheap` even though actual chat calls to `http://bragi:1234/v1/chat/completions` timed out. The worker spent about 2m45s retrying the same unreachable endpoint and ended `ddx-b4c5151a` with `execution_failed`, while the route event recorded `fallback_chain:[]`. This preserves forward progress compared with lifecycle parking, but it still wastes attempts and does not adapt away from a provider that just failed.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/service_run.go:241-258 sends the policy/profile request to Fizeau and correctly leaves concrete provider selection to Fizeau, but DDx does not add any negative constraint or route-failure feedback after the selected provider fails.\n- cli/internal/agent/execute_bead_loop.go:2140-2209 records the failed attempt and moves on/cools down, but it does not trigger an immediate route retry that excludes the just-failed provider or escalates within the same policy after provider connectivity failure.\n- cli/internal/agent/profile_select.go:451-470 chooses the policy/profile only; it has no path for using recent route-failure evidence when asking Fizeau for the next route.\n\nPROPOSED FIX\nAdd a route-failure feedback path for provider connectivity failures. When a service-backed attempt fails before producing agent output because the selected provider endpoint timed out or was unreachable, DDx should record structured route failure evidence and retry the same bead with the same operator intent while avoiding the exact failed route when Fizeau supports that constraint, or by raising the fallback floor/policy only after the cheap/free route has actually failed. The retry must not hardcode provider names or policy names.\n\nNON-SCOPE\nDo not bypass Fizeau for normal provider/model selection. Do not hardcode `bragi`, `cheap`, `default`, or local provider tier names. Do not mark local providers unusable globally based on a single attempt without an expiry. Do not route directly to paid providers when another free/local eligible candidate can be tried.\n\nOBSERVED EVIDENCE\n- Worker route: `do route fiz/qwen3.5-27b provider=bragi reason=policy=cheap; score=105.0`.\n- Provider failures: repeated `dial tcp 100.127.38.115:1234: i/o timeout`.\n- Bead event for `ddx-b4c5151a`: `routing ... provider=bragi model=qwen3.5-27b fallback_chain:[]` followed by `execute-bead ... outcome_reason=timeout`.",
+    "acceptance": "1. Add a focused test such as `TestExecuteBeadWorker_ProviderTimeoutRetriesWithRouteExclusion` proving a service attempt that fails with a provider connectivity timeout records structured route failure evidence and retries without selecting the same provider/model tuple when an alternate eligible route exists.\n2. Add or update routing-intent evidence tests so `fallback_chain` or an equivalent field records the failed provider/model and the subsequent route choice.\n3. The retry preserves operator intent: no `--harness`, `--provider`, or `--model` pins are invented, and explicit operator pins still win and do not silently route elsewhere.\n4. The implementation does not hardcode Fizeau policy names or provider names; it consumes route metadata/constraints exposed by Fizeau or local structured failure evidence.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestExecuteBeadWorker_ProviderTimeoutRetriesWithRouteExclusion|Test.*RoutingIntent|Test.*RouteFailure\" -count=1` passes.\n6. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:routing",
+      "kind:bug",
+      "phase:build",
+      "observed-failure",
+      "fizeau-integration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T08:08:09Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3268859",
+      "execute-loop-heartbeat-at": "2026-05-14T08:08:09.204687022Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T080830-81b1dec2",
+    "prompt": ".ddx/executions/20260514T080830-81b1dec2/prompt.md",
+    "manifest": ".ddx/executions/20260514T080830-81b1dec2/manifest.json",
+    "result": ".ddx/executions/20260514T080830-81b1dec2/result.json",
+    "checks": ".ddx/executions/20260514T080830-81b1dec2/checks.json",
+    "usage": ".ddx/executions/20260514T080830-81b1dec2/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-d36ff666-20260514T080830-81b1dec2"
+  },
+  "prompt_sha": "133cb5e9c8f721320af691b058d9bd5da5a34da85489733d030cacd58ebfb3ac"
+}
