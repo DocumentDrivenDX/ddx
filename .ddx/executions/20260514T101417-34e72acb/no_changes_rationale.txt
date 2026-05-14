@@ -1,0 +1,17 @@
+verification_command: cd cli && go test ./internal/server/ -count=1 -timeout 60s -run '^(TestReviewDispatcher_DispatchTurn_RecordsTurn|TestReviewDispatcher_NoToolMode_ClaudeHarness|TestReview_FullTurnLifecycle)$'
+
+The bead's work is already merged at d775a5dd4 ("feat(server): add ReviewDispatcher for review-session turn dispatch [ddx-f7c3d512]", merged via 827253f86) and present on HEAD of this worktree's checkpoint base (19788819b). The working tree is clean — there is no new code to write.
+
+AC coverage at HEAD:
+
+1. DispatchReviewTurn defined at cli/internal/server/review_dispatcher.go:37.
+2. Turn append to .ddx/reviews/<session-id>/turns.jsonl is implemented at cli/internal/server/review_dispatcher.go:91-95 via d.Store.AppendTurn; verified by TestReviewDispatcher_DispatchTurn_RecordsTurn reading turns.jsonl from .ddx/<reviewSessionsDirName>/<id>/<reviewTurnsName>.
+3. No-tool mode for claude harness: PermissionsReadOnlyReviewer set on every dispatch (cli/internal/server/review_dispatcher.go:58 and :66) and verified by TestReviewDispatcher_NoToolMode_ClaudeHarness asserting runner.lastOpts.Permissions == agent.PermissionsReadOnlyReviewer.
+4. Codex best-effort documented inline at cli/internal/server/review_dispatcher.go:32-36 (codex is not in agent.readOnlyCapableHarnesses; ValidateReadOnlyReviewerDispatch rejects it).
+5. TestReviewDispatcher_DispatchTurn_RecordsTurn — present at cli/internal/server/review_dispatcher_test.go:27, passes.
+6. TestReviewDispatcher_NoToolMode_ClaudeHarness — present at cli/internal/server/review_dispatcher_test.go:87, passes.
+7. TestReview_FullTurnLifecycle — present at cli/internal/server/review_dispatcher_test.go:122, passes.
+8. Targeted server tests are green (see verification_command). The broader ./internal/server/... suite contains long-running probe/federation tests that exceed short timeouts; those are unrelated to this bead's scope.
+9. lefthook pre-commit has nothing to check because there are no staged changes.
+
+No new commit is justified — committing without changes would either be empty or would have to touch unrelated files.
