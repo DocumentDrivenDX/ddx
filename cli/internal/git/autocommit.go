@@ -20,6 +20,10 @@ type AutoCommitConfig struct {
 	// Use this only for workflows where pre-staged work is intentionally part
 	// of the same checkpoint, such as closing a bead with staged implementation.
 	IncludeStaged bool
+	// RunGit, if non-nil, replaces the default git runner for staging and commit
+	// calls. Callers can supply gitlock.RunGitWithIndexLockRecovery to recover
+	// from transient .git/index.lock contention without changing semantics.
+	RunGit func(ctx context.Context, dir string, args ...string) ([]byte, error)
 }
 
 // AutoCommit stages and commits a file with a structured message.
@@ -79,14 +83,20 @@ func AutoCommitFiles(filePaths []string, artifactID string, operation string, cf
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	runGit := cfg.RunGit
+	if runGit == nil {
+		runGit = func(ctx context.Context, dir string, args ...string) ([]byte, error) {
+			return Command(ctx, dir, args...).CombinedOutput()
+		}
+	}
+
 	// Stage only file names after switching into the files' parent directory.
 	// This keeps relative callers working when paths are nested under a repo.
 	addArgs := []string{"add"}
 	for _, path := range filePaths {
 		addArgs = append(addArgs, filepath.Base(path))
 	}
-	addCmd := Command(ctx, repoDir, addArgs...)
-	if out, err := addCmd.CombinedOutput(); err != nil {
+	if out, err := runGit(ctx, repoDir, addArgs...); err != nil {
 		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
 	}
 
@@ -100,8 +110,7 @@ func AutoCommitFiles(filePaths []string, artifactID string, operation string, cf
 			commitArgs = append(commitArgs, filepath.Base(path))
 		}
 	}
-	commitCmd := Command(ctx, repoDir, commitArgs...)
-	if out, err := commitCmd.CombinedOutput(); err != nil {
+	if out, err := runGit(ctx, repoDir, commitArgs...); err != nil {
 		return "", fmt.Errorf("git commit failed: %w\n%s", err, string(out))
 	}
 

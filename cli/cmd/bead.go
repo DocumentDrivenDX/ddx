@@ -121,7 +121,7 @@ func (f *CommandFactory) beadAutoCommitPathsWithMode(operation string, paths []s
 		CommitPrefix:  cfg.Git.CommitPrefix,
 		IncludeStaged: includeStaged,
 	}
-	sha, err := gitpkg.AutoCommitFiles(paths, "beads", operation, acCfg)
+	sha, err := bead.AutoCommitFilesWithRecovery(paths, "beads", operation, acCfg)
 	if err != nil {
 		return "", fmt.Errorf("auto-commit beads tracker after %s: %w", operation, err)
 	}
