@@ -459,6 +459,109 @@ func TestTriageHook_UnknownClassificationRecordsWarningWithoutOutcomeReason(t *t
 	assert.True(t, found, "unknown classification must be reviewable without steering scheduling")
 }
 
+func TestPostAttemptTriageHook_EmptyOutputRecordsWarningEvent(t *testing.T) {
+	root := newTriageHookTestRoot(t)
+
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+	candidate := &bead.Bead{ID: "ddx-triage-empty", Title: "empty output triage", Priority: 0}
+	require.NoError(t, store.Create(candidate))
+
+	runner := &triageHookRunnerStub{
+		run: func(_ RunArgs) (*Result, error) {
+			return &Result{ExitCode: 0, Output: "", CondensedOutput: ""}, nil
+		},
+	}
+	triageHook := NewPostAttemptTriageHook(root, store, triageHookTestConfig(), nil, runner, nil)
+
+	var log bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "zero diff",
+				BaseRev:   "abc123",
+				ResultRev: "def456",
+				SessionID: "sess-empty",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:                  true,
+		Log:                   &log,
+		PostAttemptTriageHook: triageHook,
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.Results[0].Status)
+	assert.Empty(t, result.Results[0].OutcomeReason, "empty triage output must not steer scheduling")
+	assert.Empty(t, result.Results[0].RetryAfter)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&runner.calls))
+
+	assert.Contains(t, log.String(), "post-attempt triage warning")
+	assert.NotContains(t, log.String(), "post-attempt triage error")
+
+	events, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	found := false
+	for _, ev := range events {
+		if ev.Kind == "bead-quality.triage-warning" {
+			found = true
+			assert.Contains(t, ev.Body, "empty output")
+			assert.Contains(t, ev.Body, `"malformed":true`)
+			break
+		}
+	}
+	assert.True(t, found, "empty triage output must be durable evidence as a triage-warning event")
+}
+
+func TestPostAttemptTriageHookErrorDoesNotOverwriteReport(t *testing.T) {
+	store, candidate, _ := newExecuteLoopTestStore(t)
+	var log bytes.Buffer
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "zero diff",
+				BaseRev:   "abc123",
+				ResultRev: "def456",
+				SessionID: "sess-err",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &log,
+		PostAttemptTriageHook: func(_ context.Context, _ string, _ ExecuteBeadReport) (TriageResult, error) {
+			return TriageResult{}, assert.AnError
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, result.Results, 1)
+	report := result.Results[0]
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
+	assert.Empty(t, report.OutcomeReason, "dispatch errors must not steer OutcomeReason")
+
+	assert.Contains(t, log.String(), "post-attempt triage error")
+	assert.NotContains(t, log.String(), "post-attempt triage warning")
+
+	events, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		assert.NotEqual(t, "bead-quality.triage-warning", ev.Kind, "dispatch errors must not produce a triage-warning event")
+		assert.NotEqual(t, "bead-quality.triage", ev.Kind, "dispatch errors must not produce a triage event")
+	}
+}
+
 func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	store, candidate, _ := newExecuteLoopTestStore(t)
 
