@@ -1459,7 +1459,7 @@ func TestReadinessUnavailableOutputIsActionable(t *testing.T) {
 		}),
 	}
 
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", BeadQualityLintBlockThresholdScore: 1}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	var logBuf bytes.Buffer

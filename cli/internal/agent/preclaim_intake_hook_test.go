@@ -292,7 +292,7 @@ func TestPreClaimIntakeHook_PreservesExplicitRoutingPins(t *testing.T) {
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
-func TestLifecycleHooks_UnpinnedWorkersStillUseProfileSelection(t *testing.T) {
+func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToFizeau(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 	rcfg := intakeHookTestConfig()
@@ -335,7 +335,7 @@ func TestLifecycleHooks_UnpinnedWorkersStillUseProfileSelection(t *testing.T) {
 	lint, err := NewPreDispatchLintHook(root, store, rcfg, lintSvc, nil)(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 8, lint.Score)
-	assert.Equal(t, "cheap", lintSvc.lastReq.Policy)
+	assert.Empty(t, lintSvc.lastReq.Policy)
 	assert.Empty(t, lintSvc.lastReq.Harness)
 	assert.Empty(t, lintSvc.lastReq.Provider)
 	assert.Empty(t, lintSvc.lastReq.Model)
