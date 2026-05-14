@@ -302,11 +302,17 @@ pre-commit:
         # git.Command wrapper in Phase 2a).
         unset $(git rev-parse --local-env-vars)
 
+        # Collect staged paths and pass them to --paths so doctor only validates
+        # the checks relevant to the staged files (config or resource), skipping
+        # global installation checks (e.g. legacy skill symlinks) that are
+        # unrelated to the content of the staged change. [ddx-777f4a09]
+        staged_paths="$(git diff --cached --name-only | tr '\n' ' ')"
+
         # Check for DDx command availability
         if command -v ddx >/dev/null 2>&1; then
-          ddx doctor >/dev/null 2>&1
+          ddx doctor --paths "$staged_paths" >/dev/null 2>&1
         elif [ -x "./cli/ddx" ]; then
-          ./cli/ddx doctor >/dev/null 2>&1
+          ./cli/ddx doctor --paths "$staged_paths" >/dev/null 2>&1
         fi
       fail_text: "DDx validation failed. Run 'ddx doctor' for details"
 
