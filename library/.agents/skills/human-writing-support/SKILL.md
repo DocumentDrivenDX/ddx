@@ -5,71 +5,117 @@ description: Support DDx prose work by preserving voice, improving execution-use
 
 # Human Writing Support
 
-Use this skill when you are writing, rewriting, editing, or reviewing DDx prose:
-specs, ADRs, beads, docs, website copy, release notes, and other public text.
-
-## What This Is
+Trigger: any writing, rewriting, editing, or reviewing of Markdown under
+`docs/` (specs, ADRs, plans, beads, release notes, website copy).
 
 This is guidance for better human writing, not an AI detector and not a
 detector bypass tool. The goal is prose that helps a maintainer or agent
 execute, review, or trust a DDx document.
 
-## Core Guidance
+## Required Workflow
 
-- Preserve the user's voice unless the text is explicitly asking for a new tone.
-- Prefer specific, checkable detail over generic importance language.
-- Keep technical precision intact; do not collapse names, commands, paths,
-  numbers, or constraints into vague summaries.
-- Keep legitimate headings, lists, tables, code blocks, and DDx terminology when
-  they improve clarity.
-- If a deterministic prose check is available, treat it as advisory evidence,
-  not as a banned-word oracle. Fix findings that make the doc less executable
-  or reviewable; leave correct technical wording intact.
+After any docs edit:
 
-## Using `ddx doc prose`
+1. Preserve the author's intent and DDx terminology.
+2. Edit the document.
+3. Run `ddx doc prose --changed`.
+4. Apply high-signal findings.
+5. Rerun `ddx doc prose --changed`.
+6. Summarize remaining intentional exceptions in the change description.
 
-Run `ddx doc prose --changed` after editing Markdown under `docs/`.
+`ddx doc prose` is the only public prose checker surface; do not invoke
+Vale, Hemingway, or other tools directly. Findings are advisory, not
+blocking — apply judgment.
 
-Use a finding when it identifies one of these problems:
+## Preservation Rules
 
-- The sentence makes a broad claim but gives no concrete behavior, boundary,
-  command, artifact, measurement, or acceptance evidence.
-- The prose hides the actor, action, consequence, or review target.
-- The wording replaces a DDx concept with a vague substitute.
-- Repeated or filler text makes the document harder to execute.
+Keep these intact unless the task is explicitly about rewriting them:
 
-Do not "fix" a finding by weakening correct technical prose. Paths, headings,
-tables, commands, API names, quoted contract language, and precise terms are
-often supposed to be dense.
+- Paths, commands, IDs, frontmatter, headings, table structure, API names,
+  function signatures, and acceptance criteria.
+- Quoted source text (do not rewrite quotations).
+- Useful technical density — dense can be correct.
+- Legitimate technical lists, code blocks, and DDx canonical terms.
 
-## By Prose Type
+Do not "fix" a finding by weakening correct technical prose.
 
-### Technical prose
+## Rewrite Guidance
 
-- Preserve exact terminology, APIs, filenames, labels, and acceptance criteria.
-- Prefer edits that sharpen structure and specificity over broad rewrites.
-- Do not remove a technical list just because it looks dense; dense can be
-  correct.
+When applying a finding:
 
-### Planning prose
+- Replace broad claims with actor / action / artifact / evidence.
+- Delete filler transitions when the sentence still reads correctly.
+- Prefer shorter wording when it is equally precise.
+- Split overstuffed sentences only when doing so improves reviewability.
+- Leave a finding unresolved when the flagged text is precise; explain why
+  in the change description.
 
-- Keep decision boundaries, dependencies, risks, and open questions visible.
-- Preserve explicit non-scope statements and acceptance criteria.
-- Avoid turning a plan into motivational language or a vague vision statement.
+## Examples
 
-### Public prose
+### 1. Unsupported benefit claim → concrete rewrite
 
-- Optimize for readability, voice, and concrete claims.
-- Remove generic filler, but keep factual caveats and required qualifiers.
-- Make the prose sound like a person who knows the subject, not a template.
+Before:
 
-## Editing Checks
+> This change significantly improves the developer experience.
 
-- Ask whether each sentence adds a specific fact, decision, constraint, or
-  reviewable implication.
-- Replace broad claims with evidence, examples, concrete outcomes, or named
-  artifacts.
-- Keep a writer's intent unless the text is internally inconsistent or plainly
-  wrong.
-- Prefer small, local edits over full rewrites when the original already has a
-  strong voice.
+After:
+
+> `ddx try` now writes per-attempt evidence under
+> `.ddx/executions/<run-id>/`, so reviewers can inspect prompt, response,
+> and merge result without rerunning the bead.
+
+### 2. AI-slop paragraph → shorter actionable sentence
+
+Before:
+
+> In today's fast-paced software development landscape, it is critically
+> important that we leverage best-in-class tooling to ensure our workflows
+> remain robust, scalable, and future-proof across all stakeholders.
+
+After:
+
+> Run `ddx doc prose --changed` after editing docs so reviewers see the
+> same findings the agent saw.
+
+### 3. Token-cost edit → remove filler while preserving meaning
+
+Before (38 words):
+
+> It is worth noting that, in order to ensure that the bead is properly
+> closed out, the agent should make sure to verify that all of the
+> acceptance criteria have been satisfied before committing the change.
+
+After (15 words):
+
+> Verify every acceptance criterion before committing; do not close the
+> bead with red tests.
+
+### 4. False positive → leave unchanged
+
+The checker flags "must" in:
+
+> AC 6: `lefthook run pre-commit` must pass.
+
+Leave it. "Must" is the correct contract verb for acceptance criteria.
+Record the exception in the change description if `ddx doc prose --changed`
+still surfaces it.
+
+### 5. Table / path / API sample → do not rewrite
+
+Do not rewrite cells, paths, or API examples even if the checker flags
+them. For example, leave this table column intact:
+
+| Command | Purpose |
+|---|---|
+| `ddx bead ready` | List beads with all deps satisfied. |
+| `ddx try <id>` | Run one bead in an isolated worktree. |
+
+And leave path / API samples such as `.ddx/executions/<run-id>/` or
+`buildAgentRunner(ctx, cfg)` unchanged.
+
+## Reporting Exceptions
+
+When `ddx doc prose --changed` still has findings after the second run,
+list the intentional exceptions and the rationale (for example: "AC verb
+'must' is contract language", "table cells are canonical command names").
+Silently ignoring a finding is not acceptable; report it.

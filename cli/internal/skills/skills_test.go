@@ -2,8 +2,10 @@ package skills
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -70,5 +72,50 @@ func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 	}
 	if len(issues) > 0 {
 		t.Fatalf("repo skill validation failed: %v", issues[0])
+	}
+}
+
+// TestHumanWritingSupportSkillContent verifies every tracked copy of the
+// human-writing-support skill includes the required workflow command and
+// preservation rules. Equivalent to the docs-edit-runs-check and
+// preserves-technical-structure evals from the prose-quality plan.
+func TestHumanWritingSupportSkillContent(t *testing.T) {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test file path")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(filename), "..", "..", ".."))
+
+	skillPaths := []string{
+		filepath.Join(repoRoot, "library", ".agents", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(repoRoot, ".agents", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(repoRoot, ".claude", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(repoRoot, ".ddx", "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"),
+	}
+
+	// Required substrings: workflow command (AC3) and preservation rule
+	// surface area (AC4: paths, commands, tables, IDs, acceptance criteria).
+	required := []string{
+		"ddx doc prose --changed",
+		"Preservation Rules",
+		"Paths",
+		"commands",
+		"table",
+		"IDs",
+		"acceptance criteria",
+	}
+
+	for _, p := range skillPaths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Errorf("read %s: %v", p, err)
+			continue
+		}
+		text := string(data)
+		for _, want := range required {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s: missing required substring %q", p, want)
+			}
+		}
 	}
 }
