@@ -1512,9 +1512,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		}
 
-		if runtime.PreDispatchLintHook != nil {
+		// Model-backed lint is only a dispatch gate when a block threshold is
+		// configured. The default warn-only path relies on readiness diagnostics
+		// and must not stall or add advisory event noise before real work.
+		lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
+		if runtime.PreDispatchLintHook != nil && lintThreshold > 0 {
 			lintResult, lintErr := runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
-			lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
 			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
 
 			if lintErr != nil {

@@ -81,7 +81,8 @@ type BeadQualityConfig struct {
 type BeadQualityLintConfig struct {
 	// BlockThresholdScore, when positive, blocks dispatch for valid lint
 	// results whose score falls below the threshold. Zero or unset keeps the
-	// default warn-only behavior.
+	// default warn-only behavior and lets ddx work skip advisory model-backed
+	// lint so queue execution is not delayed by non-gating checks.
 	BlockThresholdScore *int `yaml:"block_threshold_score,omitempty" json:"block_threshold_score,omitempty"`
 }
 

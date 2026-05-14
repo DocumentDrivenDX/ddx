@@ -133,7 +133,9 @@ infrastructure failures.
 - If the hook cannot run, the workflow skill is missing, output cannot be
   parsed, or evidence cannot be written, DDx records the infrastructure failure
   and proceeds.
-- In WARN-ONLY mode, all valid lint results proceed after reporting.
+- In WARN-ONLY mode, `ddx work` may skip model-backed lint scoring after the
+  readiness pass so advisory quality checks do not stall execution or spam bead
+  evidence. Any valid lint result that is produced proceeds after reporting.
 - In BLOCK mode, only a valid post-waiver lint result below the configured
   threshold blocks dispatch.
 - Post-attempt triage failures never erase the attempt result. They annotate the

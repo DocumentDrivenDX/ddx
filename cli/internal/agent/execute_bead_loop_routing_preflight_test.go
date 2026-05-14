@@ -249,7 +249,10 @@ func TestLoop_LintHook_FiresAfterClaim(t *testing.T) {
 		}),
 	}
 
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:                           "worker",
+		BeadQualityLintBlockThresholdScore: 1,
+	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
@@ -266,9 +269,10 @@ func TestLoop_LintHook_FiresAfterClaim(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim should proceed after lint")
 }
 
-func TestLintHook_LowScore_WarnDoesNotBlock(t *testing.T) {
+func TestLintHook_WarnOnlySkipsAdvisoryLintWithoutEvent(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
+	var hookSeen int32
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -288,6 +292,7 @@ func TestLintHook_LowScore_WarnDoesNotBlock(t *testing.T) {
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+			atomic.StoreInt32(&hookSeen, 1)
 			return LintResult{
 				Score:          2,
 				Rationale:      "missing acceptance criteria",
@@ -300,25 +305,14 @@ func TestLintHook_LowScore_WarnDoesNotBlock(t *testing.T) {
 	require.NotNil(t, result)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "warn-only lint must not block claim")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&hookSeen), "warn-only lint must not call model-backed advisory hook")
 	require.Len(t, result.Results, 1)
 
 	events, err := inner.Events(candidate.ID)
 	require.NoError(t, err)
-	var lintEvent *bead.BeadEvent
 	for i := range events {
-		if events[i].Kind == "bead-quality.lint" {
-			lintEvent = &events[i]
-			break
-		}
+		assert.NotEqual(t, "bead-quality.lint", events[i].Kind, "warn-only advisory lint must not add bead event noise")
 	}
-	require.NotNil(t, lintEvent, "lint event must be appended")
-
-	var body map[string]any
-	require.NoError(t, json.Unmarshal([]byte(lintEvent.Body), &body))
-	assert.Equal(t, float64(2), body["score"])
-	assert.Equal(t, "missing acceptance criteria", body["rationale"])
-	assert.Contains(t, body["suggested_fixes"], "add numbered AC")
-	assert.Contains(t, body["waivers_applied"], "epic")
 }
 
 func TestLintHook_BlockMode_RefusesDispatchOnLowScore(t *testing.T) {
@@ -384,24 +378,25 @@ func TestLintHook_BlockMode_RefusesDispatchOnLowScore(t *testing.T) {
 }
 
 func TestLintHook_SkillMissing_ProceedsWithWarning(t *testing.T) {
-	runLintWarningProceedTest(t, "skill missing: bead-lifecycle", func(ctx context.Context, beadID string) (LintResult, error) {
+	runLintWarningProceedTest(t, "skill missing: bead-lifecycle", 0, func(ctx context.Context, beadID string) (LintResult, error) {
 		return LintResult{}, fmt.Errorf("skill missing: bead-lifecycle")
 	})
 }
 
 func TestLintHook_BadJSON_ProceedsWithWarning(t *testing.T) {
-	runLintWarningProceedTest(t, "bad JSON from hook", func(ctx context.Context, beadID string) (LintResult, error) {
+	runLintWarningProceedTest(t, "bad JSON from hook", 0, func(ctx context.Context, beadID string) (LintResult, error) {
 		return LintResult{}, fmt.Errorf("bad JSON from hook")
 	})
 }
 
 func TestLintHook_Timeout_ProceedsWithWarning(t *testing.T) {
-	runLintWarningProceedTest(t, "hook timeout", func(ctx context.Context, beadID string) (LintResult, error) {
-		return LintResult{}, fmt.Errorf("hook timeout")
+	runLintWarningProceedTest(t, "context deadline exceeded", 10*time.Millisecond, func(ctx context.Context, beadID string) (LintResult, error) {
+		<-ctx.Done()
+		return LintResult{}, ctx.Err()
 	})
 }
 
-func runLintWarningProceedTest(t *testing.T, warning string, hook func(context.Context, string) (LintResult, error)) {
+func runLintWarningProceedTest(t *testing.T, warning string, preClaimTimeout time.Duration, hook func(context.Context, string) (LintResult, error)) {
 	t.Helper()
 
 	inner, candidate, _ := newExecuteLoopTestStore(t)
@@ -419,11 +414,15 @@ func runLintWarningProceedTest(t *testing.T, warning string, hook func(context.C
 		}),
 	}
 
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:                           "worker",
+		BeadQualityLintBlockThresholdScore: 5,
+	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:                true,
+		PreClaimTimeout:     preClaimTimeout,
 		PreDispatchLintHook: hook,
 	})
 	require.NoError(t, err)
