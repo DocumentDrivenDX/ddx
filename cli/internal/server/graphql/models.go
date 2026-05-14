@@ -1953,6 +1953,80 @@ type ResultSpec struct {
 	Metric *MetricResultSpec `json:"metric,omitempty"`
 }
 
+// ReviewSession is the server-side review state machine persisted under .ddx/reviews/<id>/. Mirrors the manifest plus the append-only turns transcript so the UI can render the full review conversation.
+type ReviewSession struct {
+	// Unique session identifier
+	ID string `json:"id"`
+	// Artifact under review
+	ArtifactID string `json:"artifactId"`
+	// Artifact content SHA at the time the session was started
+	ArtifactSha string `json:"artifactSha"`
+	// Git rev the artifact was read from (commit/branch/tag), when known
+	ArtifactGitRev *string `json:"artifactGitRev,omitempty"`
+	// Rubric prompt body used as the reviewer system instruction
+	SystemRubric *string `json:"systemRubric,omitempty"`
+	// Library template reference used to render the reviewer prompt
+	TemplateRef *string `json:"templateRef,omitempty"`
+	// Library prompt reference used to render the reviewer prompt
+	PromptRef *string `json:"promptRef,omitempty"`
+	// Lifecycle status: active, completed, or cancelled
+	Status string `json:"status"`
+	// Accumulated reviewer cost in USD across all turns
+	CostUsd float64 `json:"costUSD"`
+	// Optional cost cap. Zero means no cap.
+	MaxBillableUsd float64 `json:"maxBillableUSD"`
+	// Append-only transcript of user and reviewer turns
+	Turns []*ReviewTurn `json:"turns"`
+}
+
+// ReviewSessionEvent is a streaming reviewer event for a review session. The kind field distinguishes between optional delta chunks (kind=delta) and the required final-message event (kind=final) emitted once when the reviewer turn completes.
+type ReviewSessionEvent struct {
+	// Review session this event belongs to
+	SessionID string `json:"sessionId"`
+	// Event kind: 'delta' for streaming chunks, 'final' for the completed reviewer turn
+	Kind string `json:"kind"`
+	// For delta events, the incremental content chunk; for final events, the complete reviewer message body
+	Content string `json:"content"`
+	// Cost in USD for this event (cumulative on final, zero on delta)
+	CostUsd float64 `json:"costUSD"`
+	// Timestamp of the event
+	Timestamp string `json:"timestamp"`
+}
+
+// Input for reviewSessionStart. The session identifier may be omitted; when blank the server allocates one.
+type ReviewSessionStartInput struct {
+	// Optional client-supplied session identifier. When blank the server allocates one.
+	SessionID *string `json:"sessionId,omitempty"`
+	// Artifact under review (path or stable id)
+	ArtifactID string `json:"artifactId"`
+	// Artifact content SHA at session start; cached and compared against the live artifact when a turn fires.
+	ArtifactSha string `json:"artifactSha"`
+	// Library template reference used to render the reviewer prompt
+	TemplateRef *string `json:"templateRef,omitempty"`
+	// Library prompt reference used to render the reviewer prompt
+	PromptRef *string `json:"promptRef,omitempty"`
+	// Optional cost cap in USD; zero means no cap
+	MaxBillableUsd *float64 `json:"maxBillableUSD,omitempty"`
+}
+
+// ReviewTurn is one transcript entry in a review session.
+type ReviewTurn struct {
+	// Turn actor: 'user' or 'reviewer'
+	Actor string `json:"actor"`
+	// Turn content body
+	Content string `json:"content"`
+	// Reviewer cost in USD for this turn (zero for user turns)
+	CostUsd float64 `json:"costUSD"`
+	// When the turn was appended
+	CreatedAt string `json:"createdAt"`
+}
+
+// Input for reviewSessionRespond.turn — a single user-side message appended to the session before the reviewer dispatches.
+type ReviewTurnInput struct {
+	// Turn content body. Required.
+	Content string `json:"content"`
+}
+
 // ReworkReport describes reopen and post-close churn over a time window
 type ReworkReport struct {
 	// Report scope

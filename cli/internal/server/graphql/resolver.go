@@ -153,6 +153,15 @@ type Resolver struct {
 	// ReportedWorkers, when non-nil, supplies the worker_ingest derived view
 	// for the reportedWorkers query. Nil → resolver returns an empty list.
 	ReportedWorkers ReportedWorkersProvider
+	// ReviewSessions backs the reviewSession{Start,Respond,Cancel} mutations
+	// and the reviewSessionEvents subscription. Nil → the resolver lazily
+	// allocates an in-memory default on first use so review mutations work
+	// end-to-end without external wiring (used by tests; the server package
+	// supplies the production implementation).
+	ReviewSessions ReviewSessionService
+	// reviewMu serializes lazy allocation of ReviewSessions when no
+	// implementation was wired at construction time.
+	reviewMu sync.Mutex
 }
 
 // NewResolver returns a zero-initialized resolver root.
