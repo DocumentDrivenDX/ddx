@@ -333,6 +333,7 @@ func readTreeHeadWithRetry(dir string) ([]byte, error) {
 	)
 	start := time.Now()
 	backoff := initialBackoff
+	var lastDiag string
 	for {
 		out, err := internalgit.Command(context.Background(), dir, "read-tree", "HEAD").CombinedOutput()
 		if err == nil {
@@ -342,7 +343,21 @@ func readTreeHeadWithRetry(dir string) ([]byte, error) {
 		if !strings.Contains(string(out), "index.lock") {
 			return out, err
 		}
+		// Identify the lock owner and break the lock if it is stale or
+		// owned by a dead process. This converts a hard 30s wait into an
+		// instant recovery for the common crashed-git case.
+		if result, recErr := recoverGitIndexLock(dir); recErr == nil {
+			lastDiag = result.Reason
+			if result.Removed {
+				// Lock cleared — retry immediately.
+				continue
+			}
+		}
 		if time.Since(start) >= maxElapsed {
+			if lastDiag != "" {
+				return out, fmt.Errorf("%s; index-lock owner: %s: %w",
+					strings.TrimSpace(string(out)), lastDiag, err)
+			}
 			return out, err
 		}
 		time.Sleep(backoff)
