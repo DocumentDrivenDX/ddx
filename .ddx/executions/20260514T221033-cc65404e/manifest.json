@@ -1,0 +1,140 @@
+{
+  "attempt_id": "20260514T221033-cc65404e",
+  "bead_id": "ddx-1664e1d2",
+  "base_rev": "87bbff2abc73fe8da8dbd5b28dbcd1b58a00ae93",
+  "created_at": "2026-05-14T22:10:47.245584582Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1664e1d2",
+    "title": "server: add raw-transcript audit event for run-detail access",
+    "description": "PROBLEM\nStory 16.3 needs an audit event when raw transcript content is accessed, but the current run resolver only records `run_detail_view` on canonical detail loads. There is no dedicated raw-transcript access event or test coverage for that behavior.\n\nROOT CAUSE\n- cli/internal/server/graphql/resolver_runs.go:100-145 appends `run_detail_view` from `recordRunDetailView`, and that hook is only called from `Run`; prompt/response/tool/evidence access does not emit a distinct raw-transcript event.\n- cli/internal/server/graphql/resolver_runs_test.go:332-357 covers the existing `run_detail_view` behavior, but there is no `TestAuditEvent_RawTranscriptViewed` coverage.\n\nPROPOSED FIX\n- Add a dedicated raw-transcript audit event path in the runs GraphQL/server layer.\n- Emit the event when prompt/response/transcript data is accessed, not on tab switches or unrelated navigation.\n- Add `TestAuditEvent_RawTranscriptViewed` covering the new event and its body fields.\n\nNON-SCOPE\n- UI layout changes.\n- Full Playwright stack coverage.\n- Spec prose changes beyond the minimum needed to keep event naming consistent.\n\nACCEPTANCE\n1. `TestAuditEvent_RawTranscriptViewed` exists and verifies the event emission trigger and body schema.\n2. The server code emits the raw-transcript event from the run-detail access path that actually reads prompt/response/transcript content.\n3. Existing `run_detail_view` coverage remains green.\n4. `cd cli \u0026\u0026 go test ./internal/server/graphql/...` green.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "area:server",
+      "kind:fix",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T22:09:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1311878",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:37:10.45471087Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1664e1d2\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:37:10.509531559Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:37:10.616033784Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi-club-3090\",\"resolved_model\":\"qwen3.6-27b-autoround\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T17:10:54.066857333Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi-club-3090 model=qwen3.6-27b-autoround"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.6-27b-autoround\",\"actual_power\":5,\"actual_provider\":\"bragi-club-3090\",\"attempt_id\":\"20260514T170737-70f5df6a\",\"bead_id\":\"ddx-1664e1d2\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T17:10:54.30293475Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard model=qwen3.6-27b-autoround harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:8020/v1/chat/completions\\\": dial tcp 100.127.38.115:8020: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:8020/v1/chat/completions\\\": dial tcp 100.127.38.115:8020: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.6-27b-autoround\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi-club-3090\"}",
+          "created_at": "2026-05-14T17:10:54.468396341Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi-club-3090 model=qwen3.6-27b-autoround connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:8020/v1/chat/completions\": dial tcp 100.127.38.115:8020: i/o timeout\npowerClass=standard\nresult_rev=30b1a0afdff4dd0e3fdf9a457176e62c472ef9f6\nbase_rev=30b1a0afdff4dd0e3fdf9a457176e62c472ef9f6\nretry_after=2026-05-14T17:25:54Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T17:10:54.613369613Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1664e1d2\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T20:37:05.640449696Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: library/skills/ddx/SKILL.md, library/skills/ddx/reference/work.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-14T20:37:54.43647259Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1664e1d2\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T20:57:27.463681721Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/registry/defaultplugin/library/skills/ddx/SKILL.md, cli/internal/registry/defaultplugin/library/skills/ddx/reference/work.md, library/skills/ddx/SKILL.md, library/skills/ddx/reference/work.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-14T20:58:15.341323503Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T17:10:54Z",
+          "model": "qwen3.6-27b-autoround",
+          "provider": "bragi-club-3090",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "work-heartbeat-at": "2026-05-14T22:09:37.036594069Z",
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl",
+      "work-last-status": "preclaim-hook-failed"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T221033-cc65404e",
+    "prompt": ".ddx/executions/20260514T221033-cc65404e/prompt.md",
+    "manifest": ".ddx/executions/20260514T221033-cc65404e/manifest.json",
+    "result": ".ddx/executions/20260514T221033-cc65404e/result.json",
+    "checks": ".ddx/executions/20260514T221033-cc65404e/checks.json",
+    "usage": ".ddx/executions/20260514T221033-cc65404e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1664e1d2-20260514T221033-cc65404e"
+  },
+  "prompt_sha": "bfd830cedac4ee7cbfa3d0ea2f639fb1a93f2ce65a89d9811b00c761bb6db1fb"
+}
