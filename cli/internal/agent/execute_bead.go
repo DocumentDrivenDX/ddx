@@ -803,6 +803,10 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/beads.jsonl.tmp-"):
 		return true
+	case path == ".ddx/workers":
+		return true
+	case strings.HasPrefix(path, ".ddx/workers/"):
+		return true
 	default:
 		return false
 	}
