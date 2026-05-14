@@ -346,6 +346,34 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing
 	assert.Equal(t, "qwen3.5-27b", svc.routeAttempts[0].Model)
 }
 
+func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T) {
+	root := t.TempDir()
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "seed-extra-001",
+		Title: "seed extra",
+		Extra: map[string]any{
+			executeLoopFailedRoutesKey: []FailedRouteEntry{{
+				Provider:    "bragi",
+				Model:       "qwen3.5-27b",
+				ActualPower: 5,
+				Reason:      FailureModeProviderConnectivity,
+				At:          now.Add(-time.Minute).Format(time.RFC3339),
+			}},
+		},
+	}))
+	svc := &passthroughTestService{}
+
+	seedRecentRouteAttemptsFromTracker(context.Background(), svc, root, now)
+
+	require.Len(t, svc.routeAttempts, 1)
+	assert.Equal(t, "failed", svc.routeAttempts[0].Status)
+	assert.Equal(t, "bragi", svc.routeAttempts[0].Provider)
+	assert.Equal(t, "qwen3.5-27b", svc.routeAttempts[0].Model)
+}
+
 // TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown
 // service event type does not disturb the final projection path. DDx should
 // pass through the event stream without trying to interpret or rewrite the

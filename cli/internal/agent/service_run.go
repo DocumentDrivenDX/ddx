@@ -379,6 +379,28 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 	cutoff := now.Add(-ProviderUnavailableCooldown)
 	seen := map[string]struct{}{}
 	for _, b := range beads {
+		for _, failed := range readFailedRoutes(b.Extra) {
+			at, _ := time.Parse(time.RFC3339, strings.TrimSpace(failed.At))
+			if at.IsZero() {
+				at = now
+			}
+			if at.Before(cutoff) || at.After(now.Add(time.Minute)) || strings.TrimSpace(failed.Provider) == "" {
+				continue
+			}
+			key := "\x00" + failed.Provider + "\x00" + failed.Model
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
+				Provider:  failed.Provider,
+				Model:     failed.Model,
+				Status:    "failed",
+				Reason:    FailureModeProviderConnectivity,
+				Error:     FailureModeProviderConnectivity,
+				Timestamp: at,
+			})
+		}
 		events, err := store.Events(b.ID)
 		if err != nil {
 			continue
