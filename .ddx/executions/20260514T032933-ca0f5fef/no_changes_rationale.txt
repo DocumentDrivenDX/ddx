@@ -1,0 +1,29 @@
+verification_command: cd cli && go test ./cmd/... -run "TestWorkStatus.*|TestServerWorkers.*" -count=1
+
+The bead's acceptance criteria are already satisfied at base-rev
+26fec7ee76f04aba43cce8187d305164628327db. The implementation landed in
+commit f4ea19edf "feat(work): scope live worker reports to the requested
+project [ddx-c3219628]" and was preserved through the subsequent fix
+4a95e919f. Concretely:
+
+- `ddx work status` exists at cli/cmd/work_status.go with --project,
+  --all-projects, and --json flags, registered as a subcommand in
+  cli/cmd/work.go.
+- The supporting package lives at cli/internal/workerstatus/ and
+  filters live workers by canonical project root.
+- AC1-AC4 tests (TestWorkStatusDefaultsToCurrentProjectOnly,
+  TestWorkStatusAllProjectsShowsExplicitGlobalView,
+  TestWorkStatusNoLiveWorkersNamesProjectRoot,
+  TestWorkStatusInfersBeadAndExecutionWorktree) exist in
+  cli/cmd/work_status_test.go and pass.
+- AC5/AC6 skill docs already document the project-scoped worker-status
+  rule and the --all-projects escape hatch in all three skill trees:
+  .agents/skills/ddx/reference/{status,work}.md,
+  .claude/skills/ddx/reference/{status,work}.md, and
+  cli/internal/skills/ddx/reference/{status,work}.md (verified
+  byte-identical with diff).
+- `ddx skills check` validates the three skill trees ("validated 24
+  skill files").
+
+No code or doc change is required. The verification_command above is
+the AC7 test invocation, which exits 0 against the current tree.
