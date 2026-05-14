@@ -1,0 +1,83 @@
+{
+  "attempt_id": "20260514T172847-db27381f",
+  "bead_id": "ddx-4fcea250",
+  "base_rev": "cca776a11c7bcc418d9627dbb080f3e7748a5c0b",
+  "created_at": "2026-05-14T17:29:00.926577965Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4fcea250",
+    "title": "review: Frontend ReviewPanel + active-reviews indicator + artifact-changed banner",
+    "description": "ReviewPanel component on artifact detail view. Active-reviews indicator (no reviewer dropdown — codex cut). Artifact-changed banner if artifact is mutated mid-review (sha drift).",
+    "acceptance": "1. ReviewPanel renders + handles streaming deltas. 2. Active-reviews indicator visible. 3. Drift banner triggers on sha mismatch. 4. Component tests pass.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "area:web",
+      "kind:feature",
+      "phase:2",
+      "story:18"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T17:27:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "225509",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"component location specified: Bead names a 'ReviewPanel component on artifact detail view' but provides no file paths, no SvelteKit route/component locations, no GraphQL query/subscription names to wire to, and no test function names. AC #1 references 'streaming deltas' without specifying the subscription source (presumably the reviewSession events subscription from ddx-de278b8d, but not stated). AC #2 'Active-reviews indicator visible' has no acceptance signal — visible where, driven by what query. AC #3 'sha mismatch' does not name which sha field or where it is observed. AC #4 'Component tests pass' does not name Test* functions or test files. Frontend is SvelteKit + Houdini GraphQL (per CLAUDE.md), but the bead does not point to cli/internal/server/frontend paths. A sub-agent reading this cold cannot pick files to edit without operator guidance.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T15:41:27.131149376Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:41:41.856310202Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-4fcea250\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:41:41.913239906Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:41:42.02137981Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"root_cause_with_file_line: Bead lacks file:line evidence pointing to where ReviewPanel should live in the SvelteKit frontend (cli/internal/server/frontend/), no governing FEAT-/ADR-/story:18 spec excerpt inlined, no named test function (Test* or *.test.ts file path), no GraphQL subscription/query name for streaming deltas, no sha-drift detection mechanism specified, and no AC line for `cd cli \\u0026\\u0026 go test` or frontend test command. Description is three sentences of intent — insufficient as a self-contained sub-agent prompt per the 8-criterion rubric.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T17:28:30.409673373Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T17:27:44.669204267Z",
+      "execute-loop-last-detail": "landing worktree has staged changes after waiting 2s:\nD\t.ddx/executions/20260514T155540-0f695a5e/checks/production-reachability.json\nD\t.ddx/executions/20260514T155540-0f695a5e/manifest.json\nD\t.ddx/executions/20260514T155540-0f695a5e/prompt.md\nD\t.ddx/executions/20260514T155540-0f695a5e/result.json\nD\t.ddx/executions/20260514T155540-0f695a5e/usage.json\nM\tcli/cmd/command_factory.go\nM\tcli/cmd/execute_loop_shared.go\nM\tcli/cmd/try.go\nD\tcli/cmd/try_prose_test.go\nM\tcli/internal/agent/execute_bead_loop.go\nD\tcli/internal/agent/prose_evidence.go",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-14T16:21:37Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T172847-db27381f",
+    "prompt": ".ddx/executions/20260514T172847-db27381f/prompt.md",
+    "manifest": ".ddx/executions/20260514T172847-db27381f/manifest.json",
+    "result": ".ddx/executions/20260514T172847-db27381f/result.json",
+    "checks": ".ddx/executions/20260514T172847-db27381f/checks.json",
+    "usage": ".ddx/executions/20260514T172847-db27381f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-4fcea250-20260514T172847-db27381f"
+  },
+  "prompt_sha": "8820e31aa250b377e89468563c4c979f4fea4dcd7b21004e71b6daf24b8e2b3b"
+}
