@@ -291,7 +291,7 @@ func TestLifecycleHooks_UnpinnedWorkersStillUseProfileSelection(t *testing.T) {
 	intake, err := intakeHook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, intake.Outcome)
-	assert.Equal(t, "cheap", intakeSvc.lastReq.Policy)
+	assert.Equal(t, "smart", intakeSvc.lastReq.Policy)
 	assert.Empty(t, intakeSvc.lastReq.Harness)
 	assert.Empty(t, intakeSvc.lastReq.Provider)
 	assert.Empty(t, intakeSvc.lastReq.Model)

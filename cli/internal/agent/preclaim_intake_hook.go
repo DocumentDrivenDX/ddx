@@ -144,9 +144,9 @@ func (p preClaimReadinessChecksPayload) Len() int {
 // using the repository's triage prompt and returns one of the typed intake
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
-// The hook uses the normal service execution path. Unpinned workers get the
-// lifecycle hook's strongest-profile hint; explicitly pinned workers keep their
-// operator route pins. Route failures are infrastructure failures, not
+// The hook uses the normal service execution path. Unpinned workers use the
+// warmed lifecycle profile snapshot when available; explicitly pinned workers
+// keep their operator route pins. Route failures are infrastructure failures, not
 // bead-readiness decisions, so they return intake_error and let the loop use
 // its fail-open readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
@@ -156,6 +156,7 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 // NewPreClaimIntakeHookWithLog constructs the pre-claim intake hook and emits
 // the prompt plus live service progress to log when provided.
 func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+	WarmProfileSnapshotForProject(projectRoot, svc, runner)
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {

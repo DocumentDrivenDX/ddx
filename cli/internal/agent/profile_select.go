@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"math"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -13,17 +15,25 @@ import (
 	agentlib "github.com/easel/fizeau"
 )
 
-const profileSnapshotCacheWindow = 30 * time.Second
+const (
+	profileSnapshotCacheWindow       = 5 * time.Minute
+	profileSnapshotRefreshInterval   = 30 * time.Second
+	profileSnapshotRefreshTimeout    = 15 * time.Second
+	profileSnapshotRefreshRetryAfter = 5 * time.Second
+)
 
 var (
 	profileSnapshotCacheMu sync.Mutex
-	profileSnapshotCache   = map[agentlib.FizeauService]profileSnapshotCacheEntry{}
+	profileSnapshotCache   = map[string]profileSnapshotCacheEntry{}
 	profileSnapshotNow     = time.Now
 )
 
 type profileSnapshotCacheEntry struct {
-	snap     ProfileSnapshot
-	loadedAt time.Time
+	snap             ProfileSnapshot
+	loadedAt         time.Time
+	refreshing       bool
+	refreshStartedAt time.Time
+	lastAttemptAt    time.Time
 }
 
 // ProfileSnapshot is the fizeau-owned routing vocabulary DDx uses for hidden
@@ -47,12 +57,38 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	if svc == nil {
 		return ProfileSnapshot{}, nil
 	}
-	key, cacheable := profileSnapshotCacheKey(svc)
+	key := profileSnapshotServiceCacheKey(svc)
+	return loadProfileSnapshot(ctx, key, svc)
+}
+
+// WarmProfileSnapshotForProject starts a non-blocking refresh of the profile
+// snapshot used by lifecycle hooks. It is intentionally best-effort; callers
+// should proceed without a DDx-selected profile when no hot snapshot is present.
+func WarmProfileSnapshotForProject(projectRoot string, svc agentlib.FizeauService, runner AgentRunner) {
+	if runner != nil {
+		return
+	}
+	selectedSvc := svc
+	if selectedSvc == nil {
+		factory := serviceRunFactory
+		if factory == nil {
+			factory = NewServiceFromWorkDir
+		}
+		built, err := factory(projectRoot)
+		if err != nil {
+			return
+		}
+		selectedSvc = built
+	}
+	startProfileSnapshotRefresh(profileSnapshotProjectCacheKey(projectRoot, selectedSvc), selectedSvc)
+}
+
+func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauService) (ProfileSnapshot, error) {
 	now := profileSnapshotNow()
 
 	var last profileSnapshotCacheEntry
 	var hadLast bool
-	if cacheable {
+	if key != "" {
 		profileSnapshotCacheMu.Lock()
 		if entry, ok := profileSnapshotCache[key]; ok && now.Sub(entry.loadedAt) < profileSnapshotCacheWindow {
 			snap := cloneProfileSnapshot(entry.snap)
@@ -66,15 +102,19 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	profiles, err := svc.ListPolicies(ctx)
 	if err != nil {
 		if hadLast {
+			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 			return cloneProfileSnapshot(last.snap), nil
 		}
+		markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 		return ProfileSnapshot{}, err
 	}
 	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
 	if err != nil {
 		if hadLast {
+			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 			return cloneProfileSnapshot(last.snap), nil
 		}
+		markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 		return ProfileSnapshot{}, err
 	}
 
@@ -82,7 +122,7 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 		Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
 		Models:   append([]agentlib.ModelInfo(nil), models...),
 	}
-	if cacheable {
+	if key != "" {
 		profileSnapshotCacheMu.Lock()
 		profileSnapshotCache[key] = profileSnapshotCacheEntry{snap: cloneProfileSnapshot(snap), loadedAt: now}
 		profileSnapshotCacheMu.Unlock()
@@ -90,12 +130,112 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	return snap, nil
 }
 
-func profileSnapshotCacheKey(svc agentlib.FizeauService) (agentlib.FizeauService, bool) {
-	t := reflect.TypeOf(svc)
-	if t == nil || !t.Comparable() {
-		return nil, false
+func cachedProfileSnapshot(key string) (ProfileSnapshot, bool) {
+	if key == "" {
+		return ProfileSnapshot{}, false
 	}
-	return svc, true
+	profileSnapshotCacheMu.Lock()
+	defer profileSnapshotCacheMu.Unlock()
+	entry, ok := profileSnapshotCache[key]
+	if !ok || len(entry.snap.Profiles) == 0 {
+		return ProfileSnapshot{}, false
+	}
+	return cloneProfileSnapshot(entry.snap), true
+}
+
+func startProfileSnapshotRefresh(key string, svc agentlib.FizeauService) {
+	if key == "" || svc == nil {
+		return
+	}
+	now := profileSnapshotNow()
+	profileSnapshotCacheMu.Lock()
+	entry := profileSnapshotCache[key]
+	if entry.refreshing && now.Sub(entry.refreshStartedAt) < profileSnapshotRefreshTimeout {
+		profileSnapshotCacheMu.Unlock()
+		return
+	}
+	if !entry.loadedAt.IsZero() && now.Sub(entry.loadedAt) < profileSnapshotRefreshInterval {
+		profileSnapshotCacheMu.Unlock()
+		return
+	}
+	if !entry.lastAttemptAt.IsZero() && now.Sub(entry.lastAttemptAt) < profileSnapshotRefreshRetryAfter {
+		profileSnapshotCacheMu.Unlock()
+		return
+	}
+	entry.refreshing = true
+	entry.refreshStartedAt = now
+	entry.lastAttemptAt = now
+	profileSnapshotCache[key] = entry
+	profileSnapshotCacheMu.Unlock()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), profileSnapshotRefreshTimeout)
+		defer cancel()
+		snap, err := fetchProfileSnapshot(ctx, svc)
+		if err != nil {
+			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
+			return
+		}
+		markProfileSnapshotRefreshDone(key, true, snap)
+	}()
+}
+
+func fetchProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (ProfileSnapshot, error) {
+	profiles, err := svc.ListPolicies(ctx)
+	if err != nil {
+		return ProfileSnapshot{}, err
+	}
+	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
+	if err != nil {
+		return ProfileSnapshot{}, err
+	}
+	return ProfileSnapshot{
+		Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
+		Models:   append([]agentlib.ModelInfo(nil), models...),
+	}, nil
+}
+
+func markProfileSnapshotRefreshDone(key string, ok bool, snap ProfileSnapshot) {
+	if key == "" {
+		return
+	}
+	now := profileSnapshotNow()
+	profileSnapshotCacheMu.Lock()
+	entry := profileSnapshotCache[key]
+	entry.refreshing = false
+	if ok {
+		entry.snap = cloneProfileSnapshot(snap)
+		entry.loadedAt = now
+	}
+	profileSnapshotCache[key] = entry
+	profileSnapshotCacheMu.Unlock()
+}
+
+func profileSnapshotProjectCacheKey(projectRoot string, svc agentlib.FizeauService) string {
+	if root := strings.TrimSpace(projectRoot); root != "" {
+		return "project:" + filepath.Clean(root)
+	}
+	return profileSnapshotServiceCacheKey(svc)
+}
+
+func profileSnapshotServiceCacheKey(svc agentlib.FizeauService) string {
+	t := reflect.TypeOf(svc)
+	if t == nil {
+		return ""
+	}
+	v := reflect.ValueOf(svc)
+	switch v.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
+		if v.IsNil() {
+			return ""
+		}
+		return fmt.Sprintf("service:%s:%x", t.String(), v.Pointer())
+	default:
+		if t.Comparable() {
+			return fmt.Sprintf("service:%s:%v", t.String(), svc)
+		}
+	}
+	return ""
 }
 
 func cloneProfileSnapshot(snap ProfileSnapshot) ProfileSnapshot {
@@ -440,6 +580,7 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 	if selector == nil || runner != nil {
 		return ""
 	}
+	blocking := svc != nil
 	selectedSvc := svc
 	if selectedSvc == nil {
 		factory := serviceRunFactory
@@ -452,9 +593,18 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 		}
 		selectedSvc = built
 	}
-	snap, err := LoadProfileSnapshot(ctx, selectedSvc)
-	if err != nil {
-		return ""
+	key := profileSnapshotProjectCacheKey(projectRoot, selectedSvc)
+	if snap, ok := cachedProfileSnapshot(key); ok {
+		startProfileSnapshotRefresh(key, selectedSvc)
+		return selector(snap)
 	}
-	return selector(snap)
+	if blocking {
+		snap, err := loadProfileSnapshot(ctx, key, selectedSvc)
+		if err != nil {
+			return ""
+		}
+		return selector(snap)
+	}
+	startProfileSnapshotRefresh(key, selectedSvc)
+	return ""
 }
