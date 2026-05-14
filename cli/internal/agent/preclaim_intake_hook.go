@@ -245,7 +245,7 @@ func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, r
 		}
 		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime, promptVerbose)
 		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
-		logPreClaimIntakeRoute(log, beadID, runtime)
+		logPreClaimIntakeRoute(log, beadID, runtime, promptVerbose)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{
@@ -259,14 +259,11 @@ func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, r
 }
 
 func logPreClaimIntakePrompt(w io.Writer, projectRoot, beadID, prompt string, runtime AgentRunRuntime, verbose bool) {
-	if w == nil {
+	if w == nil || !verbose {
 		return
 	}
 	logDir := ResolveLogDir(projectRoot, "")
 	_, _ = fmt.Fprintf(w, "readiness prompt %s: sent source=%s bytes=%d session_logs=%s\n", beadID, PreClaimIntakePromptSource, len(prompt), logDir)
-	if !verbose {
-		return
-	}
 	_, _ = fmt.Fprintf(w, "readiness prompt %s begin\n%s", beadID, truncatePreClaimIntakePromptForLog(prompt))
 	if !strings.HasSuffix(prompt, "\n") {
 		_, _ = fmt.Fprintln(w)
@@ -274,8 +271,8 @@ func logPreClaimIntakePrompt(w io.Writer, projectRoot, beadID, prompt string, ru
 	_, _ = fmt.Fprintf(w, "readiness prompt %s end\n", beadID)
 }
 
-func logPreClaimIntakeRoute(w io.Writer, beadID string, runtime AgentRunRuntime) {
-	if w == nil {
+func logPreClaimIntakeRoute(w io.Writer, beadID string, runtime AgentRunRuntime, verbose bool) {
+	if w == nil || !verbose {
 		return
 	}
 	if route := preClaimIntakeRouteSummary(runtime); route != "" {

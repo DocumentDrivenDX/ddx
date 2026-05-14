@@ -164,7 +164,7 @@ func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
-func TestPreClaimIntakeHookWithLogEmitsPrompt(t *testing.T) {
+func TestPreClaimIntakeHookWithLogDoesNotEmitPromptByDefault(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 	svc := &preClaimIntakeHookServiceStub{
@@ -178,8 +178,8 @@ func TestPreClaimIntakeHookWithLogEmitsPrompt(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	out := log.String()
-	assert.Contains(t, out, "readiness prompt "+b.ID+": sent source=bead-lifecycle-intake")
-	assert.Contains(t, out, "session_logs=")
+	assert.NotContains(t, out, "readiness prompt "+b.ID+": sent source=bead-lifecycle-intake")
+	assert.NotContains(t, out, "session_logs=")
 	assert.NotContains(t, out, "readiness prompt "+b.ID+" begin")
 	assert.NotContains(t, out, "MODE: intake")
 	assert.NotContains(t, out, "readiness prompt "+b.ID+" end")

@@ -115,7 +115,6 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 			Prompt:           prompt,
 			WorkDir:          projectRoot,
 			PromptSource:     postAttemptTriagePromptSource,
-			ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectCheapestProfile),
 			ClearRoutingPins: true,
 			ClearProfile:     true,
 			ClearMinPower:    true,

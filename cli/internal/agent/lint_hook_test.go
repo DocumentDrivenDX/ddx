@@ -274,7 +274,7 @@ func TestLintHook_EmptyOutputWithRunnerError_ReturnsDispatchFailure(t *testing.T
 	assert.Contains(t, err.Error(), "argument list too long")
 }
 
-func TestPreDispatchLintHook_DispatchesWithCheapestProfile(t *testing.T) {
+func TestPreDispatchLintHook_LeavesPolicyToFizeau(t *testing.T) {
 	root := newLintHookTestRoot(t)
 	store, b := newLintHookTestStore(t, root)
 
@@ -301,7 +301,7 @@ func TestPreDispatchLintHook_DispatchesWithCheapestProfile(t *testing.T) {
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 8, got.Score)
-	assert.Equal(t, "cheap", svc.lastReq.Policy)
+	assert.Empty(t, svc.lastReq.Policy, "lint dispatch must let Fizeau choose policy")
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
@@ -309,7 +309,7 @@ func TestPreDispatchLintHook_DispatchesWithCheapestProfile(t *testing.T) {
 	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")
 }
 
-func TestPreDispatchLintHook_PreservesExplicitRoutingPins(t *testing.T) {
+func TestPreDispatchLintHook_ClearsExplicitRoutingPins(t *testing.T) {
 	root := newLintHookTestRoot(t)
 	store, b := newLintHookTestStore(t, root)
 
@@ -331,9 +331,9 @@ func TestPreDispatchLintHook_PreservesExplicitRoutingPins(t *testing.T) {
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 8, got.Score)
-	assert.Equal(t, "codex", svc.lastReq.Harness)
+	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
-	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower, "lint dispatch must not inherit implementation min_power pins")
 	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")

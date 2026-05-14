@@ -634,7 +634,7 @@ func TestReviewerSkippedEmptyDiffEvent(t *testing.T) {
 	assert.True(t, found, "reviewer-skipped-empty-diff event must be emitted for no_changes outcomes")
 }
 
-func TestPostAttemptTriageHook_DispatchesWithCheapestProfile(t *testing.T) {
+func TestPostAttemptTriageHook_LeavesPolicyToFizeau(t *testing.T) {
 	root := newTriageHookTestRoot(t)
 	store, b := newTriageHookTestStore(t, root)
 
@@ -667,7 +667,7 @@ func TestPostAttemptTriageHook_DispatchesWithCheapestProfile(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "transport", got.Classification)
-	assert.Equal(t, "cheap", svc.lastReq.Policy)
+	assert.Empty(t, svc.lastReq.Policy, "triage dispatch must let Fizeau choose policy")
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
