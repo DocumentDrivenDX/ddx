@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260514T084402-708690e7",
+  "bead_id": "ddx-c2e7f14b",
+  "base_rev": "74c7dbd0c13c5d6ea7c8931a414c9c89d8924ddf",
+  "created_at": "2026-05-14T08:44:14.781442704Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c2e7f14b",
+    "title": "integrate fizeau v0.13.1 (routing hard-gate fix)",
+    "description": "fizeau v0.13.1 is released and contains the autorouting fix the ddx workers were stalling on. Bump the ddx-side fizeau pin to v0.13.1 and restart the ddx work / ddx server processes so they pick up the new binary.\n\nContext: with v0.13.0, every first dispatch attempt after a host (e.g. bragi) went off-network burned the full ~165s retry budget (5 attempts × ~30s dial timeout + exponential backoff) before the routing layer learned the host was unreachable. v0.13.0's hard-gate (`Inputs.ProviderUnreachable`) only populated from snapshot discovery errors, which lagged the first dispatch failure.\n\nv0.13.1 closes two gaps:\n- Route-attempt failures with dial-class errors (dial tcp / connection refused / no route to host / i/o timeout / no such host / 502 Bad Gateway / 503 / 504) now populate `Inputs.ProviderUnreachable` immediately. One failed dispatch hard-gates the provider for the cooldown TTL on the very next call. Non-dial failures (context canceled, 4xx, wall-clock timeouts) stay as soft demotion so sticky-lease keeps working through single transient hiccups.\n- New `RefreshIfStale` snapshot refresh mode + `Cache.MaybeRefreshSync` primitive. `buildRoutingInputs` now uses it so a cold-start route call re-probes stale providers in-line (bounded by 5s discovery timeout per source) before scoring. The first call after a host dies is now at worst the 5s probe rather than the full retry budget.\n\nRelease: https://github.com/easel/fizeau/releases/tag/v0.13.1\nCommit: 52c436e8 (fix routing) + the v0.13.1 tag.\n\nIntegration steps:\n1. Update whatever pins the ddx workers carry on the fizeau SDK / agent / binary to v0.13.1 (go.mod replace block, install.sh hash, agent_binary_url, whatever the actual mechanism is).\n2. Rebuild / reinstall ddx workers.\n3. Restart any long-running `ddx work --watch`, `ddx server`, or similar processes so they load the new binary.\n4. Verify by killing bragi (or pointing at an off host) and watching `ddx work` — instead of ~165s of `WARN provider error, retrying attempt=N` against bragi, the router should pick an alternative on the second-or-later request without burning the retry budget.",
+    "acceptance": "1. ddx production code references fizeau at version v0.13.1 (or higher within the v0.13.x series). Verified by `grep -rEn \"github.com/easel/fizeau (v0\\.13\\.[1-9]|v0\\.1[4-9])\" ~/Projects/ddx/cli ~/Projects/ddx/go.* 2\u003e/dev/null | wc -l` returning at least 1.\n2. The installed `ddx` binary on PATH carries the v0.13.1 routing symbol `ProviderUnreachable`. Verified by `strings $(which ddx) 2\u003e/dev/null | grep -c \"ProviderUnreachable\"` returning a value \u003e= 1.\n3. The v0.13.0 cooldown→hard-gate bug is no longer reproducible: after restarting `ddx work --watch` against a deliberately-off provider, no more than one `WARN provider error, retrying attempt=4` line per provider appears in `~/Projects/ddx/.ddx/logs/ddx-server.log` over a 5-minute observation window. Verified by `bash -c 'awk -F\"\\\"\" \"/WARN provider error, retrying attempt=4/{n[\\$4]++} END{for(p in n) if (n[p] \u003e 1) exit 1; exit 0}\" ~/Projects/ddx/.ddx/logs/ddx-server.log' \u0026\u0026 echo OK` printing OK after a 5-minute soak.\n4. ddx test suite is green at integration HEAD: `cd ~/Projects/ddx \u0026\u0026 go test ./cli/... -count=1 -timeout 5m` exits 0.",
+    "labels": [
+      "area:routing",
+      "kind:integration",
+      "dep:fizeau"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T08:43:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3581494",
+      "execute-loop-heartbeat-at": "2026-05-14T08:43:06.982560388Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T084402-708690e7",
+    "prompt": ".ddx/executions/20260514T084402-708690e7/prompt.md",
+    "manifest": ".ddx/executions/20260514T084402-708690e7/manifest.json",
+    "result": ".ddx/executions/20260514T084402-708690e7/result.json",
+    "checks": ".ddx/executions/20260514T084402-708690e7/checks.json",
+    "usage": ".ddx/executions/20260514T084402-708690e7/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c2e7f14b-20260514T084402-708690e7"
+  },
+  "prompt_sha": "900b1c45657c563785090f020f8610f16783f4194799777d5f9d190a6ee1b116"
+}
