@@ -1,0 +1,394 @@
+{
+  "attempt_id": "20260514T073217-72223f6e",
+  "bead_id": "ddx-a3589116",
+  "base_rev": "e5702d259cc9bdf5d55c69d91172db40f845a180",
+  "created_at": "2026-05-14T07:32:22.239224193Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a3589116",
+    "title": "worker: mirror live attempt liveness without tracker heartbeat spam",
+    "description": "PROBLEM\nDuring a long `ddx work` attempt, operators can see the bead stuck at `status=in_progress` with `extra.execute-loop-heartbeat-at` still at claim time even while the child agent is actively emitting progress. That is misleading: the tracker field is a durable claim marker, not a high-frequency liveness stream. Spamming `.ddx/beads.jsonl` with heartbeat rewrites would create tracker churn, auto-commit noise, and git/index contention. Operators need to answer \"is this worker alive and what is it doing?\" from worker logs/status and, when a server is reachable, from best-effort worker call-home events.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/bead/store.go:901-925` writes `extra.execute-loop-heartbeat-at` only on claim, then records ongoing claim liveness via `TouchClaimHeartbeat` outside the tracker. That is correct for avoiding beads.jsonl churn, but the operator-facing bead row therefore does not show live progress.\n- `cli/internal/agent/work/heartbeat.go:13-35` refreshes only the external claim lease. It has no liveness reporter hook for worker status, worker logs, or server call-home.\n- `cli/internal/agent/execute_bead_loop.go:1477-1491` wraps the attempt in `work.WithHeartbeat`, but the periodic tick does not emit a structured worker heartbeat/progress event.\n- `cli/cmd/execute_loop_shared.go:164-183` wires `ddx work` to `workerprobe.TeeJSONL` over the loop EventSink only. `cli/internal/agent/workerprobe/probe.go:456-509` mirrors only newline-delimited loop events, so a long attempt with no loop event until `bead.result` leaves the server view stale.\n- `cli/internal/server/worker_ingest.go:110-120` updates server `last_event_at` only when `/api/workers/\u003cid\u003e/event` receives an event, so the server cannot distinguish active long-running work from a silent/stale worker.\n\nPROPOSED FIX\nKeep `.ddx/beads.jsonl` low-frequency and durable: claim, terminal outcome, and explicit lifecycle events only. Add a worker liveness path that runs with `ddx work` and `ddx try`: on each claim heartbeat tick, update a local worker/attempt status sidecar or log-derived status under `.ddx/workers/\u003cworker-id\u003e/status.json` (or the existing worker status path if available) with `worker_id`, `current_bead`, `attempt_id`, `phase`, `last_activity_at`, `route`/policy summary, and child/worker PID when available. When `workerprobe` is connected, also mirror a lightweight `worker.heartbeat` or `attempt.heartbeat` event to `/api/workers/\u003cid\u003e/event` so `last_event_at` stays fresh. Server unavailability must fail open and should only be logged locally.\n\nNON-SCOPE\n- Do not reintroduce frequent `beads.jsonl` heartbeat rewrites or heartbeat auto-commits.\n- Do not make the server authoritative for worker claims, scheduling, or cancellation. ADR-022 autonomous worker semantics remain intact.\n- Do not rename existing worker ingest endpoints unless a separate contract bead is filed.\n\nParent: none. Dependencies: none; this can be implemented after the P0 routing fix but does not block it.",
+    "acceptance": "1. Add `TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam`: a long-running `ExecuteBeadWorker.Run` with a short heartbeat interval updates worker liveness outside `.ddx/beads.jsonl`; the tracker bytes remain unchanged between claim and terminal outcome.\n2. Add `TestWorkerProbe_PeriodicHeartbeatRefreshesServerLastEventAt`: with a reachable test server, a long-running attempt emits periodic worker heartbeat events and the server-derived `last_event_at` advances before `bead.result`.\n3. Add `TestWorkerProbe_ServerUnavailableDoesNotBlockWork`: with no server address or a refused connection, the same liveness path logs locally and the attempt still completes; no new failure status or cooldown is introduced.\n4. Add `TestWorkerStatusSidecar_RecordsCurrentBeadAttemptAndLastActivity`: the local worker status/log view contains current bead ID, attempt ID or provisional attempt ID, current phase, last activity timestamp, route/policy summary when known, and worker/child PID when available.\n5. Add `TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus`: operator-facing status/focus code treats a fresh worker status/log heartbeat as active even when the bead tracker claim timestamp has not changed.\n6. Run `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... ./cmd/... -run \"Test.*Worker.*Heartbeat|Test.*Worker.*Liveness|TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus\" -count=1` and `lefthook run pre-commit`.",
+    "labels": [
+      "area:agent",
+      "area:server",
+      "area:work",
+      "kind:bug",
+      "phase:build",
+      "reliability"
+    ],
+    "metadata": {
+      "adr": "ADR-022",
+      "claimed-at": "2026-05-14T07:31:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3245255",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:34:48.968689521Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:40:37.047378619Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:52:57.155550905Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:36:22.685685737Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:51:19.505010228Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:34:06.685125532Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:51:27.02703712Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T22:59:08.820313553Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T23:55:01.123243617Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T00:06:59.787029365Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T00:24:39.772074173Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:37:33.952162618Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:32:47.791223473Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:55:20.061020602Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:00:57.974291906Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:06:36.508990239Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:11:42.557222264Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:24:06.528717671Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\"}",
+          "created_at": "2026-05-14T04:34:10.651093257Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-a3589116\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T04:34:35.229049351Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/profile_select.go, cli/internal/agent/profile_select_test.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-14T04:35:10.725500669Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: empty-output\"}",
+          "created_at": "2026-05-14T04:48:02.05281348Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/execute_loop_shared.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"harness\":\"\",\"model\":\"\",\"reason\":\"context_canceled\"}",
+          "created_at": "2026-05-14T04:48:23.185621986Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "context_canceled"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-a3589116\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T04:48:23.243422677Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/execute_loop_shared.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-14T04:48:23.351684728Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T05:24:40.701897576Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:18:09.480814221Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:25:55.469090624Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-a3589116)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:44:40.100020055Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"context canceled\"}",
+          "created_at": "2026-05-14T04:45:06.521987497Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\"}",
+          "created_at": "2026-05-14T05:34:11.283587721Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T05:38:12.887755272Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T053510-7a7b82b7\",\"bead_id\":\"ddx-a3589116\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T05:38:13.20503Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\ntier=standard\nresult_rev=a6826b218c354396d4be54e79eb60ab016c43b2f\nbase_rev=a6826b218c354396d4be54e79eb60ab016c43b2f\noutcome_reason=timeout",
+          "created_at": "2026-05-14T05:38:13.360160387Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\"}",
+          "created_at": "2026-05-14T05:58:35.175841087Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T05:59:54.213972743Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\"}",
+          "created_at": "2026-05-14T06:54:53.204911779Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-14T06:59:41.642984339Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260514T065515-68c2868e\",\"harness\":\"claude\",\"model\":\"opus\",\"input_tokens\":1,\"output_tokens\":46,\"total_tokens\":47,\"cost_usd\":0,\"duration_ms\":258998,\"exit_code\":-1}",
+          "created_at": "2026-05-14T06:59:41.751392271Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=47 model=opus"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\"}",
+          "created_at": "2026-05-14T07:07:22.251384131Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"context canceled\"}",
+          "created_at": "2026-05-14T07:18:41.57319954Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"context canceled\"}",
+          "created_at": "2026-05-14T07:26:54.428612177Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T07:31:03.81791233Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Consumer of the Fizeau Execution Contract"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T073217-72223f6e",
+    "prompt": ".ddx/executions/20260514T073217-72223f6e/prompt.md",
+    "manifest": ".ddx/executions/20260514T073217-72223f6e/manifest.json",
+    "result": ".ddx/executions/20260514T073217-72223f6e/result.json",
+    "checks": ".ddx/executions/20260514T073217-72223f6e/checks.json",
+    "usage": ".ddx/executions/20260514T073217-72223f6e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-a3589116-20260514T073217-72223f6e"
+  },
+  "prompt_sha": "708b863416cf141278e57384c03530acae433c9c43a974997a86e31b892d15be"
+}
