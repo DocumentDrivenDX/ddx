@@ -330,6 +330,9 @@ func satisfiableProfiles(snap ProfileSnapshot, floor int) []agentlib.PolicyInfo 
 }
 
 func profileHasAvailableModel(profile agentlib.PolicyInfo, models []agentlib.ModelInfo) bool {
+	if len(models) == 0 {
+		return true
+	}
 	for _, model := range models {
 		if !model.Available || !model.AutoRoutable || model.ExactPinOnly {
 			continue

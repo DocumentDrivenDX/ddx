@@ -29,6 +29,19 @@ func TestSelectCheapestProfile_LowestBandWithAvailableModel(t *testing.T) {
 	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
 }
 
+func TestSelectCheapestProfile_UsesPolicyMetadataWhenModelSnapshotEmpty(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "default", MinPower: 7, MaxPower: 8},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+	}
+
+	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
+	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.TierStandard).Name)
+}
+
 func TestSelectCheapestProfile_TieDoesNotPreferLocalPolicy(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{
