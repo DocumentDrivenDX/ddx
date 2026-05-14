@@ -128,6 +128,9 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 		if err != nil {
 			return TriageResult{}, err
 		}
+		if text == "" {
+			return malformedTriageResult("output", "empty output", ""), nil
+		}
 
 		payload, ok := extractJSONCandidate(text)
 		if !ok {
@@ -222,9 +225,6 @@ func triageResultOutput(result *Result) (string, error) {
 	text := strings.TrimSpace(result.CondensedOutput)
 	if text == "" {
 		text = strings.TrimSpace(result.Output)
-	}
-	if text == "" {
-		return "", fmt.Errorf("triage hook: empty output")
 	}
 	return text, nil
 }
