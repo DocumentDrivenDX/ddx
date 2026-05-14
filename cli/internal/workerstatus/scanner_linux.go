@@ -141,7 +141,25 @@ func looksLikeDDxWorker(cmdline string) bool {
 		return false
 	}
 	sub := parts[1]
-	return sub == "work" || sub == "try"
+	if sub == "try" {
+		return true
+	}
+	if sub != "work" {
+		return false
+	}
+	if len(parts) >= 3 && isWorkHelperSubcommand(parts[2]) {
+		return false
+	}
+	return true
+}
+
+func isWorkHelperSubcommand(arg string) bool {
+	switch arg {
+	case "analyze", "clear-cooldowns", "focus", "metrics", "plan", "status":
+		return true
+	default:
+		return false
+	}
 }
 
 // resolveWorkerProjectRoot derives the project root the worker is operating
