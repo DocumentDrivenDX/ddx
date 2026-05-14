@@ -1,7 +1,7 @@
 mode: technical
 severity: advisory
 policy: advisory
-runner: embedded
+runner: vale
 vale:
   version: "3.13.0"
   styles_path: styles

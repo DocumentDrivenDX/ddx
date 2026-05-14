@@ -86,7 +86,7 @@ func TestDefaultAssetLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Mode != string(ModeTechnical) || cfg.Policy != "advisory" || cfg.Runner != "embedded" {
+	if cfg.Mode != string(ModeTechnical) || cfg.Policy != "advisory" || cfg.Runner != "vale" {
 		t.Fatalf("unexpected default config: %+v", cfg)
 	}
 

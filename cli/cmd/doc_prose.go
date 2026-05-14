@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -46,10 +46,6 @@ func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := maybeReportMissingRunner(cmd, settings.Runner); err != nil {
-		return err
-	}
-
 	rootDir := f.docRoot()
 	var relPaths []string
 	if changed {
@@ -67,12 +63,11 @@ func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 		relPaths = append([]string(nil), args...)
 	}
 
-	checker, err := docprose.NewChecker(settings.Mode, settings.Vocabulary)
-	if err != nil {
-		return err
+	type docEntry struct {
+		rel string
+		abs string
 	}
-
-	var findings []docprose.Finding
+	var entries []docEntry
 	for _, relPath := range relPaths {
 		cleanRel, absPath, ok := normalizeDocPath(rootDir, relPath)
 		if !ok {
@@ -84,18 +79,71 @@ func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 		if !pathAllowed(cleanRel, settings.Includes, settings.Excludes) {
 			continue
 		}
-		content, readErr := os.ReadFile(absPath)
-		if readErr != nil {
-			if os.IsNotExist(readErr) {
+		if _, statErr := os.Stat(absPath); statErr != nil {
+			if os.IsNotExist(statErr) {
 				continue
 			}
-			return fmt.Errorf("read %s: %w", relPath, readErr)
+			return fmt.Errorf("stat %s: %w", relPath, statErr)
 		}
-		for _, finding := range checker.Findings(cleanRel, string(content)) {
-			if settings.Severity != "" {
-				finding.Severity = settings.Severity
+		entries = append(entries, docEntry{rel: cleanRel, abs: absPath})
+	}
+
+	runnerKind := strings.ToLower(strings.TrimSpace(settings.Runner))
+	useEmbedded := runnerKind == "embedded"
+
+	var findings []docprose.Finding
+	if !useEmbedded && len(entries) > 0 {
+		ctx := cmd.Context()
+		if ctx == nil {
+			ctx = context.Background()
+		}
+		absPaths := make([]string, 0, len(entries))
+		absToRel := make(map[string]string, len(entries))
+		for _, entry := range entries {
+			absPaths = append(absPaths, entry.abs)
+			absToRel[entry.abs] = entry.rel
+		}
+		alerts, valeErr := docprose.NewValeRunner().Findings(ctx, settings, absPaths...)
+		if valeErr != nil {
+			var diag *docprose.ValeDiagnosticError
+			if !errors.As(valeErr, &diag) {
+				return valeErr
 			}
-			findings = append(findings, finding)
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: optional prose runner %q is unavailable; using embedded checker\n", "vale")
+			useEmbedded = true
+		} else {
+			normalized := docprose.NormalizeValeAlerts(alerts)
+			for _, finding := range normalized {
+				if rel, ok := absToRel[finding.File]; ok {
+					finding.File = rel
+				}
+				if settings.Severity != "" {
+					finding.Severity = settings.Severity
+				}
+				findings = append(findings, finding)
+			}
+		}
+	}
+
+	if useEmbedded {
+		checker, checkerErr := docprose.NewChecker(settings.Mode, settings.Vocabulary)
+		if checkerErr != nil {
+			return checkerErr
+		}
+		for _, entry := range entries {
+			content, readErr := os.ReadFile(entry.abs)
+			if readErr != nil {
+				if os.IsNotExist(readErr) {
+					continue
+				}
+				return fmt.Errorf("read %s: %w", entry.rel, readErr)
+			}
+			for _, finding := range checker.Findings(entry.rel, string(content)) {
+				if settings.Severity != "" {
+					finding.Severity = settings.Severity
+				}
+				findings = append(findings, finding)
+			}
 		}
 	}
 
@@ -131,21 +179,6 @@ func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 		return NewExitError(ExitCodeGeneralError, "")
 	}
 	return nil
-}
-
-func maybeReportMissingRunner(cmd *cobra.Command, runner string) error {
-	runner = strings.TrimSpace(strings.ToLower(runner))
-	switch runner {
-	case "", "embedded":
-		return nil
-	case "auto", "vale":
-		if _, err := exec.LookPath("vale"); err != nil {
-			fmt.Fprintf(cmd.ErrOrStderr(), "warning: optional prose runner %q is unavailable; using embedded checker\n", "vale")
-		}
-		return nil
-	default:
-		return fmt.Errorf("unsupported prose runner %q", runner)
-	}
 }
 
 func isBlockingProsePolicy(policy, severity string) bool {
