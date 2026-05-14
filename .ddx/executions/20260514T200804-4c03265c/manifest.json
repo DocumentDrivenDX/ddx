@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260514T200804-4c03265c",
+  "bead_id": "ddx-71629938",
+  "base_rev": "1bb8e103b6f4484ba944f079b30e1e2726d20178",
+  "created_at": "2026-05-14T20:08:08.721602451Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71629938",
+    "title": "execute-loop: thread execute-loop-failed-routes into Fizeau RouteRequest.ExcludedRoutes",
+    "description": "PROBLEM\nDDx records execute-loop-failed-routes on every provider_connectivity failure but never passes the list to Fizeau on the next attempt. Fizeau therefore re-selects the same (provider, model) and the bead loops on the same dead route until the operator intervenes. Observed in the wild: with bragi unreachable, ddx-b4edab35 first failed at 15:48 routing to bragi/qwen3.5-27b. After the 15-min cooldown the second attempt at 16:45 again routed to bragi/qwen3.5-27b and failed identically. The bead's failed-routes list grew but had no operational effect.\n\nROOT CAUSE\ncli/cmd/execute_loop_shared.go around the RouteRequest construction does not populate any caller-side exclusion field. The bead's execute-loop-failed-routes Extra is read only by recentProviderConnectivityMinPower (cli/cmd/execute_loop_shared.go:409) to nudge MinPower, never to express \"do not pick this (provider, model)\". This depends on Fizeau exposing the exclusion field (filed upstream as fizeau-8134d6db).\n\nPROPOSED FIX\n- After Fizeau bead fizeau-8134d6db lands and the new RouteRequest.ExcludedRoutes is available in the Fizeau release we depend on, read the bead's execute-loop-failed-routes list before each route request and populate ExcludedRoutes with the (provider, model) tuples whose At timestamp is within the configured exclusion window (default 1h; configurable).\n- Add an exclusion-expiry sweep: drop entries older than the window from the in-request list (the bead still keeps the history for audit, but stale exclusions do not block recovery once the provider returns).\n- When ExcludedRoutes leaves no viable candidate at the requested power class, escalate the bead's TriagePowerHintKey (composing with ddx-8a7a6843's ladder-exhaustion changes).\n\nNON-SCOPE\n- Do not garbage-collect the bead's failed-routes audit list; only filter in-request.\n- Do not implement Fizeau-side exclusion (covered by fizeau-8134d6db).\n- Do not change cooldown duration.\n\nDEPS\nfizeau-8134d6db, ddx-8a7a6843.",
+    "acceptance": "1. TestRouteRequest_PopulatedFromFailedRoutes asserts execute-loop-failed-routes within the exclusion window appear in the Fizeau RouteRequest.ExcludedRoutes payload.\n2. TestRouteRequest_ExpiredFailedRoutesDropped asserts entries older than the exclusion window are omitted from the RouteRequest but remain in the bead Extra audit list.\n3. TestRouteRequest_AllRoutesExcludedTriggersEscalation asserts that when every candidate at the requested power class is excluded, TriagePowerHintKey escalates per the ddx-8a7a6843 path.\n4. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:routing",
+      "area:execution",
+      "kind:integration",
+      "phase:2",
+      "spec:endpoint-first-routing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T20:08:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "441256",
+      "execute-loop-heartbeat-at": "2026-05-14T20:08:04.176136121Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T200804-4c03265c",
+    "prompt": ".ddx/executions/20260514T200804-4c03265c/prompt.md",
+    "manifest": ".ddx/executions/20260514T200804-4c03265c/manifest.json",
+    "result": ".ddx/executions/20260514T200804-4c03265c/result.json",
+    "checks": ".ddx/executions/20260514T200804-4c03265c/checks.json",
+    "usage": ".ddx/executions/20260514T200804-4c03265c/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-71629938-20260514T200804-4c03265c"
+  },
+  "prompt_sha": "e3365f75e0379f8005b08276d9e261a8a3e1cdf218c76c4576f58b815f412908"
+}
