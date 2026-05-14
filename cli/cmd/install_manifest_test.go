@@ -251,6 +251,14 @@ func TestPluginInstallLocalHelixFallbackIgnoresSourceOverlayWithoutScriptAssumpt
 	t.Setenv("HOME", homeDir)
 
 	localPlugin := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, ".claude-plugin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, ".claude-plugin", "plugin.json"), []byte(`{
+  "name": "helix",
+  "version": "0.3.3",
+  "description": "Local HELIX checkout",
+  "repository": "https://github.com/DocumentDrivenDX/helix",
+  "skills": "./.agents/skills/"
+}`), 0o644))
 	skillDir := filepath.Join(localPlugin, ".agents", "skills", "helix")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
@@ -274,6 +282,46 @@ Local HELIX skill body.
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix"), filepath.Join(localPlugin, ".agents", "skills", "helix"))
 	assert.NoFileExists(t, filepath.Join(homeDir, ".local", "bin", "helix"))
 	assert.NotContains(t, output, "helix script")
+}
+
+func TestPluginInstallLocalUsesPackageManifestSkillSource(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
+version: 1.0.0
+description: Local plugin with custom skill source
+type: plugin
+source: https://example.com/sample-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/sample-plugin
+  skills:
+    - source: agent-components/
+      target: .agents/skills/
+`), 0o644))
+	skillDir := filepath.Join(localPlugin, "agent-components", "custom-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: custom-skill
+description: Custom skill source
+---
+
+Custom skill body.
+`), 0o644))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "sample-plugin"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "custom-skill"), filepath.Join(localPlugin, "agent-components", "custom-skill"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "custom-skill"), filepath.Join(localPlugin, "agent-components", "custom-skill"))
+	assert.NoDirExists(t, filepath.Join(workDir, ".agents", "skills", "sample-plugin"))
 }
 
 func TestAddLocalOverlayIgnoresCoversSymlinkAndDirectoryForms(t *testing.T) {

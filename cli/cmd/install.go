@@ -262,26 +262,36 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 	}
 
 	// Load package.yaml when present so local installs honor the manifest
-	// contract, but keep the built-in registry as a compatibility fallback.
+	// contract. If package.yaml is absent, use the plugin manifest rather than
+	// assuming a repository layout from the package name.
 	reg := registry.BuiltinRegistry()
 	fallbackPkg, _ := reg.Find(name)
 
 	pkg, manifestMissing, manifestIssues, manifestErr := registry.LoadPackageManifestWithFallback(absPath, fallbackPkg)
+	if manifestMissing {
+		pluginPkg, ok, pluginErr := loadLocalPluginManifestPackage(absPath, name)
+		if pluginErr != nil {
+			return pluginErr
+		}
+		if ok {
+			pkg = pluginPkg
+		} else {
+			pkg = &registry.Package{
+				Name:        name,
+				Version:     "local",
+				Description: "local plugin package",
+				Type:        registry.PackageTypePlugin,
+				Source:      absPath,
+			}
+		}
+	}
 	if manifestErr == nil {
 		if strings.TrimSpace(pkg.Name) != "" && pkg.Name != name {
 			return fmt.Errorf("local package name %q does not match package.yaml name %q", name, pkg.Name)
 		}
 	} else {
 		if os.IsNotExist(manifestErr) && manifestMissing {
-			if pkg == nil {
-				pkg = &registry.Package{
-					Name:        name,
-					Version:     "local",
-					Description: "local plugin package",
-					Type:        registry.PackageTypePlugin,
-					Source:      absPath,
-				}
-			}
+			// Already handled through package.yaml absence fallback above.
 		} else if len(manifestIssues) > 0 {
 			return fmt.Errorf("validating package manifest: %w", manifestErr)
 		} else {
@@ -303,11 +313,6 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		pkg.Install.Root = &registry.InstallMapping{
 			Source: ".",
 			Target: fmt.Sprintf(".ddx/plugins/%s", pkg.Name),
-		}
-	}
-	if len(pkg.Install.Skills) == 0 && localPluginHasSkills(absPath) {
-		pkg.Install.Skills = []registry.InstallMapping{
-			{Source: "skills/", Target: ".agents/skills/"},
 		}
 	}
 
@@ -364,7 +369,7 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		if !filepath.IsAbs(absProject) {
 			absProject, _ = filepath.Abs(absProject)
 		}
-		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, force)
+		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, pkg.Install.Skills, force)
 		if err != nil {
 			return fmt.Errorf("installing skills: %w", err)
 		}
@@ -460,18 +465,6 @@ func markLocalInstallOverlay(projectRoot, pluginName string, files []string) (in
 	return len(tracked), nil
 }
 
-func localPluginHasSkills(root string) bool {
-	for _, candidate := range []string{
-		filepath.Join(root, ".agents", "skills"),
-		filepath.Join(root, "skills"),
-	} {
-		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
-			return true
-		}
-	}
-	return false
-}
-
 func localOverlayPaths(pluginName string, files []string) []string {
 	seen := map[string]bool{}
 	add := func(path string) {
@@ -507,60 +500,187 @@ func localOverlayPaths(pluginName string, files []string) []string {
 	return paths
 }
 
-func installLocalSkillSymlinks(pluginRoot, projectRoot string, force bool) ([]string, error) {
-	sourceRoot, entries, err := localSkillSourceEntries(pluginRoot)
+func installLocalSkillSymlinks(pluginRoot, projectRoot string, mappings []registry.InstallMapping, force bool) ([]string, error) {
+	sourceRoots, err := localSkillSourceRoots(pluginRoot, mappings)
 	if err != nil {
 		return nil, err
 	}
-	if len(entries) == 0 {
+	if len(sourceRoots) == 0 {
 		return nil, nil
 	}
 
 	var written []string
-	for _, entry := range entries {
-		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
-			continue
+	seenSkills := map[string]bool{}
+	for _, sourceRoot := range sourceRoots {
+		entries, err := os.ReadDir(sourceRoot)
+		if err != nil {
+			return nil, err
 		}
-		name := entry.Name()
-		src := filepath.Join(sourceRoot, name)
-		if _, err := os.Stat(filepath.Join(src, "SKILL.md")); err != nil {
-			return nil, fmt.Errorf("%s: missing SKILL.md: %w", src, err)
-		}
-		for _, surface := range []string{".agents/skills", ".claude/skills"} {
-			dst := filepath.Join(projectRoot, filepath.FromSlash(surface), name)
-			if err := prepareSymlinkTarget(dst, force); err != nil {
-				return nil, err
+		for _, entry := range entries {
+			if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+				continue
 			}
-			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-				return nil, fmt.Errorf("creating skills dir: %w", err)
+			name := entry.Name()
+			if seenSkills[name] {
+				continue
 			}
-			target, err := filepath.Rel(filepath.Dir(dst), src)
-			if err != nil {
-				target = src
+			src := filepath.Join(sourceRoot, name)
+			if _, err := os.Stat(filepath.Join(src, "SKILL.md")); err != nil {
+				return nil, fmt.Errorf("%s: missing SKILL.md: %w", src, err)
 			}
-			if err := os.Symlink(target, dst); err != nil {
-				return nil, fmt.Errorf("linking skill %s -> %s: %w", dst, target, err)
+			for _, surface := range []string{".agents/skills", ".claude/skills"} {
+				dst := filepath.Join(projectRoot, filepath.FromSlash(surface), name)
+				if err := prepareSymlinkTarget(dst, force); err != nil {
+					return nil, err
+				}
+				if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+					return nil, fmt.Errorf("creating skills dir: %w", err)
+				}
+				target, err := filepath.Rel(filepath.Dir(dst), src)
+				if err != nil {
+					target = src
+				}
+				if err := os.Symlink(target, dst); err != nil {
+					return nil, fmt.Errorf("linking skill %s -> %s: %w", dst, target, err)
+				}
+				written = append(written, filepath.Join(filepath.FromSlash(surface), name))
 			}
-			written = append(written, filepath.Join(filepath.FromSlash(surface), name))
+			seenSkills[name] = true
 		}
 	}
 	return written, nil
 }
 
-func localSkillSourceEntries(pluginRoot string) (string, []os.DirEntry, error) {
-	for _, candidate := range []string{
-		filepath.Join(pluginRoot, ".agents", "skills"),
-		filepath.Join(pluginRoot, "skills"),
-	} {
-		entries, err := os.ReadDir(candidate)
-		if err == nil && len(entries) > 0 {
-			return candidate, entries, nil
+func localSkillSourceRoots(pluginRoot string, mappings []registry.InstallMapping) ([]string, error) {
+	var roots []string
+	seen := map[string]bool{}
+	for _, mapping := range mappings {
+		source := strings.TrimSpace(mapping.Source)
+		if source == "" {
+			continue
 		}
-		if err != nil && !os.IsNotExist(err) {
-			return "", nil, err
+		candidate := filepath.Clean(filepath.Join(pluginRoot, filepath.FromSlash(source)))
+		info, err := os.Stat(candidate)
+		if os.IsNotExist(err) {
+			continue
 		}
+		if err != nil {
+			return nil, err
+		}
+		if !info.IsDir() {
+			return nil, fmt.Errorf("%s: skill source is not a directory", candidate)
+		}
+		if seen[candidate] {
+			continue
+		}
+		seen[candidate] = true
+		roots = append(roots, candidate)
 	}
-	return "", nil, nil
+	return roots, nil
+}
+
+type localPluginJSONManifest struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Repository  string `json:"repository"`
+	Skills      any    `json:"skills"`
+}
+
+func loadLocalPluginManifestPackage(root, expectedName string) (*registry.Package, bool, error) {
+	for _, rel := range []string{
+		filepath.Join(".codex-plugin", "plugin.json"),
+		filepath.Join(".claude-plugin", "plugin.json"),
+	} {
+		path := filepath.Join(root, rel)
+		data, err := os.ReadFile(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, false, fmt.Errorf("loading plugin manifest %s: %w", path, err)
+		}
+		var manifest localPluginJSONManifest
+		if err := json.Unmarshal(data, &manifest); err != nil {
+			return nil, false, fmt.Errorf("loading plugin manifest %s: invalid JSON: %w", path, err)
+		}
+		name := strings.TrimSpace(manifest.Name)
+		if name == "" {
+			name = expectedName
+		}
+		if name != expectedName {
+			return nil, false, fmt.Errorf("local package name %q does not match plugin manifest name %q", expectedName, name)
+		}
+		sources, err := pluginManifestSkillSources(manifest.Skills)
+		if err != nil {
+			return nil, false, fmt.Errorf("loading plugin manifest %s: %w", path, err)
+		}
+		pkg := &registry.Package{
+			Name:        name,
+			Version:     defaultString(strings.TrimSpace(manifest.Version), "local"),
+			Description: defaultString(strings.TrimSpace(manifest.Description), "local plugin package"),
+			Type:        registry.PackageTypePlugin,
+			Source:      defaultString(strings.TrimSpace(manifest.Repository), root),
+			Install: registry.PackageInstall{
+				Root: &registry.InstallMapping{
+					Source: ".",
+					Target: fmt.Sprintf(".ddx/plugins/%s", name),
+				},
+			},
+		}
+		for _, source := range sources {
+			pkg.Install.Skills = append(pkg.Install.Skills, registry.InstallMapping{
+				Source: source,
+				Target: ".agents/skills/",
+			})
+		}
+		return pkg, true, nil
+	}
+	return nil, false, nil
+}
+
+func pluginManifestSkillSources(raw any) ([]string, error) {
+	switch v := raw.(type) {
+	case nil:
+		return nil, nil
+	case string:
+		source := cleanPluginManifestPath(v)
+		if source == "" {
+			return nil, nil
+		}
+		return []string{source}, nil
+	case []any:
+		var sources []string
+		for _, item := range v {
+			text, ok := item.(string)
+			if !ok {
+				return nil, fmt.Errorf("skills entries must be strings")
+			}
+			source := cleanPluginManifestPath(text)
+			if source != "" {
+				sources = append(sources, source)
+			}
+		}
+		return sources, nil
+	default:
+		return nil, fmt.Errorf("skills must be a string or array of strings")
+	}
+}
+
+func cleanPluginManifestPath(raw string) string {
+	cleaned := strings.TrimSpace(raw)
+	cleaned = strings.TrimPrefix(cleaned, "./")
+	if cleaned == "" || cleaned == "." {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Clean(filepath.FromSlash(cleaned)))
+}
+
+func defaultString(value, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
 }
 
 func addLocalOverlayIgnores(repoRoot string, paths []string) error {
