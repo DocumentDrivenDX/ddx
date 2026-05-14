@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Audit confirms server-side WorkersByProject filter scopes by project root; new playwright e2e sets up two projects with distinct workers, navigates each route, asserts only the selected project's workers render, and verifies projectID is threaded into GraphQL variables.",
+  "findings": [
+    { "severity": "info", "summary": "Audit doc captured under .ddx/executions/<run-id>/audit.md per evidence convention.", "location": ".ddx/executions/20260502T132613-360df354/audit.md" },
+    { "severity": "info", "summary": "E2e covers both directions (A→B and B→A) and asserts negative cases (workers from the other project have count 0).", "location": "cli/internal/server/frontend/e2e/workers.spec.ts:799" }
+  ]
+}
+```

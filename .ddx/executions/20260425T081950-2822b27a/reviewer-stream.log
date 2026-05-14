@@ -1,0 +1,22 @@
+---
+## Review: ddx-12934d66 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | governing-doc trimming with truncation marker | APPROVE | execute_bead_review_evidence_test.go: TestBuildReviewPrompt_GoverningDocClamped (10× cap, bounded + marker assertion) |
+| 2 | diff trimming bounded under MaxDiffBytes | APPROVE | TestBuildReviewPrompt_DiffClamped (uses 5× cap; still exercises clamp + marker) |
+| 3 | minimum floor verbatim under 20× pressure | APPROVE | TestBuildReviewPrompt_FloorPreservedUnderPressure asserts Title/Description/AC/Notes + full file inventory |
+| 4 | ranked diff inclusion (AC > ref > others) | APPROVE | TestBuildReviewPrompt_RankedDiffInclusion checks ordering of marker indices |
+| 5 | large-file stat+hunk-header degradation | APPROVE | TestBuildReviewPrompt_LargeFileDegradation; degradeDiffFileBody at execute_bead_review.go new helper |
+| 6 | pre-dispatch short-circuit assembled prompt | APPROVE | BuildReviewPromptResult.Overflow + TestBuildReviewPrompt_PreDispatchShortCircuit |
+| 7 | TestReviewContextOverflow event + 0 dispatch | APPROVE | TestReviewContextOverflow drives worker loop, asserts review-error w/ 'context_overflow' and counter.calls==0 |
+| 8 | TestReviewFailureNotCloseBead remains green | APPROVE | Delegates to TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen |
+| 9 | AST/import gate for evidence usage | APPROVE | TestEvidencePrimitiveUsage parses execute_bead_review.go, walks AST for os.ReadFile/exec.Command("git","show") |
+
+### Summary
+
+Implementation cleanly routes governing-doc reads through `evidence.ReadFileClamped`, diff through `ClampDiff`+`DecomposeDiff`, adds priority-ordered ranking and per-file degradation, and wires the pre-dispatch short-circuit inside `DefaultBeadReviewer.ReviewBead` (functionally equivalent to wiring it in execute_bead_loop.go — the worker loop's existing review-error append path emits the event and leaves the bead open, which TestReviewContextOverflow verifies end-to-end). All five AC test functions are present with assertions matching the spec; floor preservation, marker presence, ranking order, and provider-zero-dispatch are all checked.

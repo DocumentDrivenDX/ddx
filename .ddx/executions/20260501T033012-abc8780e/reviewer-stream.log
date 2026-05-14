@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All 6 ACs implemented on /artifacts page (which supersedes /documents per bead note): search bar with ?q URL persistence, staleness badges, View in Graph + Open Graph buttons, Back to documents link, and ?highlight pan+pulse on D3Graph.",
+  "findings": [
+    {"severity": "info", "summary": "Implementation targets /artifacts rather than /documents, consistent with bead's interim note that /documents redirects to /artifacts once FEAT-008 lands.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte"}
+  ]
+}
+```

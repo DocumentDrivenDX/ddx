@@ -1,0 +1,16 @@
+---
+## Review: ddx-d532992f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | execute-bead system prompt instructs agents to use .ddx/executions/ | APPROVE | cli/internal/agent/execute_bead.go:1242-1244 (claude variant) and :1316-1318 (agent variant) — both add an "Investigation and report outputs" section pointing to `{{.AttemptDir}}` and forbidding `/tmp` |
+| 2 | CLAUDE.md or guidance file documents the convention | APPROVE | CLAUDE.md:203-205 — new "Execution Evidence Convention" section |
+| 3 | Test/demo of report AC writing to .ddx/executions/ | APPROVE | cli/internal/agent/execute_bead_evidence_path_test.go:1-59 — two tests verify both prompt variants reference `{{.AttemptDir}}`, forbid `/tmp`, and substitute cleanly to a concrete `.ddx/executions/<run-id>/` path |
+
+### Summary
+
+All three AC items are met cleanly. Both prompt variants get the same directive, CLAUDE.md gains a parallel project-wide note, and tests assert both the literal prompt content and that the `{{.AttemptDir}}` placeholder substitutes to a real `.ddx/executions/` path. Scope stays tight to the bead.

@@ -1,0 +1,3 @@
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"TC-002/003/005/007 rewritten to use the fixture node/project routes via runtime ID discovery filtered to ddx-e2e-* workspaces. Out-of-scope TCs and demo/playwright configs untouched. Execution recorded task_succeeded with exit 0.","findings":[{"severity":"info","summary":"TC-005 block relocated above TC-006 in file ordering; cosmetic only, coverage preserved.","location":"cli/internal/server/frontend/e2e/app.spec.ts"}]}
+```

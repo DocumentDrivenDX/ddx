@@ -1,0 +1,17 @@
+---
+## Review: ddx-0bbf8563 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestBuildGradingPrompt: trim/floor/PostRun/ToolCalls | APPROVE | grade_evidence_test.go:18-130 — four `TestBuildGradingPrompt_*` subtests cover output trimming, floor preservation (3-arm 2 MiB fixture), PostRunOut/PostRunOK/ToolCalls clamped inclusion, and diff decomposition |
+| 2 | TestGradingContextOverflow: short-circuit, dispatch=0 | APPROVE | grade_evidence_test.go:140-184 — asserts pinned `compare-error: context_overflow` substring in event Kind/Outcome and ProviderDispatchCount==0; mockExecutor never invoked |
+| 3 | TestEvidencePrimitiveUsage: imports + no raw os.ReadFile | APPROVE | grade_evidence_test.go:189-251 — AST gate verifies `cli/internal/evidence` import and walks for unannotated `os.ReadFile` calls |
+| 4 | Existing comparison tests still pass | APPROVE | grade.go:124-127 — legacy `buildGradingPrompt(record, customRubric)` preserved as a thin wrapper over `buildGradingPromptBounded` with `DefaultCaps()` |
+
+### Summary
+
+Clean Stage C2 implementation. Floor-first assembly (rubric + task + per-arm identity always emitted) with body trimmed to fit `MaxPromptBytes - reserved`, all per-arm sections (Output, PostRunOut, ToolCalls JSON, Diff) routed through `evidence.ClampOutput` / `ClampDiff` + `DecomposeDiff`, and a typed `GradingEvent` with the pinned `OutcomeCompareContextOverflow` constant for Stage F aggregation. Legacy entry point retained, so existing comparison tests keep working unchanged.

@@ -1,0 +1,22 @@
+---
+## Review: ddx-915240dd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Config no longer names provider profiles | BLOCK | — not found in diff |
+| 2 | Cheap-only drains land at live endpoints | BLOCK | — not found in diff |
+| 3 | 32 fake-migration children begin progress | BLOCK | — not found in diff |
+
+### Summary
+
+The diff only adds `.ddx/executions/.../result.json` execution metadata. It does not include the required agent version bump, config migration, routing evidence, or bead drain progress needed to evaluate the acceptance criteria.
+
+### Findings
+
+- `.ddx/config.yaml` is missing from the diff, so there is no evidence that DDx migrated away from named provider profiles to endpoint-first routing.
+- `cli/go.mod` is missing from the diff, so there is no evidence that DDx was bumped to the upstream agent release containing the endpoint-first redesign.
+- No `ddx work --no-adaptive-min-tier --min-tier cheap --max-tier cheap` output, tracker updates, or child bead progress evidence is included, so the cheap-only live-endpoint drain requirement is unevaluated.

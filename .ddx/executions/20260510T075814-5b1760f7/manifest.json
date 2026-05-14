@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260510T075814-5b1760f7",
+  "bead_id": "ddx-b194d20f",
+  "base_rev": "0d4c92efe58b076d62fe334dfb33576dbdd7b5d6",
+  "created_at": "2026-05-10T07:58:21.850249869Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b194d20f",
+    "title": "Rename DDx execution internals away from agent vocabulary",
+    "description": "PROBLEM\nDDx internals still use `cli/internal/agent`, AgentRunRuntime, AgentRunner, ExecuteBead*, and related names for DDx-owned task execution. After the spec update, those names will be wrong: DDx owns task execution, while Fizeau owns routing/execution internals. Keeping `agent` as the DDx package name invites future routing-policy drift and confusion with real external AI agents.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/ contains DDx-owned queue drain, bead attempt, review, worktree, session evidence, and Fizeau adapter code. Existing refactor bead ddx-387a0178 still targets cli/internal/agent/try and cli/internal/agent/work and acceptance #7 keeps deprecated `ddx agent` aliases. Existing terminology bead ddx-3ee4ddcf still says not to remove legacy aliases. Those plans conflict with the no-deprecation decision and with FEAT-010 task-execution vocabulary.\n\nPROPOSED FIX\nAfter specs are ratified and the Fizeau contract cleanup release is integrated, split/rename DDx-owned internals to names matching responsibilities, for example `cli/internal/taskexec`, `cli/internal/taskexec/run`, `cli/internal/taskexec/try`, `cli/internal/taskexec/work`, `cli/internal/fizeauadapter`, and `cli/internal/runlog` or equivalent repo-consistent names. Rename exported/internal identifiers accordingly: AgentRunRuntime -\u003e TaskRunRuntime or FizeauRunRuntime as appropriate; AgentRunner -\u003e TaskExecutor/FizeauExecutor; ExecuteBead* -\u003e Try/Attempt/Work terms. Keep `agent` only in literal external-agent concepts, historical event keys that cannot be migrated safely, or third-party standards names.\n\nNON-SCOPE\nDo not remove the public `ddx agent` CLI in this bead unless it is already covered by ddx-d8474e0e. Do not change queue behavior, retry policy, review gates, or routing semantics. Do not implement Fizeau fuzzy matching. Do not rename durable tracker keys unless a migration plan is included in a separate bead.\n\nPARENT AND DEPENDENCIES\nParent: ddx-f088a3fd. Depends on: ddx-424fdac4 and ddx-7065edd1.",
+    "acceptance": "1. DDx-owned production code no longer lives under `cli/internal/agent`; remaining `agent` package/path references are audited as literal external-agent, generated historical data, or compatibility storage.\n2. FEAT-010 package/path references match the implemented package names.\n3. All new or renamed DDx task-execution identifiers use run/try/work/taskexec/fizeauadapter vocabulary rather than Agent/ExecuteBead/ExecuteLoop vocabulary, except audited durable compatibility names.\n4. Existing stale beads ddx-387a0178 and ddx-3ee4ddcf are updated, closed as superseded, or otherwise made non-dispatchable so they no longer instruct workers to preserve `ddx agent` aliases or create new `cli/internal/agent` packages.\n5. `rg -n \"cli/internal/agent|AgentRunRuntime|AgentRunner|ExecuteBead|ExecuteLoop|ddx agent\" cli docs .agents/skills .claude/skills skills` returns only audited retained hits documented in the implementation notes.\n6. `cd cli \u0026\u0026 go test ./cmd/... ./internal/... -run \"Test.*(Run|Try|Work|Fizeau|Terminology|Routing).*\" -count=1` passes after updating exact final test names.\n7. `cd cli \u0026\u0026 go test ./...` passes.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-f088a3fd",
+    "labels": [
+      "phase:2",
+      "area:execution",
+      "area:refactor",
+      "area:fizeau",
+      "kind:breaking"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T07:57:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T07:56:44.555747377Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T07:58:14.605017503Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T07:57:10.118779949Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260510T075814-5b1760f7",
+    "prompt": ".ddx/executions/20260510T075814-5b1760f7/prompt.md",
+    "manifest": ".ddx/executions/20260510T075814-5b1760f7/manifest.json",
+    "result": ".ddx/executions/20260510T075814-5b1760f7/result.json",
+    "checks": ".ddx/executions/20260510T075814-5b1760f7/checks.json",
+    "usage": ".ddx/executions/20260510T075814-5b1760f7/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b194d20f-20260510T075814-5b1760f7"
+  },
+  "prompt_sha": "8f6898c3533a27ebb6a7d7ae920557869f3a3a7a4cce7657e3a237b48a40cc1f"
+}

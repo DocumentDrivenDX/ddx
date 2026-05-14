@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds DDx execution metadata and contains none of the required dependency, formatter, fixture, or test changes needed to satisfy the acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation is present for the bead scope: the diff does not update `cli/go.mod`/`go.sum`, does not modify progress formatting, and does not add the required formatter test coverage. Only execution metadata files were added, so every AC remains unmet or unevaluable.",
+      "location": ".ddx/executions/20260506T214924-5f579349/manifest.json:1"
+    }
+  ]
+}
+```

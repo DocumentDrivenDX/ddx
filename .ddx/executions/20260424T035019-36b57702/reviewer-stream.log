@@ -1,0 +1,17 @@
+---
+## Review: ddx-13041fa6 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner in target test | APPROVE | cli/cmd/agent_execute_bead_test.go:449-550 — body uses real `exec.Command("git",...)` + `agent.NewRunner`; only comments (lines 402, 502) reference the old fakes |
+| 2 | Dispatches via real git + script harness | APPROVE | agent_execute_bead_test.go:519 real runner `agent.NewRunner(agent.Config{})`; `--harness script` with directive file creates actual worker commit; real `git init`/`commit`/`rev-parse` throughout |
+| 3 | go test ...TestExecuteBeadPreserveOnMergeFailure passes | APPROVE | .ddx/executions/20260424T035019-36b57702/result.json — outcome=task_succeeded, exit_code=0 (landed as 8ce896a0) |
+| 4 | No other test in file modified | APPROVE | `git show --stat 8ce896a0` — sole file changed, 95+/18−, localized to the single function at lines 444-550 |
+
+### Summary
+
+Clean migration. The test now bootstraps a real repo, advances main with a conflicting sibling commit, drives the script harness to emit a real worker commit on a worktree rooted at baseSHA, and asserts the real preserve path: ref pattern includes the current-tip prefix, `git rev-parse` resolves the hidden ref to the worker SHA, and main carries no merge commit. Assertions strictly strengthen the prior fake-based ones rather than weaken them. Scope held — other tests in the file still use the fakes (out of scope per the bead).

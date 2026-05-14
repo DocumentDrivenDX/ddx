@@ -1,0 +1,17 @@
+---
+## Review: ddx-68c372a6 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No refs to fakeExecuteBeadGit / fakeAgentRunner | APPROVE | cli/cmd/agent_execute_bead_test.go:356-446 — both fakes removed; real `agent.NewRunner(agent.Config{})` + real git used |
+| 2 | Uses RealLandingGitOps + real-git harness | APPROVE | Test `git init`s a real repo, drives through `NewCommandFactory` (no GitOpsOverride) → Land() uses RealLandingGitOps; script harness invoked via `--harness script --model <directive>` |
+| 3 | go test ...TestExecuteBeadMerge passes | APPROVE | Execution evidence result.json: `"outcome":"task_succeeded","exit_code":0`; commit landed to main (30b1f128 ancestor) |
+| 4 | No other test in file modified | APPROVE | `git show 68e0bb27 --stat`: only `agent_execute_bead_test.go` touched, 79/-17; diff shows only TestExecuteBeadMerge body changed |
+
+### Summary
+
+Clean migration. Test now exercises real `git init`/`worktree add`/ref update/working-tree sync via Land() and drives an actual commit through the script harness. Adds a strong new assertion that `hello.txt` materializes on main after merge — a real regression guard that the old fake-based test could not express.

@@ -1,0 +1,12 @@
+All AC items satisfied: ADR added at docs/helix/02-design/adr/, status=Accepted, covers requireTrusted, audit-as-bead, no synchronous mutation, multi-node, threat model, allowed-mutation scope, and is linked from FEAT-006 and FEAT-008.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ADR-021 added at docs/helix/02-design/adr/ with Status: Accepted. Covers requireTrusted, audit-as-bead (no parallel table), no synchronous in-process mutation, multi-node delegation, prompt-injection threat model, and allowed-mutation scope. Cross-linked from FEAT-006 and FEAT-008.",
+  "findings": [
+    { "severity": "info", "summary": "ADR placed under docs/helix/02-design/adr/ rather than docs/helix/adrs/; acceptance allows project ADR dir, and this matches existing convention.", "location": "docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md" }
+  ]
+}
+```

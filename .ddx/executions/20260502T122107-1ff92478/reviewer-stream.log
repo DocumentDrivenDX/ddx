@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Edge stroke and arrowhead fill swapped to fg-muted/dark-fg-muted tokens; new contrast spec asserts >=3:1 in both modes and regression-guards the old tokens; geometry untouched.",
+  "findings": [
+    { "severity": "info", "summary": "AC #2 says 'computed-style assertions'; spec instead mirrors token hex values from tailwind config and computes WCAG contrast in JS. Functionally equivalent and includes a regression guard, but token values must be kept in sync manually (comment in spec calls this out).", "location": "cli/internal/server/frontend/src/lib/components/D3Graph.contrast.spec.ts:10" }
+  ]
+}
+```

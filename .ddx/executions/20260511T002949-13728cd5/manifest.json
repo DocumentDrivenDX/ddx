@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260511T002949-13728cd5",
+  "bead_id": "ddx-72fa7788",
+  "base_rev": "99465b9c465dea114589acd12b68d1ef331ce56b",
+  "created_at": "2026-05-11T00:29:52.335724615Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-72fa7788",
+    "title": "refactor(vocab): rename run-id → attempt-id across code, dirs, events, specs",
+    "description": "PROBLEM\n  The DDx codebase uses two names for the same concept:\n    - run-id: directory name in .ddx/executions/\u003crun-id\u003e/\n    - attempt_id: field name in events bodies (cost event, etc.)\n\n  These refer to the same thing — one full cycle of trying to\n  complete a bead. The split vocabulary creates confusion,\n  inconsistency in docs, and friction for newcomers.\n\n  Per sister bead \"feat(metrics): extract per-attempt rows\",\n  the metrics file is named attempts.jsonl, locking in\n  \"attempt\" as the canonical term going forward. This bead\n  rename run-id → attempt-id everywhere to align.\n\nCURRENT STATE\n  - .ddx/executions/\u003crun-id\u003e/ directory naming.\n  - Event bodies: attempt_id (already correct).\n  - Code: runID variables, RunID constants, etc.\n  - Spec docs: TD-031, SD-025, ADR-024 reference both terms.\n\nPROPOSED FIX\n  - Codebase: rename runID → attemptID, run_id → attempt_id,\n    RunID → AttemptID, etc., across cli/.\n  - File-system: rename .ddx/executions/\u003crun-id\u003e/ to\n    .ddx/executions/\u003cattempt-id\u003e/ for new dirs. Old dirs\n    remain with their existing names (backward-compat readers\n    accept both).\n  - Reader compatibility: code that reads execution dirs must\n    accept both naming conventions (attempt-id, run-id) for\n    existing dirs.\n  - Spec docs: update TD-031, SD-025, ADR-024 to use\n    attempt-id consistently. Cross-references updated.\n  - Tests: update test fixtures.\n  - Migration of existing data: no rename needed (readers\n    accept both forms).\n\n  Tests:\n    - TestVocabConsistency_AttemptIDOnly: assert no run-id or\n      runID identifiers remain in cli/internal/agent/.\n    - TestExecutionDirs_AcceptBothNames: assert readers handle\n      both legacy run-id and new attempt-id named dirs.\n\nNON-SCOPE\n  - Renaming session_id (separate concept; refers to agent\n    harness session, not bead-attempt).\n  - Renaming .ddx/executions/ → .ddx/attempts/ (could be done\n    in a follow-up; this bead just aligns the inner ID name).\n\nINTERSECTIONS\n  - Sister bead \"feat(metrics): extract per-attempt rows\"\n    locks in \"attempt\" terminology.\n  - Sister bead \"docs(ADR): formalize 3-tier evidence\n    storage\" should use attempt-id consistently.",
+    "acceptance": "1. cli/ source uses attemptID (Go identifier) / attempt_id (JSON field) consistently; no runID/run_id remains in cli/internal/agent/ or cli/internal/bead/.\n2. New execution dirs are created with names matching \u003cattempt-id\u003e; readers accept both new and legacy formats.\n3. docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md, docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md, and docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md use attempt-id terminology consistently.\n4. TestVocabConsistency_AttemptIDOnly passes (grep across cli/internal/agent/ and cli/internal/bead/ for run-id terms).\n5. TestExecutionDirs_AcceptBothNames asserts readers handle both legacy and new naming.\n6. cd cli \u0026\u0026 go test ./... green.\n7. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "area:bead",
+      "kind:refactor",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-11T00:28:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-11T00:29:49.518757466Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-11T00:28:43.29738503Z",
+      "queue-rank": "35"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260511T002949-13728cd5",
+    "prompt": ".ddx/executions/20260511T002949-13728cd5/prompt.md",
+    "manifest": ".ddx/executions/20260511T002949-13728cd5/manifest.json",
+    "result": ".ddx/executions/20260511T002949-13728cd5/result.json",
+    "checks": ".ddx/executions/20260511T002949-13728cd5/checks.json",
+    "usage": ".ddx/executions/20260511T002949-13728cd5/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-72fa7788-20260511T002949-13728cd5"
+  },
+  "prompt_sha": "03217924c1574039ce9d440a3df17e46439b71ed0597aaa1b8ad43acb9d8d068"
+}

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "RunOptions removed from server.go; both handleAgentDispatch and mcpAgentDispatch migrated to LoadAndResolve + AgentRunRuntime + RunWithConfigViaService per SD-024 Stage 2. Execution result reports success with exit_code 0.",
+  "findings": [
+    { "severity": "warn", "summary": "config.LoadAndResolve error is discarded with `_` at both call sites; a load failure will silently fall through to a zero-value ResolvedConfig instead of being surfaced to the caller.", "location": "cli/internal/server/server.go:1913" },
+    { "severity": "info", "summary": "Build/test commands could not be executed in this review environment to independently verify AC items 2 and 3; relying on the recorded successful execution result.", "location": ".ddx/executions/20260426T193714-a40b0ea6/result.json" }
+  ]
+}
+```

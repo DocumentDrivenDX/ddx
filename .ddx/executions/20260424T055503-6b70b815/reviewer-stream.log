@@ -1,0 +1,17 @@
+---
+## Review: ddx-909e5e74 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Test no longer references fakeExecuteBeadGit/fakeAgentRunner | APPROVE | cli/cmd/agent_execute_bead_test.go:2652-2709 — function body uses real git + `agent.NewRunner`; grep shows no fake refs inside this test |
+| 2 | Dispatches through real git harness + real runner | APPROVE | agent_execute_bead_test.go:2669-2680 (real `git init`/commit via scrubbed env), :2705 `f.AgentRunnerOverride = agent.NewRunner(agent.Config{})`, :2707 `--harness script` with directive file |
+| 3 | `go test ./cmd -run '^TestExecuteBeadNoGatesWhenNoChanges$'` green | APPROVE | result.json outcome=task_succeeded, status=success, exit_code=0; also merged to main as 13cf0731 which would have failed lefthook otherwise |
+| 4 | No other test in agent_execute_bead_test.go modified | APPROVE | commit stat: 1 file, +54/-8, all hunks confined to the target function at lines 2643-2709 |
+
+### Summary
+
+Clean, targeted migration. The test now exercises real `ExecuteBead → LandBeadResult` semantics against an isolated real-git repo, with the "no changes" outcome produced by a script-harness directive file rather than a stubbed `mainHeadRev==wtHeadRev` pair. Scope was respected — sibling fakes remain referenced by other tests, which is expected.

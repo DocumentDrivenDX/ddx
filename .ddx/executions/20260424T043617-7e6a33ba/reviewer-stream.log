@@ -1,0 +1,17 @@
+---
+## Review: ddx-02e5e3ba iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner in target test | APPROVE | cli/cmd/agent_execute_bead_test.go:1341-1411 — migrated body uses real `git worktree add` and `agent.NewRunner`; fakes only remain in siblings (out of scope) |
+| 2 | Real-git harness + real landing ops | APPROVE | test inits real repo via exec.Command("git",...), registers orphan with `git worktree add --detach`, omits executeBeadGitOverride so production ops (RealLandingGitOps) drive merge/preserve; uses `--harness script --model <directives>` for the agent |
+| 3 | Test passes | APPROVE | execution manifest .ddx/executions/20260424T043617-7e6a33ba/result.json records outcome=task_succeeded for result_rev=c39501aa, i.e., the bead's own gate ran the test green |
+| 4 | No other tests modified | APPROVE | git show c39501aa --stat: single file, 64+/15−, only the TestExecuteBeadOrphanRecovery function block changes in the diff |
+
+### Summary
+
+The migration cleanly replaces the fake git + fake runner with a real git-init'd repo and a scripted agent driven by a per-attempt directive file, asserting orphan removal via both on-disk absence and `git worktree list --porcelain`. Scope is held to the one test; siblings are untouched.

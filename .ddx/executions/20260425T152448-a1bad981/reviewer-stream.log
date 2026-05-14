@@ -1,0 +1,21 @@
+---
+## Review: ddx-dd7fce7e iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestReviewRetryThresholdFromConfigCLI passes | APPROVE | cli/cmd/agent_execute_loop_e2e_test.go:1-151 — loads real .ddx/config.yaml with review_max_retries:5, calls config.LoadAndResolve + worker.RunWithConfig (mirrors migrated dispatch in cli/cmd/agent_cmd.go:1996-2026), drives 5 attempts via testfixtures.ReviewFailureRunner, asserts review-manual-required count == 0 and bead closed. |
+| 2 | `cd cli && go test ./...` passes | REQUEST_CHANGES | Commit message admits pre-commit go-test stage was skipped via LEFTHOOK_EXCLUDE; agent verified the failures (TestBeadReviewCollapseGolden golden drift; install acceptance tests needing ./build/ddx) pre-exist on base b6d828ec but did not produce a passing run on this commit. AC text is explicit. |
+
+### Summary
+
+CLI dispatch migration is correctly executed: agent_cmd.go runAgentExecuteLoop now builds CLIOverrides, calls LoadAndResolve, and invokes RunWithConfig with ExecuteBeadLoopRuntime — the durable knobs (ReviewMaxRetries, harness/model) leave the options struct entirely. The e2e test is structured as a true behavioral assertion against on-disk YAML. The only unmet criterion is the literal `go test ./...` green tree, which the agent acknowledged was skipped due to pre-existing unrelated failures.
+
+### Findings
+
+- cli/cmd/agent_cmd.go:2010 — `rcfg, _ := config.LoadAndResolve(projectRoot, overrides)` silently swallows the error. If LoadAndResolve fails (malformed YAML, etc.), a zero-value ResolvedConfig flows into RunWithConfig and SD-024's sealed-construction sentinel will panic at first accessor read instead of surfacing a clean CLI error. Capture and return/log the error.
+- AC #2 verification: produce a `go test ./...` run (or scope exclusion list) demonstrating the cmd-package failures are byte-identical pre/post this bead, or fix them in-scope. Pointing at LEFTHOOK_EXCLUDE in the commit body is not a substitute for the AC's literal requirement.
+- Test pragmatics: `store.Unclaim(beadID)` between iterations is a hand-driven re-pickup that the production poll loop would do naturally. Acceptable for a unit-style e2e but worth a one-line comment that this stands in for the poll-loop reclaim, not a behavior under test.

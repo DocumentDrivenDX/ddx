@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "TC-001 rewritten to navigate fixture node/project route (/nodes/node-abc/projects/proj-1) mirroring navigation.spec.ts pattern; mocks NodeInfo/Projects/QueueSummary; demo files untouched; tests passed (exit 0).",
+  "findings": [
+    { "severity": "info", "summary": "Fixture IDs (node-abc, proj-1) are hardcoded inline rather than imported from a shared helper, but this matches the existing navigation.spec.ts pattern since no shared fixture constants module exists.", "location": "cli/internal/server/frontend/e2e/app.spec.ts:11" }
+  ]
+}
+```

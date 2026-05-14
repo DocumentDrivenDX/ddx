@@ -1,0 +1,16 @@
+---
+## Review: ddx-505316a9 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | go build ./internal/agent/... passes | APPROVE | execute_bead_loop.go:14-75 — adds types/method with proper imports; result.json shows exit_code 0 |
+| 2 | TestRunWithConfigDelegation passes via NewTestConfigForLoop+Resolve+RunWithConfig | APPROVE | execute_bead_loop_runwithconfig_test.go:20-86 — builds *Config via NewTestConfigForLoop, calls Resolve, calls RunWithConfig, asserts harness/model/assignee on loop.start event and execute-bead Actor |
+| 3 | go test ./... passes; old Run stays green | APPROVE | execute_bead_loop.go:43 — RunWithConfig delegates via w.Run(ctx, opts); ExecuteBeadLoopOptions and Run unmodified |
+
+### Summary
+
+Clean Stage 1 add-alongside implementation: ExecuteBeadLoopRuntime strips all durable fields (Assignee, ReviewMaxRetries, cooldowns, harness/model/tier) and RunWithConfig translates rcfg+runtime back into ExecuteBeadLoopOptions before delegating to the existing Run. Test asserts observable behavior via the event sink (loop.start, execute-bead Actor, routing body) rather than synthetic telemetry, matching SD-024's test-coverage commitment, and a bonus zero-value-panics test verifies the sealed-construction invariant flows through.

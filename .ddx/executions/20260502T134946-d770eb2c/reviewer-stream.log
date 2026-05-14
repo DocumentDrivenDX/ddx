@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no ladder code, no tests, no NoViableProviderError type are present in this changeset to evaluate against the acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No ladder.Next implementation visible in diff (AC1)", "location": "cli/internal/agent/escalation/" },
+    { "severity": "block", "summary": "No unit tests for transitions visible in diff (AC2)", "location": "cli/internal/agent/escalation/" },
+    { "severity": "block", "summary": "No NoViableProviderError type visible in diff (AC3)", "location": "cli/internal/agent/escalation/" },
+    { "severity": "block", "summary": "No tests asserting RoutingActual.Power input visible in diff (AC4)", "location": "cli/internal/agent/escalation/" }
+  ]
+}
+```

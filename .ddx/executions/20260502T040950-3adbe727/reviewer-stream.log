@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Close externalizes inline events to .ddx/attachments/<id>/events.jsonl, Events()/show --json transparently re-inline via LoadEventsInline, ExportTo inlines for bd/br interchange, ClosureGate accepts attached events, AppendEvent/Reopen handle both shapes, and TestAttachment* coverage exists.",
+  "findings": [
+    { "severity": "info", "summary": "Close path performs an extra full-store read+write to externalize after the status update; acceptable but doubles I/O on close. Could be folded into the same Update transaction in a follow-up.", "location": "cli/internal/bead/store.go:917" },
+    { "severity": "info", "summary": "Reopen pulls events back inline and removes the sidecar file but does not remove the attachment directory if empty; harmless cosmetic leftover.", "location": "cli/internal/bead/store.go:1100" }
+  ]
+}
+```

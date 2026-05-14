@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "buildArgsInput struct declared at runner.go:449; BuildArgs signature narrowed to take it; all 17 agent_test.go call sites pass buildArgsInput literals; adjacent runner.go and claude_stream.go convert via buildArgsInputFromRunOptions, matching the in-scope/out-of-scope split.",
+  "findings": [
+    { "severity": "info", "summary": "Commit was pushed with --no-verify due to pre-existing runtimelint flags on legacy RunOptions in runner.go/claude_stream.go, which the bead explicitly leaves for B22 final.", "location": "cli/internal/agent/runner.go" }
+  ]
+}
+```

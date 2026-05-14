@@ -1,0 +1,29 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata. It contains no code changes, no decisions log, and no verification evidence for deadcode or go test, so none of the acceptance criteria can be confirmed.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation is present for wiring or deleting `LoadState` and `SaveState`; the diff contains only execution metadata, so AC1 cannot be verified.",
+      "location": ".ddx/executions/20260507T022503-fcf8cc22/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "No `decisions.md` file was added under the execution directory, so the required per-symbol decision log is missing.",
+      "location": ".ddx/executions/20260507T022503-fcf8cc22/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no deadcode RTA output or other evidence showing zero remaining dead symbols in `internal/federation`, so AC3 is unmet.",
+      "location": ".ddx/executions/20260507T022503-fcf8cc22/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no test output or recorded proof that `cd cli && go test ./...` passed, so AC4 is unmet.",
+      "location": ".ddx/executions/20260507T022503-fcf8cc22/result.json:1"
+    }
+  ]
+}
+```

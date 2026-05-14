@@ -1,0 +1,17 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution-evidence JSON files (manifest.json, result.json). No source code changes exist. None of the 17 acceptance criteria — unified ExecuteLoopSpec struct, DispatchOptions, Validate/ApplyDefaults, custom Duration codec, cobra rebind, REST/GraphQL handler unification, workers.go consumer migration, reflection round-trip test, SpecVersion gate, OpaquePassthrough fix — are implemented here. The bead's notes claim decomposition into 6 children, but no child beads are visible in the changed files either; only evidence artifacts were committed.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes implementing AC1-AC10: unified ExecuteLoopSpec struct, DispatchOptions, Validate/ApplyDefaults, Duration codec, cobra parse, HTTP marshalling, server decode, GraphQL adapter unification, workers.go migration, runWorker consumption — none present.", "location": "cli/internal/agent/ (expected new package, absent)" },
+    { "severity": "block", "summary": "AC11 reflection round-trip test (TestExecuteLoopSpec_RoundTripsAllFields_Reflection) not added.", "location": "cli/internal/agent/ tests (absent)" },
+    { "severity": "block", "summary": "AC12 OpaquePassthrough fix at workers.go:314-317 and :752-773 not applied; user-observed `ddx work --harness claude` server-path bug remains.", "location": "cli/internal/server/workers.go:314-317,752-773" },
+    { "severity": "block", "summary": "AC7 hand-maintained request struct at server.go:2246-2260 not deleted.", "location": "cli/internal/server/server.go:2246-2260" },
+    { "severity": "block", "summary": "AC8 GraphQL workerDispatchAdapter parallel struct at graphql_adapters.go:62-75,123-137 not deleted.", "location": "cli/internal/server/graphql_adapters.go:62-75,123-137" },
+    { "severity": "block", "summary": "AC17 test invocation evidence absent; diff cannot demonstrate green tests because no source changed.", "location": "cli/" },
+    { "severity": "warn", "summary": "Bead notes claim decomposition into ddx-1a9cc01f, ddx-76cf71f4, ddx-da9e9491, ddx-ce1d6309, ddx-89a9c305, ddx-16722d4e, but the diff contains no .ddx/beads.jsonl mutation or child-bead artifacts to verify the decomposition was filed.", "location": ".ddx/beads.jsonl (not in diff)" },
+    { "severity": "info", "summary": "Commit b21843270 referenced as base; commit 4f25f6bf message 'decompose execute-loop spec unification' suggests the operator intent was decomposition, but the diff shown adds only execution evidence — the decomposition itself (child bead creation) is not represented in the reviewable changed-files list.", "location": ".ddx/executions/20260504T021759-c712d0e8/" }
+  ]
+}
+```

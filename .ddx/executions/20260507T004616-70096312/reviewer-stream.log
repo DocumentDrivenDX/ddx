@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata files. It contains no code changes, no decisions log, and no evidence that deadcode or go test acceptance criteria were satisfied.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation changes are present for `internal/federation/persistence.go`, so the two unreachable symbols cannot be verified as wired or deleted.",
+      "location": ".ddx/executions/20260507T004616-70096312/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log `.ddx/executions/<run-id>/decisions.md` is absent from the diff, so AC5 is not implemented.",
+      "location": ".ddx/executions/20260507T004616-70096312/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no included output or artifact showing `deadcode` reported zero remaining dead symbols in `internal/federation` or that `cd cli && go test ./...` passed.",
+      "location": ".ddx/executions/20260507T004616-70096312/result.json:1"
+    }
+  ]
+}
+```

@@ -1,0 +1,29 @@
+---
+## Review: ddx-15f7ee0b iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Fix A — test isolation enforced by CI | BLOCK | — not found in diff |
+| 2 | Fix B — sweep recognizes test-dir pollution | BLOCK | — not found in diff |
+| 3 | Fix C — pruning CLI | BLOCK | — not found in diff |
+| 4 | Perf amplifier — regression test | BLOCK | — not found in diff |
+| 5 | Backward compatibility | BLOCK | — not found in diff |
+| 6 | Cross-reference | BLOCK | — not found in diff |
+
+### Summary
+
+The reviewed diff only adds execution evidence under `.ddx/executions/20260423T014544-8fea19ef/`. It does not include the implementation, tests, CLI, or bead-note changes needed to evaluate or satisfy the acceptance criteria.
+
+### Findings
+
+- `cli/internal/server/**/*_test.go` — no test isolation migration or CI lint test is present in the diff.
+- `cli/internal/server/state.go`, `ServerState.migrate` — no test-dir pattern filtering, immediate-drop behavior, or phantom-project pruning log is present.
+- `cli/internal/server/state_test.go` or equivalent — no sweep fixture test for real, missing `/tmp/Test...`, reachable `/tmp/Test...`, and `/private/tmp/Test...` projects is present.
+- `cli/cmd/` or server command wiring — no `ddx server state prune [--dry-run] [--state <path>]` implementation is present.
+- CLI integration tests — no prune fixture test asserting 10 kept entries and a 110-entry backup is present.
+- `cli/internal/server/state_graphql.go`, `GetBeadSnapshots` tests, or CI workflow files — no regression test or CI assertion for skipping tombstoned/pattern-filtered projects is present.
+- Bead metadata/notes — no cross-reference notes linking `ddx-9ce6842a` and `ddx-2ceb02fa` are present in the reviewed diff.

@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json metadata file. No schema changes, resolver code, or tests are present to evaluate any AC item (mutation definition, idempotencyKey, duplicate handling, audit, concurrent tests).",
+  "findings": [
+    { "severity": "block", "summary": "No GraphQL schema change adding runRequeue mutation visible in diff", "location": "(missing)" },
+    { "severity": "block", "summary": "No resolver implementing atomic claim / duplicate idempotencyKey handling", "location": "(missing)" },
+    { "severity": "block", "summary": "No audit-event emission code for originating bead", "location": "(missing)" },
+    { "severity": "block", "summary": "No tests covering concurrent re-queue with same idempotencyKey", "location": "(missing)" },
+    { "severity": "info", "summary": "Only file changed is execution evidence metadata; actual implementation (per commit d9491735) is not part of the reviewed diff", "location": ".ddx/executions/20260503T052724-9252fd14/result.json" }
+  ]
+}
+```

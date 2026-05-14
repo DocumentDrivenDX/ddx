@@ -1,0 +1,19 @@
+## Review: ddx-021bd69b iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | ReviewVerdict struct with required fields | APPROVE | review_verdict.go:30 — SchemaVersion, Verdict, Summary, Findings |
+| 2 | Parser accepts/rejects required shapes | APPROVE | review_verdict.go:54 ParseReviewVerdict + extractJSONCandidate handles raw JSON, fenced, last-block; rejects missing/unknown/truncated |
+| 3 | TestParseReviewVerdict subtests | APPROVE | review_verdict_test.go:23 — covers each accept/reject case |
+| 4 | TestReviewerEmitsJSONContract rejects markdown | APPROVE | review_verdict_test.go:155 — asserts evidence.OutcomeReviewUnparseable |
+| 5 | TestReviewerJSONHappyPath | APPROVE | review_verdict_test.go:131 — verdict=APPROVE assertion |
+| 6 | TestReviewPromptRequestsJSON | APPROVE | review_verdict_test.go:204 — string-matches schema_version, ```json, verdict enum |
+| 7 | TestReviewerNoOptionsHeaderRegression | APPROVE | review_verdict_test.go:181 — feeds options-header echo, asserts unparseable not BLOCK |
+
+### Summary
+
+Clean implementation: typed ReviewVerdict struct, strict ParseReviewVerdict with sentinel ErrReviewVerdictUnparseable, prompt template rewritten to request JSON-only output (with "must NOT still request `### AC Grades`" assertion guarding regression). Old markdown extractor and its supporting helpers (`reVerdictLine`, `parseReviewACTable`, `extractReviewRationale`, `synthesizeReviewACsFromRationale`) are deleted. Type rename `ReviewVerdict` → `Verdict` cleanly separates the enum from the new struct. Result manifest reports task_succeeded with the expected test names.

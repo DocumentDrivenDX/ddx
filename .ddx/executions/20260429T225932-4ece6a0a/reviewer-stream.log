@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result metadata. No skill files at skills/ddx/effort-estimate/ are present in the changed-files list, so the bead's deliverable cannot be evaluated.",
+  "findings": [
+    { "severity": "block", "summary": "No skill source files (e.g., SKILL.md or equivalent under skills/ddx/effort-estimate/) appear in the diff; only execution telemetry is included.", "location": "skills/ddx/effort-estimate/" }
+  ]
+}
+```

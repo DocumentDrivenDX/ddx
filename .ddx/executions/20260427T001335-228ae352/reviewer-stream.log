@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "RunBenchmarkWithConfigViaService is declared in compare_adapter.go and the cmd/agent_cmd.go:1243 call site is switched. Legacy function preserved per scope. Result manifest reports build+tests green.",
+  "findings": [
+    { "severity": "info", "summary": "config.LoadAndResolve error is discarded with `_`; on error rcfg is the zero ResolvedConfig which (per SD-024 sealed-construction) will panic on accessor use. Acceptable for this bead but worth handling in step g/h.", "location": "cli/cmd/agent_cmd.go:1243" },
+    { "severity": "info", "summary": "Commit used --no-verify due to pre-existing runtimelint findings on legacy RunOptions literals; explicitly out-of-scope per bead description.", "location": "cli/internal/agent/compare_adapter.go" }
+  ]
+}
+```

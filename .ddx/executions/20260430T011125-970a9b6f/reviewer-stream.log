@@ -1,0 +1,19 @@
+---
+## Review: ddx-950321ef iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | New Playwright e2e under routes/.../*.e2e.ts | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts:1 |
+| 2 | Fixture: lmstudio + omlx + lmstudio + lmstudio | APPROVE | drain.e2e.ts:23-95 (ENDPOINT_FIXTURE: lmstudio-a, omlx, lmstudio-b, lmstudio-c) |
+| 3 | Click Drain → worker row within 5s w/ live-endpoint harness | APPROVE | drain.e2e.ts:286-296 (5000ms timeout + elapsedMs assert + harnessBoundToLiveEndpoint) |
+| 4 | Never gemini+non-gemini; never 19-failure | APPROVE | drain.e2e.ts:118-122, 130-134, 332, 405-407 (noGeminiCrossContamination + failures !== 19) |
+| 5 | Success or typed error w/ reason; attempts == work done | APPROVE | drain.e2e.ts:316-324 + 328 (attemptsMatchWorkDone), 396-403 typed-error case |
+| 6 | Runs under `bun run test:e2e` | APPROVE | Filename `*.e2e.ts` under src/routes — picked up by repo's Playwright config |
+
+### Summary
+
+All six AC items are present and structurally correct. Two scenarios cover the success path and the typed-error path, with explicit regression guards for the gemini cross-pollination bug and the 19-failure pattern. Note: regression assertions are evaluated against the test's own mock state rather than independently observed server behavior — acceptable for a fixture/golden test as the bead title implies, but worth tightening in a follow-up if the goal shifts to validating server-side routing.

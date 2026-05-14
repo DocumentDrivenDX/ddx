@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260510T232237-53038858",
+  "bead_id": "ddx-09ceb430",
+  "base_rev": "f734e5e82328e5c7333ead52f75fa368cc3f2ea3",
+  "created_at": "2026-05-10T23:22:39.446612217Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-09ceb430",
+    "title": "feat(work): ddx work analyze CLI for cross-attempt performance queries",
+    "description": "PROBLEM\n  After sister bead extracts per-attempt metrics to\n  .ddx/metrics/attempts.jsonl, operators need a query tool to\n  read it. Without a CLI, optimization signals are unused: the\n  data exists but answering \"which model has the best\n  cost-per-success?\" requires manual jq scripting per query.\n\nCURRENT STATE\n  - No ddx subcommand reads .ddx/metrics/.\n  - No documented query patterns for cross-attempt analysis.\n\nPROPOSED FIX\n  Implement ddx work analyze with the following query dimensions\n  and aggregations:\n\n  Dimensions (--by \u003cdim\u003e or composable):\n    - model\n    - harness\n    - profile\n    - prompt_template_hash\n    - spec_id\n    - outcome\n    - bead_id\n    - day / week / month (by ts_start bucket)\n\n  Aggregations (printed as columns):\n    - count(attempts)\n    - success_rate (closed-merged / total)\n    - avg cost_usd, sum cost_usd\n    - p50/p95 duration_ms\n    - avg input_tokens, output_tokens\n    - review_block_rate\n    - escalation_rate (ladder_steps_taken \u003e 0)\n\n  Output format:\n    - Default: human-readable table to stdout.\n    - --json: emit JSON rows for piping to other tools.\n    - --csv: emit CSV for spreadsheet import.\n\n  Examples:\n    ddx work analyze --by model\n        → rows: model, count, success_rate, avg_cost, ...\n    ddx work analyze --by model,outcome\n        → rows: model+outcome combos\n    ddx work analyze --by spec_id --since 7d\n        → recent week, by spec\n    ddx work analyze --where model=claude-sonnet-4-6 --by prompt_template_hash\n        → drill into a specific model\n\n  Implementation:\n    - cli/cmd/work_analyze.go (new file).\n    - Reads .ddx/metrics/attempts.jsonl in full (or partition\n      files if multi-machine arrives later).\n    - In-memory aggregation (millions of rows fit; this is not\n      a database).\n    - Pure-Go, no external deps.\n\n  Tests:\n    - TestAnalyze_ByModel\n    - TestAnalyze_BySpecId\n    - TestAnalyze_ComposedDimensions\n    - TestAnalyze_SinceFilter\n    - TestAnalyze_WhereFilter\n    - TestAnalyze_JSONOutput\n    - TestAnalyze_CSVOutput\n\nNON-SCOPE\n  - SQL or declarative query language (too much for v1).\n  - Live dashboards / web UI (separate concern).\n  - Cross-machine aggregation (deferred until federation\n    + partition).\n\nINTERSECTIONS\n  - Sister bead \"feat(metrics): extract per-attempt rows\" —\n    this bead reads the output of that one.\n  - ADR bead documents this as the analytics entrypoint.",
+    "acceptance": "1. cli/cmd/work_analyze.go implements ddx work analyze with --by \u003cdim\u003e, --since \u003cduration\u003e, --where \u003ckey\u003e=\u003cvalue\u003e, --json, --csv flags.\n2. Supported dimensions: model, harness, profile, prompt_template_hash, spec_id, outcome, bead_id, day, week, month.\n3. Supported aggregations: count, success_rate, avg cost_usd, sum cost_usd, p50/p95 duration_ms, avg tokens, review_block_rate, escalation_rate.\n4. Default output is human-readable table; --json emits JSONL; --csv emits CSV.\n5. TestAnalyze_ByModel, TestAnalyze_BySpecId, TestAnalyze_ComposedDimensions, TestAnalyze_SinceFilter, TestAnalyze_WhereFilter, TestAnalyze_JSONOutput, TestAnalyze_CSVOutput all pass.\n6. cd cli \u0026\u0026 go test ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "area:metrics",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T23:21:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T23:22:37.393871202Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T23:21:31.181815045Z",
+      "queue-rank": "34"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T232237-53038858",
+    "prompt": ".ddx/executions/20260510T232237-53038858/prompt.md",
+    "manifest": ".ddx/executions/20260510T232237-53038858/manifest.json",
+    "result": ".ddx/executions/20260510T232237-53038858/result.json",
+    "checks": ".ddx/executions/20260510T232237-53038858/checks.json",
+    "usage": ".ddx/executions/20260510T232237-53038858/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-09ceb430-20260510T232237-53038858"
+  },
+  "prompt_sha": "5e3252410e1cce143a39a213eec920ebde9904dd398a3890014be0a5f6c2e310"
+}

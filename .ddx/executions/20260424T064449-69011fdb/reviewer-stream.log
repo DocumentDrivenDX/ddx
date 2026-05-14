@@ -1,0 +1,19 @@
+---
+## Review: ddx-71fbe968 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Span uses `truncate min-w-0` not `shrink-0` | APPROVE | BeadDetail.svelte:264–268 — `class="min-w-0 truncate font-mono ..."`; parent keeps `min-w-0` at :263 |
+| 2 | `title={bead.id}` on span | APPROVE | BeadDetail.svelte:265 — `title={bead.id}` |
+| 3 | Copy-to-clipboard button with confirmation | APPROVE | BeadDetail.svelte:270–283 — Copy button with Check icon swap for 1.5s via `idCopied` |
+| 4 | Action buttons clickable, no overlap | APPROVE | e2e asserts `idBox.x+width <= delBox.x` and `deleteBtn.click()` opens dialog |
+| 5 | Playwright e2e covering all sub-items | APPROVE | beads.spec.ts — seeds 60-char id, asserts truncate class, bounding-rect non-intersection, title attr, clipboard write |
+| 6 | Renders cleanly at lengths 8, 32, 60, 120 | APPROVE | beads.spec.ts second test loops lengths [8,32,60,120] asserting no overflow and no overlap |
+
+### Summary
+
+Implementation cleanly matches the proposed direction: `shrink-0` swapped for `truncate min-w-0`, `title` added, a Copy/Check icon button with 1.5s confirmation added, and e2e coverage exercises each AC including the length matrix. Owner chip also gets `shrink-0` added to avoid unintended shrinkage, which is a sensible small adjustment.

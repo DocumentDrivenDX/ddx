@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Evidence tab lists bundle files with metadata, integrates whitelisted ≤64KB inline view via existing runBundleFile GraphQL (which enforces extension+size), download endpoint added with path-traversal-safe canonicalisation, and e2e covers list/view/truncated/download.",
+  "findings": [
+    {"severity": "info", "summary": "Inline view size/whitelist enforcement is delegated to the backend runBundleFile resolver (returns truncated/null content); UI correctly surfaces the truncated state.", "location": "cli/internal/server/frontend/src/lib/runDetail/Evidence.svelte"},
+    {"severity": "info", "summary": "Download handler enforces path confinement under the bundle root and forces attachment disposition.", "location": "cli/internal/server/server.go:5200"}
+  ]
+}
+```

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata (manifest.json, result.json) under .ddx/executions/. No changes to product-vision.md, concept doc, /why/ page, or execute-loop feature page — none of the AC items are evaluable from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "No documentation changes present in diff; AC requires updates to product-vision.md physics section, a new concept doc, /why/ root cause section, and execute-loop feature page", "location": "diff" },
+    { "severity": "info", "summary": "result.json references result_rev 504f582b which (per git log) does contain the docs changes, but those changes are not part of the diff under review", "location": ".ddx/executions/20260501T074835-f2ce1ec5/result.json" }
+  ]
+}
+```

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "TC-044 Playwright test added at e2e/graph.spec.ts asserts node-bbox/node-bbox non-overlap and label-bbox/foreign-circle non-overlap on a 48-node fixture after settle. Execution result_rev=d5303b7d records task_succeeded; existing graph e2e suite preserved.",
+  "findings": [
+    { "severity": "info", "summary": "Test uses a 48-node fixture rather than the 128-node TC-043 fixture; reasonable trade-off for runtime while still exercising hubs/cross-links.", "location": "cli/internal/server/frontend/e2e/graph.spec.ts:725" },
+    { "severity": "info", "summary": "Overlap loops break after >5 violations to keep failure messages bounded; assertion still fires correctly.", "location": "cli/internal/server/frontend/e2e/graph.spec.ts:805" }
+  ]
+}
+```

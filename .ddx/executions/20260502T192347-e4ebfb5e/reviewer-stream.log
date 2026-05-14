@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only a result.json execution-evidence file. No code changes for the tracker-commit lock, no lockfile, no tests. None of the 7 acceptance criteria are implemented in the reviewable diff.",
+  "findings": [
+    { "severity": "block", "summary": "No changes to cli/internal/agent/execute_bead.go wrapping tracker-commit in a file lock (AC1)", "location": "cli/internal/agent/execute_bead.go:1050" },
+    { "severity": "block", "summary": "No .ddx/.git-tracker.lock primitive introduced (AC2, AC3)", "location": "cli/internal/agent/" },
+    { "severity": "block", "summary": "No retry/backoff policy implementation (AC4, AC5)", "location": "cli/internal/agent/" },
+    { "severity": "block", "summary": "Missing TestTrackerCommit_ConcurrentSafety, TestTrackerCommit_StaleLockRecovery, TestTrackerCommit_RetryBackoffPolicy (AC6)", "location": "cli/internal/agent/" },
+    { "severity": "block", "summary": "Diff only adds execution evidence result.json; no source modifications to evaluate", "location": ".ddx/executions/20260502T192347-e4ebfb5e/result.json" }
+  ]
+}
+```

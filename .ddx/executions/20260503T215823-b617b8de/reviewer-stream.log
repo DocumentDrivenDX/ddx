@@ -1,0 +1,18 @@
+Based on the implementation commit 5f1fbef7 (referenced as result_rev in the evidence), all 4 AC items are addressed:
+
+1. `cli/internal/bead/axon_backend.go` exists (384 lines), implements `RawBackend` which Store wires into the Backend surface.
+2. 15 test functions cover create/get, update, claim/unclaim, dep add/remove/tree, list/ready/blocked, append-event, close+archive, JSONL export/import round-trip, atomic snapshot, concurrent claim, config selection (with/without flag), truthy parser, orphan recovery.
+3. `BackendAxon = "axon"` is wired into `NewStore` switch in store.go; gated by `DDX_AXON_EXPERIMENTAL=1`.
+4. result.json shows `outcome: task_succeeded`, `exit_code: 0`.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "axon_backend.go implements RawBackend per TD-030 two-collection split; Store routes beads.backend=axon behind DDX_AXON_EXPERIMENTAL flag; 15 unit tests cover all named AC ops (create/update/close, deps, list/ready/blocked, claim, events, archive, JSONL round-trip); execution evidence reports tests green.",
+  "findings": [
+    {"severity": "info", "summary": "AC §1 names 'Backend interface' but implementation is RawBackend; this is consistent with the layered design (Store exposes Backend, delegates to RawBackend) and matches the parent TD's contract.", "location": "cli/internal/bead/axon_backend.go:124"},
+    {"severity": "info", "summary": "manifest.json contains ~150 stale 'preflight_rejected' disruption events from a prior failed attempt; harmless evidence noise but inflates the evidence file substantially.", "location": ".ddx/executions/20260503T215823-b617b8de/manifest.json"}
+  ]
+}
+```

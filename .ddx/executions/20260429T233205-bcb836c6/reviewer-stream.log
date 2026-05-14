@@ -1,0 +1,21 @@
+---
+## Review: .execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-6d9490ce iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Add ddx_bead_blocked MCP tool | BLOCK | — diff contains only execution manifest/result JSON; no MCP tool code |
+| 2 | Add ddx_bead_dep_tree MCP tool | BLOCK | — diff contains only execution manifest/result JSON; no MCP tool code |
+
+### Summary
+
+The reviewed diff (c4b785d2) contains only execution evidence artifacts under `.ddx/executions/20260429T233205-bcb836c6/` (manifest.json, result.json). No source changes are present to add `ddx_bead_blocked` or `ddx_bead_dep_tree` MCP tools, and no tests accompany the change.
+
+### Findings
+
+- No changes under `cli/internal/mcp/` (or wherever MCP tools are registered) to add `ddx_bead_blocked` or `ddx_bead_dep_tree` handlers.
+- No test additions covering the two new MCP tools (e.g., a `*_test.go` exercising blocked listing and dep-tree retrieval).
+- The diff under review is purely execution metadata; the actual implementation commit (referenced as `05236b2a` in result.json) is not part of the diff being graded. Re-run the review against the implementation commit, or re-attempt the bead so the implementation diff is what gets reviewed.

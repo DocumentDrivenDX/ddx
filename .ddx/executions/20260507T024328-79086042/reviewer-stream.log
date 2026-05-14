@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution artifacts and contains no spec-document changes, so none of the bead’s required FEAT/ADR amendments are implemented or reviewable from this patch.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No changes were made to the required spec files (`FEAT-004`, `FEAT-008`, `FEAT-010`, `ADR-024`), so AC 1 through AC 5 are not implemented in this diff.",
+      "location": ".ddx/executions/20260507T024328-79086042/manifest.json"
+    },
+    {
+      "severity": "block",
+      "summary": "The patch does not add any Beads UI filter/detail-panel spec updates, task-execution semantics, or ADR alignment; it only records that an execution attempt ran successfully.",
+      "location": ".ddx/executions/20260507T024328-79086042/result.json"
+    },
+    {
+      "severity": "warn",
+      "summary": "AC 6 requires `lefthook run pre-commit` to pass, but this diff provides no check output or other evidence of that gate beyond a generic success result.",
+      "location": ".ddx/executions/20260507T024328-79086042/result.json"
+    }
+  ]
+}
+```

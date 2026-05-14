@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no code, test, or decisions-log changes, so none of the acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No production code changes are present to wire or delete the 16 unreachable symbols, so AC1 and AC3 are not implemented or assessable from this diff.",
+      "location": ".ddx/executions/20260506T185128-3f21f122/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required decisions log is missing from the changed files, so AC5 is not satisfied.",
+      "location": ".ddx/executions/20260506T185128-3f21f122/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no evidence of test execution or results for `cd cli && go test ./...`, so AC4 cannot be verified.",
+      "location": ".ddx/executions/20260506T185128-3f21f122/result.json:1"
+    }
+  ]
+}
+```

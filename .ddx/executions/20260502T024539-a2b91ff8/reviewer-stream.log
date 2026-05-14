@@ -1,0 +1,17 @@
+---
+## Review: ddx-c14000c5 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Hero gains 'A document-driven software factory.' sub-claim | APPROVE | website/content/_index.md:29-31 — sub-claim added directly under hero-headline block |
+| 2 | Sub-claim links to /docs/concepts/software-factory/ | APPROVE | website/content/_index.md:30 — `<a href="docs/concepts/software-factory/">`; resolves to /docs/concepts/software-factory/ from the root `_index.md`, and target page exists at website/content/docs/concepts/software-factory.md |
+| 3 | `cd website && hugo` builds without errors | APPROVE | Edit is plain Hugo shortcode-adjacent HTML inside an existing markdown block; no syntax change that would break the build (commit landed on main after execute-bead's build gate) |
+| 4 | `rg "document-driven software factory" _index.md/index.html` ≥ 1 match | APPROVE | website/content/_index.md:30 contains the exact phrase |
+
+### Summary
+
+Minimal, well-scoped change: a single 4-line block adds the linked sub-claim under the hero in `_index.md`, matching all four ACs. Link uses a relative path (`docs/...`) instead of absolute (`/docs/...`), but on the root `_index.md` it resolves to the same URL, so AC #2 is functionally satisfied.

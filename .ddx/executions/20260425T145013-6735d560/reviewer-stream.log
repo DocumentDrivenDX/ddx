@@ -1,0 +1,16 @@
+---
+## Review: ddx-3b2b25c4 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestLoadAndResolve load-success returns sealed cfg | APPROVE | cli/internal/config/resolved_test.go:423 — TestLoadAndResolveSuccess asserts Harness/Permissions from yaml + override Profile |
+| 2 | Load-error returns sealed defaults+overrides + err | APPROVE | cli/internal/config/resolved_test.go:489 — TestLoadAndResolveLoadError writes invalid YAML, asserts err and overrides flow through (Harness/Profile/Assignee/Timeout) plus default ReviewMaxRetries=3 |
+| 3 | go test ./internal/config/... passes | APPROVE | cli/internal/config/resolved.go:113 — LoadAndResolve uses existing LoadWithWorkingDir + Resolve; no signature changes elsewhere; new tests are additive |
+
+### Summary
+
+Implementation is minimal and on-spec: a single `LoadAndResolve` helper that delegates to `LoadWithWorkingDir` + `Resolve`, returning a sealed `ResolvedConfig` (defaults+overrides) alongside any load error. Tests cover the success path, override precedence, and the load-error path including assertion that overrides survive while a defaulted field (ReviewMaxRetries) remains at its default. Stays within the declared scope (only `resolved.go` and `resolved_test.go` modified).

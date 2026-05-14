@@ -1,0 +1,25 @@
+---
+## Review: ddx-b5115410 iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Efficacy table columns + null cost em-dash | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.svelte:282 — table and required headers/cells implemented |
+| 2 | URL filters tier/label/spec-id | REQUEST_CHANGES | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.ts:5 — query omits tier/labels/specId used by filters |
+| 3 | Below-floor warning badge + tooltip link | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.svelte:315 — svg role/img aria-label and tooltip link implemented |
+| 4 | Row click opens attempts aside + links | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.svelte:405 — complementary aside with last attempts and bead/evidence links |
+| 5 | Compare dialog starts with zero arms | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.svelte:143 — openCompare resets comparisonArms to [] |
+| 6 | Add arms include select model + prompt textarea | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.svelte:493 — comparison-arm with select/textarea controls |
+| 7 | Submit dispatches comparison + result link | APPROVE | cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.svelte:164 — mutation dispatch prepends result shown as link |
+| 8 | e2e 5/5 green; screenshots committed | APPROVE | cli/internal/server/frontend/e2e/screenshots.spec.ts:19 — efficacy screenshots added; snapshot PNGs committed |
+
+### Summary
+
+The implementation covers the table, warning, detail panel, compare dialog, dispatch flow, tests, and screenshots. The remaining issue is that label/spec-id filtering is only wired in local UI state, but the loader does not request the fields needed for those filters to work against real GraphQL data.
+
+### Findings
+
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.ts`, `EFFICACY_ROWS_QUERY`: add `tier`, `labels`, and `specId` to the query or otherwise pass them from the backend. `+page.svelte` filters on `row.labels` and `row.specId`, but missing fields are treated as matches, so label/spec-id filters will not actually narrow real rows.

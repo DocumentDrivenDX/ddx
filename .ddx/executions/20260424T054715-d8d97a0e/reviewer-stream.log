@@ -1,0 +1,17 @@
+---
+## Review: ddx-de9d564f iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner in test | APPROVE | cli/cmd/agent_execute_bead_test.go:2500-2565 — test body has no references (only in migration comments at 2495, 2547) |
+| 2 | Real-git harness + real runner flow | APPROVE | agent_execute_bead_test.go:2524-2529 (real `git init`/commits w/ GIT_* scrubbed via runGit), :2555-2556 (`NewCommandFactory` + `agent.NewRunner(agent.Config{})`), :2558-2560 (`--harness script` driven by directive file) |
+| 3 | `go test -run ^TestExecuteBeadGatePass$` green | APPROVE | execution result.json: `outcome=task_succeeded`, commit 401c7b08 landed via FF merge — implies gate check passed |
+| 4 | No other tests in file modified | APPROVE | `git show --stat 401c7b08` — single file, +57/-8 lines, all within TestExecuteBeadGatePass block (lines 2491-2565) |
+
+### Summary
+
+Clean, scoped migration. Test now exercises real `git init`, real commits for seed/bead/gate docs, and drives the script harness with a directive file that produces a real commit in the worker worktree — exactly the shape the bead asked for. Implementer chose an inline real-git harness rather than calling `newScriptHarnessRepo`, which the AC explicitly permits ("or equivalent real-git harness"), and used `NewCommandFactory` defaults instead of a named `RealLandingGitOps` struct, which still routes through the real ExecuteBead → LandBeadResult → Land pipeline. Scope respected: sibling tests still use the fakes, matching the bead's explicit scope limit.

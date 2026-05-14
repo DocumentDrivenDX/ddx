@@ -1,0 +1,15 @@
+---
+## Review: ddx-0b382233 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | rg 'ExecuteBeadOptions\{' cli/ returns 0 outside retiring type | APPROVE | Only match is `cli/internal/agent/execute_bead.go:154` — the opts assembly inside the `ExecuteBeadWithConfig` shim, which is the legacy surface scheduled for the SD-024 cleanup bead. |
+| 2 | cd cli && go test ./... passes | APPROVE | Commit `46232b14` lands the migration cleanly; both production dispatchers (`cmd/agent_cmd.go` singleTierAttempt, `server/workers.go` singleTierAttempt) and the last test site (`execute_bead_commit_test.go`) now route through `ExecuteBeadWithConfig` + `ExecuteBeadRuntime`. |
+
+### Summary
+
+The prior iter's BLOCK findings (two unmigrated production dispatch sites and several test files) are resolved. The sole remaining `ExecuteBeadOptions{` literal is the internal construction inside the `ExecuteBeadWithConfig` shim, consistent with SD-024's "retire old types in dedicated cleanup beads" migration discipline.

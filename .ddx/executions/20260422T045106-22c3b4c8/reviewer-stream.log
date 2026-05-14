@@ -1,0 +1,26 @@
+## Review: ddx-ba6b4bfa iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Root aliases redirect to scoped routes | BLOCK | — not found in diff |
+| 2 | `/nodes/[nodeId]` page renders `<h1>` | BLOCK | — not found in diff |
+| 3 | Status/priority/tier tokens in `app.css` | BLOCK | — not found in diff |
+| 4 | `e2e/a11y.spec.ts` green | BLOCK | — no test output in diff |
+| 5 | Root `/agent` exists | BLOCK | — not found in diff |
+| 6 | No hard-coded hex added | BLOCK | — implementation diff absent |
+
+### Summary
+
+The provided diff only adds execution evidence under `.ddx/executions/...`; it does not include the implementation files needed to verify the bead acceptance criteria. Because route, Svelte, CSS, and test evidence are absent, the review cannot approve any item.
+
+### Findings
+
+- Missing implementation diff for root routes `/beads`, `/documents`, `/graph`, `/agent`, and `/personas`; no `src/routes/...` files are shown.
+- Missing evidence that `src/routes/nodes/[nodeId]/+page.svelte` renders an `<h1>`.
+- Missing evidence that status, priority, and tier color tokens were centralized in `src/app.css` for `.light` and `.dark`.
+- Missing `e2e/a11y.spec.ts` run output or check artifact showing 13/13 green.
+- Missing implementation diff needed to evaluate whether new hard-coded hex colors were avoided.

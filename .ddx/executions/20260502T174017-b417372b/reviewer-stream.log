@@ -1,0 +1,22 @@
+---
+## Review: ddx-ab7f6184 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Routes mounted only when --hub-mode | APPROVE | cli/internal/server/federation_hub.go:60-66 — routes registered inside EnableHubMode; test TestFederationRoutesNotMountedWithoutHubMode |
+| 2 | Re-register same node_id replaces by id; URL change updates | APPROVE | federation_hub.go:213-227 (UpsertSpoke); TestFederationRegisterIdempotentByNodeID |
+| 3 | Duplicate node_id different identity → 409 + log | APPROVE | federation_hub.go:191-205; TestFederationRegisterDuplicateNodeIDDifferentIdentity |
+| 4 | Non-loopback non-ts-net peers refused unless opt-out | APPROVE | federation_hub.go:118-130 requireFederationTrusted; TestFederationStrictDefaultRefusesPlainHTTP |
+| 5 | Plain-HTTP path emits WARN per accepted registration | APPROVE | federation_hub.go:230-236; TestFederationPlainHTTPOptOutEmitsWarn (asserts 2 WARNs for 2 regs) |
+| 6 | Version mismatch major/schema reject 4xx + reason | APPROVE | federation/handshake.go:48-65; TestFederationRegisterVersion{Major,Schema}MismatchRejected |
+| 7 | Newer minor accepted as degraded | APPROVE | handshake.go:62-65; TestFederationRegisterNewerMinorAcceptedDegraded |
+| 8 | Integration tests cover all paths | APPROVE | federation_hub_test.go (15 tests via httptest stack) |
+| 9 | --federation-allow-plain-http only valid in hub-mode | APPROVE | cli/cmd/server.go:97-99 |
+
+### Summary
+
+Implementation is complete and tightly scoped to the AC. Hub routes are gated on `EnableHubMode`, peer policy is enforced via a federation-specific trust gate, identity-aware registration distinguishes idempotent re-registers from 409 conflicts, and version handshake is factored into a clean `federation.Handshake` with stable reason codes. Test coverage exercises every AC path through the real HTTP handler.

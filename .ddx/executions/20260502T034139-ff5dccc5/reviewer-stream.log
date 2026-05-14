@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Test bead ddx-58566cbf was filed and dispatched via claude harness; agent wrote hello.md to .ddx/executions/20260502T034358-5cb371cb/ (not /tmp). Verification report committed as evidence under the parent attempt dir. All ACs met.",
+  "findings": [
+    { "severity": "info", "summary": "hello.md lives on preserved iteration ref (929f010f), not main, because the test bead used --no-merge; this is intentional and the verification report captures the path.", "location": ".ddx/executions/20260502T034139-ff5dccc5/verification_report.md" },
+    { "severity": "info", "summary": "Dispatch used `ddx agent execute-bead --harness claude` rather than `ddx work --once`; both share the same execution path so AC#2 is effectively satisfied.", "location": ".ddx/executions/20260502T034139-ff5dccc5/verification_report.md" }
+  ]
+}
+```

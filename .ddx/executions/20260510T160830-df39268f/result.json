@@ -1,0 +1,15 @@
+{
+  "bead_id": "ddx-def1c23f",
+  "attempt_id": "20260510T160830-df39268f",
+  "base_rev": "1f2c4d33b0f5d4ebfb3b9944e21dcd6b1310b0df",
+  "result_rev": "1f2c4d33b0f5d4ebfb3b9944e21dcd6b1310b0df",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "loading bead ddx-def1c23f from worktree snapshot: bead: not found: ddx-def1c23f",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "loading bead ddx-def1c23f from worktree snapshot: bead: not found: ddx-def1c23f",
+  "failure_mode": "unknown",
+  "started_at": "0001-01-01T00:00:00Z",
+  "finished_at": "0001-01-01T00:00:00Z"
+}

@@ -1,0 +1,17 @@
+---
+## Review: ddx-94311dcf iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | RSCH/REF rows added to artifact table | APPROVE | docs/helix/01-frame/features/FEAT-005-artifacts.md:84-85 — both rows with locations and prefixes |
+| 2 | Schema example shows REF metadata outside ddx: | APPROVE | docs/helix/01-frame/features/FEAT-005-artifacts.md:112-131 — source_url/source_author/accessed at top level, id/depends_on under ddx: |
+| 3 | No CLI code change | APPROVE | commit 1920801c only touches FEAT-005-artifacts.md |
+| 4 | rg RSCH-NNN finds match | APPROVE | docs/helix/01-frame/features/FEAT-005-artifacts.md:84 — `IDs `RSCH-NNN`` |
+
+### Summary
+
+Docs-only change cleanly registers `RSCH` and `REF` artifact kinds in the Common Artifact Types table and adds a clear schema example demonstrating type-specific metadata at the top level alongside the `ddx:` identity block. All four acceptance criteria are satisfied.

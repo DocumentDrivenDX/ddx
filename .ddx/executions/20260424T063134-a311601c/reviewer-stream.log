@@ -1,0 +1,17 @@
+---
+## Review: ddx-27e2b5ce iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit / fakeAgentRunner refs in target test | APPROVE | cli/cmd/agent_execute_bead_gates_test.go:186-248 — body now uses real runGit + NewCommandFactory; only mentions are in explanatory comments |
+| 2 | Dispatch via real git + real runner | APPROVE | test initializes real `git init -b main`, seeds commits, wires `f.AgentRunnerOverride = agent.NewRunner(agent.Config{})`, drives the `script` harness via `directives.txt` |
+| 3 | Test passes | APPROVE | .ddx/executions/20260424T063134-a311601c/result.json — outcome=task_succeeded, exit_code=0 (run under execute-bead gate) |
+| 4 | No other test in file modified | APPROVE | `git show 01b17e13 --stat` = 53 insertions / 7 deletions confined to TestExecuteBead_NoGoverningIDs_Merges; no `+func` / `-func` signature changes |
+
+### Summary
+
+Clean, scoped migration. The target test now exercises real git (with GIT_* env scrubbed via `scrubEnv`) and the real agent runner dispatching to the `script` harness with a per-attempt directive file, matching the pattern in the two previously-migrated sibling tests. Assertions are preserved and the change is contained to the single function named in the bead.

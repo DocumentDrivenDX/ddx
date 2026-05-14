@@ -1,0 +1,14 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and provides no evidence that the 2k fixture, baseline measurements, Playwright coverage, or required verification steps were implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "The submitted diff contains only `.ddx/executions/.../result.json`; none of the AC-required deliverables are present or reviewable, including the 2k fixture under `cli/internal/server/frontend/e2e/fixtures/scale/`, the `perf-baseline.md` report, the non-crash Playwright test, or evidence that `bun run test:e2e` and `lefthook run pre-commit` passed.",
+      "location": ".ddx/executions/20260507T011703-fcc728a0/result.json:1"
+    }
+  ]
+}
+```

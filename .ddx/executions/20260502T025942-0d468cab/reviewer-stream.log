@@ -1,0 +1,26 @@
+## Review: ddx-abd000f7 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | hugo builds with no errors/broken links | BLOCK | diff contains only execution metadata; no build output evidence |
+| 2 | ddx doc audit passes | BLOCK | no audit output in diff |
+| 3 | rg `\bDun\b` returns 0 in website/docs | BLOCK | no grep evidence in diff |
+| 4 | execute-loop/execute-bead 0 in primary copy | BLOCK | no grep evidence in diff |
+| 5 | quorum 0 in _index/features | BLOCK | no grep evidence in diff |
+| 6 | 10 principle slugs present | BLOCK | no ls output in diff |
+| 7 | all 22 child beads closed | BLOCK | no bead list output in diff |
+| 8 | /tmp/redesign-verify.txt report | BLOCK | not in diff (and /tmp wouldn't be tracked) |
+
+### Summary
+
+The committed diff contains only the execute-bead manifest and result JSON — no actual verification artifacts. None of the eight acceptance criteria can be evaluated from the diff alone, and AC8 explicitly required a verification report which is absent from version control.
+
+### Findings
+
+- AC1–7: No evidence of any verification command being run is captured in the diff. The bead required a verification report, but the only files added are `.ddx/executions/20260502T025942-0d468cab/manifest.json` and `result.json`, which are execution metadata rather than verification output.
+- AC8: The required `/tmp/redesign-verify.txt` is (a) not in the diff and (b) located in `/tmp` which cannot persist as evidence. The next iteration should write the verification report into the execution dir (e.g. `.ddx/executions/<id>/verify.txt`) or under `docs/`/`website/` so it is captured by the commit.
+- Re-run all eight checks and commit the captured outputs (hugo build log, `ddx doc audit` output, the four `rg` invocations, `ls website/content/docs/principles/`, and `ddx bead list --parent ddx-629ec5b4 --status closed`) as a single tracked report file.

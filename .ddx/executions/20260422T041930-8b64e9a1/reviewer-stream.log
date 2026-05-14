@@ -1,0 +1,19 @@
+---
+## Review: ddx-85dc2ab8 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | FILTER_BEADS includes priority=0; US-082g.a passes | BLOCK | — not found in diff |
+
+### Summary
+
+The submitted diff only adds execution evidence files under `.ddx/executions`. It does not modify the `FILTER_BEADS` fixture or any test expectation, so the acceptance criteria cannot be verified as implemented.
+
+### Findings
+
+- `FILTER_BEADS` fixture is not changed in the provided diff; no priority `0` bead is added.
+- `beads.spec.ts` / `US-082g.a` is not changed or evidenced, so the default-sort assertion remains unevaluated.

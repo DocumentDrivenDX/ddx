@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All ACs met: derived-view fields rendered, freshness badge with connected/stale/disconnected states, duplicate-worker rows grouped per project root with banner, non-authoritative label present, .gql query added, and Playwright spec covers all behaviors. Execution evidence reports task_succeeded.",
+  "findings": [
+    { "severity": "info", "summary": "Loader filters reportedWorkers client-side by project path; if /api/projects fails the filter falls through to show all workers (acceptable fallback, not an AC issue).", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.ts:130" },
+    { "severity": "info", "summary": "Both inline gql template (in +layout.ts) and worker.gql duplicate the ReportedWorkersByProject definition; harmless but slight redundancy.", "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/worker.gql:1" }
+  ]
+}
+```

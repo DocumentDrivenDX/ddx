@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review contains only execution evidence (manifest.json, result.json) for the attempt. No actual code, schema, CHANGELOG, or migration-doc changes are visible, so none of the 5 AC items can be verified from this diff.",
+  "findings": [
+    { "severity": "block", "summary": "Changed files are limited to .ddx/executions/* metadata; no Go struct, schema, sample config, CHANGELOG, or docs/migrations changes present to evaluate against AC1–AC5.", "location": ".ddx/executions/20260429T034538-9aa875d6/" }
+  ]
+}
+```

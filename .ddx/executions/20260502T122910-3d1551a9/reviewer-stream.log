@@ -1,0 +1,5 @@
+TD covers all three required topics and is explicit about deferred implementation.
+
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"TD-028 authored under docs/helix/02-design/technical-designs/, covers prompt_version, DDX_PROMPT_VARIANT selector, and offline-comparison roadmap (referencing usage.json, session_index.go, resolver_feat008.go). Status frontmatter and prose explicitly mark implementation as deferred.","findings":[]}
+```

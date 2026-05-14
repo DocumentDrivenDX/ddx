@@ -1,0 +1,20 @@
+verification_command: cd cli && go test ./internal/server/... ./internal/agent/... -run TestArtifactBodyDelimitedAsUntrusted
+
+All five ACs are satisfied by code already present in the repository:
+
+AC1 — Helper exists: evidence.DelimitUntrustedData in cli/internal/evidence/untrusted.go
+AC2 — Used at every artifact-body interpolation site in scope:
+  - execute_bead_review.go:375  (governing-doc content)
+  - execute_bead_review.go:397  (diff body)
+  The main execution prompt (buildPrompt in execute_bead.go) does not inline
+  external file content — only bead metadata — so no additional sites exist.
+  The server state_executions.go transport clamp is out of scope per the bead's
+  NON-SCOPE section.
+AC3 — TestArtifactBodyDelimitedAsUntrusted in execute_bead_review_evidence_test.go:204-228
+  asserts the delimiter pair wraps both governing-doc and diff payloads and that
+  the raw payload survives inside the wrapper.
+AC4 — cd cli && go test ./internal/server/... ./internal/agent/... green (verified)
+AC5 — lefthook run pre-commit passes (verified)
+
+No source changes are required. The prior no_changes lacked a verification_command; this
+file supplies it so the triage:no-changes-unverified label can be resolved.

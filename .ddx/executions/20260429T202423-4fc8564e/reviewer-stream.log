@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review only contains execution evidence artifacts (manifest.json, result.json). No HTTP routes or MCP tools are present in the diff to evaluate against the acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "Diff contains only .ddx/executions/ evidence files; no server, HTTP route, or MCP tool implementation visible to verify evidence/cooldown/routing endpoints", "location": ".ddx/executions/20260429T202423-4fc8564e/" }
+  ]
+}
+```

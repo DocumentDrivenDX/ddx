@@ -1,0 +1,8 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "All raw palette classes (gray-*, blue-*, emerald-*, red-*) replaced with semantic tokens. text-lever→text-accent-lever, text-xl/lg→text-headline-lg/md, font-mono→font-mono-code, text-xs (line 214)→text-mono-code, error block uses semantic error tokens, ACTIONS accentClass mapped to accent-lever/accent-fulcrum/fg-ink, icon wells use bg-bg-surface/text-fg-muted. Grep confirms no residual palette classes.",
+  "findings": []
+}
+```

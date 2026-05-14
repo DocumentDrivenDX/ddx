@@ -1,0 +1,18 @@
+---
+## Review: ddx-3200e80e iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | IntegrityPanel: bg-surface card, border-line borders | APPROVE | IntegrityPanel.svelte:119 — `border-border-line bg-bg-surface` applied to section, header, and divider |
+| 2 | IntegrityPanel: status CSS vars for indicators | APPROVE | IntegrityPanel.svelte:178,199,214 — `badge-status-blocked` on issue ID, copy button, and snippet |
+| 3 | D3Graph: accent-lever/load/fulcrum node colors | APPROVE | D3Graph.svelte:111-115 — `fill-accent-load` for roots, `fill-accent-lever` for dependents, `stroke-accent-fulcrum` |
+| 4 | D3Graph: bg-canvas background | APPROVE | D3Graph.svelte:182 — `bg-bg-canvas dark:bg-dark-bg-canvas` on container |
+| 5 | D3Graph: fg-muted axis labels | APPROVE | D3Graph.svelte:123 — node text uses `fill-fg-muted dark:fill-dark-fg-muted` |
+
+### Summary
+
+All token replacements specified in the bead description are present in the diff. The implementation cleanly swaps prior `accent-load/*` opacity-based styling for the requested surface/border/status tokens and adds a sensible root-vs-dependent node color distinction in D3Graph. No acceptance criteria were declared, so evaluation was against the description; nothing missing.

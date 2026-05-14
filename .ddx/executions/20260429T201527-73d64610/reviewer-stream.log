@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review contains only execution manifest/result metadata files. No HTTP routes, MCP tools, or test changes are present to evaluate against the acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No implementation diff for /api/metrics/{id}/history, /api/metrics/{id}/trend, or ddx_metric_history/ddx_metric_trend MCP tools is visible in the changed files.", "location": ".ddx/executions/20260429T201527-73d64610/" }
+  ]
+}
+```

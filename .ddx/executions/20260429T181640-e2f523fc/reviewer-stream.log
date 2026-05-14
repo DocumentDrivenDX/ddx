@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata (manifest.json, result.json) for the attempt. No FEAT-019 contraction changes are visible — cannot evaluate AC against the actual spec edits requested by the bead.",
+  "findings": [
+    { "severity": "block", "summary": "No changes to FEAT-019 spec; diff shows only execution evidence files. Cannot verify peer-to-FEAT-010 assertions at :40 and :404 were removed or that scope was contracted to evaluation UX.", "location": ".ddx/executions/20260429T181640-e2f523fc/" }
+  ]
+}
+```

@@ -1,0 +1,31 @@
+---
+## Review: ddx-2ceb02fa iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Session-index source of truth | BLOCK | — no sessions.index.jsonl writer or schema in diff |
+| 2 | Single-call-site guarantee | BLOCK | — no unit test in diff |
+| 3 | Visibility restored | BLOCK | — no GraphQL resolver changes in diff |
+| 4 | Body lazy-load | BLOCK | — no session(id) resolver in diff |
+| 5 | Legacy migration | BLOCK | — no reindex command in diff |
+| 6 | Deprecated-file behavior | BLOCK | — no changes to agent_usage.go or status.go |
+| 7 | Perf sanity | BLOCK | — no benchmark in diff |
+| 8 | UI gap banner | BLOCK | — no frontend changes in diff |
+| 9 | Playwright e2e | BLOCK | — no e2e test in diff |
+
+### Summary
+
+The diff contains only a single execution evidence file (`result.json`) recording that the bead attempt ran. None of the nine acceptance criteria are addressed — no index file format, no writer, no GraphQL changes, no migration command, no tests, no frontend work. This is execution bookkeeping, not implementation.
+
+### Findings
+
+- **AC 1–3**: No `sessions.index.jsonl` schema, writer in `service.Execute`, or updated GraphQL resolver in `cli/internal/server/state_graphql.go`.
+- **AC 4**: No `session(id: ID!)` resolver for lazy-loading prompt/response/stderr from execution bundles.
+- **AC 5**: No `ddx agent log reindex` command or migration logic.
+- **AC 6**: `cli/cmd/agent_usage.go` and `cli/cmd/status.go` are untouched.
+- **AC 7**: No benchmark captured.
+- **AC 8–9**: No frontend changes or Playwright tests.

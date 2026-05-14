@@ -1,0 +1,18 @@
+All 10 linked principle pages exist.
+
+---
+## Review: ddx-b3319694 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No longer carries the 9-principle outdated list | APPROVE | website/content/docs/concepts/principles.md — old 9-principle prose removed (116 lines deleted) |
+| 2 | Redirect or umbrella linking to /docs/principles/ | APPROVE | website/content/docs/concepts/principles.md:1-25 — umbrella with aliases + 10 links |
+| 3 | Hugo builds without 404 on principle internal links | APPROVE | All 10 target dirs exist under website/content/docs/principles/ |
+
+### Summary
+
+The page was converted to a thin umbrella that points to each of the 10 dedicated principle pages, with a Hugo `aliases` entry preserving the old URL. Every linked slug resolves to an existing directory under `website/content/docs/principles/`, so internal links should not 404.

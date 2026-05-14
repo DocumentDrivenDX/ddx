@@ -1,0 +1,15 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution metadata (result.json). No homepage sections, /features/ page, DESIGN.md tokens, Playwright coverage, or UI screenshots are present in the changed files. None of the acceptance criteria are evidenced.",
+  "findings": [
+    { "severity": "block", "summary": "No homepage section changes evidenced in diff", "location": "website/" },
+    { "severity": "block", "summary": "No /features/ section with maturity badges added", "location": "website/content/features/" },
+    { "severity": "block", "summary": "No DESIGN.md tokens wired to Hugo", "location": "website/" },
+    { "severity": "block", "summary": "No Playwright e2e test additions", "location": "website/tests/" },
+    { "severity": "block", "summary": "No UI screenshots committed", "location": "website/static/ui/" },
+    { "severity": "info", "summary": "Only an execution result.json metadata file is present in the diff", "location": ".ddx/executions/20260501T035243-15df167e/result.json" }
+  ]
+}
+```

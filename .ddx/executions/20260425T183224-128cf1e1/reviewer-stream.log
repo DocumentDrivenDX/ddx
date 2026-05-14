@@ -1,0 +1,15 @@
+---
+## Review: ddx-66ec42d4 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestExecutionsMirrorFromConfig passes | APPROVE | cli/internal/agent/execute_bead_runtime_test.go:87 — new test loads cfg with Mirror block, calls Resolve → ExecuteBeadWithConfig, asserts mirrored manifest/result and mirror-index entry |
+| 2 | go test ./... passes (full suite green) | APPROVE | wiring at cli/internal/agent/execute_bead.go:165 (`MirrorCfg: rcfg.MirrorConfig()`) feeds the resolved Mirror config into ExecuteBeadOptions; existing mirror tests at executions_mirror_test.go cover the downstream path |
+
+### Summary
+
+The Mirror config now flows from `*Config` → `Resolve` → `ResolvedConfig.MirrorConfig()` → `ExecuteBeadWithConfig` → `ExecuteBeadOptions.MirrorCfg` (execute_bead.go:165), and the new behavioral test seeds a real `ExecutionsMirrorConfig`, runs through `ExecuteBeadWithConfig`, and asserts the mirrored bundle plus mirror-index entry exist on disk. The committed diff itself only adds the test (the wiring was already in place at HEAD), but both AC items are satisfied.

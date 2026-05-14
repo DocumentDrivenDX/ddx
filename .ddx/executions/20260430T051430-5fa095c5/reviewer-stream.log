@@ -1,0 +1,18 @@
+---
+## Review: ddx-3c59ea2a iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Token class swap (gray → semantic tokens) | APPROVE | BeadDetail.svelte:243-249, 258-262, 361-417 — `text-fg-muted`, `text-fg-ink`, `bg-bg-elevated`, `border-border-line`, `text-error` etc. replace gray/red/blue literals throughout |
+| 2 | Sharp badges (rounded-none) | APPROVE | BeadDetail.svelte:275, 294, 303, 312, 321, 329, 402, 460, 466, 525, 530 — `rounded-md`/`rounded-full`/`rounded` → `rounded-none` on buttons, label pills, exec rows, verdict badge, cascade box |
+| 3 | Mono-code IDs (font-mono-code) | APPROVE | BeadDetail.svelte:255 (bead.id), 388 (parent), 463 (exec.id), 482 (dependency id) |
+| 4 | Accent-lever links | APPROVE | BeadDetail.svelte:294 (Claim button bg-accent-lever), 463 (exec.id text-accent-lever), 242 (status open → text-accent-lever) |
+| 5 | No functional changes | APPROVE | dbdc4ee3 stat — only class strings altered in BeadDetail.svelte; no script/handler/markup-structure edits |
+
+### Summary
+
+Clean restyle: 42 insertions / 42 deletions in a single file, all class-attribute swaps. Design-token usage is consistent across header, body, exec list, dependency list, delete dialog, and dark-mode pairs. No logic, props, or test-id changes — the test selectors (`bead-detail-id`, `bead-detail-copy-id`, `bead-executions`) are preserved, so the `bun run test:e2e -- --grep 'bead'` plus `--update-snapshots` flow noted in the task description should pass with refreshed visual diffs.

@@ -1,0 +1,17 @@
+---
+## Review: ddx-7f9a7009 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No fakeExecuteBeadGit/fakeAgentRunner refs | APPROVE | cli/cmd/agent_execute_bead_test.go:1898-1997 — only a historical comment at :1950; no fake structs instantiated inside the test |
+| 2 | Uses real-git harness + real runner | APPROVE | :1904-1930 real `git init`/commit with scrubbed GIT_* env; :1955 `agent.NewRunner(agent.Config{})`; :1960 `--harness script` via directive file (equivalent real-git harness) |
+| 3 | Test passes | APPROVE | commit 2140ed45 on main; execution result.json records `task_succeeded` / exit 0 |
+| 4 | No other test modified | APPROVE | `git show 2140ed45 --stat` shows 1 file, diff range is entirely within TestExecuteBeadHeadRevFailure body |
+
+### Summary
+
+Migration cleanly removes the fakes from TestExecuteBeadHeadRevFailure and drives the failure via a real script-harness directive (`delete-file .git`) that corrupts the worktree, so the post-agent `git rev-parse HEAD` fails for real. Assertions updated from the synthetic `"disk read error"` string to `"rev-parse"`, which is stricter because it reflects the actual failing git command. Scope is confined to this one test.

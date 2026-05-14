@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence (manifest.json, result.json). No implementation of ADR-004 — no collection abstraction, archive split, attachments sidecar, or migration tool. AC items 2–5 are unmet; AC1 (children closed) not demonstrated.",
+  "findings": [
+    { "severity": "block", "summary": "No code changes implementing the collection abstraction, archive read-through, or attachments sidecar", "location": "cli/internal/bead/" },
+    { "severity": "block", "summary": "No 'ddx bead migrate-archive' / archive command added; AC5 migration tool absent", "location": "cli/cmd/" },
+    { "severity": "block", "summary": "beads.jsonl not split; no size-threshold mechanism present (AC2)", "location": ".ddx/beads.jsonl" },
+    { "severity": "info", "summary": "Only execution evidence files committed for this attempt", "location": ".ddx/executions/20260502T193536-5a586700/" }
+  ]
+}
+```

@@ -1,0 +1,17 @@
+---
+## Review: ddx-675f1170 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Modal: bg-elevated, border-line, rounded-none | APPROVE | CommandPalette.svelte:488 — dialog has `rounded-none border border-border-line bg-bg-elevated` (+ dark variants) |
+| 2 | Input: bg-elevated, border-line, focus:accent-lever | APPROVE | CommandPalette.svelte:505 — `border border-border-line bg-bg-elevated ... focus:border-accent-lever` (+ dark variants) |
+| 3 | Results list: hover bg-canvas | APPROVE | CommandPalette.svelte:539 — `hover:bg-bg-canvas` added alongside existing `data-[selected]` styles (+ dark variant) |
+| 4 | No functional changes | APPROVE | Only `class=` attribute strings changed in source .svelte; no script/handler edits |
+
+### Summary
+
+Implementation matches the spec precisely. Token classes applied symmetrically with dark-mode counterparts; dialog already had the required modal tokens, input gained the bordered/focus-lever style, and result items gained a hover state without disturbing the existing selected-state highlight. The committed build artifacts under `frontend/build/` are noise but don't affect correctness.

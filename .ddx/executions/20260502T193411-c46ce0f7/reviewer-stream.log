@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only an execution result.json artifact; no test files were added under cli/internal/bead/ for any of the 4 required CI guard tests. Cannot verify acceptance criteria from the diff.",
+  "findings": [
+    { "severity": "block", "summary": "No CI guard test functions present in diff (schema↔Go-constants, status-literal audit, TD↔schema, schema_compat round-trip)", "location": "cli/internal/bead/" },
+    { "severity": "block", "summary": "Only changed file is an execution evidence artifact, not implementation code", "location": ".ddx/executions/20260502T193411-c46ce0f7/result.json" }
+  ]
+}
+```

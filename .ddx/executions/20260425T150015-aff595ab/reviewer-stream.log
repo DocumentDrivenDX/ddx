@@ -1,0 +1,15 @@
+---
+## Review: ddx-77accfda iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestNewTestConfigForLoop passes; sets every opts field, Resolves, asserts accessors | APPROVE | cli/internal/config/testconfig_test.go:10-77 — sets every `TestLoopConfigOpts` field, calls `cfg.Resolve(TestLoopOverrides(opts))`, asserts each loop-relevant accessor (Assignee, ReviewMaxRetries, NoProgressCooldown, MaxNoChangesBeforeClose, HeartbeatInterval, Harness, Model, Profile, MinTier, MaxTier, EvidenceCaps fields) |
+| 2 | go doc returns non-empty for NewTestConfigForLoop and TestLoopConfigOpts | APPROVE | cli/internal/config/testconfig.go:5-9 (TestLoopConfigOpts doc) and 22-30 (NewTestConfigForLoop doc) — exported with godoc comments |
+
+### Summary
+
+Stage 1 test-config constructor is implemented per spec: `TestLoopConfigOpts` and `NewTestConfigForLoop` live in `cli/internal/config/testconfig.go`, exported and documented; the test goes opts → *Config → Resolve → ResolvedConfig and verifies each accessor round-trips. The diff also wires `NoProgressCooldown`/`MaxNoChangesBeforeClose`/`HeartbeatInterval` into `(*Config).Resolve` so the round-trip actually works — a necessary correlate noted in SD-024 Stage 1. The auxiliary `TestLoopOverrides` helper is a reasonable accommodation for fields with no durable *Config home (Assignee/Profile/MinTier/MaxTier) and does not violate the "no shortcut to construct ResolvedConfig directly" rule.

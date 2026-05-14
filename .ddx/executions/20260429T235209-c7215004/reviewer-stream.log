@@ -1,0 +1,24 @@
+---
+## Review: .execute-bead-wt-ddx-44236615-20260429T185004-ffa9adf1-ecea5b2b iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | GET /api/metrics/{id}/history HTTP route | BLOCK | — not found in diff |
+| 2 | GET /api/metrics/{id}/trend HTTP route | BLOCK | — not found in diff |
+| 3 | ddx_metric_history MCP tool | BLOCK | — not found in diff |
+| 4 | ddx_metric_trend MCP tool | BLOCK | — not found in diff |
+
+### Summary
+
+The diff under review contains only execution evidence files (manifest.json, result.json) under `.ddx/executions/20260429T235209-c7215004/`. No HTTP route handlers, MCP tool registrations, or tests are present. The actual implementation may have landed in a prior commit (result.json references `result_rev: 7d9818a3...`, which matches recent commit `7d9818a3 test(server): cover /api/metrics/{id}/history|trend HTTP and ddx_metric_history|trend MCP`), but the diff scoped to this review shows no source changes.
+
+### Findings
+
+- No changes under `cli/internal/server/` for HTTP routes `/api/metrics/{id}/history` or `/api/metrics/{id}/trend`.
+- No changes under `cli/internal/mcp/` (or wherever MCP tools are registered) adding `ddx_metric_history` or `ddx_metric_trend`.
+- No test files added or modified covering the new HTTP routes or MCP tools.
+- Diff consists solely of `.ddx/executions/20260429T235209-c7215004/manifest.json` and `result.json` — execution metadata, not implementation. Re-run review against `result_rev=7d9818a3da475621c06506ddca1249710183443d` (or its merge) to evaluate actual code.

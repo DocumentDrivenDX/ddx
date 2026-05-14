@@ -1,0 +1,10 @@
+All AC items satisfied: log pre uses bg-terminal-bg/text-terminal-fg, empty-state uses text-fg-muted, metadata grid and sessions table use text-body-sm.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Log <pre> now uses bg-terminal-bg/text-terminal-fg, empty-state uses text-fg-muted dark:text-dark-fg-muted, metadata grid (line 314) and sessions table (line 389) switched from text-sm/text-xs to text-body-sm. All AC met.",
+  "findings": []
+}
+```

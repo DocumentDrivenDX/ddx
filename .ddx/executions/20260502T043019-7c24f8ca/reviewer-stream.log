@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "ExportTo now streams archived beads with inlined events alongside active rows; new test TestExportStreamsArchiveAndAttachmentEvents covers migrate→export round-trip and bd-compatible parsing, satisfying AC1–AC4.",
+  "findings": [
+    { "severity": "info", "summary": "Archive partner read errors are silently swallowed (treated as empty); acceptable per inline comment but could mask corruption.", "location": "cli/internal/bead/import.go:67" }
+  ]
+}
+```

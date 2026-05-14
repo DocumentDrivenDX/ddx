@@ -1,0 +1,13 @@
+verification_command: cd cli && go test ./internal/bead/... ./internal/agent/... -run "TestWithLock_RecordsWaitDuration|TestTrackerLock_RecordsRetryCount" -v
+
+All acceptance criteria were already satisfied by commit 4162d8655
+"feat(agent/lock): instrument bead.Store.WithLock and tracker lock with wait/hold/retry metrics [ddx-128c7f9d]"
+which predates the current base rev (4386b853).
+
+AC1: cli/internal/bead/lock.go — LockSample{Wait, Hold} + LockMetricsSink + instrumented WithLock.
+AC2: cli/internal/agent/tracker_lock.go — TrackerLockSample{Wait, Hold, Retries} + TrackerLockMetricsSink + instrumented withTrackerLockPolicy.
+AC3: lockTimeoutError(lockDir, why) returns "tracker lock timeout (max elapsed, lock: <path>, owner pid: <pid>)" — lock identity and claimant PID included.
+AC4: TestWithLock_RecordsWaitDuration in cli/internal/bead/lock_metrics_test.go — PASS.
+AC5: TestTrackerLock_RecordsRetryCount in cli/internal/agent/tracker_lock_test.go — PASS.
+AC6: go test ./internal/bead/... ./internal/agent/... — all green.
+AC7: lefthook pre-commit — no changed files to check; existing codebase passes.

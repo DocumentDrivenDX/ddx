@@ -1,0 +1,21 @@
+---
+## Review: ddx-915240dd iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Config uses endpoint blocks, not provider profiles | APPROVE | .ddx/config.yaml:12 — endpoint blocks use type/host/port |
+| 2 | Cheap-only drains land at live endpoints | REQUEST_CHANGES | cli/internal/agent/serviceconfig_test.go:56 — fake live endpoint test only |
+| 3 | 32 fake-migration children make progress | BLOCK | .ddx/beads.jsonl:19 — no post-attempt child progress found |
+
+### Summary
+
+The implementation appears to add endpoint-first configuration and routing support, but the acceptance requires real drain evidence and progress across the 32 fake-migration children. The reviewed tracker state still shows those children last updated on 2026-04-21, before this 2026-04-22 attempt.
+
+### Findings
+
+- `cli/internal/agent/serviceconfig_test.go:56` proves routing can resolve against an `httptest` live endpoint, but there is no evidence that `ddx work --no-adaptive-min-tier --min-tier cheap --max-tier cheap` was rerun against live local endpoints.
+- `.ddx/beads.jsonl:19` through `.ddx/beads.jsonl:488` show the 32 `workstream:fake-migration` beads still updated before this attempt, with no post-change routing/cost/execute events showing progress on local models.

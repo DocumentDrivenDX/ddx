@@ -1,0 +1,18 @@
+---
+## Review: ddx-6f876b36 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Detect core.bare=true on non-bare repo | APPROVE | cli/cmd/doctor.go:710 — `git_core_bare_corruption` check + test at doctor_repo_health_test.go:45 |
+| 2 | --fix removes the bad config | APPROVE | cli/cmd/doctor.go:716 calls `gitConfigUnset`; verified by test at doctor_repo_health_test.go:69 |
+| 3 | Stray core.worktree detection + fix | APPROVE | cli/cmd/doctor.go:731 + test at doctor_repo_health_test.go:85 |
+| 4 | extensions.worktreeConfig warning | APPROVE | cli/cmd/doctor.go:755 — non-fatal warning issue; test at doctor_repo_health_test.go:121 |
+| 5 | Doctor passes on clean repo | APPROVE | doctor_repo_health_test.go:111 TestCheckGitRepoHealthCleanRepo |
+
+### Summary
+
+Implementation cleanly adds a `checkGitRepoHealth` helper covering all three requested checks, wires it into `runDoctor` with a new `--fix` flag, and ships four targeted tests that corrupt/clean/verify behavior. The symlink-resolved worktree comparison and the `--git-dir` probe (which works even when core.bare lies) show thoughtfulness about the corruption modes described in the bead.

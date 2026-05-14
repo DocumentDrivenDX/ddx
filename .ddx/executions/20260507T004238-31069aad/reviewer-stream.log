@@ -1,0 +1,19 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution metadata files. It does not update FEAT-008 or provide evidence that the FEAT-008-specific doc audit criterion was satisfied, so neither acceptance item is implemented in the submitted change.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 is unmet: the submitted diff does not modify `docs/helix/01-frame/features/FEAT-008-web-ui.md` to add or confirm the explicit graph-edge contrast acceptance criterion.",
+      "location": "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 is unmet: there is no audit output or repository change demonstrating a clean FEAT-008 doc audit; the diff only records execution artifacts.",
+      "location": ".ddx/executions/20260507T004238-31069aad/result.json:1"
+    }
+  ]
+}
+```

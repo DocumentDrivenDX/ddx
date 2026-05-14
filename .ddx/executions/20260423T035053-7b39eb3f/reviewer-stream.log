@@ -1,0 +1,34 @@
+---
+## Review: ddx-2ceb02fa iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Session-index source of truth | BLOCK | — not found in diff |
+| 2 | Single-call-site guarantee | BLOCK | — not found in diff |
+| 3 | Visibility restored | BLOCK | — not found in diff |
+| 4 | Body lazy-load | BLOCK | — not found in diff |
+| 5 | Legacy migration | BLOCK | — not found in diff |
+| 6 | Deprecated-file behavior | BLOCK | — not found in diff |
+| 7 | Perf sanity | BLOCK | — not found in diff |
+| 8 | UI note | BLOCK | — not found in diff |
+| 9 | Playwright e2e | BLOCK | — not found in diff |
+
+### Summary
+
+The commit only adds execution evidence files under `.ddx/executions/20260423T035053-7b39eb3f/`, including `result.json` and `usage.json`. It contains no implementation changes, resolver changes, CLI migration command, tests, benchmark, or UI work for the Sessions index feature.
+
+### Findings
+
+- Missing `service.Execute` or shared agent-execution wrapper change to append one pointer-only row to `.ddx/agent-logs/sessions.index.jsonl`.
+- Missing unit test proving execute-bead, execute-loop, `ddx agent run`, quorum, and replay paths append exactly one index row.
+- Missing `cli/internal/server/state_graphql.go` update so GraphQL `sessions` reads `sessions.index.jsonl`.
+- Missing new GraphQL `session(id: ID!)` resolver for lazy-loading prompt, response, and stderr from execution bundles or native logs.
+- Missing `ddx agent log reindex` or equivalent migration command, plus integration test for legacy `sessions.jsonl`.
+- Missing updates to `cli/cmd/agent_usage.go` and `cli/cmd/status.go` to stop reading legacy `sessions.jsonl`.
+- Missing 10,000-entry GraphQL sessions benchmark and recorded baseline/after-fix bead notes.
+- Missing Sessions UI gap banner or feasible backfill behavior.
+- Missing Playwright e2e covering migration, latest timestamp visibility, lazy body load, and live feed updates.

@@ -1,0 +1,17 @@
+---
+## Review: ddx-eb298ca8 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Fixture file added at expected path | APPROVE | cli/internal/agent/testfixtures/review_failure_runner.go:1-122 — exports `ReviewFailureRunner` with `Executor()`/`Reviewer()` installable into `ExecuteBeadWorker.Executor`/`.Reviewer` injection seams |
+| 2 | Test verifying fixture behavior added | APPROVE | cli/internal/agent/testfixtures/review_failure_runner_test.go:18 — `TestReviewFailureRunner` instantiates fixture with `FailUntilCall=2`, drives 3 iterations of `worker.RunWithConfig`, asserts 2 `review-error` events (with `failure_class=` and `result_rev=`), 1 `APPROVE`, bead `closed` |
+| 3 | Threshold behavior observable via real bead events | APPROVE | review_failure_runner_test.go:91-97 walks `store.Events(beadID)` from a real `bead.NewStore` and asserts on `review-error` / `review` / `review-manual-required` Kinds; complementary `TestReviewFailureRunner_ThresholdEscalation` covers the inverse threshold trip |
+| 4 | Out-of-scope respected (no dispatch-site test changes) | APPROVE | diff touches only the two new files under `cli/internal/agent/testfixtures/` |
+
+### Summary
+
+Bead delivers exactly the deterministic Executor+Reviewer fixture SD-024 §Bead 6.5 calls for: fail-N-then-approve via real `bead.Store`, real `RunWithConfig`, and real event assertions — no synthetic telemetry seam. Scope is tight (two files, 311 LoC), atomic counters keep it safe under repeated invocation, and the bonus `_ThresholdEscalation` test pre-validates the very signal beads 7-9 will reuse. I was unable to execute the AC `go test` command in this sandbox, but the API surface used (`agent.ExecuteBeadExecutorFunc`, `agent.BeadReviewerFunc`, `config.NewTestConfigForLoop`, `RunWithConfig`, `ExecuteBeadLoopRuntime`) is consistent with SD-024's Stage 1 plan.

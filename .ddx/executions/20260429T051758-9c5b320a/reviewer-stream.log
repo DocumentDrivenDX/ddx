@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Diff under review only contains execution evidence artifacts (manifest.json, result.json) recording a successful claude-harness run for ddx-d15b6aa1. The actual spec migration landed in commit d604d686 per result_rev; this evidence commit is consistent with task_succeeded outcome.",
+  "findings": [
+    { "severity": "info", "summary": "Reviewed diff is execution evidence only; the spec migration changes are in the referenced result_rev d604d686, not in this diff range.", "location": ".ddx/executions/20260429T051758-9c5b320a/result.json" }
+  ]
+}
+```

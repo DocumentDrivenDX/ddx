@@ -1,0 +1,23 @@
+status: proposed
+reason: Bead scope far exceeds the single-attempt threshold (~500 lines / ~5 files). Actual scope: 100+ Go files in cli/internal/agent/ root package alone, plus subdirectories (try/, work/, executeloop/, escalation/, workerprobe/), plus 45+ cmd/ files, plus server/, GraphQL, and doc updates — all requiring coordinated rename. Decomposition depth cap (depth 2) prevents creating child beads. Operator must either (a) narrow this bead to a single slice (e.g., rename only cli/internal/agent → cli/internal/taskexec package declaration + import paths, one commit), or (b) retract this bead and file a sequenced set of depth-1 beads under a new parent. No code changes were made.
+
+Scope evidence:
+- cli/internal/agent/*.go: 100+ files (execute_bead_*.go alone: ~40 files; agent_runner*.go, candidate_cycle, dispatch, land, loop, review, triage, worktree, etc.)
+- cli/internal/agent/try/, work/, executeloop/, escalation/: additional sub-packages
+- cli/cmd/: 45+ agent-surface command files
+- cli/internal/server/: GraphQL resolvers, HTTP handlers
+- docs/: FEAT-010 (1375 lines), ADR refs, help text
+- ACs 1–5 require cross-cutting audit + identifier rename across all of the above
+- ACs 6–8 require all tests green after the rename
+
+Decomposition depth cap: This bead is already at depth 2 (parent ddx-f088a3fd → this bead). A third decomposition layer is prohibited by the execute-bead instructions.
+
+Recommended operator action:
+1. Retract or close ddx-b194d20f as too-large-at-depth-2.
+2. File new depth-1 children directly under ddx-f088a3fd, each scoped to one file group or one concern:
+   - Slice A: Rename Go package declaration + module import path (cli/internal/agent → cli/internal/taskexec), fix all import sites.
+   - Slice B: Rename exported identifiers: AgentRunRuntime → RunRuntime, AgentRunner → FizeauExecutor, ExecuteBead* → Try*, ExecuteLoop* → Work*.
+   - Slice C: Update CLI command help text and server/GraphQL surface.
+   - Slice D: Update docs, FEAT-010, and .agents/skills/ references.
+   - Slice E: Close/supersede stale beads ddx-387a0178 and ddx-3ee4ddcf.
+3. Each slice should be independently committable and testable in a single pass.

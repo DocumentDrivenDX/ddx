@@ -1,0 +1,27 @@
+---
+## Review: ddx-b6cf025c iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Nav indicator visible everywhere | APPROVE | `DrainIndicator.svelte` mounted in `NavShell.svelte:68`; idle/active states with dot/spinner; click navigates to workers href; e2e asserts indicator on `/beads` route |
+| 2 | Live updates (≤2s worker, ≤5s bead) | APPROVE | `DrainIndicator.svelte:69` polls every 3000ms, within both bounds |
+| 3 | Summary query returns zeros on unknown | APPROVE | `resolver_feat008.go:290-316` returns `&QueueAndWorkersSummary{}` with zeros for unknown projects; `queue_and_workers_summary_test.go:79-107` covers it |
+| 4 | Overview page — count control | APPROVE | `+layout.svelte:196-245` renders drain-count-panel with +/- buttons, help text, confirm-gated remove targeting oldest worker |
+| 5 | Default-spec + safety rail | REQUEST_CHANGES | `graphql_adapters.go:84-115` applies default_spec and enforces max_count; `workers_config_test.go` covers both paths. However, the frontend `+ Add worker` button does NOT disable when max_count is reached — no tooltip "at workers.max_count limit". The error surfaces as a toast after the mutation fails, but the AC requires the button to be proactively disabled with a tooltip. |
+| 6 | Playwright — flow | REQUEST_CHANGES | `workers.spec.ts:566-672` covers most of the flow but does not assert the indicator transitions to spinner + active text after adding a worker (AC says assert "1 worker · 3 ready"). The test also doesn't click `+` a second time to assert "2 workers · 3 ready", nor verify the indicator text updates after `− Remove worker`. |
+| 7 | No regressions | APPROVE | Existing workers table, per-worker Start/Stop, and Drain button are untouched in the diff |
+| 8 | Cross-references | APPROVE | Noted as documentation; no code action required |
+
+### Summary
+
+Solid implementation covering the full vertical slice — schema, resolver, config types, frontend indicator, count-control panel, and tests. Two gaps remain: the `+ Add worker` button lacks proactive disabling at `max_count` (it only fails after the mutation), and the Playwright test doesn't fully exercise the indicator state transitions the AC specifies.
+
+### Findings
+
+- **`+layout.svelte` (workers overview)**: The `+ Add worker` button has no awareness of `workers.max_count`. The AC requires the button to be **disabled with a tooltip** ("at workers.max_count limit") when the cap is reached, rather than allowing the click and surfacing a server error. This needs the `queueAndWorkersSummary` query (or a new field) to expose the cap, and the button's `disabled` binding to incorporate it.
+
+- **`workers.spec.ts`**: The e2e test asserts `dispatchCalled` and `stopCalled` booleans but does not verify the **indicator text transitions** after add/remove. AC #6 explicitly requires asserting "1 worker · 3 ready" after the first add, "2 workers · 3 ready" after the second add, and updated text after remove. The test also only clicks `+` once, not twice as the AC specifies. The mock's `QueueAndWorkersSummary` handler dynamically computes `runningWorkers` from the mocked `workers` array, so the data is available — the assertions are just missing.

@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution result artifact and contains none of the required spec, migration, or skill-document changes, so none of the acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No governing docs or skill references were changed. The bead requires updates to FEAT-001, FEAT-006 or replacement, FEAT-010, ADR-024, TP-020, routing migration docs, design docs, and skill references, but the diff contains only a new execution result JSON artifact.",
+      "location": ".ddx/executions/20260506T181741-d70d13e0/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "Acceptance criteria 1 through 8 are not implemented or evaluable from this diff because there are no edits to the referenced documentation files and no evidence of the required terminology or boundary changes.",
+      "location": ".ddx/executions/20260506T181741-d70d13e0/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "Acceptance criteria 9 and 10 are not satisfied by adding a result artifact alone; there is no reviewable evidence here that `ddx doc validate` and `lefthook run pre-commit` passed or that any unrelated failures were documented in bead notes.",
+      "location": ".ddx/executions/20260506T181741-d70d13e0/result.json:1"
+    }
+  ]
+}
+```

@@ -1,0 +1,12 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff under review only contains execution manifest/result evidence files. No source code for cli/internal/checks/{protocol,loader,runner}.go or cli/cmd/ac.go is present in the changed-files set, so AC items 1-5 cannot be verified.",
+  "findings": [
+    { "severity": "block", "summary": "No checks protocol package files in diff (protocol.go/loader.go/runner.go missing).", "location": "cli/internal/checks/" },
+    { "severity": "block", "summary": "No ddx ac CLI command in diff (ac.go/ac_test.go missing).", "location": "cli/cmd/ac.go" },
+    { "severity": "block", "summary": "Diff insufficient to evaluate acceptance criteria; only execution evidence JSON files changed.", "location": ".ddx/executions/20260503T105250-e8a776ed/" }
+  ]
+}
+```

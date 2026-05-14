@@ -1,0 +1,22 @@
+---
+## Review: ddx-90234d47 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Confirm ddx-agent exports mountable Cobra root | BLOCK | — diff contains only execution-evidence JSON; no audit content |
+| 2 | Audit 3-layer architecture gaps | BLOCK | — not present in diff |
+| 3 | Audit generate-artifact run-side metadata gaps | BLOCK | — not present in diff |
+| 4 | Output list of CONTRACT-003 amendments (or none) | BLOCK | — no amendment list in diff |
+
+### Summary
+
+The diff under review (`7a306da1`) contains only `.ddx/executions/.../manifest.json` and `result.json` evidence files — no audit deliverable. The actual audit document appears to live in a separate commit (`08a40b69 docs(design): CONTRACT-003 audit for plan-2026-04-29`) referenced by `result_rev`, but it is not included in the diff presented for review, so the deliverable cannot be evaluated here.
+
+### Findings
+
+- The reviewable diff is execution-evidence chore only; the audit artifact (expected under `docs/helix/02-design/`) is not in scope of this diff. Re-run review against the squashed range including `08a40b69`, or attach the audit document to this iteration.
+- No file in the diff contains any statement about ddx-agent's Cobra root export, 3-layer architecture gaps, or run-side `generate-artifact` metadata — the three substantive audit questions from the bead description are unanswered by the changes shown.

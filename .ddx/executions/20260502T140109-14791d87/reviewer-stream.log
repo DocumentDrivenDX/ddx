@@ -1,0 +1,13 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution evidence (manifest.json, result.json). No ADR-007, FEAT-026, or amendments to FEAT-020/FEAT-021 are present in the changed files. Cannot verify any acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "ADR-007 not authored in this diff", "location": "docs/helix/" },
+    { "severity": "block", "summary": "FEAT-026 not authored in this diff", "location": "docs/helix/" },
+    { "severity": "block", "summary": "FEAT-020 and FEAT-021 amendments not present in this diff", "location": "docs/helix/" },
+    { "severity": "block", "summary": "No evidence of ddx doc audit being run/clean", "location": ".ddx/executions/20260502T140109-14791d87/" }
+  ]
+}
+```

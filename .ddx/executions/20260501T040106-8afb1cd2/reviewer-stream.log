@@ -1,0 +1,10 @@
+The references all properly qualify .stitch/DESIGN.md or are bare mentions inside .stitch/PLAN.md (where context is clear). Root DESIGN.md is non-existent. Acceptance met.
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Root DESIGN.md confirmed non-existent; CI workflow, lefthook hook, package.json export, visual prompt depends_on entries, and plan doc all reference .stitch/DESIGN.md. website/DESIGN.md is a separate frontend doc, out of scope.",
+  "findings": []
+}
+```

@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds execution artifacts under .ddx/executions. It shows prompt_sha recorded in one manifest, but provides no code or test changes to verify the CI size fixture or the resolver_feat008 prompt_sha slicing behavior.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 is only evidenced by a generated execution artifact, not by the implementation that would add prompt_sha to manifest generation generally.",
+      "location": ".ddx/executions/20260507T005929-ad16b683/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "No CI fixture or test code is included, so there is no evidence for the size-budget assertion required by AC2.",
+      "location": ".ddx/executions/20260507T005929-ad16b683/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "No GraphQL resolver, schema, or efficacy view changes are present, so AC3 cannot be evaluated from this diff.",
+      "location": ".ddx/executions/20260507T005929-ad16b683/manifest.json:1"
+    }
+  ]
+}
+```

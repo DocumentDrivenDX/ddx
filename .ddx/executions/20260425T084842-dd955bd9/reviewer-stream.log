@@ -1,0 +1,22 @@
+---
+## Review: ddx-70c1d2e2 iter 1
+
+### Verdict: REQUEST_CHANGES
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestReviewErrorTaxonomy — 4 classes, body carries literal id | APPROVE | cli/internal/agent/execute_bead_review_taxonomy_test.go:1 — table-driven test for context_overflow/provider_empty/unparseable/transport asserts class string in event body+summary |
+| 2 | TestBoundedReviewRetry — Nth fail, fresh rev resets, no-rev no-budget | APPROVE | cli/internal/agent/execute_bead_review_retry_test.go — three top-level tests; case (c) covers both execution_failed and --no-merge (PreserveRef) sub-tests |
+| 3 | execute_bead_review_failure_modes_test.go stays green (§13) | APPROVE | execute_bead_loop.go new path uses SetExecutionCooldown (long park) and never closes the bead; retry test also asserts `Status != Closed` |
+| 4 | TestReviewMaxRetriesConfig — override in config.yaml, loop respects it | REQUEST_CHANGES | cli/internal/config/review_max_retries_test.go:1 verifies YAML→field→Resolve only; nothing in cmd/ wires `cfg.ResolveReviewMaxRetries()` into `ExecuteBeadLoopOptions.ReviewMaxRetries`, so the loop does not actually respect the YAML override end-to-end |
+| 5 | review-manual-required body includes failure_class, attempt_count, result_rev | APPROVE | execute_bead_loop.go reviewErrorEventBody emits `failure_class=`, `attempt_count=`, `result_rev=` lines; asserted in retry_test.go |
+
+### Summary
+
+Core implementation is solid: taxonomy classification, retry-counter scoping via existing event log, terminal escalation via cooldown park (preserving §13), and structured event bodies are all in place with thorough tests. The one real gap is that the config field is loadable but not plumbed into the worker invocation in any `cmd/` entry point, so the YAML override is currently inert in production paths even though the option works programmatically.
+
+### Findings
+
+- **Config-to-loop wiring missing.** `NewConfig.ReviewMaxRetries` and `ResolveReviewMaxRetries()` exist (cli/internal/config/types.go), and `ExecuteBeadLoopOptions.ReviewMaxRetries` is honored (cli/internal/agent/execute_bead_loop.go), but no caller in `cli/cmd/` reads the resolved value and sets it on the options struct. `grep -r ReviewMaxRetries cli/cmd` returns nothing. AC #4 explicitly requires "verifies the loop respects the override" sourced from `.ddx/config.yaml`; the existing config test stops at the loader. Add the plumbing in the `ddx work` / `ddx agent execute-loop` command wiring and either extend `TestReviewMaxRetriesConfig` to drive the loop via that path, or add an integration test that loads YAML→options→worker and asserts escalation at the configured threshold.

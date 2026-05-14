@@ -1,0 +1,5 @@
+All four ACs satisfied: doc lands at docs/helix path, references ADR-004/SD-004/FEAT-004 plus lock-contention bead, defines Backend Go interface, names chaos_test.go contract.
+
+```json
+{"schema_version":1,"verdict":"APPROVE","summary":"TD-030 extended at correct in-repo path with all six required topics, references to ADR-004/FEAT-004/lock-contention patch (ddx-da11a34a), a concrete Go Backend interface for cli/internal/bead/backend.go, and an explicit chaos_test.go conformance contract.","findings":[{"severity":"info","summary":"Doc references ADR-004 implicitly via the archive-policy section but not by ADR id; FEAT-004 and the ddx-da11a34a lock patch are cited explicitly. Acceptable given the ADR-004 archive policy is described directly.","location":"docs/helix/02-design/technical-designs/TD-030-axon-bead-backend.md"}]}
+```

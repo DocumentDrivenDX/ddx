@@ -1,0 +1,17 @@
+---
+## Review: ddx-d3119355 iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | No bare exec.Command("git"...) in scoped read-only callsites | APPROVE | processmetrics.go:1171, resolver_commits.go:105, state.go:454, server.go:3647/3700/3748/3759 all migrated to `internalgit.Command` |
+| 2 | gitEnvForDir function removed | APPROVE | cli/cmd/init.go — function body gone; call sites now use `gitpkg.CleanEnv()` (init.go:306, 713) |
+| 3 | scrubbedGitEnv function removed | APPROVE | cli/internal/server/server.go — function body gone; call sites use `internalgit.CleanEnv()` (server.go:809, 1672, 1744); bonus removal of `graphqlScrubbedGitEnv` in resolver_commits.go |
+| 4 | All tests pass | APPROVE | Landed commit 30025549 passed execute-bead checkpoint gates (result.json: outcome=task_succeeded, exit_code=0) |
+
+### Summary
+
+Phase 2c migration is complete and surgical: the five listed read-only callsites (processmetrics, server.go MCP handlers + HTTP handlers, resolver_commits, state) now route through `internalgit.Command`/`internalgit.CleanEnv`, and both duplicate scrub helpers (`gitEnvForDir`, `scrubbedGitEnv`) are deleted. Note: AC item 1 read literally ("anywhere in non-test code") is broader than the bead scope — ~50 bare `exec.Command("git"...)` calls remain in mutating paths (execute_bead*, compare_adapter, bead/store, install.go, init.go write paths), which are explicitly out of scope for this phase. Interpreted per the Phase 2c scope listed in the description, the work is complete.

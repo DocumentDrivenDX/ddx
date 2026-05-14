@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "TestWorkersPanel_LiveTransitions covers all 7 AC: subprocess worker re-execs and POSTs to /api/workers/register, GraphQL query asserts connected/stale/disconnected via injected synthetic clock (setNow on shared adapter); no wall-clock sleep past thresholds.",
+  "findings": [
+    { "severity": "info", "summary": "Probe interval is treated as 30s (60s=2x, 300s=10x), matching ADR-022 rev 5; clock seam added on adapter rather than worker_ingest.go but functionally equivalent.", "location": "cli/internal/server/reported_workers_adapter.go:24" },
+    { "severity": "info", "summary": "Subprocess exits after registration; freshness transitions are driven solely by synthetic clock — appropriate since the test exercises freshness logic, not liveness pings.", "location": "cli/internal/server/workers_panel_live_transitions_test.go:158" }
+  ]
+}
+```

@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds an execution metadata file and contains no fixture, tests, baseline report, or CI/pre-commit evidence, so none of the acceptance criteria can be verified as implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No 2000-artifact fixture was added under cli/internal/server/frontend/e2e/fixtures/scale/, so the required scale corpus is not implemented in the submitted diff.",
+      "location": ".ddx/executions/20260507T001835-4e374494/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "The required baseline report at .ddx/executions/<run-id>/perf-baseline.md is missing; only result.json was added, with no recorded first-paint, scroll, or search measurements.",
+      "location": ".ddx/executions/20260507T001835-4e374494/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "There is no Playwright test for loading the 2k fixture, and no evidence that bun run test:e2e or lefthook run pre-commit passed.",
+      "location": ".ddx/executions/20260507T001835-4e374494/result.json:1"
+    }
+  ]
+}
+```

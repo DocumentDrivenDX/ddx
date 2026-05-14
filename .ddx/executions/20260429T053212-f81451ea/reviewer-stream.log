@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "Screenshot spec migrated to resolve fixture node/project IDs at runtime via /graphql + /api/projects, and plugin-detail uses fixture-only `ddx` plugin. Only in-scope file modified; demo config/spec untouched.",
+  "findings": [
+    { "severity": "info", "summary": "Fixture detection relies on path/name regex `ddx-e2e-*`; brittle if fixture naming changes, but acceptable for stable seeded harness.", "location": "cli/internal/server/frontend/e2e/screenshots.spec.ts:30" }
+  ]
+}
+```

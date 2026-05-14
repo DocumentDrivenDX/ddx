@@ -1,0 +1,22 @@
+---
+## Review: ddx-4cecb7d5 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | e2e/plugins.spec.ts 4/4 green | BLOCK | — not found in diff |
+| 2 | manifest in YAML form | BLOCK | — not found in diff |
+| 3 | screenshots committed | BLOCK | — not found in diff |
+
+### Summary
+
+The provided diff only adds `.ddx/executions/20260422T085958-39f3e3e4/result.json` execution metadata. It contains no UI implementation, test output, YAML manifest rendering, or committed screenshots needed to evaluate the bead acceptance criteria.
+
+### Findings
+
+- `e2e/plugins.spec.ts` evidence is missing from the diff; no test file changes or test run output showing 4/4 passing is included.
+- `plugins/[name]/+page.svelte` evidence is missing from the diff; no implementation proves the manifest renders as literal YAML.
+- Screenshot artifacts are missing from the diff; no committed screenshots are present.

@@ -1,0 +1,11 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "Diff contains only execution manifest/result artifacts under .ddx/executions/. No code or test changes exist to evaluate against any of the 5 acceptance criteria.",
+  "findings": [
+    { "severity": "block", "summary": "No source/test changes — only execution artifacts added", "location": ".ddx/executions/20260501T042518-6985c3b2/" },
+    { "severity": "block", "summary": "AC1-5 cannot be verified: no removal/quarantine of harness tests, no stubs, no opt-in gating, no static check documentation", "location": "(none)" }
+  ]
+}
+```

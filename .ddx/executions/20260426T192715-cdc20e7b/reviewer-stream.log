@@ -1,0 +1,10 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "AgentRunner interface migrated to (ctx, ResolvedConfig, AgentRunRuntime) signature. Store builds ResolvedConfig from Executor.Env (HARNESS/MODEL/EFFORT) + TimeoutMS via LoadAndResolve. Wrapper delegates to RunWithConfigViaService. CommandFactory split into Agent/ExecAgentRunnerOverride. Result.json reports build+tests passing.",
+  "findings": [
+    { "severity": "info", "summary": "config.LoadAndResolve error is discarded (rcfg, _ := ...). Acceptable for fallback to defaults but worth noting for follow-up if zero-value sentinel panics on access.", "location": "cli/internal/exec/store.go:204" }
+  ]
+}
+```

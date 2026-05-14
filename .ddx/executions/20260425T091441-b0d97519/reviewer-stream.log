@@ -1,0 +1,17 @@
+---
+## Review: ddx-91347caa iter 1
+
+### Verdict: APPROVE
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | TestServerInlinePromptOversize: 413 + JSON fields | APPROVE | cli/internal/server/server_inline_prompt_oversize_test.go:1; handler at server.go:1887 returns 413 with error/observed_bytes/cap_bytes/config_hint |
+| 2 | TestExecStoreOversizePromptEnv: error names def, env, size, cap | APPROVE | cli/internal/exec/store_oversize_prompt_env_test.go:1; bead_runtime.go:73 emits "exec definition %q env DDX_AGENT_PROMPT exceeds cap: observed %d, cap %d" |
+| 3 | TestDocgraphOversizePromptMetadata: actionable build error | APPROVE | cli/internal/docgraph/docgraph_oversize_prompt_metadata_test.go:1; ParseDocument at docgraph.go:519 returns ErrPromptMetadataOversize, BuildGraph propagates it as fatal at :197 |
+| 4 | go test ./... passes | APPROVE | result.json reports outcome=task_succeeded, exit_code=0; full suite gate ran in execute-bead worktree |
+
+### Summary
+
+Clean Stage D2 implementation. Three ingress sites cap inline prompts via package-level vars defaulting to `evidence.DefaultMaxPromptBytes`, each producing actionable errors with observed/cap/config_hint info. Test coverage matches the named acceptance gates exactly. The `--no-verify` note correctly scopes pre-existing evidencelint violations (Server text egress mcpContent literals) to Stage E1/E2, out of scope here.

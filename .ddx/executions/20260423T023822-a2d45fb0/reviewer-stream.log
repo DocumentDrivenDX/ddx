@@ -1,0 +1,28 @@
+## Review: ddx-9e0eff22 iter 1
+
+### Verdict: BLOCK
+
+### AC Grades
+
+| # | Item | Grade | Evidence |
+|---|------|-------|----------|
+| 1 | Design note + policy decision recorded | BLOCK | — not found in diff |
+| 2 | Project-local persona directory recognized | BLOCK | — not found in diff |
+| 3 | GraphQL mutations (create/update/delete) | BLOCK | — not found in diff |
+| 4 | CLI parity (new/edit/fork/delete) | BLOCK | — not found in diff |
+| 5 | UI — explainer copy | BLOCK | — not found in diff |
+| 6 | UI — source badge | BLOCK | — not found in diff |
+| 7 | UI — New / Edit / Delete for project personas | BLOCK | — not found in diff |
+| 8 | UI — Fork library to project | BLOCK | — not found in diff |
+| 9 | No regressions | BLOCK | — not found in diff |
+| 10 | Empty project-local state hint | BLOCK | — not found in diff |
+
+### Summary
+
+The diff contains only an execution evidence file (`result.json`) recording that the agent ran for ~28 minutes and reported success. None of the ten acceptance criteria are addressed — no design doc, no Go code, no GraphQL schema changes, no UI components, no tests. The execution metadata itself is not implementation.
+
+### Findings
+
+- The entire diff is a single file `.ddx/executions/20260423T023822-a2d45fb0/result.json` — an execution log, not implementation code.
+- Zero of the required artifacts are present: no `docs/helix/02-design/` design note, no changes to `cli/internal/persona/`, no GraphQL schema or resolver additions, no SvelteKit UI changes, no Playwright tests, no CLI command additions.
+- The `result.json` claims `"outcome": "task_succeeded"` but the merged commit (`5e13d45c`) needs to be inspected — the diff provided for review shows only the evidence file, not the implementation. If the implementation landed in a prior commit that was merged, the review diff is incomplete and needs to include all commits from the bead branch.

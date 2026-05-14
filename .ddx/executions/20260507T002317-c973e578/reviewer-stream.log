@@ -1,0 +1,24 @@
+```json
+{
+  "schema_version": 1,
+  "verdict": "BLOCK",
+  "summary": "The diff only adds DDx execution metadata. It contains no 2k fixture, no Playwright test, no perf-baseline report, and no evidence for the required e2e or pre-commit passes, so the acceptance criteria are not implemented or verifiable.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No product or test files are changed. AC1 and AC4 are unmet because the diff adds no synthetic 2000-artifact fixture under `cli/internal/server/frontend/e2e/fixtures/scale/` and no Playwright coverage for the required load-without-crash scenario.",
+      "location": ".ddx/executions/20260507T002317-c973e578/manifest.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 is unmet because the diff does not add `.ddx/executions/<run-id>/perf-baseline.md` or any recorded baseline measurements for cold/warm first paint, scroll smoothness, or search latency.",
+      "location": ".ddx/executions/20260507T002317-c973e578/result.json:1"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 and AC6 are not verifiable from this change set. The added metadata claims success, but there is no attached evidence that `bun run test:e2e` or `lefthook run pre-commit` actually passed for the required implementation.",
+      "location": ".ddx/executions/20260507T002317-c973e578/result.json:1"
+    }
+  ]
+}
+```
