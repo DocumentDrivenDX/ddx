@@ -36,7 +36,10 @@ func TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead(t *testing.T) 
 	intakeRelease := make(chan struct{})
 
 	makeRuntime := func(assignee string) (config.ResolvedConfig, ExecuteBeadLoopRuntime) {
-		opts := config.TestLoopConfigOpts{Assignee: assignee}
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           assignee,
+			BeadQualityLintBlockThresholdScore: 1,
+		}
 		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
 		rt := ExecuteBeadLoopRuntime{
 			Once: true,
@@ -105,7 +108,10 @@ func TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents(t *tes
 	lintRelease := make(chan struct{})
 
 	makeRuntime := func(assignee string) (config.ResolvedConfig, ExecuteBeadLoopRuntime) {
-		opts := config.TestLoopConfigOpts{Assignee: assignee}
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           assignee,
+			BeadQualityLintBlockThresholdScore: 1,
+		}
 		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
 		rt := ExecuteBeadLoopRuntime{
 			Once: true,
@@ -283,7 +289,10 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
 			}),
 		}
-		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           "worker",
+			BeadQualityLintBlockThresholdScore: 5,
+		}
 		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
 
 		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
@@ -314,7 +323,10 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
 			}),
 		}
-		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           "worker",
+			BeadQualityLintBlockThresholdScore: 5,
+		}
 		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
 
 		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
@@ -371,7 +383,10 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 				return ExecuteBeadReport{}, nil
 			}),
 		}
-		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           "worker",
+			BeadQualityLintBlockThresholdScore: 5,
+		}
 		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
 
 		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
@@ -509,7 +524,10 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
 			}),
 		}
-		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           "worker",
+			BeadQualityLintBlockThresholdScore: 5,
+		}
 		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
 
 		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{

@@ -354,6 +354,11 @@ func readTreeHeadWithRetry(dir string) ([]byte, error) {
 }
 
 func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) error {
+	skipWorktreePaths, err := checkpointSkipWorktreePaths(dir)
+	if err != nil {
+		return err
+	}
+
 	// Step 1: sync the index to HEAD. This is required before checkout-index
 	// below will do anything useful, and also keeps subsequent CommitTracker
 	// calls from building stale trees.
@@ -366,6 +371,9 @@ func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) e
 	out, err := readTreeHeadWithRetry(dir)
 	if err != nil {
 		return fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	if err := restoreCheckpointSkipWorktreePaths(dir, skipWorktreePaths); err != nil {
+		return err
 	}
 
 	// Step 2: compute the list of tracked files changed between the previous
@@ -397,6 +405,9 @@ func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) e
 	// those ourselves.
 	skip := map[string]bool{}
 	for _, path := range skipPaths {
+		skip[filepath.ToSlash(path)] = true
+	}
+	for _, path := range skipWorktreePaths {
 		skip[filepath.ToSlash(path)] = true
 	}
 	var indexFiles []string

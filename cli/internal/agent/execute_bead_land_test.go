@@ -1721,3 +1721,45 @@ func TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL(t *testing.T) {
 		t.Errorf("beads-archive.jsonl was clobbered by SyncWorkTreeToHead\ngot:  %q\nwant: %q", string(got), liveContent)
 	}
 }
+
+func TestSyncWorkTreeToHead_PreservesSkipWorktreeLocalOverlay(t *testing.T) {
+	r := newLandTestRepo(t)
+	overlayPath := ".ddx/plugins/helix/README.md"
+	r.writeFile("app.txt", "old\n")
+	r.writeFile(overlayPath, "committed overlay\n")
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "add tracked overlay")
+	fromRev := r.resolveRef("HEAD")
+
+	r.runGit("update-index", "--skip-worktree", "--", overlayPath)
+	r.writeFile(overlayPath, "local overlay\n")
+	next := r.commitOn(fromRev, "app.txt", "new\n", "change app")
+	r.runGit("update-ref", "refs/heads/main", next, fromRev)
+
+	ops := RealLandingGitOps{}
+	if err := ops.SyncWorkTreeToHead(r.dir, fromRev); err != nil {
+		t.Fatalf("SyncWorkTreeToHead: %v", err)
+	}
+
+	if got := r.runGit("ls-files", "-v", "--", overlayPath); !strings.HasPrefix(got, "S ") {
+		t.Fatalf("overlay skip-worktree bit not preserved: %q", got)
+	}
+	status := r.runGit("status", "--short", "--", overlayPath)
+	if status != "" {
+		t.Fatalf("overlay path became visible in git status: %q", status)
+	}
+	gotApp, err := os.ReadFile(filepath.Join(r.dir, "app.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotApp) != "new\n" {
+		t.Fatalf("non-overlay changed file not materialized: %q", string(gotApp))
+	}
+	gotOverlay, err := os.ReadFile(filepath.Join(r.dir, overlayPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotOverlay) != "local overlay\n" {
+		t.Fatalf("local overlay was clobbered: %q", string(gotOverlay))
+	}
+}
