@@ -152,7 +152,7 @@ func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 		ResolvedPowerClass: "standard",
 		EscalationCount:    1,
 		FinalPowerClass:    "standard",
-	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC), nil)
 
 	require.Len(t, app.events, 1)
 	assert.Equal(t, "ddx-0001", app.events[0].BeadID)
@@ -165,4 +165,32 @@ func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 	assert.Equal(t, "standard", body["resolved_power_class"])
 	assert.Equal(t, float64(1), body["escalation_count"])
 	assert.Equal(t, "standard", body["final_power_class"])
+}
+
+// TestAppendLoopRoutingEvidence_RouteFailureFallbackChain proves that prior
+// route-failure entries on a bead get serialised into the routing event's
+// fallback_chain field so post-hoc routing analytics can see which
+// provider/model tuples were excluded before the resolved route was selected.
+func TestAppendLoopRoutingEvidence_RouteFailureFallbackChain(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	failed := []FailedRouteEntry{
+		{Provider: "bragi", Model: "qwen3.5-27b", ActualPower: 50, Reason: FailureModeProviderConnectivity},
+	}
+	appendLoopRoutingEvidence(app, "ddx-0001", ExecuteBeadReport{
+		Provider: "openai",
+		Model:    "gpt-5.4",
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC), failed)
+
+	require.Len(t, app.events, 1)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
+	chain, ok := body["fallback_chain"].([]any)
+	require.True(t, ok, "fallback_chain must be a JSON array")
+	require.Len(t, chain, 1)
+	first := chain[0].(map[string]any)
+	assert.Equal(t, "bragi", first["provider"])
+	assert.Equal(t, "qwen3.5-27b", first["model"])
+	assert.Equal(t, float64(50), first["actual_power"])
+	assert.Equal(t, FailureModeProviderConnectivity, first["reason"])
+	assert.Equal(t, "openai", body["resolved_provider"])
 }
