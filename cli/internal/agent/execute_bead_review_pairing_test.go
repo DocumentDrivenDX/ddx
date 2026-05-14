@@ -219,6 +219,7 @@ func TestReviewBead_DoesNotInheritImplementerHarness(t *testing.T) {
 }
 
 func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
@@ -259,17 +260,20 @@ func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t 
 	assert.Empty(t, svc.lastReq.Provider)
 }
 
-func TestReviewRouting_MissingActualPowerUsesSmartFloor(t *testing.T) {
+func TestReviewRouting_MissingActualPowerUsesMetadataSelectedReviewerProfile(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
 	projectRoot, head, store := reviewPairingTestSetup(t)
+	profiles := []agentlib.PolicyInfo{
+		{Name: "review-mid", MinPower: 9, MaxPower: 10},
+		{Name: "review-high", MinPower: 71, MaxPower: 80},
+	}
+	models := []agentlib.ModelInfo{
+		{ID: "review-mid-model", Power: 10, Available: true, AutoRoutable: true},
+		{ID: "review-high-model", Power: 72, Available: true, AutoRoutable: true},
+	}
 	svc := &passthroughTestService{
-		listPolicies: []agentlib.PolicyInfo{
-			{Name: "smart", MinPower: 9, MaxPower: 10},
-			{Name: "frontier", MinPower: 71, MaxPower: 80},
-		},
-		listModels: []agentlib.ModelInfo{
-			{ID: "smart-model", Power: 10, Available: true, AutoRoutable: true},
-			{ID: "frontier-model", Power: 72, Available: true, AutoRoutable: true},
-		},
+		listPolicies: profiles,
+		listModels:   models,
 		executeEvents: []agentlib.ServiceEvent{
 			{
 				Type: "final",
@@ -290,8 +294,10 @@ func TestReviewRouting_MissingActualPowerUsesSmartFloor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "smart", svc.lastReq.Policy)
-	assert.Equal(t, 9, svc.lastReq.MinPower)
+	expected := reviewerProfileForTest(ProfileSnapshot{Profiles: profiles, Models: models})
+	require.NotEmpty(t, expected.Name)
+	assert.Equal(t, expected.Name, svc.lastReq.Policy)
+	assert.Equal(t, expected.MinPower, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
 }
 
@@ -358,6 +364,7 @@ func TestReviewPairingDegraded_IsTelemetryOnly(t *testing.T) {
 }
 
 func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
@@ -392,4 +399,17 @@ func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
 	assert.Equal(t, "frontier", svc.lastReq.Policy)
 	assert.Equal(t, 71, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
+}
+
+func reviewerProfileForTest(snap ProfileSnapshot) reviewerDispatchProfile {
+	name := SelectReviewerProfile(snap)
+	if name == "" {
+		return reviewerDispatchProfile{}
+	}
+	for _, profile := range snap.Profiles {
+		if profile.Name == name {
+			return reviewerDispatchProfile{Name: name, MinPower: profile.MinPower}
+		}
+	}
+	return reviewerDispatchProfile{Name: name}
 }

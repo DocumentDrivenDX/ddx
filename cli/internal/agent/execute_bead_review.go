@@ -922,7 +922,7 @@ func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl 
 	} else if escalatedFloor > 0 {
 		name = SelectStrongestProfileAbove(snap, escalatedFloor)
 	} else {
-		name = selectSmartReviewerProfile(snap)
+		name = SelectReviewerProfile(snap)
 	}
 	if name == "" {
 		return reviewerDispatchProfile{MinPower: escalatedFloor}
@@ -942,12 +942,10 @@ func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl 
 	return reviewerDispatchProfile{Name: name, MinPower: escalatedFloor}
 }
 
-func selectSmartReviewerProfile(snap ProfileSnapshot) string {
-	for _, profile := range snap.Profiles {
-		if profile.Name == "smart" && profileHasAvailableModel(profile, snap.Models) {
-			return profile.Name
-		}
-	}
+// SelectReviewerProfile chooses the strongest satisfiable Fizeau policy for
+// reviewer work when the implementer's actual power is unknown. The policy name
+// is intentionally taken from Fizeau metadata rather than assumed by DDx.
+func SelectReviewerProfile(snap ProfileSnapshot) string {
 	return SelectStrongestProfile(snap)
 }
 
