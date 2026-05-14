@@ -392,13 +392,21 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 				continue
 			}
 			seen[key] = struct{}{}
+			// Rebase replayed failures to `now` so they survive fizeau's
+			// route-health TTL window. Historical tracker timestamps (minutes
+			// to ~15 min old) sit outside fizeau's default 30s cooldown and
+			// are dropped immediately by ActiveAttempts, leaving policy/default
+			// Execute routes free to re-pick the same failed provider. The
+			// tracker-side cutoff above (ProviderUnavailableCooldown) decides
+			// which failures are still worth replaying; once they pass that
+			// gate they are asserted active for fizeau's TTL counted from now.
 			_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
 				Provider:  failed.Provider,
 				Model:     failed.Model,
 				Status:    "failed",
 				Reason:    FailureModeProviderConnectivity,
 				Error:     FailureModeProviderConnectivity,
-				Timestamp: at,
+				Timestamp: now,
 			})
 		}
 		events, err := store.Events(b.ID)
@@ -434,7 +442,7 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 				Status:    "failed",
 				Reason:    FailureModeProviderConnectivity,
 				Error:     strings.TrimSpace(fmt.Sprint(body["error"])),
-				Timestamp: ev.CreatedAt,
+				Timestamp: now,
 			})
 		}
 	}
