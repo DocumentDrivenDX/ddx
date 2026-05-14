@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260514T155540-0f695a5e",
+  "bead_id": "ddx-4e9f610f",
+  "base_rev": "b431816a12140fe80241d13d336f00efbf3f78ec",
+  "created_at": "2026-05-14T15:55:52.163370612Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4e9f610f",
+    "title": "try: attach prose-check evidence for docs-changing attempts",
+    "description": "PROBLEM\nDDx should run prose checks during normal docs-changing attempts without users reminding the agent. Findings need to be captured as evidence and fed back while the attempt is still editable.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:264-283 requires `ddx try` / `ddx work` attempts that change Markdown under `docs/` to run `ddx doc prose --changed`, attach evidence, and keep prose advisory. No workflow hook currently implements that contract.\n\nSMART JUSTIFICATION: Workflow-hook policy is high-judgment because it touches execution finalization and evidence. A weak implementation could block correct work on advisory prose findings or run too late for agents to repair obvious prose issues.\n\nPROPOSED FIX\n- Detect docs Markdown changes in `ddx try` / `ddx work` attempts.\n- Run `ddx doc prose --changed` before finalization when docs changed.\n- Attach prose-check evidence to the attempt.\n- Feed findings back to the agent before final response when editable.\n- Keep prose findings advisory by default and separate from correctness review.\n\nNON-SCOPE\n- Do not make prose checks mandatory blockers.\n- Do not run full-doc cleanup.\n- Do not alter Fizeau routing.\n\nDEPS\nDepends on the Vale-backed command and the upgraded writing skill.",
+    "acceptance": "1. `TestTryDocsChanged_AttachesProseEvidence` covers docs-changing attempts.\n2. `TestTryNoDocsChanged_SkipsProseCheck` covers non-doc attempts.\n3. `TestTryProseFindings_AdvisoryByDefault` proves findings do not block closure.\n4. `TestTryProseFindings_FedBackBeforeFinalization` covers editable feedback timing.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "adr:025",
+      "area:docprose",
+      "area:execution",
+      "kind:integration",
+      "phase:2",
+      "prose-quality",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:smart"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T15:54:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "18574",
+      "execute-loop-heartbeat-at": "2026-05-14T15:54:48.855231898Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T155540-0f695a5e",
+    "prompt": ".ddx/executions/20260514T155540-0f695a5e/prompt.md",
+    "manifest": ".ddx/executions/20260514T155540-0f695a5e/manifest.json",
+    "result": ".ddx/executions/20260514T155540-0f695a5e/result.json",
+    "checks": ".ddx/executions/20260514T155540-0f695a5e/checks.json",
+    "usage": ".ddx/executions/20260514T155540-0f695a5e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-4e9f610f-20260514T155540-0f695a5e"
+  },
+  "prompt_sha": "12664131b86dbf9a84023430bd57e182cc75880a1652ab46d27cfd03b062da87"
+}
