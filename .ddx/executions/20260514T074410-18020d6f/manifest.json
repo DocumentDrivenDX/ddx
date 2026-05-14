@@ -1,0 +1,223 @@
+{
+  "attempt_id": "20260514T074410-18020d6f",
+  "bead_id": "ddx-6cde5ffd",
+  "base_rev": "b68117e879a36d4a57912011777b45a0501cadb5",
+  "created_at": "2026-05-14T07:44:16.24484625Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6cde5ffd",
+    "title": "registry: install default package from embedded package FS",
+    "description": "PROBLEM\n  `ddx init` must install the default `ddx` package offline from embedded package content, using the same installer semantics as `ddx plugin install ddx`. Today the binary embeds a special skill-only tree instead of the default package layout.\n\nROOT CAUSE\n  cli/internal/registry/installer.go:20-185 only installs packages by downloading a GitHub tarball. cli/cmd/init.go:276-299 works around offline/default-package needs by separately copying embedded skills and then attempting `registry.InstallPackage(pkg, workingDir)`, which downloads package content and may fail offline. cli/Makefile:65-84 syncs `skills/ddx` into `cli/internal/skills/ddx` for `go:embed`, not a package-rooted `library/` tree. The plan requires `InstallPackageFromFS(pkg, sourceFS, projectRoot)` or equivalent embedded-package support rooted at the default package.\n\nPROPOSED FIX\n  - Add an embedded default-package FS under the registry package, rooted at the package layout that will be copied from `library/`.\n  - Split package install entrypoints into remote, local-dir, and embedded-FS paths that share the same core manifest/mapping implementation.\n  - Preserve the existing `InstallPackage(pkg, projectRoot)` public wrapper as the remote path only if callers still need it during the migration.\n  - Add offline tests proving an embedded package install can create `.ddx/plugins/ddx`, `.agents/skills/ddx`, and `.claude/skills/ddx` without network.\n\nNON-SCOPE\n  - Rewriting `ddx init` to call the embedded package installer; a dependent bead owns the init call site.\n  - Moving the source skill tree into `library/skills/ddx`; a later bead owns the content move.\n  - Removing old embedded skill files before offline init is green.\n\nPARENT + DEPS\n  Parent: ddx-6862f2ac. Depends on the registry mapping bead so embedded installs use the same mapping implementation.",
+    "acceptance": "1. `TestInstallPackageFromFSHonorsManifestMappings` proves an embedded `fs.FS` rooted at a package directory reads `package.yaml` and applies root plus skill mappings.\n2. `TestInstallPackageFromFSInstallsDefaultDDxPackageOffline` proves the embedded default package can install `.ddx/plugins/ddx`, `.agents/skills/ddx`, and `.claude/skills/ddx` without invoking network download code.\n3. `TestInstallPackageFromRemoteUsesSharedCore` proves the remote entrypoint and embedded-FS entrypoint share the same skill mapping behavior for a fixture package.\n4. `cd cli \u0026\u0026 go test ./internal/registry/... -run 'TestInstallPackageFromFSHonorsManifestMappings|TestInstallPackageFromFSInstallsDefaultDDxPackageOffline|TestInstallPackageFromRemoteUsesSharedCore' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./internal/registry/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6862f2ac",
+    "labels": [
+      "area:cli",
+      "area:plugins",
+      "area:skills",
+      "kind:feature",
+      "phase:2",
+      "plan-2026-05-13",
+      "spec:plan-2026-05-13-ddx-skill-package-layout"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T07:43:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3268858",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:40:05.992280168Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:54:00.711238243Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:37:25.838080415Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:34:38.166062693Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:51:57.962718768Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:33:18.718712079Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:55:22.930538163Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:01:00.188439823Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:06:37.447671206Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:11:42.557222264Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:24:06.528717671Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\"}",
+          "created_at": "2026-05-14T04:34:50.805190597Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T05:24:40.701897576Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:18:41.423730131Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"context canceled\"}",
+          "created_at": "2026-05-14T05:40:21.46318376Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T05:40:41.222383934Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"agent exited without a commit or no_changes_rationale.txt\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"reason\":\"context_canceled\"}",
+          "created_at": "2026-05-14T05:40:41.657249578Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "context_canceled"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T054021-087c4984\",\"bead_id\":\"ddx-6cde5ffd\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T05:40:41.721459032Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-14T05:40:41.843222944Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "context canceled",
+          "created_at": "2026-05-14T05:40:41.91033002Z",
+          "kind": "loop-error",
+          "source": "ddx work",
+          "summary": "addBeadLabel failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T07:43:29.362457275Z",
+      "execute-loop-last-detail": "addBeadLabel: context canceled",
+      "execute-loop-last-status": "loop-error",
+      "execute-loop-no-changes-count": 1,
+      "execute-loop-retry-after": "2026-05-14T05:45:41Z",
+      "spec-id": "plan-2026-05-13-ddx-skill-package-layout"
+    }
+  },
+  "governing": [
+    {
+      "id": "plan-2026-05-13-ddx-skill-package-layout",
+      "path": "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
+      "title": "DDx Skill Package Layout"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T074410-18020d6f",
+    "prompt": ".ddx/executions/20260514T074410-18020d6f/prompt.md",
+    "manifest": ".ddx/executions/20260514T074410-18020d6f/manifest.json",
+    "result": ".ddx/executions/20260514T074410-18020d6f/result.json",
+    "checks": ".ddx/executions/20260514T074410-18020d6f/checks.json",
+    "usage": ".ddx/executions/20260514T074410-18020d6f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-6cde5ffd-20260514T074410-18020d6f"
+  },
+  "prompt_sha": "ff5a37fddd2617eadf618ee605e83eba48ec24b4ba399e20d9d09a992d360b95"
+}

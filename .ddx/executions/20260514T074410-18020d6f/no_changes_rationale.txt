@@ -1,0 +1,15 @@
+All acceptance criteria are already satisfied at base-rev b68117e87.
+
+Evidence:
+- cli/internal/registry/installer.go defines InstallPackageFromRemote, InstallPackageFromDir, and InstallPackageFromFS (lines 29, 63, 83), all routing through the shared core installFromExtractedDir (line 116). InstallPackage remains as a compatibility shim delegating to the remote path.
+- cli/internal/registry/defaultplugin/embed.go embeds library/ via //go:embed and exposes FS() rooted at the package layout, with library/package.yaml declaring root + skill mappings.
+- cli/internal/registry/installer_test.go contains the three required tests:
+  - TestInstallPackageFromFSHonorsManifestMappings (line 208)
+  - TestInstallPackageFromFSInstallsDefaultDDxPackageOffline (line 236) — uses offlineTransport to fail any network attempt
+  - TestInstallPackageFromRemoteUsesSharedCore (line 277) — asserts identical file lists between remote and FS entrypoints
+
+Test runs (in cli/):
+- `go test ./internal/registry/... -run 'TestInstallPackageFromFSHonorsManifestMappings|TestInstallPackageFromFSInstallsDefaultDDxPackageOffline|TestInstallPackageFromRemoteUsesSharedCore' -count=1` -> PASS
+- `go test ./internal/registry/... -count=1` -> ok
+
+verification_command: cd cli && go test ./internal/registry/... -run 'TestInstallPackageFromFSHonorsManifestMappings|TestInstallPackageFromFSInstallsDefaultDDxPackageOffline|TestInstallPackageFromRemoteUsesSharedCore' -count=1
