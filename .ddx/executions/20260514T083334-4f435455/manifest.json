@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260514T083334-4f435455",
+  "bead_id": "ddx-96ccd9c0",
+  "base_rev": "c1e569d7f60a62dc387f0c8750f06dd6e321aa9e",
+  "created_at": "2026-05-14T08:33:48.976764086Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-96ccd9c0",
+    "title": "test: measure coverage and enforce a ratchet",
+    "description": "PROBLEM\nThe default DDx test path currently answers only pass/fail. It does not produce an aggregate coverage number, does not persist a baseline, and does not fail when coverage regresses. That made it easy to miss that the interrupted work/watch tracker-noise path had no real integration coverage until production behavior exposed it.\n\nROOT CAUSE WITH FILE:LINE\n- Makefile:23-24 delegates `make test` to `cli-test` without any coverage gate.\n- Makefile:59-61 delegates CLI tests to `cd cli \u0026\u0026 $(MAKE) test`, so root-level default testing inherits the CLI target behavior.\n- cli/Makefile:111-114 runs `go test -v ./...` with no `-coverprofile`, aggregate coverage parsing, baseline comparison, or ratchet persistence.\n- cli/Makefile:116-120 has `test-full` run `go test -race -cover ./...`, but it only prints package coverage and has no enforced ratchet.\n\nPROPOSED FIX\nAdd a coverage measurement and ratchet workflow for the default Go test suite. The implementation must read its baseline/threshold from a checked-in repo config or data file, not from hardcoded defaults in Go source. Add a Make target that runs coverage, reports aggregate coverage, compares it to the configured baseline, and fails on regression. Decide whether `make test` should invoke the ratchet directly or whether CI/default-test documentation should make the ratchet target mandatory; if not wired into `make test`, document the reason in the bead implementation.\n\nNON-SCOPE\nDo not require live harness tests, perf tests, or networked integration tests for the coverage ratchet. Do not make developers update a baseline implicitly during ordinary test runs. Do not hide coverage failures behind verbose-only output. Do not manually edit `.ddx/beads.jsonl`.\n\nIN-SCOPE FILES\n- Makefile\n- cli/Makefile\n- cli/tools/ or cli/internal/ test-support package for coverage-ratchet parsing/comparison\n- a checked-in coverage ratchet config/baseline file under cli/ or .ddx/\n\nOUT-OF-SCOPE\n- Fizeau routing policy\n- worker execution semantics\n- live_harness and perf test inclusion policy",
+    "acceptance": "1. Add `TestCoverageRatchetReadsBaselineFromConfig` proving the ratchet threshold/baseline is loaded from a checked-in config/data file and is not a compiled fallback.\n2. Add `TestCoverageRatchetFailsBelowBaseline` proving a measured aggregate below the configured baseline returns a non-zero/failing result with a useful message.\n3. Add `TestCoverageRatchetAllowsEqualOrImprovedCoverage` proving equal or improved measured coverage passes without updating the baseline.\n4. Add a reproducible command, for example `cd cli \u0026\u0026 make coverage-ratchet`, that runs `go test` with a cover profile, computes aggregate coverage, and enforces the configured ratchet.\n5. Run `cd cli \u0026\u0026 go test ./...` and the new coverage-ratchet command.\n6. Run `lefthook run pre-commit`.",
+    "labels": [
+      "area:test",
+      "area:ci",
+      "kind:task",
+      "quality",
+      "coverage",
+      "ratchet"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T08:32:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3572754",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:28:48.876311063Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T08:32:19.745897361Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T083334-4f435455",
+    "prompt": ".ddx/executions/20260514T083334-4f435455/prompt.md",
+    "manifest": ".ddx/executions/20260514T083334-4f435455/manifest.json",
+    "result": ".ddx/executions/20260514T083334-4f435455/result.json",
+    "checks": ".ddx/executions/20260514T083334-4f435455/checks.json",
+    "usage": ".ddx/executions/20260514T083334-4f435455/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-96ccd9c0-20260514T083334-4f435455"
+  },
+  "prompt_sha": "661a0c87679154400376f9f294d87f5454b9648843c6375c20861b4a12775400"
+}
