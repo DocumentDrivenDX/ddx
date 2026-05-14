@@ -449,6 +449,15 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	proseHook := f.proseEvidenceHookOverride
+	if proseHook == nil {
+		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
+			ProjectRoot: projectRoot,
+			Events:      bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			Actor:       resolveClaimAssignee(),
+			Source:      "ddx try",
+		})
+	}
 	result, runErr := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Mode:                  executeloop.ModeOnce,
 		Log:                   cmd.OutOrStdout(),
@@ -460,6 +469,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreDispatchLintHook:   lintHook,
 		PostAttemptTriageHook: triageHook,
+		ProseEvidenceHook:     proseHook,
 		NoReview:              noReview,
 	})
 	if runErr != nil {

@@ -42,6 +42,11 @@ type ExecuteBeadLoopRuntime struct {
 	PreClaimIntakeHook    PreClaimIntakeHook
 	PreDispatchLintHook   func(ctx context.Context, beadID string) (LintResult, error)
 	PostAttemptTriageHook func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error)
+	// ProseEvidenceHook runs after a successful (landed) attempt and before
+	// CloseWithEvidence so docs-changing attempts attach advisory prose-check
+	// evidence to the bead's event history. Errors are logged and ignored;
+	// prose findings never block closure.
+	ProseEvidenceHook ProseEvidenceHook
 	// PostAttemptDecompositionHook is called when a no_changes attempt signals
 	// orchestrator_action: decompose in its rationale, indicating the bead is too
 	// large for implementation-level splitting. The hook should run the same
@@ -2026,6 +2031,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks: %v\n", recErr)
 					}
+				}
+			}
+			// Advisory prose-check evidence for docs-changing attempts. Runs
+			// before CloseWithEvidence so findings land in the bead's history
+			// while the attempt is still editable. Errors are advisory.
+			if runtime.ProseEvidenceHook != nil {
+				if proseErr := runtime.ProseEvidenceHook(ctx, candidate.ID, report); proseErr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "prose evidence: %v (continuing)\n", proseErr)
 				}
 			}
 			// Automated close eligibility is now owned by the pre-land

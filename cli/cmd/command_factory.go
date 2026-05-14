@@ -74,6 +74,12 @@ type CommandFactory struct {
 	// shelling out to a real agent harness.
 	tryExecutorOverride agent.ExecuteBeadExecutor
 
+	// proseEvidenceHookOverride, when non-nil, replaces the default
+	// post-attempt prose evidence hook used by ddx try and ddx work. Tests
+	// inject this to assert hook invocation timing and behavior without
+	// running real git/docprose commands.
+	proseEvidenceHookOverride agent.ProseEvidenceHook
+
 	// resourceCheckerOverride, when non-nil, replaces the default execution
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker

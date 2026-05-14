@@ -237,6 +237,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	innerIntakeHook := agent.NewPreClaimIntakeHookWithLogVerbose(projectRoot, store, rcfg, nil, qualityRunner, intakeLog, f.viperInstance.GetBool("verbose"))
 	intakeHook := agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), innerIntakeHook)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	proseHook := f.proseEvidenceHookOverride
+	if proseHook == nil {
+		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
+			ProjectRoot: projectRoot,
+			Events:      bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			Actor:       resolveClaimAssignee(),
+			Source:      "ddx work",
+		})
+	}
 	decompositionHook := agent.NewPreClaimDecompositionHook(store, qualityRunner, rcfg, projectRoot)
 	recoveryHook := agent.NewAutoRecoveryPostLadderExhaustionHook(store, qualityRunner, rcfg, projectRoot, agent.AutoRecoveryConfig{
 		MaxRecoveryCostUSD: spec.MaxRecoveryCostUSD,
@@ -490,6 +499,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
 		PreDispatchLintHook:          lintHook,
 		PostAttemptTriageHook:        triageHook,
+		ProseEvidenceHook:            proseHook,
 		PostAttemptDecompositionHook: decompositionHook,
 		BudgetStop:                   costCapTripped,
 		NoReview:                     spec.NoReview,
