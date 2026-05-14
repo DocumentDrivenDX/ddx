@@ -316,6 +316,9 @@ func satisfiableProfiles(snap ProfileSnapshot, floor int) []agentlib.PolicyInfo 
 		if profile.Name == "" {
 			continue
 		}
+		if hasHardPolicyRequirement(profile) {
+			continue
+		}
 		if profile.MinPower == 0 && profile.MaxPower == 0 {
 			continue
 		}
