@@ -1,0 +1,263 @@
+{
+  "attempt_id": "20260514T094953-1d56fc2d",
+  "bead_id": "ddx-11ef34e1",
+  "base_rev": "d2ca2e6396bf590330d2efca9bb33134324e7382",
+  "created_at": "2026-05-14T09:50:00.671326564Z",
+  "requested": {
+    "harness": "claude",
+    "model": "opus",
+    "prompt": "synthesized",
+    "min_power": 10
+  },
+  "bead": {
+    "id": "ddx-11ef34e1",
+    "title": "skills package: remove checked-in DDx skill mirrors",
+    "description": "PROBLEM\n  After the DDx skill source moves into the package layout, the repository must stop treating `.agents/skills/ddx`, `.claude/skills/ddx`, `.ddx/skills/ddx`, and `cli/internal/skills/ddx` as independent checked-in mirrors. Those outputs should be produced by init, registry installs, local overlays, or embed sync, not edited as canonical sources.\n\nROOT CAUSE\n  The current repo contains full copied mirrors at `.agents/skills/ddx`, `.claude/skills/ddx`, `.ddx/skills/ddx`, `cli/internal/skills/ddx`, and `skills/ddx`. cli/Makefile:74-81 refreshes these mirrors via rsync. docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md:134-141 explicitly calls for removing direct bootstrap mechanisms and checked-in mirrors after replacement tests exist.\n\nPROPOSED FIX\n  - Remove checked-in project-local skill mirror directories from source control once package installer tests prove they are regenerated.\n  - Keep only the embedded default-package copy required by the release binary, generated from `library/` by the build sync path.\n  - Update any generated file lists, gitignore/exclude expectations, or validation commands that still assume `.ddx/skills/ddx` is a source-controlled mirror.\n  - Make local development use `ddx plugin install ddx --local library --force` when live-editable skill discovery paths are needed.\n\nNON-SCOPE\n  - Deleting the embedded package copy before offline init tests are green.\n  - Removing third-party or user-owned skills under `.agents/skills` or `.claude/skills`.\n  - Updating all long-form feature prose; a docs bead owns governing documentation cleanup.\n\nPARENT + DEPS\n  Parent: ddx-6862f2ac. Depends on the skill source move and init/package installer tests.",
+    "acceptance": "1. `TestInitInstallsDDxPluginPackage` and `TestPluginInstallLocalDDxLibrarySymlinksSkills` pass after the checked-in project-local mirrors are removed from source control.\n2. `git ls-files .agents/skills/ddx .claude/skills/ddx .ddx/skills/ddx skills/ddx` returns no tracked canonical mirror files after the migration commit.\n3. `ddx plugin install ddx --local library --force` recreates `.agents/skills/ddx` and `.claude/skills/ddx` as local symlink overlays in a development checkout.\n4. `ddx skills check library/skills/ddx .agents/skills/ddx .claude/skills/ddx` passes after the local overlay install.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6862f2ac",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:plugins",
+      "area:build",
+      "kind:cleanup",
+      "plan-2026-05-13",
+      "spec:plan-2026-05-13-ddx-skill-package-layout"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T09:05:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3610635",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:27:01.267779069Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T082409-d8679f7f\",\"bead_id\":\"ddx-11ef34e1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T08:27:01.521160172Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\npowerClass=cheap\nresult_rev=f08c779fce18d2d544034e28836b7d9aa7962068\nbase_rev=f08c779fce18d2d544034e28836b7d9aa7962068\noutcome_reason=timeout",
+          "created_at": "2026-05-14T08:27:01.67470385Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:31:15.429897538Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:34:05.245672219Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:43:05.190069071Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T084012-305e9719\",\"bead_id\":\"ddx-11ef34e1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T08:43:05.49698733Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\"}",
+          "created_at": "2026-05-14T08:43:05.664907611Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\npowerClass=cheap\nresult_rev=ca730056040d64f909bcd35c071f4bfa7047672c\nbase_rev=ca730056040d64f909bcd35c071f4bfa7047672c\nretry_after=2026-05-14T08:58:05Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T08:43:05.806549962Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:47:14.539538251Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T084410-d3748278\",\"bead_id\":\"ddx-11ef34e1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T08:47:14.843459708Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\"}",
+          "created_at": "2026-05-14T08:47:15.017089599Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\npowerClass=cheap\nresult_rev=ee107742bd4b6e9e24e38207ca9f709d96fdaa31\nbase_rev=ee107742bd4b6e9e24e38207ca9f709d96fdaa31\nretry_after=2026-05-14T09:02:15Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T08:47:15.172110595Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T08:49:16.911493583Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T08:53:41.839661413Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T085039-c7ef3c59\",\"bead_id\":\"ddx-11ef34e1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T08:53:42.112505237Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\"}",
+          "created_at": "2026-05-14T08:53:42.28626167Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\npowerClass=cheap\nresult_rev=00cbbb784c1069aebc93c9a8839667382679e9e0\nbase_rev=00cbbb784c1069aebc93c9a8839667382679e9e0\nretry_after=2026-05-14T09:08:42Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T08:53:42.433434716Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T08:57:44.123383719Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T09:01:55.162338282Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T09:05:08.644636728Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"opus\"}",
+          "created_at": "2026-05-14T09:21:20.305526742Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260514T090619-a95c8983\",\"harness\":\"claude\",\"model\":\"opus\",\"input_tokens\":127,\"output_tokens\":41518,\"total_tokens\":41645,\"cost_usd\":9.42693175,\"duration_ms\":895901,\"exit_code\":0}",
+          "created_at": "2026-05-14T09:21:20.374718293Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=41645 cost_usd=9.4269 model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"opus\",\"requested_min_power\":8}",
+          "created_at": "2026-05-14T09:49:46.688850408Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260514T092132-866934f0\",\"harness\":\"claude\",\"model\":\"opus\",\"input_tokens\":189,\"output_tokens\":63750,\"total_tokens\":63939,\"cost_usd\":16.015127500000002,\"duration_ms\":1688925,\"exit_code\":0}",
+          "created_at": "2026-05-14T09:49:46.7524903Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=63939 cost_usd=16.0151 model=opus"
+        }
+      ],
+      "execute-loop-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T08:43:05Z",
+          "model": "qwen3.5-27b",
+          "provider": "bragi",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T09:05:51.514756098Z",
+      "spec-id": "plan-2026-05-13-ddx-skill-package-layout"
+    }
+  },
+  "governing": [
+    {
+      "id": "plan-2026-05-13-ddx-skill-package-layout",
+      "path": "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
+      "title": "DDx Skill Package Layout"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T094953-1d56fc2d",
+    "prompt": ".ddx/executions/20260514T094953-1d56fc2d/prompt.md",
+    "manifest": ".ddx/executions/20260514T094953-1d56fc2d/manifest.json",
+    "result": ".ddx/executions/20260514T094953-1d56fc2d/result.json",
+    "checks": ".ddx/executions/20260514T094953-1d56fc2d/checks.json",
+    "usage": ".ddx/executions/20260514T094953-1d56fc2d/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-11ef34e1-20260514T094953-1d56fc2d"
+  },
+  "prompt_sha": "2389b1016da0a0ff348c475d2824eef4cf46357b6559957b67825b0b75c1cb44"
+}
