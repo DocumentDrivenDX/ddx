@@ -205,6 +205,34 @@ func TestCheckpointPreDispatchDirtIgnoresGitIgnoredGeneratedPaths(t *testing.T) 
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
 }
 
+func TestCheckpointPreDispatchDirtPreservesSkipWorktreeLocalOverlay(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260514T000001-overlay"
+
+	pluginFileRel := filepath.Join(".ddx", "plugins", "helix", "README.md")
+	pluginFile := filepath.Join(projectRoot, pluginFileRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(pluginFile), 0o755))
+	require.NoError(t, os.WriteFile(pluginFile, []byte("tracked plugin copy\n"), 0o644))
+	runGitInteg(t, projectRoot, "add", pluginFileRel)
+	runGitInteg(t, projectRoot, "commit", "-m", "test: track plugin copy")
+	runGitInteg(t, projectRoot, "update-index", "--skip-worktree", "--", pluginFileRel)
+	require.Contains(t, runGitInteg(t, projectRoot, "ls-files", "-t", "--", pluginFileRel), "S "+filepath.ToSlash(pluginFileRel))
+
+	require.NoError(t, os.Remove(pluginFile))
+	require.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", pluginFileRel),
+		"skip-worktree local overlay changes must start hidden")
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"overlay"}`+"\n"), 0o644))
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.True(t, committed, "allowed DDx bookkeeping should still checkpoint")
+
+	assert.Contains(t, runGitInteg(t, projectRoot, "ls-files", "-t", "--", pluginFileRel), "S "+filepath.ToSlash(pluginFileRel),
+		"checkpoint index sync must not drop local overlay skip-worktree bits")
+	assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", pluginFileRel),
+		"hidden local overlay changes must remain hidden after checkpoint")
+}
+
 func TestCheckpointPreDispatchDirtyPathsExcludeIgnored(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 

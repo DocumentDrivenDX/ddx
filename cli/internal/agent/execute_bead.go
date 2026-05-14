@@ -559,6 +559,11 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return false, nil
 	}
 
+	skipWorktreePaths, err := checkpointSkipWorktreePaths(projectRoot)
+	if err != nil {
+		return false, err
+	}
+
 	dirtyPaths, err := preDispatchCheckpointDirtyPaths(projectRoot)
 	if err != nil {
 		return false, err
@@ -648,7 +653,52 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if out, err := internalgit.Command(context.Background(), projectRoot, "read-tree", "HEAD").CombinedOutput(); err != nil {
 		return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
 	}
+	if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
+		return false, err
+	}
 	return true, nil
+}
+
+func checkpointSkipWorktreePaths(projectRoot string) ([]string, error) {
+	out, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "-t", "-z").Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing skip-worktree paths: %w", err)
+	}
+	var paths []string
+	for len(out) > 0 {
+		recordEnd := bytes.IndexByte(out, 0)
+		if recordEnd == -1 {
+			recordEnd = len(out)
+		}
+		record := out[:recordEnd]
+		if recordEnd < len(out) {
+			out = out[recordEnd+1:]
+		} else {
+			out = nil
+		}
+		if len(record) < 3 || record[0] != 'S' || record[1] != ' ' {
+			continue
+		}
+		path := filepath.ToSlash(string(record[2:]))
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
+}
+
+func restoreCheckpointSkipWorktreePaths(projectRoot string, paths []string) error {
+	for start := 0; start < len(paths); start += 100 {
+		end := start + 100
+		if end > len(paths) {
+			end = len(paths)
+		}
+		args := append([]string{"update-index", "--skip-worktree", "--"}, paths[start:end]...)
+		if out, err := internalgit.Command(context.Background(), projectRoot, args...).CombinedOutput(); err != nil {
+			return fmt.Errorf("restoring skip-worktree paths after checkpoint index sync: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+	}
+	return nil
 }
 
 func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
