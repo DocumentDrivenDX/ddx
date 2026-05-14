@@ -13,10 +13,10 @@ keywords:
   - skills
 install:
   root:
-    source: library
+    source: .
     target: .ddx/plugins/ddx
   skills:
-    - source: .agents/skills/
+    - source: skills/
       target: .agents/skills/
-    - source: .agents/skills/
+    - source: skills/
       target: .claude/skills/
