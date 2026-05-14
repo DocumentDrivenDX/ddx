@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260514T171151-8852268f",
+  "bead_id": "ddx-f7c9159f",
+  "base_rev": "4a01d943f7858ad617da7351bb73a28ae8a54c18",
+  "created_at": "2026-05-14T17:12:04.239156441Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f7c9159f",
+    "title": "frontend: add full-stack run-detail Playwright coverage and p95 render-frame check",
+    "description": "PROBLEM\nThe run-detail page and evidence browser need a single end-to-end regression test that exercises prompt, response, tool trace, and evidence together, plus the p95 dataset size check. The current Playwright coverage only checks the evidence tab slice.\n\nROOT CAUSE\n- cli/internal/server/frontend/e2e/runs-evidence.spec.ts:241-305 currently covers evidence tab behavior, but it does not assert the complete prompt/response/tool-trace/evidence flow in one scenario or the 200-tool-call/30-file render-frame budget.\n\nPROPOSED FIX\n- Add one Playwright scenario named `full stack: prompt/response/tool-trace/evidence`.\n- Cover prompt visible, response visible, tool trace visible, and evidence list visible states in a single run-detail flow.\n- Add the p95 dataset fixture/check for 200 tool calls and 30 evidence files and keep the tabs interactive within one render frame.\n\nNON-SCOPE\n- Server audit semantics.\n- Spec prose edits.\n- Any new auth or RBAC behavior.\n\nACCEPTANCE\n1. `test('full stack: prompt/response/tool-trace/evidence', ...)` exists in the Playwright suite.\n2. The scenario asserts prompt visible, response visible, tool trace visible, and evidence list visible in the same flow.\n3. The p95 dataset check covers 200 tool calls and 30 evidence files and preserves one-frame interactivity.\n4. `bun run test:e2e` green.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "area:frontend",
+      "kind:test",
+      "spec:FEAT-008",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T17:10:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "225509",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:38:00.872661102Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f7c9159f\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:38:00.92897866Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:38:01.034558805Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T17:10:55.948653709Z",
+      "execute-loop-last-detail": "landing worktree has staged changes after waiting 2s:\nD\t.ddx/executions/20260514T155540-0f695a5e/checks/production-reachability.json\nD\t.ddx/executions/20260514T155540-0f695a5e/manifest.json\nD\t.ddx/executions/20260514T155540-0f695a5e/prompt.md\nD\t.ddx/executions/20260514T155540-0f695a5e/result.json\nD\t.ddx/executions/20260514T155540-0f695a5e/usage.json\nM\tcli/cmd/command_factory.go\nM\tcli/cmd/execute_loop_shared.go\nM\tcli/cmd/try.go\nD\tcli/cmd/try_prose_test.go\nM\tcli/internal/agent/execute_bead_loop.go\nD\tcli/internal/agent/prose_evidence.go",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-14T16:21:28Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T171151-8852268f",
+    "prompt": ".ddx/executions/20260514T171151-8852268f/prompt.md",
+    "manifest": ".ddx/executions/20260514T171151-8852268f/manifest.json",
+    "result": ".ddx/executions/20260514T171151-8852268f/result.json",
+    "checks": ".ddx/executions/20260514T171151-8852268f/checks.json",
+    "usage": ".ddx/executions/20260514T171151-8852268f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f7c9159f-20260514T171151-8852268f"
+  },
+  "prompt_sha": "809fa7004c5bf502ee7d33cec51b3d25dbef300dafb59e85c711ea36f3163cd0"
+}
