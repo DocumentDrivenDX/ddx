@@ -259,6 +259,52 @@ func TestCheckpointPreDispatchDirtyPathsExcludeIgnored(t *testing.T) {
 	assert.NotContains(t, paths, "cli/build/ddx")
 }
 
+// TestPreDispatchCheckpoint_IgnoresWorkerSidecarsWithoutGitignore guards the
+// fix for old projects whose .gitignore predates the .ddx/workers/ rule. The
+// pre-dispatch checkpoint must treat .ddx/workers/<id>/status.json as DDx
+// runtime scratch regardless of project gitignore contents — otherwise stale
+// worker liveness sidecars block the next ddx work attempt.
+func TestPreDispatchCheckpoint_IgnoresWorkerSidecarsWithoutGitignore(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260514T000002-workers"
+
+	// No .gitignore rule for .ddx/workers/ — simulate an older repo.
+	workerRel := filepath.Join(".ddx", "workers", "agent-loop-test", "status.json")
+	workerPath := filepath.Join(projectRoot, workerRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(workerPath), 0o755))
+	require.NoError(t, os.WriteFile(workerPath, []byte(`{"alive":true}`+"\n"), 0o644))
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, ".ddx/workers/agent-loop-test/status.json",
+		"worker liveness sidecars must not appear in pre-dispatch checkpoint dirt")
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	assert.False(t, committed,
+		"checkpoint must be a no-op when only worker sidecars are dirty")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"),
+		"HEAD must not advance when only worker sidecars are dirty")
+
+	// Negative assertion: an ordinary untracked file must still appear and
+	// still trigger the existing checkpoint refusal.
+	implPath := filepath.Join(projectRoot, "feature.txt")
+	require.NoError(t, os.WriteFile(implPath, []byte("real implementation\n"), 0o644))
+
+	paths, err = preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, paths, "feature.txt",
+		"ordinary untracked files must still surface as checkpoint dirt")
+	assert.NotContains(t, paths, ".ddx/workers/agent-loop-test/status.json")
+
+	committed, err = checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.Error(t, err)
+	require.False(t, committed)
+	assert.Contains(t, err.Error(), "checkpoint refused to absorb implementation changes outside DDx bookkeeping")
+	assert.Contains(t, err.Error(), "feature.txt")
+}
+
 func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
