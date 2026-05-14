@@ -145,7 +145,7 @@ func (p preClaimReadinessChecksPayload) Len() int {
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
 // The hook uses the normal service execution path. Unpinned workers get the
-// lifecycle hook's cheapest-profile hint; explicitly pinned workers keep their
+// lifecycle hook's strongest-profile hint; explicitly pinned workers keep their
 // operator route pins. Route failures are infrastructure failures, not
 // bead-readiness decisions, so they return intake_error and let the loop use
 // its fail-open readiness path.
@@ -193,8 +193,9 @@ func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg con
 			ClearMinPower: true,
 			ClearMaxPower: true,
 		}
-		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectCheapestProfile)
 		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime)
+		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
+		logPreClaimIntakeRoute(log, beadID, runtime)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{
@@ -213,14 +214,20 @@ func logPreClaimIntakePrompt(w io.Writer, projectRoot, beadID, prompt string, ru
 	}
 	logDir := ResolveLogDir(projectRoot, "")
 	_, _ = fmt.Fprintf(w, "readiness prompt %s: source=%s bytes=%d session_logs=%s\n", beadID, PreClaimIntakePromptSource, len(prompt), logDir)
-	if route := preClaimIntakeRouteSummary(runtime); route != "" {
-		_, _ = fmt.Fprintf(w, "readiness prompt %s: route %s\n", beadID, route)
-	}
 	_, _ = fmt.Fprintf(w, "readiness prompt %s begin\n%s", beadID, truncatePreClaimIntakePromptForLog(prompt))
 	if !strings.HasSuffix(prompt, "\n") {
 		_, _ = fmt.Fprintln(w)
 	}
 	_, _ = fmt.Fprintf(w, "readiness prompt %s end\n", beadID)
+}
+
+func logPreClaimIntakeRoute(w io.Writer, beadID string, runtime AgentRunRuntime) {
+	if w == nil {
+		return
+	}
+	if route := preClaimIntakeRouteSummary(runtime); route != "" {
+		_, _ = fmt.Fprintf(w, "readiness prompt %s: route %s\n", beadID, route)
+	}
 }
 
 func preClaimIntakeRouteSummary(runtime AgentRunRuntime) string {

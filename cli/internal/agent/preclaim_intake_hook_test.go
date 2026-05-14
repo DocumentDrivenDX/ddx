@@ -133,7 +133,7 @@ func intakeHookTestConfig() config.ResolvedConfig {
 	return cfg.Resolve(config.CLIOverrides{})
 }
 
-func TestPreClaimIntakeHook_DispatchesWithCheapestProfileNoStrongPowerTrick(t *testing.T) {
+func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -159,7 +159,7 @@ func TestPreClaimIntakeHook_DispatchesWithCheapestProfileNoStrongPowerTrick(t *t
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Equal(t, "cheap", svc.lastReq.Policy)
+	assert.Equal(t, "smart", svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
