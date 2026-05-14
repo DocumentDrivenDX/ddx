@@ -1066,14 +1066,15 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 
 	t.Run("reason and source match ParkReason mapping", func(t *testing.T) {
 		expected := map[ParkReason]parkReasonMeta{
-			ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "legacy agent execute-loop"},
-			ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "legacy agent execute-loop"},
-			ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "legacy agent execute-loop"},
-			ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "legacy agent execute-loop"},
-			ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "legacy agent execute-loop"},
-			ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "legacy agent execute-loop"},
-			ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "legacy agent execute-loop"},
-			ParkAutoRecoveryFailed:         {Reason: "automated recovery failed; operator review required", Source: "legacy agent execute-loop"},
+			ParkIntakeRejection:              {Reason: "pre-claim intake blocked execution", Source: "legacy agent execute-loop"},
+			ParkNoChangesOperatorRequired:    {Reason: "operator decision required before another automated attempt", Source: "legacy agent execute-loop"},
+			ParkPostReviewMalfunction:        {Reason: "review BLOCK triage reached operator-required rung", Source: "legacy agent execute-loop"},
+			ParkReviewTerminal:               {Reason: "terminal review block requires operator decision", Source: "legacy agent execute-loop"},
+			ParkConflictRecovery:             {Reason: "land conflict requires operator judgment", Source: "legacy agent execute-loop"},
+			ParkReviewRequestClarification:   {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "legacy agent execute-loop"},
+			ParkLadderExhaustionManual:       {Reason: "recovery:manual label set; operator review required", Source: "legacy agent execute-loop"},
+			ParkAutoRecoveryFailed:           {Reason: "automated recovery failed; operator review required", Source: "legacy agent execute-loop"},
+			ParkProviderConnectivityRepeated: {Reason: "provider unreachable on repeated attempts; operator review required", Source: "legacy agent execute-loop"},
 		}
 		assert.Equal(t, expected, parkReasonMetaMap)
 	})

@@ -2272,7 +2272,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					report.Disrupted = true
 					report.DisruptionReason = "provider_connectivity"
 					operatorPinned := isOperatorRoutingPinned(rcfg.Passthrough())
-					if err := applyProviderConnectivityRouteExclusion(w.Store, candidate.ID, report, operatorPinned, w.EscalationNextFloor, now().UTC()); err != nil {
+					if err := applyProviderConnectivityRouteExclusion(w.Store, candidate.ID, assignee, report, operatorPinned, w.EscalationNextFloor, now().UTC()); err != nil {
 						if runtime.Log != nil {
 							_, _ = fmt.Fprintf(runtime.Log, "route-exclusion update failed for %s: %v (continuing)\n", candidate.ID, err)
 						}
@@ -3453,6 +3453,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	if nextFloorFn != nil {
 		nextFloor, err := nextFloorFn(actualPower)
 		if err != nil {
+			emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, time.Now().UTC())
 			return applyNoChangesOperatorRequired(store, beadID, actor, noChanges, time.Now().UTC())
 		}
 		return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
@@ -3506,6 +3507,7 @@ func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, act
 				return nil
 			})
 		}
+		emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, at)
 	}
 	return store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
 		ensureBeadExtra(b)
@@ -3840,15 +3842,34 @@ func isOperatorRoutingPinned(pt config.AgentPassthrough) bool {
 // ladder step is available) advances TriagePowerHintKey above the failed
 // route's actualPower so the next attempt's RouteRequest naturally picks a
 // different candidate. The lifecycle status is unchanged (bead stays open).
+//
+// When the ladder is exhausted, it emits an execution-escalation-aborted event
+// and sets TriagePowerHintKey to actualPower+1 as a sentinel so downstream
+// routing knows to avoid the failed tier.
+//
+// When the same (provider, model) appears in the failed-routes list for the
+// second time, the bead is promoted to operator_required.
 func applyProviderConnectivityRouteExclusion(
 	store ExecuteBeadLoopStore,
 	beadID string,
+	actor string,
 	report ExecuteBeadReport,
 	operatorPinned bool,
 	nextFloorFn func(int) (int, error),
 	at time.Time,
 ) error {
-	return store.Update(beadID, func(b *bead.Bead) {
+	var (
+		ladderExhausted bool
+		repeatFailure   bool
+	)
+	if err := store.Update(beadID, func(b *bead.Bead) {
+		existing := readFailedRoutes(b.Extra)
+		for _, e := range existing {
+			if e.Provider == report.Provider && e.Model == report.Model {
+				repeatFailure = true
+				break
+			}
+		}
 		appendFailedRoute(b, FailedRouteEntry{
 			Provider:    report.Provider,
 			Model:       report.Model,
@@ -3861,9 +3882,59 @@ func applyProviderConnectivityRouteExclusion(
 		}
 		nextFloor, err := nextFloorFn(report.ActualPower)
 		if err != nil {
+			ladderExhausted = true
+			b.Extra[TriagePowerHintKey] = report.ActualPower + 1
 			return
 		}
 		b.Extra[TriagePowerHintKey] = nextFloor
+	}); err != nil {
+		return err
+	}
+	if ladderExhausted {
+		emitEscalationAbortedEvent(store, beadID, actor, report.Provider, report.Model, report.ActualPower, at)
+	}
+	if repeatFailure {
+		msg := fmt.Sprintf("provider %s / model %s unreachable on 2+ attempts; check ddx config or provider health", report.Provider, report.Model)
+		return store.ParkToProposed(beadID, bead.ParkProviderConnectivityRepeated, func(b *bead.Bead) {
+			ensureBeadExtra(b)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+				Reason:          msg,
+				Since:           at.UTC().Format(time.RFC3339),
+				Source:          "ddx work",
+				SuggestedAction: "check provider health or reconfigure endpoints in .ddx/config.yaml",
+				Summary:         "provider unreachable on repeated attempts",
+			})
+		})
+	}
+	return nil
+}
+
+// emitEscalationAbortedEvent records a kind=execution-escalation-aborted event
+// when nextFloorFn returns an error (typically ErrLadderExhausted). Best-effort.
+func emitEscalationAbortedEvent(store BeadEventAppender, beadID, actor, provider, model string, actualPower int, at time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	body, err := json.Marshal(map[string]any{
+		"provider":     provider,
+		"model":        model,
+		"actual_power": actualPower,
+		"reason":       fmt.Sprintf("ladder exhausted at power %d", actualPower),
+	})
+	if err != nil {
+		return
+	}
+	summary := fmt.Sprintf("escalation aborted: ladder exhausted at power %d provider=%s", actualPower, provider)
+	if model != "" {
+		summary += " model=" + model
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "execution-escalation-aborted",
+		Summary:   summary,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
 	})
 }
 
