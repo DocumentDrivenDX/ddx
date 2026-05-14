@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260514T185436-8a6d9fe4",
+  "bead_id": "ddx-8a7a6843",
+  "base_rev": "cfad0fbd83361dbb7b6d793e5074fe723fd385f5",
+  "created_at": "2026-05-14T18:54:41.378117914Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8a7a6843",
+    "title": "execute-loop: surface and act on ladder-exhausted escalation instead of silently no-op'ing",
+    "description": "PROBLEM\nOn provider_connectivity failure, applyProviderConnectivityRouteExclusion calls nextFloorFn(actualPower). When the configured power ladder has no step above actualPower (common when the local config exposes only cheap-tier providers), nextFloorFn returns powerladder.ErrLadderExhausted. The current code silently swallows that error and does NOT set b.Extra[TriagePowerHintKey]. As a result the next claim sees no hint, the routing intent re-derives \"cheap\", and the same dead (provider, model) is selected again. The failed-route list is appended to but never consulted by Fizeau, so it has no effect on the next decision. A drain in this state attempts each bead once, times out for ~2m45s in Fizeau retries, gets the same provider_connectivity outcome, and bottoms out at 100% failures with no escalation ever taking effect. Reproduces exactly when local LM Studio hosts (bragi/grendel) are unreachable: every bead routes to power=5 cheap models, fails, retry-after expires 15min later, re-routes to the same model, fails again.\n\nROOT CAUSE\ncli/internal/agent/execute_bead_loop.go:3862-3866 in applyProviderConnectivityRouteExclusion:\n    nextFloor, err := nextFloorFn(report.ActualPower)\n    if err != nil {\n        return\n    }\n    b.Extra[TriagePowerHintKey] = nextFloor\n\nThe early return swallows ErrLadderExhausted. The same silent-swallow pattern also lives in applyNoChangesSmartRetry (execute_bead_loop.go:3454) and applyRepairCycleExhaustedEscalation (execute_bead_loop.go:3497). The bead-event log gets a route-failure entry but no operator-visible signal that escalation aborted.\n\nPROPOSED FIX\n- When nextFloorFn returns ErrLadderExhausted (or any error), emit a kind=execution-escalation-aborted event with a summary naming the failed (provider, model, actualPower) and the reason \"ladder exhausted at power N\".\n- Set TriagePowerHintKey to actualPower+1 anyway (or to a sentinel \u003e=actualPower+1) so the next route decision at least knows \"anything but the failed tier\" — this is a no-op for routers that ignore the hint, but it gives clear signal to Fizeau-side exclusion honoring (separate bead).\n- After 2 consecutive provider_connectivity failures on the SAME (provider, model), promote the bead's outcome to operator_required with a clear message (\"provider X / model Y unreachable on 2+ attempts; check ddx config or provider health\") so the queue does not silently re-loop forever.\n- Apply the same change to applyNoChangesSmartRetry and applyRepairCycleExhaustedEscalation so all three escalation paths surface ladder exhaustion uniformly.\n\nNON-SCOPE\n- Do not change Fizeau-side routing exclusion (separate bead in upstream repo).\n- Do not introduce a new bead status; reuse open/blocked/operator_required.\n- Do not auto-edit operator config; just signal clearly.\n\nDEPS\nNone.",
+    "acceptance": "1. TestApplyProviderConnectivityRouteExclusion_LadderExhaustedEmitsEvent asserts a kind=execution-escalation-aborted event is appended when nextFloorFn returns ErrLadderExhausted, and that summary names provider, model, and actualPower.\n2. TestApplyProviderConnectivityRouteExclusion_LadderExhaustedSetsSentinelHint asserts TriagePowerHintKey is set to a value \u003e= actualPower+1 even when ladder is exhausted (so downstream routing has explicit \"not the failed tier\" signal).\n3. TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired asserts that after 2 consecutive provider_connectivity failures against the same (provider, model), the bead's outcome_reason transitions to operator_required with a message naming the unreachable provider.\n4. TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent and TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent assert the same signaling on the other two escalation paths.\n5. cd cli \u0026\u0026 go test ./internal/agent/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "area:routing",
+      "area:execution",
+      "kind:bug",
+      "phase:2",
+      "spec:endpoint-first-routing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T18:54:36Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "311911",
+      "execute-loop-heartbeat-at": "2026-05-14T18:54:36.344905628Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T185436-8a6d9fe4",
+    "prompt": ".ddx/executions/20260514T185436-8a6d9fe4/prompt.md",
+    "manifest": ".ddx/executions/20260514T185436-8a6d9fe4/manifest.json",
+    "result": ".ddx/executions/20260514T185436-8a6d9fe4/result.json",
+    "checks": ".ddx/executions/20260514T185436-8a6d9fe4/checks.json",
+    "usage": ".ddx/executions/20260514T185436-8a6d9fe4/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-8a7a6843-20260514T185436-8a6d9fe4"
+  },
+  "prompt_sha": "3daddc8a1638cd41fa4ebb78520b88b9f809ef51fb246052234df1347f3cec00"
+}
