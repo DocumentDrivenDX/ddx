@@ -1,0 +1,142 @@
+{
+  "attempt_id": "20260514T220831-59690843",
+  "bead_id": "ddx-17388615",
+  "base_rev": "6ae717fb8a9d1b5c8204f9252f135dba77724409",
+  "created_at": "2026-05-14T22:08:44.911190741Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-17388615",
+    "title": "docs: normalize Story 16 run-detail specs across FEAT-008/010/019",
+    "description": "PROBLEM\nStory 16.3 needs the run-detail page, evidence whitelist, resolver contract, and review deep-link documented together. The current docs already cover parts of that surface, but the wording is split across three specs and still needs to be normalized into one coherent Story 16.3 contract.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-web-ui.md:835-841 documents the run-detail evidence whitelist and `run_detail_view`, but it does not present the Story 16.3 trust-boundary language as a dedicated subsection.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:1215-1236 defines `run_detail_view` audit semantics, but the run resolver contract and drain-time persistence notes need to be spelled out in the same place.\n- docs/helix/01-frame/features/FEAT-019-agent-evaluation.md:64-73 ties evaluation drill-down to the shared run-detail surface, but the review surface still needs an explicit `/runs/[runId]` deep-page link.\n\nPROPOSED FIX\n- FEAT-008: add or normalize the Run-detail-page subsection so the trust boundary and evidence whitelist are explicit.\n- FEAT-010: extend the run resolver contract text with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path), bundle-root confinement, and normalized ToolCallEntry persistence at drain time.\n- FEAT-019: point the review surface at `/runs/[runId]` so the deep page is called out directly.\n\nNON-SCOPE\n- Server implementation changes.\n- Playwright or Bun test work.\n- Any new auth or RBAC semantics.\n\nACCEPTANCE\n1. FEAT-008, FEAT-010, and FEAT-019 are updated in the repository and read as one consistent run-detail contract.\n2. The updated prose includes the trust boundary, evidence whitelist, resolver contract, drain-time persistence note, ToolCallEntry definition, and `/runs/[runId]` deep-page reference.\n3. `cd cli \u0026\u0026 go test ./...` green.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "area:docs",
+      "kind:spec",
+      "spec:FEAT-008",
+      "spec:FEAT-010",
+      "spec:FEAT-019"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T22:07:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1311878",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:36:21.139280522Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-17388615\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:36:21.193226298Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:36:21.295210125Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T17:06:41.072059086Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T170325-de94c651\",\"bead_id\":\"ddx-17388615\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T17:06:41.336120764Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\"}",
+          "created_at": "2026-05-14T17:06:41.506719234Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\npowerClass=standard\nresult_rev=d8085be0596db14ee0a5531cb98894ff32e31948\nbase_rev=d8085be0596db14ee0a5531cb98894ff32e31948\nretry_after=2026-05-14T17:21:41Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T17:06:41.650305542Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-17388615\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T20:35:25.017409911Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: library/skills/ddx/SKILL.md, library/skills/ddx/reference/work.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-14T20:36:15.02152514Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-17388615\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T20:37:48.963499285Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: library/skills/ddx/SKILL.md, library/skills/ddx/reference/work.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-14T20:38:38.892103107Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T17:06:41Z",
+          "model": "qwen3.5-27b",
+          "provider": "bragi",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "work-heartbeat-at": "2026-05-14T22:07:35.880496334Z",
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl",
+      "work-last-status": "preclaim-hook-failed"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260514T220831-59690843",
+    "prompt": ".ddx/executions/20260514T220831-59690843/prompt.md",
+    "manifest": ".ddx/executions/20260514T220831-59690843/manifest.json",
+    "result": ".ddx/executions/20260514T220831-59690843/result.json",
+    "checks": ".ddx/executions/20260514T220831-59690843/checks.json",
+    "usage": ".ddx/executions/20260514T220831-59690843/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-17388615-20260514T220831-59690843"
+  },
+  "prompt_sha": "df87befd56984d0270426927603301ce20c5c5f37f8bff1718ba562d2b1a13c4"
+}
