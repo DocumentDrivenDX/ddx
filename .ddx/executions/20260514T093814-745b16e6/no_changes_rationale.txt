@@ -1,0 +1,18 @@
+status: blocked
+reason: pre-existing test failures in cli/internal/agent block the lefthook pre-commit go-test gate (AC #5)
+
+WHAT IS DONE (in worktree, uncommitted)
+- Renamed TestWorkerHeartbeat_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam → TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam in cli/internal/agent/execute_bead_loop_liveness_test.go (AC #1 exact name match).
+- Added TestWorkerStatusSidecar_RecordsCurrentBeadAttemptAndLastActivity in the same file (AC #2 exact name match). The test drives a multi-tick ExecuteBeadWorker.Run via runBlockedHeartbeatLoopWithRuntime and asserts the .ddx/workers/<worker-id>/status.json sidecar contains worker_id, current_bead, attempt_id (provisional), phase, last_activity_at, and pid.
+- AC #3 (atomic sidecar writes) is already satisfied by workerstatus.WriteLiveness's tmp-then-rename in cli/internal/workerstatus/liveness.go:52-85.
+- AC #4 narrow verification command (`cd cli && go test ./internal/agent/... ./cmd/... -run "TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam|TestWorkerStatusSidecar_RecordsCurrentBeadAttemptAndLastActivity" -count=1`) is GREEN against the worktree edits.
+
+WHAT BLOCKS
+- AC #5 requires `lefthook run pre-commit passes`. Lefthook's go-test hook runs `go test -short -race -timeout 30m ./internal/agent` for any staged file under cli/internal/agent/. That package has TWO pre-existing failures reproducible on the baseline checkpoint (commit 9b6331815) WITHOUT my changes:
+  1. TestReadinessUnavailableOutputIsActionable (cli/internal/agent/execute_bead_intake_test.go:1479) — actionable readiness warning no longer surfaces in the work log
+  2. TestLifecycleHooks_UnpinnedWorkersStillUseProfileSelection (cli/internal/agent/preclaim_intake_hook_test.go:338) — pre-dispatch lint hook sends empty Policy instead of "cheap"
+- Both relate to routing/policy/readiness behaviour (see recent commits 6bd016d7c, 021c9ade4, 8cfb7ab36, 8ea44d438, 3ac1bb88d, 3568e17b0). Out of scope for a sidecar-naming bead and would require its own bead with routing/policy investigation.
+
+WHAT A FOLLOW-UP NEEDS
+- Fix or quarantine the two failing tests above so `go test -short ./internal/agent` is green; once that lands, re-attempt this bead and the existing worktree edits commit cleanly.
+- Alternatively, file a sibling bead targeting only those two tests, then dispatch this bead after that one merges.
