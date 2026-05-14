@@ -3,11 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -148,6 +150,88 @@ func TestExecuteBeadWorker_ProviderTimeoutPreservesOperatorPin(t *testing.T) {
 
 	_, hasHint := got.Extra[TriagePowerHintKey]
 	assert.False(t, hasHint, "pinned routing must NOT be silently rerouted via power-hint bump")
+}
+
+// TestRouteRequest_PopulatedFromFailedRoutes asserts that failed-route entries
+// whose At timestamp is within RouteExclusionWindow appear in the Fizeau
+// RouteRequest.ExcludedRoutes payload built by buildExcludedRoutes.
+func TestRouteRequest_PopulatedFromFailedRoutes(t *testing.T) {
+	frozen := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	failed := []FailedRouteEntry{
+		{Provider: "bragi", Model: "qwen3.5-27b", ActualPower: 50, Reason: FailureModeProviderConnectivity, At: frozen.Add(-10 * time.Minute).Format(time.RFC3339)},
+		{Provider: "local", Model: "llama3", ActualPower: 30, Reason: FailureModeProviderConnectivity, At: frozen.Add(-5 * time.Minute).Format(time.RFC3339)},
+	}
+
+	excluded := buildExcludedRoutes(failed, frozen, RouteExclusionWindow)
+
+	require.Len(t, excluded, 2)
+	assert.Equal(t, "bragi", excluded[0].Provider)
+	assert.Equal(t, "qwen3.5-27b", excluded[0].Model)
+	assert.Equal(t, "local", excluded[1].Provider)
+	assert.Equal(t, "llama3", excluded[1].Model)
+}
+
+// TestRouteRequest_ExpiredFailedRoutesDropped asserts that entries older than
+// RouteExclusionWindow are omitted from the RouteRequest payload but remain
+// in the bead Extra audit list (the input slice is not modified).
+func TestRouteRequest_ExpiredFailedRoutesDropped(t *testing.T) {
+	frozen := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	failed := []FailedRouteEntry{
+		{Provider: "bragi", Model: "qwen3.5-27b", At: frozen.Add(-2 * time.Hour).Format(time.RFC3339)}, // expired
+		{Provider: "local", Model: "llama3", At: frozen.Add(-30 * time.Minute).Format(time.RFC3339)},   // active
+	}
+
+	excluded := buildExcludedRoutes(failed, frozen, RouteExclusionWindow)
+
+	// expired entry must be omitted; active entry must be kept
+	require.Len(t, excluded, 1, "only active (non-expired) entries must appear in ExcludedRoutes")
+	assert.Equal(t, "local", excluded[0].Provider)
+	assert.Equal(t, "llama3", excluded[0].Model)
+
+	// audit list must be untouched
+	assert.Len(t, failed, 2, "buildExcludedRoutes must not modify the input slice")
+}
+
+// TestRouteRequest_AllRoutesExcludedTriggersEscalation asserts that when
+// every candidate at the requested power class is excluded (resolveRoute
+// returns a no-viable-candidate error), CheckAndApplyRouteExclusions escalates
+// TriagePowerHintKey via the ddx-8a7a6843 ladder-exhaustion path.
+func TestRouteRequest_AllRoutesExcludedTriggersEscalation(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	frozen := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+
+	_ = store.Update(first.ID, func(b *bead.Bead) {
+		appendFailedRoute(b, FailedRouteEntry{
+			Provider: "bragi", Model: "qwen3.5-27b", ActualPower: 50,
+			Reason: FailureModeProviderConnectivity,
+			At:     frozen.Add(-10 * time.Minute).Format(time.RFC3339),
+		})
+	})
+	b, err := store.Get(first.ID)
+	require.NoError(t, err)
+
+	noViableRoute := func(_ context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		require.Len(t, req.ExcludedRoutes, 1, "resolveRoute must receive the excluded routes payload")
+		assert.Equal(t, "bragi", req.ExcludedRoutes[0].Provider)
+		assert.Equal(t, "qwen3.5-27b", req.ExcludedRoutes[0].Model)
+		return nil, fmt.Errorf("ResolveRoute: no viable routing candidate: 1 candidates rejected")
+	}
+
+	report, skip := CheckAndApplyRouteExclusions(
+		context.Background(), store, first.ID, "actor", b.Extra, frozen, 50,
+		noViableRoute,
+		func(p int) (int, error) { return p + 20, nil },
+	)
+
+	require.True(t, skip, "dispatch must be skipped when all routes at the requested power class are excluded")
+	assert.Equal(t, FailureModeNoViableProvider, report.OutcomeReason)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
+	assert.Equal(t, first.ID, report.BeadID)
+
+	updated, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, float64(70), updated.Extra[TriagePowerHintKey],
+		"TriagePowerHintKey must escalate to actualPower+ladder-step (50+20=70)")
 }
 
 // TestIsProviderConnectivityFailureReport_Discriminates pins down the

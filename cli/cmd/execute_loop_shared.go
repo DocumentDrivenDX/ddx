@@ -415,6 +415,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 						initialMinPower = learnedMinPower
 					}
 				}
+				// Pre-dispatch route-exclusion check: if every known route at
+				// the requested power class is in the bead's failed-routes list
+				// and still within the exclusion window, skip the dispatch and
+				// escalate TriagePowerHintKey so the next attempt routes higher.
+				if svcForExcl, svcExclErr := agent.ResolveServiceFromWorkDir(projectRoot); svcExclErr == nil {
+					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
+						ctx, store, beadID, resolveClaimAssignee(),
+						targetBead.Extra, time.Now().UTC(), initialMinPower,
+						svcForExcl.ResolveRoute,
+						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
+					); skip {
+						return exclusionReport, nil
+					}
+				}
 			}
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
