@@ -174,6 +174,115 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 	assert.Empty(t, lastReq.Model, "zero-config work must not hard-pin a model")
 }
 
+// TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin covers
+// ddx-e0b95b4a. agent.endpoints declares where providers live (transport
+// config) — it does NOT pin a routing decision the way agent.model does.
+// Treating endpoints as a routing pin disables zero-config tier inference
+// (autoInferTier in runAgentExecuteLoopImpl), so no-flag `ddx work` sends an
+// empty Policy and Fizeau resolves it via its default policy. In production
+// at /home/erik/Projects/ddx this scored Opus on ordinary implementation work
+// (see .ddx/attachments/ddx-c3219628/events.jsonl: actual_model=opus,
+// cost_usd=15.0776 on a worker-status bug; ddx-6cde5ffd: $6.83 on a registry
+// package task).
+//
+// The matrix verifies the new contract: only an explicit model pin in
+// agent.config.yaml suppresses zero-config tier inference; endpoints, an
+// empty agent block, or no config at all leave inference active so the
+// implementation profile selector can request a Fizeau policy by metadata.
+func TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin(t *testing.T) {
+	cases := []struct {
+		name     string
+		writeCfg bool
+		yaml     string
+		want     bool
+	}{
+		{
+			name:     "no .ddx/config.yaml",
+			writeCfg: false,
+			want:     false,
+		},
+		{
+			name:     "library-only config (zero-config baseline)",
+			writeCfg: true,
+			yaml: `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+`,
+			want: false,
+		},
+		{
+			name:     "endpoints only, no model pin (production scenario)",
+			writeCfg: true,
+			yaml: `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+agent:
+  endpoints:
+    - type: lmstudio
+      host: 127.0.0.1
+      port: 1234
+    - type: omlx
+      host: 127.0.0.1
+      port: 1235
+`,
+			want: false,
+		},
+		{
+			name:     "model pin counts as routing config",
+			writeCfg: true,
+			yaml: `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+agent:
+  model: pinned-model
+`,
+			want: true,
+		},
+		{
+			name:     "model pin coexists with endpoints (still routing config)",
+			writeCfg: true,
+			yaml: `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+agent:
+  model: pinned-model
+  endpoints:
+    - type: lmstudio
+      host: 127.0.0.1
+      port: 1234
+`,
+			want: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			ddxDir := filepath.Join(dir, ".ddx")
+			require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+			if tc.writeCfg {
+				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(tc.yaml), 0o644))
+			}
+			got := projectHasRoutingConfig(dir)
+			assert.Equalf(t, tc.want, got,
+				"projectHasRoutingConfig(%s) = %v, want %v — endpoints alone must not gate zero-config tier inference",
+				tc.name, got, tc.want)
+		})
+	}
+}
+
 func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)

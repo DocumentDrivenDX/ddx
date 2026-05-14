@@ -533,6 +533,13 @@ func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile stri
 	}
 }
 
+// projectHasRoutingConfig reports whether the project's .ddx/config.yaml pins a
+// routing decision that should suppress DDx's zero-config tier inference.
+// agent.endpoints alone is transport configuration (where providers live) and
+// does NOT pin routing — leaving it on the suppression list caused no-flag work
+// in projects with local endpoints to send an empty Policy and inherit
+// Fizeau's default policy (which, with no DDx-supplied hint, scored Opus on
+// ordinary implementation work; see ddx-e0b95b4a).
 func projectHasRoutingConfig(projectRoot string) bool {
 	if projectRoot == "" {
 		return false
@@ -546,11 +553,5 @@ func projectHasRoutingConfig(projectRoot string) bool {
 		return false
 	}
 	a := cfg.Agent
-	if strings.TrimSpace(a.Model) != "" {
-		return true
-	}
-	if len(a.Endpoints) > 0 {
-		return true
-	}
-	return false
+	return strings.TrimSpace(a.Model) != ""
 }

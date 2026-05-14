@@ -213,6 +213,20 @@ library:
     branch: "main"
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
+	// Pre-stage the bead-lifecycle skill so ensureBeadLifecycleSkill is a no-op
+	// in tests that dispatch through ddx work / ddx try. Without this, the
+	// lifecycle hook installs ~50 untracked files into the test's git repo, and
+	// the subsequent pre-execute-bead checkpoint refuses to absorb them
+	// (matches setupWorkIntakeFixture's existing pre-install pattern).
+	skillDir := filepath.Join(dir, ".agents", "skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
+	// Mirror the production .gitignore subset that keeps the pre-execute-bead
+	// checkpoint from refusing on per-machine session log dirs written during
+	// dispatch. The production repo gitignores these; the test fixture must do
+	// the same or the checkpoint sees them as dirty implementation files.
+	gitignore := ".ddx/agent-logs/\n.ddx/workers/\n.ddx/backups/\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0o644))
 	return dir
 }
 
