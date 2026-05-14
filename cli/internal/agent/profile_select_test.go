@@ -294,6 +294,48 @@ func TestLoadProfileSnapshot_MemoizesAndStaleOnError(t *testing.T) {
 	assert.Equal(t, 1, svc.modelCalls)
 }
 
+func TestLoadProfileSnapshot_KeepsPoliciesWhenModelsUnavailable(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
+	svc := &profileSnapshotServiceStub{
+		profiles: []agentlib.PolicyInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+		modelErr: fmt.Errorf("model inventory unavailable"),
+	}
+
+	snap, err := LoadProfileSnapshot(context.Background(), svc)
+
+	require.NoError(t, err)
+	require.Len(t, snap.Profiles, 2)
+	assert.Empty(t, snap.Models)
+	assert.Equal(t, "smart", SelectStrongestProfile(snap))
+	assert.Equal(t, 1, svc.profileCalls)
+	assert.Equal(t, 1, svc.modelCalls)
+}
+
+func TestSelectProfileForDispatch_ColdProjectCacheLoadsPolicySnapshot(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
+	svc := &profileSnapshotServiceStub{
+		profiles: []agentlib.PolicyInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "default", MinPower: 7, MaxPower: 8},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+		modelErr: fmt.Errorf("model inventory unavailable"),
+	}
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		return svc, nil
+	})
+	t.Cleanup(func() { SetServiceRunFactory(nil) })
+
+	got := selectProfileForDispatch(context.Background(), t.TempDir(), nil, nil, SelectStrongestProfile)
+
+	assert.Equal(t, "smart", got)
+	assert.Equal(t, 1, svc.profileCalls)
+	assert.Equal(t, 1, svc.modelCalls)
+}
+
 func resetProfileSnapshotCacheForTest(t *testing.T) {
 	t.Helper()
 	profileSnapshotCacheMu.Lock()
@@ -311,6 +353,8 @@ type profileSnapshotServiceStub struct {
 	profiles     []agentlib.PolicyInfo
 	models       []agentlib.ModelInfo
 	err          error
+	profileErr   error
+	modelErr     error
 	profileCalls int
 	modelCalls   int
 }
@@ -341,6 +385,9 @@ func (s *profileSnapshotServiceStub) ListProviders(context.Context) ([]agentlib.
 
 func (s *profileSnapshotServiceStub) ListModels(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	s.modelCalls++
+	if s.modelErr != nil {
+		return nil, s.modelErr
+	}
 	if s.err != nil {
 		return nil, s.err
 	}
@@ -349,6 +396,9 @@ func (s *profileSnapshotServiceStub) ListModels(context.Context, agentlib.ModelF
 
 func (s *profileSnapshotServiceStub) ListPolicies(context.Context) ([]agentlib.PolicyInfo, error) {
 	s.profileCalls++
+	if s.profileErr != nil {
+		return nil, s.profileErr
+	}
 	if s.err != nil {
 		return nil, s.err
 	}

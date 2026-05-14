@@ -19,6 +19,7 @@ const (
 	profileSnapshotCacheWindow       = 5 * time.Minute
 	profileSnapshotRefreshInterval   = 30 * time.Second
 	profileSnapshotRefreshTimeout    = 15 * time.Second
+	profileSnapshotColdLoadTimeout   = 2 * time.Second
 	profileSnapshotRefreshRetryAfter = 5 * time.Second
 )
 
@@ -114,8 +115,15 @@ func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauSer
 			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 			return cloneProfileSnapshot(last.snap), nil
 		}
-		markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
-		return ProfileSnapshot{}, err
+		snap := ProfileSnapshot{
+			Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
+		}
+		if key != "" {
+			profileSnapshotCacheMu.Lock()
+			profileSnapshotCache[key] = profileSnapshotCacheEntry{snap: cloneProfileSnapshot(snap), loadedAt: now}
+			profileSnapshotCacheMu.Unlock()
+		}
+		return snap, nil
 	}
 
 	snap := ProfileSnapshot{
@@ -187,7 +195,9 @@ func fetchProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Prof
 	}
 	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
 	if err != nil {
-		return ProfileSnapshot{}, err
+		return ProfileSnapshot{
+			Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
+		}, nil
 	}
 	return ProfileSnapshot{
 		Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
@@ -605,6 +615,27 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 		}
 		return selector(snap)
 	}
+	if coldCtx, cancel := profileSnapshotColdLoadContext(ctx); coldCtx != nil {
+		defer cancel()
+		snap, err := loadProfileSnapshot(coldCtx, key, selectedSvc)
+		if err == nil {
+			startProfileSnapshotRefresh(key, selectedSvc)
+			return selector(snap)
+		}
+	}
 	startProfileSnapshotRefresh(key, selectedSvc)
 	return ""
+}
+
+func profileSnapshotColdLoadContext(parent context.Context) (context.Context, context.CancelFunc) {
+	if profileSnapshotColdLoadTimeout <= 0 {
+		if parent == nil {
+			return context.Background(), func() {}
+		}
+		return parent, func() {}
+	}
+	if parent == nil {
+		parent = context.Background()
+	}
+	return context.WithTimeout(parent, profileSnapshotColdLoadTimeout)
 }
