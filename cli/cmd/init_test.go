@@ -12,15 +12,15 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestInitRegistersSkills verifies that ddx init copies the single `ddx` skill
-// (SKILL.md + reference/*.md) to project-local directories as real files.
+// TestInitRegistersSkills verifies that ddx init installs the `ddx` skill into
+// the harness-visible skill directories as real files via the embedded package
+// installer.
 func TestInitRegistersSkills(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
 	_, err := te.RunCommand("init", "--no-git")
 	require.NoError(t, err)
 
 	targetDirs := []string{
-		filepath.Join(te.Dir, ".ddx", "skills"),
 		filepath.Join(te.Dir, ".agents", "skills"),
 		filepath.Join(te.Dir, ".claude", "skills"),
 	}
@@ -29,13 +29,73 @@ func TestInitRegistersSkills(t *testing.T) {
 	for _, dir := range targetDirs {
 		skillFile := filepath.Join(dir, "ddx", "SKILL.md")
 		assert.FileExists(t, skillFile, "ddx SKILL.md should exist at %s", skillFile)
-
-		// Reference files should also be copied
-		for _, ref := range []string{"beads.md", "work.md", "review.md", "agents.md", "status.md"} {
-			refFile := filepath.Join(dir, "ddx", "reference", ref)
-			assert.FileExists(t, refFile, "ddx reference/%s should exist at %s", ref, refFile)
-		}
 	}
+}
+
+// TestInitInstallsDDxPluginPackage verifies that `ddx init` creates
+// .ddx/plugins/ddx, .agents/skills/ddx, and .claude/skills/ddx through the
+// embedded package installer path (no separate bootstrap skill copier).
+func TestInitInstallsDDxPluginPackage(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	// Plugin root installed under .ddx/plugins/ddx (root mapping target).
+	assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx"),
+		".ddx/plugins/ddx must be created by the embedded package installer")
+	// Package manifest from the embedded library lands under the plugin root.
+	assert.FileExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx", "package.yaml"),
+		".ddx/plugins/ddx/package.yaml must be present after install")
+
+	// Skill outputs installed via install.skills[*] mappings.
+	for _, target := range []string{".agents", ".claude"} {
+		skillDir := filepath.Join(te.Dir, target, "skills", "ddx")
+		assert.DirExists(t, skillDir, "%s/skills/ddx must be created by the package installer", target)
+		assert.FileExists(t, filepath.Join(skillDir, "SKILL.md"),
+			"%s/skills/ddx/SKILL.md must be installed from the embedded package", target)
+	}
+}
+
+// TestInitWorksOfflineWithEmbeddedDefaultPlugin verifies that `ddx init`
+// succeeds without any network access and still installs the default package
+// and its skill. We block network by forcing all HTTP through an unreachable
+// proxy; the embedded path must not depend on it.
+func TestInitWorksOfflineWithEmbeddedDefaultPlugin(t *testing.T) {
+	// Force any outbound HTTP through an unreachable proxy. The embedded
+	// installer materializes from //go:embed and must not require a remote
+	// fetch.
+	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
+	t.Setenv("http_proxy", "http://127.0.0.1:1")
+	t.Setenv("https_proxy", "http://127.0.0.1:1")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err, "ddx init must succeed offline via the embedded default plugin")
+
+	assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx"),
+		"embedded package install must produce .ddx/plugins/ddx offline")
+	assert.FileExists(t, filepath.Join(te.Dir, ".agents", "skills", "ddx", "SKILL.md"),
+		"embedded package install must produce .agents/skills/ddx/SKILL.md offline")
+	assert.FileExists(t, filepath.Join(te.Dir, ".claude", "skills", "ddx", "SKILL.md"),
+		"embedded package install must produce .claude/skills/ddx/SKILL.md offline")
+}
+
+// TestInitDoesNotCreateBootstrapDDxSkillMirror verifies the legacy
+// .ddx/skills/ddx bootstrap mirror is no longer created. Skill outputs only
+// live at the harness-visible paths .agents/skills/ddx and .claude/skills/ddx.
+func TestInitDoesNotCreateBootstrapDDxSkillMirror(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	// The bootstrap mirror path must not exist after init.
+	bootstrapMirror := filepath.Join(te.Dir, ".ddx", "skills", "ddx")
+	_, statErr := os.Stat(bootstrapMirror)
+	assert.True(t, os.IsNotExist(statErr),
+		".ddx/skills/ddx must not be created as a separate bootstrap mirror; got stat err=%v", statErr)
 }
 
 // TestCleanupBootstrapSkills_RemovesStaleSkills verifies stale ddx-* skills are removed.
@@ -85,17 +145,20 @@ func TestCleanupBootstrapSkills_SkipsDirsWithoutSKILLMD(t *testing.T) {
 	assert.DirExists(t, noSkillDir, "ddx-* dir without SKILL.md should not be removed")
 }
 
-// TestInitCleansUpStaleBootstrapSkills verifies stale ddx-* skills from prior
-// DDx versions (pre-consolidation: ddx-bead, ddx-run, etc.) are removed when
-// `ddx init` runs, leaving only the single `ddx` skill from the current
-// shipped set.
-func TestInitCleansUpStaleBootstrapSkills(t *testing.T) {
+// TestInitRemovesStaleDDXPrefixedSkillsWithoutTouchingThirdPartySkills verifies
+// that stale ddx-* skills from prior DDx versions (pre-consolidation:
+// ddx-bead, ddx-run, etc.) are removed from harness-visible skill targets
+// when `ddx init` runs, while unrelated third-party skills (anything not
+// prefixed `ddx-`) are preserved. Cleanup operates on the package-installer
+// outputs (.agents/skills, .claude/skills) — the bootstrap-only
+// .ddx/skills/ddx mirror is no longer created.
+func TestInitRemovesStaleDDXPrefixedSkillsWithoutTouchingThirdPartySkills(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
 
-	// Manually plant stale pre-consolidation skills in all three target dirs
 	stalePreConsolidationSkills := []string{"ddx-bead", "ddx-run", "ddx-agent", "ddx-review", "ddx-status", "ddx-doctor", "ddx-install", "ddx-release"}
+	thirdPartySkills := []string{"helix-align", "external-tool", "some-skill"}
+
 	targetDirs := []string{
-		filepath.Join(te.Dir, ".ddx", "skills"),
 		filepath.Join(te.Dir, ".agents", "skills"),
 		filepath.Join(te.Dir, ".claude", "skills"),
 	}
@@ -105,12 +168,17 @@ func TestInitCleansUpStaleBootstrapSkills(t *testing.T) {
 			require.NoError(t, os.MkdirAll(staleDir, 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("# Stale"), 0o644))
 		}
+		for _, third := range thirdPartySkills {
+			thirdDir := filepath.Join(dir, third)
+			require.NoError(t, os.MkdirAll(thirdDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(thirdDir, "SKILL.md"), []byte("# Third party"), 0o644))
+		}
 	}
 
 	_, err := te.RunCommand("init", "--no-git")
 	require.NoError(t, err)
 
-	// All stale pre-consolidation skills must be cleaned up
+	// Stale ddx-* skills must be cleaned up from harness-visible targets.
 	for _, dir := range targetDirs {
 		for _, stale := range stalePreConsolidationSkills {
 			staleDir := filepath.Join(dir, stale)
@@ -119,34 +187,19 @@ func TestInitCleansUpStaleBootstrapSkills(t *testing.T) {
 		}
 	}
 
-	// The current shipped skill must be present
+	// Third-party skills must be preserved.
+	for _, dir := range targetDirs {
+		for _, third := range thirdPartySkills {
+			thirdSkill := filepath.Join(dir, third, "SKILL.md")
+			assert.FileExists(t, thirdSkill, "third-party skill %s must be preserved at %s", third, thirdSkill)
+		}
+	}
+
+	// The current shipped skill must be present in harness-visible targets.
 	for _, dir := range targetDirs {
 		skillFile := filepath.Join(dir, "ddx", "SKILL.md")
 		assert.FileExists(t, skillFile, "ddx SKILL.md should exist in %s", skillFile)
 	}
-}
-
-// TestInitSkillsNoOverwrite verifies that existing `ddx` skill files are not
-// overwritten during non-force init (user may have customized them).
-// Note: pre-consolidation dirs like ddx-doctor/ are swept by cleanup and do
-// NOT get this preservation behavior — only the current `ddx` layout does.
-func TestInitSkillsNoOverwrite(t *testing.T) {
-	te := NewTestEnvironment(t, WithGitInit(false))
-
-	// Pre-create a SKILL.md for the current `ddx` layout with custom content
-	skillDir := filepath.Join(te.Dir, ".agents", "skills", "ddx")
-	require.NoError(t, os.MkdirAll(skillDir, 0755))
-	existingContent := "# custom content"
-	skillFile := filepath.Join(skillDir, "SKILL.md")
-	require.NoError(t, os.WriteFile(skillFile, []byte(existingContent), 0644))
-
-	_, err := te.RunCommand("init", "--no-git")
-	require.NoError(t, err)
-
-	// Existing file must not be overwritten
-	data, err := os.ReadFile(skillFile)
-	require.NoError(t, err)
-	assert.Equal(t, existingContent, string(data), "existing skill file should not be overwritten")
 }
 
 // TestGenerateAgentsMD_IncludesInteractiveStewardGuidance verifies that the

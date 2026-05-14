@@ -143,7 +143,6 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 func refreshShippedSkills(workingDir string) {
 	bootstrapSkillNames := []string{"ddx"}
 	for _, dir := range []string{
-		filepath.Join(workingDir, ".ddx", "skills"),
 		filepath.Join(workingDir, ".agents", "skills"),
 		filepath.Join(workingDir, ".claude", "skills"),
 	} {
@@ -153,7 +152,6 @@ func refreshShippedSkills(workingDir string) {
 	if err := skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: true}); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill install failed: %v\n", err)
 	}
-	registerBootstrapDDxSkills(workingDir, true)
 	generateAgentsMD(workingDir)
 }
 

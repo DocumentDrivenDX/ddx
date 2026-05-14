@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,7 @@ import (
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
-	"github.com/DocumentDrivenDX/ddx/internal/skills"
+	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 	"github.com/spf13/cobra"
 )
 
@@ -247,34 +246,25 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		_ = os.MkdirAll(filepath.Join(libraryPath, sub), 0755)
 	}
 
-	// Create .ddx/skills/ in project for bootstrap skills
-	projectSkillsDir := filepath.Join(workingDir, ".ddx", "skills")
-	if err := os.MkdirAll(projectSkillsDir, 0755); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: could not create .ddx/skills directory: %v\n", err)
-	}
-
-	// Copy bootstrap skills to .ddx/skills/, .agents/skills/, and .claude/skills/
-	// All as real files (not symlinks) so they're git-trackable.
-	// Stale pre-consolidation ddx-* skill dirs (ddx-bead, ddx-run, etc.) are
-	// removed first so harnesses don't see drifted skills.
+	// Sweep stale pre-consolidation ddx-* skill dirs from harness-visible
+	// targets so leftover skills from older DDx versions don't shadow the
+	// package-installer outputs. The current package installs a single `ddx`
+	// skill into .agents/skills/ and .claude/skills/; unrelated third-party
+	// skills (anything not prefixed `ddx-` or matching the kept name) are
+	// preserved.
 	bootstrapSkillNames := []string{"ddx"}
 	for _, dir := range []string{
-		filepath.Join(workingDir, ".ddx", "skills"),
 		filepath.Join(workingDir, ".agents", "skills"),
 		filepath.Join(workingDir, ".claude", "skills"),
 	} {
 		_ = os.MkdirAll(dir, 0755)
 		cleanupBootstrapSkills(dir, bootstrapSkillNames)
 	}
-	// .agents/skills/ + .claude/skills/ via shared installer.
-	if err := skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: opts.Force}); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill install failed: %v\n", err)
-	}
-	// .ddx/skills/ stays bootstrap-only (plugin skills do NOT register here).
-	registerBootstrapDDxSkills(workingDir, opts.Force)
 
-	// Auto-install the default ddx plugin (library resources).
-	// Non-fatal: if offline or install fails, warn and continue.
+	// Install the default ddx plugin through the embedded package installer.
+	// This produces .ddx/plugins/ddx, .agents/skills/ddx, and .claude/skills/ddx
+	// from the //go:embed'd library tree, so init works offline without a
+	// separate bootstrap skill copier or remote tarball download.
 	reg := registry.BuiltinRegistry()
 	if pkg, err := reg.Find("ddx"); err == nil {
 		var oldFiles []string
@@ -284,8 +274,8 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 			}
 		}
 
-		if entry, installErr := registry.InstallPackage(pkg, workingDir); installErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not install default library: %v\n", installErr)
+		if entry, installErr := registry.InstallPackageFromFS(pkg, defaultplugin.FS(), workingDir); installErr != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not install default ddx plugin from embedded package: %v\n", installErr)
 		} else {
 			_ = removeStaleFilesFromInstall(oldFiles, entry.Files)
 
@@ -409,43 +399,6 @@ func cleanupBootstrapSkills(targetDir string, keep []string) {
 		}
 
 		_ = os.RemoveAll(skillDir)
-	}
-}
-
-// registerBootstrapDDxSkills copies the embedded `ddx` skill tree into
-// <workingDir>/.ddx/skills/ as real files. This path is bootstrap-only —
-// plugin skills do NOT register here. Cleanup of stale pre-consolidation
-// dirs is done by the caller.
-func registerBootstrapDDxSkills(workingDir string, force bool) {
-	targetDir := filepath.Join(workingDir, ".ddx", "skills")
-	_ = os.MkdirAll(targetDir, 0755)
-
-	err := fs.WalkDir(skills.SkillFiles, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || path == "." {
-			return nil
-		}
-		destPath := filepath.Join(targetDir, path)
-		if d.IsDir() {
-			_ = os.MkdirAll(destPath, 0755)
-			return nil
-		}
-		if !force {
-			if _, statErr := os.Stat(destPath); statErr == nil {
-				return nil
-			}
-		}
-		data, readErr := skills.SkillFiles.ReadFile(path)
-		if readErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not read embedded skill %s: %v\n", path, readErr)
-			return nil
-		}
-		if writeErr := os.WriteFile(destPath, data, 0644); writeErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not write skill file %s: %v\n", destPath, writeErr)
-		}
-		return nil
-	})
-	if err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: bootstrap skill registration failed: %v\n", err)
 	}
 }
 
