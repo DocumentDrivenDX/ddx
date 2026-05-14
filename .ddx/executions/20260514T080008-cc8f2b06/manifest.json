@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260514T080008-cc8f2b06",
+  "bead_id": "ddx-aa630f6d",
+  "base_rev": "fc0d212ac8fd4e44c2d30fe0e4b81f012ae3f112",
+  "created_at": "2026-05-14T08:00:21.424554392Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aa630f6d",
+    "title": "skills package: move DDx skill source under library",
+    "description": "PROBLEM\n  The checked-in editable DDx skill source is still outside the default package layout and is synchronized into multiple mirrors. The plan requires `library/skills/ddx` to become the canonical source and the release binary to embed default package content, not a special skill-only tree.\n\nROOT CAUSE\n  cli/Makefile:65-84 defines `SKILLS_SRC := ../skills/ddx`, copies it to `internal/skills/ddx`, and refreshes `.agents/skills/ddx`, `.claude/skills/ddx`, and `.ddx/skills/ddx`. library/package.yaml:14-22 currently maps package root from `library` and skill source from `.agents/skills/`, not package-local `skills/`. FEAT-011 still documents the five-copy source model at docs/helix/01-frame/features/FEAT-011-skills.md:214-244.\n\nPROPOSED FIX\n  - Move the canonical DDx skill tree from `skills/ddx` into `library/skills/ddx`.\n  - Update `library/package.yaml` so `install.root.source` is package-rooted correctly and both skill mappings use `source: skills/` with targets `.agents/skills/` and `.claude/skills/`.\n  - Replace `copy-skills` with a default-package embed sync from `library/` to the embedded default-package directory.\n  - Update or add tests that prove package-owned skill source and embedded package copy stay in sync.\n\nNON-SCOPE\n  - Deleting project-local generated mirrors after install tests prove replacement behavior; a sibling bead owns mirror deletion and cleanup.\n  - Rewriting `ddx init`; the dependent init bead owns runtime behavior.\n  - Editing broad feature/spec prose beyond what is needed to keep build/test paths accurate.\n\nPARENT + DEPS\n  Parent: ddx-6862f2ac. Depends on the installer and init beads because the repository layout move should happen after package-owned install behavior is testable.",
+    "acceptance": "1. `TestDefaultDDxPackageManifestUsesPackageLocalSkillSource` proves `library/package.yaml` declares `install.skills[*].source: skills/` for the DDx package.\n2. `TestDefaultPackageEmbedCopyIncludesDDxSkill` proves the build/embed sync copies `library/skills/ddx/SKILL.md` into the embedded default-package tree used by the binary.\n3. `ddx skills check library/skills/ddx` passes.\n4. `make skill-schema` passes.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... -run 'TestDefaultDDxPackageManifestUsesPackageLocalSkillSource|TestDefaultPackageEmbedCopyIncludesDDxSkill' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6862f2ac",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:plugins",
+      "area:build",
+      "kind:refactor",
+      "plan-2026-05-13",
+      "spec:plan-2026-05-13-ddx-skill-package-layout"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T07:59:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3268858",
+      "execute-loop-heartbeat-at": "2026-05-14T07:59:41.477539727Z",
+      "spec-id": "plan-2026-05-13-ddx-skill-package-layout"
+    }
+  },
+  "governing": [
+    {
+      "id": "plan-2026-05-13-ddx-skill-package-layout",
+      "path": "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
+      "title": "DDx Skill Package Layout"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T080008-cc8f2b06",
+    "prompt": ".ddx/executions/20260514T080008-cc8f2b06/prompt.md",
+    "manifest": ".ddx/executions/20260514T080008-cc8f2b06/manifest.json",
+    "result": ".ddx/executions/20260514T080008-cc8f2b06/result.json",
+    "checks": ".ddx/executions/20260514T080008-cc8f2b06/checks.json",
+    "usage": ".ddx/executions/20260514T080008-cc8f2b06/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-aa630f6d-20260514T080008-cc8f2b06"
+  },
+  "prompt_sha": "6f6195af3c98ae8a4a3b4e3be74caafe8976f6fd24391b7bc21f917ed914786a"
+}
