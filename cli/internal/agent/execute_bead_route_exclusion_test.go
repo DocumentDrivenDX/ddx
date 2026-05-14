@@ -234,6 +234,115 @@ func TestRouteRequest_AllRoutesExcludedTriggersEscalation(t *testing.T) {
 		"TriagePowerHintKey must escalate to actualPower+ladder-step (50+20=70)")
 }
 
+// TestFailedRoutes_DeduplicatesOnSameProviderModel asserts that two consecutive
+// applyProviderConnectivityRouteExclusion calls with the same (provider, model)
+// result in ONE entry whose At timestamp is the second call's and whose count is 2.
+func TestFailedRoutes_DeduplicatesOnSameProviderModel(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	t1 := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	t2 := t1.Add(5 * time.Minute)
+	report := ExecuteBeadReport{
+		BeadID:      first.ID,
+		Status:      ExecuteBeadStatusExecutionFailed,
+		Provider:    "bragi",
+		Model:       "qwen3-27b",
+		ActualPower: 50,
+	}
+	noopFloor := func(p int) (int, error) { return p + 10, nil }
+
+	require.NoError(t, applyProviderConnectivityRouteExclusion(store, first.ID, "actor", report, false, noopFloor, t1))
+	// second call: same (provider, model) — triggers repeatFailure + ParkToProposed
+	_ = applyProviderConnectivityRouteExclusion(store, first.ID, "actor", report, false, noopFloor, t2)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.Extra)
+
+	entries := readFailedRoutes(got.Extra)
+	require.Len(t, entries, 1, "duplicate (provider, model) must produce exactly one entry")
+	assert.Equal(t, "bragi", entries[0].Provider)
+	assert.Equal(t, "qwen3-27b", entries[0].Model)
+	assert.Equal(t, 2, entries[0].Count, "count must be 2 after two calls")
+	assert.Equal(t, t2.UTC().Format(time.RFC3339), entries[0].At, "At must reflect the second call's timestamp")
+}
+
+// TestFailedRoutes_CapsAt32Entries asserts that after 33 distinct (provider, model)
+// failures, the list contains exactly 32 entries and the oldest has been evicted (FIFO).
+func TestFailedRoutes_CapsAt32Entries(t *testing.T) {
+	b := &bead.Bead{ID: "test", Extra: make(map[string]any)}
+	base := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	for i := 0; i < 33; i++ {
+		appendFailedRoute(b, FailedRouteEntry{
+			Provider: "provider",
+			Model:    fmt.Sprintf("model-%02d", i),
+			At:       base.Add(time.Duration(i) * time.Minute).Format(time.RFC3339),
+		})
+	}
+	entries := readFailedRoutes(b.Extra)
+	require.Len(t, entries, 32, "ring must cap at 32 entries")
+	for _, e := range entries {
+		assert.NotEqual(t, "model-00", e.Model, "oldest entry (model-00) must be evicted")
+	}
+	assert.Equal(t, "model-32", entries[len(entries)-1].Model, "newest entry must be present")
+}
+
+// TestFailedRoutes_ExclusionWindowFiltersOldEntriesFromRouteRequest asserts that
+// entries older than RouteExclusionWindow are present in the bead's Extra audit list
+// but absent from the Fizeau RouteRequest.ExcludedRoutes payload.
+func TestFailedRoutes_ExclusionWindowFiltersOldEntriesFromRouteRequest(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	frozen := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[executeLoopFailedRoutesKey] = []FailedRouteEntry{
+			{Provider: "bragi", Model: "qwen3-27b", Count: 1,
+				At: frozen.Add(-2 * time.Hour).Format(time.RFC3339)}, // outside window
+			{Provider: "local", Model: "llama3", Count: 1,
+				At: frozen.Add(-30 * time.Minute).Format(time.RFC3339)}, // inside window
+		}
+	}))
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+
+	audit := readFailedRoutes(got.Extra)
+	require.Len(t, audit, 2, "both entries must be present in the audit list")
+
+	excluded := buildExcludedRoutes(audit, frozen, RouteExclusionWindow)
+	require.Len(t, excluded, 1, "only the recent entry must appear in ExcludedRoutes")
+	assert.Equal(t, "local", excluded[0].Provider)
+	assert.Equal(t, "llama3", excluded[0].Model)
+}
+
+// TestFailedRoutes_StoreGetCollapsesLegacyDuplicates asserts that a bead loaded from
+// .ddx/beads.jsonl with pre-migration duplicate entries is normalized on read.
+func TestFailedRoutes_StoreGetCollapsesLegacyDuplicates(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	t1 := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
+	t2 := t1.Add(5 * time.Minute)
+
+	// Write legacy duplicate entries directly, bypassing appendFailedRoute,
+	// simulating a bead that accumulated duplicates before this fix.
+	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[executeLoopFailedRoutesKey] = []map[string]any{
+			{"provider": "bragi", "model": "qwen3-27b", "at": t1.Format(time.RFC3339)},
+			{"provider": "bragi", "model": "qwen3-27b", "at": t2.Format(time.RFC3339)},
+		}
+	}))
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+
+	entries := readFailedRoutes(got.Extra)
+	require.Len(t, entries, 1, "legacy duplicates must be collapsed on read")
+	assert.Equal(t, "bragi", entries[0].Provider)
+	assert.Equal(t, "qwen3-27b", entries[0].Model)
+	assert.Equal(t, t2.Format(time.RFC3339), entries[0].At, "newer timestamp must be kept")
+	assert.Equal(t, 2, entries[0].Count, "count must reflect number of collapsed duplicates")
+}
+
 // TestIsProviderConnectivityFailureReport_Discriminates pins down the
 // classifier boundaries: it fires only on transport-level errors against an
 // identified route, and defers to the existing no_viable_provider /
