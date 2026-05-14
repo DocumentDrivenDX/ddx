@@ -94,6 +94,67 @@ func TestLoop_BinaryRefreshStopsBeforeClaim(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
 
+func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run while pre-claim hook is systemically blocked")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	progressCh := make(chan ProgressEvent, 8)
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case evt := <-progressCh:
+				if evt.Phase == "loop.idle" && evt.Message == "preclaim_systemic" {
+					cancel()
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		Log:          &logBuf,
+		ProgressCh:   progressCh,
+		PreClaimHook: func(ctx context.Context) error {
+			return fmt.Errorf("local branch main has diverged from origin (local=abc origin=def); reconcile manually before claiming")
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 0, result.Failures)
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Nil(t, gotFirst.Extra["execute-loop-retry-after"])
+	assert.Nil(t, gotSecond.Extra["execute-loop-retry-after"])
+
+	out := logBuf.String()
+	assert.Contains(t, out, "systemic; leaving beads untouched")
+	assert.Contains(t, out, "pre-claim hook blocked queue:")
+	assert.Equal(t, 1, strings.Count(out, "systemic; leaving beads untouched"))
+}
+
 func TestWorkWatch_CheckpointDirtyReleasesClaimWithoutFailure(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 

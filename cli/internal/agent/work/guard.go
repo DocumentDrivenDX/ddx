@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 )
@@ -12,6 +13,8 @@ import (
 // DefaultPreClaimTimeout bounds pre-claim readiness hooks when callers do not
 // provide an explicit timeout.
 const DefaultPreClaimTimeout = 5 * time.Minute
+
+const SystemicPreClaimReasonPrefix = "systemic_preclaim:"
 
 // Guard decides whether a bead may proceed. Callers use the returned reason
 // for skip telemetry and logs.
@@ -38,8 +41,9 @@ type PreClaimGuard struct {
 	cooldown time.Duration
 	timeout  time.Duration
 
-	mu         sync.Mutex
-	failCounts map[string]int
+	mu             sync.Mutex
+	failCounts     map[string]int
+	loggedSystemic map[string]bool
 }
 
 // NewPreClaimGuard constructs a Guard that owns the pre-claim hook retry
@@ -55,13 +59,14 @@ func NewPreClaimGuard(hook PreClaimHook, store cooldownStore, log io.Writer, now
 		timeout = DefaultPreClaimTimeout
 	}
 	return &PreClaimGuard{
-		hook:       hook,
-		store:      store,
-		log:        log,
-		now:        now,
-		cooldown:   cooldown,
-		timeout:    timeout,
-		failCounts: make(map[string]int),
+		hook:           hook,
+		store:          store,
+		log:            log,
+		now:            now,
+		cooldown:       cooldown,
+		timeout:        timeout,
+		failCounts:     make(map[string]int),
+		loggedSystemic: make(map[string]bool),
 	}
 }
 
@@ -72,6 +77,18 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 	}
 	err, timedOut := callPreClaimHookWithTimeout(ctx, g.hook, g.timeout)
 	if err != nil || timedOut {
+		if err != nil && isSystemicPreClaimError(err) {
+			reason := err.Error()
+			g.mu.Lock()
+			shouldLog := !g.loggedSystemic[reason]
+			g.loggedSystemic[reason] = true
+			g.mu.Unlock()
+			if shouldLog && g.log != nil {
+				_, _ = fmt.Fprintf(g.log, "pre-claim hook: %v (systemic; leaving beads untouched)\n", err)
+			}
+			return false, SystemicPreClaimReasonPrefix + reason
+		}
+
 		g.mu.Lock()
 		defer g.mu.Unlock()
 
@@ -106,6 +123,22 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 	delete(g.failCounts, beadID)
 	g.mu.Unlock()
 	return true, ""
+}
+
+func IsSystemicPreClaimSkipReason(reason string) bool {
+	return strings.HasPrefix(reason, SystemicPreClaimReasonPrefix)
+}
+
+func SystemicPreClaimDetail(reason string) string {
+	return strings.TrimPrefix(reason, SystemicPreClaimReasonPrefix)
+}
+
+func isSystemicPreClaimError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "local branch ") && strings.Contains(msg, " has diverged from origin ")
 }
 
 type preClaimHookCallResult struct {

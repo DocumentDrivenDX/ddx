@@ -336,6 +336,28 @@ func TestSelectProfileForDispatch_ColdProjectCacheLoadsPolicySnapshot(t *testing
 	assert.Equal(t, 0, svc.modelCalls)
 }
 
+func TestLoadProfileSnapshot_DegradesToPolicyOnlyWhenModelDiscoveryTimesOut(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
+	oldTimeout := profileSnapshotLoadTimeout
+	profileSnapshotLoadTimeout = 25 * time.Millisecond
+	t.Cleanup(func() { profileSnapshotLoadTimeout = oldTimeout })
+
+	svc := &profileSnapshotServiceStub{
+		profiles:   []agentlib.PolicyInfo{{Name: "cheap", MinPower: 5, MaxPower: 5}},
+		modelDelay: time.Second,
+	}
+
+	start := time.Now()
+	got, err := LoadProfileSnapshot(context.Background(), svc)
+
+	require.NoError(t, err)
+	assert.Equal(t, "cheap", got.Profiles[0].Name)
+	assert.Empty(t, got.Models)
+	assert.Equal(t, 1, svc.profileCalls)
+	assert.Equal(t, 1, svc.modelCalls)
+	assert.Less(t, time.Since(start), 250*time.Millisecond)
+}
+
 func resetProfileSnapshotCacheForTest(t *testing.T) {
 	t.Helper()
 	profileSnapshotCacheMu.Lock()
@@ -355,6 +377,7 @@ type profileSnapshotServiceStub struct {
 	err          error
 	profileErr   error
 	modelErr     error
+	modelDelay   time.Duration
 	profileCalls int
 	modelCalls   int
 }
@@ -383,13 +406,20 @@ func (s *profileSnapshotServiceStub) ListProviders(context.Context) ([]agentlib.
 	return nil, nil
 }
 
-func (s *profileSnapshotServiceStub) ListModels(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+func (s *profileSnapshotServiceStub) ListModels(ctx context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	s.modelCalls++
 	if s.modelErr != nil {
 		return nil, s.modelErr
 	}
 	if s.err != nil {
 		return nil, s.err
+	}
+	if s.modelDelay > 0 {
+		select {
+		case <-time.After(s.modelDelay):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	return append([]agentlib.ModelInfo(nil), s.models...), nil
 }

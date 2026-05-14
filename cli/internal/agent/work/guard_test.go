@@ -44,6 +44,31 @@ func TestGuard_PreClaim_TwoStrikesSkips(t *testing.T) {
 	}
 }
 
+func TestGuard_PreClaimSystemicErrorDoesNotCooldownBead(t *testing.T) {
+	store := &stubCooldownStore{}
+	var log bytes.Buffer
+	errMsg := "local branch main has diverged from origin (local=abc origin=def); reconcile manually before claiming"
+	guard := NewPreClaimGuard(func(ctx context.Context) error {
+		return errors.New(errMsg)
+	}, store, &log, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
+
+	allowed1, reason1 := guard.Allow(context.Background(), "ddx-1")
+	allowed2, reason2 := guard.Allow(context.Background(), "ddx-2")
+
+	if allowed1 || allowed2 {
+		t.Fatalf("systemic pre-claim error must skip beads")
+	}
+	if !IsSystemicPreClaimSkipReason(reason1) || !IsSystemicPreClaimSkipReason(reason2) {
+		t.Fatalf("systemic reason prefix missing: %q / %q", reason1, reason2)
+	}
+	if store.calls != 0 {
+		t.Fatalf("systemic pre-claim error must not write bead cooldowns, got %d", store.calls)
+	}
+	if got := strings.Count(log.String(), "leaving beads untouched"); got != 1 {
+		t.Fatalf("systemic pre-claim error should log once, got %d in %q", got, log.String())
+	}
+}
+
 func TestGuard_PreClaimTimeoutReturnsPromptly(t *testing.T) {
 	store := &stubCooldownStore{}
 	started := make(chan struct{}, 1)

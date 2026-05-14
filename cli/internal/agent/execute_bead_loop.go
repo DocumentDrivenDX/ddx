@@ -912,6 +912,37 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			emitPickerPrioritySkips(emit, candidate, skips)
 		}
 		if !ok {
+			if detail, systemic := systemicPreClaimSkipDetail(skips); systemic {
+				if runtime.Log != nil && !wasIdle {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim hook blocked queue: %s; sleeping %s\n", detail, idleInterval)
+				}
+				emit("loop.idle", map[string]any{
+					"reason":        "preclaim_systemic",
+					"detail":        detail,
+					"idle_interval": idleInterval.String(),
+				})
+				emitProgress(runtime.ProgressCh, ProgressEvent{
+					EventID:   "evt-" + randomProgressID(),
+					WorkerID:  runtime.WorkerID,
+					ProjectID: runtime.ProjectRoot,
+					Phase:     "loop.idle",
+					Heartbeat: true,
+					TS:        now().UTC(),
+					Message:   "preclaim_systemic",
+				})
+				wasIdle = true
+				if loopMode != executeloop.ModeWatch {
+					setExit("Preflight", "preclaim_systemic")
+					return result, nil
+				}
+				if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
+					if exitReason == "" {
+						applyStop(work.StopInput{ContextErr: err})
+					}
+					return result, err
+				}
+				continue
+			}
 			if hasGuardSkips(skips) {
 				continue
 			}
@@ -1178,7 +1209,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						if strictIntakeBlocking() {
 							return "review the readiness timeout and retry the bead later"
 						}
-						return "unclaim and continue draining other ready work"
+						return "continue with implementation; review should create follow-up work for any readiness gaps"
 					}(),
 					map[string]any{
 						"bead_id":       candidate.ID,
@@ -1214,11 +1245,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				} else {
 					emit("pre_claim_intake.warn", eventBody)
 					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "timeout", timeoutDetail, now().UTC())
-					if err := w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "timeout", timeoutDetail, ""); err != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness cooldown error: %v\n", err)
-					}
-					_ = w.Store.Unclaim(candidate.ID)
-					continue
+					intakeOutcome = PreClaimIntakeActionableAtomic
 				}
 			}
 			switch {
@@ -1486,7 +1513,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if runtime.PreDispatchLintHook != nil {
-			lintResult, lintErr := runtime.PreDispatchLintHook(ctx, candidate.ID)
+			lintResult, lintErr := runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
 			lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
 			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
 
@@ -2370,6 +2397,26 @@ func hasGuardSkips(skips []pickerSkip) bool {
 	return false
 }
 
+func systemicPreClaimSkipDetail(skips []pickerSkip) (string, bool) {
+	detail := ""
+	seenSystemic := false
+	for _, skip := range skips {
+		switch skip.Reason {
+		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead":
+			continue
+		default:
+			if !work.IsSystemicPreClaimSkipReason(skip.Reason) {
+				return "", false
+			}
+			seenSystemic = true
+			if detail == "" {
+				detail = work.SystemicPreClaimDetail(skip.Reason)
+			}
+		}
+	}
+	return detail, seenSystemic
+}
+
 func queueRankValue(raw any) any {
 	rank, ok := parseQueueRank(raw)
 	if !ok {
@@ -3195,6 +3242,11 @@ type preClaimIntakeHookCallResult struct {
 	err    error
 }
 
+type preDispatchLintHookCallResult struct {
+	result LintResult
+	err    error
+}
+
 func runPreClaimIntakeHookWithTimeout(ctx context.Context, hook PreClaimIntakeHook, beadID string, timeout time.Duration) (PreClaimIntakeResult, error) {
 	if hook == nil {
 		return PreClaimIntakeResult{}, nil
@@ -3222,6 +3274,36 @@ func runPreClaimIntakeHookWithTimeout(ctx context.Context, hook PreClaimIntakeHo
 			return timeoutPreClaimIntakeResult(beadID, timeout), nil
 		}
 		return PreClaimIntakeResult{}, hookCtx.Err()
+	}
+}
+
+func runPreDispatchLintHookWithTimeout(ctx context.Context, hook func(context.Context, string) (LintResult, error), beadID string, timeout time.Duration) (LintResult, error) {
+	if hook == nil {
+		return LintResult{}, nil
+	}
+	if timeout <= 0 {
+		timeout = work.DefaultPreClaimTimeout
+	}
+	hookCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	resultCh := make(chan preDispatchLintHookCallResult, 1)
+	go func() {
+		result, err := hook(hookCtx, beadID)
+		resultCh <- preDispatchLintHookCallResult{result: result, err: err}
+	}()
+
+	select {
+	case call := <-resultCh:
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) || errors.Is(call.err, context.DeadlineExceeded) {
+			return LintResult{}, &LintHookError{Kind: LintHookErrorKindCanceled, Err: context.DeadlineExceeded}
+		}
+		return call.result, call.err
+	case <-hookCtx.Done():
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) {
+			return LintResult{}, &LintHookError{Kind: LintHookErrorKindCanceled, Err: context.DeadlineExceeded}
+		}
+		return LintResult{}, hookCtx.Err()
 	}
 }
 

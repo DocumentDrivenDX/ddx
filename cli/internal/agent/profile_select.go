@@ -24,9 +24,10 @@ const (
 )
 
 var (
-	profileSnapshotCacheMu sync.Mutex
-	profileSnapshotCache   = map[string]profileSnapshotCacheEntry{}
-	profileSnapshotNow     = time.Now
+	profileSnapshotCacheMu     sync.Mutex
+	profileSnapshotCache       = map[string]profileSnapshotCacheEntry{}
+	profileSnapshotNow         = time.Now
+	profileSnapshotLoadTimeout = 3 * time.Second
 )
 
 type profileSnapshotCacheEntry struct {
@@ -57,6 +58,9 @@ type ImplementationProfileSelection struct {
 func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (ProfileSnapshot, error) {
 	if svc == nil {
 		return ProfileSnapshot{}, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	key := profileSnapshotServiceCacheKey(svc)
 	return loadProfileSnapshot(ctx, key, svc)
@@ -100,7 +104,10 @@ func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauSer
 		profileSnapshotCacheMu.Unlock()
 	}
 
-	profiles, err := svc.ListPolicies(ctx)
+	loadCtx, cancel := context.WithTimeout(ctx, profileSnapshotLoadTimeout)
+	defer cancel()
+
+	profiles, err := svc.ListPolicies(loadCtx)
 	if err != nil {
 		if hadLast {
 			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
@@ -109,21 +116,16 @@ func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauSer
 		markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 		return ProfileSnapshot{}, err
 	}
-	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
+	models, err := svc.ListModels(loadCtx, agentlib.ModelFilter{})
 	if err != nil {
 		if hadLast {
 			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 			return cloneProfileSnapshot(last.snap), nil
 		}
-		snap := ProfileSnapshot{
-			Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
-		}
-		if key != "" {
-			profileSnapshotCacheMu.Lock()
-			profileSnapshotCache[key] = profileSnapshotCacheEntry{snap: cloneProfileSnapshot(snap), loadedAt: now}
-			profileSnapshotCacheMu.Unlock()
-		}
-		return snap, nil
+		// Model discovery is advisory for DDx profile selection. Fizeau still
+		// owns concrete routing and candidate filtering at dispatch time, so do
+		// not let a slow/stale model snapshot consume the readiness budget.
+		models = nil
 	}
 
 	snap := ProfileSnapshot{
