@@ -7,11 +7,14 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/easel/fizeau"
 )
@@ -257,6 +260,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		MinPower:        minPower,
 		MaxPower:        maxPower,
 	}
+	seedRecentRouteAttemptsFromTracker(ctx, svc, workDir, time.Now().UTC())
 
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -361,6 +365,57 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.FizeauService, projectRoot string, now time.Time) {
+	if svc == nil || strings.TrimSpace(projectRoot) == "" {
+		return
+	}
+	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	beads, err := store.List("", "", nil)
+	if err != nil {
+		return
+	}
+	cutoff := now.Add(-ProviderUnavailableCooldown)
+	seen := map[string]struct{}{}
+	for _, b := range beads {
+		events, err := store.Events(b.ID)
+		if err != nil {
+			continue
+		}
+		for _, ev := range events {
+			if ev.Kind != "route-failure" || ev.CreatedAt.Before(cutoff) || ev.CreatedAt.After(now.Add(time.Minute)) {
+				continue
+			}
+			var body map[string]any
+			if err := json.Unmarshal([]byte(ev.Body), &body); err != nil {
+				continue
+			}
+			if strings.TrimSpace(fmt.Sprint(body["outcome_reason"])) != FailureModeProviderConnectivity {
+				continue
+			}
+			provider := strings.TrimSpace(fmt.Sprint(body["provider"]))
+			if provider == "" || provider == "<nil>" {
+				continue
+			}
+			harness := strings.TrimSpace(fmt.Sprint(body["harness"]))
+			model := strings.TrimSpace(fmt.Sprint(body["model"]))
+			key := harness + "\x00" + provider + "\x00" + model
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
+				Harness:   harness,
+				Provider:  provider,
+				Model:     model,
+				Status:    "failed",
+				Reason:    FailureModeProviderConnectivity,
+				Error:     strings.TrimSpace(fmt.Sprint(body["error"])),
+				Timestamp: ev.CreatedAt,
+			})
+		}
+	}
 }
 
 func recordServiceRouteAttempt(ctx context.Context, svc agentlib.FizeauService, result *Result, elapsed time.Duration, finishedAt time.Time) {

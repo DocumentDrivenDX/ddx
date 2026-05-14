@@ -11,8 +11,10 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -319,6 +321,29 @@ func TestExecuteOnService_RecordsFailedRouteAttempt(t *testing.T) {
 	assert.Equal(t, "bragi", attempt.Provider)
 	assert.Equal(t, "qwen3.5-27b", attempt.Model)
 	assert.Contains(t, attempt.Error, "i/o timeout")
+}
+
+func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing.T) {
+	root := t.TempDir()
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{ID: "seed-route-001", Title: "seed route"}))
+	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
+	require.NoError(t, store.AppendEvent("seed-route-001", bead.BeadEvent{
+		Kind:      "route-failure",
+		Summary:   "provider=bragi model=qwen3.5-27b connectivity failure",
+		Body:      `{"harness":"fiz","provider":"bragi","model":"qwen3.5-27b","error":"dial tcp 100.127.38.115:1234: i/o timeout","outcome_reason":"provider_connectivity"}`,
+		CreatedAt: now.Add(-time.Minute),
+	}))
+	svc := &passthroughTestService{}
+
+	seedRecentRouteAttemptsFromTracker(context.Background(), svc, root, now)
+
+	require.Len(t, svc.routeAttempts, 1)
+	assert.Equal(t, "failed", svc.routeAttempts[0].Status)
+	assert.Equal(t, FailureModeProviderConnectivity, svc.routeAttempts[0].Reason)
+	assert.Equal(t, "bragi", svc.routeAttempts[0].Provider)
+	assert.Equal(t, "qwen3.5-27b", svc.routeAttempts[0].Model)
 }
 
 // TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown
