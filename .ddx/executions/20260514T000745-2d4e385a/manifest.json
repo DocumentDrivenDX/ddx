@@ -1,0 +1,134 @@
+{
+  "attempt_id": "20260514T000745-2d4e385a",
+  "bead_id": "ddx-6cde5ffd",
+  "base_rev": "73e63d63e2a66e74f99dfe2cbce4fe4893dbe255",
+  "created_at": "2026-05-14T00:07:48.730198411Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6cde5ffd",
+    "title": "registry: install default package from embedded package FS",
+    "description": "PROBLEM\n  `ddx init` must install the default `ddx` package offline from embedded package content, using the same installer semantics as `ddx plugin install ddx`. Today the binary embeds a special skill-only tree instead of the default package layout.\n\nROOT CAUSE\n  cli/internal/registry/installer.go:20-185 only installs packages by downloading a GitHub tarball. cli/cmd/init.go:276-299 works around offline/default-package needs by separately copying embedded skills and then attempting `registry.InstallPackage(pkg, workingDir)`, which downloads package content and may fail offline. cli/Makefile:65-84 syncs `skills/ddx` into `cli/internal/skills/ddx` for `go:embed`, not a package-rooted `library/` tree. The plan requires `InstallPackageFromFS(pkg, sourceFS, projectRoot)` or equivalent embedded-package support rooted at the default package.\n\nPROPOSED FIX\n  - Add an embedded default-package FS under the registry package, rooted at the package layout that will be copied from `library/`.\n  - Split package install entrypoints into remote, local-dir, and embedded-FS paths that share the same core manifest/mapping implementation.\n  - Preserve the existing `InstallPackage(pkg, projectRoot)` public wrapper as the remote path only if callers still need it during the migration.\n  - Add offline tests proving an embedded package install can create `.ddx/plugins/ddx`, `.agents/skills/ddx`, and `.claude/skills/ddx` without network.\n\nNON-SCOPE\n  - Rewriting `ddx init` to call the embedded package installer; a dependent bead owns the init call site.\n  - Moving the source skill tree into `library/skills/ddx`; a later bead owns the content move.\n  - Removing old embedded skill files before offline init is green.\n\nPARENT + DEPS\n  Parent: ddx-6862f2ac. Depends on the registry mapping bead so embedded installs use the same mapping implementation.",
+    "acceptance": "1. `TestInstallPackageFromFSHonorsManifestMappings` proves an embedded `fs.FS` rooted at a package directory reads `package.yaml` and applies root plus skill mappings.\n2. `TestInstallPackageFromFSInstallsDefaultDDxPackageOffline` proves the embedded default package can install `.ddx/plugins/ddx`, `.agents/skills/ddx`, and `.claude/skills/ddx` without invoking network download code.\n3. `TestInstallPackageFromRemoteUsesSharedCore` proves the remote entrypoint and embedded-FS entrypoint share the same skill mapping behavior for a fixture package.\n4. `cd cli \u0026\u0026 go test ./internal/registry/... -run 'TestInstallPackageFromFSHonorsManifestMappings|TestInstallPackageFromFSInstallsDefaultDDxPackageOffline|TestInstallPackageFromRemoteUsesSharedCore' -count=1` passes.\n5. `cd cli \u0026\u0026 go test ./internal/registry/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6862f2ac",
+    "labels": [
+      "phase:2",
+      "area:plugins",
+      "area:skills",
+      "area:cli",
+      "kind:feature",
+      "plan-2026-05-13",
+      "spec:plan-2026-05-13-ddx-skill-package-layout"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-14T00:07:00Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "2124107",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:40:05.992280168Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:54:00.711238243Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:37:25.838080415Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:34:38.166062693Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-6cde5ffd)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:51:57.962718768Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Title is imperative and names subsystem+change. Description has clear PROBLEM, ROOT CAUSE with specific file:line references (installer.go:20-185, init.go:276-299, Makefile:65-84), PROPOSED FIX, and NON-SCOPE. AC is numbered with 6 verifiable items, names specific Test* functions, includes go test invocation, and lefthook gate. Labels include phase, areas, kind, plan, and spec cross-ref. Parent and explicit deps present. Bead is self-contained with no /tmp paths or chat references.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T23:55:46.589028144Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-6cde5ffd\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-13T23:55:49.292520755Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"infrastructure\",\"decode_warnings\":[{\"field\":\"classification\",\"warning\":\"unknown classification\",\"raw_excerpt\":\"infrastructure\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: .ddx/metrics/attempts.jsonl; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"pre-execute-bead checkpoint refused to absorb non-bookkeeping change (.ddx/metrics/attempts.jsonl) before claiming; this is an environment/workspace hygiene issue unrelated to the bead's substantive work\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-13T23:56:06.260320437Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "unusable triage classification: infrastructure"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: .ddx/metrics/attempts.jsonl; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-13T23:56:06.366787312Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Title is imperative and names subsystem + change. Description has PROBLEM, ROOT CAUSE with specific file:line refs (installer.go:20-185, init.go:276-299, Makefile:65-84), PROPOSED FIX, and NON-SCOPE. AC is numbered with 6 verifiable items, names specific Test* functions, includes `cd cli \\u0026\\u0026 go test` and `lefthook run pre-commit` gates. Labels include phase, area, kind, plan, spec cross-refs. Parent and deps are explicit. Bead is self-contained with no /tmp references.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-14T00:07:43.129206584Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-14T00:07:00.968441642Z",
+      "execute-loop-last-detail": "readiness check timed out after 30s (ddx-6cde5ffd)",
+      "execute-loop-last-status": "timeout",
+      "execute-loop-retry-after": "2026-05-13T20:56:58Z",
+      "spec-id": "plan-2026-05-13-ddx-skill-package-layout"
+    }
+  },
+  "governing": [
+    {
+      "id": "plan-2026-05-13-ddx-skill-package-layout",
+      "path": "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
+      "title": "DDx Skill Package Layout"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260514T000745-2d4e385a",
+    "prompt": ".ddx/executions/20260514T000745-2d4e385a/prompt.md",
+    "manifest": ".ddx/executions/20260514T000745-2d4e385a/manifest.json",
+    "result": ".ddx/executions/20260514T000745-2d4e385a/result.json",
+    "checks": ".ddx/executions/20260514T000745-2d4e385a/checks.json",
+    "usage": ".ddx/executions/20260514T000745-2d4e385a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6cde5ffd-20260514T000745-2d4e385a"
+  },
+  "prompt_sha": "fa6f97730d06b74979e984a83f7549f927761f8bc4257660c131fbe9153e53fb"
+}
