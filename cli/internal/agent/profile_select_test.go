@@ -162,6 +162,12 @@ func TestSelectImplementationProfile_DoesNotSelectRequirementProfileForOrdinaryW
 	assert.Equal(t, "cheap", got.Name)
 }
 
+func TestSelectCheapestProfile_DoesNotSelectRequirementProfile(t *testing.T) {
+	snap := canonicalFizeauPolicySnapshot()
+
+	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
+}
+
 func TestSelectImplementationProfile_MetadataTieBreaksByCostAndSpeedNotLocalPreference(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{

@@ -81,23 +81,12 @@ func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Dur
 	return 0
 }
 
-// NewServiceFromWorkDir constructs a FizeauService for the given DDx project.
-// When .ddx/config.yaml contains agent.endpoints, those endpoint blocks are
-// injected as the service config so routing is independent from global named
-// provider profiles. Otherwise, ConfigPath preserves the upstream agent loader
-// fallback for legacy .agent/global configuration.
+// NewServiceFromWorkDir constructs the normal execution FizeauService for a DDx
+// project. Fizeau owns provider config, provider discovery, include-by-default
+// semantics, and policy routing; DDx project endpoint blocks are used by status
+// surfaces below, not as an execution-time replacement for Fizeau config.
 func NewServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
-	opts := agentlib.ServiceOptions{
-		ConfigPath: filepath.Join(workDir, "config.yaml"),
-	}
-	sc, err := serviceConfigFromDDxEndpoints(workDir)
-	if err != nil {
-		return nil, err
-	}
-	if sc != nil {
-		opts.ServiceConfig = sc
-	}
-	return agentlib.New(opts)
+	return agentlib.New(agentlib.ServiceOptions{})
 }
 
 // NewStatusProbeServiceFromWorkDir constructs a service for status surfaces
