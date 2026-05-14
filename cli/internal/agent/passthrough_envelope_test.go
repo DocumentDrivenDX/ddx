@@ -30,6 +30,7 @@ type passthroughTestService struct {
 	listModels          []agentlib.ModelInfo
 	listPolicies        []agentlib.PolicyInfo
 	executeEvents       []agentlib.ServiceEvent
+	routeAttempts       []agentlib.RouteAttempt
 }
 
 func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -79,6 +80,7 @@ func (s *passthroughTestService) ResolveRoute(ctx context.Context, req agentlib.
 }
 
 func (s *passthroughTestService) RecordRouteAttempt(ctx context.Context, attempt agentlib.RouteAttempt) error {
+	s.routeAttempts = append(s.routeAttempts, attempt)
 	return nil
 }
 
@@ -283,6 +285,40 @@ func TestExecuteOnService_FinalErrorWithZeroExitBecomesFailure(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.ExitCode)
 	assert.Contains(t, result.Error, "ResolveRoute: no viable routing candidate")
+}
+
+func TestExecuteOnService_RecordsFailedRouteAttempt(t *testing.T) {
+	finalPayload, err := json.Marshal(map[string]any{
+		"status":    "error",
+		"exit_code": 1,
+		"error":     `openai: Post "http://bragi:1234/v1/chat/completions": dial tcp 100.127.38.115:1234: i/o timeout`,
+		"routing_actual": map[string]any{
+			"harness":  "fiz",
+			"provider": "bragi",
+			"model":    "qwen3.5-27b",
+			"power":    5,
+		},
+	})
+	require.NoError(t, err)
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{{Type: "final", Data: finalPayload}},
+	}
+	rcfg := resolvedWithPassthrough("", "", "", 0, 0)
+
+	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	require.Len(t, svc.routeAttempts, 1)
+	attempt := svc.routeAttempts[0]
+	assert.Equal(t, "failed", attempt.Status)
+	assert.Equal(t, "provider_error", attempt.Reason)
+	assert.Equal(t, "fiz", attempt.Harness)
+	assert.Equal(t, "bragi", attempt.Provider)
+	assert.Equal(t, "qwen3.5-27b", attempt.Model)
+	assert.Contains(t, attempt.Error, "i/o timeout")
 }
 
 // TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown

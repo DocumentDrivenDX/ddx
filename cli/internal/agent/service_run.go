@@ -351,6 +351,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}
 	result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 	normalizeServiceFinalExitCode(result)
+	recordServiceRouteAttempt(ctx, svc, result, elapsed, finishedAt)
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,
 		Model:       model,
@@ -360,6 +361,31 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func recordServiceRouteAttempt(ctx context.Context, svc agentlib.FizeauService, result *Result, elapsed time.Duration, finishedAt time.Time) {
+	if svc == nil || result == nil || strings.TrimSpace(result.Provider) == "" {
+		return
+	}
+	status := "success"
+	reason := "success"
+	if result.ExitCode != 0 || strings.TrimSpace(result.Error) != "" {
+		status = "failed"
+		reason = "execution_failed"
+		if strings.TrimSpace(result.Error) != "" {
+			reason = "provider_error"
+		}
+	}
+	_ = svc.RecordRouteAttempt(ctx, agentlib.RouteAttempt{
+		Harness:   result.Harness,
+		Provider:  result.Provider,
+		Model:     result.Model,
+		Status:    status,
+		Reason:    reason,
+		Error:     result.Error,
+		Duration:  elapsed,
+		Timestamp: finishedAt,
+	})
 }
 
 func metadataWithEnv(metadata, env map[string]string) map[string]string {
