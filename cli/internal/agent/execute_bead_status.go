@@ -37,6 +37,7 @@ const (
 	FailureModeNoEvidenceProduced             = "no_evidence_produced"
 	FailureModeRatchetMiss                    = "ratchet_miss"
 	FailureModeNoViableProvider               = "no_viable_provider"
+	FailureModeProviderConnectivity           = "provider_connectivity"
 	FailureModeHarnessNotInstalled            = "harness_not_installed"
 	FailureModeBlockedByPassthroughConstraint = "blocked_by_passthrough_constraint"
 	FailureModeAgentPowerUnsatisfied          = "agent_power_unsatisfied"

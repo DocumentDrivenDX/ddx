@@ -2010,7 +2010,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				continue
 			}
-			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
+			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC(), readFailedRoutes(candidate.Extra))
 			// Story 15: when an operator-prompt bead succeeds, scan
 			// base..result for affected beads and artifacts, and append
 			// origin_operator_prompt_id back-link events. Failure is
@@ -2254,7 +2254,29 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			} else {
-				if isNoViableProviderReport(report) {
+				if isProviderConnectivityFailureReport(report) {
+					report.OutcomeReason = FailureModeProviderConnectivity
+					report.Disrupted = true
+					report.DisruptionReason = "provider_connectivity"
+					operatorPinned := isOperatorRoutingPinned(rcfg.Passthrough())
+					if err := applyProviderConnectivityRouteExclusion(w.Store, candidate.ID, report, operatorPinned, w.EscalationNextFloor, now().UTC()); err != nil {
+						if runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "route-exclusion update failed for %s: %v (continuing)\n", candidate.ID, err)
+						}
+					}
+					emitRouteFailureEvent(w.Store, candidate.ID, assignee, report, now().UTC())
+					retryAfter := now().UTC().Add(CapLoopCooldown(ProviderUnavailableCooldown))
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
+						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+						})
+						if ctx.Err() != nil {
+							return result, ctx.Err()
+						}
+						continue
+					}
+					report.RetryAfter = retryAfter.Format(time.RFC3339)
+				} else if isNoViableProviderReport(report) {
 					report.OutcomeReason = FailureModeNoViableProvider
 					retryAfter := now().UTC().Add(CapLoopCooldown(ProviderUnavailableCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
@@ -2562,7 +2584,12 @@ func hasResultForBead(results []ExecuteBeadReport, beadID string) bool {
 // from the executor's ExecuteBeadReport, so that review-outcomes analytics can
 // attribute a subsequent review verdict to the originating provider/model powerClass.
 // Best-effort: errors and missing-provider cases are silently ignored.
-func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report ExecuteBeadReport, createdAt time.Time) {
+//
+// failedRoutes, when non-empty, populates fallback_chain so the routing event
+// records which earlier provider/model tuples were excluded before this
+// successful (or current) route was selected. Pass nil when there is no prior
+// route-failure evidence on the bead.
+func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report ExecuteBeadReport, createdAt time.Time, failedRoutes []FailedRouteEntry) {
 	if store == nil || beadID == "" {
 		return
 	}
@@ -2573,10 +2600,19 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 	if provider == "" {
 		return
 	}
+	chain := make([]map[string]any, 0, len(failedRoutes))
+	for _, e := range failedRoutes {
+		chain = append(chain, map[string]any{
+			"provider":     e.Provider,
+			"model":        e.Model,
+			"actual_power": e.ActualPower,
+			"reason":       e.Reason,
+		})
+	}
 	body, err := json.Marshal(map[string]any{
 		"resolved_provider":    provider,
 		"resolved_model":       report.Model,
-		"fallback_chain":       []string{},
+		"fallback_chain":       chain,
 		"requested_profile":    report.RequestedProfile,
 		"inferred_power_class": report.InferredPowerClass,
 		"routing_intent_note":  report.RoutingIntentNote,
@@ -3676,6 +3712,179 @@ func isNoViableProviderReport(report ExecuteBeadReport) bool {
 		report.Stderr,
 	}, "\n"))
 	return ClassifyFailureMode(report.Status, 0, combined) == FailureModeNoViableProvider
+}
+
+// providerConnectivityMarkers names the substrings that indicate the routed
+// provider endpoint itself was unreachable (TCP-level dial failure, connection
+// refused, network down). These are stricter than the broader transport
+// markers because we only treat them as route-exclusion evidence when paired
+// with a non-empty Provider in the report.
+var providerConnectivityMarkers = []string{
+	"dial tcp",
+	"connection refused",
+	"i/o timeout",
+	"no route to host",
+	"network is unreachable",
+	"bad gateway",
+	"service unavailable",
+	"gateway timeout",
+}
+
+// isProviderConnectivityFailureReport reports whether a worker report describes
+// a routed provider endpoint that could not be reached. Requires both an
+// identified route (Provider) and a transport-level error marker. Reports that
+// already classify as no_viable_provider or routing-infrastructure failures
+// keep their own paths; this is for the narrower "fizeau picked a route, the
+// HTTP call to that endpoint failed" case.
+func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
+	if report.Status != ExecuteBeadStatusExecutionFailed {
+		return false
+	}
+	if strings.TrimSpace(report.Provider) == "" {
+		return false
+	}
+	if isNoViableProviderReport(report) || isRoutingInfrastructureReport(report) {
+		return false
+	}
+	combined := strings.ToLower(strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n"))
+	for _, marker := range providerConnectivityMarkers {
+		if strings.Contains(combined, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// executeLoopFailedRoutesKey is the bead Extra key holding the JSON-encoded
+// list of (provider, model, actual_power) tuples that have failed with a
+// provider-connectivity error. Subsequent routing-evidence events read this
+// list to populate fallback_chain so post-hoc review can see what was
+// excluded; the power-hint nudge on the same bead biases fizeau's next
+// RouteRequest off the failed power tier when a ladder is available.
+const executeLoopFailedRoutesKey = "execute-loop-failed-routes"
+
+// FailedRouteEntry is the JSON shape persisted under executeLoopFailedRoutesKey.
+// Exported so external callers (test helpers, tooling) can decode it without
+// duplicating the schema.
+type FailedRouteEntry struct {
+	Provider    string `json:"provider"`
+	Model       string `json:"model,omitempty"`
+	ActualPower int    `json:"actual_power,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	At          string `json:"at,omitempty"`
+}
+
+// readFailedRoutes decodes the failed-route list from a bead's Extra. Returns
+// nil when absent or malformed; never errors.
+func readFailedRoutes(extra map[string]any) []FailedRouteEntry {
+	if len(extra) == 0 {
+		return nil
+	}
+	raw, ok := extra[executeLoopFailedRoutesKey]
+	if !ok {
+		return nil
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var entries []FailedRouteEntry
+	if err := json.Unmarshal(encoded, &entries); err != nil {
+		return nil
+	}
+	return entries
+}
+
+// appendFailedRoute records entry on b.Extra under executeLoopFailedRoutesKey
+// without duplicating (provider, model) tuples already in the list.
+func appendFailedRoute(b *bead.Bead, entry FailedRouteEntry) {
+	ensureBeadExtra(b)
+	existing := readFailedRoutes(b.Extra)
+	for _, e := range existing {
+		if e.Provider == entry.Provider && e.Model == entry.Model {
+			return
+		}
+	}
+	b.Extra[executeLoopFailedRoutesKey] = append(existing, entry)
+}
+
+// isOperatorRoutingPinned reports whether the resolved passthrough envelope
+// carries any explicit operator pin (harness, model, or provider). When true,
+// the route-exclusion path records the failure but does not bump the power
+// hint — pinned routes must retry exactly as the operator requested.
+func isOperatorRoutingPinned(pt config.AgentPassthrough) bool {
+	return strings.TrimSpace(pt.Harness) != "" ||
+		strings.TrimSpace(pt.Model) != "" ||
+		strings.TrimSpace(pt.Provider) != ""
+}
+
+// applyProviderConnectivityRouteExclusion appends the failed (provider, model)
+// to the bead's failed-route list and (when no operator pin is in force and a
+// ladder step is available) advances TriagePowerHintKey above the failed
+// route's actualPower so the next attempt's RouteRequest naturally picks a
+// different candidate. The lifecycle status is unchanged (bead stays open).
+func applyProviderConnectivityRouteExclusion(
+	store ExecuteBeadLoopStore,
+	beadID string,
+	report ExecuteBeadReport,
+	operatorPinned bool,
+	nextFloorFn func(int) (int, error),
+	at time.Time,
+) error {
+	return store.Update(beadID, func(b *bead.Bead) {
+		appendFailedRoute(b, FailedRouteEntry{
+			Provider:    report.Provider,
+			Model:       report.Model,
+			ActualPower: report.ActualPower,
+			Reason:      FailureModeProviderConnectivity,
+			At:          at.UTC().Format(time.RFC3339),
+		})
+		if operatorPinned || nextFloorFn == nil {
+			return
+		}
+		nextFloor, err := nextFloorFn(report.ActualPower)
+		if err != nil {
+			return
+		}
+		b.Extra[TriagePowerHintKey] = nextFloor
+	})
+}
+
+// emitRouteFailureEvent records a kind=route-failure event capturing the
+// failed (provider, model) tuple and the surface error. Best-effort.
+func emitRouteFailureEvent(store BeadEventAppender, beadID, actor string, report ExecuteBeadReport, at time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	body, err := json.Marshal(map[string]any{
+		"provider":       report.Provider,
+		"model":          report.Model,
+		"harness":        report.Harness,
+		"actual_power":   report.ActualPower,
+		"detail":         report.Detail,
+		"error":          report.Error,
+		"outcome_reason": FailureModeProviderConnectivity,
+	})
+	if err != nil {
+		return
+	}
+	summary := "provider=" + report.Provider
+	if report.Model != "" {
+		summary += " model=" + report.Model
+	}
+	summary += " connectivity failure"
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "route-failure",
+		Summary:   summary,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
 }
 
 func isRoutingInfrastructureReport(report ExecuteBeadReport) bool {
