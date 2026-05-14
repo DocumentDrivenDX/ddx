@@ -314,7 +314,7 @@ pre-commit:
       <<: *go_checks
       name: "Validate skill metadata"
       run: |
-        if ! git diff --cached --name-only | grep -qE '^(skills/[^/]+/SKILL\.md|cli/internal/skills/[^/]+/SKILL\.md)$'; then
+        if ! git diff --cached --name-only | grep -qE '^(library/skills/[^/]+/SKILL\.md|cli/internal/registry/defaultplugin/library/skills/[^/]+/SKILL\.md)$'; then
           exit 0
         fi
         make skill-schema
@@ -322,20 +322,20 @@ pre-commit:
         - merge
         - rebase
 
-    sync-embedded-skills:
-      name: "Sync cli/internal/skills/ddx from top-level skills/ddx"
+    sync-embedded-default-plugin:
+      name: "Sync cli/internal/registry/defaultplugin/library from library/"
       root: "cli/"
       run: |
-        if ! git diff --cached --name-only | grep -qE '^skills/ddx/'; then
+        if ! git diff --cached --name-only | grep -qE '^library/(skills/|package\.yaml$)'; then
           exit 0
         fi
         make copy-skills
-        cd .. && git add cli/internal/skills/ddx/
+        cd .. && git add cli/internal/registry/defaultplugin/library/
       stage_fixed: true
       skip:
         - merge
         - rebase
-      fail_text: "Failed to sync cli/internal/skills/ddx from skills/ddx. Run 'cd cli && make copy-skills' manually and stage the result."
+      fail_text: "Failed to sync cli/internal/registry/defaultplugin/library from library/. Run 'cd cli && make copy-skills' manually and stage the result."
 
     design-md-lint:
       name: "DESIGN.md lint"

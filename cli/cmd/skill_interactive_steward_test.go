@@ -169,9 +169,6 @@ func TestDDxSkillCopiedTreesMatchSource(t *testing.T) {
 	copyDirs := []string{
 		filepath.Join(root, "cli", "internal", "skills", "ddx"),
 		filepath.Join(root, "cli", "internal", "registry", "defaultplugin", "library", "skills", "ddx"),
-		filepath.Join(root, ".agents", "skills", "ddx"),
-		filepath.Join(root, ".claude", "skills", "ddx"),
-		filepath.Join(root, ".ddx", "skills", "ddx"),
 	}
 
 	touchedFiles := []string{
