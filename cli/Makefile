@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test test-full test-perf lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
+.PHONY: all build clean test test-full test-perf coverage-ratchet lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -127,6 +127,17 @@ bench-graphql:
 	DDX_BENCH_REPORT_DATE=$(BENCH_REPORT_DATE) \
 	go test -tags=perf ./internal/server/perf/ -run TestGraphQLPerfMatrix_Baseline -v -timeout 5m
 	@echo "Baseline report written to $(BENCH_REPORT_DIR)/$(BENCH_REPORT_DATE)-baseline.md"
+
+# Enforce the aggregate coverage ratchet recorded in coverage-baseline.yml.
+# Kept separate from `make test` because building a coverage profile across
+# the full module is slower than the verbose smoke run developers use for
+# fast feedback; CI / quality gates invoke this target explicitly.
+COVERAGE_PROFILE ?= coverage.out
+COVERAGE_BASELINE ?= coverage-baseline.yml
+coverage-ratchet: copy-skills
+	@echo "Running coverage ratchet (go test -coverprofile=$(COVERAGE_PROFILE))..."
+	@go test -coverprofile=$(COVERAGE_PROFILE) ./...
+	@go run ./tools/coverage-ratchet -profile $(COVERAGE_PROFILE) -baseline $(COVERAGE_BASELINE)
 
 # Run perf tests (excluded from default `make test`; use this target or CI perf job)
 test-perf:
@@ -244,6 +255,7 @@ help:
 	@echo "  deps        - Install dependencies"
 	@echo "  test        - Run tests"
 	@echo "  test-full   - Run full test suite with race detector + coverage (mirrors CI)"
+	@echo "  coverage-ratchet - Run go test with coverage and enforce baseline in coverage-baseline.yml"
 	@echo "  lint        - Run linter"
 	@echo "  bead-schema - Validate the shared bead record schema"
 	@echo "  skill-schema - Validate bundled SKILL.md metadata"

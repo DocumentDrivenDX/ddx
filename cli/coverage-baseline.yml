@@ -1,0 +1,7 @@
+# Coverage ratchet baseline for `cli/...`.
+#
+# `make coverage-ratchet` runs `go test -coverprofile=coverage.out ./...`
+# and fails when the aggregate covered-statement percentage drops below
+# this value. Ratchet the number upward as coverage improves; never lower
+# it without a recorded justification.
+baseline: 0.0
