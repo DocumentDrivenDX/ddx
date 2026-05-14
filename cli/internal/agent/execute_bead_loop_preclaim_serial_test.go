@@ -498,6 +498,45 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Contains(t, eventSink.String(), "pre_dispatch_lint.blocked")
 	})
 
+	t.Run("lint_timeout_warns_and_executes_during_queue_drain", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		var execCalled atomic.Int32
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				execCalled.Add(1)
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+			}),
+		}
+		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:            true,
+			EventSink:       &eventSink,
+			PreClaimTimeout: 20 * time.Millisecond,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+			},
+			PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+				<-ctx.Done()
+				return LintResult{}, ctx.Err()
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, int32(1), execCalled.Load(), "lint timeout must fail open and proceed to execution")
+		assert.Equal(t, 1, result.Attempts)
+		assert.Equal(t, 1, result.Successes)
+
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusClosed, got.Status)
+		assert.Contains(t, eventSink.String(), "pre_dispatch_lint.warn")
+	})
+
 	t.Run("lint_blocked_targeted_unclaims_without_execution", func(t *testing.T) {
 		store, candidate, _ := newExecuteLoopTestStore(t)
 		var eventSink bytes.Buffer

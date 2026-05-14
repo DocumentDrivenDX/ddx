@@ -1474,7 +1474,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if runtime.PreDispatchLintHook != nil {
-			lintResult, lintErr := runtime.PreDispatchLintHook(ctx, candidate.ID)
+			lintResult, lintErr := runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
 			lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
 			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
 
@@ -3143,6 +3143,11 @@ type preClaimIntakeHookCallResult struct {
 	err    error
 }
 
+type preDispatchLintHookCallResult struct {
+	result LintResult
+	err    error
+}
+
 func runPreClaimIntakeHookWithTimeout(ctx context.Context, hook PreClaimIntakeHook, beadID string, timeout time.Duration) (PreClaimIntakeResult, error) {
 	if hook == nil {
 		return PreClaimIntakeResult{}, nil
@@ -3170,6 +3175,36 @@ func runPreClaimIntakeHookWithTimeout(ctx context.Context, hook PreClaimIntakeHo
 			return timeoutPreClaimIntakeResult(beadID, timeout), nil
 		}
 		return PreClaimIntakeResult{}, hookCtx.Err()
+	}
+}
+
+func runPreDispatchLintHookWithTimeout(ctx context.Context, hook func(context.Context, string) (LintResult, error), beadID string, timeout time.Duration) (LintResult, error) {
+	if hook == nil {
+		return LintResult{}, nil
+	}
+	if timeout <= 0 {
+		timeout = work.DefaultPreClaimTimeout
+	}
+	hookCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	resultCh := make(chan preDispatchLintHookCallResult, 1)
+	go func() {
+		result, err := hook(hookCtx, beadID)
+		resultCh <- preDispatchLintHookCallResult{result: result, err: err}
+	}()
+
+	select {
+	case call := <-resultCh:
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) || errors.Is(call.err, context.DeadlineExceeded) {
+			return LintResult{}, &LintHookError{Kind: LintHookErrorKindCanceled, Err: context.DeadlineExceeded}
+		}
+		return call.result, call.err
+	case <-hookCtx.Done():
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) {
+			return LintResult{}, &LintHookError{Kind: LintHookErrorKindCanceled, Err: context.DeadlineExceeded}
+		}
+		return LintResult{}, hookCtx.Err()
 	}
 }
 
