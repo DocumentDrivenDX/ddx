@@ -6,13 +6,13 @@ import (
 
 // BenchmarkArm defines one arm in a benchmark run.
 type BenchmarkArm struct {
-	Label   string               `json:"label"`
-	Harness string               `json:"harness"`
-	Tier    escalation.ModelTier `json:"tier"`
-	Model   string               `json:"model,omitempty"` // explicit override; empty = no DDx-side model resolution
+	Label      string                `json:"label"`
+	Harness    string                `json:"harness"`
+	PowerClass escalation.PowerClass `json:"power_class"`
+	Model      string                `json:"model,omitempty"` // explicit override; empty = no DDx-side model resolution
 }
 
-// ResolveArm no longer resolves tier to a DDx-side concrete model.
+// ResolveArm no longer resolves powerClass to a DDx-side concrete model.
 // Benchmark callers must set Model explicitly when they want a pin.
 func (a *BenchmarkArm) ResolveArm() {
 }

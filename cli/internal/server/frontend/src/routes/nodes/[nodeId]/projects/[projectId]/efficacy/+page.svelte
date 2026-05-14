@@ -60,7 +60,7 @@
 
 	let { data }: { data: PageData } = $props();
 
-	let tierFilter = $state('');
+	let powerClassFilter = $state('');
 	let labelFilter = $state('');
 	let specIdFilter = $state('');
 	let selectedRowKey = $state<string | null>(null);
@@ -76,8 +76,8 @@
 
 	const filteredRows = $derived(
 		data.rows.filter((row) => {
-			const tierMatches =
-				!tierFilter || !rowTier(row) || rowTier(row).toLowerCase() === tierFilter.toLowerCase();
+			const powerClassMatches =
+				!powerClassFilter || !rowPowerClass(row) || rowPowerClass(row).toLowerCase() === powerClassFilter.toLowerCase();
 			const labelMatches =
 				!labelFilter ||
 				!row.labels ||
@@ -86,7 +86,7 @@
 				!specIdFilter ||
 				!row.specId ||
 				row.specId.toLowerCase().includes(specIdFilter.toLowerCase());
-			return tierMatches && labelMatches && specMatches;
+			return powerClassMatches && labelMatches && specMatches;
 		})
 	);
 	const topPerformers = $derived(
@@ -100,7 +100,7 @@
 	);
 
 	$effect(() => {
-		tierFilter = data.activeTier;
+		powerClassFilter = data.activePowerClass;
 		labelFilter = data.activeLabel;
 		specIdFilter = data.activeSpecId;
 		comparisonResults = data.comparisons;
@@ -110,14 +110,14 @@
 		return row.rowKey ?? `${row.harness}|${row.provider}|${row.model}`;
 	}
 
-	function rowTier(row: EfficacyRow): string {
-		if (row.tier) return row.tier;
+	function rowPowerClass(row: EfficacyRow): string {
+		if (row.powerClass) return row.powerClass;
 		if (/qwen|omlx|local|cheap/i.test(`${row.provider} ${row.model}`)) return 'cheap';
 		if (/gpt|claude|sonnet|opus/i.test(row.model)) return 'frontier';
 		return '';
 	}
 
-	function updateFilter(key: 'tier' | 'label' | 'spec-id', value: string) {
+	function updateFilter(key: 'powerClass' | 'label' | 'spec-id', value: string) {
 		const params = new URLSearchParams($page.url.searchParams);
 		if (value.trim()) {
 			params.set(key, value.trim());
@@ -276,18 +276,18 @@
 		<label
 			class="space-y-1 text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
 		>
-			<span>Tier</span>
+			<span>Power class</span>
 			<select
-				name="tier"
-				value={tierFilter}
+				name="powerClass"
+				value={powerClassFilter}
 				onchange={(event) => {
 					const value = (event.currentTarget as HTMLSelectElement).value;
-					tierFilter = value;
-					updateFilter('tier', value);
+					powerClassFilter = value;
+					updateFilter('powerClass', value);
 				}}
 				class="w-full border border-[#E4DDD0] bg-[#FFFFFF] px-3 py-2 text-sm text-[#1F2125] focus:border-[#3B5B7A] focus:ring-1 focus:ring-[#3B5B7A] focus:outline-none dark:border-[#34302A] dark:bg-[#1A1815] dark:text-[#EDE6D6]"
 			>
-				<option value="">All tiers</option>
+				<option value="">All power classes</option>
 				<option value="cheap">Cheap</option>
 				<option value="balanced">Balanced</option>
 				<option value="frontier">Frontier</option>

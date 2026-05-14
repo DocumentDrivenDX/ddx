@@ -27,14 +27,14 @@ func TestAgentSessionsGraphQLFiltersByProvider(t *testing.T) {
 	}
 }
 
-func TestWorkerResultFromRecordIncludesTier(t *testing.T) {
+func TestWorkerResultFromRecordIncludesPower(t *testing.T) {
 	gqlResult := workerResultFromRecord(&WorkerExecutionResult{
-		AttemptID: "attempt-1",
-		Tier:      "cheap",
-		Provider:  "claude",
+		AttemptID:  "attempt-1",
+		PowerClass: "cheap",
+		Provider:   "claude",
 	})
-	if gqlResult.Tier == nil || *gqlResult.Tier != "cheap" {
-		t.Fatalf("tier=%v, want cheap", gqlResult.Tier)
+	if gqlResult.PowerClass == nil || *gqlResult.PowerClass != "cheap" {
+		t.Fatalf("powerClass=%v, want cheap", gqlResult.PowerClass)
 	}
 	if gqlResult.Provider == nil || *gqlResult.Provider != "claude" {
 		t.Fatalf("provider=%v, want claude", gqlResult.Provider)

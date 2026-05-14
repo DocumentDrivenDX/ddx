@@ -505,8 +505,8 @@ func workerResultFromRecord(r *WorkerExecutionResult) *ddxgraphql.WorkerExecutio
 	if r.Harness != "" {
 		out.Harness = &r.Harness
 	}
-	if r.Tier != "" {
-		out.Tier = &r.Tier
+	if r.PowerClass != "" {
+		out.PowerClass = &r.PowerClass
 	}
 	if r.Provider != "" {
 		out.Provider = &r.Provider

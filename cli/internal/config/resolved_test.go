@@ -26,8 +26,8 @@ func sealedFixture() ResolvedConfig {
 		model:                   "claude-opus-4-7",
 		provider:                "anthropic",
 		profile:                 "default",
-		minTier:                 "cheap",
-		maxTier:                 "smart",
+		minPowerHint:            "cheap",
+		maxPowerHint:            "smart",
 		effort:                  "high",
 		permissions:             "elevated",
 		timeout:                 30 * time.Second,
@@ -80,8 +80,8 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"Model":                              func(r ResolvedConfig) { _ = r.Model() },
 		"Provider":                           func(r ResolvedConfig) { _ = r.Provider() },
 		"Profile":                            func(r ResolvedConfig) { _ = r.Profile() },
-		"MinTier":                            func(r ResolvedConfig) { _ = r.MinTier() },
-		"MaxTier":                            func(r ResolvedConfig) { _ = r.MaxTier() },
+		"MinPowerHint":                       func(r ResolvedConfig) { _ = r.MinPowerHint() },
+		"MaxPowerHint":                       func(r ResolvedConfig) { _ = r.MaxPowerHint() },
 		"Effort":                             func(r ResolvedConfig) { _ = r.Effort() },
 		"Permissions":                        func(r ResolvedConfig) { _ = r.Permissions() },
 		"Timeout":                            func(r ResolvedConfig) { _ = r.Timeout() },
@@ -183,21 +183,21 @@ func TestResolvedConfigProfileAccessor(t *testing.T) {
 	}
 }
 
-func TestResolvedConfigMinTierAccessor(t *testing.T) {
-	if got := sealedFixture().MinTier(); got != "cheap" {
-		t.Fatalf("MinTier = %q", got)
+func TestResolvedConfigMinPowerHintAccessor(t *testing.T) {
+	if got := sealedFixture().MinPowerHint(); got != "cheap" {
+		t.Fatalf("MinPowerHint = %q", got)
 	}
-	if got := (ResolvedConfig{sealed: true}).MinTier(); got != "" {
-		t.Fatalf("zero-after-seal MinTier = %q, want empty", got)
+	if got := (ResolvedConfig{sealed: true}).MinPowerHint(); got != "" {
+		t.Fatalf("zero-after-seal MinPowerHint = %q, want empty", got)
 	}
 }
 
-func TestResolvedConfigMaxTierAccessor(t *testing.T) {
-	if got := sealedFixture().MaxTier(); got != "smart" {
-		t.Fatalf("MaxTier = %q", got)
+func TestResolvedConfigMaxPowerHintAccessor(t *testing.T) {
+	if got := sealedFixture().MaxPowerHint(); got != "smart" {
+		t.Fatalf("MaxPowerHint = %q", got)
 	}
-	if got := (ResolvedConfig{sealed: true}).MaxTier(); got != "" {
-		t.Fatalf("zero-after-seal MaxTier = %q, want empty", got)
+	if got := (ResolvedConfig{sealed: true}).MaxPowerHint(); got != "" {
+		t.Fatalf("zero-after-seal MaxPowerHint = %q, want empty", got)
 	}
 }
 

@@ -359,7 +359,7 @@ test('executions list and detail flow', async ({ page }) => {
 	await expect(page.getByTestId('bead-executions')).toContainText(blockExec.id);
 });
 
-test('execution detail renders cost tier information', async ({ page }) => {
+test('execution detail renders cost powerClass information', async ({ page }) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		if (body.query.includes('NodeInfo')) {
@@ -396,7 +396,7 @@ test('execution detail renders cost tier information', async ({ page }) => {
 	// Heading confirms we landed on detail view.
 	await expect(page.getByRole('heading', { name: blockExec.id })).toBeVisible();
 
-	// Cost-tier signal: the Cost quick-fact cell renders the formatted USD
+	// Cost-powerClass signal: the Cost quick-fact cell renders the formatted USD
 	// amount derived from the execution's costUsd field. blockExec.costUsd is
 	// 0.04, which fmtCost formats as "$0.0400".
 	const costLabel = page.getByText('Cost', { exact: true });

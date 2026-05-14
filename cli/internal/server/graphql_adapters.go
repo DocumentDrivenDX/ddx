@@ -94,7 +94,7 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	// (no rawArgs, no workers.default_spec) must produce a spec with
 	// Profile: "default" and nothing else. This eliminates the historical
 	// 19-burn drain-queue failure mode where an empty spec fanned out into
-	// per-tier ladder iteration with no upstream synthesis target.
+	// per-powerClass ladder iteration with no upstream synthesis target.
 	if spec.Profile == "" {
 		spec.Profile = "default"
 	}

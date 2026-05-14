@@ -14,14 +14,14 @@ func TestNewConfigParsesTopLevelTriageBlock(t *testing.T) {
 version: "1.0"
 triage:
   policies:
-    review_block: [escalate_tier, operator_required]
+    review_block: [escalate_power, operator_required]
     lock_contention: [retry_with_backoff, retry_with_backoff, operator_required]
 `
 	var cfg NewConfig
 	require.NoError(t, yaml.Unmarshal([]byte(raw), &cfg))
 	require.NotNil(t, cfg.Triage)
 	assert.Equal(t,
-		[]string{"escalate_tier", "operator_required"},
+		[]string{"escalate_power", "operator_required"},
 		cfg.Triage.Policies["review_block"])
 }
 
@@ -36,14 +36,14 @@ func TestResolveTriagePolicy_ConfigOverridesDefault(t *testing.T) {
 	cfg := &NewConfig{
 		Triage: &TriagePolicyConfig{
 			Policies: map[string][]string{
-				"review_block": {"escalate_tier", "operator_required"},
+				"review_block": {"escalate_power", "operator_required"},
 			},
 		},
 	}
 	policy := cfg.ResolveTriagePolicy()
-	// review_block first rung is now escalate_tier (overridden).
+	// review_block first rung is now escalate_power (overridden).
 	assert.Equal(t,
-		triage.ActionEscalateTier,
+		triage.ActionEscalatePower,
 		policy.Decide("ddx-test", triage.FailureModeReviewBlock, nil))
 	// Other modes still inherit defaults.
 	assert.Equal(t,
@@ -56,7 +56,7 @@ func TestResolveTriagePolicy_DropsUnknownNames(t *testing.T) {
 		Triage: &TriagePolicyConfig{
 			Policies: map[string][]string{
 				"review_block":    {"not_a_real_action", "operator_required"},
-				"not_a_real_mode": {"escalate_tier"},
+				"not_a_real_mode": {"escalate_power"},
 			},
 		},
 	}
@@ -73,7 +73,7 @@ func TestSchemaAcceptsTopLevelTriageBlock(t *testing.T) {
 	yamlDoc := []byte(`version: "1.0"
 triage:
   policies:
-    review_block: [re_attempt_with_context, escalate_tier, operator_required]
+    review_block: [re_attempt_with_context, escalate_power, operator_required]
 `)
 	require.NoError(t, v.Validate(yamlDoc))
 }

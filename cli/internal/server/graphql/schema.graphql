@@ -643,8 +643,8 @@ type WorkerExecutionResult {
   workerId: String
   """Harness used"""
   harness: String
-  """Tier used"""
-  tier: String
+  """Power class used"""
+  powerClass: String
   """Provider used"""
   provider: String
   """Model used"""
@@ -1046,6 +1046,12 @@ type Execution implements Node {
   baseRev: String
   """Git revision the attempt produced (commit SHA when one was made)."""
   resultRev: String
+  """ImplementationRev is the worker's own commit SHA before landing."""
+  implementationRev: String
+  """LandedRev is the target branch tip after coordinator landing."""
+  landedRev: String
+  """EvidenceRev is the trailing evidence commit SHA when distinct from ImplementationRev."""
+  evidenceRev: String
   """Bundle directory (relative to project root)."""
   bundlePath: String!
   """Path to the prompt file in the bundle."""
@@ -3029,7 +3035,7 @@ type Query {
   agentMetrics(
     """Time window to aggregate over. Default 7d (Story 11 locked: all-time removed)."""
     window: AgentMetricsWindow! = W7D,
-    """Grouping axis: MODEL, HARNESS, PROVIDER, or TIER (harness/model)."""
+    """Grouping axis: MODEL, HARNESS, PROVIDER, or ROUTE (harness/model)."""
     groupBy: AgentMetricsAxis!
   ): AgentMetricsResult!
 }
@@ -3056,13 +3062,13 @@ enum AgentMetricsAxis {
   HARNESS
   """Group by provider name"""
   PROVIDER
-  """Group by harness/model tier (TierKey)"""
-  TIER
+  """Group by harness/model route key"""
+  ROUTE
 }
 
 """AgentMetricsRow is one aggregated bucket: counts, success rate, duration percentiles, and cost/token means for the attempts in `key`."""
 type AgentMetricsRow {
-  """Group key (model, harness, provider, or tier label)"""
+  """Group key (model, harness, provider, or route key)"""
   key: String!
   """Total attempts in this bucket"""
   attempts: Int!
@@ -3424,12 +3430,12 @@ input ComparisonArmInput {
   prompt: String!
 }
 
-"""Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; tier is clamped to the bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window."""
+"""Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; priority is clamped to the valid bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window."""
 input OperatorPromptSubmitInput {
   """The full operator prompt body. The first non-empty line becomes the bead title; the entire body is stored as the bead description."""
   prompt: String!
-  """Optional priority tier for the resulting bead (clamped to the valid bead priority range). Defaults to 2 when omitted."""
-  tier: Int
+  """Optional priority for the resulting bead (clamped to the valid bead priority range). Defaults to 2 when omitted."""
+  priority: Int
   """Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true)."""
   idempotencyKey: String!
   """When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the execute-loop without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false."""

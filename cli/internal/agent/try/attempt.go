@@ -50,15 +50,15 @@ type Report struct {
 	ReviewVerdict               string
 	ReviewRationale             string
 	CycleTrace                  []ExecutionCycleTrace
-	Tier                        string
+	PowerClass                  string
 	ProbeResult                 string
 	CostUSD                     float64
 	DurationMS                  int64
 	RequestedProfile            string
-	RequestedTier               string
-	ResolvedTier                string
+	InferredPowerClass          string
+	ResolvedPowerClass          string
 	EscalationCount             int
-	FinalTier                   string
+	FinalPowerClass             string
 	DecompositionRecommendation []string
 	DecompositionRationale      string
 	Disrupted                   bool

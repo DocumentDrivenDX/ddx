@@ -27,7 +27,7 @@ The governing policy is:
    get the work done.
 3. Reserve the most powerful profiles for the most difficult work: bead
    breakdown, debugging, high-risk reviews, architecture-sensitive work, or
-   retries with concrete lower-tier failure evidence.
+   retries with concrete lower-power failure evidence.
 
 ## Current State
 
@@ -38,17 +38,17 @@ The governing policy is:
 - `ddx try` accepts CLI execution constraints: abstract power bounds plus raw
   passthrough strings for profile, harness, provider, model, and model-ref.
 - When no routing flags are supplied and no project routing config exists,
-  `ddx try` calls `escalation.InferTier(bead)`.
-- `InferTier` treats labels `tier:smart`, `tier:standard`, and `tier:cheap` as
-  explicit tier overrides before falling back to priority, kind, and scope
+  `ddx try` calls `escalation.InferPowerClass(bead)`.
+- `InferPowerClass` treats labels `power:smart`, `power:standard`, and `power:cheap` as
+  explicit power overrides before falling back to priority, kind, and scope
   heuristics.
 - DDx has Fizeau profile snapshot helpers that can read `ListPolicies` and
   `ListModels`, but implementation dispatch must use those helpers to select a
-  profile/policy for inferred tier intent instead of falling through to
+  profile/policy for inferred power intent instead of falling through to
   Fizeau's default policy.
 
 That gives DDx a usable short-term path, but it is underspecified. It does not
-define when `tier:smart` is justified, how the choice is audited, or how to
+define when `power:smart` is justified, how the choice is audited, or how to
 reject durable model/harness cargo culting.
 
 ## Design
@@ -59,13 +59,13 @@ DDx recognizes exactly one durable bead-level hint surface in v1:
 
 | Surface | Values | Meaning |
 |---|---|---|
-| `tier:cheap` label | cheap | Mechanical work where low-cost models should be enough. |
-| `tier:standard` label | standard | Ordinary implementation or review work. |
-| `tier:smart` label | smart | High-judgment, broad, ambiguous, or architecture-sensitive work. |
+| `power:cheap` label | cheap | Mechanical work where low-cost models should be enough. |
+| `power:standard` label | standard | Ordinary implementation or review work. |
+| `power:smart` label | smart | High-judgment, broad, ambiguous, or architecture-sensitive work. |
 
 The label is a request for abstract execution power. It is not a model name,
-provider name, harness name, or Fizeau profile name. Fizeau may expose tier-like
-profile names as shortcuts, but those names are configurable and DDx must not
+provider name, harness name, or Fizeau profile name. Fizeau may expose
+shortcut profile names, but those names are configurable and DDx must not
 treat them as canonical. At the DDx request-construction boundary, DDx maps the
 hint to a Fizeau profile/policy by inspecting Fizeau-owned profile metadata.
 Fizeau still owns the concrete route inside that profile.
@@ -117,7 +117,7 @@ For ordinary implementation work, DDx should select the medium/default band by
 metadata, not by a hard-coded Fizeau profile name. It should not drift to the
 highest-power profile merely because a stronger subscription model is
 available. The strongest band is appropriate when the bead carries an explicit
-strong-tier hint, the work is breakdown/debug/high-risk by policy, or prior
+strong-power hint, the work is breakdown/debug/high-risk by policy, or prior
 attempt evidence shows a weaker profile could not meet acceptance criteria.
 
 If Fizeau profile metadata is unavailable, DDx may fall back to a `MinPower`
@@ -126,16 +126,16 @@ implementation work uses a medium-band lower-bound floor, not the top available
 model. If that floor is unsatisfied but a weaker free/available provider exists,
 DDx should try it and record a degraded route rather than failing before
 attempting the bead. Escalation raises profile/power only after DDx-owned
-evidence shows the lower tier did not complete the work.
+evidence shows the lower-power attempt did not complete the work.
 
 DDx should not add bead-level `harness`, `provider`, `model`, or `model-ref`
 fields. Those remain operator-supplied CLI passthrough constraints for one
 attempt, or project/Fizeau configuration when a workspace intentionally pins
 routing policy.
 
-### Smart-Tier Justification
+### Smart-Power Justification
 
-`tier:smart` requires a justification in the bead description. The justification
+`power:smart` requires a justification in the bead description. The justification
 must name the reason the bead is likely capability-sensitive, using one or more
 of these categories:
 
@@ -218,11 +218,11 @@ Minimum fields:
 | `bead_id` | Target bead. |
 | `attempt_id` | Attempt/run id. |
 | `routing_intent_source` | `cli`, `project_config`, `bead_hint`, `heuristic`, or `default`. |
-| `requested_tier` | `cheap`, `standard`, `smart`, or empty when not tier-based. |
+| `requested_power_class` | `cheap`, `standard`, `smart`, or empty when not power-based. |
 | `requested_profile` | Fizeau profile/policy name DDx requested, when selected. |
 | `requested_min_power` | Resolved `MinPower`, when available. |
 | `requested_max_power` | Resolved `MaxPower`, when available. |
-| `smart_justification` | Extracted justification text when `requested_tier=smart`. |
+| `smart_justification` | Extracted justification text when `requested_power_class=smart`. |
 | `actual_harness` | Harness reported by Fizeau/agent after execution. |
 | `actual_provider` | Provider reported after execution. |
 | `actual_model` | Model reported after execution. |
@@ -240,7 +240,7 @@ power.
 The agent metrics rollup should ingest the routing-intent fields once they are
 present in run evidence. At minimum, operators need to answer:
 
-- How many attempts used `tier:smart`?
+- How many attempts used `power:smart`?
 - Which beads requested smart, and what was the justification?
 - What was the success rate and cost of smart-hinted work compared with
   heuristic or default work?
@@ -256,7 +256,7 @@ Suggested dimensions:
 | Dimension | Example |
 |---|---|
 | `routing_intent_source` | `bead_hint` |
-| `requested_tier` | `smart` |
+| `requested_power_class` | `smart` |
 | `actual_power_bucket` | `>=80` |
 | `degraded` | `true` |
 | `bead_author` | `erik` or agent id when available |
@@ -264,9 +264,9 @@ Suggested dimensions:
 
 Suggested counters:
 
-- attempts by requested tier and source;
-- success rate by requested tier;
-- cost and token usage by requested tier;
+- attempts by requested power class and source;
+- success rate by requested power class;
+- cost and token usage by requested power class;
 - smart-hint count by bead author/agent;
 - rejected durable route-pin count;
 - override/degradation count.
@@ -277,14 +277,14 @@ Suggested counters:
 bead hint affects execution:
 
 ```text
-routing intent: tier=smart source=bead_hint
+routing intent: powerClass=smart source=bead_hint
 ```
 
-If `tier:smart` is present without justification, the lint failure should be
+If `power:smart` is present without justification, the lint failure should be
 plain:
 
 ```text
-bead uses tier:smart but has no SMART JUSTIFICATION section
+bead uses power:smart but has no SMART JUSTIFICATION section
 ```
 
 If a durable concrete pin is found:
@@ -300,13 +300,13 @@ allowed. Use ddx try <id> --model ... for one-off debugging.
 
 Scope:
 
-- Parse `tier:*` labels into a typed execution hint.
+- Parse `power:*` labels into a typed execution hint.
 - Extract `SMART JUSTIFICATION:` from bead descriptions.
 - Detect forbidden durable route-pin fields and labels.
 
 Acceptance:
 
-1. Tests cover valid `tier:cheap`, `tier:standard`, and `tier:smart`.
+1. Tests cover valid `power:cheap`, `power:standard`, and `power:smart`.
 2. Tests cover missing smart justification.
 3. Tests cover forbidden concrete route-pin fields and labels.
 4. Existing heuristic inference behavior remains unchanged when no hint exists.
@@ -323,7 +323,7 @@ Acceptance:
 
 1. A smart bead without justification fails lint.
 2. A bead with `harness:claude` or `execution-model=...` fails lint.
-3. A bead with valid `tier:smart` and justification passes lint.
+3. A bead with valid `power:smart` and justification passes lint.
 
 ### Bead 3: record routing-intent evidence
 
@@ -335,7 +335,7 @@ Scope:
 
 Acceptance:
 
-1. Attempts with `tier:smart` record source `bead_hint`.
+1. Attempts with `power:smart` record source `bead_hint`.
 2. CLI routing flags record source `cli`.
 3. Heuristic inference records source `heuristic`.
 4. Actual route facts are linked to requested intent when the attempt finishes.
@@ -345,7 +345,7 @@ Acceptance:
 Scope:
 
 - Extend the TD-032 normalized attempt projection with routing-intent fields.
-- Add rollup dimensions/counters for requested tier, source, degradation, and
+- Add rollup dimensions/counters for requested power class, source, degradation, and
   rejected pins.
 
 Acceptance:
@@ -363,7 +363,7 @@ Scope:
 
 Acceptance:
 
-1. Bead authoring template explains when to use `tier:smart`.
+1. Bead authoring template explains when to use `power:smart`.
 2. DDx skill guidance says not to persist harness/provider/model choices.
 3. Skill validation passes.
 
@@ -373,16 +373,16 @@ Acceptance:
 - No DDx-side concrete route ranking or fallback.
 - No change to Fizeau's routing algorithm.
 - No materialized metrics store in the first implementation.
-- No automatic promotion to `tier:smart` solely because a previous attempt used
+- No automatic promotion to `power:smart` solely because a previous attempt used
   a particular harness or model.
 - No default use of the strongest profile for ordinary implementation work.
 
 ## Open Questions
 
-- Should `tier:smart` without justification be a hard blocker immediately, or
+- Should `power:smart` without justification be a hard blocker immediately, or
   start as a warning for one release?
-- Should `tier:*` remain labels long term, or should DDx eventually expose a
-  first-class `execution-tier` field while continuing to read labels for
+- Should `power:*` remain labels long term, or should DDx eventually expose a
+  first-class `execution-power` field while continuing to read labels for
   compatibility?
 - Which additional Fizeau profile facts should participate in tie-breaking
   after power, speed, cost, and availability are stable across providers?

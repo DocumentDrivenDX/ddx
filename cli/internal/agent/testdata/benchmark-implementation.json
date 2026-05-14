@@ -3,12 +3,12 @@
   "description": "Tests model ability to read code, understand architecture, and produce correct multi-file implementations. Designed to find the boundary between local and cloud model capabilities.",
   "version": "1.0.0",
   "arms": [
-    {"label": "agent-smart", "harness": "agent", "tier": "smart"},
-    {"label": "agent-fast",  "harness": "agent", "tier": "fast"},
-    {"label": "codex-smart", "harness": "codex", "tier": "smart"},
-    {"label": "codex-fast",  "harness": "codex", "tier": "fast"},
-    {"label": "claude-smart","harness": "claude", "tier": "smart"},
-    {"label": "claude-fast", "harness": "claude", "tier": "fast"}
+    {"label": "agent-smart", "harness": "agent", "power_class": "smart"},
+    {"label": "agent-fast",  "harness": "agent", "power_class": "fast"},
+    {"label": "codex-smart", "harness": "codex", "power_class": "smart"},
+    {"label": "codex-fast",  "harness": "codex", "power_class": "fast"},
+    {"label": "claude-smart","harness": "claude", "power_class": "smart"},
+    {"label": "claude-fast", "harness": "claude", "power_class": "fast"}
   ],
   "prompts": [
     {

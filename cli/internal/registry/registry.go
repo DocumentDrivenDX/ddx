@@ -101,16 +101,6 @@ func BuiltinRegistry() *Registry {
 						{Source: ".agents/skills/", Target: ".agents/skills/"},
 						{Source: ".agents/skills/", Target: ".claude/skills/"},
 					},
-					// CLI script → ~/.local/bin/helix
-					// Uses scripts/helix directly (bin/helix has a symlink
-					// resolution bug when invoked through a symlink).
-					Scripts: &InstallMapping{
-						Source: "scripts/helix",
-						Target: "~/.local/bin/helix",
-					},
-					Executable: []string{
-						"scripts/helix",
-					},
 				},
 				Keywords: []string{"workflow", "methodology", "ai", "development"},
 			},

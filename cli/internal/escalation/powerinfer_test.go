@@ -7,22 +7,22 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
-func TestExecutionHintParse_ValidTierLabels(t *testing.T) {
+func TestExecutionHintParse_ValidPowerLabels(t *testing.T) {
 	cases := []struct {
 		label string
-		want  ModelTier
+		want  PowerClass
 	}{
-		{"tier:cheap", TierCheap},
-		{"tier:standard", TierStandard},
-		{"tier:smart", TierSmart},
+		{"power:cheap", PowerCheap},
+		{"power:standard", PowerStandard},
+		{"power:smart", PowerSmart},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.label, func(t *testing.T) {
 			b := &bead.Bead{Labels: []string{tc.label}}
 			hint := ParseExecutionHint(b)
-			if hint.RequestedTier != tc.want {
-				t.Fatalf("requested tier: want %q, got %q", tc.want, hint.RequestedTier)
+			if hint.InferredPowerClass != tc.want {
+				t.Fatalf("requested power: want %q, got %q", tc.want, hint.InferredPowerClass)
 			}
 			if hint.Source != ExecutionIntentSourceBeadHint {
 				t.Fatalf("source: want bead_hint, got %q", hint.Source)
@@ -33,10 +33,10 @@ func TestExecutionHintParse_ValidTierLabels(t *testing.T) {
 
 func TestExecutionHintParse_SmartRequiresJustification(t *testing.T) {
 	t.Run("missing", func(t *testing.T) {
-		b := &bead.Bead{Labels: []string{"tier:smart"}}
+		b := &bead.Bead{Labels: []string{"power:smart"}}
 		hint := ParseExecutionHint(b)
-		if hint.RequestedTier != TierSmart {
-			t.Fatalf("requested tier: want smart, got %q", hint.RequestedTier)
+		if hint.InferredPowerClass != PowerSmart {
+			t.Fatalf("requested power: want smart, got %q", hint.InferredPowerClass)
 		}
 		if hint.SmartJustification != "" {
 			t.Fatalf("smart justification must be empty when absent, got %q", hint.SmartJustification)
@@ -45,14 +45,14 @@ func TestExecutionHintParse_SmartRequiresJustification(t *testing.T) {
 		if len(findings) != 1 {
 			t.Fatalf("expected 1 finding, got %d", len(findings))
 		}
-		if findings[0].Message != "bead uses tier:smart but has no SMART JUSTIFICATION section" {
+		if findings[0].Message != "bead uses power:smart but has no SMART JUSTIFICATION section" {
 			t.Fatalf("unexpected finding: %+v", findings[0])
 		}
 	})
 
 	t.Run("present", func(t *testing.T) {
 		b := &bead.Bead{
-			Labels:      []string{"tier:smart"},
+			Labels:      []string{"power:smart"},
 			Description: "PROBLEM\nhard decision\n\nSMART JUSTIFICATION:\nThis bead decides the durable execution-hint contract.\n",
 		}
 		hint := ParseExecutionHint(b)
@@ -104,131 +104,131 @@ func TestExecutionHintLint_RejectsDurableRoutePins(t *testing.T) {
 	}
 }
 
-func TestInferTier_NilBead(t *testing.T) {
-	if got := InferTier(nil); got != TierCheap {
-		t.Fatalf("nil bead: want %q, got %q", TierCheap, got)
+func TestInferPowerClass_NilBead(t *testing.T) {
+	if got := InferPowerClass(nil); got != PowerCheap {
+		t.Fatalf("nil bead: want %q, got %q", PowerCheap, got)
 	}
 }
 
-func TestInferTier_ExplicitTierLabel(t *testing.T) {
+func TestInferPowerClass_ExplicitPowerLabel(t *testing.T) {
 	cases := []struct {
 		label string
-		want  ModelTier
+		want  PowerClass
 	}{
-		{"tier:smart", TierSmart},
-		{"tier:standard", TierStandard},
-		{"tier:cheap", TierCheap},
-		{"TIER:SMART", TierSmart},
+		{"power:smart", PowerSmart},
+		{"power:standard", PowerStandard},
+		{"power:cheap", PowerCheap},
+		{"POWER:SMART", PowerSmart},
 	}
 	for _, c := range cases {
 		b := &bead.Bead{Labels: []string{c.label}}
-		if got := InferTier(b); got != c.want {
+		if got := InferPowerClass(b); got != c.want {
 			t.Errorf("label %q: want %q, got %q", c.label, c.want, got)
 		}
 	}
 }
 
-func TestInferTier_ExplicitTierLabelOverridesPriority(t *testing.T) {
-	// An explicit tier wins over priority:critical, which would otherwise
+func TestInferPowerClass_ExplicitPowerLabelOverridesPriority(t *testing.T) {
+	// An explicit powerClass wins over priority:critical, which would otherwise
 	// route to smart.
-	b := &bead.Bead{Labels: []string{"priority:critical", "tier:cheap"}}
-	if got := InferTier(b); got != TierCheap {
-		t.Fatalf("explicit tier should win: got %q", got)
+	b := &bead.Bead{Labels: []string{"priority:critical", "power:cheap"}}
+	if got := InferPowerClass(b); got != PowerCheap {
+		t.Fatalf("explicit powerClass should win: got %q", got)
 	}
 }
 
-func TestInferTier_UsesTriageTierHint(t *testing.T) {
+func TestInferPowerClass_UsesTriagePowerHint(t *testing.T) {
 	b := &bead.Bead{
 		Labels: []string{"priority:low", "kind:chore"},
 		Extra: map[string]any{
-			triageTierHintKey: string(TierSmart),
+			triagePowerHintKey: string(PowerSmart),
 		},
 	}
-	if got := InferTier(b); got != TierSmart {
-		t.Fatalf("triage tier hint: want %q, got %q", TierSmart, got)
+	if got := InferPowerClass(b); got != PowerSmart {
+		t.Fatalf("triage powerClass hint: want %q, got %q", PowerSmart, got)
 	}
 }
 
-func TestInferTier_PriorityCritical(t *testing.T) {
+func TestInferPowerClass_PriorityCritical(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"priority:critical", "kind:chore"}}
-	if got := InferTier(b); got != TierSmart {
+	if got := InferPowerClass(b); got != PowerSmart {
 		t.Fatalf("critical priority: want smart, got %q", got)
 	}
 }
 
-func TestInferTier_PriorityHighBug(t *testing.T) {
+func TestInferPowerClass_PriorityHighBug(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"priority:high", "kind:bug"}}
-	if got := InferTier(b); got != TierSmart {
+	if got := InferPowerClass(b); got != PowerSmart {
 		t.Fatalf("high-priority bug: want smart, got %q", got)
 	}
 }
 
-func TestInferTier_PriorityHighEnhancement(t *testing.T) {
+func TestInferPowerClass_PriorityHighEnhancement(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"priority:high", "kind:enhancement"}}
-	if got := InferTier(b); got != TierStandard {
+	if got := InferPowerClass(b); got != PowerStandard {
 		t.Fatalf("high-priority enhancement: want standard, got %q", got)
 	}
 }
 
-func TestInferTier_PriorityLow(t *testing.T) {
+func TestInferPowerClass_PriorityLow(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"priority:low", "kind:bug"}}
-	if got := InferTier(b); got != TierCheap {
+	if got := InferPowerClass(b); got != PowerCheap {
 		t.Fatalf("low priority: want cheap, got %q", got)
 	}
 }
 
-func TestInferTier_KindBug(t *testing.T) {
+func TestInferPowerClass_KindBug(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"kind:bug"}}
-	if got := InferTier(b); got != TierStandard {
+	if got := InferPowerClass(b); got != PowerStandard {
 		t.Fatalf("bug kind: want standard, got %q", got)
 	}
 }
 
-func TestInferTier_KindChore(t *testing.T) {
+func TestInferPowerClass_KindChore(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"kind:chore"}}
-	if got := InferTier(b); got != TierCheap {
+	if got := InferPowerClass(b); got != PowerCheap {
 		t.Fatalf("chore kind: want cheap, got %q", got)
 	}
 }
 
-func TestInferTier_KindEnhancement(t *testing.T) {
+func TestInferPowerClass_KindEnhancement(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"kind:enhancement"}}
-	if got := InferTier(b); got != TierStandard {
+	if got := InferPowerClass(b); got != PowerStandard {
 		t.Fatalf("enhancement kind: want standard, got %q", got)
 	}
 }
 
-func TestInferTier_IssueTypeFallback(t *testing.T) {
+func TestInferPowerClass_IssueTypeFallback(t *testing.T) {
 	b := &bead.Bead{IssueType: "bug"}
-	if got := InferTier(b); got != TierStandard {
+	if got := InferPowerClass(b); got != PowerStandard {
 		t.Fatalf("issue_type bug: want standard, got %q", got)
 	}
 }
 
-func TestInferTier_ScopeShort(t *testing.T) {
+func TestInferPowerClass_ScopeShort(t *testing.T) {
 	b := &bead.Bead{Description: "fix typo"}
-	if got := InferTier(b); got != TierCheap {
+	if got := InferPowerClass(b); got != PowerCheap {
 		t.Fatalf("short scope: want cheap, got %q", got)
 	}
 }
 
-func TestInferTier_ScopeMedium(t *testing.T) {
+func TestInferPowerClass_ScopeMedium(t *testing.T) {
 	b := &bead.Bead{Description: strings.Repeat("x", 2000)}
-	if got := InferTier(b); got != TierStandard {
+	if got := InferPowerClass(b); got != PowerStandard {
 		t.Fatalf("medium scope: want standard, got %q", got)
 	}
 }
 
-func TestInferTier_ScopeLarge(t *testing.T) {
+func TestInferPowerClass_ScopeLarge(t *testing.T) {
 	b := &bead.Bead{Description: strings.Repeat("x", 5000)}
-	if got := InferTier(b); got != TierSmart {
+	if got := InferPowerClass(b); got != PowerSmart {
 		t.Fatalf("large scope: want smart, got %q", got)
 	}
 }
 
-func TestInferTier_NoMetadataDefaultsCheap(t *testing.T) {
+func TestInferPowerClass_NoMetadataDefaultsCheap(t *testing.T) {
 	b := &bead.Bead{Title: "do thing"}
-	if got := InferTier(b); got != TierCheap {
+	if got := InferPowerClass(b); got != PowerCheap {
 		t.Fatalf("no metadata: want cheap, got %q", got)
 	}
 }

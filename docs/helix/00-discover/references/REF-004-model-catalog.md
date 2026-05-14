@@ -5,13 +5,13 @@ kind: reference
 source_url: https://openrouter.ai/api/v1/models
 source_author: DDx maintainers (pricing via OpenRouter)
 accessed: 2026-04-12
-summary: "Routing tier assignment, SWE-bench/LiveCodeBench scores, and pricing for models used by agent routing (smart/standard/fast tiers)."
+summary: "Routing power assignment, SWE-bench/LiveCodeBench scores, and pricing for models used by agent routing (smart/standard/fast power classes)."
 tags: [models, routing, benchmarks, pricing]
 ---
 
 # Model Catalog
 
-Reference table for routing tier assignment, benchmark scores, and pricing.
+Reference table for routing power assignment, benchmark scores, and pricing.
 Used to drive model selection in agent routing (defined by Fizeau CONTRACT-003-fizeau-service).
 
 **Primary benchmarks:**
@@ -25,9 +25,9 @@ HumanEval is omitted — saturated at 90%+ across all frontier models, not usefu
 
 ---
 
-## Tiers
+## Power Classes
 
-| Tier | When to use |
+| Power class | When to use |
 |------|-------------|
 | **smart** | User interactive sessions, HELIX document alignment, complex multi-file reasoning, when explicitly requested |
 | **standard** | Default for most coding tasks — refactoring, feature work, test writing, code review |
@@ -35,7 +35,7 @@ HumanEval is omitted — saturated at 90%+ across all frontier models, not usefu
 
 ---
 
-## Smart Tier
+## Smart Power
 
 | Model | Provider | SWE-bench | LiveCodeBench | $/M in | $/M out | Notes | As-of |
 |-------|----------|-----------|---------------|--------|---------|-------|-------|
@@ -45,7 +45,7 @@ HumanEval is omitted — saturated at 90%+ across all frontier models, not usefu
 
 ---
 
-## Standard Tier
+## Standard Power
 
 | Model | Provider | SWE-bench | LiveCodeBench | $/M in | $/M out | Notes | As-of |
 |-------|----------|-----------|---------------|--------|---------|-------|-------|
@@ -57,7 +57,7 @@ HumanEval is omitted — saturated at 90%+ across all frontier models, not usefu
 
 ---
 
-## Fast Tier
+## Fast Power
 
 | Model | Provider | SWE-bench | LiveCodeBench | $/M in | $/M out | Notes | As-of |
 |-------|----------|-----------|---------------|--------|---------|-------|-------|

@@ -12,7 +12,7 @@ func TestDefaultPolicy_BlockLadderProgression(t *testing.T) {
 		want    Action
 	}{
 		{"first BLOCK", nil, ActionReAttemptWithContext},
-		{"second BLOCK", []FailureMode{FailureModeReviewBlock}, ActionEscalateTier},
+		{"second BLOCK", []FailureMode{FailureModeReviewBlock}, ActionEscalatePower},
 		{"third BLOCK", []FailureMode{FailureModeReviewBlock, FailureModeReviewBlock}, ActionOperatorRequired},
 		{"fourth BLOCK clamps to last rung",
 			[]FailureMode{FailureModeReviewBlock, FailureModeReviewBlock, FailureModeReviewBlock},
@@ -70,11 +70,11 @@ func TestPolicy_UnknownModeFallsBackToOperatorRequired(t *testing.T) {
 func TestPolicy_ConfigOverride(t *testing.T) {
 	// Caller-supplied policy overrides the default ladder for review_block.
 	custom := TriagePolicy{Ladders: map[FailureMode][]Action{
-		FailureModeReviewBlock: {ActionEscalateTier, ActionOperatorRequired},
+		FailureModeReviewBlock: {ActionEscalatePower, ActionOperatorRequired},
 	}}
 	got := custom.Decide("ddx-test", FailureModeReviewBlock, nil)
-	if got != ActionEscalateTier {
-		t.Fatalf("override first rung: got %q want %q", got, ActionEscalateTier)
+	if got != ActionEscalatePower {
+		t.Fatalf("override first rung: got %q want %q", got, ActionEscalatePower)
 	}
 	got = custom.Decide("ddx-test", FailureModeReviewBlock, []FailureMode{FailureModeReviewBlock})
 	if got != ActionOperatorRequired {

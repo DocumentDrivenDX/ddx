@@ -131,7 +131,7 @@ operator-prompt submissions.
 - **Title** is the first line of the prompt.
 - **Body** is the full prompt verbatim.
 - **Default labels** include `kind:operator-prompt`, `source:web-ui`.
-- **Default tier** is the project's policy tier.
+- **Default power policy** is the project's configured policy.
 - **Acceptance section** is auto-generated from a template (e.g.
   "agent must produce a diff or evidence rationale; no AC = AC is the
   prompt verbatim"). The structural AC check is skipped for this
@@ -205,8 +205,8 @@ trusted *peer*. The threats and mitigations:
 
 An operator-prompt bead's execution may do **anything a normal bead's
 execution can do** — the full agent toolkit (bead CRUD, document write,
-worker dispatch within tier policy, etc.). There is no privilege
-escalation: the agent runs with the same harness, profile, tier, and tool
+worker dispatch within power policy, etc.). There is no privilege
+escalation: the agent runs with the same harness, profile, power, and tool
 permissions that it would for any bead the project owns.
 
 One hard exclusion:
@@ -271,7 +271,7 @@ the bead. Mitigations:
   that a hard requirement, not a nice-to-have.
 - **Weaker AC than authored beads.** Operator-prompt beads skip the
   structural AC check because the AC template is auto-generated. Review
-  tier is expected to catch garbage. This is documented as a known
+  reviewer is expected to catch garbage. This is documented as a known
   tradeoff, not hidden.
 - **Ts-net peers are read-only by default.** They must be added to a
   per-project allowlist before any prompt they submit will be persisted.

@@ -189,7 +189,7 @@ Concretely:
 
 1. A worker process (`ddx work`) reads the bead store directly, picks
    the next eligible bead per the current picker logic (priority asc,
-   optional queue-rank within tier, then FIFO), claims it atomically,
+   optional queue-rank within power band, then FIFO), claims it atomically,
    executes via `try.Attempt`,
    writes evidence locally, and reports the result by writing the bead's
    event log + closing the bead via the store.

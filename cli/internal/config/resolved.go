@@ -17,8 +17,8 @@ type CLIOverrides struct {
 	Profile       string
 	Effort        string
 	Permissions   string
-	MinTier       string
-	MaxTier       string
+	MinPowerHint  string
+	MaxPowerHint  string
 	Timeout       *time.Duration
 	NoReview      *bool
 	Assignee      string
@@ -79,8 +79,8 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.provider = overrides.Provider
 	r.explicitProvider = overrides.Provider != ""
 	r.profile = overrides.Profile
-	r.minTier = overrides.MinTier
-	r.maxTier = overrides.MaxTier
+	r.minPowerHint = overrides.MinPowerHint
+	r.maxPowerHint = overrides.MaxPowerHint
 	r.effort = overrides.Effort
 	r.minPower = overrides.MinPower
 	r.maxPower = overrides.MaxPower
@@ -179,8 +179,8 @@ type ResolvedConfig struct {
 	explicitModel                      bool
 	explicitProvider                   bool
 	profile                            string
-	minTier                            string
-	maxTier                            string
+	minPowerHint                       string
+	maxPowerHint                       string
 	effort                             string
 	minPower                           int
 	maxPower                           int
@@ -272,14 +272,14 @@ func (r ResolvedConfig) Profile() string {
 	return r.profile
 }
 
-func (r ResolvedConfig) MinTier() string {
+func (r ResolvedConfig) MinPowerHint() string {
 	r.requireSealed()
-	return r.minTier
+	return r.minPowerHint
 }
 
-func (r ResolvedConfig) MaxTier() string {
+func (r ResolvedConfig) MaxPowerHint() string {
 	r.requireSealed()
-	return r.maxTier
+	return r.maxPowerHint
 }
 
 func (r ResolvedConfig) MinPower() int {

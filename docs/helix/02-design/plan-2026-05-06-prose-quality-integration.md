@@ -324,7 +324,7 @@ small verification surface.
 Some child beads require higher-judgment execution: corpus labeling, rule
 semantics, skill behavior, and workflow-hook policy. Those beads should use the
 bead-level execution-hint policy in TD-037 rather than ad hoc model or harness
-choices. In particular, `tier:smart` requires an inline `SMART JUSTIFICATION`
+choices. In particular, `power:smart` requires an inline `SMART JUSTIFICATION`
 in the bead description, and durable harness/provider/model pins are out of
 scope for this plan.
 
@@ -346,19 +346,19 @@ Acceptance:
 
 | Order | Bead | Scope | Suggested hint | Depends on |
 |---:|---|---|---|---|
-| 0 | `try: define and enforce bead-level execution hints` | Implement TD-037 parsing, lint, evidence, and metrics slices needed before smart hints are relied on. | `tier:smart` with TD-037 justification | none |
+| 0 | `try: define and enforce bead-level execution hints` | Implement TD-037 parsing, lint, evidence, and metrics slices needed before smart hints are relied on. | `power:smart` with TD-037 justification | none |
 | 1 | `doctor: validate pinned Vale prose checker` | `cli/cmd/doctor.go`, doctor tests, constants for Vale version. | none | 0 |
 | 2 | `docprose: add DDx Vale style pack skeleton` | `library/checks/prose-quality/styles/DDx/`, metadata schema, no command wiring. | none | 1 |
-| 3 | `docprose: add corpus harness for normalized findings` | `cli/internal/docprose/testdata/corpus/`, corpus loader/tests, expected JSON schema. | `tier:smart` for corpus design judgment | 2 |
-| 4 | `docprose: port initial rules to Vale styles` | Vale style files and corpus golden cases for unsupported claim, AI slop, filler, token cost. | `tier:smart` for rule precision judgment | 3 |
+| 3 | `docprose: add corpus harness for normalized findings` | `cli/internal/docprose/testdata/corpus/`, corpus loader/tests, expected JSON schema. | `power:smart` for corpus design judgment | 2 |
+| 4 | `docprose: port initial rules to Vale styles` | Vale style files and corpus golden cases for unsupported claim, AI slop, filler, token cost. | `power:smart` for rule precision judgment | 3 |
 | 5 | `docprose: generate temporary Vale config` | config generation from DDx defaults/project config; no Vale execution yet. | none | 2 |
 | 6 | `docprose: invoke Vale and parse JSON` | Vale subprocess adapter, JSON structs, error diagnostics. | none | 5 |
-| 7 | `docprose: normalize Vale findings to DDx findings` | rule-id mapping, rationale/suggested-edit mapping, line merge behavior. | `tier:smart` for finding-quality semantics | 4, 6 |
+| 7 | `docprose: normalize Vale findings to DDx findings` | rule-id mapping, rationale/suggested-edit mapping, line merge behavior. | `power:smart` for finding-quality semantics | 4, 6 |
 | 8 | `doc prose: switch command to Vale-backed engine` | `ddx doc prose --changed` and explicit path behavior. | none | 7 |
-| 9 | `bead review: reuse Vale-backed prose findings` | `ddx bead review --prose` path, review evidence. | `tier:smart` for review-policy interaction | 8 |
-| 10 | `skills: upgrade human-writing-support workflow examples` | active and shipped skill copies, eval prompts if available. | `tier:smart` for skill behavior quality | 8 |
-| 11 | `try: attach prose-check evidence for docs-changing attempts` | execute/try/work evidence capture and advisory handling. | `tier:smart` for workflow-hook policy | 8, 10 |
-| 12 | `docs: run Vale-backed prose pass across DDx docs` | Apply high-signal findings to `docs/**`; record before/after finding count and word-count delta. | `tier:smart` for corpus-scale editorial judgment | 11 |
+| 9 | `bead review: reuse Vale-backed prose findings` | `ddx bead review --prose` path, review evidence. | `power:smart` for review-policy interaction | 8 |
+| 10 | `skills: upgrade human-writing-support workflow examples` | active and shipped skill copies, eval prompts if available. | `power:smart` for skill behavior quality | 8 |
+| 11 | `try: attach prose-check evidence for docs-changing attempts` | execute/try/work evidence capture and advisory handling. | `power:smart` for workflow-hook policy | 8, 10 |
+| 12 | `docs: run Vale-backed prose pass across DDx docs` | Apply high-signal findings to `docs/**`; record before/after finding count and word-count delta. | `power:smart` for corpus-scale editorial judgment | 11 |
 
 ### Split Rules
 

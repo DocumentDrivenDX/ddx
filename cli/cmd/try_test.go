@@ -282,7 +282,7 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 
 // TestTryRecordsExecutionRoutingIntent verifies that ddx try records the
 // bead-hint routing intent evidence and prints the concise routing-intent
-// line when a durable tier label is present.
+// line when a durable powerClass label is present.
 func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	env := NewTestEnvironment(t)
 	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
@@ -294,7 +294,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:          "hint-bead-001",
 		Title:       "Hinted bead",
-		Labels:      []string{"tier:smart"},
+		Labels:      []string{"power:smart"},
 		Description: "PROBLEM\nhard decision\n\nSMART JUSTIFICATION:\nThis bead decides the durable execution-hint contract.\n",
 	}))
 
@@ -316,7 +316,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 
 	out, err := executeCommand(root, "try", "hint-bead-001", "--harness=claude", "--no-review", "--no-review-i-know-what-im-doing")
 	require.NoError(t, err, "ddx try with a smart bead hint must succeed: %s", out)
-	assert.Contains(t, out, "routing intent: tier=smart source=bead_hint")
+	assert.Contains(t, out, "routing intent: powerClass=smart source=bead_hint")
 
 	events, err := store.Events("hint-bead-001")
 	require.NoError(t, err)
@@ -333,7 +333,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(intentEvent.Body), &body))
 	assert.Equal(t, "bead_hint", body["routing_intent_source"])
-	assert.Equal(t, "smart", body["requested_tier"])
+	assert.Equal(t, "smart", body["inferred_power_class"])
 	assert.Contains(t, body["smart_justification"], "durable execution-hint contract")
 	assert.Equal(t, "claude", body["actual_harness"])
 	assert.Equal(t, "anthropic", body["actual_provider"])
@@ -356,8 +356,8 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:        "ddx-zero-config-try-tier-standard",
-		Title:     "Try with inferred standard routing tier",
+		ID:        "ddx-zero-config-try-powerClass-standard",
+		Title:     "Try with inferred standard routing powerClass",
 		IssueType: "bug",
 	}))
 
@@ -367,7 +367,7 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	out, err := executeCommand(
 		root,
 		"try",
-		"ddx-zero-config-try-tier-standard",
+		"ddx-zero-config-try-powerClass-standard",
 		"--no-review",
 		"--no-review-i-know-what-im-doing",
 	)
@@ -399,8 +399,8 @@ func TestTryZeroConfigCheapTaskSkipsRequirementProfile(t *testing.T) {
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:        "ddx-zero-config-try-tier-cheap",
-		Title:     "Try with inferred cheap routing tier",
+		ID:        "ddx-zero-config-try-powerClass-cheap",
+		Title:     "Try with inferred cheap routing powerClass",
 		IssueType: "chore",
 	}))
 
@@ -410,7 +410,7 @@ func TestTryZeroConfigCheapTaskSkipsRequirementProfile(t *testing.T) {
 	out, err := executeCommand(
 		root,
 		"try",
-		"ddx-zero-config-try-tier-cheap",
+		"ddx-zero-config-try-powerClass-cheap",
 		"--no-review",
 		"--no-review-i-know-what-im-doing",
 	)

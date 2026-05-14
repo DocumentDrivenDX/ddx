@@ -14,7 +14,7 @@ import (
 
 // TestReviewBlock_EscalatesImplementerOnRepairExhaustion asserts that when
 // repair-cycle-exhausted is returned and the escalation ladder has a higher
-// tier available, the bead remains open with TriageTierHintKey bumped to the
+// powerClass available, the bead remains open with TriagePowerHintKey bumped to the
 // next floor.
 func TestReviewBlock_EscalatesImplementerOnRepairExhaustion(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
@@ -50,17 +50,17 @@ func TestReviewBlock_EscalatesImplementerOnRepairExhaustion(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after escalation")
 	// After JSON round-trip, int values in Extra come back as float64.
-	assert.Equal(t, float64(70), got.Extra[TriageTierHintKey], "tier hint must advance to next floor")
+	assert.Equal(t, float64(70), got.Extra[TriagePowerHintKey], "powerClass hint must advance to next floor")
 }
 
-// TestReviewBlock_StillFailsAtTopTier_ParkProposed asserts that when
-// repair-cycle-exhausted occurs at the top tier (EscalationNextFloor errors),
+// TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed asserts that when
+// repair-cycle-exhausted occurs at the top powerClass (EscalationNextFloor errors),
 // the bead is parked to proposed for operator review.
-func TestReviewBlock_StillFailsAtTopTier_ParkProposed(t *testing.T) {
+func TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	b := &bead.Bead{ID: "ddx-rce02", Title: "Repair cycle exhausted at top tier"}
+	b := &bead.Bead{ID: "ddx-rce02", Title: "Repair cycle exhausted at top powerClass"}
 	require.NoError(t, store.Create(b))
 
 	worker := &ExecuteBeadWorker{

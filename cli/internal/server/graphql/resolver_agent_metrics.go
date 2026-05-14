@@ -176,8 +176,8 @@ func axisKey(a agentmetrics.Attempt, axis AgentMetricsAxis) string {
 		return a.Harness
 	case AgentMetricsAxisProvider:
 		return a.Provider
-	case AgentMetricsAxisTier:
-		return a.Tier
+	case AgentMetricsAxisRoute:
+		return a.PowerClass
 	}
 	return ""
 }

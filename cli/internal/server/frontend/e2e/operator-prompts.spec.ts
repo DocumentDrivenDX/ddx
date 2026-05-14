@@ -83,7 +83,7 @@ test.describe('operator prompts (Story 15-6)', () => {
 
 		const promptBody = `e2e operator prompt ${Date.now()}`;
 		await page.getByTestId('operator-prompt-textarea').fill(promptBody);
-		await page.getByTestId('operator-prompt-tier').selectOption('2');
+		await page.getByTestId('operator-prompt-priority').selectOption('2');
 		await page.getByTestId('operator-prompt-submit').click();
 
 		// Preview appears with proposed status before approval.

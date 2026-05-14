@@ -576,7 +576,7 @@
             },
             "effort": {
               "type": "string",
-              "description": "Default reasoning-effort tier (low, medium, high)."
+              "description": "Default reasoning-effort power class (low, medium, high)."
             }
           },
           "additionalProperties": false
@@ -642,7 +642,7 @@
         },
         "context_budget": {
           "type": "string",
-          "description": "Prompt budget label that ddx try consults when assembling the bead prompt. Empty string means full budget; \"minimal\" omits large governing documents (cheap-tier path). See SD-024 §Stage 3."
+          "description": "Prompt budget label that ddx try consults when assembling the bead prompt. Empty string means full budget; \"minimal\" omits large governing documents (cheap-power class path). See SD-024 §Stage 3."
         }
       },
       "additionalProperties": false
@@ -660,7 +660,7 @@
               "type": "string",
               "enum": [
                 "re_attempt_with_context",
-                "escalate_tier",
+                "escalate_power",
                 "retry_with_backoff",
                 "file_followup",
                 "operator_required"

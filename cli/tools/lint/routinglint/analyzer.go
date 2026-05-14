@@ -20,7 +20,7 @@
 //
 // Forbidden identifiers (exact name match):
 //
-//	ResolveProfileLadder, ResolveTierModelRef, AdaptiveMinTier,
+//	ResolveProfileLadder, AdaptiveMinPowerHint,
 //	workersByHarness, ResolveProfileLadderCallCount.
 //
 // Forbidden string literals (anywhere in cli/ Go source):
@@ -78,16 +78,15 @@ var forbiddenIdents = map[string]string{
 	"ApplyModelCatalogYAML":         "DDx-side model catalog overlay retired by ddx-cd641910",
 	"DefaultModelCatalogYAML":       "DDx-side model catalog seed retired by ddx-cd641910",
 	"CheckDeprecatedPin":            "DDx-side catalog pin check retired by ddx-cd641910",
-	"ResolveProfileLadder":          "tier-ladder resolver retired by ddx-3bd7396a — DDx must not re-implement profile-to-preference mapping",
-	"ResolveTierModelRef":           "tier-model resolver retired by ddx-3bd7396a — DDx must not re-implement exact-pin filtering",
-	"ResolveProfileLadderCallCount": "test seam for the retired tier-ladder resolver — also retired by ddx-3bd7396a",
-	"AdaptiveMinTier":               "adaptive-min-tier promotion logic retired by ddx-3bd7396a",
+	"ResolveProfileLadder":          "powerClass-ladder resolver retired by ddx-3bd7396a — DDx must not re-implement profile-to-preference mapping",
+	"ResolveProfileLadderCallCount": "test seam for the retired powerClass-ladder resolver — also retired by ddx-3bd7396a",
+	"AdaptiveMinPowerHint":          "adaptive-min-power-class promotion logic retired by ddx-3bd7396a",
 	"workersByHarness":              "escalation worker grouping helper retired by ddx-3bd7396a",
 	"queueByHarness":                "using harness as a queue-selection criterion violates the passthrough envelope contract (ddx-20047dd5)",
 	"retryByPassthrough":            "using passthrough values in retry policy violates the passthrough envelope contract (ddx-20047dd5)",
 	"endpointByPassthrough":         "using passthrough values in endpoint selection violates the passthrough envelope contract (ddx-20047dd5)",
 	"catalogThresholdForHarness":    "using harness in catalog threshold evaluation violates the passthrough envelope contract (ddx-20047dd5)",
-	"ResolveModelTier":              "DDx-side model tier resolution retired by ddx-ef81fa60",
+	"ResolvePowerClass":             "DDx-side model powerClass resolution retired by ddx-ef81fa60",
 	"resolveStrongSplitterMinPower": "DDx-side strong-power trick retired by ddx-ef81fa60",
 	"isStrongPowerUnsatisfiedError": "DDx-side routing error substring retry retired by ddx-ef81fa60",
 	"isSmartRouteUnavailableError":  "DDx-side routing error substring retry retired by ddx-ef81fa60",

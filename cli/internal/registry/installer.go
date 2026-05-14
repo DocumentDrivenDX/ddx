@@ -499,7 +499,13 @@ func copyMapping(srcDir string, mapping *InstallMapping) ([]string, error) {
 
 			fi, err := os.Stat(srcPath)
 			if err != nil {
-				continue // skip broken symlinks
+				if recovered := recoverSkillDir(srcDir, src, e.Name()); recovered != "" {
+					srcPath = recovered
+					fi, err = os.Stat(srcPath)
+				}
+				if err != nil {
+					continue // skip unrecoverable broken symlinks
+				}
 			}
 
 			if fi.IsDir() {

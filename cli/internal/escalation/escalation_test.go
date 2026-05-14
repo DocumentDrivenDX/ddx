@@ -46,26 +46,26 @@ func (r *recordingAppender) AppendEvent(id string, event bead.BeadEvent) error {
 	return nil
 }
 
-// TestEscalationSummary exercises the 3-tier escalation scenario from the
+// TestEscalationSummary exercises the 3-powerClass escalation scenario from the
 // bead: cheap fails, standard fails, smart succeeds. The emitted
-// kind:escalation-summary event body must contain all three tier records
-// with correct statuses, costs, and a winning_tier/wasted_cost_usd roll-up.
+// kind:escalation-summary event body must contain all three powerClass records
+// with correct statuses, costs, and a winning_power_class/wasted_cost_usd roll-up.
 func TestEscalationSummary(t *testing.T) {
-	attempts := []TierAttemptRecord{
-		{Tier: "cheap", Harness: "agent", Model: "cheap-model", Status: statusExecutionFailed, CostUSD: 0.02, DurationMS: 1200},
-		{Tier: "standard", Harness: "codex", Model: "standard-model", Status: statusNoChanges, CostUSD: 0.15, DurationMS: 3400},
-		{Tier: "smart", Harness: "claude", Model: "smart-model", Status: statusSuccess, CostUSD: 0.80, DurationMS: 9000},
+	attempts := []PowerAttemptRecord{
+		{PowerClass: "cheap", Harness: "agent", Model: "cheap-model", Status: statusExecutionFailed, CostUSD: 0.02, DurationMS: 1200},
+		{PowerClass: "standard", Harness: "codex", Model: "standard-model", Status: statusNoChanges, CostUSD: 0.15, DurationMS: 3400},
+		{PowerClass: "smart", Harness: "claude", Model: "smart-model", Status: statusSuccess, CostUSD: 0.80, DurationMS: 9000},
 	}
 
 	summary := BuildEscalationSummary(attempts, "smart")
-	require.Equal(t, "smart", summary.WinningTier)
-	require.Len(t, summary.TiersAttempted, 3)
+	require.Equal(t, "smart", summary.WinningPowerClass)
+	require.Len(t, summary.PowerAttempts, 3)
 	assert.InDelta(t, 0.97, summary.TotalCostUSD, 1e-9)
 	assert.InDelta(t, 0.17, summary.WastedCostUSD, 1e-9, "cheap (0.02) + standard (0.15) wasted, smart succeeded")
-	assert.Equal(t, "cheap", summary.TiersAttempted[0].Tier)
-	assert.Equal(t, statusExecutionFailed, summary.TiersAttempted[0].Status)
-	assert.Equal(t, statusNoChanges, summary.TiersAttempted[1].Status)
-	assert.Equal(t, statusSuccess, summary.TiersAttempted[2].Status)
+	assert.Equal(t, "cheap", summary.PowerAttempts[0].PowerClass)
+	assert.Equal(t, statusExecutionFailed, summary.PowerAttempts[0].Status)
+	assert.Equal(t, statusNoChanges, summary.PowerAttempts[1].Status)
+	assert.Equal(t, statusSuccess, summary.PowerAttempts[2].Status)
 
 	// Now wire through AppendEscalationSummaryEvent and verify the emitted
 	// event has kind:escalation-summary, a summary line, and a JSON body
@@ -79,46 +79,46 @@ func TestEscalationSummary(t *testing.T) {
 	assert.Equal(t, "ddx-test-1", ev.id)
 	assert.Equal(t, "escalation-summary", ev.event.Kind)
 	assert.Equal(t, "test-actor", ev.event.Actor)
-	assert.Contains(t, ev.event.Summary, "winning_tier=smart")
+	assert.Contains(t, ev.event.Summary, "winning_power_class=smart")
 	assert.Contains(t, ev.event.Summary, "attempts=3")
 
 	var decoded EscalationSummary
 	require.NoError(t, json.Unmarshal([]byte(ev.event.Body), &decoded))
-	assert.Equal(t, "smart", decoded.WinningTier)
-	require.Len(t, decoded.TiersAttempted, 3)
-	assert.Equal(t, "cheap", decoded.TiersAttempted[0].Tier)
-	assert.Equal(t, "agent", decoded.TiersAttempted[0].Harness)
-	assert.Equal(t, "cheap-model", decoded.TiersAttempted[0].Model)
-	assert.Equal(t, statusExecutionFailed, decoded.TiersAttempted[0].Status)
-	assert.InDelta(t, 0.02, decoded.TiersAttempted[0].CostUSD, 1e-9)
-	assert.Equal(t, int64(1200), decoded.TiersAttempted[0].DurationMS)
+	assert.Equal(t, "smart", decoded.WinningPowerClass)
+	require.Len(t, decoded.PowerAttempts, 3)
+	assert.Equal(t, "cheap", decoded.PowerAttempts[0].PowerClass)
+	assert.Equal(t, "agent", decoded.PowerAttempts[0].Harness)
+	assert.Equal(t, "cheap-model", decoded.PowerAttempts[0].Model)
+	assert.Equal(t, statusExecutionFailed, decoded.PowerAttempts[0].Status)
+	assert.InDelta(t, 0.02, decoded.PowerAttempts[0].CostUSD, 1e-9)
+	assert.Equal(t, int64(1200), decoded.PowerAttempts[0].DurationMS)
 	assert.InDelta(t, 0.97, decoded.TotalCostUSD, 1e-9)
 	assert.InDelta(t, 0.17, decoded.WastedCostUSD, 1e-9)
 }
 
-// TestEscalationSummaryExhausted verifies the exhausted case (no tier
-// succeeded): winning_tier is "exhausted" and all costs are wasted.
+// TestEscalationSummaryExhausted verifies the exhausted case (no powerClass
+// succeeded): winning_power_class is "exhausted" and all costs are wasted.
 func TestEscalationSummaryExhausted(t *testing.T) {
-	attempts := []TierAttemptRecord{
-		{Tier: "cheap", Harness: "agent", Model: "c", Status: statusExecutionFailed, CostUSD: 0.01, DurationMS: 900},
-		{Tier: "smart", Harness: "claude", Model: "s", Status: statusExecutionFailed, CostUSD: 0.50, DurationMS: 7000},
+	attempts := []PowerAttemptRecord{
+		{PowerClass: "cheap", Harness: "agent", Model: "c", Status: statusExecutionFailed, CostUSD: 0.01, DurationMS: 900},
+		{PowerClass: "smart", Harness: "claude", Model: "s", Status: statusExecutionFailed, CostUSD: 0.50, DurationMS: 7000},
 	}
 	summary := BuildEscalationSummary(attempts, "")
-	assert.Equal(t, EscalationWinningExhausted, summary.WinningTier)
+	assert.Equal(t, EscalationWinningExhausted, summary.WinningPowerClass)
 	assert.InDelta(t, 0.51, summary.TotalCostUSD, 1e-9)
-	assert.InDelta(t, 0.51, summary.WastedCostUSD, 1e-9, "every attempt wasted when no tier succeeded")
+	assert.InDelta(t, 0.51, summary.WastedCostUSD, 1e-9, "every attempt wasted when no powerClass succeeded")
 }
 
 // TestEscalationSummaryBuildSourceSliceIndependent verifies the attempts
 // slice in the returned summary is independent of the caller's slice —
 // mutating the caller's slice must not change the summary.
 func TestEscalationSummaryBuildSourceSliceIndependent(t *testing.T) {
-	attempts := []TierAttemptRecord{
-		{Tier: "cheap", Status: statusSuccess, CostUSD: 0.05},
+	attempts := []PowerAttemptRecord{
+		{PowerClass: "cheap", Status: statusSuccess, CostUSD: 0.05},
 	}
 	summary := BuildEscalationSummary(attempts, "cheap")
-	attempts[0].Tier = "mutated"
-	assert.Equal(t, "cheap", summary.TiersAttempted[0].Tier, "summary must hold an independent copy of attempts")
+	attempts[0].PowerClass = "mutated"
+	assert.Equal(t, "cheap", summary.PowerAttempts[0].PowerClass, "summary must hold an independent copy of attempts")
 }
 
 // --- ShouldEscalate ---
@@ -151,20 +151,20 @@ func TestShouldEscalateAlreadySatisfiedIsFalse(t *testing.T) {
 	assert.False(t, ShouldEscalate(statusAlreadySatisfied))
 }
 
-// --- FormatTierAttemptBody ---
+// --- FormatPowerAttemptBody ---
 
-func TestFormatTierAttemptBodyWithAllFields(t *testing.T) {
-	body := FormatTierAttemptBody("cheap", "claude", "claude-haiku-4-5", "ok", "execution failed")
-	assert.Contains(t, body, "tier=cheap")
+func TestFormatPowerAttemptBodyWithAllFields(t *testing.T) {
+	body := FormatPowerAttemptBody("cheap", "claude", "claude-haiku-4-5", "ok", "execution failed")
+	assert.Contains(t, body, "powerClass=cheap")
 	assert.Contains(t, body, "harness=claude")
 	assert.Contains(t, body, "model=claude-haiku-4-5")
 	assert.Contains(t, body, "probe=ok")
 	assert.Contains(t, body, "execution failed")
 }
 
-func TestFormatTierAttemptBodyNoProbeNoDetail(t *testing.T) {
-	body := FormatTierAttemptBody("standard", "codex", "gpt-5.4", "", "")
-	assert.Contains(t, body, "tier=standard")
+func TestFormatPowerAttemptBodyNoProbeNoDetail(t *testing.T) {
+	body := FormatPowerAttemptBody("standard", "codex", "gpt-5.4", "", "")
+	assert.Contains(t, body, "powerClass=standard")
 	assert.NotContains(t, body, "probe=")
 }
 

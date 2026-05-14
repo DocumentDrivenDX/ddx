@@ -83,7 +83,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 			ReviewerIndex: reviewerIndex,
 		})
 		// Apply escalated MinPower: use the higher of the base R4 floor and the
-		// escalated profile floor so retries reach a stronger reviewer tier.
+		// escalated profile floor so retries reach a stronger reviewer powerClass.
 		if reviewProfile.MinPower > slotRuntime.MinPowerOverride {
 			slotRuntime.MinPowerOverride = reviewProfile.MinPower
 		}

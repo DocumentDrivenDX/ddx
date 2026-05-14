@@ -50,7 +50,7 @@ Two closed lists, both maintained as Go constants in
 - **Forbidden identifiers** (exact `Ident.Name` match — substrings inside
   larger identifiers such as test-function names are not flagged):
   `ResolveProfileLadder`, `ResolveTierModelRef`,
-  `ResolveProfileLadderCallCount`, `AdaptiveMinTier`, `workersByHarness`.
+  `ResolveProfileLadderCallCount`, `AdaptiveMinPower`, `workersByHarness`.
 
 - **Forbidden string literals** (exact value match):
   `--escalate`, `--override-model`,

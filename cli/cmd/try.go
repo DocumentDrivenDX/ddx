@@ -14,7 +14,7 @@ import (
 	agentlib "github.com/easel/fizeau"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	workguard "github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
@@ -95,7 +95,7 @@ Exit codes:
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
-	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
+	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart powerClass)")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
@@ -233,12 +233,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	noRoutingFlags := harness == "" && model == "" && provider == "" &&
 		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
 		!cmd.Flags().Changed("max-power")
-	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
+	autoInferPowerClass := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
 	var ladderOnce sync.Once
 	var ladder escalationFloorFinder
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
-			ladder = tierescalation.NewLadder(nil)
+			ladder = powerladder.NewLadder(nil)
 			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
@@ -249,7 +249,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			if listErr != nil {
 				return
 			}
-			ladder = tierescalation.NewLadder(models)
+			ladder = powerladder.NewLadder(models)
 		})
 		return ladder
 	}
@@ -262,42 +262,42 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	agent.RecoverOrphans(gitOps, projectRoot, beadID)
 
-	// Build the executor: either the test override or the real single-tier executor.
+	// Build the executor: either the test override or the real single-power executor.
 	var executor agent.ExecuteBeadExecutor
 	if f.tryExecutorOverride != nil {
 		executor = f.tryExecutorOverride
 	} else {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, execBeadID string) (agent.ExecuteBeadReport, error) {
-			var inferredTier escalation.ModelTier
+			var inferredPolicy escalation.PowerClass
 			requestMinPower := minPower
 			requestProfile := profile
 			var routingNote string
 			reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-				report := agent.ReportFromExecuteBeadResult(res, string(inferredTier))
-				report.RequestedTier = string(inferredTier)
+				report := agent.ReportFromExecuteBeadResult(res, string(inferredPolicy))
+				report.InferredPowerClass = string(inferredPolicy)
 				report.RequestedProfile = requestProfile
 				report.RoutingIntentNote = routingNote
 				return report
 			}
-			if autoInferTier {
+			if autoInferPowerClass {
 				var targetBead *bead.Bead
 				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
 					targetBead = b
-					inferredTier = escalation.InferTier(targetBead)
+					inferredPolicy = escalation.InferPowerClass(targetBead)
 				} else {
-					inferredTier = escalation.TierCheap
+					inferredPolicy = escalation.PowerCheap
 				}
-				if floor, ok := numericTierFloorHint(targetBead); ok && floor > requestMinPower {
+				if floor, ok := numericPowerFloorHint(targetBead); ok && floor > requestMinPower {
 					requestMinPower = floor
 				}
 				var unavailableReport agent.ExecuteBeadReport
 				var unavailable bool
-				if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestMinPower); selectErr == nil && selection.Name != "" {
+				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestMinPower); selectErr == nil && selection.Name != "" {
 					requestProfile = selection.Name
 					routingNote = selection.Note
 					if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
 						unavailableReport := smartRouteUnavailableReport(targetBead, requestMinPower, maxPower, nil)
-						unavailableReport.RequestedTier = string(inferredTier)
+						unavailableReport.InferredPowerClass = string(inferredPolicy)
 						unavailableReport.RequestedProfile = requestProfile
 						unavailableReport.RoutingIntentNote = routingNote
 						return unavailableReport, nil
@@ -305,7 +305,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				} else {
 					requestMinPower, unavailableReport, unavailable = investigationRetryInitialMinPowerWithInference(targetBead, requestMinPower, maxPower, loadLadder(), true)
 					if unavailable {
-						unavailableReport.RequestedTier = string(inferredTier)
+						unavailableReport.InferredPowerClass = string(inferredPolicy)
 						return unavailableReport, nil
 					}
 				}
@@ -367,12 +367,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 							res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 						}
 						_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-						tierStr := ""
-						if inferredTier != "" {
-							tierStr = string(inferredTier)
+						policyStr := ""
+						if inferredPolicy != "" {
+							policyStr = string(inferredPolicy)
 						}
-						report := agent.ReportFromExecuteBeadResult(res, tierStr)
-						report.RequestedTier = string(inferredTier)
+						report := agent.ReportFromExecuteBeadResult(res, policyStr)
+						report.InferredPowerClass = string(inferredPolicy)
 						report.RequestedProfile = requestProfile
 						report.RoutingIntentNote = routingNote
 						return report, nil
@@ -405,12 +405,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				res.Outcome = "no-changes"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
-			tierStr := ""
-			if inferredTier != "" {
-				tierStr = string(inferredTier)
+			policyStr := ""
+			if inferredPolicy != "" {
+				policyStr = string(inferredPolicy)
 			}
-			report := agent.ReportFromExecuteBeadResult(res, tierStr)
-			report.RequestedTier = string(inferredTier)
+			report := agent.ReportFromExecuteBeadResult(res, policyStr)
+			report.InferredPowerClass = string(inferredPolicy)
 			report.RequestedProfile = requestProfile
 			report.RoutingIntentNote = routingNote
 			return report, nil
@@ -483,8 +483,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	report := result.Results[0]
 	writeTryResult(cmd.OutOrStdout(), report)
-	if intent := escalation.ParseExecutionHint(target); intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.RequestedTier != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: tier=%s source=%s\n", intent.RequestedTier, intent.Source)
+	if intent := escalation.ParseExecutionHint(target); intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.InferredPowerClass != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: powerClass=%s source=%s\n", intent.InferredPowerClass, intent.Source)
 	}
 
 	return tryExitCodeForStatus(report.Status)

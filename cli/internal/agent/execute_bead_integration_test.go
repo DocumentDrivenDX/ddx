@@ -1,6 +1,6 @@
 package agent
 
-// execute_bead_integration_test.go — Tier-2 integration tests for
+// execute_bead_integration_test.go — PowerClass-2 integration tests for
 // execute-loop orchestration. Every test uses:
 //   - a real git init'd temp repo (via newScriptHarnessRepo)
 //   - the script harness (not virtual/fakeAgentRunner)

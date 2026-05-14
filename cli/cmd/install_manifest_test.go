@@ -245,6 +245,85 @@ Local skill body.
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "helix-build"), filepath.Join(localPlugin, ".agents", "skills", "helix-build"))
 }
 
+func TestPluginInstallLocalHelixFallbackIgnoresSourceOverlayWithoutScriptAssumption(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	skillDir := filepath.Join(localPlugin, ".agents", "skills", "helix")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: helix
+description: Local HELIX skill
+---
+
+Local HELIX skill body.
+`), 0o644))
+	staleOverlay := filepath.Join(localPlugin, ".ddx", "plugins", "helix")
+	require.NoError(t, os.MkdirAll(filepath.Dir(staleOverlay), 0o755))
+	if err := os.Symlink(filepath.Join(t.TempDir(), ".ddx", "plugins", "helix"), staleOverlay); err != nil {
+		t.Skipf("symlink creation unsupported: %v", err)
+	}
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "helix", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "helix"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix"), filepath.Join(localPlugin, ".agents", "skills", "helix"))
+	assert.NoFileExists(t, filepath.Join(homeDir, ".local", "bin", "helix"))
+	assert.NotContains(t, output, "helix script")
+}
+
+func TestAddLocalOverlayIgnoresCoversSymlinkAndDirectoryForms(t *testing.T) {
+	repoRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(repoRoot, ".git", "info"), 0o755))
+
+	require.NoError(t, addLocalOverlayIgnores(repoRoot, []string{".ddx/plugins/helix"}))
+
+	data, err := os.ReadFile(filepath.Join(repoRoot, ".git", "info", "exclude"))
+	require.NoError(t, err)
+	text := string(data)
+	assert.Contains(t, text, ".ddx/plugins/helix\n")
+	assert.Contains(t, text, ".ddx/plugins/helix/\n")
+}
+
+func TestPluginInstallLocalCopiesScriptOnlyWhenManifestDeclaresIt(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
+version: local
+description: Local plugin with explicit script
+type: plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/sample-plugin
+  scripts:
+    source: tools/sample
+    target: ~/.local/bin/sample-plugin
+  executable:
+    - tools/sample
+`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, "tools"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "tools", "sample"), []byte("#!/usr/bin/env bash\necho sample\n"), 0o755))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	installedScript := filepath.Join(homeDir, ".local", "bin", "sample-plugin")
+	assert.FileExists(t, installedScript)
+	data, err := os.ReadFile(installedScript)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "echo sample")
+}
+
 func TestPluginInstallLocalMirrorsTopLevelSkillsWithoutPackageManifest(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()

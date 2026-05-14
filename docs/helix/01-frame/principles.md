@@ -160,7 +160,7 @@ endpoints, capabilities, and protocols rather than provider names; live
 discovery rather than hardcoded model lists; portable prompt formats
 rather than vendor-specific control tokens. The cost is a layer of
 indirection and the discipline to resist convenient shortcuts. The
-payoff is the freedom to swap, mix, and tier providers as the market
+payoff is the freedom to swap, mix, and power-rank providers as the market
 moves — and to run local models alongside hosted ones without rewriting
 the harness. DDx treats portability as a non-negotiable, even when a
 single-vendor path would be cheaper to ship this quarter.

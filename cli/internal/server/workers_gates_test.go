@@ -388,7 +388,7 @@ func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
 		"ResultRev (compat alias) must equal LandedRev after landing")
 
 	// Simulate building the WorkerExecutionResult from the ExecuteBeadReport
-	// as singleTierAttempt does (mirrors workers.go:~787, ~979).
+	// as singlePolicyAttempt does (mirrors workers.go:~787, ~979).
 	report := agent.ExecuteBeadReport{
 		BeadID:            res.BeadID,
 		AttemptID:         res.AttemptID,

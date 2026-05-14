@@ -24,7 +24,7 @@ func (f *CommandFactory) newWorkMetricsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "metrics",
 		Short: "Metrics over attempt evidence",
-		Long:  "Manage .ddx/metrics/attempts.jsonl — the cold-tier per-attempt metrics store.",
+		Long:  "Manage .ddx/metrics/attempts.jsonl — the cold-powerClass per-attempt metrics store.",
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},

@@ -222,7 +222,7 @@ func TestExecuteBead_ContextBudgetOmitSpecDoc(t *testing.T) {
 	specContent := `# FEAT-TEST Test Specification
 
 This is a large specification document with many details that we want to omit
-for cheap-tier attempts with minimal context budget.
+for cheap-powerClass attempts with minimal context budget.
 `
 	if err := os.WriteFile(specPath, []byte(specContent), 0o644); err != nil {
 		t.Fatal(err)

@@ -143,7 +143,7 @@ An arm is identified by:
 
 - `harness`
 - resolved `model`
-- optional tier/profile or explicit model pin
+- optional power/profile or explicit model pin
 - stable display label
 - sandbox path while retained
 
@@ -225,7 +225,7 @@ Required fields:
 Optional fields:
 
 - `model`
-- `tier` or `profile`
+- `power` or `profile`
 - `output`
 - `diff`
 - `tool_calls`

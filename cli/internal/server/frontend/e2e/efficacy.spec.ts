@@ -223,21 +223,21 @@ test('US-096.a2: efficacy sparkline column and top-performers tile render', asyn
 	await expect(page.getByTestId('efficacy-sparkline-bars-codex|openai|gpt-5')).toBeVisible();
 });
 
-test('US-096.b: filtering by tier / label / spec-id updates table and encodes to URL', async ({
+test('US-096.b: filtering by power class / label / spec-id updates table and encodes to URL', async ({
 	page
 }) => {
 	await mockEfficacy(page);
 	await page.goto(BASE_URL);
 
-	await page.getByRole('combobox', { name: /tier/i }).selectOption('cheap');
-	await expect(page).toHaveURL(/[?&]tier=cheap/);
+	await page.getByRole('combobox', { name: /powerClass/i }).selectOption('cheap');
+	await expect(page).toHaveURL(/[?&]powerClass=cheap/);
 
 	await page.getByRole('textbox', { name: /spec[- ]id/i }).fill('FEAT-008');
 	await expect(page).toHaveURL(/[?&]spec-id=FEAT-008/);
 
 	// Reload preserves filter state from URL.
 	await page.reload();
-	await expect(page.getByRole('combobox', { name: /tier/i })).toHaveValue('cheap');
+	await expect(page.getByRole('combobox', { name: /powerClass/i })).toHaveValue('cheap');
 	await expect(page.getByRole('textbox', { name: /spec[- ]id/i })).toHaveValue('FEAT-008');
 });
 

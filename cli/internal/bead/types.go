@@ -149,7 +149,7 @@ func OperatorPromptMutationGuard(actorIssueType, targetIssueType string) error {
 // non-empty line of the prompt, full prompt body is preserved verbatim in the
 // description, default labels are kind:operator-prompt + source:web-ui, the
 // status starts in `proposed` (approval flow), priority defaults to the
-// caller-supplied tier (clamped to MinPriority..MaxPriority), and the
+// caller-supplied priority (clamped to MinPriority..MaxPriority), and the
 // acceptance field carries the auto-AC stub.
 //
 // The returned bead is not persisted; callers feed it to Store.Create which
@@ -163,18 +163,18 @@ func NewOperatorPromptBead(prompt string, defaultTier int) *Bead {
 	if title == "" {
 		title = "(empty operator prompt)"
 	}
-	tier := defaultTier
-	if tier < MinPriority {
-		tier = MinPriority
+	priority := defaultTier
+	if priority < MinPriority {
+		priority = MinPriority
 	}
-	if tier > MaxPriority {
-		tier = MaxPriority
+	if priority > MaxPriority {
+		priority = MaxPriority
 	}
 	return &Bead{
 		Title:       title,
 		IssueType:   IssueTypeOperatorPrompt,
 		Status:      StatusProposed,
-		Priority:    tier,
+		Priority:    priority,
 		Labels:      []string{OperatorPromptLabelKind, OperatorPromptLabelSource},
 		Description: body,
 		Acceptance:  OperatorPromptDefaultAcceptance,

@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -134,17 +134,17 @@ type WorkerRecord struct {
 }
 
 type WorkerExecutionResult struct {
-	BeadID    string `json:"bead_id,omitempty"`
-	AttemptID string `json:"attempt_id,omitempty"`
-	WorkerID  string `json:"worker_id,omitempty"`
-	Harness   string `json:"harness,omitempty"`
-	Tier      string `json:"tier,omitempty"`
-	Provider  string `json:"provider,omitempty"`
-	Model     string `json:"model,omitempty"`
-	Status    string `json:"status,omitempty"`
-	Detail    string `json:"detail,omitempty"`
-	SessionID string `json:"session_id,omitempty"`
-	BaseRev   string `json:"base_rev,omitempty"`
+	BeadID     string `json:"bead_id,omitempty"`
+	AttemptID  string `json:"attempt_id,omitempty"`
+	WorkerID   string `json:"worker_id,omitempty"`
+	Harness    string `json:"harness,omitempty"`
+	PowerClass string `json:"power_class,omitempty"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Status     string `json:"status,omitempty"`
+	Detail     string `json:"detail,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+	BaseRev    string `json:"base_rev,omitempty"`
 	// ResultRev is the backwards-compat field. After a successful land it mirrors
 	// LandedRev. Prefer ImplementationRev and LandedRev for new consumers.
 	ResultRev         string `json:"result_rev,omitempty"`
@@ -611,11 +611,11 @@ func (m *WorkerManager) runPluginAction(ctx context.Context, id, dir string, spe
 		record.State = "exited"
 		record.Status = "success"
 		record.LastResult = &WorkerExecutionResult{
-			AttemptID: id,
-			WorkerID:  id,
-			Tier:      "",
-			Status:    state,
-			Detail:    fmt.Sprintf("%s plugin %s", spec.Action, spec.Name),
+			AttemptID:  id,
+			WorkerID:   id,
+			PowerClass: "",
+			Status:     state,
+			Detail:     fmt.Sprintf("%s plugin %s", spec.Action, spec.Name),
 		}
 	}
 	if preservedState != "" {
@@ -638,9 +638,9 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
 
-func nextEscalationFloor(l *tierescalation.Ladder, actualPower int) (int, error) {
+func nextEscalationFloor(l *powerladder.Ladder, actualPower int) (int, error) {
 	if l == nil {
-		return 0, tierescalation.ErrLadderExhausted
+		return 0, powerladder.ErrLadderExhausted
 	}
 	floor := actualPower
 	for {
@@ -648,7 +648,7 @@ func nextEscalationFloor(l *tierescalation.Ladder, actualPower int) (int, error)
 		if err == nil {
 			return next, nil
 		}
-		var nvp *tierescalation.NoViableProviderError
+		var nvp *powerladder.NoViableProviderError
 		if errors.As(err, &nvp) {
 			floor = nvp.Floor
 			continue
@@ -657,10 +657,10 @@ func nextEscalationFloor(l *tierescalation.Ladder, actualPower int) (int, error)
 	}
 }
 
-func runEscalatingSingleTierAttempts(
+func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
-	ladder *tierescalation.Ladder,
+	ladder *powerladder.Ladder,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
 ) (agent.ExecuteBeadReport, error) {
@@ -688,17 +688,17 @@ func runEscalatingSingleTierAttempts(
 	}
 }
 
-func appendTierAttemptEvent(store agent.BeadEventAppender, beadID string, report agent.ExecuteBeadReport, actor string, createdAt time.Time) {
+func appendPowerAttemptEvent(store agent.BeadEventAppender, beadID string, report agent.ExecuteBeadReport, actor string, createdAt time.Time) {
 	if store == nil || beadID == "" {
 		return
 	}
-	body := policyescalation.FormatTierAttemptBody(report.Tier, report.Harness, report.Model, report.ProbeResult, report.Detail)
+	body := policyescalation.FormatPowerAttemptBody(report.PowerClass, report.Harness, report.Model, report.ProbeResult, report.Detail)
 	summary := report.Status
-	if report.Tier != "" {
-		summary = fmt.Sprintf("%s tier=%s", summary, report.Tier)
+	if report.PowerClass != "" {
+		summary = fmt.Sprintf("%s powerClass=%s", summary, report.PowerClass)
 	}
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
-		Kind:      "tier-attempt",
+		Kind:      "power-attempt",
 		Summary:   summary,
 		Body:      body,
 		Actor:     actor,
@@ -755,10 +755,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// workers were silently lost (ddx-e14efc58).
 		coordinator := m.LandCoordinators.Get(projectRoot)
 
-		// singleTierAttempt runs one execution at a specific harness/model.
+		// singlePolicyAttempt runs one execution at a specific harness/model.
 		// The caller controls MinPower per rung; this helper keeps the
 		// profile stable and only advances the power floor.
-		singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
+		singlePolicyAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 			gitOps := &agent.RealGitOps{}
 			attemptProvider := spec.Provider
 			if resolvedProvider != "" {
@@ -838,10 +838,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// not contribute (see escalation.CountsTowardCostCap).
 		maxCostUSD := executeLoopMaxCostUSD(spec)
 		var ladderOnce sync.Once
-		var ladder *tierescalation.Ladder
-		loadLadder := func() *tierescalation.Ladder {
+		var ladder *powerladder.Ladder
+		loadLadder := func() *powerladder.Ladder {
 			ladderOnce.Do(func() {
-				ladder = tierescalation.NewLadder(nil)
+				ladder = powerladder.NewLadder(nil)
 				if svc, svcErr := agent.NewServiceFromWorkDir(projectRoot); svcErr == nil {
 					modelFilter := agentlib.ModelFilter{}
 					if harness := rcfg.Harness(); harness != "" {
@@ -850,7 +850,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 					modelCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					defer cancel()
 					if models, listErr := svc.ListModels(modelCtx, modelFilter); listErr == nil {
-						ladder = tierescalation.NewLadder(models)
+						ladder = powerladder.NewLadder(models)
 					}
 				}
 			})
@@ -890,7 +890,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				cappedReport.BeadID = beadID
 				return cappedReport, nil
 			}
-			report, err := singleTierAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
+			report, err := singlePolicyAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
 			if err == nil {
 				accumulateBilledCost(report)
 				if cappedReport, capped := costCapTripped(); capped {
@@ -902,30 +902,30 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		}
 
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			attempts := make([]policyescalation.TierAttemptRecord, 0, 3)
+			attempts := make([]policyescalation.PowerAttemptRecord, 0, 3)
 			recordAttempt := func(report agent.ExecuteBeadReport) {
-				if report.Tier == "" && report.Harness == "" && report.Model == "" && report.ProbeResult == "" && report.CostUSD == 0 && report.DurationMS == 0 {
+				if report.PowerClass == "" && report.Harness == "" && report.Model == "" && report.ProbeResult == "" && report.CostUSD == 0 && report.DurationMS == 0 {
 					return
 				}
-				attempts = append(attempts, policyescalation.TierAttemptRecord{
-					Tier:       report.Tier,
+				attempts = append(attempts, policyescalation.PowerAttemptRecord{
+					PowerClass: report.PowerClass,
 					Harness:    report.Harness,
 					Model:      report.Model,
 					Status:     report.Status,
 					CostUSD:    report.CostUSD,
 					DurationMS: report.DurationMS,
 				})
-				appendTierAttemptEvent(store, beadID, report, "ddx", time.Now().UTC())
+				appendPowerAttemptEvent(store, beadID, report, "ddx", time.Now().UTC())
 			}
-			report, err := runEscalatingSingleTierAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			report, err := runEscalatingPowerAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return attemptWithCostCap(ctx, beadID, requestedMinPower)
 			}, recordAttempt)
 			if len(attempts) > 0 {
-				winningTier := ""
-				if report.Status == agent.ExecuteBeadStatusSuccess && report.Tier != "" {
-					winningTier = report.Tier
+				winningPowerClass := ""
+				if report.Status == agent.ExecuteBeadStatusSuccess && report.PowerClass != "" {
+					winningPowerClass = report.PowerClass
 				}
-				_ = policyescalation.AppendEscalationSummaryEvent(store, beadID, "ddx", attempts, winningTier, time.Now().UTC())
+				_ = policyescalation.AppendEscalationSummaryEvent(store, beadID, "ddx", attempts, winningPowerClass, time.Now().UTC())
 			}
 			return report, err
 		})
@@ -1022,7 +1022,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				AttemptID:         last.AttemptID,
 				WorkerID:          last.WorkerID,
 				Harness:           last.Harness,
-				Tier:              last.Tier,
+				PowerClass:        last.PowerClass,
 				Provider:          last.Provider,
 				Model:             last.Model,
 				Status:            last.Status,

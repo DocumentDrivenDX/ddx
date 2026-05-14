@@ -54,7 +54,7 @@ func newTriageTestStore(t *testing.T) (*bead.Store, *bead.Bead) {
 }
 
 // TestApplyReviewTriageDecision_FirstBlockReAttempts verifies that the first
-// BLOCK on a bead chooses re_attempt_with_context: no tier hint is set, the
+// BLOCK on a bead chooses re_attempt_with_context: no powerClass hint is set, the
 // bead remains worker-runnable, and a triage-decision event records the action.
 func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	store, b := newTriageTestStore(t)
@@ -67,8 +67,8 @@ func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriageTierHintKey]
-		assert.False(t, hasHint, "first BLOCK must not set tier hint")
+		_, hasHint := got.Extra[TriagePowerHintKey]
+		assert.False(t, hasHint, "first BLOCK must not set powerClass hint")
 	}
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
@@ -76,23 +76,23 @@ func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 }
 
 // TestApplyReviewTriageDecision_SecondBlockEscalates verifies that the second
-// BLOCK chooses escalate_tier: a tier-pin hint is written into bead.Extra
+// BLOCK chooses escalate_power: a powerClass-pin hint is written into bead.Extra
 // and a triage-decision event records the chosen action.
 func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	seedBlocks(t, store, b.ID, now, 2)
 
-	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierStandard)))
+	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.PowerStandard)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	require.NotNil(t, got.Extra)
-	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
+	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
-	assert.Contains(t, ev.Summary, "escalate_tier")
+	assert.Contains(t, ev.Summary, "escalate_power")
 	assert.Contains(t, ev.Body, "smart")
 }
 
@@ -106,7 +106,7 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	require.NoError(t, store.Claim(b.ID, "worker"))
 	seedBlocks(t, store, b.ID, now, 3)
 
-	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierSmart)))
+	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.PowerSmart)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
@@ -125,7 +125,7 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 
 // TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt verifies that
 // when the latest BLOCK was paired with a kind:review-pairing-degraded event
-// from the same attempt window, the policy's escalate_tier rung is overridden
+// from the same attempt window, the policy's escalate_power rung is overridden
 // to re_attempt_with_context so a freshly-paired reviewer gets another chance.
 func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T) {
 	store, b := newTriageTestStore(t)
@@ -151,13 +151,13 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 		CreatedAt: now.Add(time.Minute),
 	}))
 
-	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierStandard)))
+	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.PowerStandard)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriageTierHintKey]
-		assert.False(t, hasHint, "pairing-degraded must override escalate_tier; no tier hint expected")
+		_, hasHint := got.Extra[TriagePowerHintKey]
+		assert.False(t, hasHint, "pairing-degraded must override escalate_power; no powerClass hint expected")
 	}
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	ev := findEvent(t, store, b.ID, "triage-decision")

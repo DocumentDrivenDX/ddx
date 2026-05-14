@@ -76,14 +76,14 @@ const operatorPromptMutation = `mutation Submit($input: OperatorPromptSubmitInpu
 
 // gqlSubmitRaw issues a raw POST and returns the parsed top-level response so
 // callers can assert on either data or errors.
-func gqlSubmitRaw(t *testing.T, h http.Handler, csrfHeader, prompt, idemKey string, tier *int) (int, map[string]json.RawMessage) {
+func gqlSubmitRaw(t *testing.T, h http.Handler, csrfHeader, prompt, idemKey string, priority *int) (int, map[string]json.RawMessage) {
 	t.Helper()
 	input := map[string]any{
 		"prompt":         prompt,
 		"idempotencyKey": idemKey,
 	}
-	if tier != nil {
-		input["tier"] = *tier
+	if priority != nil {
+		input["priority"] = *priority
 	}
 	body, _ := json.Marshal(map[string]any{
 		"query":     operatorPromptMutation,

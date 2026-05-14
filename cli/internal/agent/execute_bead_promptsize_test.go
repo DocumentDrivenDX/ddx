@@ -28,7 +28,7 @@ func representativePromptBead() *bead.Bead {
 			"the bead body.",
 		Acceptance: "AC1: prompt renders deterministically.\n" +
 			"AC2: word and byte counts are reported per (variant, contextBudget).",
-		Labels: []string{"phase:2", "story:12", "tier:cheap"},
+		Labels: []string{"phase:2", "story:12", "power:cheap"},
 		Extra:  map[string]any{"spec-id": "FEAT-022"},
 	}
 }
@@ -145,7 +145,7 @@ func TestPromptSizeReport(t *testing.T) {
 		}
 	}
 	// Minimal must be strictly smaller than full for both variants — the
-	// fixture's reason for existing is to catch regressions on the cheap-tier
+	// fixture's reason for existing is to catch regressions on the cheap-powerClass
 	// path.
 	byKey := map[string]row{}
 	for _, r := range rows {

@@ -39,7 +39,7 @@ func LoadAttempts(workingDir string) ([]Attempt, error) {
 	for _, a := range rs {
 		applyEnrichment(&a, enrich)
 		a.Bucket = ClassifyBucket(a.Status)
-		a.Tier = TierKey(a.Harness, a.Model)
+		a.PowerClass = RouteKey(a.Harness, a.Model)
 		out = append(out, a)
 		seen[a.AttemptID] = true
 	}
@@ -54,7 +54,7 @@ func LoadAttempts(workingDir string) ([]Attempt, error) {
 		}
 		applyEnrichment(&a, enrich)
 		a.Bucket = ClassifyBucket(a.Status)
-		a.Tier = TierKey(a.Harness, a.Model)
+		a.PowerClass = RouteKey(a.Harness, a.Model)
 		out = append(out, a)
 		seen[a.AttemptID] = true
 	}
@@ -65,9 +65,9 @@ func LoadAttempts(workingDir string) ([]Attempt, error) {
 	return out, nil
 }
 
-// TierKey is the canonical "harness/model" tier label used by other Story
+// RouteKey is the canonical "harness/model" powerClass label used by other Story
 // 11 surfaces. An empty model collapses to just the harness.
-func TierKey(harness, model string) string {
+func RouteKey(harness, model string) string {
 	if model == "" {
 		return harness
 	}
@@ -220,7 +220,7 @@ type routingFacts struct {
 	Provider              string
 	Model                 string
 	RoutingIntentSource   string
-	RequestedTier         string
+	InferredPowerClass    string
 	SmartJustification    string
 	RejectedRoutePinCount int
 	RoutingIntentDegraded bool
@@ -243,7 +243,7 @@ func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
 	for _, b := range beads {
 		facts := routingFromExtra(b.Extra)
 		if facts.Harness == "" && facts.Provider == "" && facts.Model == "" &&
-			facts.RoutingIntentSource == "" && facts.RequestedTier == "" &&
+			facts.RoutingIntentSource == "" && facts.InferredPowerClass == "" &&
 			facts.SmartJustification == "" && facts.RejectedRoutePinCount == 0 &&
 			!facts.RoutingIntentDegraded && facts.RoutingIntentNote == "" {
 			continue
@@ -256,8 +256,8 @@ func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
 // routingFromExtra walks bead.Extra["events"] in chronological order and
 // returns the last kind:routing, kind:escalation-summary, or
 // execution-routing-intent facts. The routing event carries resolved_provider
-// / resolved_model, the escalation summary exposes a tiers_attempted list
-// whose final entry is the winning tier, and the routing-intent event carries
+// / resolved_model, the escalation summary exposes a power_attempts list
+// whose final entry is the winning powerClass, and the routing-intent event carries
 // the durable bead-hint audit fields.
 func routingFromExtra(extra map[string]any) routingFacts {
 	if extra == nil {
@@ -321,22 +321,22 @@ func routingFromExtra(extra map[string]any) routingFacts {
 			}
 		case "escalation-summary":
 			var body struct {
-				WinningTier    string `json:"winning_tier"`
-				TiersAttempted []struct {
-					Tier    string `json:"tier"`
-					Harness string `json:"harness"`
-					Model   string `json:"model"`
-					Status  string `json:"status"`
-				} `json:"tiers_attempted"`
+				WinningPowerClass string `json:"winning_power_class"`
+				PowerAttempts     []struct {
+					PowerClass string `json:"power_class"`
+					Harness    string `json:"harness"`
+					Model      string `json:"model"`
+					Status     string `json:"status"`
+				} `json:"power_attempts"`
 			}
 			if err := json.Unmarshal([]byte(e.body), &body); err != nil {
 				continue
 			}
-			// Use the winning tier when one exists, else the last
-			// attempted tier.
-			pick := body.WinningTier
-			for _, t := range body.TiersAttempted {
-				if pick != "" && t.Tier == pick {
+			// Use the winning powerClass when one exists, else the last
+			// attempted powerClass.
+			pick := body.WinningPowerClass
+			for _, t := range body.PowerAttempts {
+				if pick != "" && t.PowerClass == pick {
 					if t.Harness != "" {
 						out.Harness = t.Harness
 					}
@@ -346,8 +346,8 @@ func routingFromExtra(extra map[string]any) routingFacts {
 					break
 				}
 			}
-			if pick == "" && len(body.TiersAttempted) > 0 {
-				last := body.TiersAttempted[len(body.TiersAttempted)-1]
+			if pick == "" && len(body.PowerAttempts) > 0 {
+				last := body.PowerAttempts[len(body.PowerAttempts)-1]
 				if last.Harness != "" {
 					out.Harness = last.Harness
 				}
@@ -358,7 +358,7 @@ func routingFromExtra(extra map[string]any) routingFacts {
 		case "execution-routing-intent":
 			var body struct {
 				RoutingIntentSource   string   `json:"routing_intent_source"`
-				RequestedTier         string   `json:"requested_tier"`
+				InferredPowerClass    string   `json:"inferred_power_class"`
 				SmartJustification    string   `json:"smart_justification"`
 				ActualHarness         string   `json:"actual_harness"`
 				ActualProvider        string   `json:"actual_provider"`
@@ -373,8 +373,8 @@ func routingFromExtra(extra map[string]any) routingFacts {
 			if body.RoutingIntentSource != "" {
 				out.RoutingIntentSource = body.RoutingIntentSource
 			}
-			if body.RequestedTier != "" {
-				out.RequestedTier = body.RequestedTier
+			if body.InferredPowerClass != "" {
+				out.InferredPowerClass = body.InferredPowerClass
 			}
 			if body.SmartJustification != "" {
 				out.SmartJustification = body.SmartJustification
@@ -418,8 +418,8 @@ func applyEnrichment(a *Attempt, enrich map[string]routingFacts) {
 	if a.RoutingIntentSource == "" {
 		a.RoutingIntentSource = facts.RoutingIntentSource
 	}
-	if a.RequestedTier == "" {
-		a.RequestedTier = facts.RequestedTier
+	if a.InferredPowerClass == "" {
+		a.InferredPowerClass = facts.InferredPowerClass
 	}
 	if a.SmartJustification == "" {
 		a.SmartJustification = facts.SmartJustification

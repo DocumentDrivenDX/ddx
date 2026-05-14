@@ -299,7 +299,7 @@ DDx side, all in `cli/internal/agent/`:
 | legacy DDx candidate scorer/selector | Rank + select | Profile policy hardcoded; no per-model-route override |
 | legacy DDx live route probe | Live probe + build | Probes every harness/provider, no cache |
 | `discovery.go` `FuzzyMatchModel` | Cross-provider model fuzzy match | **No case norm, no vendor-prefix strip** (ddx-0486e601) |
-| `tier_escalation.go:57` `AdaptiveMinTier` | Trailing success rate → tier promotion | Doesn't talk to agent's per-route failover; they don't know about each other |
+| `tier_escalation.go:57` `AdaptiveMinPower` | Trailing success rate → power promotion | Doesn't talk to agent's per-route failover; they don't know about each other |
 | `routing_metrics.go`, `routing_signals*.go` | Routing observation surfaces | DDx-only; agent has its own observation store |
 
 Agent side (`/Users/erik/Projects/agent/`):
@@ -318,7 +318,7 @@ Agent side (`/Users/erik/Projects/agent/`):
 | ddx-2d974641 | P1 | **Epic** — autorouting "use qwen3.6 on vidar" should Just Work end-to-end |
 | ddx-8610020e | P1 (in_progress) | RouteRequest missing Provider field; `--provider` dropped at normalization |
 | ddx-0486e601 | P1 | Fuzzy match: case + canonical-prefix normalization (qwen/qwen3.6 ≠ Qwen3.6-35B-A3B-4bit) |
-| ddx-3c5ba7cc | P1 | Tier escalation must respect `--provider` affinity |
+| ddx-3c5ba7cc | P1 | Power escalation must respect `--provider` affinity |
 | ddx-2f5a2284 | P2 | ModelRef/Profile must consult discovery + apply `--provider` soft preference |
 | ddx-4817edfd subtree | P2-P4 | Per-provider+model gating: tool-support, effort/permissions, context-window, structured-output |
 | ddx-0216b966 | P3 | Discovery fuzzy tiebreak: prefer latest version over shortest suffix |
@@ -490,7 +490,7 @@ That's 6 methods. Adds `ListHarnesses` (because under C the agent owns the harne
 | Parallel routing engines | One routing engine; the other deletes |
 | `--provider` bypass | One RouteRequest type with Provider field; one normalization path; bypass impossible |
 | Fuzzy matching fragmentation | One canonical-form helper; all candidates pool through it |
-| Profile semantics split | Tier escalation and provider failover live next to each other; one event loop sees both |
+| Profile semantics split | Power escalation and provider failover live next to each other; one event loop sees both |
 | Capability gating asymmetry | One gating predicate, applied per-candidate (whether candidate is a harness or a (harness, provider, model) tuple) |
 | Health/quota fragmentation | One probe abstraction, one observation store, one cooldown store |
 
@@ -842,7 +842,7 @@ type Event struct {
   "harness": "agent",
   "provider": "bragi",
   "model": "qwen/qwen3.6-35b-a3b",
-  "reason": "cheap-tier match; bragi reachable; 256K context",
+  "reason": "cheap-power match; bragi reachable; 256K context",
   "fallback_chain": ["openrouter:qwen/qwen3.6"]
 }
 
@@ -958,7 +958,7 @@ The harness wrappers are not just `exec.Command + parse JSON`. They include subt
 | `routing_discovery_test.go` | 356 | Discovery + fuzzy matching |
 | `routing_metrics_test.go` | 84 | Routing metric aggregation |
 | `claude_stream_test.go` | (TBD) | Stream parser, fallback handling |
-| `tier_escalation_test.go` + `_integration_test.go` | 559 | Tier escalation rules |
+| `tier_escalation_test.go` + `_integration_test.go` | 559 | Power escalation rules |
 | `provider_deadline_test.go` | 188 | Per-request deadlines, idle timeouts |
 | `script_test.go` | 346 | Script harness (test-only directive interpreter) |
 | `virtual_test.go` | 224 | Virtual provider (test-only replay) |
@@ -992,7 +992,7 @@ After Phase 2 produces a working contract over native providers, Phase 3 brings 
     - Single RouteRequest type (Provider field present from day one — fixes ddx-8610020e).
     - Canonical-form fuzzy matcher (case + vendor-prefix normalization — fixes ddx-0486e601).
     - Per-(harness,provider,model) capability gating (fixes ddx-4817edfd subtree).
-    - Profile-aware tier escalation that talks to provider failover (fixes ddx-3c5ba7cc).
+    - Profile-aware power escalation that talks to provider failover (fixes ddx-3c5ba7cc).
     - Single observation store + cooldown abstraction.
 - 3.10 **`RouteStatus`** — operator-dashboard surface. Aggregates cooldown state, recent decisions cache, observation-derived per-(provider,model) latency. Distinct from per-request `ResolveRoute`.
 - 3.11 **`TailSessionLog`** — surfaces in-progress session events to subscribers (DDx workers). Backed by the same internal session-log writer Execute uses.

@@ -22,13 +22,13 @@ const (
 // pin.
 type ExecutionHint struct {
 	Source             ExecutionIntentSource
-	RequestedTier      ModelTier
+	InferredPowerClass PowerClass
 	SmartJustification string
 	RejectedRoutePins  []string
 }
 
 // ExecutionHintFinding is a single lint finding emitted when bead metadata
-// carries a durable route pin or a missing smart-tier justification.
+// carries a durable route pin or a missing smart-powerClass justification.
 type ExecutionHintFinding struct {
 	Field   string `json:"field"`
 	Value   string `json:"value,omitempty"`
@@ -36,7 +36,7 @@ type ExecutionHintFinding struct {
 }
 
 // ParseExecutionHint derives the bead's abstract execution intent from its
-// durable metadata. A tier label wins over heuristics and marks the source as
+// durable metadata. A powerClass label wins over heuristics and marks the source as
 // bead_hint; otherwise the caller should fall back to heuristics/defaults.
 func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 	if b == nil {
@@ -45,18 +45,18 @@ func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 
 	hint := ExecutionHint{
 		Source:             ExecutionIntentSourceHeuristic,
-		RequestedTier:      InferTier(b),
+		InferredPowerClass: InferPowerClass(b),
 		SmartJustification: extractSmartJustification(b.Description),
 	}
-	if hint.RequestedTier == "" {
+	if hint.InferredPowerClass == "" {
 		hint.Source = ExecutionIntentSourceDefault
 	}
 
 	for _, raw := range b.Labels {
-		tier, ok := parseTierLabel(raw)
+		powerClass, ok := parsePowerLabel(raw)
 		if ok {
 			hint.Source = ExecutionIntentSourceBeadHint
-			hint.RequestedTier = tier
+			hint.InferredPowerClass = powerClass
 		}
 		if pin, ok := parseDurableRoutePinLabel(raw); ok {
 			hint.RejectedRoutePins = append(hint.RejectedRoutePins, pin)
@@ -70,17 +70,17 @@ func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 		}
 	}
 
-	// The smart-tier justification is only meaningful when the bead explicitly
+	// The smart-powerClass justification is only meaningful when the bead explicitly
 	// asks for smart. Heuristic smart inference does not require the authored
 	// SMART JUSTIFICATION section.
-	if hint.RequestedTier != TierSmart {
+	if hint.InferredPowerClass != PowerSmart {
 		hint.SmartJustification = ""
 	}
 	return hint
 }
 
 // LintExecutionHints returns durable-routing findings for the bead. The lint
-// surface is intentionally narrow: it rejects smart-tier beads without an
+// surface is intentionally narrow: it rejects smart-powerClass beads without an
 // explicit justification and durable model/provider/harness pins that should
 // stay on one-off CLI flags.
 func LintExecutionHints(b *bead.Bead) []ExecutionHintFinding {
@@ -90,10 +90,10 @@ func LintExecutionHints(b *bead.Bead) []ExecutionHintFinding {
 	hint := ParseExecutionHint(b)
 	findings := make([]ExecutionHintFinding, 0, len(hint.RejectedRoutePins)+1)
 
-	if hint.Source == ExecutionIntentSourceBeadHint && hint.RequestedTier == TierSmart && strings.TrimSpace(hint.SmartJustification) == "" {
+	if hint.Source == ExecutionIntentSourceBeadHint && hint.InferredPowerClass == PowerSmart && strings.TrimSpace(hint.SmartJustification) == "" {
 		findings = append(findings, ExecutionHintFinding{
 			Field:   "description",
-			Message: "bead uses tier:smart but has no SMART JUSTIFICATION section",
+			Message: "bead uses power:smart but has no SMART JUSTIFICATION section",
 		})
 	}
 
@@ -104,22 +104,22 @@ func LintExecutionHints(b *bead.Bead) []ExecutionHintFinding {
 	return findings
 }
 
-func parseTierLabel(raw string) (ModelTier, bool) {
+func parsePowerLabel(raw string) (PowerClass, bool) {
 	l := strings.ToLower(strings.TrimSpace(raw))
 	if l == "" {
 		return "", false
 	}
-	tier, ok := strings.CutPrefix(l, "tier:")
+	powerClass, ok := strings.CutPrefix(l, "power:")
 	if !ok {
 		return "", false
 	}
-	switch strings.TrimSpace(tier) {
-	case string(TierSmart):
-		return TierSmart, true
-	case string(TierStandard):
-		return TierStandard, true
-	case string(TierCheap):
-		return TierCheap, true
+	switch strings.TrimSpace(powerClass) {
+	case string(PowerSmart):
+		return PowerSmart, true
+	case string(PowerStandard):
+		return PowerStandard, true
+	case string(PowerCheap):
+		return PowerCheap, true
 	default:
 		return "", false
 	}

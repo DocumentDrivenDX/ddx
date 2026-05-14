@@ -13,7 +13,7 @@ import (
 // failure (test failed, build failed, no changes after attempt).
 //
 // Infrastructure failures should not consume escalation budget — the bead
-// should be deferred with a retry-after, not retried at the next tier with
+// should be deferred with a retry-after, not retried at the next powerClass with
 // a more expensive model. The model wasn't given a fair chance.
 //
 // Patterns are matched case-insensitively as substrings of the failure
@@ -54,13 +54,13 @@ var InfrastructureFailurePatterns = []string{
 // IsInfrastructureFailure reports whether the given failure status + detail
 // indicates a transient infrastructure problem the model could not have
 // fixed. Only execution_failed can be infrastructure; other escalatable
-// statuses are semantic outcomes that should proceed through the tier ladder.
+// statuses are semantic outcomes that should proceed through the powerClass ladder.
 // Returns false for statuses whose detail does not match any known
 // infrastructure pattern.
 //
 // Used by the execute-loop to decide whether to (a) defer the bead with a
-// retry-after and try the same tier later, or (b) burn through to the next
-// tier as the standard escalation policy.
+// retry-after and try the same powerClass later, or (b) burn through to the next
+// powerClass as the standard escalation policy.
 func IsInfrastructureFailure(status, detail string) bool {
 	if status != "execution_failed" {
 		return false
@@ -89,11 +89,11 @@ func IsInfrastructureFailure(status, detail string) bool {
 const DefaultMaxCostUSD = 100.0
 
 // DefaultMaxBeadCostUSD is the default per-bead budget. When a single bead
-// exhausts this amount across all escalation tiers, escalation stops and the
+// exhausts this amount across all escalation powerClasses, escalation stops and the
 // bead is returned to open without a cooldown. Operators can override
 // per-bead with a budget:<USD> label (e.g. budget:25.0).
 //
-// $5 is a conservative default — enough to attempt two or three smart-tier
+// $5 is a conservative default — enough to attempt two or three smart-powerClass
 // runs before halting, but low enough to protect against runaway escalation
 // on a pathologically difficult bead.
 const DefaultMaxBeadCostUSD = 5.0
@@ -232,7 +232,7 @@ func (t *CostCapTracker) Tripped() (string, bool) {
 }
 
 // PerBeadCostTracker accumulates billed cost for a single bead across all
-// escalation tiers and reports when the per-bead budget is exceeded.
+// escalation powerClasses and reports when the per-bead budget is exceeded.
 // When the budget is exceeded, the caller should stop escalating, unclaim
 // the bead, and emit a per_bead_budget_exhausted event (see TD-031 §5).
 //
@@ -292,12 +292,12 @@ func ParseBeadBudgetLabel(labels []string) (float64, bool) {
 	return 0, false
 }
 
-// ParseBeadTierHintLabel scans a bead's label slice for a "tier:hint=<name>"
-// entry and returns the parsed ModelTier and true when found with a recognized
-// tier name. Returns ("", false) when the label is absent or the name is
+// ParseBeadPowerHintLabel scans a bead's label slice for a "power:hint=<name>"
+// entry and returns the parsed PowerClass and true when found with a recognized
+// powerClass name. Returns ("", false) when the label is absent or the name is
 // unrecognized. Recognized names are: cheap, standard, smart.
-func ParseBeadTierHintLabel(labels []string) (ModelTier, bool) {
-	const prefix = "tier:hint="
+func ParseBeadPowerHintLabel(labels []string) (PowerClass, bool) {
+	const prefix = "power:hint="
 	for _, l := range labels {
 		lower := strings.ToLower(strings.TrimSpace(l))
 		name, ok := strings.CutPrefix(lower, prefix)
@@ -305,12 +305,12 @@ func ParseBeadTierHintLabel(labels []string) (ModelTier, bool) {
 			continue
 		}
 		switch strings.TrimSpace(name) {
-		case string(TierSmart):
-			return TierSmart, true
-		case string(TierStandard):
-			return TierStandard, true
-		case string(TierCheap):
-			return TierCheap, true
+		case string(PowerSmart):
+			return PowerSmart, true
+		case string(PowerStandard):
+			return PowerStandard, true
+		case string(PowerCheap):
+			return PowerCheap, true
 		default:
 			return "", false
 		}
@@ -318,12 +318,12 @@ func ParseBeadTierHintLabel(labels []string) (ModelTier, bool) {
 	return "", false
 }
 
-// HasBeadTierHintLabel reports whether labels contains any "tier:hint=..." entry,
-// including entries with unrecognized tier names. Used to detect invalid hints
+// HasBeadPowerHintLabel reports whether labels contains any "power:hint=..." entry,
+// including entries with unrecognized powerClass names. Used to detect invalid hints
 // so callers can emit a warning before falling back to the default.
-func HasBeadTierHintLabel(labels []string) bool {
+func HasBeadPowerHintLabel(labels []string) bool {
 	for _, l := range labels {
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(l)), "tier:hint=") {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(l)), "power:hint=") {
 			return true
 		}
 	}

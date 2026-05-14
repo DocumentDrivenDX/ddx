@@ -78,7 +78,7 @@ Each input row to the rollup engine is an `agentmetrics.Attempt`:
   "harness": "claude",
   "provider": "openai",
   "model": "gpt-5.5",
-  "tier": "claude/gpt-5.5",
+  "route": "claude/gpt-5.5",
   "status": "closed",
   "outcome": "merged",
   "bucket": "successful",
@@ -97,7 +97,7 @@ Schema rules:
 
 - `attempt_id` is the dedupe key.
 - `source` is one of `run-store` or `bundle`.
-- `tier` is the canonical `harness/model` label; an empty model collapses to
+- `route` is the canonical `harness/model` label; an empty model collapses to
   the harness name only.
 - `bucket` is derived from status, with `already_satisfied` counted as a
   success per Story 11.
@@ -109,7 +109,7 @@ The rollup response is a revision-scoped envelope containing row aggregates:
 ```json
 {
   "window": "W7D",
-  "group_by": "TIER",
+  "group_by": "ROUTE",
   "revision": "sha256:...",
   "rows": [
     {
@@ -133,7 +133,7 @@ The rollup response is a revision-scoped envelope containing row aggregates:
 Schema rules:
 
 - `window` is the query window enum (`24h`, `7d`, or `30d`).
-- `group_by` is one of `MODEL`, `HARNESS`, `PROVIDER`, or `TIER`.
+- `group_by` is one of `MODEL`, `HARNESS`, `PROVIDER`, or `ROUTE`.
 - `revision` is the fingerprint of the underlying source corpus used to build
   the response.
 - `rows[].key` is the axis label for the selected grouping.

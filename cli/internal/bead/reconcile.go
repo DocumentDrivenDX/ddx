@@ -310,7 +310,7 @@ func isNoViableProviderEvent(e BeadEvent) bool {
 	}
 	body := strings.ToLower(e.Body)
 	return strings.Contains(body, "no viable provider") ||
-		strings.Contains(body, "all tiers exhausted")
+		strings.Contains(body, "all powerClasses exhausted")
 }
 
 func hasNoChangesResidue(b Bead) bool {

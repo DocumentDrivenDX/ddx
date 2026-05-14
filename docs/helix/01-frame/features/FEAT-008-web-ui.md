@@ -1075,7 +1075,7 @@ provider logs
 **E2E Test:** `actions.spec.ts` — full workflow: open project view → verify Actions panel → click Drain queue → verify confirmation dialog with bead count → confirm → verify worker appears in Workers list within 1s → verify button becomes worker link → click disabled action → verify tooltip explains prerequisite
 
 ### US-096: Operator Views Model Efficacy and Runs Comparisons
-**As an** operator pursuing the cost-tiered throughput-per-dollar goal
+**As an** operator pursuing the cost-awareed throughput-per-dollar goal
 **I want** to see per-model completion rates, cost, and latency, and run
   A/B comparisons between prompts or models
 **So that** I can steer the system toward the models and prompts that
@@ -1087,13 +1087,13 @@ provider logs
   `(harness, provider, model)` tuple used in the last N days with:
   success count, attempt count, completion rate, median tokens in/out,
   median duration, median cost (or `—` when no cost signal)
-- Given I filter by tier / label / spec-id, then the table refilters
+- Given I filter by power class / label / spec-id, then the table refilters
   live; URL encodes the filter for bookmarking
 - Given I click `Compare`, then a dialog lets me pick N `(model, prompt)`
   pairs; on submit, DDx dispatches the `compare-prompts` workflow and the resulting
   `ComparisonRecord` appears under `Comparisons` with per-arm outputs,
   diffs, and (if configured) grader scores
-- Given a model's completion rate crosses the configured adaptive-min-tier
+- Given a model's completion rate crosses the configured adaptive-min-power
   floor (trailing-window success rate < threshold), then a warning badge
   appears on that row with a tooltip linking to the routing metrics doc
 - Given I click a row, then a detail panel shows the last 10 attempts

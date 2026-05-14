@@ -21,7 +21,7 @@ func writeFile(t *testing.T, workingDir, rel, body string) {
 }
 
 // TestLoadAttempts_BundleOnly exercises the legacy fallback path: only
-// .ddx/executions/ exists. Status is bucketed and tier is filled in.
+// .ddx/executions/ exists. Status is bucketed and powerClass is filled in.
 func TestLoadAttempts_BundleOnly(t *testing.T) {
 	wd := t.TempDir()
 	writeFile(t, wd, ".ddx/executions/20260101T000000-aaa/result.json", `{
@@ -58,8 +58,8 @@ func TestLoadAttempts_BundleOnly(t *testing.T) {
 	if a1.Bucket != BucketSuccess {
 		t.Fatalf("a1 bucket = %q, want success", a1.Bucket)
 	}
-	if a1.Tier != "claude/sonnet" {
-		t.Fatalf("a1 tier = %q, want claude/sonnet", a1.Tier)
+	if a1.PowerClass != "claude/sonnet" {
+		t.Fatalf("a1 powerClass = %q, want claude/sonnet", a1.PowerClass)
 	}
 	if a1.Source != SourceBundle {
 		t.Fatalf("a1 source = %q, want bundle", a1.Source)
@@ -200,8 +200,8 @@ func TestLoadAttempts_RoutingEnrichment(t *testing.T) {
 	if a.Model != "sonnet" {
 		t.Fatalf("enriched model = %q, want sonnet", a.Model)
 	}
-	if a.Tier != "claude/sonnet" {
-		t.Fatalf("enriched tier = %q, want claude/sonnet", a.Tier)
+	if a.PowerClass != "claude/sonnet" {
+		t.Fatalf("enriched powerClass = %q, want claude/sonnet", a.PowerClass)
 	}
 }
 
@@ -250,8 +250,8 @@ func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
 	beadJSON := `{"id":"ddx-hint","title":"t","status":"closed",` +
 		`"issue_type":"task","priority":2,` +
 		`"created_at":"` + now + `","updated_at":"` + now + `",` +
-		`"events":[{"kind":"execution-routing-intent","summary":"source=bead_hint tier=smart",` +
-		`"body":"{\"routing_intent_source\":\"bead_hint\",\"requested_tier\":\"smart\",\"smart_justification\":\"This bead decides the durable execution-hint contract.\",\"actual_harness\":\"claude\",\"actual_provider\":\"anthropic\",\"actual_model\":\"claude-sonnet-4-6\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"rejected_route_pins\":[\"harness:claude\",\"execution-model=gpt-5.5\"]}",` +
+		`"events":[{"kind":"execution-routing-intent","summary":"source=bead_hint powerClass=smart",` +
+		`"body":"{\"routing_intent_source\":\"bead_hint\",\"inferred_power_class\":\"smart\",\"smart_justification\":\"This bead decides the durable execution-hint contract.\",\"actual_harness\":\"claude\",\"actual_provider\":\"anthropic\",\"actual_model\":\"claude-sonnet-4-6\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"rejected_route_pins\":[\"harness:claude\",\"execution-model=gpt-5.5\"]}",` +
 		`"created_at":"` + now + `"}]}`
 	writeFile(t, wd, ".ddx/beads.jsonl", beadJSON+"\n")
 
@@ -266,8 +266,8 @@ func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
 	if a.RoutingIntentSource != "bead_hint" {
 		t.Fatalf("routing intent source = %q, want bead_hint", a.RoutingIntentSource)
 	}
-	if a.RequestedTier != "smart" {
-		t.Fatalf("requested tier = %q, want smart", a.RequestedTier)
+	if a.InferredPowerClass != "smart" {
+		t.Fatalf("requested powerClass = %q, want smart", a.InferredPowerClass)
 	}
 	if a.SmartJustification == "" {
 		t.Fatal("smart justification must be projected")
@@ -282,7 +282,7 @@ func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
 	smartCount := 0
 	pinCount := 0
 	for _, attempt := range got {
-		if attempt.RequestedTier == "smart" && attempt.RoutingIntentSource == "bead_hint" {
+		if attempt.InferredPowerClass == "smart" && attempt.RoutingIntentSource == "bead_hint" {
 			smartCount++
 		}
 		if attempt.RejectedRoutePinCount > 0 {

@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
@@ -23,7 +23,7 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 
 func nextEscalationFloor(l escalationFloorFinder, actualPower int) (int, error) {
 	if l == nil {
-		return 0, tierescalation.ErrLadderExhausted
+		return 0, powerladder.ErrLadderExhausted
 	}
 	floor := actualPower
 	for {
@@ -31,7 +31,7 @@ func nextEscalationFloor(l escalationFloorFinder, actualPower int) (int, error) 
 		if err == nil {
 			return next, nil
 		}
-		var nvp *tierescalation.NoViableProviderError
+		var nvp *powerladder.NoViableProviderError
 		if errors.As(err, &nvp) {
 			floor = nvp.Floor
 			continue
@@ -42,14 +42,14 @@ func nextEscalationFloor(l escalationFloorFinder, actualPower int) (int, error) 
 
 func highestViableEscalationFloor(l escalationFloorFinder) (int, error) {
 	if l == nil {
-		return 0, tierescalation.ErrLadderExhausted
+		return 0, powerladder.ErrLadderExhausted
 	}
 	floor := 0
 	highest := 0
 	for {
 		next, err := nextEscalationFloor(l, floor)
 		if err != nil {
-			if errors.Is(err, tierescalation.ErrLadderExhausted) && highest > 0 {
+			if errors.Is(err, powerladder.ErrLadderExhausted) && highest > 0 {
 				return highest, nil
 			}
 			return 0, err
@@ -64,7 +64,7 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 }
 
 func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder, inferZeroConfig bool) (int, agent.ExecuteBeadReport, bool) {
-	if floor, ok := numericTierFloorHint(b); ok {
+	if floor, ok := numericPowerFloorHint(b); ok {
 		if baseMinPower > floor {
 			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
 		}
@@ -73,7 +73,7 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 		}
 		return floor, agent.ExecuteBeadReport{}, false
 	}
-	if tier, ok := triageTierHint(b); ok && tier == policyescalation.TierSmart {
+	if powerClass, ok := triagePowerHint(b); ok && powerClass == policyescalation.PowerSmart {
 		floor, err := highestViableEscalationFloor(ladder)
 		if err != nil {
 			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, err), true
@@ -87,8 +87,8 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 		return floor, agent.ExecuteBeadReport{}, false
 	}
 	if b != nil {
-		if tier, ok := policyescalation.ParseBeadTierHintLabel(b.Labels); ok {
-			labelFloor, hasFloor := resolveTierFloor(tier, ladder)
+		if powerClass, ok := policyescalation.ParseBeadPowerHintLabel(b.Labels); ok {
+			labelFloor, hasFloor := resolvePowerFloor(powerClass, ladder)
 			if !hasFloor {
 				labelFloor = baseMinPower
 			}
@@ -100,8 +100,8 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 				return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
 			}
 			return floor, agent.ExecuteBeadReport{}, false
-		} else if policyescalation.HasBeadTierHintLabel(b.Labels) {
-			fmt.Fprintf(os.Stderr, "ddx: bead %s has unrecognized tier:hint label; using default MinPower\n", b.ID)
+		} else if policyescalation.HasBeadPowerHintLabel(b.Labels) {
+			fmt.Fprintf(os.Stderr, "ddx: bead %s has unrecognized power:hint label; using default MinPower\n", b.ID)
 		}
 	}
 	if inferZeroConfig {
@@ -110,15 +110,15 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
-func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFinder) (int, bool) {
-	switch tier {
-	case policyescalation.TierSmart:
+func resolvePowerFloor(powerClass policyescalation.PowerClass, ladder escalationFloorFinder) (int, bool) {
+	switch powerClass {
+	case policyescalation.PowerSmart:
 		floor, err := highestViableEscalationFloor(ladder)
 		if err != nil {
 			return 0, false
 		}
 		return floor, true
-	case policyescalation.TierStandard:
+	case policyescalation.PowerStandard:
 		first, err := nextEscalationFloor(ladder, 0)
 		if err != nil {
 			return 0, false
@@ -134,28 +134,28 @@ func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFin
 }
 
 func zeroConfigInferredMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
-	tier := policyescalation.InferTier(b)
-	if tier == "" {
+	powerClass := policyescalation.InferPowerClass(b)
+	if powerClass == "" {
 		return baseMinPower, agent.ExecuteBeadReport{}, false
 	}
-	tierFloor, hasTierFloor := resolveTierFloor(tier, ladder)
-	if !hasTierFloor && tier != policyescalation.TierCheap {
-		return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, fmt.Errorf("no viable routing floor for inferred tier %s", tier)), true
+	powerFloor, hasPowerFloor := resolvePowerFloor(powerClass, ladder)
+	if !hasPowerFloor && powerClass != policyescalation.PowerCheap {
+		return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, fmt.Errorf("no viable routing floor for inferred powerClass %s", powerClass)), true
 	}
-	if tierFloor > baseMinPower {
-		if maxPower > 0 && tierFloor >= maxPower {
-			return baseMinPower, smartRouteUnavailableReport(b, tierFloor, maxPower, nil), true
+	if powerFloor > baseMinPower {
+		if maxPower > 0 && powerFloor >= maxPower {
+			return baseMinPower, smartRouteUnavailableReport(b, powerFloor, maxPower, nil), true
 		}
-		return tierFloor, agent.ExecuteBeadReport{}, false
+		return powerFloor, agent.ExecuteBeadReport{}, false
 	}
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
-func numericTierFloorHint(b *bead.Bead) (int, bool) {
+func numericPowerFloorHint(b *bead.Bead) (int, bool) {
 	if b == nil || b.Extra == nil {
 		return 0, false
 	}
-	raw, ok := b.Extra[agent.TriageTierHintKey]
+	raw, ok := b.Extra[agent.TriagePowerHintKey]
 	if !ok {
 		return 0, false
 	}
@@ -171,21 +171,21 @@ func numericTierFloorHint(b *bead.Bead) (int, bool) {
 	}
 }
 
-func triageTierHint(b *bead.Bead) (policyescalation.ModelTier, bool) {
+func triagePowerHint(b *bead.Bead) (policyescalation.PowerClass, bool) {
 	if b == nil || b.Extra == nil {
 		return "", false
 	}
-	raw, ok := b.Extra[agent.TriageTierHintKey]
+	raw, ok := b.Extra[agent.TriagePowerHintKey]
 	if !ok {
 		return "", false
 	}
 	switch strings.ToLower(strings.TrimSpace(fmt.Sprint(raw))) {
-	case string(policyescalation.TierSmart):
-		return policyescalation.TierSmart, true
-	case string(policyescalation.TierStandard):
-		return policyescalation.TierStandard, true
-	case string(policyescalation.TierCheap):
-		return policyescalation.TierCheap, true
+	case string(policyescalation.PowerSmart):
+		return policyescalation.PowerSmart, true
+	case string(policyescalation.PowerStandard):
+		return policyescalation.PowerStandard, true
+	case string(policyescalation.PowerCheap):
+		return policyescalation.PowerCheap, true
 	default:
 		return "", false
 	}
@@ -211,7 +211,7 @@ func smartRouteUnavailableReport(b *bead.Bead, minPower, maxPower int, cause err
 	}
 }
 
-func runEscalatingSingleTierAttempts(
+func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
 	ladder escalationFloorFinder,

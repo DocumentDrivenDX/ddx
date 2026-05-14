@@ -261,11 +261,11 @@ type reviewArtifactResult struct {
 	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
 }
 
-// SelectReviewerTier returns the tier to use for the review agent.
-// Rule: max(impl_tier + 1, smart). Since smart is the ceiling, the
-// reviewer always runs at smart tier regardless of the implementation tier.
-func SelectReviewerTier(_ escalation.ModelTier) escalation.ModelTier {
-	return escalation.TierSmart
+// SelectReviewerPolicy returns the power class to use for the review agent.
+// Rule: max(implementation power + one step, smart). Since smart is the ceiling,
+// the reviewer always runs at smart power regardless of the implementation power.
+func SelectReviewerPolicy(_ escalation.PowerClass) escalation.PowerClass {
+	return escalation.PowerSmart
 }
 
 // HasBeadLabel reports whether label is present in labels.
@@ -1008,7 +1008,7 @@ func reviewPairingDegradedBody(impl ImplementerRouting, reviewerHarness, reviewe
 // events recorded against the bead whose body cites the given result_rev. Each
 // counts as one escalation step — review-error events from transport/overflow/
 // parse failures and pairing-degraded events from routing collisions both
-// signal that the current reviewer tier is insufficient.
+// signal that the current reviewer powerClass is insufficient.
 func countPriorEscalationTriggers(reader BeadEventReader, beadID, resultRev string) int {
 	if reader == nil || resultRev == "" {
 		return 0
@@ -1230,7 +1230,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	start := time.Now()
 	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewProfile.Name)
 	// Apply escalated MinPower: use the higher of the base R4 floor and the
-	// escalated profile floor so retries reach a stronger reviewer tier.
+	// escalated profile floor so retries reach a stronger reviewer powerClass.
 	if reviewProfile.MinPower > runRuntime.MinPowerOverride {
 		runRuntime.MinPowerOverride = reviewProfile.MinPower
 	}
@@ -1417,7 +1417,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 // for the post-merge reviewer. The reviewer carries no persistent
 // ResolvedConfig of its own — the durable knobs that affect a review
 // invocation (timeout, provider, evidence caps) are read from the project's
-// .ddx/config.yaml via LoadAndResolve, while reviewer-tier harness/model
+// .ddx/config.yaml via LoadAndResolve, while reviewer-powerClass harness/model
 // are pinned via the runtime override fields. Resolution order matches the
 // execute-bead worker (runner > pre-built service > fresh service).
 func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runtime AgentRunRuntime) (*Result, error) {

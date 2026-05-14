@@ -59,7 +59,7 @@ func MarkResultLandError(projectRoot string, res *ExecuteBeadResult, err error) 
 
 // ReportFromExecuteBeadResult maps the detailed worker/orchestrator result
 // into the loop-facing report shape used by ddx work and ddx try.
-func ReportFromExecuteBeadResult(res *ExecuteBeadResult, tier string) ExecuteBeadReport {
+func ReportFromExecuteBeadResult(res *ExecuteBeadResult, powerClass string) ExecuteBeadReport {
 	if res == nil {
 		return ExecuteBeadReport{}
 	}
@@ -85,7 +85,7 @@ func ReportFromExecuteBeadResult(res *ExecuteBeadResult, tier string) ExecuteBea
 		ResultRev:                   res.ResultRev,
 		PreserveRef:                 res.PreserveRef,
 		NoChangesRationale:          res.NoChangesRationale,
-		Tier:                        tier,
+		PowerClass:                  powerClass,
 		CostUSD:                     res.CostUSD,
 		DurationMS:                  int64(res.DurationMS),
 		ResourceExhausted:           res.ResourceExhausted,

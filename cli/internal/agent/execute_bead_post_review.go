@@ -423,7 +423,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		out.Approved = false
 	}
 	if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
-		_ = applyReviewTriageDecision(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.Tier)
+		_ = applyReviewTriageDecision(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.PowerClass)
 	}
 
 	out.Report = report
@@ -550,7 +550,7 @@ func reviewResultHasACEvidence(res *ReviewResult) bool {
 // ExecuteBeadWorker; the C3
 // extraction (ddx-a921ff01) moves it inside the post-merge-review pipeline
 // driven by RunPostMergeReview / try.Attempt.
-func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, currentTier string) error {
+func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, currentPowerClass string) error {
 	events, err := store.Events(beadID)
 	if err != nil {
 		return err
@@ -583,11 +583,11 @@ func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string,
 	action := policy.Decide(beadID, triage.FailureModeReviewBlock, history)
 
 	pairedDegraded := latestBlockPairedDegraded(blockTimestamps, pairingDegraded)
-	if pairedDegraded && action == triage.ActionEscalateTier {
+	if pairedDegraded && action == triage.ActionEscalatePower {
 		action = triage.ActionReAttemptWithContext
 	}
 
-	return applyTriageAction(store, beadID, actor, now, action, currentTier, pairedDegraded)
+	return applyTriageAction(store, beadID, actor, now, action, currentPowerClass, pairedDegraded)
 }
 
 // latestBlockPairedDegraded reports whether the most recent BLOCK event was
@@ -611,9 +611,9 @@ func latestBlockPairedDegraded(blocks, pairing []time.Time) bool {
 }
 
 // applyTriageAction performs the side effects for a chosen Action: writes a
-// tier-pin hint into bead.Extra (escalate_tier), moves the bead to proposed
+// powerClass-pin hint into bead.Extra (escalate_power), moves the bead to proposed
 // for operator-required outcomes, and always records a triage-decision event.
-func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, action triage.Action, currentTier string, pairedDegraded bool) error {
+func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, action triage.Action, currentPowerClass string, pairedDegraded bool) error {
 	body := map[string]any{
 		"action": string(action),
 		"mode":   string(triage.FailureModeReviewBlock),
@@ -623,21 +623,21 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 	}
 
 	switch action {
-	case triage.ActionEscalateTier:
-		nextTier := nextEscalatedTier(currentTier)
-		body["tier_hint"] = string(nextTier)
+	case triage.ActionEscalatePower:
+		nextPowerClass := nextEscalatedPowerClass(currentPowerClass)
+		body["power_hint"] = string(nextPowerClass)
 		_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
-			b.Extra[TriageTierHintKey] = string(nextTier)
+			b.Extra[TriagePowerHintKey] = string(nextPowerClass)
 		})
 	case triage.ActionOperatorRequired:
 		if err := store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
-			delete(b.Extra, TriageTierHintKey)
+			delete(b.Extra, TriagePowerHintKey)
 			// Migration-only cleanup: defensive removal for legacy rows that escaped
 			// the lifecycle migration or arrived via external import.
 			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
@@ -678,17 +678,17 @@ func clearReviewTriageClaimMetadata(b *bead.Bead) {
 	delete(b.Extra, "execute-loop-heartbeat-at")
 }
 
-// nextEscalatedTier returns the next tier above `current`. An unrecognised or
-// empty current tier defaults to standard; smart is its own ceiling.
-func nextEscalatedTier(current string) escalation.ModelTier {
-	switch escalation.ModelTier(current) {
-	case escalation.TierCheap:
-		return escalation.TierStandard
-	case escalation.TierStandard:
-		return escalation.TierSmart
-	case escalation.TierSmart:
-		return escalation.TierSmart
+// nextEscalatedPowerClass returns the next powerClass above `current`. An unrecognised or
+// empty current powerClass defaults to standard; smart is its own ceiling.
+func nextEscalatedPowerClass(current string) escalation.PowerClass {
+	switch escalation.PowerClass(current) {
+	case escalation.PowerCheap:
+		return escalation.PowerStandard
+	case escalation.PowerStandard:
+		return escalation.PowerSmart
+	case escalation.PowerSmart:
+		return escalation.PowerSmart
 	default:
-		return escalation.TierStandard
+		return escalation.PowerStandard
 	}
 }

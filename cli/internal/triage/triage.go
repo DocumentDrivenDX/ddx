@@ -32,8 +32,8 @@ const (
 	// ActionReAttemptWithContext — re-queue the bead with the prior
 	// failure context threaded into the next prompt.
 	ActionReAttemptWithContext Action = "re_attempt_with_context"
-	// ActionEscalateTier — re-queue with a higher-capability model tier.
-	ActionEscalateTier Action = "escalate_tier"
+	// ActionEscalatePower — re-queue with a higher-capability model powerClass.
+	ActionEscalatePower Action = "escalate_power"
 	// ActionRetryWithBackoff — retry after a delay (lock contention etc.).
 	ActionRetryWithBackoff Action = "retry_with_backoff"
 	// ActionFileFollowup — file a follow-up bead and close this one.
@@ -51,12 +51,12 @@ type TriagePolicy struct {
 }
 
 // DefaultPolicy returns the built-in policy. Mirrors the parent bead's
-// AC#3: BLOCK → re_attempt_with_context, escalate_tier, operator_required.
+// AC#3: BLOCK → re_attempt_with_context, escalate_power, operator_required.
 func DefaultPolicy() TriagePolicy {
 	return TriagePolicy{Ladders: map[FailureMode][]Action{
 		FailureModeReviewBlock: {
 			ActionReAttemptWithContext,
-			ActionEscalateTier,
+			ActionEscalatePower,
 			ActionOperatorRequired,
 		},
 		FailureModeLockContention: {
@@ -66,7 +66,7 @@ func DefaultPolicy() TriagePolicy {
 		},
 		FailureModeExecutionFailed: {
 			ActionReAttemptWithContext,
-			ActionEscalateTier,
+			ActionEscalatePower,
 			ActionOperatorRequired,
 		},
 		FailureModeNoChanges: {
@@ -104,7 +104,7 @@ func (p TriagePolicy) Decide(beadID string, mode FailureMode, history []FailureM
 func ParseAction(s string) (Action, error) {
 	switch Action(s) {
 	case ActionReAttemptWithContext,
-		ActionEscalateTier,
+		ActionEscalatePower,
 		ActionRetryWithBackoff,
 		ActionFileFollowup,
 		ActionOperatorRequired:

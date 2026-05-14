@@ -20,7 +20,7 @@ func newImplementationProfileSelector(projectRoot string) *implementationProfile
 	return &implementationProfileSelector{projectRoot: projectRoot}
 }
 
-func (s *implementationProfileSelector) Select(ctx context.Context, tier escalation.ModelTier, floor int) (agent.ImplementationProfileSelection, error) {
+func (s *implementationProfileSelector) Select(ctx context.Context, powerClass escalation.PowerClass, floor int) (agent.ImplementationProfileSelection, error) {
 	if s == nil {
 		return agent.ImplementationProfileSelection{}, nil
 	}
@@ -37,11 +37,11 @@ func (s *implementationProfileSelector) Select(ctx context.Context, tier escalat
 	if s.err != nil {
 		return agent.ImplementationProfileSelection{}, s.err
 	}
-	if tier == "" {
-		tier = escalation.TierCheap
+	if powerClass == "" {
+		powerClass = escalation.PowerCheap
 	}
 	if floor > 0 {
-		return agent.SelectImplementationProfileForMinPower(s.snap, tier, floor), nil
+		return agent.SelectImplementationProfileForMinPower(s.snap, powerClass, floor), nil
 	}
-	return agent.SelectImplementationProfile(s.snap, tier), nil
+	return agent.SelectImplementationProfile(s.snap, powerClass), nil
 }

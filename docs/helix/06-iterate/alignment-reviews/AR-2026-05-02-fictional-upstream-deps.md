@@ -16,7 +16,7 @@ ddx:
 
 ## What happened
 
-A planning sub-agent (codex review of the Story 10 plan, recorded at `/tmp/story-10-codex.out`) recommended adding several fields to the upstream Fizeau `ExecuteRequest` and `ExecuteResponse` to support reviewer pairing and capability-tier escalation. The recommendation was framed as a "hard upstream dependency" gating six DDx beads (S10_3, S10_5, S10_6, S10_9, S12_1, and indirectly others through coupling).
+A planning sub-agent (codex review of the Story 10 plan, recorded at `/tmp/story-10-codex.out`) recommended adding several fields to the upstream Fizeau `ExecuteRequest` and `ExecuteResponse` to support reviewer pairing and capability-power escalation. The recommendation was framed as a "hard upstream dependency" gating six DDx beads (S10_3, S10_5, S10_6, S10_9, S12_1, and indirectly others through coupling).
 
 DDx beads were filed with that framing baked into descriptions, hard `dep` edges connecting them to a wrapper coordination bead (`S10_1`), and the user was told the queue was substantially blocked on upstream work.
 

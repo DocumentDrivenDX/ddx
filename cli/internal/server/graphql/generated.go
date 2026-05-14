@@ -528,34 +528,37 @@ type ComplexityRoot struct {
 	}
 
 	Execution struct {
-		AgentLogPath func(childComplexity int) int
-		BaseRev      func(childComplexity int) int
-		BeadID       func(childComplexity int) int
-		BeadTitle    func(childComplexity int) int
-		BundlePath   func(childComplexity int) int
-		CostUsd      func(childComplexity int) int
-		CreatedAt    func(childComplexity int) int
-		DurationMs   func(childComplexity int) int
-		ExitCode     func(childComplexity int) int
-		FinishedAt   func(childComplexity int) int
-		Harness      func(childComplexity int) int
-		ID           func(childComplexity int) int
-		Manifest     func(childComplexity int) int
-		ManifestPath func(childComplexity int) int
-		Model        func(childComplexity int) int
-		ProjectID    func(childComplexity int) int
-		Prompt       func(childComplexity int) int
-		PromptPath   func(childComplexity int) int
-		Rationale    func(childComplexity int) int
-		Result       func(childComplexity int) int
-		ResultPath   func(childComplexity int) int
-		ResultRev    func(childComplexity int) int
-		SessionID    func(childComplexity int) int
-		StartedAt    func(childComplexity int) int
-		Status       func(childComplexity int) int
-		Tokens       func(childComplexity int) int
-		Verdict      func(childComplexity int) int
-		WorkerID     func(childComplexity int) int
+		AgentLogPath      func(childComplexity int) int
+		BaseRev           func(childComplexity int) int
+		BeadID            func(childComplexity int) int
+		BeadTitle         func(childComplexity int) int
+		BundlePath        func(childComplexity int) int
+		CostUsd           func(childComplexity int) int
+		CreatedAt         func(childComplexity int) int
+		DurationMs        func(childComplexity int) int
+		EvidenceRev       func(childComplexity int) int
+		ExitCode          func(childComplexity int) int
+		FinishedAt        func(childComplexity int) int
+		Harness           func(childComplexity int) int
+		ID                func(childComplexity int) int
+		ImplementationRev func(childComplexity int) int
+		LandedRev         func(childComplexity int) int
+		Manifest          func(childComplexity int) int
+		ManifestPath      func(childComplexity int) int
+		Model             func(childComplexity int) int
+		ProjectID         func(childComplexity int) int
+		Prompt            func(childComplexity int) int
+		PromptPath        func(childComplexity int) int
+		Rationale         func(childComplexity int) int
+		Result            func(childComplexity int) int
+		ResultPath        func(childComplexity int) int
+		ResultRev         func(childComplexity int) int
+		SessionID         func(childComplexity int) int
+		StartedAt         func(childComplexity int) int
+		Status            func(childComplexity int) int
+		Tokens            func(childComplexity int) int
+		Verdict           func(childComplexity int) int
+		WorkerID          func(childComplexity int) int
 	}
 
 	ExecutionConnection struct {
@@ -1411,12 +1414,12 @@ type ComplexityRoot struct {
 		Detail     func(childComplexity int) int
 		Harness    func(childComplexity int) int
 		Model      func(childComplexity int) int
+		PowerClass func(childComplexity int) int
 		Provider   func(childComplexity int) int
 		ResultRev  func(childComplexity int) int
 		RetryAfter func(childComplexity int) int
 		SessionID  func(childComplexity int) int
 		Status     func(childComplexity int) int
-		Tier       func(childComplexity int) int
 		WorkerID   func(childComplexity int) int
 	}
 
@@ -3673,6 +3676,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Execution.DurationMs(childComplexity), true
+	case "Execution.evidenceRev":
+		if e.ComplexityRoot.Execution.EvidenceRev == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Execution.EvidenceRev(childComplexity), true
 	case "Execution.exitCode":
 		if e.ComplexityRoot.Execution.ExitCode == nil {
 			break
@@ -3697,6 +3706,18 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Execution.ID(childComplexity), true
+	case "Execution.implementationRev":
+		if e.ComplexityRoot.Execution.ImplementationRev == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Execution.ImplementationRev(childComplexity), true
+	case "Execution.landedRev":
+		if e.ComplexityRoot.Execution.LandedRev == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Execution.LandedRev(childComplexity), true
 	case "Execution.manifest":
 		if e.ComplexityRoot.Execution.Manifest == nil {
 			break
@@ -7818,6 +7839,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkerExecutionResult.Model(childComplexity), true
+	case "WorkerExecutionResult.powerClass":
+		if e.ComplexityRoot.WorkerExecutionResult.PowerClass == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerExecutionResult.PowerClass(childComplexity), true
 	case "WorkerExecutionResult.provider":
 		if e.ComplexityRoot.WorkerExecutionResult.Provider == nil {
 			break
@@ -7848,12 +7875,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkerExecutionResult.Status(childComplexity), true
-	case "WorkerExecutionResult.tier":
-		if e.ComplexityRoot.WorkerExecutionResult.Tier == nil {
-			break
-		}
-
-		return e.ComplexityRoot.WorkerExecutionResult.Tier(childComplexity), true
 	case "WorkerExecutionResult.workerId":
 		if e.ComplexityRoot.WorkerExecutionResult.WorkerID == nil {
 			break
@@ -20804,6 +20825,93 @@ func (ec *executionContext) fieldContext_Execution_resultRev(_ context.Context, 
 	return fc, nil
 }
 
+func (ec *executionContext) _Execution_implementationRev(ctx context.Context, field graphql.CollectedField, obj *Execution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Execution_implementationRev,
+		func(ctx context.Context) (any, error) {
+			return obj.ImplementationRev, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Execution_implementationRev(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Execution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Execution_landedRev(ctx context.Context, field graphql.CollectedField, obj *Execution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Execution_landedRev,
+		func(ctx context.Context) (any, error) {
+			return obj.LandedRev, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Execution_landedRev(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Execution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Execution_evidenceRev(ctx context.Context, field graphql.CollectedField, obj *Execution) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Execution_evidenceRev,
+		func(ctx context.Context) (any, error) {
+			return obj.EvidenceRev, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Execution_evidenceRev(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Execution",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Execution_bundlePath(ctx context.Context, field graphql.CollectedField, obj *Execution) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -21667,6 +21775,12 @@ func (ec *executionContext) fieldContext_ExecutionEdge_node(_ context.Context, f
 				return ec.fieldContext_Execution_baseRev(ctx, field)
 			case "resultRev":
 				return ec.fieldContext_Execution_resultRev(ctx, field)
+			case "implementationRev":
+				return ec.fieldContext_Execution_implementationRev(ctx, field)
+			case "landedRev":
+				return ec.fieldContext_Execution_landedRev(ctx, field)
+			case "evidenceRev":
+				return ec.fieldContext_Execution_evidenceRev(ctx, field)
 			case "bundlePath":
 				return ec.fieldContext_Execution_bundlePath(ctx, field)
 			case "promptPath":
@@ -33707,6 +33821,12 @@ func (ec *executionContext) fieldContext_Query_execution(ctx context.Context, fi
 				return ec.fieldContext_Execution_baseRev(ctx, field)
 			case "resultRev":
 				return ec.fieldContext_Execution_resultRev(ctx, field)
+			case "implementationRev":
+				return ec.fieldContext_Execution_implementationRev(ctx, field)
+			case "landedRev":
+				return ec.fieldContext_Execution_landedRev(ctx, field)
+			case "evidenceRev":
+				return ec.fieldContext_Execution_evidenceRev(ctx, field)
 			case "bundlePath":
 				return ec.fieldContext_Execution_bundlePath(ctx, field)
 			case "promptPath":
@@ -33806,6 +33926,12 @@ func (ec *executionContext) fieldContext_Query_executionBySessionId(ctx context.
 				return ec.fieldContext_Execution_baseRev(ctx, field)
 			case "resultRev":
 				return ec.fieldContext_Execution_resultRev(ctx, field)
+			case "implementationRev":
+				return ec.fieldContext_Execution_implementationRev(ctx, field)
+			case "landedRev":
+				return ec.fieldContext_Execution_landedRev(ctx, field)
+			case "evidenceRev":
+				return ec.fieldContext_Execution_evidenceRev(ctx, field)
 			case "bundlePath":
 				return ec.fieldContext_Execution_bundlePath(ctx, field)
 			case "promptPath":
@@ -33905,6 +34031,12 @@ func (ec *executionContext) fieldContext_Query_executionByResultRev(ctx context.
 				return ec.fieldContext_Execution_baseRev(ctx, field)
 			case "resultRev":
 				return ec.fieldContext_Execution_resultRev(ctx, field)
+			case "implementationRev":
+				return ec.fieldContext_Execution_implementationRev(ctx, field)
+			case "landedRev":
+				return ec.fieldContext_Execution_landedRev(ctx, field)
+			case "evidenceRev":
+				return ec.fieldContext_Execution_evidenceRev(ctx, field)
 			case "bundlePath":
 				return ec.fieldContext_Execution_bundlePath(ctx, field)
 			case "promptPath":
@@ -41039,8 +41171,8 @@ func (ec *executionContext) fieldContext_Worker_lastResult(_ context.Context, fi
 				return ec.fieldContext_WorkerExecutionResult_workerId(ctx, field)
 			case "harness":
 				return ec.fieldContext_WorkerExecutionResult_harness(ctx, field)
-			case "tier":
-				return ec.fieldContext_WorkerExecutionResult_tier(ctx, field)
+			case "powerClass":
+				return ec.fieldContext_WorkerExecutionResult_powerClass(ctx, field)
 			case "provider":
 				return ec.fieldContext_WorkerExecutionResult_provider(ctx, field)
 			case "model":
@@ -41920,14 +42052,14 @@ func (ec *executionContext) fieldContext_WorkerExecutionResult_harness(_ context
 	return fc, nil
 }
 
-func (ec *executionContext) _WorkerExecutionResult_tier(ctx context.Context, field graphql.CollectedField, obj *WorkerExecutionResult) (ret graphql.Marshaler) {
+func (ec *executionContext) _WorkerExecutionResult_powerClass(ctx context.Context, field graphql.CollectedField, obj *WorkerExecutionResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_WorkerExecutionResult_tier,
+		ec.fieldContext_WorkerExecutionResult_powerClass,
 		func(ctx context.Context) (any, error) {
-			return obj.Tier, nil
+			return obj.PowerClass, nil
 		},
 		nil,
 		ec.marshalOString2ᚖstring,
@@ -41936,7 +42068,7 @@ func (ec *executionContext) _WorkerExecutionResult_tier(ctx context.Context, fie
 	)
 }
 
-func (ec *executionContext) fieldContext_WorkerExecutionResult_tier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_WorkerExecutionResult_powerClass(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "WorkerExecutionResult",
 		Field:      field,
@@ -44296,7 +44428,7 @@ func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"prompt", "tier", "idempotencyKey", "autoApprove"}
+	fieldsInOrder := [...]string{"prompt", "priority", "idempotencyKey", "autoApprove"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -44310,13 +44442,13 @@ func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.
 				return it, err
 			}
 			it.Prompt = data
-		case "tier":
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tier"))
+		case "priority":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("priority"))
 			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
 			if err != nil {
 				return it, err
 			}
-			it.Tier = data
+			it.Priority = data
 		case "idempotencyKey":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idempotencyKey"))
 			data, err := ec.unmarshalNString2string(ctx, v)
@@ -47795,6 +47927,12 @@ func (ec *executionContext) _Execution(ctx context.Context, sel ast.SelectionSet
 			out.Values[i] = ec._Execution_baseRev(ctx, field, obj)
 		case "resultRev":
 			out.Values[i] = ec._Execution_resultRev(ctx, field, obj)
+		case "implementationRev":
+			out.Values[i] = ec._Execution_implementationRev(ctx, field, obj)
+		case "landedRev":
+			out.Values[i] = ec._Execution_landedRev(ctx, field, obj)
+		case "evidenceRev":
+			out.Values[i] = ec._Execution_evidenceRev(ctx, field, obj)
 		case "bundlePath":
 			out.Values[i] = ec._Execution_bundlePath(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -54704,8 +54842,8 @@ func (ec *executionContext) _WorkerExecutionResult(ctx context.Context, sel ast.
 			out.Values[i] = ec._WorkerExecutionResult_workerId(ctx, field, obj)
 		case "harness":
 			out.Values[i] = ec._WorkerExecutionResult_harness(ctx, field, obj)
-		case "tier":
-			out.Values[i] = ec._WorkerExecutionResult_tier(ctx, field, obj)
+		case "powerClass":
+			out.Values[i] = ec._WorkerExecutionResult_powerClass(ctx, field, obj)
 		case "provider":
 			out.Values[i] = ec._WorkerExecutionResult_provider(ctx, field, obj)
 		case "model":

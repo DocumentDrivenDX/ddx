@@ -293,11 +293,11 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 		// fresh bead, overwriting the stale entry below.
 	}
 
-	tier := bead.DefaultPriority
-	if input.Tier != nil {
-		tier = *input.Tier
+	priority := bead.DefaultPriority
+	if input.Priority != nil {
+		priority = *input.Priority
 	}
-	b := bead.NewOperatorPromptBead(input.Prompt, tier)
+	b := bead.NewOperatorPromptBead(input.Prompt, priority)
 	if err := store.Create(ctx, b); err != nil {
 		return nil, err
 	}

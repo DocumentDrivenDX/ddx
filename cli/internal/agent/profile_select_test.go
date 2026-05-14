@@ -39,7 +39,7 @@ func TestSelectCheapestProfile_UsesPolicyMetadataWhenModelSnapshotEmpty(t *testi
 	}
 
 	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
-	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.TierStandard).Name)
+	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.PowerStandard).Name)
 }
 
 func TestSelectCheapestProfile_TieDoesNotPreferLocalPolicy(t *testing.T) {
@@ -120,7 +120,7 @@ func TestSelectImplementationProfile_StandardUsesOpaqueMediumBand(t *testing.T) 
 		},
 	}
 
-	got := SelectImplementationProfile(snap, escalation.TierStandard)
+	got := SelectImplementationProfile(snap, escalation.PowerStandard)
 
 	assert.Equal(t, "p-balanced", got.Name)
 	assert.Equal(t, 50, got.MinPower)
@@ -130,9 +130,9 @@ func TestSelectImplementationProfile_StandardUsesOpaqueMediumBand(t *testing.T) 
 func TestSelectImplementationProfile_CanonicalFizeauPolicies(t *testing.T) {
 	snap := canonicalFizeauPolicySnapshot()
 
-	assert.Equal(t, "cheap", SelectImplementationProfile(snap, escalation.TierCheap).Name)
-	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.TierStandard).Name)
-	assert.Equal(t, "smart", SelectImplementationProfile(snap, escalation.TierSmart).Name)
+	assert.Equal(t, "cheap", SelectImplementationProfile(snap, escalation.PowerCheap).Name)
+	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.PowerStandard).Name)
+	assert.Equal(t, "smart", SelectImplementationProfile(snap, escalation.PowerSmart).Name)
 }
 
 func TestSelectImplementationProfile_DoesNotHardcodeTierNames(t *testing.T) {
@@ -149,15 +149,15 @@ func TestSelectImplementationProfile_DoesNotHardcodeTierNames(t *testing.T) {
 		},
 	}
 
-	assert.Equal(t, "alpha", SelectImplementationProfile(snap, escalation.TierCheap).Name)
-	assert.Equal(t, "bravo", SelectImplementationProfile(snap, escalation.TierStandard).Name)
-	assert.Equal(t, "charlie", SelectImplementationProfile(snap, escalation.TierSmart).Name)
+	assert.Equal(t, "alpha", SelectImplementationProfile(snap, escalation.PowerCheap).Name)
+	assert.Equal(t, "bravo", SelectImplementationProfile(snap, escalation.PowerStandard).Name)
+	assert.Equal(t, "charlie", SelectImplementationProfile(snap, escalation.PowerSmart).Name)
 }
 
 func TestSelectImplementationProfile_DoesNotSelectRequirementProfileForOrdinaryWork(t *testing.T) {
 	snap := canonicalFizeauPolicySnapshot()
 
-	got := SelectImplementationProfile(snap, escalation.TierCheap)
+	got := SelectImplementationProfile(snap, escalation.PowerCheap)
 
 	assert.Equal(t, "cheap", got.Name)
 }
@@ -180,12 +180,12 @@ func TestSelectImplementationProfile_MetadataTieBreaksByCostAndSpeedNotLocalPref
 		},
 	}
 
-	got := SelectImplementationProfile(snap, escalation.TierCheap)
+	got := SelectImplementationProfile(snap, escalation.PowerCheap)
 
 	assert.Equal(t, "local", got.Name)
 }
 
-func TestSelectImplementationProfile_DegradesToOnlyAvailableProfile(t *testing.T) {
+func TestSelectImplementationProfile_StandardKeepsMediumPolicyWhenModelSnapshotSaysUnavailable(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{
 			{Name: "p-low", MinPower: 10, MaxPower: 20},
@@ -197,14 +197,15 @@ func TestSelectImplementationProfile_DegradesToOnlyAvailableProfile(t *testing.T
 		},
 	}
 
-	got := SelectImplementationProfile(snap, escalation.TierStandard)
+	got := SelectImplementationProfile(snap, escalation.PowerStandard)
 
-	assert.Equal(t, "p-low", got.Name)
+	assert.Equal(t, "p-balanced", got.Name)
+	assert.Equal(t, 50, got.MinPower)
 	assert.True(t, got.Degraded)
-	assert.Contains(t, got.Note, "medium profile unavailable")
+	assert.Contains(t, got.Note, "requesting medium policy")
 }
 
-func TestSelectImplementationProfile_StandardFallsBackDownBeforeSmart(t *testing.T) {
+func TestSelectImplementationProfile_StandardDoesNotDowngradeToWeakPolicy(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{
 			{Name: "p-low", MinPower: 10, MaxPower: 20},
@@ -218,11 +219,12 @@ func TestSelectImplementationProfile_StandardFallsBackDownBeforeSmart(t *testing
 		},
 	}
 
-	got := SelectImplementationProfile(snap, escalation.TierStandard)
+	got := SelectImplementationProfile(snap, escalation.PowerStandard)
 
-	assert.Equal(t, "p-low", got.Name)
+	assert.Equal(t, "p-balanced", got.Name)
+	assert.Equal(t, 50, got.MinPower)
 	assert.True(t, got.Degraded)
-	assert.Contains(t, got.Note, "weaker available profile before smart")
+	assert.Contains(t, got.Note, "requesting medium policy")
 }
 
 func TestSelectImplementationProfileForMinPower_MovesOffWeakProfileOnRetry(t *testing.T) {
@@ -239,7 +241,7 @@ func TestSelectImplementationProfileForMinPower_MovesOffWeakProfileOnRetry(t *te
 		},
 	}
 
-	got := SelectImplementationProfileForMinPower(snap, escalation.TierCheap, 50)
+	got := SelectImplementationProfileForMinPower(snap, escalation.PowerCheap, 50)
 
 	assert.Equal(t, "p-balanced", got.Name)
 	assert.Equal(t, 50, got.MinPower)

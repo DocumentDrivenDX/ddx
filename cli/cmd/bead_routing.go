@@ -29,7 +29,7 @@ func (f *CommandFactory) newBeadRoutingCommand() *cobra.Command {
 
 Each entry records which provider and model was selected, why, and whether any
 fallback chain was applied. Use --json to get machine-readable output suitable
-for feeding into the cost-tier analysis pipeline.`,
+for feeding into the cost-powerClass analysis pipeline.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			beadID := args[0]

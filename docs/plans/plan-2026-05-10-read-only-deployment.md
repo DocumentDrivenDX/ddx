@@ -17,7 +17,7 @@ A **minimum viable read-only deployment** ships in this order:
 
 1. **BlobStore (FEAT-028 v1)** — already drafted.
 2. **EntityStore on Axon for `beads` + `bead_events`** — FEAT-004 update, gated on Axon production-readiness work (per `plan-2026-05-10-axon-only-architecture.md`).
-3. **EntityStore `attempts` collection (new)** — derived from `.ddx/metrics/attempts.jsonl` rows + `result.json` content via BlobStore pointer. **Highest single-addition value** for cost-tier observability.
+3. **EntityStore `attempts` collection (new)** — derived from `.ddx/metrics/attempts.jsonl` rows + `result.json` content via BlobStore pointer. **Highest single-addition value** for cost-aware observability.
 4. **Thin read-only ConfigStore** — project + user scopes.
 
 After those four, the **working command set**: full bead inspection, full execution-evidence inspection, all metrics commands, persona/agent config introspection, and `ddx doctor`/`ddx status` working in degraded-but-honest mode.
@@ -39,7 +39,7 @@ The user framed it as: *"ddx should be able to run in a read-only state with Blo
 | Category | Examples | Reads from |
 |---|---|---|
 | Bead query | `ddx bead show/list/ready/blocked/status/dep tree/export/doctor/lint/routing/queue/replay/evidence list` | `.ddx/beads.jsonl`, `.ddx/beads-archive.jsonl`, `.ddx/attachments/` |
-| Execution-derived metrics | `ddx bead metrics`, `legacy agent metrics tier-success/review-outcomes/cost-efficiency` | `.ddx/executions/*/result.json`, `.ddx/metrics/attempts.jsonl` |
+| Execution-derived metrics | `ddx bead metrics`, `legacy agent metrics route-success/review-outcomes/cost-efficiency` | `.ddx/executions/*/result.json`, `.ddx/metrics/attempts.jsonl` |
 | Agent inspection | `legacy agent log`, `legacy agent list/capabilities/doctor/workers/providers/models/route-status/usage/executions fetch` | `.ddx/agent-logs/`, `.ddx/workers/`, `.ddx/executions/`, config |
 | Library browse | `ddx list`, `ddx prompts/persona/skills`, `ddx installed/search/outdated/verify`, `ddx exec list/show` | `.ddx/plugins/`, `.ddx/skills/`, `library/` |
 | Project state | `ddx status`, `ddx doctor`, `ddx config` (read), `ddx jq`, `ddx log` | mixed |

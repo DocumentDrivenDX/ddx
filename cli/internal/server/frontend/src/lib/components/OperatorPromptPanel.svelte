@@ -25,7 +25,7 @@
 	const PRIORITY_OPTIONS = [0, 1, 2, 3, 4];
 
 	let promptText = $state('');
-	let tier = $state(2);
+	let priority = $state(2);
 	let submitting = $state(false);
 	let approving = $state(false);
 	let pendingBead = $state<OperatorPromptBead | null>(null);
@@ -249,8 +249,8 @@
 				<label class="text-fg-ink dark:text-dark-fg-ink flex items-center gap-2 text-sm">
 					<span class="font-medium">Priority</span>
 					<select
-						data-testid="operator-prompt-tier"
-						bind:value={tier}
+						data-testid="operator-prompt-priority"
+						bind:value={priority}
 						class="border-border-line bg-bg-canvas dark:border-dark-border-line dark:bg-dark-bg-canvas rounded-md border px-2 py-1 text-sm"
 					>
 						{#each PRIORITY_OPTIONS as p}

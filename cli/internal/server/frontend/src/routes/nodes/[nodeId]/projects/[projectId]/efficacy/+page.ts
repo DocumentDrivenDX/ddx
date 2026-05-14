@@ -54,7 +54,7 @@ export interface EfficacyRow {
 	medianCostUsd: number | null;
 	sparkline?: number[] | null;
 	warning: EfficacyWarning | null;
-	tier?: string | null;
+	powerClass?: string | null;
 	labels?: string[] | null;
 	specId?: string | null;
 }
@@ -84,7 +84,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		projectId: params.projectId,
 		rows: rowsData.efficacyRows,
 		comparisons: comparisonsData.comparisons,
-		activeTier: url.searchParams.get('tier') ?? '',
+		activePowerClass: url.searchParams.get('powerClass') ?? '',
 		activeLabel: url.searchParams.get('label') ?? '',
 		activeSpecId: url.searchParams.get('spec-id') ?? ''
 	};

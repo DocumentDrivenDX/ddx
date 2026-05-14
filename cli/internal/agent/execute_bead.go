@@ -2200,7 +2200,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	sb.WriteString("  </bead>\n")
 
 	// For minimal budget, omit full governing refs and only include bead metadata.
-	// This significantly reduces prompt size for cheap-tier attempts on local models.
+	// This significantly reduces prompt size for cheap-powerClass attempts on local models.
 	if contextBudget == "minimal" {
 		sb.WriteString("  <governing>\n    <note>No governing references.</note>\n  </governing>\n")
 	} else {

@@ -17,7 +17,7 @@ import (
 // for ddx-fdd3ea36 / ddx-dd4c423d.
 //
 // Guards against reintroduction of the "19-burn" fan-out pattern: an empty
-// dispatch spec must drive exactly one executor invocation, never a per-tier
+// dispatch spec must drive exactly one executor invocation, never a per-powerClass
 // iteration. The deprecated profile_ladders / model_overrides fields are gone;
 // the default execute-loop path resolves to a single ResolveRoute call.
 //
@@ -59,8 +59,8 @@ agent:
 	assert.Empty(t, rcfg.Harness(), "default path must not synthesise a harness")
 	assert.Empty(t, rcfg.Model(), "default path must not synthesise a model from model_overrides")
 	assert.Empty(t, rcfg.Profile(), "default path must not synthesise a profile")
-	assert.Empty(t, rcfg.MinTier(), "default path must not synthesise MinTier")
-	assert.Empty(t, rcfg.MaxTier(), "default path must not synthesise MaxTier")
+	assert.Empty(t, rcfg.MinPowerHint(), "default path must not synthesise MinPowerHint")
+	assert.Empty(t, rcfg.MaxPowerHint(), "default path must not synthesise MaxPowerHint")
 
 	// 3. Single ready bead in a fresh store. We use one bead so that
 	//    Once:true draining ends after exactly one queue pass.
@@ -70,7 +70,7 @@ agent:
 	require.NoError(t, store.Create(target))
 
 	// 4. Counting executor stub. Returns success on the first call so the
-	//    loop closes the bead cleanly. Any reintroduction of tier-ladder
+	//    loop closes the bead cleanly. Any reintroduction of powerClass-ladder
 	//    fan-out into the default loop would drive >1 invocation here.
 	var execCount int32
 	worker := &ExecuteBeadWorker{
@@ -99,7 +99,7 @@ agent:
 	got := atomic.LoadInt32(&execCount)
 	assert.LessOrEqualf(t, got, int32(1),
 		"executor must be invoked at most once per bead on the default drain path; got %d. "+
-			"A value >1 (historically 19) means tier-ladder fan-out has been reintroduced.",
+			"A value >1 (historically 19) means powerClass-ladder fan-out has been reintroduced.",
 		got)
 	assert.Equal(t, 1, result.Attempts, "loop should report exactly one attempt for one ready bead")
 	assert.Equal(t, 1, result.Successes)

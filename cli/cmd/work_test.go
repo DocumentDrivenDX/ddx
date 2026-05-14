@@ -148,8 +148,8 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:        "ddx-zero-config-work-tier-standard",
-		Title:     "Work with inferred standard routing tier",
+		ID:        "ddx-zero-config-work-powerClass-standard",
+		Title:     "Work with inferred standard routing powerClass",
 		IssueType: "bug",
 	}))
 
@@ -174,11 +174,65 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 	assert.Empty(t, lastReq.Model, "zero-config work must not hard-pin a model")
 }
 
+func TestWorkZeroConfigStandardPolicyDoesNotDowngradeToCheapPolicy(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies = []agentlib.PolicyInfo{
+		{Name: "cheap", MinPower: 5, MaxPower: 5},
+		{Name: "default", MinPower: 7, MaxPower: 8},
+		{Name: "smart", MinPower: 9, MaxPower: 10},
+	}
+	stub.listModels = []agentlib.ModelInfo{
+		{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+		{ID: "default-offline", Power: 7, Available: false, AutoRoutable: true},
+		{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+	}
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:          "ddx-zero-config-work-standard-no-cheap",
+		Title:       "Work with standard powerClass and stale medium model snapshot",
+		IssueType:   "bug",
+		Description: "bug work should infer standard powerClass",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	requests := capturedImplementationRequests(stub)
+	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
+	lastReq := requests[0]
+	assert.Equal(t, "default", lastReq.Policy, "standard-powerClass work must not downgrade to the weak policy when the model snapshot is stale")
+	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must keep power as Fizeau policy metadata, not DDx hardcoded floor")
+}
+
 // TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin covers
 // ddx-e0b95b4a. agent.endpoints declares where providers live (transport
 // config) — it does NOT pin a routing decision the way agent.model does.
-// Treating endpoints as a routing pin disables zero-config tier inference
-// (autoInferTier in runAgentExecuteLoopImpl), so no-flag `ddx work` sends an
+// Treating endpoints as a routing pin disables zero-config powerClass inference
+// (autoInferPowerClass in runAgentExecuteLoopImpl), so no-flag `ddx work` sends an
 // empty Policy and Fizeau resolves it via its default policy. In production
 // at /home/erik/Projects/ddx this scored Opus on ordinary implementation work
 // (see .ddx/attachments/ddx-c3219628/events.jsonl: actual_model=opus,
@@ -186,7 +240,7 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 // package task).
 //
 // The matrix verifies the new contract: only an explicit model pin in
-// agent.config.yaml suppresses zero-config tier inference; endpoints, an
+// agent.config.yaml suppresses zero-config powerClass inference; endpoints, an
 // empty agent block, or no config at all leave inference active so the
 // implementation profile selector can request a Fizeau policy by metadata.
 func TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin(t *testing.T) {
@@ -277,7 +331,7 @@ agent:
 			}
 			got := projectHasRoutingConfig(dir)
 			assert.Equalf(t, tc.want, got,
-				"projectHasRoutingConfig(%s) = %v, want %v — endpoints alone must not gate zero-config tier inference",
+				"projectHasRoutingConfig(%s) = %v, want %v — endpoints alone must not gate zero-config powerClass inference",
 				tc.name, got, tc.want)
 		})
 	}
@@ -315,7 +369,7 @@ func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) 
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:        "ddx-zero-config-work-tier-retry",
+		ID:        "ddx-zero-config-work-powerClass-retry",
 		Title:     "Work retries within the selected policy at MinPower=actual+1",
 		IssueType: "bug",
 	}))

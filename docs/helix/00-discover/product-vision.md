@@ -58,7 +58,7 @@ Each pain point below maps to a specific DDx capability — the list is bounded 
 
 ### Physics of Generative AI
 
-4. **LLMs are stochastic, unreliable, and costly.** Cost-tier ladders, ensemble verification, and 'cheapest model that works' are the operating shape of agentic work, not optimizations. Quality degrades as the context window fills.
+4. **LLMs are stochastic, unreliable, and costly.** Cost-aware ladders, ensemble verification, and 'cheapest model that works' are the operating shape of agentic work, not optimizations. Quality degrades as the context window fills.
 5. **Evidence provides memory.** Agents carry no state between invocations and outputs aren't bit-reproducible. The only thing that survives a run is what we captured as it happened. That captured evidence is the substrate for evaluation, trust, debugging, and learning — without it, every other principle degrades to anecdote.
 6. **Context rot is real; bounded context execution is the response.** LLM output quality decays as a single context window fills — well before the hard token limit. Long-running agent sessions accumulate transcript, tool noise, and failed attempts that compete with the original instructions; the agent at hour one is not the agent at minute one. The structural fix is **bounded context execution** — also known as the **Ralph loop**: every unit of work runs in a fresh, narrowly-scoped context against an explicit contract (a bead with acceptance criteria), with persistent state landing on disk as evidence rather than carried forward as transcript. DDx implements this with `ddx try` (single bounded attempt in an isolated worktree) and `ddx work` (queue drain that re-enters the loop with a fresh context per bead). See `website/content/docs/concepts/bounded-context-execution.md` for the full treatment.
 
@@ -235,6 +235,6 @@ Operating principles are the choices DDx makes in response to the physics above.
 2. **Project-local by default** — install touches the project, not the machine.
 3. **Artifacts are the product (documents primary, other media supported)** — code is output; artifacts are what you maintain.
 4. **Bead-driven work** — beads are the unit of work; the queue is the interface.
-5. **Cost-tiered throughput** — optimize closed beads per dollar, not raw capability.
+5. **Cost-awareed throughput** — optimize closed beads per dollar, not raw capability.
 6. **Git-native, file-first** — plain files, standard git, no lock-in.
 7. **Agent-agnostic** — any capable harness plugs in via the prompt envelope.

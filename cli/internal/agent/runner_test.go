@@ -20,8 +20,8 @@ import (
 //
 // Symptom in production (host 'eitri', 2026-04-17): routing picked
 // lmstudio correctly; exec dispatch returned status=execution_failed,
-// detail="exec: no command", duration_ms=0, exit_code=-1. Cheap tier
-// was burning <1s per bead and escalating straight to smart tier.
+// detail="exec: no command", duration_ms=0, exit_code=-1. Cheap powerClass
+// was burning <1s per bead and escalating straight to smart powerClass.
 func TestRunLMStudioDispatchesThroughEmbeddedAgent(t *testing.T) {
 	// Isolate from the user's fizeau global config (~/.config/fizeau/config.yaml)
 	// so runAgentViaService does not make real HTTP connections to configured

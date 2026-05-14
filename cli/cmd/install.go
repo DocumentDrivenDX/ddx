@@ -571,11 +571,14 @@ func addLocalOverlayIgnores(repoRoot string, paths []string) error {
 	var additions []string
 	for _, p := range paths {
 		pattern := filepath.ToSlash(p)
+		candidates := []string{pattern}
 		if !strings.HasSuffix(pattern, "/") {
-			pattern += "/"
+			candidates = append(candidates, pattern+"/")
 		}
-		if !strings.Contains(text, "\n"+pattern+"\n") && !strings.HasPrefix(text, pattern+"\n") {
-			additions = append(additions, pattern)
+		for _, candidate := range candidates {
+			if !strings.Contains(text, "\n"+candidate+"\n") && !strings.HasPrefix(text, candidate+"\n") {
+				additions = append(additions, candidate)
+			}
 		}
 	}
 	if len(additions) == 0 {
@@ -652,14 +655,79 @@ func copyDirTree(src, dst string) ([]string, error) {
 
 func filterLocalInstallValidationIssues(root string, issues []registry.ValidationIssue) []registry.ValidationIssue {
 	filtered := issues[:0]
+	roots := localInstallRootAliases(root)
 	for _, issue := range issues {
-		rel, err := filepath.Rel(root, issue.Path)
-		if err == nil && shouldSkipLocalInstallIssue(filepath.ToSlash(rel)) {
+		if rel, ok := localInstallIssueRel(roots, issue.Path); ok && shouldSkipLocalInstallIssue(rel) {
 			continue
 		}
 		filtered = append(filtered, issue)
 	}
 	return filtered
+}
+
+func localInstallRootAliases(root string) []string {
+	seen := map[string]bool{}
+	var roots []string
+	add := func(path string) {
+		if strings.TrimSpace(path) == "" {
+			return
+		}
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		if !seen[abs] {
+			seen[abs] = true
+			roots = append(roots, abs)
+		}
+		if resolved, err := filepath.EvalSymlinks(abs); err == nil && resolved != "" && !seen[resolved] {
+			seen[resolved] = true
+			roots = append(roots, resolved)
+		}
+	}
+	add(root)
+	return roots
+}
+
+func localInstallIssueRel(roots []string, path string) (string, bool) {
+	for _, candidate := range localInstallPathAliases(path) {
+		for _, root := range roots {
+			rel, err := filepath.Rel(root, candidate)
+			if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || rel == ".." {
+				continue
+			}
+			return filepath.ToSlash(rel), true
+		}
+	}
+	return "", false
+}
+
+func localInstallPathAliases(path string) []string {
+	seen := map[string]bool{}
+	var aliases []string
+	add := func(candidate string) {
+		if strings.TrimSpace(candidate) == "" {
+			return
+		}
+		abs, err := filepath.Abs(candidate)
+		if err != nil {
+			abs = candidate
+		}
+		if !seen[abs] {
+			seen[abs] = true
+			aliases = append(aliases, abs)
+		}
+	}
+	add(path)
+	if resolved, err := filepath.EvalSymlinks(path); err == nil && resolved != "" {
+		add(resolved)
+	}
+	dir := filepath.Dir(path)
+	base := filepath.Base(path)
+	if resolvedDir, err := filepath.EvalSymlinks(dir); err == nil && resolvedDir != "" {
+		add(filepath.Join(resolvedDir, base))
+	}
+	return aliases
 }
 
 func shouldSkipLocalInstallIssue(rel string) bool {

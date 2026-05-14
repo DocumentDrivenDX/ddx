@@ -145,13 +145,13 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	appendLoopRoutingEvidence(app, "ddx-0001", ExecuteBeadReport{
-		Provider:         "openai",
-		Model:            "gpt-5.4",
-		RequestedProfile: "default",
-		RequestedTier:    "cheap",
-		ResolvedTier:     "standard",
-		EscalationCount:  1,
-		FinalTier:        "standard",
+		Provider:           "openai",
+		Model:              "gpt-5.4",
+		RequestedProfile:   "default",
+		InferredPowerClass: "cheap",
+		ResolvedPowerClass: "standard",
+		EscalationCount:    1,
+		FinalPowerClass:    "standard",
 	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
 
 	require.Len(t, app.events, 1)
@@ -161,8 +161,8 @@ func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
 	assert.Equal(t, "default", body["requested_profile"])
-	assert.Equal(t, "cheap", body["requested_tier"])
-	assert.Equal(t, "standard", body["resolved_tier"])
+	assert.Equal(t, "cheap", body["inferred_power_class"])
+	assert.Equal(t, "standard", body["resolved_power_class"])
 	assert.Equal(t, float64(1), body["escalation_count"])
-	assert.Equal(t, "standard", body["final_tier"])
+	assert.Equal(t, "standard", body["final_power_class"])
 }

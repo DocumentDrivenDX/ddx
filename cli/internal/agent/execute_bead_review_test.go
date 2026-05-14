@@ -31,13 +31,13 @@ func (r *reviewRunnerStub) Run(opts RunArgs) (*Result, error) {
 }
 
 // ---------------------------------------------------------------------------
-// SelectReviewerTier
+// SelectReviewerPolicy
 // ---------------------------------------------------------------------------
 
-func TestSelectReviewerTier_AlwaysSmart(t *testing.T) {
-	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierCheap))
-	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierStandard))
-	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierSmart))
+func TestSelectReviewerPolicy_AlwaysSmart(t *testing.T) {
+	assert.Equal(t, escalation.PowerSmart, SelectReviewerPolicy(escalation.PowerCheap))
+	assert.Equal(t, escalation.PowerSmart, SelectReviewerPolicy(escalation.PowerStandard))
+	assert.Equal(t, escalation.PowerSmart, SelectReviewerPolicy(escalation.PowerSmart))
 }
 
 func TestPreLandReview_UsesAttemptWorktree(t *testing.T) {
@@ -831,10 +831,10 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
-// TestExecuteBeadWorkerReviewBoundedByMaxTier verifies the retired post-land
+// TestExecuteBeadWorkerReviewBoundedByMaxPowerHint verifies the retired post-land
 // reviewer is unreachable from execute-loop success. Candidate-cycle review
 // owns repair/retry now, so a success closes directly within one worker.Run.
-func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
+func TestExecuteBeadWorkerReviewBoundedByMaxPowerHint(t *testing.T) {
 	// Use a single-bead store so we can assert "exactly one attempt".
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

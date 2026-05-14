@@ -41,7 +41,7 @@ func TestRoutinglint_ForbidsRetiredCatalogIdentifiers(t *testing.T) {
 
 func TestRoutinglint_ForbidsRetiredProfileShadowingSymbols(t *testing.T) {
 	want := []string{
-		"ResolveModelTier",
+		"ResolvePowerClass",
 		"resolveStrongSplitterMinPower",
 		"isStrongPowerUnsatisfiedError",
 		"isSmartRouteUnavailableError",

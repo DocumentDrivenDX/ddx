@@ -102,8 +102,8 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	// speaks OpenAI-compatible APIs and can be pointed at any provider via
 	// --provider. Without this dispatch, the exec path below would call
 	// ExecuteInDir with harness.Binary="", producing a zero-duration
-	// "exec: no command" error (see ddx-501e87ef: cheap-tier attempts on
-	// lmstudio were burning <1s and escalating straight to smart tier).
+	// "exec: no command" error (see ddx-501e87ef: cheap-powerClass attempts on
+	// lmstudio were burning <1s and escalating straight to smart powerClass).
 	if harness.IsHTTPProvider && harness.Binary == "" {
 		agentOpts := opts
 		// Surface the harness name as the provider so the embedded runtime

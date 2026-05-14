@@ -131,7 +131,7 @@ Default selection is weak-first and progress-biased:
 - do not duplicate Fizeau-owned provider preference mappings such as
   local-first, subscription-first, or local-only ordering;
 - reserve the strongest profiles for breakdown, debugging, high-risk review,
-  architecture-sensitive work, or retries with concrete lower-tier failure
+  architecture-sensitive work, or retries with concrete lower-power failure
   evidence;
 - on retry, if the raised power floor has no matching no-extra-requirement
   profile, send numeric power intent rather than reusing a stale lower-power
@@ -480,7 +480,7 @@ Free-form prompts submitted from the web UI are persisted as beads with
 title is the prompt's first line, the body is the full prompt verbatim,
 default labels are `kind:operator-prompt,source:web-ui`, and the AC section
 is auto-generated from a template. These beads run with the same
-harness/profile/tier as regular beads but skip the structural AC check
+harness/profile/power constraints as regular beads but skip the structural AC check
 (which assumes pre-authored AC). They cannot mutate other operator-prompt
 beads — a hard rule enforced at the bead store, not at planning time.
 

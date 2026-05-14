@@ -21,7 +21,7 @@ import (
 //  1. When accumulated cost exceeds the cap, the next executor call
 //     returns the cap-tripped error WITHOUT invoking the inner attempt.
 //  2. Infrastructure failures are detected by IsInfrastructureFailure
-//     and short-circuit before the next-tier escalation step.
+//     and short-circuit before the next-powerClass escalation step.
 //
 // Patterns mirror the closures in cli/internal/server/workers.go
 // (ddx-785d02f7).
@@ -165,10 +165,10 @@ func TestWorkerExecutorCostCap_SubscriptionDoesNotCount(t *testing.T) {
 }
 
 // TestWorkerInfrastructureFailureDoesNotEscalate asserts the contract
-// the server tier-loop relies on: IsInfrastructureFailure flags
+// the server powerClass-loop relies on: IsInfrastructureFailure flags
 // transient provider failures (so the loop defers with retry-after)
 // without consuming escalation budget, while real model-capability
-// failures fall through to the next-tier path.
+// failures fall through to the next-powerClass path.
 func TestWorkerInfrastructureFailureDoesNotEscalate(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -190,7 +190,7 @@ func TestWorkerInfrastructureFailureDoesNotEscalate(t *testing.T) {
 			}
 			// The loop ordering invariant: when IsInfrastructureFailure
 			// returns true, ShouldEscalate must also be true (otherwise
-			// the infra branch is unreachable from the tier loop).
+			// the infra branch is unreachable from the powerClass loop).
 			if tc.wantInfra && !escalation.ShouldEscalate(tc.status) {
 				t.Fatalf("infra-failure case %q has !ShouldEscalate; loop ordering invariant broken", tc.name)
 			}

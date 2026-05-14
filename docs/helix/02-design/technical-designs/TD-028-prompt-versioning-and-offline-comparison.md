@@ -20,7 +20,7 @@ for offline A/B, and the offline-comparison roadmap that consumes
 them — is intentionally NOT implemented in Story 12. A follow-up
 story will pick this up once we have enough post-Story-12 attempts
 in `.ddx/executions/` to know which slices actually move the cheap-
-tier metrics.
+route metrics.
 
 ## Motivation
 
@@ -30,7 +30,7 @@ in `cli/internal/agent/execute_bead.go`) by ~30% and adds a
 load-bearing-guardrail comment contract (FEAT-022 amendment). Two
 risks fall out of that work:
 
-1. **No way to tell whether the rewrite helped.** Cheap-tier behavior
+1. **No way to tell whether the rewrite helped.** Cheap-power behavior
    on the new shorter prompts could be better, the same, or worse, and
    we have no clean way to slice attempt outcomes (efficacy,
    `no_evidence_produced`, escalation rate) by prompt body.
@@ -180,7 +180,7 @@ Concretely, the offline workflow becomes:
 
 Out of scope for this TD:
 
-- Statistical significance testing. The cheap-tier sample sizes
+- Statistical significance testing. The cheap-power sample sizes
   in our queue are too small for clean significance claims;
   decisions will be directional ("variant clearly worse → drop"
   or "variant clearly better → ship"), not p-value gated.

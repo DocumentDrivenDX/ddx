@@ -158,7 +158,7 @@ passes them through as opaque constraints to the agent runtime.
 
 Decomposition is a high-judgment routing decision. The splitter must run through
 the normal `ddx work` path with Fizeau's `smart` model-ref and a strong
-`MinPower` floor, defaulting to the smart/top-power tier floor when the project
+`MinPower` floor, defaulting to the smart/top-power class floor when the project
 has no explicit splitter override. DDx still does not pick a concrete model: it
 only requests the abstract smart ref, raises the power floor, and lets the agent
 route within any operator-supplied passthrough constraints. If no available

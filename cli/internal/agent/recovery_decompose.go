@@ -128,7 +128,7 @@ func NewDecomposePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner Age
 	}
 }
 
-// runDecomposer dispatches a smart+ tier agent to split the bead into child
+// runDecomposer dispatches a smart+ powerClass agent to split the bead into child
 // beads after the escalation ladder has been exhausted. On success, child beads
 // are created with Parent=beadID, the parent's execution-eligible is set to
 // false, and a "decompose-applied" event is emitted. On failure a

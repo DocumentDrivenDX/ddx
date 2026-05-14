@@ -43,7 +43,7 @@ func TestStoreAcceptsOperatorPromptBead(t *testing.T) {
 	assert.True(t, strings.Contains(got.Description, "body line two"))
 }
 
-// TestNewOperatorPromptBeadDefaults covers tier clamping and the
+// TestNewOperatorPromptBeadDefaults covers powerClass clamping and the
 // empty-prompt fallback so operators cannot smuggle in nonsense priorities
 // or zero-length titles.
 func TestNewOperatorPromptBeadDefaults(t *testing.T) {

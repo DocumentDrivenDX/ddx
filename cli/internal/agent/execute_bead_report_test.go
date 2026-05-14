@@ -39,7 +39,7 @@ func TestMarkResultExecutionErrorReturnsStructuredReport(t *testing.T) {
 	report := ReportFromExecuteBeadResult(res, "standard")
 
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
-	assert.Equal(t, "standard", report.Tier)
+	assert.Equal(t, "standard", report.PowerClass)
 	assert.Contains(t, report.Detail, "failed to read worktree HEAD")
 }
 

@@ -19,7 +19,7 @@ import (
 // and the default idle interval, with no route pins set. This is the contract
 // that eliminates the historical
 // 19-burn drain-queue failure mode where an empty input fanned out into
-// per-tier ladder iteration with no upstream synthesis target.
+// per-powerClass ladder iteration with no upstream synthesis target.
 func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

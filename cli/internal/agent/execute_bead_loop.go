@@ -22,7 +22,7 @@ import (
 
 // ExecuteBeadLoopRuntime carries the non-serializable plumbing and
 // per-invocation runtime intent for an execute-bead loop run. Durable knobs
-// (assignee, retry caps, harness/model, tier bounds, etc.) live on
+// (assignee, retry caps, harness/model, powerClass bounds, etc.) live on
 // config.ResolvedConfig and are passed via Run's rcfg argument.
 type ExecuteBeadLoopRuntime struct {
 	Log             io.Writer
@@ -164,14 +164,14 @@ const LandConflictCooldown = 15 * time.Minute
 const StoreErrorCooldown = 5 * time.Minute
 
 // ProviderUnavailableCooldown is the retry pause for route/provider outages
-// where no configured tier can currently run the bead. This is transient
+// where no configured powerClass can currently run the bead. This is transient
 // scheduler state, not bead quality evidence, so it must not become a durable
 // triage:needs-investigation park.
 const ProviderUnavailableCooldown = 15 * time.Minute
 
 // SmartRetryCooldown is the queue-fairness pause after a real no_changes
 // implementation attempt asks for status=open/smart retry. The bead remains
-// open with its tier hint, but a watch worker moves on instead of repeating the
+// open with its powerClass hint, but a watch worker moves on instead of repeating the
 // same empty-diff attempt every idle cycle.
 const SmartRetryCooldown = 5 * time.Minute
 
@@ -430,25 +430,25 @@ type ExecuteBeadReport struct {
 	ReviewRationale string `json:"review_rationale,omitempty"`
 	// CycleTrace carries the append-only execution cycle trace in order.
 	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
-	// Tier is the model tier used for the final attempt (cheap, standard, smart).
-	// Populated by tier-escalating executors; empty for single-tier attempts.
-	Tier string `json:"tier,omitempty"`
+	// PowerClass is the model powerClass used for the final attempt (cheap, standard, smart).
+	// Populated by powerClass-escalating executors; empty for single-power attempts.
+	PowerClass string `json:"power_class,omitempty"`
 	// ProbeResult is a brief summary of the provider health probe at attempt time.
 	ProbeResult string `json:"probe_result,omitempty"`
 	// CostUSD is the dollar cost of this attempt as reported by the harness.
-	// Tier-escalating executors propagate this so the escalation trace can
+	// Power-escalating executors propagate this so the escalation trace can
 	// compute wasted/effective spend.
 	CostUSD float64 `json:"cost_usd,omitempty"`
 	// DurationMS is the wall-clock duration of this attempt.
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	// Profile routing telemetry. Populated when execute-loop uses a profile
 	// ladder rather than an explicit harness/model pin.
-	RequestedProfile  string `json:"requested_profile,omitempty"`
-	RequestedTier     string `json:"requested_tier,omitempty"`
-	RoutingIntentNote string `json:"routing_intent_note,omitempty"`
-	ResolvedTier      string `json:"resolved_tier,omitempty"`
-	EscalationCount   int    `json:"escalation_count,omitempty"`
-	FinalTier         string `json:"final_tier,omitempty"`
+	RequestedProfile   string `json:"requested_profile,omitempty"`
+	InferredPowerClass string `json:"inferred_power_class,omitempty"`
+	RoutingIntentNote  string `json:"routing_intent_note,omitempty"`
+	ResolvedPowerClass string `json:"resolved_power_class,omitempty"`
+	EscalationCount    int    `json:"escalation_count,omitempty"`
+	FinalPowerClass    string `json:"final_power_class,omitempty"`
 	// DecompositionRecommendation carries the structured list of recommended
 	// sub-bead titles when Status == declined_needs_decomposition. The loop
 	// records these on the bead as a `decomposition-recommendation` event so
@@ -509,7 +509,7 @@ type ExecuteBeadLoopStore interface {
 	// intentionally transition a bead back into open state.
 	Reopen(id, reason, notes string) error
 	// Update mutates a bead in place. Used by the post-merge triage step to
-	// add metadata hints (e.g. tier-pin) when the triage policy escalates after
+	// add metadata hints (e.g. powerClass-pin) when the triage policy escalates after
 	// repeated review BLOCKs.
 	Update(args ...any) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
@@ -626,7 +626,7 @@ type ExecuteBeadWorker struct {
 
 	// ConflictResolver, when non-nil, is called after the 3-way ort auto-merge
 	// step fails to recover a preserved iteration. The implementation should
-	// attempt a focused conflict-resolution pass (e.g. a cheap-tier agent run
+	// attempt a focused conflict-resolution pass (e.g. a cheap-powerClass agent run
 	// with the conflict files and bead AC) and return the new merged tip SHA on
 	// success. isBlocking=true signals the conflict requires human judgment
 	// (escalating to land_conflict_operator_required); false means failed-but-retriable.
@@ -635,7 +635,7 @@ type ExecuteBeadWorker struct {
 	// EscalationNextFloor, when non-nil, is called by the no-changes smart-retry
 	// path to advance the MinPower floor by exactly one ladder step above
 	// actualPower. Returns an error (e.g. ErrLadderExhausted) when already at the
-	// top tier, causing the bead to be parked to status=proposed.
+	// top powerClass, causing the bead to be parked to status=proposed.
 	EscalationNextFloor func(actualPower int) (int, error)
 
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
@@ -2534,7 +2534,7 @@ func hasResultForBead(results []ExecuteBeadReport, beadID string) bool {
 
 // appendLoopRoutingEvidence records a kind:routing evidence event on the bead
 // from the executor's ExecuteBeadReport, so that review-outcomes analytics can
-// attribute a subsequent review verdict to the originating provider/model tier.
+// attribute a subsequent review verdict to the originating provider/model powerClass.
 // Best-effort: errors and missing-provider cases are silently ignored.
 func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report ExecuteBeadReport, createdAt time.Time) {
 	if store == nil || beadID == "" {
@@ -2548,15 +2548,15 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 		return
 	}
 	body, err := json.Marshal(map[string]any{
-		"resolved_provider":   provider,
-		"resolved_model":      report.Model,
-		"fallback_chain":      []string{},
-		"requested_profile":   report.RequestedProfile,
-		"requested_tier":      report.RequestedTier,
-		"routing_intent_note": report.RoutingIntentNote,
-		"resolved_tier":       report.ResolvedTier,
-		"escalation_count":    report.EscalationCount,
-		"final_tier":          report.FinalTier,
+		"resolved_provider":    provider,
+		"resolved_model":       report.Model,
+		"fallback_chain":       []string{},
+		"requested_profile":    report.RequestedProfile,
+		"inferred_power_class": report.InferredPowerClass,
+		"routing_intent_note":  report.RoutingIntentNote,
+		"resolved_power_class": report.ResolvedPowerClass,
+		"escalation_count":     report.EscalationCount,
+		"final_power_class":    report.FinalPowerClass,
 	})
 	if err != nil {
 		return
@@ -2580,15 +2580,15 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		return
 	}
 	intent := escalation.ParseExecutionHint(&target)
-	requestedTier := string(intent.RequestedTier)
-	if report.RequestedTier != "" {
-		requestedTier = report.RequestedTier
+	inferredPolicy := string(intent.InferredPowerClass)
+	if report.InferredPowerClass != "" {
+		inferredPolicy = report.InferredPowerClass
 	}
 	body := map[string]any{
 		"bead_id":                 target.ID,
 		"attempt_id":              report.AttemptID,
 		"routing_intent_source":   string(intent.Source),
-		"requested_tier":          requestedTier,
+		"inferred_power_class":    inferredPolicy,
 		"requested_profile":       report.RequestedProfile,
 		"smart_justification":     intent.SmartJustification,
 		"actual_harness":          report.Harness,
@@ -2601,7 +2601,7 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	}
 	degraded := false
 	note := ""
-	if intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.RequestedTier == escalation.TierSmart && strings.TrimSpace(intent.SmartJustification) == "" {
+	if intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.InferredPowerClass == escalation.PowerSmart && strings.TrimSpace(intent.SmartJustification) == "" {
 		degraded = true
 		note = "missing SMART JUSTIFICATION"
 	}
@@ -2623,7 +2623,7 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if err != nil {
 		return
 	}
-	summary := fmt.Sprintf("source=%s tier=%s", intent.Source, requestedTier)
+	summary := fmt.Sprintf("source=%s powerClass=%s", intent.Source, inferredPolicy)
 	if report.Model != "" {
 		summary += " model=" + report.Model
 	}
@@ -2712,8 +2712,8 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	if report.Detail != "" {
 		parts = append(parts, report.Detail)
 	}
-	if report.Tier != "" {
-		parts = append(parts, fmt.Sprintf("tier=%s", report.Tier))
+	if report.PowerClass != "" {
+		parts = append(parts, fmt.Sprintf("powerClass=%s", report.PowerClass))
 	}
 	if report.ProbeResult != "" {
 		parts = append(parts, fmt.Sprintf("probe_result=%s", report.ProbeResult))
@@ -3374,7 +3374,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	}
 
 	// When a ladder is available, advance by one step. If the ladder is
-	// exhausted (already at top tier), the work requires human input.
+	// exhausted (already at top powerClass), the work requires human input.
 	if nextFloorFn != nil {
 		nextFloor, err := nextFloorFn(actualPower)
 		if err != nil {
@@ -3389,7 +3389,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 			clearNoChangesLifecycleLabels(b)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
 			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
-			b.Extra[TriageTierHintKey] = nextFloor
+			b.Extra[TriagePowerHintKey] = nextFloor
 			b.Extra[executeLoopSmartRetryKey] = true
 			b.Extra[executeLoopSmartRetryReasonKey] = reason
 			b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
@@ -3406,7 +3406,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 		clearNoChangesLifecycleLabels(b)
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
 		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
-		b.Extra[TriageTierHintKey] = string(escalation.TierSmart)
+		b.Extra[TriagePowerHintKey] = string(escalation.PowerSmart)
 		b.Extra[executeLoopSmartRetryKey] = true
 		b.Extra[executeLoopSmartRetryReasonKey] = reason
 		b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
@@ -3415,19 +3415,19 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 }
 
 // applyRepairCycleExhaustedEscalation bumps the implementer MinPower to the
-// next tier when repair cycles are exhausted. If the ladder is already at the
-// top tier, the bead is parked to proposed for operator review.
+// next powerClass when repair cycles are exhausted. If the ladder is already at the
+// top powerClass, the bead is parked to proposed for operator review.
 func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, actor string, actualPower int, at time.Time, nextFloorFn func(int) (int, error)) error {
 	if nextFloorFn != nil {
 		nextFloor, err := nextFloorFn(actualPower)
 		if err == nil {
 			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
-				Reason: "repair cycle exhausted: escalating implementer to higher tier",
+				Reason: "repair cycle exhausted: escalating implementer to higher powerClass",
 				Actor:  actor,
 				Source: "ddx work",
 			}, func(b *bead.Bead) error {
 				ensureBeadExtra(b)
-				b.Extra[TriageTierHintKey] = nextFloor
+				b.Extra[TriagePowerHintKey] = nextFloor
 				return nil
 			})
 		}
@@ -3435,7 +3435,7 @@ func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, act
 	return store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-			Reason:          "repair cycle exhausted at top tier: operator decision required",
+			Reason:          "repair cycle exhausted at top power: operator decision required",
 			Since:           at.UTC().Format(time.RFC3339),
 			Source:          "ddx work",
 			SuggestedAction: "review the blocked attempt and accept, split, or retry with a stronger model",
@@ -3538,7 +3538,7 @@ func clearSmartRetryMetadata(b *bead.Bead) {
 	if b.Extra == nil {
 		return
 	}
-	delete(b.Extra, TriageTierHintKey)
+	delete(b.Extra, TriagePowerHintKey)
 	delete(b.Extra, executeLoopSmartRetryKey)
 	delete(b.Extra, executeLoopSmartRetryReasonKey)
 	delete(b.Extra, executeLoopSmartRetrySuggestedActionKey)
@@ -3935,7 +3935,7 @@ const consecutiveLadderExhaustionsKey = "consecutive_ladder_exhaustions"
 
 // isPerBeadBudgetExhaustedReport reports whether the given report signals that
 // the per-bead cost budget was exhausted. The marker is set by
-// runEscalatingSingleTierAttempts (cmd package) when the PerBeadCostTracker
+// runEscalatingPowerAttempts (cmd package) when the PerBeadCostTracker
 // trips. Using the escalation constant avoids string duplication.
 func isPerBeadBudgetExhaustedReport(report ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, escalation.PerBeadBudgetExhaustedReason)

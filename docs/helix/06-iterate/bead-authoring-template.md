@@ -224,27 +224,27 @@ ACCEPTANCE
 
 ---
 
-## 7. Tier-hint label: `tier:hint=<name>`
+## 7. Power-hint label: `power:hint=<name>`
 
-Add a `tier:hint=<name>` label to tell the execute-loop which power tier to
+Add a `power:hint=<name>` label to tell the execute-loop which power class to
 start from. This is an operator-level hint for beads where the default
 cheap-first start is likely to waste a full cheap attempt.
 
 | Label | Resolved floor | When to use |
 |---|---|---|
-| `tier:hint=cheap` | 0 (unconstrained, same as default) | Mechanical tasks; cheap models expected to succeed |
-| `tier:hint=standard` | Second viable floor in catalog | Ordinary implementation work; cheap tier likely to fail |
-| `tier:hint=smart` | Highest viable floor in catalog | Hard/broad/architecture-sensitive work; requires strong reasoning |
+| `power:hint=cheap` | 0 (unconstrained, same as default) | Mechanical tasks; cheap models expected to succeed |
+| `power:hint=standard` | Second viable floor in catalog | Ordinary implementation work; cheap power likely to fail |
+| `power:hint=smart` | Highest viable floor in catalog | Hard/broad/architecture-sensitive work; requires strong reasoning |
 
 **Composition with `--min-power`:** the label sets a floor. The `--min-power`
 flag can raise the floor further but cannot lower it below the label value.
 
-**Invalid tier names** (anything other than `cheap`, `standard`, `smart`) are
+**Invalid power hint names** (anything other than `cheap`, `standard`, `smart`) are
 silently ignored and the default floor is used.
 
-`tier:hint=<name>` is distinct from `tier:smart` / `tier:standard` / `tier:cheap`
-(the older heuristic-override labels). The `tier:hint=` prefix marks it as an
-explicit floor hint; the plain `tier:` prefix is still recognized by `InferTier`
+`power:hint=<name>` is distinct from `power:smart` / `power:standard` / `power:cheap`
+(the older heuristic-override labels). The `power:hint=` prefix marks it as an
+explicit floor hint; the plain `power:` prefix is still recognized by `InferPowerClass`
 for heuristic routing. Both can appear on the same bead.
 
 ---

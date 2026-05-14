@@ -13,11 +13,11 @@ import (
 
 func ResolveProfileLadder() string { return "" } // want `routinglint: forbidden identifier ResolveProfileLadder`
 
-func ResolveTierModelRef() string { return "" } // want `routinglint: forbidden identifier ResolveTierModelRef`
+func ResolvePowerClass() string { return "" } // want `routinglint: forbidden identifier ResolvePowerClass`
 
 func ResolveProfileLadderCallCount() int { return 0 } // want `routinglint: forbidden identifier ResolveProfileLadderCallCount`
 
-func AdaptiveMinTier() int { return 0 } // want `routinglint: forbidden identifier AdaptiveMinTier`
+func AdaptiveMinPowerHint() int { return 0 } // want `routinglint: forbidden identifier AdaptiveMinPowerHint`
 
 func workersByHarness() map[string]int { return nil } // want `routinglint: forbidden identifier workersByHarness`
 

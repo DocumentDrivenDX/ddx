@@ -18,18 +18,18 @@ func mkModel(power int, available, autoRoutable bool) agentlib.ModelInfo {
 func viable(power int) agentlib.ModelInfo    { return mkModel(power, true, true) }
 func nonviable(power int) agentlib.ModelInfo { return mkModel(power, false, true) }
 
-func TestLadder_Tiers_DistinctAscending(t *testing.T) {
+func TestLadder_PowerClasses_DistinctAscending(t *testing.T) {
 	l := NewLadder([]agentlib.ModelInfo{
 		viable(70), viable(50), viable(70), viable(90), viable(50),
 	})
-	got := l.Tiers()
+	got := l.PowerClasses()
 	want := []int{50, 70, 90}
 	if len(got) != len(want) {
-		t.Fatalf("Tiers len: got %v want %v", got, want)
+		t.Fatalf("PowerClasses len: got %v want %v", got, want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Fatalf("Tiers[%d]: got %d want %d (full=%v)", i, got[i], want[i], got)
+			t.Fatalf("PowerClasses[%d]: got %d want %d (full=%v)", i, got[i], want[i], got)
 		}
 	}
 }
@@ -41,13 +41,13 @@ func TestLadder_IgnoresUnratedModels(t *testing.T) {
 		mkModel(-10, true, true),
 		viable(80),
 	})
-	got := l.Tiers()
+	got := l.PowerClasses()
 	if len(got) != 2 || got[0] != 50 || got[1] != 80 {
-		t.Fatalf("Tiers: got %v want [50 80]", got)
+		t.Fatalf("PowerClasses: got %v want [50 80]", got)
 	}
 }
 
-func TestLadder_Next_AllViable_StepsThroughTiers(t *testing.T) {
+func TestLadder_Next_AllViable_StepsThroughPowerClasses(t *testing.T) {
 	l := NewLadder([]agentlib.ModelInfo{viable(50), viable(70), viable(90)})
 
 	cases := []struct {
@@ -95,7 +95,7 @@ func TestLadder_Next_NilReceiverExhausted(t *testing.T) {
 	}
 }
 
-func TestLadder_Next_SkipTierReturnsNoViableProviderError(t *testing.T) {
+func TestLadder_Next_SkipPowerClassReturnsNoViableProviderError(t *testing.T) {
 	// 50 viable, 70 has only non-viable models, 90 viable.
 	l := NewLadder([]agentlib.ModelInfo{
 		viable(50),
@@ -130,7 +130,7 @@ func TestLadder_Next_AllNonViableExhaustsViaSkip(t *testing.T) {
 		nonviable(50), nonviable(70), nonviable(90),
 	})
 
-	// First call returns NoViableProvider for tier 50.
+	// First call returns NoViableProvider for powerClass 50.
 	_, err := l.Next(0)
 	var nvp *NoViableProviderError
 	if !errors.As(err, &nvp) || nvp.Floor != 50 {
@@ -153,8 +153,8 @@ func TestLadder_Next_AllNonViableExhaustsViaSkip(t *testing.T) {
 	}
 }
 
-func TestLadder_Next_ViabilityDropsAtPartiallyAvailableTier(t *testing.T) {
-	// Tier 70 has one Available but non-AutoRoutable model and one
+func TestLadder_Next_ViabilityDropsAtPartiallyAvailablePowerClass(t *testing.T) {
+	// PowerClass 70 has one Available but non-AutoRoutable model and one
 	// non-Available AutoRoutable model — neither counts as viable.
 	l := NewLadder([]agentlib.ModelInfo{
 		viable(50),

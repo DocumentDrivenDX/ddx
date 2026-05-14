@@ -147,7 +147,7 @@ var builtinHarnessConfigs = map[string]harnessConfig{
 		Surface:      "virtual",
 		CostClass:    "local",
 		IsLocal:      true,
-		TestOnly:     true, // test-only replay harness; never selected by production tier routing
+		TestOnly:     true, // test-only replay harness; never selected by production powerClass routing
 	},
 	"script": {
 		Name:       "script",
@@ -156,7 +156,7 @@ var builtinHarnessConfigs = map[string]harnessConfig{
 		Surface:    "script",
 		CostClass:  "local",
 		IsLocal:    true,
-		TestOnly:   true, // test-only directive interpreter; never selected by production tier routing
+		TestOnly:   true, // test-only directive interpreter; never selected by production powerClass routing
 	},
 	"openrouter": {
 		Name:           "openrouter",

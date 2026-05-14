@@ -1,6 +1,6 @@
 package agent
 
-// execute_bead_checkpoint_test.go — Tier-2 integration tests for the
+// execute_bead_checkpoint_test.go — PowerClass-2 integration tests for the
 // pre-dispatch checkpoint guard. DDx must capture allowed bookkeeping changes
 // as a real commit on the current branch, but it must reject ordinary
 // implementation files so they stay in the bead's substantive [ddx-<id>]

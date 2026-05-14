@@ -20,7 +20,7 @@ The escalation and auto-recovery design is anchored by five explicit principles:
 - **P1 — Cheapest first:** DDx always dispatches the lowest-power model that can plausibly handle the work. Power escalation is a recovery step, not a default operating mode.
 - **P2 — Escalate on failure:** When a capability-sensitive failure class is detected, DDx raises `MinPower` for the next attempt. It does not alter harness, provider, or model values; Fizeau resolves the concrete route.
 - **P3 — Reviewer always stronger:** The adversarial pre-close reviewer's `MinPower` floor is always set higher than the implementer's actual reported power. A reviewer may not run at a weaker power than the implementer it is reviewing.
-- **P4 — Reframe then decompose on persistent failure:** When a bead's escalation ladder is exhausted on consecutive drain cycles, DDx first attempts a strong-tier reframer pass. If reframing fails or produces no change, DDx attempts a strong-tier decomposer pass. Only after both fail does DDx park the bead at `status=proposed`.
+- **P4 — Reframe then decompose on persistent failure:** When a bead's escalation ladder is exhausted on consecutive drain cycles, DDx first attempts a strong-power reframer pass. If reframing fails or produces no change, DDx attempts a strong-power decomposer pass. Only after both fail does DDx park the bead at `status=proposed`.
 - **P5 — No human in the loop for routing or budget:** DDx stops at `status=proposed` or at a configured budget cap; it never silently retries indefinitely or makes content-aware routing decisions. Operator action is a terminal state reached only after automated escalation and auto-recovery have been exhausted.
 
 ## Context
@@ -38,7 +38,7 @@ state, worktree isolation, evidence, gates, review verdicts, cooldowns, and
 the queue-drain loop. The escalation policy therefore has to be expressed in
 terms of DDx-owned evidence and abstract power bounds, not concrete model names.
 
-Earlier planning used "tier" and profile language. That vocabulary is now
+Earlier planning used older routing and profile language. That vocabulary is now
 migration debt when it implies DDx choosing a provider, model, or fallback chain.
 The stable contract is `MinPower` / `MaxPower` plus opaque passthrough
 constraints.
@@ -214,8 +214,8 @@ cycle overwrites prior evidence.
 DDx applies escalation in a strict priority order within and across drain cycles:
 
 1. **Within-cycle (ladder climb):** For a single bead execution, DDx escalates `MinPower` across successive retries until the configured power ceiling is reached or a stop condition fires. Each retry is a new layer-1 invocation in the same layer-2 attempt record.
-2. **Cross-cycle (reframe):** When the escalation ladder is exhausted on `consecutive_ladder_exhaustions >= 2` drain cycles, DDx dispatches a strong-tier reframer agent (per P3, `MinPower` set to the strong-tier floor). The reframer rewrites the bead description and/or acceptance criteria in-place; the bead re-enters the execution-ready queue with `status=open` and a reset ladder.
-3. **Cross-cycle (decompose):** If the reframe attempt fails or produces no change, DDx dispatches a strong-tier decomposer agent to split the bead into 2–5 executable child beads. If child depth is exhausted, the decomposer switches to sibling or replacement bead specs under the nearest safe parent/root. The oversized bead is left `status=open` with dependency, `execution-eligible=false`, or supersession metadata that lets the queue advance through the generated executable work.
+2. **Cross-cycle (reframe):** When the escalation ladder is exhausted on `consecutive_ladder_exhaustions >= 2` drain cycles, DDx dispatches a strong-power reframer agent (per P3, `MinPower` set to the strong-power floor). The reframer rewrites the bead description and/or acceptance criteria in-place; the bead re-enters the execution-ready queue with `status=open` and a reset ladder.
+3. **Cross-cycle (decompose):** If the reframe attempt fails or produces no change, DDx dispatches a strong-power decomposer agent to split the bead into 2–5 executable child beads. If child depth is exhausted, the decomposer switches to sibling or replacement bead specs under the nearest safe parent/root. The oversized bead is left `status=open` with dependency, `execution-eligible=false`, or supersession metadata that lets the queue advance through the generated executable work.
 4. **Final escape (`status=proposed`):** If child decomposition and sibling/replacement decomposition both fail, or the decomposition would be lossy and require operator judgment, DDx parks the bead at `status=proposed` with `auto-recovery-failed` evidence and clears the active claim.
 
 No step may be skipped or reordered. DDx must not move a bead directly to `status=proposed` from within-cycle escalation while cross-cycle options remain available and the per-bead budget has not been exhausted.

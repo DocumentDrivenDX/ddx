@@ -30,7 +30,7 @@ type AgentMetricsResult struct {
 
 // AgentMetricsRow is one aggregated bucket: counts, success rate, duration percentiles, and cost/token means for the attempts in `key`.
 type AgentMetricsRow struct {
-	// Group key (model, harness, provider, or tier label)
+	// Group key (model, harness, provider, or route key)
 	Key string `json:"key"`
 	// Total attempts in this bucket
 	Attempts int `json:"attempts"`
@@ -1017,12 +1017,10 @@ type Execution struct {
 	// Git revision the attempt produced (commit SHA when one was made).
 	ResultRev *string `json:"resultRev,omitempty"`
 	// ImplementationRev is the worker's own commit SHA before landing.
-	// Distinct from LandedRev on the merge-commit path.
 	ImplementationRev *string `json:"implementationRev,omitempty"`
-	// LandedRev is the target branch tip after the coordinator landing.
+	// LandedRev is the target branch tip after coordinator landing.
 	LandedRev *string `json:"landedRev,omitempty"`
-	// EvidenceRev is the trailing evidence commit SHA when distinct from
-	// ImplementationRev. Empty when not separately committed.
+	// EvidenceRev is the trailing evidence commit SHA when distinct from ImplementationRev.
 	EvidenceRev *string `json:"evidenceRev,omitempty"`
 	// Bundle directory (relative to project root).
 	BundlePath string `json:"bundlePath"`
@@ -1468,12 +1466,12 @@ type OperatorPromptCancelResult struct {
 	Bead *Bead `json:"bead"`
 }
 
-// Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; tier is clamped to the bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window.
+// Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; priority is clamped to the valid bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window.
 type OperatorPromptSubmitInput struct {
 	// The full operator prompt body. The first non-empty line becomes the bead title; the entire body is stored as the bead description.
 	Prompt string `json:"prompt"`
-	// Optional priority tier for the resulting bead (clamped to the valid bead priority range). Defaults to 2 when omitted.
-	Tier *int `json:"tier,omitempty"`
+	// Optional priority for the resulting bead (clamped to the valid bead priority range). Defaults to 2 when omitted.
+	Priority *int `json:"priority,omitempty"`
 	// Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true).
 	IdempotencyKey string `json:"idempotencyKey"`
 	// When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the execute-loop without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false.
@@ -2425,8 +2423,8 @@ type WorkerExecutionResult struct {
 	WorkerID *string `json:"workerId,omitempty"`
 	// Harness used
 	Harness *string `json:"harness,omitempty"`
-	// Tier used
-	Tier *string `json:"tier,omitempty"`
+	// Power class used
+	PowerClass *string `json:"powerClass,omitempty"`
 	// Provider used
 	Provider *string `json:"provider,omitempty"`
 	// Model used
@@ -2501,20 +2499,20 @@ const (
 	AgentMetricsAxisHarness AgentMetricsAxis = "HARNESS"
 	// Group by provider name
 	AgentMetricsAxisProvider AgentMetricsAxis = "PROVIDER"
-	// Group by harness/model tier (TierKey)
-	AgentMetricsAxisTier AgentMetricsAxis = "TIER"
+	// Group by harness/model route key
+	AgentMetricsAxisRoute AgentMetricsAxis = "ROUTE"
 )
 
 var AllAgentMetricsAxis = []AgentMetricsAxis{
 	AgentMetricsAxisModel,
 	AgentMetricsAxisHarness,
 	AgentMetricsAxisProvider,
-	AgentMetricsAxisTier,
+	AgentMetricsAxisRoute,
 }
 
 func (e AgentMetricsAxis) IsValid() bool {
 	switch e {
-	case AgentMetricsAxisModel, AgentMetricsAxisHarness, AgentMetricsAxisProvider, AgentMetricsAxisTier:
+	case AgentMetricsAxisModel, AgentMetricsAxisHarness, AgentMetricsAxisProvider, AgentMetricsAxisRoute:
 		return true
 	}
 	return false

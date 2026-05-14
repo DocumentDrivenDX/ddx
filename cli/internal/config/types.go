@@ -198,7 +198,7 @@ type EvidenceCapsConfig struct {
 	PerHarness           map[string]*EvidenceCapsOverride `yaml:"per_harness,omitempty" json:"per_harness,omitempty"`
 	// ContextBudget is the prompt budget label that execute-bead consults
 	// when assembling the bead prompt. Empty string means "full budget";
-	// "minimal" omits large governing documents (cheap-tier path). See
+	// "minimal" omits large governing documents (cheap-powerClass path). See
 	// SD-024 §Stage 3 — ExecuteBeadOptions migration.
 	ContextBudget string `yaml:"context_budget,omitempty" json:"context_budget,omitempty"`
 }
@@ -320,7 +320,7 @@ func (e *ExecutionsConfig) ResolveRetainDays() int {
 }
 
 // ExecutionsMirrorConfig describes the out-of-band archive target for the
-// local-tier evidence bundle (.ddx/executions/, .ddx/agent-logs/,
+// local-powerClass evidence bundle (.ddx/executions/, .ddx/agent-logs/,
 // .ddx/workers/). A configured kind plus path enables mirroring; kind=none
 // (or empty) leaves mirroring disabled.
 type ExecutionsMirrorConfig struct {

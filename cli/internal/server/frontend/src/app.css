@@ -51,19 +51,19 @@
 	--priority-p4-surface: #FBF8F2;
 	--priority-p4-border: #E4DDD0;
 
-	/* cost tiers */
-	--tier-cheap-text: oklch(40% 0.11 163);
-	--tier-cheap-surface: oklch(97% 0.03 163);
-	--tier-cheap-border: oklch(79% 0.1 163);
-	--tier-standard-text: #3B5B7A;
-	--tier-standard-surface: oklch(97% 0.01 220);
-	--tier-standard-border: oklch(78% 0.06 220);
-	--tier-fast-text: #A8801F;
-	--tier-fast-surface: oklch(97% 0.03 55);
-	--tier-fast-border: oklch(79% 0.09 55);
-	--tier-smart-text: oklch(41% 0.13 315);
-	--tier-smart-surface: oklch(97% 0.02 315);
-	--tier-smart-border: oklch(79% 0.09 315);
+	/* cost power-classes */
+	--power-class-cheap-text: oklch(40% 0.11 163);
+	--power-class-cheap-surface: oklch(97% 0.03 163);
+	--power-class-cheap-border: oklch(79% 0.1 163);
+	--power-class-standard-text: #3B5B7A;
+	--power-class-standard-surface: oklch(97% 0.01 220);
+	--power-class-standard-border: oklch(78% 0.06 220);
+	--power-class-fast-text: #A8801F;
+	--power-class-fast-surface: oklch(97% 0.03 55);
+	--power-class-fast-border: oklch(79% 0.09 55);
+	--power-class-smart-text: oklch(41% 0.13 315);
+	--power-class-smart-surface: oklch(97% 0.02 315);
+	--power-class-smart-border: oklch(79% 0.09 315);
 
 	/* run-hierarchy layers — work=violet (~300), try=blue (~220), run=teal (~190) */
 	--layer-work-text: oklch(41% 0.13 300);
@@ -142,18 +142,18 @@
 	--priority-p4-surface: #26231F;
 	--priority-p4-border: #34302A;
 
-	--tier-cheap-text: oklch(78% 0.11 163);
-	--tier-cheap-surface: oklch(27% 0.06 163);
-	--tier-cheap-border: oklch(51% 0.1 163);
-	--tier-standard-text: #7BA3CC;
-	--tier-standard-surface: oklch(22% 0.04 220);
-	--tier-standard-border: oklch(45% 0.07 220);
-	--tier-fast-text: #D4A53D;
-	--tier-fast-surface: oklch(22% 0.04 55);
-	--tier-fast-border: oklch(47% 0.09 55);
-	--tier-smart-text: oklch(78% 0.1 315);
-	--tier-smart-surface: oklch(28% 0.06 315);
-	--tier-smart-border: oklch(51% 0.09 315);
+	--power-class-cheap-text: oklch(78% 0.11 163);
+	--power-class-cheap-surface: oklch(27% 0.06 163);
+	--power-class-cheap-border: oklch(51% 0.1 163);
+	--power-class-standard-text: #7BA3CC;
+	--power-class-standard-surface: oklch(22% 0.04 220);
+	--power-class-standard-border: oklch(45% 0.07 220);
+	--power-class-fast-text: #D4A53D;
+	--power-class-fast-surface: oklch(22% 0.04 55);
+	--power-class-fast-border: oklch(47% 0.09 55);
+	--power-class-smart-text: oklch(78% 0.1 315);
+	--power-class-smart-surface: oklch(28% 0.06 315);
+	--power-class-smart-border: oklch(51% 0.09 315);
 
 	--layer-work-text: oklch(78% 0.1 300);
 	--layer-work-surface: oklch(27% 0.06 300);
@@ -318,16 +318,16 @@
 		border-color: var(--layer-run-border);
 	}
 
-	/* billing mode badges — tier-fast=amber (real cost), tier-standard=blue (subscription), p4=neutral (local) */
+	/* billing mode badges — power-class-fast=amber (real cost), power-class-standard=blue (subscription), p4=neutral (local) */
 	.badge-billing-paid {
-		color: var(--tier-fast-text);
-		background-color: var(--tier-fast-surface);
-		border-color: var(--tier-fast-border);
+		color: var(--power-class-fast-text);
+		background-color: var(--power-class-fast-surface);
+		border-color: var(--power-class-fast-border);
 	}
 	.badge-billing-subscription {
-		color: var(--tier-standard-text);
-		background-color: var(--tier-standard-surface);
-		border-color: var(--tier-standard-border);
+		color: var(--power-class-standard-text);
+		background-color: var(--power-class-standard-surface);
+		border-color: var(--power-class-standard-border);
 	}
 	.badge-billing-local {
 		color: var(--priority-p4-text);
@@ -335,19 +335,19 @@
 		border-color: var(--priority-p4-border);
 	}
 
-	/* caution banner (amber/gold, via tier-fast CSS vars) */
+	/* caution banner (amber/gold, via power-class-fast CSS vars) */
 	.alert-caution {
-		border-color: var(--tier-fast-border);
-		background-color: var(--tier-fast-surface);
-		color: var(--tier-fast-text);
+		border-color: var(--power-class-fast-border);
+		background-color: var(--power-class-fast-surface);
+		color: var(--power-class-fast-text);
 	}
 
 	/* graph node staleness — semantic mapping:
-	   stale = warning (tier-fast amber/gold), missing = error (status-blocked red),
+	   stale = warning (power-class-fast amber/gold), missing = error (status-blocked red),
 	   fresh = success (status-closed green). Light/dark resolved via existing CSS vars. */
 	.node-stale {
-		fill: var(--tier-fast-border);
-		stroke: var(--tier-fast-text);
+		fill: var(--power-class-fast-border);
+		stroke: var(--power-class-fast-text);
 	}
 	.node-missing {
 		fill: var(--status-blocked-border);

@@ -14,7 +14,7 @@ import (
 	agentlib "github.com/easel/fizeau"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
@@ -143,7 +143,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		!cmd.Flags().Changed("model") && !cmd.Flags().Changed("provider") &&
 		!cmd.Flags().Changed("profile") &&
 		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
-	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
+	autoInferPowerClass := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
 
 	if !spec.OpaquePassthrough {
 		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider); err != nil {
@@ -277,15 +277,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}, true
 	}
 
-	singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, requestedProfile string, requestedTier escalation.ModelTier, routingNote string, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
+	singlePolicyAttempt := func(ctx context.Context, beadID string, requestedMinPower int, requestedProfile string, inferredPolicy escalation.PowerClass, routingNote string, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
 		attemptProvider := spec.Provider
 		if resolvedProvider != "" {
 			attemptProvider = resolvedProvider
 		}
 		reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-			report := agent.ReportFromExecuteBeadResult(res, string(requestedTier))
-			report.RequestedTier = string(requestedTier)
+			report := agent.ReportFromExecuteBeadResult(res, string(inferredPolicy))
+			report.InferredPowerClass = string(inferredPolicy)
 			report.RequestedProfile = requestedProfile
 			report.RoutingIntentNote = routingNote
 			return report
@@ -357,7 +357,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	var ladder escalationFloorFinder
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
-			ladder = tierescalation.NewLadder(nil)
+			ladder = powerladder.NewLadder(nil)
 			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
@@ -372,7 +372,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if listErr != nil {
 				return
 			}
-			ladder = tierescalation.NewLadder(models)
+			ladder = powerladder.NewLadder(models)
 		})
 		return ladder
 	}
@@ -388,9 +388,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			inferredTier := escalation.ModelTier("")
-			if autoInferTier {
-				inferredTier = escalation.InferTier(targetBead)
+			inferredPolicy := escalation.PowerClass("")
+			if autoInferPowerClass {
+				inferredPolicy = escalation.InferPowerClass(targetBead)
 			}
 			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPowerWithInference(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder(), false)
 			if unavailable {
@@ -398,13 +398,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
-			if autoInferTier {
-				if selection, selectErr := profileSelector.Select(ctx, inferredTier, initialMinPower); selectErr == nil && selection.Name != "" {
+			if autoInferPowerClass {
+				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, initialMinPower); selectErr == nil && selection.Name != "" {
 					initialProfile = selection.Name
 					initialRoutingNote = selection.Note
 					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
 						unavailableReport := smartRouteUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
-						unavailableReport.RequestedTier = string(inferredTier)
+						unavailableReport.InferredPowerClass = string(inferredPolicy)
 						unavailableReport.RequestedProfile = initialProfile
 						unavailableReport.RoutingIntentNote = initialRoutingNote
 						return unavailableReport, nil
@@ -412,7 +412,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				} else {
 					initialMinPower, unavailableReport, unavailable = zeroConfigInferredMinPower(targetBead, initialMinPower, spec.MaxPower, loadLadder())
 					if unavailable {
-						unavailableReport.RequestedTier = string(inferredTier)
+						unavailableReport.InferredPowerClass = string(inferredPolicy)
 						return unavailableReport, nil
 					}
 				}
@@ -422,15 +422,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				perBeadBudget = override
 			}
 			perBeadTracker := escalation.NewPerBeadCostTracker(perBeadBudget, harnessBilledLookup)
-			report, err := runEscalatingSingleTierAttempts(
+			report, err := runEscalatingPowerAttempts(
 				ctx,
 				initialMinPower,
 				loadLadder(),
 				func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 					requestProfile := initialProfile
 					routingNote := initialRoutingNote
-					if autoInferTier {
-						if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestedMinPower); selectErr == nil {
+					if autoInferPowerClass {
+						if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestedMinPower); selectErr == nil {
 							// Empty selection means no no-extra-requirement policy covers this
 							// retry floor. Drop the stale lower policy and send MinPower-only so
 							// Fizeau can route or report no eligible candidate from live config.
@@ -442,7 +442,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 							}
 						}
 					}
-					return singleTierAttempt(ctx, beadID, requestedMinPower, requestProfile, inferredTier, routingNote, spec.Harness, spec.Provider, spec.Model)
+					return singlePolicyAttempt(ctx, beadID, requestedMinPower, requestProfile, inferredPolicy, routingNote, spec.Harness, spec.Provider, spec.Model)
 				},
 				nil,
 				perBeadTracker,
@@ -538,7 +538,7 @@ func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile stri
 }
 
 // projectHasRoutingConfig reports whether the project's .ddx/config.yaml pins a
-// routing decision that should suppress DDx's zero-config tier inference.
+// routing decision that should suppress DDx's zero-config powerClass inference.
 // agent.endpoints alone is transport configuration (where providers live) and
 // does NOT pin routing — leaving it on the suppression list caused no-flag work
 // in projects with local endpoints to send an empty Policy and inherit

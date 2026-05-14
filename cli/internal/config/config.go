@@ -196,7 +196,7 @@ func (c *Config) Validate() error {
 						Field:      fmt.Sprintf("triage.policies.%s[%d]", mode, i),
 						Value:      action,
 						Message:    err.Error(),
-						Suggestion: "use re_attempt_with_context, escalate_tier, retry_with_backoff, file_followup, or operator_required",
+						Suggestion: "use re_attempt_with_context, escalate_power, retry_with_backoff, file_followup, or operator_required",
 					})
 				}
 			}

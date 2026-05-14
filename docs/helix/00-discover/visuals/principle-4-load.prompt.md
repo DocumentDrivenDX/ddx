@@ -64,7 +64,7 @@ metaphor.
 
 # Anchoring (recently-landed positioning)
 
-Anchored to **LLMs are stochastic, unreliable, costly** and to the **Right-Size the Model** principle (`/docs/principles/right-size-the-model/`). The variable mass and the `$` annotation are the empirical drivers behind cost-tier routing: cheap models do, strong models review, deterministic checks at the top of the ladder.
+Anchored to **LLMs are stochastic, unreliable, costly** and to the **Right-Size the Model** principle (`/docs/principles/right-size-the-model/`). The variable mass and the `$` annotation are the empirical drivers behind cost-aware routing: cheap models do, strong models review, deterministic checks at the top of the ladder.
 
 # Negative prompt
 

@@ -133,8 +133,8 @@ func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	events, err := store.Events(candidate.ID)
 	require.NoError(t, err)
 	for _, ev := range events {
-		assert.NotEqual(t, "tier-attempt", ev.Kind,
-			"no tier-attempt event must be recorded when preflight rejects at startup")
+		assert.NotEqual(t, "power-attempt", ev.Kind,
+			"no power-attempt event must be recorded when preflight rejects at startup")
 	}
 
 	// Bead must remain open with no owner — confirms no Claim side-effects.

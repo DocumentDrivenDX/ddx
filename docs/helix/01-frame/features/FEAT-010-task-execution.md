@@ -192,7 +192,7 @@ layer-3 run record.
 
 `ddx work` wires this hook by default in both CLI and server-managed worker
 paths. Decomposition decisions request Fizeau's `smart` model-ref and run with a
-strong `MinPower` floor, defaulting to the smart/top-power tier floor when no
+strong `MinPower` floor, defaulting to the smart/top-power class floor when no
 project-specific splitter override is configured. DDx does not choose the
 concrete model; it passes the raised power floor to Fizeau and preserves any
 operator-supplied harness/provider/model passthrough constraints. If those
@@ -1088,8 +1088,8 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     escalation ladder is exhausted on `N` consecutive drain cycles (default
     `N = 2`, configurable in `.ddx/config.yaml` as
     `escalation.auto_recovery_threshold`), `ddx work` attempts
-    (a) reframe via a strong-tier reframer agent, then (b) decomposition via
-    a strong-tier decomposer agent, before parking the bead at
+    (a) reframe via a strong-power reframer agent, then (b) decomposition via
+    a strong-power decomposer agent, before parking the bead at
     `status=proposed`. Each recovery step follows ADR-024 P4 and P3 (strong
     `MinPower` floor, passthrough constraints forwarded unchanged). Outcomes
     and status transitions are defined in TD-031 §2 (`reframe_applied`,

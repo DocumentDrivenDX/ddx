@@ -7,23 +7,23 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
-const triageTierHintKey = "triage.tier_hint"
+const triagePowerHintKey = "triage.power_hint"
 
-// InferTier returns a recommended ModelTier for a bead based on its metadata.
-// It inspects, in priority order: an explicit "tier:" label, the kind/priority
+// InferPowerClass returns a recommended PowerClass for a bead based on its metadata.
+// It inspects, in priority order: an explicit "power:" label, the kind/priority
 // labels and IssueType, then falls back to an estimated-scope heuristic on the
 // description length.
 //
-// The default for a bead with no useful signal is TierCheap, matching the
+// The default for a bead with no useful signal is PowerCheap, matching the
 // hot-fix behavior in cmd/agent_cmd.go runAgentExecuteLoopImpl that this
 // engine replaces. Aligns with the endpoint-first routing redesign goal of
 // cheap-by-default with metadata-driven escalation.
-func InferTier(b *bead.Bead) ModelTier {
+func InferPowerClass(b *bead.Bead) PowerClass {
 	if b == nil {
-		return TierCheap
+		return PowerCheap
 	}
-	if tier, ok := triageTierHint(b); ok {
-		return tier
+	if powerClass, ok := triagePowerHint(b); ok {
+		return powerClass
 	}
 
 	kindLabel := ""
@@ -34,8 +34,8 @@ func InferTier(b *bead.Bead) ModelTier {
 			continue
 		}
 		// Explicit override wins.
-		if tier, ok := parseTierLabel(l); ok {
-			return tier
+		if powerClass, ok := parsePowerLabel(l); ok {
+			return powerClass
 		}
 		if v, ok := strings.CutPrefix(l, "kind:"); ok {
 			kindLabel = strings.TrimSpace(v)
@@ -49,16 +49,16 @@ func InferTier(b *bead.Bead) ModelTier {
 	// is happy at cheap. Medium falls through to kind- and scope-based logic.
 	switch priorityLabel {
 	case "critical", "urgent":
-		return TierSmart
+		return PowerSmart
 	case "high":
 		// High priority bugs/incidents go to smart; high enhancements stay
-		// at standard so we don't burn smart-tier budget on routine work.
+		// at standard so we don't burn smart-powerClass budget on routine work.
 		if isBugKind(kindLabel) || isBugKind(b.IssueType) {
-			return TierSmart
+			return PowerSmart
 		}
-		return TierStandard
+		return PowerStandard
 	case "low", "trivial":
-		return TierCheap
+		return PowerCheap
 	}
 
 	kind := kindLabel
@@ -67,11 +67,11 @@ func InferTier(b *bead.Bead) ModelTier {
 	}
 	switch {
 	case isBugKind(kind):
-		return TierStandard
+		return PowerStandard
 	case isCheapKind(kind):
-		return TierCheap
+		return PowerCheap
 	case isStandardKind(kind):
-		return TierStandard
+		return PowerStandard
 	}
 
 	// Estimated scope from description length. Long, dense descriptions tend
@@ -79,40 +79,40 @@ func InferTier(b *bead.Bead) ModelTier {
 	descLen := len(b.Description) + len(b.Acceptance)
 	switch {
 	case descLen >= 4000:
-		return TierSmart
+		return PowerSmart
 	case descLen >= 1500:
-		return TierStandard
+		return PowerStandard
 	default:
-		return TierCheap
+		return PowerCheap
 	}
 }
 
-func triageTierHint(b *bead.Bead) (ModelTier, bool) {
+func triagePowerHint(b *bead.Bead) (PowerClass, bool) {
 	if b == nil || b.Extra == nil {
 		return "", false
 	}
-	raw, ok := b.Extra[triageTierHintKey]
+	raw, ok := b.Extra[triagePowerHintKey]
 	if !ok {
 		return "", false
 	}
-	return parseTierValue(fmt.Sprint(raw))
+	return parsePowerValue(fmt.Sprint(raw))
 }
 
-func parseTierValue(raw string) (ModelTier, bool) {
+func parsePowerValue(raw string) (PowerClass, bool) {
 	l := strings.ToLower(strings.TrimSpace(raw))
 	if l == "" {
 		return "", false
 	}
-	if strings.HasPrefix(l, "tier:") {
-		return parseTierLabel(l)
+	if strings.HasPrefix(l, "power:") {
+		return parsePowerLabel(l)
 	}
 	switch l {
-	case string(TierSmart):
-		return TierSmart, true
-	case string(TierStandard):
-		return TierStandard, true
-	case string(TierCheap):
-		return TierCheap, true
+	case string(PowerSmart):
+		return PowerSmart, true
+	case string(PowerStandard):
+		return PowerStandard, true
+	case string(PowerCheap):
+		return PowerCheap, true
 	default:
 		return "", false
 	}

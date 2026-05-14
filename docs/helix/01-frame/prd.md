@@ -153,7 +153,7 @@ problems outside that mapping belong in workflow tools, not the platform.
   mechanics from scratch; proven patterns stay trapped in individual repos
 
 **LLM physics** (Principle 4 — LLMs are stochastic, unreliable, and costly)
-- **No cost-tier enforcement**: Token cost is a first-order constraint, not an
+- **No cost-aware enforcement**: Token cost is a first-order constraint, not an
   optimization. Without capability-keyed routing and model-selection guidance,
   teams overspend on routine work and have no signal on the cheapest model that
   reliably closes beads

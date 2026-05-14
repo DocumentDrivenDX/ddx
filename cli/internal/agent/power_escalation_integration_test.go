@@ -22,13 +22,13 @@ import (
 func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 	store, targetBead, _ := newExecuteLoopTestStore(t)
 
-	// Track which tiers the executor was invoked with.
-	var attemptTiers []string
+	// Track which powerClasses the executor was invoked with.
+	var attemptPowerClasses []string
 
-	// The executor simulates tier-based escalation by reading the tier from
-	// the report it is asked to build. In the real code path the tier is
+	// The executor simulates powerClass-based escalation by reading the powerClass from
+	// the report it is asked to build. In the real code path the powerClass is
 	// resolved by the agent service; here we inject it directly via
-	// ExecuteBeadReport.Tier.
+	// ExecuteBeadReport.PowerClass.
 	//
 	// cheap  → execution_failed (provider down)
 	// standard → success
@@ -37,25 +37,25 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			callCount++
-			tier := escalation.TierCheap
+			powerClass := escalation.PowerCheap
 			if callCount > 1 {
-				tier = escalation.TierStandard
+				powerClass = escalation.PowerStandard
 			}
-			attemptTiers = append(attemptTiers, string(tier))
+			attemptPowerClasses = append(attemptPowerClasses, string(powerClass))
 
-			// Append a tier-attempt event the same way the real escalating
+			// Append a power-attempt event the same way the real escalating
 			// executor does, so the trail is visible in bead events.
 			_ = store.AppendEvent(beadID, bead.BeadEvent{
-				Kind:      "tier-attempt",
+				Kind:      "power-attempt",
 				Actor:     "test",
 				Source:    "test",
 				CreatedAt: time.Now().UTC(),
 			})
 
-			if tier == escalation.TierCheap {
+			if powerClass == escalation.PowerCheap {
 				return ExecuteBeadReport{
 					BeadID:      beadID,
-					Tier:        string(tier),
+					PowerClass:  string(powerClass),
 					Harness:     "mock-cheap",
 					Model:       "cheap-model",
 					Status:      ExecuteBeadStatusExecutionFailed,
@@ -63,10 +63,10 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 					ProbeResult: "error: 502",
 				}, nil
 			}
-			// Standard tier succeeds.
+			// Standard powerClass succeeds.
 			return ExecuteBeadReport{
 				BeadID:      beadID,
-				Tier:        string(tier),
+				PowerClass:  string(powerClass),
 				Harness:     "mock-standard",
 				Model:       "standard-model",
 				Status:      ExecuteBeadStatusSuccess,
@@ -79,7 +79,7 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 	}
 
 	// Run the loop twice: first call returns cheap failure, second returns
-	// standard success. The Executor decides internally which tier to use
+	// standard success. The Executor decides internally which powerClass to use
 	// based on callCount, mirroring the real escalation loop.
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "test-worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
@@ -90,17 +90,17 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 
 	// After a cheap failure the loop sees execution_failed and unclaims.
 	// On the next iteration (same Run call, same queue), the bead is still
-	// open and ready, so the executor is called again with the next tier.
+	// open and ready, so the executor is called again with the next powerClass.
 	//
 	// NOTE: because the store has a second bead, after the cheap failure the
 	// loop will attempt the second bead. To isolate this test to a single
 	// bead, we confirm the behaviour by checking the final bead state.
 	//
 	// The full escalation-within-a-single-claim behaviour is exercised by the
-	// CLI path (singleTierAttempt loop in runAgentExecuteLoop). This test
+	// CLI path (singlePolicyAttempt loop in runAgentExecuteLoop). This test
 	// validates that:
 	//  1. The executor is called per bead claim.
-	//  2. tier-attempt events are recorded.
+	//  2. power-attempt events are recorded.
 	//  3. When the second call succeeds, the bead is closed.
 	require.GreaterOrEqual(t, result.Attempts, 1)
 
@@ -108,20 +108,20 @@ func TestEscalationTrailCheapFailStandardSucceed(t *testing.T) {
 	events, err := store.Events(targetBead.ID)
 	require.NoError(t, err)
 
-	// At minimum a "tier-attempt" event must have been appended.
-	var tierAttemptFound bool
+	// At minimum a "power-attempt" event must have been appended.
+	var powerAttemptFound bool
 	for _, ev := range events {
-		if ev.Kind == "tier-attempt" {
-			tierAttemptFound = true
+		if ev.Kind == "power-attempt" {
+			powerAttemptFound = true
 			break
 		}
 	}
-	assert.True(t, tierAttemptFound, "tier-attempt event must appear in bead events for escalation trail")
+	assert.True(t, powerAttemptFound, "power-attempt event must appear in bead events for escalation trail")
 }
 
-// TestEscalationTierRecordedInFinalEvent verifies that when a bead report
-// carries Tier and ProbeResult, those values appear in the loop event body.
-func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
+// TestEscalationPowerRecordedInFinalEvent verifies that when a bead report
+// carries PowerClass and ProbeResult, those values appear in the loop event body.
+func TestEscalationPowerRecordedInFinalEvent(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 
 	worker := &ExecuteBeadWorker{
@@ -129,13 +129,13 @@ func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
 				BeadID:      beadID,
-				Tier:        "standard",
+				PowerClass:  "standard",
 				ProbeResult: "ok (2 candidates)",
 				Harness:     "claude",
 				Model:       "claude-sonnet-4-6",
 				Status:      ExecuteBeadStatusSuccess,
 				Detail:      "merged",
-				SessionID:   "sess-tier",
+				SessionID:   "sess-powerClass",
 				ResultRev:   "def45678",
 			}, nil
 		}),
@@ -161,6 +161,6 @@ func TestEscalationTierRecordedInFinalEvent(t *testing.T) {
 		}
 	}
 	require.NotNil(t, loopEvent, "execute-bead event must be present")
-	assert.Contains(t, loopEvent.Body, "tier=standard", "tier must appear in loop event body")
+	assert.Contains(t, loopEvent.Body, "powerClass=standard", "powerClass must appear in loop event body")
 	assert.Contains(t, loopEvent.Body, "probe_result=ok (2 candidates)", "probe_result must appear in loop event body")
 }

@@ -316,24 +316,24 @@ func SelectStrongestProfileAbove(snap ProfileSnapshot, floor int) string {
 // example local-only/no-remote policy requirements) unless DDx has an explicit
 // matching intent; explicit --profile remains a raw passthrough handled by
 // Fizeau.
-func SelectImplementationProfile(snap ProfileSnapshot, tier escalation.ModelTier) ImplementationProfileSelection {
-	return selectImplementationProfile(snap, tier, 0)
+func SelectImplementationProfile(snap ProfileSnapshot, powerClass escalation.PowerClass) ImplementationProfileSelection {
+	return selectImplementationProfile(snap, powerClass, 0)
 }
 
 // SelectImplementationProfileForMinPower chooses an implementation profile
 // whose advertised power range can satisfy the requested lower bound. It is
 // used by retry escalation so DDx does not keep a weak profile pinned after it
 // has raised MinPower beyond that profile's range.
-func SelectImplementationProfileForMinPower(snap ProfileSnapshot, tier escalation.ModelTier, floor int) ImplementationProfileSelection {
-	return selectImplementationProfile(snap, tier, floor)
+func SelectImplementationProfileForMinPower(snap ProfileSnapshot, powerClass escalation.PowerClass, floor int) ImplementationProfileSelection {
+	return selectImplementationProfile(snap, powerClass, floor)
 }
 
-func selectImplementationProfile(snap ProfileSnapshot, tier escalation.ModelTier, floor int) ImplementationProfileSelection {
+func selectImplementationProfile(snap ProfileSnapshot, powerClass escalation.PowerClass, floor int) ImplementationProfileSelection {
 	profiles := implementationCandidateProfiles(snap, floor)
 	if len(profiles) == 0 {
 		return ImplementationProfileSelection{}
 	}
-	selected, note := chooseImplementationCandidate(snap, profiles, tier, floor)
+	selected, note := chooseImplementationCandidate(snap, profiles, powerClass, floor)
 	return ImplementationProfileSelection{
 		Name:     selected.Name,
 		MinPower: selected.MinPower,
@@ -360,19 +360,19 @@ func implementationCandidateProfiles(snap ProfileSnapshot, floor int) []agentlib
 	return out
 }
 
-func chooseImplementationCandidate(snap ProfileSnapshot, profiles []agentlib.PolicyInfo, tier escalation.ModelTier, floor int) (agentlib.PolicyInfo, string) {
-	if floor > 0 && tier != escalation.TierSmart {
+func chooseImplementationCandidate(snap ProfileSnapshot, profiles []agentlib.PolicyInfo, powerClass escalation.PowerClass, floor int) (agentlib.PolicyInfo, string) {
+	if floor > 0 && powerClass != escalation.PowerSmart {
 		return profiles[0], ""
 	}
-	switch tier {
-	case escalation.TierSmart:
+	switch powerClass {
+	case escalation.PowerSmart:
 		return profiles[len(profiles)-1], ""
-	case escalation.TierStandard:
+	case escalation.PowerStandard:
 		if selected, note, ok := standardProfileSelection(snap, profiles); ok {
 			return selected, note
 		}
 		return profiles[0], "medium profile unavailable; using only available profile"
-	case escalation.TierCheap, "":
+	case escalation.PowerCheap, "":
 		return profiles[0], ""
 	default:
 		return profiles[0], ""
@@ -392,9 +392,11 @@ func firstBandAboveLowest(profiles []agentlib.PolicyInfo) (agentlib.PolicyInfo, 
 	return agentlib.PolicyInfo{}, false
 }
 
-// standardProfileSelection prefers the configured medium band when available.
-// If that band has no live model, it falls back downward before burning the
-// strongest profile on ordinary implementation work.
+// standardProfileSelection prefers the configured medium band. Model discovery
+// is advisory and may be stale relative to Fizeau's live route resolver, so a
+// standard-powerClass implementation must not silently downgrade to the weakest
+// policy just because the cached model snapshot does not currently contain a
+// live medium-band candidate.
 func standardProfileSelection(snap ProfileSnapshot, available []agentlib.PolicyInfo) (agentlib.PolicyInfo, string, bool) {
 	if len(available) == 0 {
 		return agentlib.PolicyInfo{}, "", false
@@ -411,16 +413,7 @@ func standardProfileSelection(snap ProfileSnapshot, available []agentlib.PolicyI
 			return profile, "", true
 		}
 	}
-	var lower []agentlib.PolicyInfo
-	for _, profile := range available {
-		if profileMaxForSort(profile) <= profileMaxForSort(desired) {
-			lower = append(lower, profile)
-		}
-	}
-	if len(lower) > 0 {
-		return lower[len(lower)-1], "medium profile unavailable; using weaker available profile before smart", true
-	}
-	return available[0], "medium profile unavailable; using weakest available stronger profile", true
+	return desired, "medium profile absent from live model snapshot; requesting medium policy", true
 }
 
 func desiredStandardProfile(snap ProfileSnapshot) (agentlib.PolicyInfo, bool) {

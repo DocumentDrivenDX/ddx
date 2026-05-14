@@ -17,8 +17,8 @@ func TestNewTestConfigForLoop(t *testing.T) {
 		Harness:                 "claude",
 		Model:                   "claude-opus-4-7",
 		Profile:                 "smart",
-		MinTier:                 "smart",
-		MaxTier:                 "smart",
+		MinPowerHint:            "smart",
+		MaxPowerHint:            "smart",
 		BeadQualityMode:         BeadQualityModeBlock,
 		EvidenceCaps: EvidenceCapsConfig{
 			MaxPromptBytes:       intPtrLoop(123456),
@@ -59,11 +59,11 @@ func TestNewTestConfigForLoop(t *testing.T) {
 	if got := rcfg.Profile(); got != opts.Profile {
 		t.Errorf("Profile: got %q, want %q", got, opts.Profile)
 	}
-	if got := rcfg.MinTier(); got != opts.MinTier {
-		t.Errorf("MinTier: got %q, want %q", got, opts.MinTier)
+	if got := rcfg.MinPowerHint(); got != opts.MinPowerHint {
+		t.Errorf("MinPowerHint: got %q, want %q", got, opts.MinPowerHint)
 	}
-	if got := rcfg.MaxTier(); got != opts.MaxTier {
-		t.Errorf("MaxTier: got %q, want %q", got, opts.MaxTier)
+	if got := rcfg.MaxPowerHint(); got != opts.MaxPowerHint {
+		t.Errorf("MaxPowerHint: got %q, want %q", got, opts.MaxPowerHint)
 	}
 	if got := rcfg.BeadQualityMode(); got != BeadQualityModeBlock {
 		t.Errorf("BeadQualityMode: got %q, want %q", got, BeadQualityModeBlock)

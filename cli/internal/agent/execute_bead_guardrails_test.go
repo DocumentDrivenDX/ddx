@@ -210,7 +210,7 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
 // TestExecuteBeadInstructionsMissingGoverningGate covers AC5: non-minimal
 // renders include executeBeadMissingGoverningText when refs are empty;
 // contextBudget=="minimal" omits governing refs entirely (replaced by the
-// cheap-tier "No governing references." note).
+// cheap-powerClass "No governing references." note).
 func TestExecuteBeadInstructionsMissingGoverningGate(t *testing.T) {
 	full := renderFullPromptForGuardrails(t, "claude", "")
 	if !strings.Contains(full, executeBeadMissingGoverningText) {

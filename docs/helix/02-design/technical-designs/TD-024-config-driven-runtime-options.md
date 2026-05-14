@@ -111,8 +111,8 @@ func (r ResolvedConfig) Model() string
 func (r ResolvedConfig) Provider() string
 func (r ResolvedConfig) ModelRef() string
 func (r ResolvedConfig) Profile() string
-func (r ResolvedConfig) MinTier() string
-func (r ResolvedConfig) MaxTier() string
+func (r ResolvedConfig) MinPower() string
+func (r ResolvedConfig) MaxPower() string
 func (r ResolvedConfig) Effort() string
 func (r ResolvedConfig) Permissions() string
 func (r ResolvedConfig) Timeout() time.Duration
@@ -147,8 +147,8 @@ type CLIOverrides struct {
     Profile     string
     Effort      string
     Permissions string
-    MinTier     string
-    MaxTier     string
+    MinPower     string
+    MaxPower     string
     Timeout     *time.Duration
     NoReview    *bool
     Assignee    string
@@ -343,8 +343,8 @@ overrides := config.CLIOverrides{
     Harness:  spec.Harness,
     Model:    spec.Model,
     Profile:  spec.Profile,
-    MinTier:  spec.MinTier,
-    MaxTier:  spec.MaxTier,
+    MinPower:  spec.MinPower,
+    MaxPower:  spec.MaxPower,
     NoReview: optBool(spec.NoReview),
 }
 rcfg, err := config.LoadAndResolve(projectRoot, overrides)
@@ -393,7 +393,7 @@ or per-invocation control plane), or **runtime intent** (stays on
 | `ProjectRoot`               | runtime intent    | derived; passed to `LoadAndResolve`         |
 | `Harness`/`Model`/`Provider`/`ModelRef` | durable | `Config.Agent.*`, override-able           |
 | `Profile`                   | durable           | `Config.Agent.Routing.Profile`              |
-| `MinTier`/`MaxTier`         | durable           | `Config.Workers.DefaultSpec.MinTier` / `MaxTier` (existing fields at `cli/internal/config/types.go:70-71`; no new field needed) |
+| `MinPower`/`MaxPower`         | durable           | `Config.Workers.DefaultSpec.MinPower` / `MaxPower` (existing fields at `cli/internal/config/types.go:70-71`; no new field needed) |
 | `ReviewMaxRetries`          | durable (already) | already in `Config`; loop reads via `rcfg`  |
 
 ### `RunOptions` → `AgentRunRuntime`
@@ -457,12 +457,12 @@ explicit so a future caller can elevate one without re-architecting.
 ### `*Config` extensions
 
 Two existing sub-structs extended (no new fields invented beyond
-those listed; `WorkersConfig.DefaultSpec.MinTier`/`MaxTier` already
+those listed; `WorkersConfig.DefaultSpec.MinPower`/`MaxPower` already
 exist at `cli/internal/config/types.go:70-71` and are reused):
 - `WorkersConfig` adds: `Assignee`, `NoProgressCooldown`,
   `MaxNoChangesBeforeClose`, `HeartbeatInterval`. The existing
   `WorkersConfig.DefaultSpec` (carrying `Harness`, `Profile`,
-  `Effort`, `MinTier`, `MaxTier`) remains the primary surface for
+  `Effort`, `MinPower`, `MaxPower`) remains the primary surface for
   per-spec defaults; the new fields layer on as additional defaults
   for the loop's policy knobs that don't fit the spec shape.
   Resolution precedence: `CLIOverrides` > `WorkersConfig.DefaultSpec`
@@ -497,8 +497,8 @@ type TestLoopConfigOpts struct {
     Harness                 string
     Model                   string
     Profile                 string
-    MinTier                 string
-    MaxTier                 string
+    MinPower                 string
+    MaxPower                 string
     EvidenceCaps            EvidenceCapsConfig
 }
 
@@ -541,8 +541,8 @@ The analyzer flags:
    classification table above. Concrete forbidden names (closed
    list, not regex-derived to avoid drift):
    `Harness`, `Model`, `Provider`, `ModelRef`, `Profile`, `Effort`,
-   `Permissions`, `Timeout`, `WallClock`, `ContextBudget`, `MinTier`,
-   `MaxTier`, `Assignee`, `ReviewMaxRetries`, `NoProgressCooldown`,
+   `Permissions`, `Timeout`, `WallClock`, `ContextBudget`, `MinPower`,
+   `MaxPower`, `Assignee`, `ReviewMaxRetries`, `NoProgressCooldown`,
    `MaxNoChangesBeforeClose`, `HeartbeatInterval`,
    `SessionLogDir` (durable variant), `MirrorCfg`, `Models`,
    `ReasoningLevels`, `Endpoints`, `ProfileLadders`,

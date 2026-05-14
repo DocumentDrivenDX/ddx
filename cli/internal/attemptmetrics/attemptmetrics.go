@@ -1,4 +1,4 @@
-// Package attemptmetrics implements the cold-tier metrics layer: one row per
+// Package attemptmetrics implements the cold-powerClass metrics layer: one row per
 // bead-attempt written to .ddx/metrics/attempts.jsonl. Rows are appended with
 // O_APPEND so concurrent single-writer access is safe. The schema_version field
 // allows future migrations without losing historical rows.

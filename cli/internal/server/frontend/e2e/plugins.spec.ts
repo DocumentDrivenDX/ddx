@@ -39,7 +39,7 @@ const PLUGINS = [
 		diskBytes: 800_000
 	},
 	{
-		name: 'ddx-cost-tier',
+		name: 'ddx-cost-power-class',
 		version: '0.5.0',
 		installedVersion: '0.4.2',
 		type: 'plugin',
@@ -192,7 +192,7 @@ test('US-098.a: plugins page lists every registry entry with version, type, stat
 		page.getByRole('article', { name: /frontend-design/i }).getByText(/available/i)
 	).toBeVisible();
 	await expect(
-		page.getByRole('article', { name: /ddx-cost-tier/i }).getByText(/update/i)
+		page.getByRole('article', { name: /ddx-cost-power-class/i }).getByText(/update/i)
 	).toBeVisible();
 });
 
@@ -272,13 +272,13 @@ test('US-098.d: update-available card shows both versions and Update action', as
 	});
 	await page.goto(BASE_URL);
 
-	const card = page.getByRole('article', { name: /ddx-cost-tier/i });
+	const card = page.getByRole('article', { name: /ddx-cost-power-class/i });
 	await expect(card).toContainText('0.4.2');
 	await expect(card).toContainText('0.5.0');
 
 	await card.getByRole('button', { name: /update/i }).click();
 	await expect.poll(() => captured).not.toBeNull();
-	expect(captured).toMatchObject({ name: 'ddx-cost-tier', action: 'update' });
+	expect(captured).toMatchObject({ name: 'ddx-cost-power-class', action: 'update' });
 });
 
 test('plugin update refreshes card when worker completes successfully', async ({ page }) => {
@@ -291,16 +291,16 @@ test('plugin update refreshes card when worker completes successfully', async ({
 	});
 
 	await page.goto(BASE_URL);
-	const card = page.getByRole('article', { name: /ddx-cost-tier/i });
+	const card = page.getByRole('article', { name: /ddx-cost-power-class/i });
 	await card.getByRole('button', { name: /update/i }).click();
 
 	await expect(card).toContainText('Updating...');
 	await expect(card.getByRole('button', { name: /update/i })).toBeDisabled();
-	await expect(page.getByRole('link', { name: /ddx-cost-tier.*worker-upd-success/ })).toBeVisible();
+	await expect(page.getByRole('link', { name: /ddx-cost-power-class.*worker-upd-success/ })).toBeVisible();
 	await expect.poll(() => stream.hasSubscription('worker-upd-success')).toBe(true);
 
 	plugins = plugins.map((plugin) =>
-		plugin.name === 'ddx-cost-tier'
+		plugin.name === 'ddx-cost-power-class'
 			? { ...plugin, status: 'installed', installedVersion: plugin.version }
 			: plugin
 	);
@@ -324,12 +324,12 @@ test('plugin update failure shows per-card failure without changing status', asy
 	});
 
 	await page.goto(BASE_URL);
-	const card = page.getByRole('article', { name: /ddx-cost-tier/i });
+	const card = page.getByRole('article', { name: /ddx-cost-power-class/i });
 	await card.getByRole('button', { name: /update/i }).click();
 	await expect.poll(() => stream.hasSubscription('worker-upd-failed')).toBe(true);
 
 	plugins = plugins.map((plugin) =>
-		plugin.name === 'ddx-cost-tier'
+		plugin.name === 'ddx-cost-power-class'
 			? { ...plugin, status: 'installed', installedVersion: plugin.version }
 			: plugin
 	);
@@ -364,12 +364,12 @@ test('plugin update falls back to polling when worker stream drops terminal even
 	});
 
 	await page.goto(BASE_URL);
-	const card = page.getByRole('article', { name: /ddx-cost-tier/i });
+	const card = page.getByRole('article', { name: /ddx-cost-power-class/i });
 	await card.getByRole('button', { name: /update/i }).click();
 	await expect(card).toContainText('Updating...');
 
 	plugins = plugins.map((plugin) =>
-		plugin.name === 'ddx-cost-tier'
+		plugin.name === 'ddx-cost-power-class'
 			? { ...plugin, status: 'installed', installedVersion: plugin.version }
 			: plugin
 	);
@@ -400,20 +400,20 @@ test('two plugin updates track separate workers concurrently', async ({ page }) 
 
 	await page.goto(BASE_URL);
 	const helix = page.getByRole('article', { name: /helix/i });
-	const costTier = page.getByRole('article', { name: /ddx-cost-tier/i });
+	const costTier = page.getByRole('article', { name: /ddx-cost-power-class/i });
 
 	await helix.getByRole('button', { name: /update/i }).click();
 	await costTier.getByRole('button', { name: /update/i }).click();
 
 	await expect(page.getByRole('link', { name: /helix.*worker-helix/ })).toBeVisible();
 	await expect(
-		page.getByRole('link', { name: /ddx-cost-tier.*worker-ddx-cost-tier/ })
+		page.getByRole('link', { name: /ddx-cost-power-class.*worker-ddx-cost-power-class/ })
 	).toBeVisible();
 	await expect(helix).toContainText('Updating...');
 	await expect(costTier).toContainText('Updating...');
 
 	await expect.poll(() => stream.hasSubscription('worker-helix')).toBe(true);
-	await expect.poll(() => stream.hasSubscription('worker-ddx-cost-tier')).toBe(true);
+	await expect.poll(() => stream.hasSubscription('worker-ddx-cost-power-class')).toBe(true);
 
 	plugins = plugins.map((plugin) =>
 		plugin.name === 'helix'
@@ -425,6 +425,6 @@ test('two plugin updates track separate workers concurrently', async ({ page }) 
 	await expect(helix).toContainText(/installed/i, { timeout: 2000 });
 	await expect(costTier).toContainText('Updating...');
 	await expect(
-		page.getByRole('link', { name: /ddx-cost-tier.*worker-ddx-cost-tier/ })
+		page.getByRole('link', { name: /ddx-cost-power-class.*worker-ddx-cost-power-class/ })
 	).toBeVisible();
 });

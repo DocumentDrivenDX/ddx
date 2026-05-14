@@ -201,16 +201,16 @@ func TestAgentMetrics_GroupByProvider(t *testing.T) {
 	}
 }
 
-func TestAgentMetrics_GroupByTier(t *testing.T) {
+func TestAgentMetrics_GroupByRoute(t *testing.T) {
 	resetAgentMetricsCache()
 	wd := fixtureWorkingDir(t)
 	r := newTestResolver(t, wd)
-	res, err := r.AgentMetrics(context.Background(), AgentMetricsWindowW30d, AgentMetricsAxisTier)
+	res, err := r.AgentMetrics(context.Background(), AgentMetricsWindowW30d, AgentMetricsAxisRoute)
 	if err != nil {
 		t.Fatalf("AgentMetrics: %v", err)
 	}
 	if len(res.Rows) != 2 {
-		t.Fatalf("tier rows = %d, want 2", len(res.Rows))
+		t.Fatalf("powerClass rows = %d, want 2", len(res.Rows))
 	}
 	if findRow(t, res.Rows, "claude/sonnet").Attempts != 2 {
 		t.Fatalf("claude/sonnet attempts != 2")

@@ -816,7 +816,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 			return ExecuteBeadReport{
 				BeadID:    beadID,
 				Status:    ExecuteBeadStatusExecutionFailed,
-				Detail:    "execute-loop: all tiers exhausted - no viable provider found",
+				Detail:    "execute-loop: all powerClasses exhausted - no viable provider found",
 				BaseRev:   "aaaa1111",
 				ResultRev: "aaaa1111",
 			}, nil
@@ -903,7 +903,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 		Title:    "Smart retry",
 		Priority: 0,
 		Extra: map[string]any{
-			TriageTierHintKey: string(escalation.TierSmart),
+			TriagePowerHintKey: string(escalation.PowerSmart),
 		},
 	}
 	require.NoError(t, store.Create(target))
@@ -939,7 +939,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	require.NotNil(t, got.Extra)
-	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
+	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
 	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
 }
 
@@ -1820,7 +1820,7 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	require.True(t, hasRetry, "smart-runnable no_changes must set a short retry-after so watch workers drain other beads")
 	assert.Equal(t, r.Results[0].RetryAfter, retryAfter)
 	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
-	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
+	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
 	assert.Equal(t, NoChangesEventAutonomousRetry, got.Extra[bead.ExtraLastStatus])
 	assert.Contains(t, got.Extra[bead.ExtraLastDetail], "stronger code search")
 
@@ -1838,7 +1838,7 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 }
 
 // TestNoChangesSmartRetry_StepwiseClimb asserts that each no_changes failure
-// with a wired EscalationNextFloor advances the tier hint by exactly one ladder
+// with a wired EscalationNextFloor advances the powerClass hint by exactly one ladder
 // step, not by jumping directly to the top of the ladder.
 func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
@@ -1892,7 +1892,7 @@ func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	// After JSON round-trip, int values in Extra come back as float64.
-	assert.Equal(t, float64(70), got.Extra[TriageTierHintKey], "first no_changes at power 50 must set hint to next step (70), not top of ladder (90)")
+	assert.Equal(t, float64(70), got.Extra[TriagePowerHintKey], "first no_changes at power 50 must set hint to next step (70), not top of ladder (90)")
 	_, err = store.ClearCooldowns(nil)
 	require.NoError(t, err)
 
@@ -1902,22 +1902,22 @@ func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 	got, err = store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Equal(t, float64(90), got.Extra[TriageTierHintKey], "second no_changes at power 70 must set hint to next step (90)")
+	assert.Equal(t, float64(90), got.Extra[TriagePowerHintKey], "second no_changes at power 70 must set hint to next step (90)")
 }
 
-// TestNoChangesSmartRetry_TopTierExhausted_GoesToProposed asserts that when
-// no_changes happens at the top tier (EscalationNextFloor returns an error),
+// TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed asserts that when
+// no_changes happens at the top powerClass (EscalationNextFloor returns an error),
 // the bead is parked to status=proposed rather than retried.
-func TestNoChangesSmartRetry_TopTierExhausted_GoesToProposed(t *testing.T) {
+func TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	b := &bead.Bead{ID: "ddx-toptier", Title: "Top tier exhausted bead"}
+	b := &bead.Bead{ID: "ddx-toptier", Title: "Top powerClass exhausted bead"}
 	require.NoError(t, store.Create(b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
-		// Ladder exhausted: top-tier model already used, nothing higher.
+		// Ladder exhausted: top-powerClass model already used, nothing higher.
 		EscalationNextFloor: func(actualPower int) (int, error) {
 			return 0, fmt.Errorf("ladder exhausted")
 		},
@@ -1926,7 +1926,7 @@ func TestNoChangesSmartRetry_TopTierExhausted_GoesToProposed(t *testing.T) {
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
 				ActualPower:        90,
-				NoChangesRationale: "status: open\nreason: top-tier model still could not complete the work",
+				NoChangesRationale: "status: open\nreason: top-powerClass model still could not complete the work",
 			}, nil
 		}),
 	}
@@ -1939,9 +1939,9 @@ func TestNoChangesSmartRetry_TopTierExhausted_GoesToProposed(t *testing.T) {
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status, "no_changes at top tier must park bead to proposed (genuine spec gap)")
+	assert.Equal(t, bead.StatusProposed, got.Status, "no_changes at top powerClass must park bead to proposed (genuine spec gap)")
 	assert.Empty(t, got.Owner, "proposed bead must not be owned")
-	assert.NotContains(t, got.Extra, TriageTierHintKey, "tier hint must be cleared when parked to proposed")
+	assert.NotContains(t, got.Extra, TriagePowerHintKey, "powerClass hint must be cleared when parked to proposed")
 }
 
 func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {

@@ -62,7 +62,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 | `ddx server workers list` | `GET /api/agent/workers` | **MISSING** | **G4** |
 | `ddx server workers show <id>` | `GET /api/agent/workers/{id}` | **MISSING** | **G4** |
 | `ddx server workers log <id>` | `GET /api/agent/workers/{id}/log` | **MISSING** | **G4** |
-| `legacy agent metrics tier-success` | **MISSING** | **MISSING** | **G7** |
+| `legacy agent metrics route-success` | **MISSING** | **MISSING** | **G7** |
 | `legacy agent metrics review-outcomes` | **MISSING** | **MISSING** | **G7** |
 | `legacy agent metrics cost-efficiency` | **MISSING** | **MISSING** | **G7** |
 | `legacy agent executions` | `GET /api/exec/runs` | `ddx_exec_history` | partial |
@@ -153,7 +153,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 - CLI: `legacy agent models`, `legacy agent catalog show`, `legacy agent capabilities`, `legacy agent usage`
 - HTTP: No route for models, catalog, or capabilities (providers/routing is covered)
 - MCP: No tools
-- Impact: High — there's no server-side way to discover available models, tier assignments, or capability metadata. Automated model selection and cost tiering depend on this. The endpoint-first routing redesign (memory: project_endpoint_routing_design) needs these surfaces.
+- Impact: High — there's no server-side way to discover available models, power assignments, or capability metadata. Automated model selection and cost-aware routing depend on this. The endpoint-first routing redesign (memory: project_endpoint_routing_design) needs these surfaces.
 
 **G6 · `ddx_list_personas` MCP tool**
 - HTTP: `GET /api/personas` covers list
@@ -165,7 +165,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 **G7 · MCP process metrics tools**
 - HTTP: `/api/metrics/{summary,cost,cycle-time,rework}` all exist
 - MCP: No metrics tools at all
-- Impact: Cost-aware agents (per cost-tiered-work standing goal) can't query process metrics via MCP without switching to HTTP. Affects FEAT-016 read parity.
+- Impact: Cost-aware agents (per cost-awareed-work standing goal) can't query process metrics via MCP without switching to HTTP. Affects FEAT-016 read parity.
 
 **G8 · Layer-aware run-history HTTP + MCP** (FEAT-021 unified substrate)
 - No routes exist for the three-layer substrate (`work` → `try` → `run` drill-down)

@@ -107,12 +107,12 @@ must satisfy.
 **Palette discipline**
 
 - Colors reference semantic tokens (e.g. `status.open`, `status.blocked`,
-  `priority.p0`, `tier.cheap`) centralized in Tailwind config and/or
+  `priority.p0`, `power.cheap`) centralized in Tailwind config and/or
   `$lib/stores/theme.ts`. Raw hex in component markup is a drift signal;
   CI greps for `#[0-9a-fA-F]{3,8}` outside the theme files and fails.
 - Every colored state has an accompanying non-color cue (text label, icon,
   pattern). Status conveyed by color alone is a violation.
-- Status/priority/tier vocabularies use the SAME token across all pages so
+- Status/priority/power vocabularies use the SAME token across all pages so
   a "blocked" bead and a "blocked" worker look identical.
 
 **Dark / light parity**
