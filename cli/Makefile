@@ -62,23 +62,19 @@ frontend-verify:
 	fi; \
 	echo "  ok"
 
-# Copy the canonical top-level skills/ddx/ tree into cli/internal/skills/ddx/
-# so //go:embed (which cannot traverse upward out of the package) picks it up.
-# Runs as a prereq of build/test/dev so contributors never see stale embedded
-# skills. rsync --delete keeps the destination in exact sync.
-# Also refreshes project-local copies (.agents, .claude, .ddx) when they
-# already exist, so interactive-behavior edits stay in sync across all five
-# shipped paths without a separate ddx init/update invocation.
-SKILLS_SRC := ../skills/ddx
-SKILLS_DST := internal/skills/ddx
+# Sync the canonical default-plugin skill tree (../library/skills/) and its
+# manifest into internal/registry/defaultplugin/library/ so //go:embed (which
+# cannot traverse upward out of the package) picks them up. Runs as a prereq
+# of build/test/dev so contributors never see a stale embedded default
+# package. rsync --delete keeps the skill destination in exact sync.
+DEFAULT_PKG_SRC := ../library
+DEFAULT_PKG_DST := internal/registry/defaultplugin/library
 copy-skills:
-	@if [ ! -d "$(SKILLS_SRC)" ]; then \
-		echo "error: $(SKILLS_SRC) not found (run from cli/)"; exit 1; \
+	@if [ ! -d "$(DEFAULT_PKG_SRC)/skills" ]; then \
+		echo "error: $(DEFAULT_PKG_SRC)/skills not found (run from cli/)"; exit 1; \
 	fi
-	@rsync -a --delete $(SKILLS_SRC)/ $(SKILLS_DST)/
-	@if [ -d "../.agents/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.agents/skills/ddx/; fi
-	@if [ -d "../.claude/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.claude/skills/ddx/; fi
-	@if [ -d "../.ddx/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.ddx/skills/ddx/; fi
+	@rsync -a --delete $(DEFAULT_PKG_SRC)/skills/ $(DEFAULT_PKG_DST)/skills/
+	@cp $(DEFAULT_PKG_SRC)/package.yaml $(DEFAULT_PKG_DST)/package.yaml
 
 # Build for current platform
 build: copy-skills frontend-build frontend-verify

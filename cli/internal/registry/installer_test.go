@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	iofs "io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -304,6 +305,39 @@ func TestInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
 		_, err = os.Stat(filepath.Join(fsRoot, rel))
 		require.NoError(t, err, "fs install missing %s", rel)
 	}
+}
+
+// TestDefaultDDxPackageManifestUsesPackageLocalSkillSource proves the
+// canonical library/package.yaml declares package-local skill sources
+// (i.e. source: skills/) so the embedded default-package install copies
+// the DDx skill out of library/skills/ rather than out of a checked-in
+// .agents/skills mirror.
+func TestDefaultDDxPackageManifestUsesPackageLocalSkillSource(t *testing.T) {
+	manifestPath := filepath.Join("..", "..", "..", "library", "package.yaml")
+	pkg, issues, err := LoadPackageManifest(filepath.Dir(manifestPath))
+	require.NoError(t, err, "library/package.yaml must load cleanly")
+	require.Empty(t, issues, "library/package.yaml must have no schema issues")
+	require.NotNil(t, pkg)
+
+	require.NotEmpty(t, pkg.Install.Skills, "library/package.yaml must declare install.skills mappings")
+	for _, m := range pkg.Install.Skills {
+		assert.Equal(t, "skills/", m.Source,
+			"library/package.yaml install.skills[*].source must be package-local 'skills/', got %q", m.Source)
+	}
+}
+
+// TestDefaultPackageEmbedCopyIncludesDDxSkill proves the embedded
+// default-package tree used by the binary actually carries the canonical
+// library/skills/ddx/SKILL.md so offline `ddx init` installs a real skill.
+func TestDefaultPackageEmbedCopyIncludesDDxSkill(t *testing.T) {
+	data, err := iofs.ReadFile(defaultplugin.FS(), "skills/ddx/SKILL.md")
+	require.NoError(t, err, "embedded default package must include skills/ddx/SKILL.md")
+	require.NotEmpty(t, data, "embedded skills/ddx/SKILL.md must not be empty")
+
+	canonical, err := os.ReadFile(filepath.Join("..", "..", "..", "library", "skills", "ddx", "SKILL.md"))
+	require.NoError(t, err, "canonical library/skills/ddx/SKILL.md must exist on disk")
+	assert.Equal(t, string(canonical), string(data),
+		"embedded skills/ddx/SKILL.md must match the canonical library/skills/ddx/SKILL.md (run `make copy-skills` to sync)")
 }
 
 // offlineTransport fails any HTTP attempt so tests can prove an install path

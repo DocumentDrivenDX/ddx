@@ -101,8 +101,11 @@ func TestProseQualityStylePack_ShipsThroughDefaultLibrary(t *testing.T) {
 	if len(issues) > 0 {
 		t.Fatalf("library manifest validation issues: %+v", issues)
 	}
-	if manifest.Install.Root == nil || manifest.Install.Root.Source != "library" || manifest.Install.Root.Target != ".ddx/plugins/ddx" {
-		t.Fatalf("library manifest does not ship the library root: %+v", manifest.Install.Root)
+	// The canonical library/package.yaml is package-rooted: install.root.source
+	// is "." relative to the library/ package root. Resolving the rule paths
+	// therefore goes through library/<source>.
+	if manifest.Install.Root == nil || manifest.Install.Root.Source != "." || manifest.Install.Root.Target != ".ddx/plugins/ddx" {
+		t.Fatalf("library manifest does not ship the package root: %+v", manifest.Install.Root)
 	}
 
 	settings, err := docprose.DefaultSettings()
@@ -110,7 +113,7 @@ func TestProseQualityStylePack_ShipsThroughDefaultLibrary(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, rule := range settings.StylePack.Rules {
-		path := filepath.Join(root, manifest.Install.Root.Source, "checks", "prose-quality", "styles", filepath.FromSlash(rule.File))
+		path := filepath.Join(root, "library", manifest.Install.Root.Source, "checks", "prose-quality", "styles", filepath.FromSlash(rule.File))
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("style file %s is outside the default library install root: %v", path, err)
 		}

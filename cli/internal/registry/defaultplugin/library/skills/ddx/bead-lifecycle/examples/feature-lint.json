@@ -1,0 +1,38 @@
+{
+  "mode": "lint",
+  "bead_type": "feature",
+  "source": "Curated from the audit discussion of ddx-0793ac75, showing a weak feature bead and concrete retrofit direction.",
+  "input_summary": {
+    "title": "federation: federated GraphQL resolvers + routing-metadata fields",
+    "labels": ["phase:2", "story:14", "area:server", "kind:feature"],
+    "description_traits": [
+      "one-paragraph feature excerpt",
+      "does not name schema or resolver files",
+      "does not define routing metadata shape"
+    ],
+    "acceptance_traits": [
+      "says tested but names no Test* symbol",
+      "omits go test command",
+      "omits lefthook gate"
+    ]
+  },
+  "expected_output": {
+    "score": 1,
+    "rationale": [
+      {"criterion": "a", "verdict": "fail", "reason": "title is specific but combines multiple implementation surfaces"},
+      {"criterion": "b", "verdict": "fail", "reason": "description lacks problem, file:line root cause or current state, proposed file scope, and non-scope"},
+      {"criterion": "c", "verdict": "fail", "reason": "AC names no Test* symbols or go test -run filters"},
+      {"criterion": "d", "verdict": "fail", "reason": "new resolver path has no explicit production wiring assertion"},
+      {"criterion": "e", "verdict": "fail", "reason": "go test and lefthook gates are missing"},
+      {"criterion": "f", "verdict": "pass", "reason": "labels include phase, story cross-reference, area, and kind"},
+      {"criterion": "g", "verdict": "fail", "reason": "parent/deps are not explicit in the provided input"},
+      {"criterion": "h", "verdict": "fail", "reason": "agent cannot pick schema, resolver files, metadata fields, or tests from the bead alone"}
+    ],
+    "suggested_fixes": [
+      {"criterion": "b", "fix": "Add CURRENT STATE citing cli/internal/server/graphql/schema.graphql and resolver package locations, plus PROPOSED FIX and NON-SCOPE."},
+      {"criterion": "c", "fix": "Name TestFederatedWorkers_FanOutAggregates, TestFederatedMutation_RoutesToOwner, and TestFederatedWorkers_DegradedSpoke."},
+      {"criterion": "e", "fix": "Add cd cli && go test ./internal/server/... and lefthook run pre-commit AC lines."}
+    ],
+    "waivers_applied": []
+  }
+}

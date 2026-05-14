@@ -35,7 +35,7 @@ type routeFixture struct {
 
 func loadRouteFixtures(t *testing.T, root string) []routeFixture {
 	t.Helper()
-	path := filepath.Join(root, "skills", "ddx", "evals", "routing.jsonl")
+	path := filepath.Join(root, "library", "skills", "ddx", "evals", "routing.jsonl")
 	f, err := os.Open(path)
 	require.NoError(t, err, "open routing.jsonl")
 	defer f.Close()
@@ -161,13 +161,14 @@ func TestDDxInteractiveStewardRouteFixtures(t *testing.T) {
 }
 
 // TestDDxSkillCopiedTreesMatchSource compares the touched ddx skill files
-// across all five shipped skill paths so a stale project copy cannot pass.
+// across all shipped skill paths so a stale project copy cannot pass.
 func TestDDxSkillCopiedTreesMatchSource(t *testing.T) {
 	root := interactiveStewardRepoRoot(t)
-	srcDir := filepath.Join(root, "skills", "ddx")
+	srcDir := filepath.Join(root, "library", "skills", "ddx")
 
 	copyDirs := []string{
 		filepath.Join(root, "cli", "internal", "skills", "ddx"),
+		filepath.Join(root, "cli", "internal", "registry", "defaultplugin", "library", "skills", "ddx"),
 		filepath.Join(root, ".agents", "skills", "ddx"),
 		filepath.Join(root, ".claude", "skills", "ddx"),
 		filepath.Join(root, ".ddx", "skills", "ddx"),
