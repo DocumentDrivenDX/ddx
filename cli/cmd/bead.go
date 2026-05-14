@@ -66,6 +66,7 @@ Examples:
 	cmd.AddCommand(f.newBeadMetricsCommand())
 	cmd.AddCommand(f.newBeadDoctorCommand())
 	cmd.AddCommand(f.newBeadCooldownCommand())
+	cmd.AddCommand(f.newBeadClearCooldownCommand())
 	cmd.AddCommand(f.newBeadReconcileCommand())
 	cmd.AddCommand(f.newBeadMigrateCommand())
 	cmd.AddCommand(f.newBeadArchiveCommand())
@@ -1721,4 +1722,90 @@ Use this command instead of editing the magic Extra key directly:
 	cmd.AddCommand(clearCmd)
 
 	return cmd
+}
+
+// newBeadClearCooldownCommand wires `ddx bead clear-cooldown --all [--reason <status>]`.
+// It is the bulk operator escape hatch: clears work-retry-after across the tracker
+// in one pass and prints the count and IDs so the operator can verify which beads
+// were released. Use `ddx bead cooldown clear <id>` for single-bead clearing.
+func (f *CommandFactory) newBeadClearCooldownCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "clear-cooldown",
+		Short: "Bulk-clear work cooldowns across the tracker",
+		Long: `clear-cooldown scans all beads with an active work-retry-after field and
+clears them in one pass. Use after a systemic infra issue (provider outage,
+index lock storm) is resolved so affected beads re-enter the execution queue
+without per-bead loops.
+
+Requires --all or --reason to prevent accidental bulk clears.`,
+		Example: `  # Clear all active cooldowns and print the affected IDs
+  ddx bead clear-cooldown --all
+
+  # Clear only provider_connectivity cooldowns
+  ddx bead clear-cooldown --reason provider_connectivity`,
+		Args: cobra.NoArgs,
+		RunE: f.runBeadClearCooldown,
+	}
+	cmd.Flags().Bool("all", false, "Clear cooldowns on every bead with retry-after set")
+	cmd.Flags().String("reason", "", "Clear only beads where last-status matches this value")
+	return cmd
+}
+
+func (f *CommandFactory) runBeadClearCooldown(cmd *cobra.Command, _ []string) error {
+	all, _ := cmd.Flags().GetBool("all")
+	reason, _ := cmd.Flags().GetString("reason")
+
+	if !all && reason == "" {
+		return fmt.Errorf("requires --all or --reason <value>")
+	}
+
+	store := f.beadStore()
+
+	// Collect IDs first so we can print them alongside the count.
+	allBeads, err := store.ReadAll(context.Background())
+	if err != nil {
+		return err
+	}
+
+	var ids []string
+	for _, b := range allBeads {
+		if b.Extra == nil {
+			continue
+		}
+		v, _ := b.Extra[bead.ExtraRetryAfter].(string)
+		if v == "" {
+			continue
+		}
+		if reason != "" {
+			s, _ := b.Extra[bead.ExtraLastStatus].(string)
+			if s != reason {
+				continue
+			}
+		}
+		ids = append(ids, b.ID)
+	}
+
+	var filter func(bead.Bead) bool
+	if reason != "" {
+		r := reason
+		filter = func(b bead.Bead) bool {
+			if b.Extra == nil {
+				return false
+			}
+			v, _ := b.Extra[bead.ExtraLastStatus].(string)
+			return v == r
+		}
+	}
+
+	count, err := store.ClearCooldowns(filter)
+	if err != nil {
+		return err
+	}
+
+	w := cmd.OutOrStdout()
+	fmt.Fprintf(w, "%d cooldowns cleared\n", count)
+	for _, id := range ids {
+		fmt.Fprintf(w, "  %s\n", id)
+	}
+	return nil
 }

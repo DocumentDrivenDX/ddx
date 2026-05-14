@@ -101,6 +101,55 @@ func TestGuard_PreClaimTimeoutReturnsPromptly(t *testing.T) {
 	}
 }
 
+// TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown: AC #5 — when the only
+// blocking pre-claim condition is .ddx/beads.jsonl being staged (a transient
+// multi-worker tracker race), the guard must treat the error as systemic and
+// skip without writing a per-bead cooldown.
+func TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown(t *testing.T) {
+	store := &stubCooldownStore{}
+	errMsg := ".ddx/beads.jsonl is staged; another worker's tracker commit is in progress"
+	guard := NewPreClaimGuard(func(ctx context.Context) error {
+		return errors.New(errMsg)
+	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
+
+	allowed1, reason1 := guard.Allow(context.Background(), "ddx-staged-1")
+	allowed2, reason2 := guard.Allow(context.Background(), "ddx-staged-2")
+
+	if allowed1 || allowed2 {
+		t.Fatalf("staged beads.jsonl must skip beads")
+	}
+	if !IsSystemicPreClaimSkipReason(reason1) || !IsSystemicPreClaimSkipReason(reason2) {
+		t.Fatalf("staged beads.jsonl must produce systemic reason prefix: %q / %q", reason1, reason2)
+	}
+	if store.calls != 0 {
+		t.Fatalf("staged beads.jsonl must not write bead cooldowns, got %d", store.calls)
+	}
+}
+
+// TestPreClaimIndexLock_SkipsWithoutCooldown: AC #6 — when a git index.lock
+// contention error surfaces from the pre-claim hook, the guard must treat it as
+// systemic and skip without writing a per-bead cooldown.
+func TestPreClaimIndexLock_SkipsWithoutCooldown(t *testing.T) {
+	store := &stubCooldownStore{}
+	errMsg := "fatal: Unable to create '/path/to/repo/.git/index.lock': File exists"
+	guard := NewPreClaimGuard(func(ctx context.Context) error {
+		return errors.New(errMsg)
+	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
+
+	allowed1, reason1 := guard.Allow(context.Background(), "ddx-lock-1")
+	allowed2, reason2 := guard.Allow(context.Background(), "ddx-lock-2")
+
+	if allowed1 || allowed2 {
+		t.Fatalf("index.lock contention must skip beads")
+	}
+	if !IsSystemicPreClaimSkipReason(reason1) || !IsSystemicPreClaimSkipReason(reason2) {
+		t.Fatalf("index.lock contention must produce systemic reason prefix: %q / %q", reason1, reason2)
+	}
+	if store.calls != 0 {
+		t.Fatalf("index.lock contention must not write bead cooldowns, got %d", store.calls)
+	}
+}
+
 func TestGuard_Complexity_NilGateAllowsSilently(t *testing.T) {
 	var buf bytes.Buffer
 	guard := NewComplexityGuard(nil, &buf)

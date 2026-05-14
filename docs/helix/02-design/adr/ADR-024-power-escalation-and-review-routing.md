@@ -93,9 +93,13 @@ loop over concrete route names.
 Infrastructure failures are not capability failures. Provider 5xx responses,
 network unreachability, command-not-found, authentication failures, quota
 exhaustion, and analogous transport/setup failures do not consume escalation
-budget. DDx records the failure and either leaves the bead immediately
-reclaimable or applies a retry-after cooldown only when time passing could
-plausibly fix the same attempt class.
+budget. DDx records the failure and leaves the bead immediately reclaimable.
+A per-bead `work-retry-after` cooldown MUST NOT be applied for
+`provider_connectivity` or `no_viable_provider` outcomes: the route-exclusion
+window and the worker's `paused-infra` state are the correct mechanisms. A
+retry-after cooldown is only permissible when (a) no alternate routing path
+exists AND (b) the condition is purely time-dependent (not fixable by routing
+to a different provider or worker).
 
 HTTP 429 / rate-limit handling is internal to one attempt. The claim stays held,
 DDx honors a parseable `Retry-After` when present, otherwise uses bounded

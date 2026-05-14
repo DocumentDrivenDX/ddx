@@ -138,7 +138,22 @@ func isSystemicPreClaimError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "local branch ") && strings.Contains(msg, " has diverged from origin ")
+	// Branch divergence: local tracker has diverged from origin.
+	if strings.Contains(msg, "local branch ") && strings.Contains(msg, " has diverged from origin ") {
+		return true
+	}
+	// Staged beads.jsonl: another worker's tracker commit is partially staged.
+	// The file becomes unstaged within milliseconds; treating this as bead-specific
+	// would wrongly cooldown beads during a transient multi-worker commit race.
+	if strings.Contains(msg, "beads.jsonl") && strings.Contains(msg, "staged") {
+		return true
+	}
+	// Git index.lock: an external git process holds the index lock. This is
+	// transient (sub-second for normal operations); no bead is at fault.
+	if strings.Contains(msg, "index.lock") {
+		return true
+	}
+	return false
 }
 
 type preClaimHookCallResult struct {

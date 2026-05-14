@@ -59,7 +59,7 @@ func TestExecuteBeadWorker_ProviderTimeoutRetriesWithRouteExclusion(t *testing.T
 	assert.Equal(t, FailureModeProviderConnectivity, report.OutcomeReason)
 	assert.True(t, report.Disrupted, "provider connectivity failure must be marked disrupted")
 	assert.Equal(t, "provider_connectivity", report.DisruptionReason)
-	assert.Equal(t, frozen.Add(ProviderUnavailableCooldown).Format(time.RFC3339), report.RetryAfter)
+	assert.Empty(t, report.RetryAfter, "no per-bead cooldown for provider_connectivity (P6 + ADR-024)")
 
 	require.Equal(t, []int{50}, floorCalls, "EscalationNextFloor must be consulted with actualPower")
 

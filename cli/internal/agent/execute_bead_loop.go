@@ -182,6 +182,13 @@ const ProviderUnavailableCooldown = 15 * time.Minute
 // same empty-diff attempt every idle cycle.
 const SmartRetryCooldown = 5 * time.Minute
 
+// PausedInfraInterval is the polling interval the worker waits in paused-infra
+// state before re-evaluating the queue. Infra failures (no_viable_provider,
+// provider_connectivity) transition the worker to this state instead of parking
+// individual beads: beads remain immediately reclaimable, and the worker retries
+// after this window.
+const PausedInfraInterval = 2 * time.Minute
+
 // SubmitWithPreMergeChecks is the canonical land-back step for the execute-bead
 // loop. It runs the project's .ddx/checks/*.yaml gate against the worker's
 // (baseRev, resultRev) before forwarding to submit. On Blocked, it preserves
@@ -729,6 +736,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 	result := &ExecuteBeadLoopResult{}
 	resultsResetIdx := 0
+	// pausedInfraUntil is set when a no_viable_provider outcome is recorded.
+	// The worker sleeps until this time (in Watch mode) before re-evaluating
+	// the queue, leaving all beads immediately reclaimable. Zero means no pause.
+	var pausedInfraUntil time.Time
 	complexityGuard := work.NewComplexityGuard(w.ComplexityGate, runtime.Log)
 	preclaimGuard := work.NewPreClaimGuard(runtime.PreClaimHook, w.Store, runtime.Log, now, 30*time.Second, preClaimTimeout)
 	workLog := NewWorkLogRenderer(WorkLogRendererOptions{Now: now})
@@ -965,6 +976,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if hasGuardSkips(skips) {
 				continue
 			}
+
+			// Before reporting NoReadyWork, check whether every cooldown in the
+			// queue is from an infra-fault class. If so, transition the WORKER to
+			// paused-infra and wait for the earliest cooldown to expire instead of
+			// returning idle/drained — this keeps beads immediately reclaimable
+			// and avoids the misleading "drained" signal when the real issue is infra.
+			if diag, ok := w.Store.(readyDiagnoser); ok {
+				if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil && len(breakdown.ExecutionReady) == 0 && len(breakdown.RetryCooldown) > 0 {
+					if resumeAt, allInfra := infraCooldownResumeAt(w.Store, breakdown.RetryCooldown); allInfra {
+						emit("loop.paused-infra", map[string]any{
+							"reason":    "all_infra_cooldowns",
+							"resume_at": resumeAt.Format(time.RFC3339),
+						})
+						emitProgress(runtime.ProgressCh, ProgressEvent{
+							EventID:   "evt-" + randomProgressID(),
+							WorkerID:  runtime.WorkerID,
+							ProjectID: runtime.ProjectRoot,
+							Phase:     "loop.paused-infra",
+							Heartbeat: true,
+							TS:        now().UTC(),
+							Message:   "all_infra_cooldowns",
+						})
+						sleepDur := time.Until(resumeAt)
+						if sleepDur <= 0 {
+							sleepDur = PausedInfraInterval
+						}
+						if err := sleepOrWake(ctx, sleepDur, runtime.WakeCh); err != nil {
+							if exitReason == "" {
+								applyStop(work.StopInput{ContextErr: err})
+							}
+							return result, err
+						}
+						continue
+					}
+				}
+			}
+
 			result.NoReadyWork = true
 			if diag, ok := w.Store.(readyDiagnoser); ok {
 				if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
@@ -2280,30 +2328,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						}
 					}
 					emitRouteFailureEvent(w.Store, candidate.ID, assignee, report, now().UTC())
-					retryAfter := now().UTC().Add(CapLoopCooldown(ProviderUnavailableCooldown))
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
-						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-						})
-						if ctx.Err() != nil {
-							return result, ctx.Err()
-						}
-						continue
-					}
-					report.RetryAfter = retryAfter.Format(time.RFC3339)
+					// Route exclusion (TTL-based via RouteExclusionWindow) is the
+					// correct mechanism — no per-bead cooldown. Bead is immediately
+					// reclaimable; next attempt routes around the failed (provider,model).
 				} else if isNoViableProviderReport(report) {
 					report.OutcomeReason = FailureModeNoViableProvider
-					retryAfter := now().UTC().Add(CapLoopCooldown(ProviderUnavailableCooldown))
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
-						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-						})
-						if ctx.Err() != nil {
-							return result, ctx.Err()
-						}
-						continue
-					}
-					report.RetryAfter = retryAfter.Format(time.RFC3339)
+					report.Disrupted = true
+					report.DisruptionReason = "no_viable_provider"
+					// Transition the worker to paused-infra: leave every bead
+					// immediately reclaimable, pause this worker for PausedInfraInterval,
+					// then re-evaluate the full queue (P6 + ADR-024 §Infra Fallback).
+					pausedInfraUntil = now().UTC().Add(PausedInfraInterval)
 				} else {
 					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 					if shouldSuppressNoProgress(report) {
@@ -2367,6 +2402,36 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+		}
+
+		// Paused-infra: no_viable_provider transitions the WORKER (not the bead)
+		// to a wait state. Emit the event always so observers can surface the
+		// substate; only sleep in Watch mode (Once mode exits below).
+		if !pausedInfraUntil.IsZero() {
+			resumeAt := pausedInfraUntil
+			pausedInfraUntil = time.Time{}
+			emit("loop.paused-infra", map[string]any{
+				"reason":    "no_viable_provider",
+				"resume_at": resumeAt.Format(time.RFC3339),
+			})
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				Phase:     "loop.paused-infra",
+				Heartbeat: true,
+				TS:        now().UTC(),
+				Message:   "no_viable_provider",
+			})
+			if loopMode != executeloop.ModeOnce {
+				if err := sleepOrWake(ctx, time.Until(resumeAt), runtime.WakeCh); err != nil {
+					if exitReason == "" {
+						applyStop(work.StopInput{ContextErr: err})
+					}
+					return result, err
+				}
+				continue
+			}
 		}
 
 		if loopMode == executeloop.ModeOnce {
@@ -3717,6 +3782,50 @@ func isTransientOutcomeReason(reason string) bool {
 	default:
 		return false
 	}
+}
+
+// isInfraFaultCooldownStatus returns true for work-last-status values that
+// represent infra-class failures where time passing (not model/bead work) is
+// what resolves the condition. Used by the paused-infra detector to
+// distinguish infra-cooled beads from bead-fault-cooled beads.
+func isInfraFaultCooldownStatus(status string) bool {
+	switch status {
+	case FailureModeProviderConnectivity, FailureModeNoViableProvider,
+		"loop-error":
+		return true
+	default:
+		return false
+	}
+}
+
+// infraCooldownResumeAt inspects the IDs in cooldownIDs, gets each bead's
+// work-last-status, and returns (earliestRetry, true) when every bead carries
+// an infra-fault status. If any bead has a non-infra status or cannot be read,
+// it returns (zero, false).
+func infraCooldownResumeAt(store ExecuteBeadLoopStore, cooldownIDs []string) (time.Time, bool) {
+	var earliest time.Time
+	for _, id := range cooldownIDs {
+		b, err := store.Get(id)
+		if err != nil || b == nil {
+			return time.Time{}, false
+		}
+		status, _ := b.Extra[bead.ExtraLastStatus].(string)
+		if !isInfraFaultCooldownStatus(status) {
+			return time.Time{}, false
+		}
+		retryStr, _ := b.Extra[bead.ExtraRetryAfter].(string)
+		if retryStr != "" {
+			if t, parseErr := time.Parse(time.RFC3339, retryStr); parseErr == nil {
+				if earliest.IsZero() || t.Before(earliest) {
+					earliest = t
+				}
+			}
+		}
+	}
+	if earliest.IsZero() {
+		earliest = time.Now().UTC().Add(PausedInfraInterval)
+	}
+	return earliest, true
 }
 
 func isNoViableProviderReport(report ExecuteBeadReport) bool {
