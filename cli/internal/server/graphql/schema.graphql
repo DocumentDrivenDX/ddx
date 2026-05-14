@@ -3368,6 +3368,23 @@ type Mutation {
 
   """Requeue an existing run by reopening its originating bead so the execute-loop can claim it again. Atomic with respect to the mandatory idempotencyKey: concurrent calls with the same key dedupe to the originating bead and never enqueue twice. An audit event of kind run_requeue is appended to the originating bead capturing operator identity, run id, and the optional layer override."""
   runRequeue(input: RunRequeueInput!): RunRequeueResult!
+
+  """Start a new review session. Persists the session manifest and seeds an empty transcript so subsequent reviewSessionRespond calls can append turns."""
+  reviewSessionStart(input: ReviewSessionStartInput!): ReviewSession!
+
+  """Append a user turn to a review session and dispatch a reviewer reply. The session must be in the active status; calls against terminal sessions return REVIEWER_UNAVAILABLE."""
+  reviewSessionRespond(
+    """Review session identifier"""
+    sessionId: ID!,
+    """User turn to append to the session before dispatching the reviewer"""
+    turn: ReviewTurnInput!
+  ): ReviewSession!
+
+  """Cancel an active review session. Transitions the session to the cancelled status; idempotent (cancelling a cancelled session is a no-op and returns true)."""
+  reviewSessionCancel(
+    """Review session identifier"""
+    sessionId: ID!
+  ): Boolean!
 }
 
 # ============================================
@@ -3482,6 +3499,66 @@ type RunRequeueResult {
   deduplicated: Boolean!
 }
 
+"""ReviewSession is the server-side review state machine persisted under .ddx/reviews/<id>/. Mirrors the manifest plus the append-only turns transcript so the UI can render the full review conversation."""
+type ReviewSession {
+  """Unique session identifier"""
+  id: ID!
+  """Artifact under review"""
+  artifactId: String!
+  """Artifact content SHA at the time the session was started"""
+  artifactSha: String!
+  """Git rev the artifact was read from (commit/branch/tag), when known"""
+  artifactGitRev: String
+  """Rubric prompt body used as the reviewer system instruction"""
+  systemRubric: String
+  """Library template reference used to render the reviewer prompt"""
+  templateRef: String
+  """Library prompt reference used to render the reviewer prompt"""
+  promptRef: String
+  """Lifecycle status: active, completed, or cancelled"""
+  status: String!
+  """Accumulated reviewer cost in USD across all turns"""
+  costUSD: Float!
+  """Optional cost cap. Zero means no cap."""
+  maxBillableUSD: Float!
+  """Append-only transcript of user and reviewer turns"""
+  turns: [ReviewTurn!]!
+}
+
+"""ReviewTurn is one transcript entry in a review session."""
+type ReviewTurn {
+  """Turn actor: 'user' or 'reviewer'"""
+  actor: String!
+  """Turn content body"""
+  content: String!
+  """Reviewer cost in USD for this turn (zero for user turns)"""
+  costUSD: Float!
+  """When the turn was appended"""
+  createdAt: DateTime!
+}
+
+"""Input for reviewSessionStart. The session identifier may be omitted; when blank the server allocates one."""
+input ReviewSessionStartInput {
+  """Optional client-supplied session identifier. When blank the server allocates one."""
+  sessionId: String
+  """Artifact under review (path or stable id)"""
+  artifactId: String!
+  """Artifact content SHA at session start; cached and compared against the live artifact when a turn fires."""
+  artifactSha: String!
+  """Library template reference used to render the reviewer prompt"""
+  templateRef: String
+  """Library prompt reference used to render the reviewer prompt"""
+  promptRef: String
+  """Optional cost cap in USD; zero means no cap"""
+  maxBillableUSD: Float
+}
+
+"""Input for reviewSessionRespond.turn — a single user-side message appended to the session before the reviewer dispatches."""
+input ReviewTurnInput {
+  """Turn content body. Required."""
+  content: String!
+}
+
 # ============================================
 # Subscriptions
 # ============================================
@@ -3511,6 +3588,12 @@ type Subscription {
     """Project root path"""
     projectRoot: String!
   ): CoordinatorMetricsUpdate!
+
+  """Stream review session events. Streaming deltas are optional; subscribers are guaranteed at least one final-message event when the reviewer turn completes."""
+  reviewSessionEvents(
+    """Review session identifier"""
+    sessionId: ID!
+  ): ReviewSessionEvent!
 }
 
 # ============================================
@@ -3561,6 +3644,20 @@ type ExecutionEvent {
   stream: String!
   """Log line content"""
   line: String!
+  """Timestamp of the event"""
+  timestamp: DateTime!
+}
+
+"""ReviewSessionEvent is a streaming reviewer event for a review session. The kind field distinguishes between optional delta chunks (kind=delta) and the required final-message event (kind=final) emitted once when the reviewer turn completes."""
+type ReviewSessionEvent {
+  """Review session this event belongs to"""
+  sessionId: ID!
+  """Event kind: 'delta' for streaming chunks, 'final' for the completed reviewer turn"""
+  kind: String!
+  """For delta events, the incremental content chunk; for final events, the complete reviewer message body"""
+  content: String!
+  """Cost in USD for this event (cumulative on final, zero on delta)"""
+  costUSD: Float!
   """Timestamp of the event"""
   timestamp: DateTime!
 }

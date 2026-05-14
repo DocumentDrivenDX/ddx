@@ -799,6 +799,9 @@ type ComplexityRoot struct {
 		PersonaUpdate         func(childComplexity int, name string, body string, projectID string) int
 		PluginDispatch        func(childComplexity int, name string, action string, scope string) int
 		RefreshProviderModels func(childComplexity int, name string, kind ProviderKind) int
+		ReviewSessionCancel   func(childComplexity int, sessionID string) int
+		ReviewSessionRespond  func(childComplexity int, sessionID string, turn ReviewTurnInput) int
+		ReviewSessionStart    func(childComplexity int, input ReviewSessionStartInput) int
 		RunRequeue            func(childComplexity int, input RunRequeueInput) int
 		StartWorker           func(childComplexity int, input StartWorkerInput) int
 		StopWorker            func(childComplexity int, id string) int
@@ -1166,6 +1169,35 @@ type ComplexityRoot struct {
 		Metric func(childComplexity int) int
 	}
 
+	ReviewSession struct {
+		ArtifactGitRev func(childComplexity int) int
+		ArtifactID     func(childComplexity int) int
+		ArtifactSha    func(childComplexity int) int
+		CostUsd        func(childComplexity int) int
+		ID             func(childComplexity int) int
+		MaxBillableUsd func(childComplexity int) int
+		PromptRef      func(childComplexity int) int
+		Status         func(childComplexity int) int
+		SystemRubric   func(childComplexity int) int
+		TemplateRef    func(childComplexity int) int
+		Turns          func(childComplexity int) int
+	}
+
+	ReviewSessionEvent struct {
+		Content   func(childComplexity int) int
+		CostUsd   func(childComplexity int) int
+		Kind      func(childComplexity int) int
+		SessionID func(childComplexity int) int
+		Timestamp func(childComplexity int) int
+	}
+
+	ReviewTurn struct {
+		Actor     func(childComplexity int) int
+		Content   func(childComplexity int) int
+		CostUsd   func(childComplexity int) int
+		CreatedAt func(childComplexity int) int
+	}
+
 	ReworkReport struct {
 		Beads   func(childComplexity int) int
 		Scope   func(childComplexity int) int
@@ -1328,10 +1360,11 @@ type ComplexityRoot struct {
 	}
 
 	Subscription struct {
-		BeadLifecycle      func(childComplexity int, projectID string) int
-		CoordinatorMetrics func(childComplexity int, projectRoot string) int
-		ExecutionEvidence  func(childComplexity int, runID string) int
-		WorkerProgress     func(childComplexity int, workerID string) int
+		BeadLifecycle       func(childComplexity int, projectID string) int
+		CoordinatorMetrics  func(childComplexity int, projectRoot string) int
+		ExecutionEvidence   func(childComplexity int, runID string) int
+		ReviewSessionEvents func(childComplexity int, sessionID string) int
+		WorkerProgress      func(childComplexity int, workerID string) int
 	}
 
 	Thresholds struct {
@@ -1478,6 +1511,9 @@ type MutationResolver interface {
 	OperatorPromptApprove(ctx context.Context, id string) (*OperatorPromptApproveResult, error)
 	OperatorPromptCancel(ctx context.Context, id string) (*OperatorPromptCancelResult, error)
 	RunRequeue(ctx context.Context, input RunRequeueInput) (*RunRequeueResult, error)
+	ReviewSessionStart(ctx context.Context, input ReviewSessionStartInput) (*ReviewSession, error)
+	ReviewSessionRespond(ctx context.Context, sessionID string, turn ReviewTurnInput) (*ReviewSession, error)
+	ReviewSessionCancel(ctx context.Context, sessionID string) (bool, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (Node, error)
@@ -1567,6 +1603,7 @@ type SubscriptionResolver interface {
 	BeadLifecycle(ctx context.Context, projectID string) (<-chan *BeadEvent, error)
 	ExecutionEvidence(ctx context.Context, runID string) (<-chan *ExecutionEvent, error)
 	CoordinatorMetrics(ctx context.Context, projectRoot string) (<-chan *CoordinatorMetricsUpdate, error)
+	ReviewSessionEvents(ctx context.Context, sessionID string) (<-chan *ReviewSessionEvent, error)
 }
 
 type executableSchema graphql.ExecutableSchemaState[ResolverRoot, DirectiveRoot, ComplexityRoot]
@@ -4905,6 +4942,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RefreshProviderModels(childComplexity, args["name"].(string), args["kind"].(ProviderKind)), true
+	case "Mutation.reviewSessionCancel":
+		if e.ComplexityRoot.Mutation.ReviewSessionCancel == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reviewSessionCancel_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReviewSessionCancel(childComplexity, args["sessionId"].(string)), true
+	case "Mutation.reviewSessionRespond":
+		if e.ComplexityRoot.Mutation.ReviewSessionRespond == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reviewSessionRespond_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReviewSessionRespond(childComplexity, args["sessionId"].(string), args["turn"].(ReviewTurnInput)), true
+	case "Mutation.reviewSessionStart":
+		if e.ComplexityRoot.Mutation.ReviewSessionStart == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_reviewSessionStart_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.ReviewSessionStart(childComplexity, args["input"].(ReviewSessionStartInput)), true
 	case "Mutation.runRequeue":
 		if e.ComplexityRoot.Mutation.RunRequeue == nil {
 			break
@@ -6796,6 +6866,129 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.ResultSpec.Metric(childComplexity), true
 
+	case "ReviewSession.artifactGitRev":
+		if e.ComplexityRoot.ReviewSession.ArtifactGitRev == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.ArtifactGitRev(childComplexity), true
+	case "ReviewSession.artifactId":
+		if e.ComplexityRoot.ReviewSession.ArtifactID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.ArtifactID(childComplexity), true
+	case "ReviewSession.artifactSha":
+		if e.ComplexityRoot.ReviewSession.ArtifactSha == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.ArtifactSha(childComplexity), true
+	case "ReviewSession.costUSD":
+		if e.ComplexityRoot.ReviewSession.CostUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.CostUsd(childComplexity), true
+	case "ReviewSession.id":
+		if e.ComplexityRoot.ReviewSession.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.ID(childComplexity), true
+	case "ReviewSession.maxBillableUSD":
+		if e.ComplexityRoot.ReviewSession.MaxBillableUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.MaxBillableUsd(childComplexity), true
+	case "ReviewSession.promptRef":
+		if e.ComplexityRoot.ReviewSession.PromptRef == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.PromptRef(childComplexity), true
+	case "ReviewSession.status":
+		if e.ComplexityRoot.ReviewSession.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.Status(childComplexity), true
+	case "ReviewSession.systemRubric":
+		if e.ComplexityRoot.ReviewSession.SystemRubric == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.SystemRubric(childComplexity), true
+	case "ReviewSession.templateRef":
+		if e.ComplexityRoot.ReviewSession.TemplateRef == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.TemplateRef(childComplexity), true
+	case "ReviewSession.turns":
+		if e.ComplexityRoot.ReviewSession.Turns == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSession.Turns(childComplexity), true
+
+	case "ReviewSessionEvent.content":
+		if e.ComplexityRoot.ReviewSessionEvent.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSessionEvent.Content(childComplexity), true
+	case "ReviewSessionEvent.costUSD":
+		if e.ComplexityRoot.ReviewSessionEvent.CostUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSessionEvent.CostUsd(childComplexity), true
+	case "ReviewSessionEvent.kind":
+		if e.ComplexityRoot.ReviewSessionEvent.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSessionEvent.Kind(childComplexity), true
+	case "ReviewSessionEvent.sessionId":
+		if e.ComplexityRoot.ReviewSessionEvent.SessionID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSessionEvent.SessionID(childComplexity), true
+	case "ReviewSessionEvent.timestamp":
+		if e.ComplexityRoot.ReviewSessionEvent.Timestamp == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewSessionEvent.Timestamp(childComplexity), true
+
+	case "ReviewTurn.actor":
+		if e.ComplexityRoot.ReviewTurn.Actor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewTurn.Actor(childComplexity), true
+	case "ReviewTurn.content":
+		if e.ComplexityRoot.ReviewTurn.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewTurn.Content(childComplexity), true
+	case "ReviewTurn.costUSD":
+		if e.ComplexityRoot.ReviewTurn.CostUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewTurn.CostUsd(childComplexity), true
+	case "ReviewTurn.createdAt":
+		if e.ComplexityRoot.ReviewTurn.CreatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReviewTurn.CreatedAt(childComplexity), true
+
 	case "ReworkReport.beads":
 		if e.ComplexityRoot.ReworkReport.Beads == nil {
 			break
@@ -7489,6 +7682,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Subscription.ExecutionEvidence(childComplexity, args["runID"].(string)), true
+	case "Subscription.reviewSessionEvents":
+		if e.ComplexityRoot.Subscription.ReviewSessionEvents == nil {
+			break
+		}
+
+		args, err := ec.field_Subscription_reviewSessionEvents_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Subscription.ReviewSessionEvents(childComplexity, args["sessionId"].(string)), true
 	case "Subscription.workerProgress":
 		if e.ComplexityRoot.Subscription.WorkerProgress == nil {
 			break
@@ -7988,6 +8192,8 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBeadUpdateInput,
 		ec.unmarshalInputComparisonArmInput,
 		ec.unmarshalInputOperatorPromptSubmitInput,
+		ec.unmarshalInputReviewSessionStartInput,
+		ec.unmarshalInputReviewTurnInput,
 		ec.unmarshalInputRunRequeueInput,
 		ec.unmarshalInputStartWorkerInput,
 	)
@@ -8435,6 +8641,44 @@ func (ec *executionContext) field_Mutation_refreshProviderModels_args(ctx contex
 		return nil, err
 	}
 	args["kind"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reviewSessionCancel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reviewSessionRespond_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "turn", ec.unmarshalNReviewTurnInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewTurnInput)
+	if err != nil {
+		return nil, err
+	}
+	args["turn"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_reviewSessionStart_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNReviewSessionStartInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSessionStartInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -9843,6 +10087,17 @@ func (ec *executionContext) field_Subscription_executionEvidence_args(ctx contex
 		return nil, err
 	}
 	args["runID"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Subscription_reviewSessionEvents_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "sessionId", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["sessionId"] = arg0
 	return args, nil
 }
 
@@ -27083,6 +27338,177 @@ func (ec *executionContext) fieldContext_Mutation_runRequeue(ctx context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_reviewSessionStart(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_reviewSessionStart,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReviewSessionStart(ctx, fc.Args["input"].(ReviewSessionStartInput))
+		},
+		nil,
+		ec.marshalNReviewSession2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_reviewSessionStart(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ReviewSession_id(ctx, field)
+			case "artifactId":
+				return ec.fieldContext_ReviewSession_artifactId(ctx, field)
+			case "artifactSha":
+				return ec.fieldContext_ReviewSession_artifactSha(ctx, field)
+			case "artifactGitRev":
+				return ec.fieldContext_ReviewSession_artifactGitRev(ctx, field)
+			case "systemRubric":
+				return ec.fieldContext_ReviewSession_systemRubric(ctx, field)
+			case "templateRef":
+				return ec.fieldContext_ReviewSession_templateRef(ctx, field)
+			case "promptRef":
+				return ec.fieldContext_ReviewSession_promptRef(ctx, field)
+			case "status":
+				return ec.fieldContext_ReviewSession_status(ctx, field)
+			case "costUSD":
+				return ec.fieldContext_ReviewSession_costUSD(ctx, field)
+			case "maxBillableUSD":
+				return ec.fieldContext_ReviewSession_maxBillableUSD(ctx, field)
+			case "turns":
+				return ec.fieldContext_ReviewSession_turns(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReviewSession", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reviewSessionStart_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_reviewSessionRespond(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_reviewSessionRespond,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReviewSessionRespond(ctx, fc.Args["sessionId"].(string), fc.Args["turn"].(ReviewTurnInput))
+		},
+		nil,
+		ec.marshalNReviewSession2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSession,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_reviewSessionRespond(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ReviewSession_id(ctx, field)
+			case "artifactId":
+				return ec.fieldContext_ReviewSession_artifactId(ctx, field)
+			case "artifactSha":
+				return ec.fieldContext_ReviewSession_artifactSha(ctx, field)
+			case "artifactGitRev":
+				return ec.fieldContext_ReviewSession_artifactGitRev(ctx, field)
+			case "systemRubric":
+				return ec.fieldContext_ReviewSession_systemRubric(ctx, field)
+			case "templateRef":
+				return ec.fieldContext_ReviewSession_templateRef(ctx, field)
+			case "promptRef":
+				return ec.fieldContext_ReviewSession_promptRef(ctx, field)
+			case "status":
+				return ec.fieldContext_ReviewSession_status(ctx, field)
+			case "costUSD":
+				return ec.fieldContext_ReviewSession_costUSD(ctx, field)
+			case "maxBillableUSD":
+				return ec.fieldContext_ReviewSession_maxBillableUSD(ctx, field)
+			case "turns":
+				return ec.fieldContext_ReviewSession_turns(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReviewSession", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reviewSessionRespond_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_reviewSessionCancel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_reviewSessionCancel,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().ReviewSessionCancel(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_reviewSessionCancel(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_reviewSessionCancel_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NodeInfo_id(ctx context.Context, field graphql.CollectedField, obj *NodeInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -36750,6 +37176,596 @@ func (ec *executionContext) fieldContext_ResultSpec_metric(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _ReviewSession_id(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_artifactId(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_artifactId,
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_artifactId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_artifactSha(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_artifactSha,
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactSha, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_artifactSha(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_artifactGitRev(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_artifactGitRev,
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactGitRev, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_artifactGitRev(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_systemRubric(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_systemRubric,
+		func(ctx context.Context) (any, error) {
+			return obj.SystemRubric, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_systemRubric(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_templateRef(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_templateRef,
+		func(ctx context.Context) (any, error) {
+			return obj.TemplateRef, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_templateRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_promptRef(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_promptRef,
+		func(ctx context.Context) (any, error) {
+			return obj.PromptRef, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_promptRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_status(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_costUSD(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_costUSD,
+		func(ctx context.Context) (any, error) {
+			return obj.CostUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_costUSD(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_maxBillableUSD(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_maxBillableUSD,
+		func(ctx context.Context) (any, error) {
+			return obj.MaxBillableUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_maxBillableUSD(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSession_turns(ctx context.Context, field graphql.CollectedField, obj *ReviewSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSession_turns,
+		func(ctx context.Context) (any, error) {
+			return obj.Turns, nil
+		},
+		nil,
+		ec.marshalNReviewTurn2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewTurnᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSession_turns(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "actor":
+				return ec.fieldContext_ReviewTurn_actor(ctx, field)
+			case "content":
+				return ec.fieldContext_ReviewTurn_content(ctx, field)
+			case "costUSD":
+				return ec.fieldContext_ReviewTurn_costUSD(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_ReviewTurn_createdAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReviewTurn", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSessionEvent_sessionId(ctx context.Context, field graphql.CollectedField, obj *ReviewSessionEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSessionEvent_sessionId,
+		func(ctx context.Context) (any, error) {
+			return obj.SessionID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSessionEvent_sessionId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSessionEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSessionEvent_kind(ctx context.Context, field graphql.CollectedField, obj *ReviewSessionEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSessionEvent_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSessionEvent_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSessionEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSessionEvent_content(ctx context.Context, field graphql.CollectedField, obj *ReviewSessionEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSessionEvent_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSessionEvent_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSessionEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSessionEvent_costUSD(ctx context.Context, field graphql.CollectedField, obj *ReviewSessionEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSessionEvent_costUSD,
+		func(ctx context.Context) (any, error) {
+			return obj.CostUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSessionEvent_costUSD(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSessionEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewSessionEvent_timestamp(ctx context.Context, field graphql.CollectedField, obj *ReviewSessionEvent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewSessionEvent_timestamp,
+		func(ctx context.Context) (any, error) {
+			return obj.Timestamp, nil
+		},
+		nil,
+		ec.marshalNDateTime2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewSessionEvent_timestamp(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewSessionEvent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewTurn_actor(ctx context.Context, field graphql.CollectedField, obj *ReviewTurn) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewTurn_actor,
+		func(ctx context.Context) (any, error) {
+			return obj.Actor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewTurn_actor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewTurn",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewTurn_content(ctx context.Context, field graphql.CollectedField, obj *ReviewTurn) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewTurn_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewTurn_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewTurn",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewTurn_costUSD(ctx context.Context, field graphql.CollectedField, obj *ReviewTurn) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewTurn_costUSD,
+		func(ctx context.Context) (any, error) {
+			return obj.CostUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewTurn_costUSD(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewTurn",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReviewTurn_createdAt(ctx context.Context, field graphql.CollectedField, obj *ReviewTurn) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReviewTurn_createdAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CreatedAt, nil
+		},
+		nil,
+		ec.marshalNDateTime2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReviewTurn_createdAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReviewTurn",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ReworkReport_scope(ctx context.Context, field graphql.CollectedField, obj *ReworkReport) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -40321,6 +41337,59 @@ func (ec *executionContext) fieldContext_Subscription_coordinatorMetrics(ctx con
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Subscription_coordinatorMetrics_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Subscription_reviewSessionEvents(ctx context.Context, field graphql.CollectedField) (ret func(ctx context.Context) graphql.Marshaler) {
+	return graphql.ResolveFieldStream(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Subscription_reviewSessionEvents,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Subscription().ReviewSessionEvents(ctx, fc.Args["sessionId"].(string))
+		},
+		nil,
+		ec.marshalNReviewSessionEvent2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSessionEvent,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Subscription_reviewSessionEvents(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Subscription",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "sessionId":
+				return ec.fieldContext_ReviewSessionEvent_sessionId(ctx, field)
+			case "kind":
+				return ec.fieldContext_ReviewSessionEvent_kind(ctx, field)
+			case "content":
+				return ec.fieldContext_ReviewSessionEvent_content(ctx, field)
+			case "costUSD":
+				return ec.fieldContext_ReviewSessionEvent_costUSD(ctx, field)
+			case "timestamp":
+				return ec.fieldContext_ReviewSessionEvent_timestamp(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReviewSessionEvent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Subscription_reviewSessionEvents_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -44463,6 +45532,101 @@ func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.
 				return it, err
 			}
 			it.AutoApprove = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputReviewSessionStartInput(ctx context.Context, obj any) (ReviewSessionStartInput, error) {
+	var it ReviewSessionStartInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"sessionId", "artifactId", "artifactSha", "templateRef", "promptRef", "maxBillableUSD"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "sessionId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("sessionId"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.SessionID = data
+		case "artifactId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactId"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactID = data
+		case "artifactSha":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("artifactSha"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ArtifactSha = data
+		case "templateRef":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("templateRef"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.TemplateRef = data
+		case "promptRef":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("promptRef"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.PromptRef = data
+		case "maxBillableUSD":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("maxBillableUSD"))
+			data, err := ec.unmarshalOFloat2ᚖfloat64(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.MaxBillableUsd = data
+		}
+	}
+	return it, nil
+}
+
+func (ec *executionContext) unmarshalInputReviewTurnInput(ctx context.Context, obj any) (ReviewTurnInput, error) {
+	var it ReviewTurnInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"content"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "content":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("content"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Content = data
 		}
 	}
 	return it, nil
@@ -49622,6 +50786,27 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "reviewSessionStart":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reviewSessionStart(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reviewSessionRespond":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reviewSessionRespond(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "reviewSessionCancel":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_reviewSessionCancel(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -53385,6 +54570,196 @@ func (ec *executionContext) _ResultSpec(ctx context.Context, sel ast.SelectionSe
 	return out
 }
 
+var reviewSessionImplementors = []string{"ReviewSession"}
+
+func (ec *executionContext) _ReviewSession(ctx context.Context, sel ast.SelectionSet, obj *ReviewSession) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, reviewSessionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ReviewSession")
+		case "id":
+			out.Values[i] = ec._ReviewSession_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "artifactId":
+			out.Values[i] = ec._ReviewSession_artifactId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "artifactSha":
+			out.Values[i] = ec._ReviewSession_artifactSha(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "artifactGitRev":
+			out.Values[i] = ec._ReviewSession_artifactGitRev(ctx, field, obj)
+		case "systemRubric":
+			out.Values[i] = ec._ReviewSession_systemRubric(ctx, field, obj)
+		case "templateRef":
+			out.Values[i] = ec._ReviewSession_templateRef(ctx, field, obj)
+		case "promptRef":
+			out.Values[i] = ec._ReviewSession_promptRef(ctx, field, obj)
+		case "status":
+			out.Values[i] = ec._ReviewSession_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "costUSD":
+			out.Values[i] = ec._ReviewSession_costUSD(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "maxBillableUSD":
+			out.Values[i] = ec._ReviewSession_maxBillableUSD(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "turns":
+			out.Values[i] = ec._ReviewSession_turns(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var reviewSessionEventImplementors = []string{"ReviewSessionEvent"}
+
+func (ec *executionContext) _ReviewSessionEvent(ctx context.Context, sel ast.SelectionSet, obj *ReviewSessionEvent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, reviewSessionEventImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ReviewSessionEvent")
+		case "sessionId":
+			out.Values[i] = ec._ReviewSessionEvent_sessionId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._ReviewSessionEvent_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._ReviewSessionEvent_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "costUSD":
+			out.Values[i] = ec._ReviewSessionEvent_costUSD(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "timestamp":
+			out.Values[i] = ec._ReviewSessionEvent_timestamp(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var reviewTurnImplementors = []string{"ReviewTurn"}
+
+func (ec *executionContext) _ReviewTurn(ctx context.Context, sel ast.SelectionSet, obj *ReviewTurn) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, reviewTurnImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ReviewTurn")
+		case "actor":
+			out.Values[i] = ec._ReviewTurn_actor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._ReviewTurn_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "costUSD":
+			out.Values[i] = ec._ReviewTurn_costUSD(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "createdAt":
+			out.Values[i] = ec._ReviewTurn_createdAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var reworkReportImplementors = []string{"ReworkReport"}
 
 func (ec *executionContext) _ReworkReport(ctx context.Context, sel ast.SelectionSet, obj *ReworkReport) graphql.Marshaler {
@@ -54394,6 +55769,8 @@ func (ec *executionContext) _Subscription(ctx context.Context, sel ast.Selection
 		return ec._Subscription_executionEvidence(ctx, fields[0])
 	case "coordinatorMetrics":
 		return ec._Subscription_coordinatorMetrics(ctx, fields[0])
+	case "reviewSessionEvents":
+		return ec._Subscription_reviewSessionEvents(ctx, fields[0])
 	default:
 		panic("unknown field " + strconv.Quote(fields[0].Name))
 	}
@@ -57354,6 +58731,70 @@ func (ec *executionContext) marshalNReportedWorker2ᚖgithubᚗcomᚋDocumentDri
 		return graphql.Null
 	}
 	return ec._ReportedWorker(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNReviewSession2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSession(ctx context.Context, sel ast.SelectionSet, v ReviewSession) graphql.Marshaler {
+	return ec._ReviewSession(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNReviewSession2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSession(ctx context.Context, sel ast.SelectionSet, v *ReviewSession) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ReviewSession(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNReviewSessionEvent2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSessionEvent(ctx context.Context, sel ast.SelectionSet, v ReviewSessionEvent) graphql.Marshaler {
+	return ec._ReviewSessionEvent(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNReviewSessionEvent2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSessionEvent(ctx context.Context, sel ast.SelectionSet, v *ReviewSessionEvent) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ReviewSessionEvent(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNReviewSessionStartInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewSessionStartInput(ctx context.Context, v any) (ReviewSessionStartInput, error) {
+	res, err := ec.unmarshalInputReviewSessionStartInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNReviewTurn2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewTurnᚄ(ctx context.Context, sel ast.SelectionSet, v []*ReviewTurn) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNReviewTurn2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewTurn(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNReviewTurn2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewTurn(ctx context.Context, sel ast.SelectionSet, v *ReviewTurn) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ReviewTurn(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNReviewTurnInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReviewTurnInput(ctx context.Context, v any) (ReviewTurnInput, error) {
+	res, err := ec.unmarshalInputReviewTurnInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNReworkReport2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReworkReport(ctx context.Context, sel ast.SelectionSet, v ReworkReport) graphql.Marshaler {
