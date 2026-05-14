@@ -33,9 +33,18 @@ type passthroughTestService struct {
 	listPolicies        []agentlib.PolicyInfo
 	executeEvents       []agentlib.ServiceEvent
 	routeAttempts       []agentlib.RouteAttempt
+	// routeAttemptsAtExecute is the len(routeAttempts) at the moment Execute
+	// is first invoked; route-health seed entries land at indices
+	// [0, routeAttemptsAtExecute) and post-run entries (recordServiceRouteAttempt)
+	// land at indices >= routeAttemptsAtExecute. Lets tests verify the seed
+	// happens before the dispatched Execute call.
+	routeAttemptsAtExecute int
 }
 
 func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+	if !s.executeCalled {
+		s.routeAttemptsAtExecute = len(s.routeAttempts)
+	}
 	s.executeCalled = true
 	s.lastReq = req
 	ch := make(chan agentlib.ServiceEvent, len(s.executeEvents)+1)
@@ -372,6 +381,141 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T)
 	assert.Equal(t, "failed", svc.routeAttempts[0].Status)
 	assert.Equal(t, "bragi", svc.routeAttempts[0].Provider)
 	assert.Equal(t, "qwen3.5-27b", svc.routeAttempts[0].Model)
+}
+
+// TestExecutePolicySeedsRouteHealthFromTracker (ddx-d7c56c1b AC1) reproduces
+// the production failure: tracker evidence for a recent provider_connectivity
+// failure on bragi/qwen3.5-27b must be replayed into fizeau's route-health
+// store with a fresh-enough timestamp that fizeau's default 30s TTL still
+// considers it active when the routing engine reads ActiveAttempts. DDx's
+// ProviderUnavailableCooldown is 15 min; without rebasing the timestamp the
+// historical event is immediately expired by fizeau and policy/default routes
+// keep selecting the failed provider.
+func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
+	root := t.TempDir()
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
+
+	now := time.Now().UTC()
+	// 5 minutes old: well inside DDx's 15-min replay window but well outside
+	// fizeau's default 30s route-health TTL. This is the exact gap that lets
+	// dial-class failures keep re-burning the same provider in production.
+	failureAt := now.Add(-5 * time.Minute)
+	require.NoError(t, store.AppendEvent("seed-policy-001", bead.BeadEvent{
+		Kind:      "route-failure",
+		Summary:   "provider_connectivity bragi/qwen3.5-27b",
+		Body:      `{"harness":"fiz","provider":"bragi","model":"qwen3.5-27b","error":"dial tcp 100.127.38.115:1234: i/o timeout","outcome_reason":"provider_connectivity"}`,
+		CreatedAt: failureAt,
+	}))
+
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("fiz", "", "", 0, 0)
+
+	// Drive executeOnService end-to-end: seed must run before Execute is
+	// dispatched, with the request still policy-driven (no provider/model pin
+	// injected by DDx — AC3).
+	_, err := executeOnService(context.Background(), svc, root, rcfg, AgentRunRuntime{Prompt: "hello"})
+	require.NoError(t, err)
+
+	require.True(t, svc.executeCalled, "executeOnService must dispatch Execute")
+	require.GreaterOrEqual(t, svc.routeAttemptsAtExecute, 1, "seed must record a route-health attempt before Execute is called")
+
+	seeded := svc.routeAttempts[:svc.routeAttemptsAtExecute]
+	var bragi *agentlib.RouteAttempt
+	for i := range seeded {
+		if seeded[i].Provider == "bragi" && seeded[i].Model == "qwen3.5-27b" {
+			bragi = &seeded[i]
+			break
+		}
+	}
+	require.NotNil(t, bragi, "tracker evidence for bragi/qwen3.5-27b must be replayed before Execute; got %+v", seeded)
+	assert.Equal(t, "failed", bragi.Status)
+	assert.Equal(t, FailureModeProviderConnectivity, bragi.Reason)
+
+	// The DDx-side route-health hard-gate only works if the replayed
+	// timestamp survives fizeau's default TTL window. routehealth.DefaultCooldown
+	// is 30s; if DDx replays the historical timestamp verbatim, fizeau's
+	// ActiveAttempts immediately expires the record and policy routing happily
+	// re-picks the failed provider. The rebase to `now` is the contract.
+	require.False(t, bragi.Timestamp.IsZero(), "Timestamp must be set")
+	age := now.Sub(bragi.Timestamp)
+	assert.LessOrEqual(t, age, 30*time.Second,
+		"replayed RouteAttempt.Timestamp must fall within fizeau's default 30s route-health TTL so the hard-gate is honored on the next routing decision; got age %v (original event at %v)",
+		age, failureAt)
+
+	// AC3: the dispatched request must remain policy-driven — DDx must not
+	// have pinned a provider/model in response to the failure.
+	assert.Equal(t, "fiz", svc.lastReq.Harness)
+	assert.Empty(t, svc.lastReq.Provider, "DDx must not pin a provider in response to tracker evidence")
+	assert.Empty(t, svc.lastReq.Model, "DDx must not pin a model in response to tracker evidence")
+	assert.Zero(t, svc.lastReq.MinPower, "DDx must not raise MinPower floor in response to tracker evidence")
+}
+
+// TestRecordRouteAttemptRouteHealthGatesPolicyExecute (ddx-d7c56c1b AC2)
+// proves the seed-then-dispatch ordering executeOnService uses for
+// policy/default Execute: every Execute call first runs the route-health seed
+// from tracker evidence, then issues the actual Execute. This is the
+// DDx-side contract for AC2; fizeau v0.13.1 service_routing.go:102 already
+// applies route-attempt cooldowns inside ResolveRoute (which Execute's
+// under-specified path delegates to), so honoring the seed end-to-end through
+// Execute requires only that DDx populate the store before each dispatch.
+func TestRecordRouteAttemptRouteHealthGatesPolicyExecute(t *testing.T) {
+	root := t.TempDir()
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "hardgate-001",
+		Title: "hard-gate via failed-route extra",
+		Extra: map[string]any{
+			executeLoopFailedRoutesKey: []FailedRouteEntry{{
+				Provider:    "bragi",
+				Model:       "qwen3.5-27b",
+				ActualPower: 5,
+				Reason:      FailureModeProviderConnectivity,
+				At:          time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
+			}},
+		},
+	}))
+
+	svc := &passthroughTestService{}
+	// Policy-driven request: no provider/model/min-power pin. The under-specified
+	// Execute path delegates to ResolveRoute which applies route-attempt
+	// cooldowns (fizeau v0.13.1 service_routing.go:102 -> applyRouteAttemptCooldowns).
+	rcfg := resolvedWithPassthrough("fiz", "", "", 0, 0)
+
+	_, err := executeOnService(context.Background(), svc, root, rcfg, AgentRunRuntime{Prompt: "hello"})
+	require.NoError(t, err)
+
+	require.True(t, svc.executeCalled)
+	require.GreaterOrEqual(t, svc.routeAttemptsAtExecute, 1, "RecordRouteAttempt must fire before Execute so the route-health hard-gate is in place")
+
+	// The pre-Execute seed must carry the failed marker, not a success — a
+	// success would clear the failure in routehealth.Store.
+	preExecute := svc.routeAttempts[:svc.routeAttemptsAtExecute]
+	var bragiSeed *agentlib.RouteAttempt
+	for i := range preExecute {
+		if preExecute[i].Provider == "bragi" && preExecute[i].Model == "qwen3.5-27b" {
+			bragiSeed = &preExecute[i]
+			break
+		}
+	}
+	require.NotNil(t, bragiSeed, "failed-route extra for bragi/qwen3.5-27b must be seeded before Execute")
+	assert.Equal(t, "failed", bragiSeed.Status)
+	assert.Equal(t, FailureModeProviderConnectivity, bragiSeed.Reason)
+
+	// Rebased timestamp survives fizeau's 30s default TTL.
+	now := time.Now().UTC()
+	require.False(t, bragiSeed.Timestamp.IsZero())
+	assert.LessOrEqual(t, now.Sub(bragiSeed.Timestamp), 30*time.Second,
+		"seeded Timestamp must fall within fizeau's default route-health TTL so policy Execute hard-gates the failed provider")
+
+	// AC3: the dispatched request stays policy-driven; DDx must not introduce
+	// a provider/model pin or a hardcoded MinPower floor in response to the
+	// failed-route extra.
+	assert.Empty(t, svc.lastReq.Provider)
+	assert.Empty(t, svc.lastReq.Model)
+	assert.Zero(t, svc.lastReq.MinPower)
 }
 
 // TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown
