@@ -1,0 +1,193 @@
+{
+  "attempt_id": "20260515T183358-e6f0fb9b",
+  "bead_id": "ddx-051500ff",
+  "base_rev": "ac49995712fe95a0bbca630952d41346af6073d7",
+  "created_at": "2026-05-15T18:34:02.547862709Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-051500ff",
+    "title": "bead: auto-commit attachment writes from execute-loop and migrate",
+    "description": "PROBLEM\nTwo code paths write to .ddx/attachments/\u003cbead-id\u003e/events.jsonl as part of normal operation, and neither auto-commits the result. Operators end up with persistent untracked-and-modified worktree state that contradicts the project's intent (1083 attachment files ARE tracked across 11.6 MB of committed history — this is first-class audit-trail data, not detritus).\n\nConcrete demonstration today:\n\n1. Run `ddx try \u003cid\u003e` on 9 beads → 9 new untracked .ddx/attachments/\u003cbead-id\u003e/ dirs appear in main repo. Each contains routing decisions, cost-per-attempt, execution-routing-intent, prose-check.findings, execute-bead outcome — exactly the audit data the convention says we keep.\n2. Run `ddx bead migrate` → 142 events externalized into existing tracked attachment files (showing as M), 1 new untracked attachment dir, 292 beads archived (modifying .ddx/beads.jsonl and .ddx/beads-archive.jsonl), and a fresh worktree of 151 dirty files. None committed.\n3. The audit log clearly shows the historical pattern: commits like `878931ce3 chore(beads): commit missing event attachments` and `5d54258fd Merge bead ... attempt ... into main` periodically sweep up the accumulation — but it's recurring manual cleanup, not the steady-state design.\n\nROOT CAUSE\nTwo distinct writers, neither stages or commits its output:\n\nA. The execute-loop emits per-attempt routing/cost/intent events. cli/internal/agent/execute_bead_loop.go emitRouteFailureEvent (line 3872) and the routing/cost emitters all call store.AppendEvent → the bead store writes to .ddx/attachments/\u003cbead-id\u003e/events.jsonl when the bead's events are externalized (or to the inline events array when not). The Store.AppendEvent path has no follow-up `git add`. The execute-loop's chore(\"add execution evidence\") commit (visible in git log as `chore: add execution evidence [\u003crun-id\u003e]`) stages `.ddx/executions/\u003crun-id\u003e/` per AGENTS.md convention — but NOT `.ddx/attachments/\u003cbead-id\u003e/`.\n\nB. cli/internal/bead/migrate.go ArchiveWithEvents (line 561) externalizes inline events from closed/archived beads to attachments. After externalizing 142 events today across many files, the migrate command exits without staging or committing the resulting changes. The operator command surface (cli/cmd/bead.go migrate handler) has no auto-commit step analogous to the bead store's other auto-commit paths.\n\nPROPOSED FIX\n1. Execute-loop landing path: extend the existing post-merge \"chore(beads): commit missing event attachments\"-style commit (or the bead's own evidence commit) to ALSO stage .ddx/attachments/\u003cbead-id\u003e/ for the bead just landed. Use the same git-index-lock recovery (cli/internal/gitlock per ddx-6a518fd9) so concurrent workers and the statusline poller do not race.\n2. `ddx bead migrate` auto-commit: after a successful migrate that wrote any attachment changes (newly externalized + newly archived rows), call a single auto-commit at end-of-run with message `chore(beads): externalize and archive (\u003cN\u003e events to \u003cM\u003e attachments, \u003cK\u003e beads archived)`. Skip the commit entirely when no changes were written (idempotent re-run is a no-op).\n3. Regression invariant: after `ddx try \u003cid\u003e` completes with `success`/`already_satisfied`, `git status --short` in the main repo MUST show zero untracked files under `.ddx/attachments/\u003cbead-id\u003e/` for that bead.\n4. Operator escape hatch: `ddx bead reconcile-attachments` — single command that stages every untracked .ddx/attachments/ dir and any modified attachment files, commits as `chore(beads): reconcile missing attachment commits (\u003cN\u003e dirs, \u003cM\u003e modified)`. Useful for one-shot cleanup of pre-existing accumulation when this fix lands (today's 10 untracked + 141 modified dirs are an immediate use case).\n\nNON-SCOPE\n- Do not change WHAT gets externalized (the migrate event-externalization logic is fine).\n- Do not change ATTACHMENT FORMAT or location.\n- Do not add attachments to .gitignore (they ARE valuable cross-machine audit data per characterization).\n- Do not auto-commit .ddx/executions/\u003crun-id\u003e/ — that's per-machine and stays untracked under existing convention.\n\nDEPS\nddx-6a518fd9 (landed) — required so the auto-commits route through index-lock recovery and don't bounce on operator/statusline git contention.",
+    "acceptance": "1. TestExecuteLoopLanding_StagesAttachmentDir asserts that after a `ddx try \u003cid\u003e` returns success, the .ddx/attachments/\u003cid\u003e/ dir for that bead is committed (`git ls-files .ddx/attachments/\u003cid\u003e/` returns the events.jsonl, and `git status --short` shows no untracked entries under that path).\n2. TestExecuteLoopLanding_AttachmentsCommittedUnderIndexLockContention asserts the auto-commit succeeds even when a stale .git/index.lock is present at commit time (regression guard for the gitlock recovery integration).\n3. TestBeadMigrate_AutoCommits asserts that `ddx bead migrate` against a repo with closed beads carrying inline events writes the attachments AND creates a single commit with message matching `^chore\\(beads\\): externalize and archive`. The commit's path list includes all modified attachment files and any new attachment dirs.\n4. TestBeadMigrate_NoChangesNoCommit asserts `ddx bead migrate` against an already-migrated repo (no inline events to externalize, no beads to archive) does NOT create an empty commit.\n5. TestBeadReconcileAttachments asserts the new `ddx bead reconcile-attachments` operator command stages and commits any untracked .ddx/attachments/ dirs and modified attachment files, and prints a summary line `chore(beads): reconcile missing attachment commits (\u003cN\u003e dirs, \u003cM\u003e modified)`.\n6. TestBeadReconcileAttachments_NoChanges asserts the same command in a clean repo prints \"no attachment changes to reconcile\" and exits 0 without committing.\n7. cd cli \u0026\u0026 go test ./cmd/... ./internal/bead/... ./internal/agent/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "area:bead",
+      "area:execution",
+      "area:devx",
+      "kind:bug",
+      "phase:2"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi-club-3090\",\"resolved_model\":\"qwen3.6-27b-autoround\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-15T00:39:54.641917487Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi-club-3090 model=qwen3.6-27b-autoround"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.6-27b-autoround\",\"actual_power\":5,\"actual_provider\":\"bragi-club-3090\",\"attempt_id\":\"20260515T003905-2d44d34b\",\"bead_id\":\"ddx-051500ff\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T00:39:54.906119966Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard model=qwen3.6-27b-autoround harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"qwen3.6-27b-autoround\",\"provider\":\"bragi-club-3090\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-15T00:39:54.971333909Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=bragi-club-3090 model=qwen3.6-27b-autoround"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:8020/v1/chat/completions\\\": dial tcp 100.127.38.115:8020: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:8020/v1/chat/completions\\\": dial tcp 100.127.38.115:8020: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.6-27b-autoround\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi-club-3090\"}",
+          "created_at": "2026-05-15T00:39:55.035181978Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi-club-3090 model=qwen3.6-27b-autoround connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:8020/v1/chat/completions\": dial tcp 100.127.38.115:8020: i/o timeout\npowerClass=standard\nresult_rev=118811243c0cce2a8bb0f6c9515af2dbf8547ce1\nbase_rev=118811243c0cce2a8bb0f6c9515af2dbf8547ce1\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-15T00:39:55.082634854Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-051500ff\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T01:38:47.930542856Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T01:39:12.79053754Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T01:39:12.825989936Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-051500ff\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T01:39:18.83574158Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T01:39:43.676425901Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T01:39:43.708762757Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-051500ff\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:30:14.841852851Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:30:30.909063003Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:30:30.949147128Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-051500ff\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:31:08.179566909Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:31:23.941244022Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:31:23.984629311Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-051500ff)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T18:33:58.048463653Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "triage.power_hint": 6,
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-15T00:39:54Z",
+          "count": 1,
+          "model": "qwen3.6-27b-autoround",
+          "provider": "bragi-club-3090",
+          "reason": "provider_connectivity"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T183358-e6f0fb9b",
+    "prompt": ".ddx/executions/20260515T183358-e6f0fb9b/prompt.md",
+    "manifest": ".ddx/executions/20260515T183358-e6f0fb9b/manifest.json",
+    "result": ".ddx/executions/20260515T183358-e6f0fb9b/result.json",
+    "checks": ".ddx/executions/20260515T183358-e6f0fb9b/checks.json",
+    "usage": ".ddx/executions/20260515T183358-e6f0fb9b/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-051500ff-20260515T183358-e6f0fb9b"
+  },
+  "prompt_sha": "5bac2f73bf4723a1be9685712b5fced6872cec0aa53f82cec4d25d093461b758"
+}
