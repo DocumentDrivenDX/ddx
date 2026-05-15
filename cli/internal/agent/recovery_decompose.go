@@ -59,7 +59,6 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 	}
 	runtime := AgentRunRuntime{
 		Prompt:           prompt,
-		WorkDir:          projectRoot,
 		PromptSource:     preClaimDecomposerPromptSource,
 		ProfileOverride:  selectProfileForDispatch(tctx, projectRoot, nil, runner, SelectStrongestProfile),
 		ClearRoutingPins: true,
@@ -67,7 +66,7 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 		ClearMinPower:    true,
 		ClearMaxPower:    true,
 	}
-	result, err := dispatchViaResolvedConfig(tctx, projectRoot, nil, runner, rcfg, runtime)
+	result, err := dispatchLifecycleRun(tctx, projectRoot, nil, runner, rcfg, runtime)
 	if err != nil {
 		if tctx.Err() != nil {
 			return nil, tctx.Err()
@@ -149,7 +148,6 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 
 	runtime := AgentRunRuntime{
 		Prompt:           prompt,
-		WorkDir:          projectRoot,
 		PromptSource:     decomposerPromptSource,
 		ProfileOverride:  selectProfileForDispatch(tctx, projectRoot, nil, runner, SelectStrongestProfile),
 		ClearRoutingPins: true,
@@ -158,7 +156,7 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		ClearMaxPower:    true,
 	}
 
-	result, err := dispatchViaResolvedConfig(tctx, projectRoot, nil, runner, rcfg, runtime)
+	result, err := dispatchLifecycleRun(tctx, projectRoot, nil, runner, rcfg, runtime)
 	if err != nil && result == nil {
 		if tctx.Err() != nil {
 			return DecomposeResult{Failed: true, Reason: "timeout"}

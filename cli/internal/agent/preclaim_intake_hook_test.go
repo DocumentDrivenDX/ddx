@@ -29,6 +29,12 @@ type preClaimIntakeHookServiceStub struct {
 	finalText    string
 }
 
+type preClaimIntakeHookRunnerFunc func(RunArgs) (*Result, error)
+
+func (f preClaimIntakeHookRunnerFunc) Run(opts RunArgs) (*Result, error) {
+	return f(opts)
+}
+
 func (s *preClaimIntakeHookServiceStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	atomic.AddInt32(&s.executeCalls, 1)
 	s.lastReq = req
@@ -129,6 +135,19 @@ func newPreClaimIntakeHookTestStore(t *testing.T, root string) (*bead.Store, *be
 	return store, b
 }
 
+func newCleanPreClaimIntakeHookGitRoot(t *testing.T) (string, *bead.Store, *bead.Bead) {
+	t.Helper()
+	root := newPreClaimIntakeHookTestRoot(t)
+	runGitInteg(t, root, "init", "-b", "main")
+	runGitInteg(t, root, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, root, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("seed\n"), 0o644))
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+	runGitInteg(t, root, "add", ".")
+	runGitInteg(t, root, "commit", "-m", "chore: seed lifecycle intake repo")
+	return root, store, b
+}
+
 func intakeHookTestConfig() config.ResolvedConfig {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
 	return cfg.Resolve(config.CLIOverrides{})
@@ -164,7 +183,8 @@ func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *t
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Contains(t, svc.lastReq.Prompt, "MODE: intake")
-	assert.Equal(t, root, svc.lastReq.WorkDir)
+	assert.NotEqual(t, root, svc.lastReq.WorkDir)
+	assert.False(t, isPathWithin(svc.lastReq.WorkDir, root))
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
@@ -173,6 +193,54 @@ func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *t
 	assert.Zero(t, svc.lastReq.MaxPower)
 	assert.Greater(t, svc.lastReq.EstimatedPromptTokens, 0)
 	assert.False(t, svc.lastReq.RequiresTools)
+}
+
+func TestPreClaimIntakeHookDispatchesOutsideProjectRoot(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.NotEqual(t, root, svc.lastReq.WorkDir)
+	assert.False(t, isPathWithin(svc.lastReq.WorkDir, root))
+	assert.Equal(t, PermissionsReadOnlyLifecycle, svc.lastReq.Permissions)
+	assert.True(t, strings.HasPrefix(filepath.Base(svc.lastReq.WorkDir), lifecycleScratchDirPrefix))
+}
+
+func TestLifecycleDispatchRejectsProjectRootMutation(t *testing.T) {
+	root, store, b := newCleanPreClaimIntakeHookGitRoot(t)
+	sentinelAbs := filepath.Join(root, "lifecycle-sentinel.txt")
+	var dispatchedWorkDir string
+
+	runner := preClaimIntakeHookRunnerFunc(func(opts RunArgs) (*Result, error) {
+		dispatchedWorkDir = opts.WorkDir
+		require.NoError(t, os.WriteFile(sentinelAbs, []byte("sentinel\n"), 0o644))
+		return &Result{
+			ExitCode: 0,
+			Output:   `{"classification":"atomic","confidence":0.99,"reasoning":"ready"}`,
+		}, nil
+	})
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), nil, runner)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeError, got.Outcome)
+	assert.Contains(t, got.Detail, "project root mutation rejected")
+	assert.NotEqual(t, root, dispatchedWorkDir)
+	assert.False(t, isPathWithin(dispatchedWorkDir, root))
+
+	_, statErr := os.Stat(sentinelAbs)
+	assert.True(t, os.IsNotExist(statErr))
+
+	status, statusErr := runGitIntegOutput(root, "status", "--short")
+	require.NoError(t, statusErr)
+	assert.Empty(t, strings.TrimSpace(status))
 }
 
 func TestPreClaimIntakeHookWithLogDoesNotEmitPromptByDefault(t *testing.T) {

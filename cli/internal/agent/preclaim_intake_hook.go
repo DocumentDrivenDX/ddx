@@ -406,7 +406,6 @@ func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, r
 
 		runtime := AgentRunRuntime{
 			Prompt:        prompt,
-			WorkDir:       projectRoot,
 			PromptSource:  PreClaimIntakePromptSource,
 			Output:        log,
 			WorkLogPhase:  "readiness",
@@ -523,7 +522,7 @@ func preClaimIntakeRouteUnavailableDetail(err error) string {
 }
 
 func dispatchPreClaimIntakePayloadOnce(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
-	result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
+	result, err := dispatchLifecycleRun(ctx, projectRoot, svc, runner, rcfg, runtime)
 	if err != nil {
 		return "", fmt.Errorf("pre-claim intake: dispatch: %w", err)
 	}
