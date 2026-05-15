@@ -548,6 +548,8 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 // contains ordinary implementation files, the attempt fails with an actionable
 // error so those changes can be committed in the bead's substantive
 // [ddx-<id>] commit instead of being folded into the checkpoint.
+const preDispatchCheckpointDirtyRefusalPrefix = "checkpoint refused to absorb implementation changes outside DDx bookkeeping: "
+
 func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
 		return false, nil
@@ -587,7 +589,8 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	sort.Strings(blockedPaths)
 	if len(blockedPaths) > 0 {
 		return false, fmt.Errorf(
-			"checkpoint refused to absorb implementation changes outside DDx bookkeeping: %s; commit those files in the bead's [ddx-<id>] substantive commit before rerunning",
+			"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
+			preDispatchCheckpointDirtyRefusalPrefix,
 			strings.Join(blockedPaths, ", "),
 		)
 	}

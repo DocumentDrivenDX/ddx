@@ -156,7 +156,7 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+metricsRel), attemptID)
 }
 
-func TestCheckpointPreDispatchDirtRejectsImplementationPaths(t *testing.T) {
+func TestPreDispatchCheckpointRejectsImplementationDirtyPaths(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260513T000002-block000"
 
@@ -170,6 +170,7 @@ func TestCheckpointPreDispatchDirtRejectsImplementationPaths(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, committed)
 	assert.Contains(t, err.Error(), "cli/internal/agent/dirty_impl.go")
+	assert.Contains(t, err.Error(), "commit or clean")
 	assert.Contains(t, err.Error(), "[ddx-<id>]")
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
 }

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
@@ -155,21 +156,27 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(out, "systemic; leaving beads untouched"))
 }
 
-func TestWorkWatch_CheckpointDirtyReleasesClaimWithoutFailure(t *testing.T) {
-	store, first, _ := newExecuteLoopTestStore(t)
+func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
+	inner, first, second := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
 	defer cancel()
+
+	dirtyPaths := []string{"cli/cmd/execute_loop_shared.go", "cli/internal/agent/dirty_impl.go"}
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			cancel()
-			return ExecuteBeadReport{}, fmt.Errorf("pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/execute_loop_shared.go; commit those files in the bead's [ddx-<id>] substantive commit before rerunning")
+			return ExecuteBeadReport{}, fmt.Errorf(
+				"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
+				preExecuteCheckpointDirtyMarker,
+				strings.Join(dirtyPaths, ", "),
+			)
 		}),
 	}
 
-	var logBuf bytes.Buffer
+	var logBuf, eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
@@ -177,21 +184,112 @@ func TestWorkWatch_CheckpointDirtyReleasesClaimWithoutFailure(t *testing.T) {
 		IdleInterval: time.Hour,
 		Log:          &logBuf,
 		WakeCh:       make(chan struct{}),
+		EventSink:    &eventSink,
+		ProjectRoot:  "/repo/watch",
+		SessionID:    "sess-watch",
+		WorkerID:     "worker-watch",
 	})
 
-	require.ErrorIs(t, err, context.Canceled)
+	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Attempts)
 	assert.Equal(t, 0, result.Failures)
 	assert.Empty(t, result.Results)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "checkpoint_dirty", result.OperatorAttention.Reason)
+	assert.Equal(t, first.ID, result.OperatorAttention.BeadID)
+	assert.Equal(t, "/repo/watch", result.OperatorAttention.ProjectRoot)
+	assert.Equal(t, dirtyPaths, result.OperatorAttention.DirtyPaths)
+	assert.Contains(t, result.OperatorAttention.Message, "commit or clean")
 
-	got, err := store.Get(first.ID)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "only the first ready bead may be claimed while the tree is dirty")
+
+	gotFirst, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Empty(t, gotFirst.Owner)
+	assert.Empty(t, gotSecond.Owner)
 
 	out := logBuf.String()
-	assert.Contains(t, out, "watch: repo has uncommitted implementation changes; released ddx-0001")
-	assert.NotContains(t, out, "failed:")
+	assert.Contains(t, out, "operator attention: project worktree /repo/watch has uncommitted implementation changes; released ddx-0001.")
+	assert.Contains(t, out, "commit or clean")
+	assert.NotContains(t, out, "will retry")
+
+	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
+	var operatorAttention map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["type"] != "loop.operator_attention" {
+			continue
+		}
+		data, ok := entry["data"].(map[string]any)
+		require.True(t, ok, "loop.operator_attention must include data")
+		operatorAttention = data
+		break
+	}
+	require.NotNil(t, operatorAttention, "loop.operator_attention event must be emitted")
+	assert.Equal(t, first.ID, operatorAttention["bead_id"])
+	assert.Equal(t, "/repo/watch", operatorAttention["project_root"])
+	assert.Equal(t, "checkpoint_dirty", operatorAttention["reason"])
+	assert.Contains(t, operatorAttention["message"], "commit or clean")
+	require.Len(t, operatorAttention["dirty_paths"], len(dirtyPaths))
+}
+
+func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
+	inner, first, second := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{}, fmt.Errorf(
+				"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
+				preExecuteCheckpointDirtyMarker,
+				"cli/internal/agent/dirty_impl.go",
+			)
+		}),
+	}
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:        executeloop.ModeDrain,
+		Log:         &logBuf,
+		ProjectRoot: "/repo/drain",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "only the first bead may reach the checkpoint refusal")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "the second ready bead must not be claimed while the same dirty-tree blocker remains")
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "/repo/drain", result.OperatorAttention.ProjectRoot)
+	assert.Equal(t, []string{"cli/internal/agent/dirty_impl.go"}, result.OperatorAttention.DirtyPaths)
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Empty(t, gotFirst.Owner)
+	assert.Empty(t, gotSecond.Owner)
+
+	assert.Contains(t, logBuf.String(), "commit or clean")
 }
 
 func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {

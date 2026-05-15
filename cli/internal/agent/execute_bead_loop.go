@@ -604,18 +604,29 @@ type ProgressEvent struct {
 	Message   string    `json:"message,omitempty"`
 }
 
+// OperatorAttentionStop captures a project-level terminal condition that must
+// stop autonomous work until an operator changes the local environment.
+type OperatorAttentionStop struct {
+	Reason      string   `json:"reason"`
+	BeadID      string   `json:"bead_id,omitempty"`
+	ProjectRoot string   `json:"project_root,omitempty"`
+	DirtyPaths  []string `json:"dirty_paths,omitempty"`
+	Message     string   `json:"message,omitempty"`
+}
+
 type ExecuteBeadLoopResult struct {
-	Attempts          int                  `json:"attempts"`
-	Successes         int                  `json:"successes"`
-	Failures          int                  `json:"failures"`
-	StopCondition     string               `json:"stop_condition,omitempty"`
-	ExitReason        string               `json:"exit_reason,omitempty"`
-	NoReadyWork       bool                 `json:"no_ready_work,omitempty"`
-	NoReadyWorkDetail NoReadyWorkBreakdown `json:"no_ready_work_detail,omitempty"`
-	QueueSnapshot     *QueueSnapshot       `json:"queue_snapshot,omitempty"`
-	LastSuccessAt     time.Time            `json:"last_success_at,omitempty"`
-	LastFailureStatus string               `json:"last_failure_status,omitempty"`
-	Results           []ExecuteBeadReport  `json:"results,omitempty"`
+	Attempts          int                    `json:"attempts"`
+	Successes         int                    `json:"successes"`
+	Failures          int                    `json:"failures"`
+	StopCondition     string                 `json:"stop_condition,omitempty"`
+	ExitReason        string                 `json:"exit_reason,omitempty"`
+	OperatorAttention *OperatorAttentionStop `json:"operator_attention,omitempty"`
+	NoReadyWork       bool                   `json:"no_ready_work,omitempty"`
+	NoReadyWorkDetail NoReadyWorkBreakdown   `json:"no_ready_work_detail,omitempty"`
+	QueueSnapshot     *QueueSnapshot         `json:"queue_snapshot,omitempty"`
+	LastSuccessAt     time.Time              `json:"last_success_at,omitempty"`
+	LastFailureStatus string                 `json:"last_failure_status,omitempty"`
+	Results           []ExecuteBeadReport    `json:"results,omitempty"`
 }
 
 // ExecuteBeadWorker drains the current single-project execution-ready queue.
@@ -692,12 +703,46 @@ func randomProgressID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
 }
 
-func isPreExecuteCheckpointDirtyReport(report ExecuteBeadReport, err error) bool {
-	const marker = "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping"
-	if err != nil && strings.Contains(err.Error(), marker) {
-		return true
+const preExecuteCheckpointDirtyMarker = "pre-execute-bead checkpoint: " + preDispatchCheckpointDirtyRefusalPrefix
+
+func preExecuteCheckpointDirtyStop(report ExecuteBeadReport, err error, projectRoot, beadID string) (*OperatorAttentionStop, bool) {
+	detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
+	if err != nil && strings.Contains(err.Error(), preExecuteCheckpointDirtyMarker) {
+		detail = strings.TrimSpace(err.Error())
+	} else if !strings.Contains(detail, preExecuteCheckpointDirtyMarker) {
+		return nil, false
 	}
-	return strings.Contains(report.Detail, marker) || strings.Contains(report.Error, marker)
+	paths := parsePreExecuteCheckpointDirtyPaths(detail)
+	message := "commit or clean the listed implementation files before restarting ddx work"
+	if len(paths) > 0 {
+		message = fmt.Sprintf("commit or clean the listed implementation files before restarting ddx work: %s", strings.Join(paths, ", "))
+	}
+	return &OperatorAttentionStop{
+		Reason:      "checkpoint_dirty",
+		BeadID:      beadID,
+		ProjectRoot: projectRoot,
+		DirtyPaths:  paths,
+		Message:     message,
+	}, true
+}
+
+func parsePreExecuteCheckpointDirtyPaths(detail string) []string {
+	idx := strings.Index(detail, preDispatchCheckpointDirtyRefusalPrefix)
+	if idx == -1 {
+		return nil
+	}
+	pathsField := detail[idx+len(preDispatchCheckpointDirtyRefusalPrefix):]
+	if semi := strings.Index(pathsField, ";"); semi >= 0 {
+		pathsField = pathsField[:semi]
+	}
+	var paths []string
+	for _, path := range strings.Split(pathsField, ",") {
+		path = strings.TrimSpace(path)
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths
 }
 
 func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
@@ -1709,7 +1754,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
 		}
 		classifyLoopReportFailure(&report)
-		if loopMode == executeloop.ModeWatch && isPreExecuteCheckpointDirtyReport(report, err) {
+		if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
 			if unclaimErr := w.Store.Unclaim(candidate.ID); unclaimErr != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
@@ -1719,35 +1764,29 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				return result, unclaimErr
 			}
-			detail := strings.TrimSpace(report.Detail)
+			detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
 			if detail == "" && err != nil {
-				detail = err.Error()
+				detail = strings.TrimSpace(err.Error())
 			}
+			result.OperatorAttention = checkpointDirty
+			setExit("OperatorAttention", "operator_attention")
 			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "watch: repo has uncommitted implementation changes; released %s and will retry after %s: %s\n", candidate.ID, idleInterval, detail)
+				_, _ = fmt.Fprintf(runtime.Log,
+					"operator attention: project worktree %s has uncommitted implementation changes; released %s. %s\n",
+					checkpointDirty.ProjectRoot,
+					candidate.ID,
+					checkpointDirty.Message,
+				)
 			}
-			emit("loop.watch_checkpoint_dirty", map[string]any{
-				"bead_id":       candidate.ID,
-				"detail":        detail,
-				"idle_interval": idleInterval.String(),
+			emit("loop.operator_attention", map[string]any{
+				"reason":       checkpointDirty.Reason,
+				"bead_id":      candidate.ID,
+				"project_root": checkpointDirty.ProjectRoot,
+				"dirty_paths":  checkpointDirty.DirtyPaths,
+				"message":      checkpointDirty.Message,
+				"detail":       detail,
 			})
-			emitProgress(runtime.ProgressCh, ProgressEvent{
-				EventID:   "evt-" + randomProgressID(),
-				WorkerID:  runtime.WorkerID,
-				ProjectID: runtime.ProjectRoot,
-				BeadID:    candidate.ID,
-				Phase:     "loop.idle",
-				Heartbeat: true,
-				TS:        now().UTC(),
-				Message:   "checkpoint_dirty",
-			})
-			if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
-				if exitReason == "" {
-					applyStop(work.StopInput{ContextErr: err})
-				}
-				return result, err
-			}
-			continue
+			return result, nil
 		}
 		if IsResourceExhaustedStatus(report.Status) {
 			result.Attempts++
