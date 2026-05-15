@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,82 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
 	assert.True(t, decomposeApplied, "decompose-applied event must be emitted")
 }
 
+func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	projectRoot := t.TempDir()
+
+	b := &bead.Bead{
+		ID:          "ddx-post-ladder-dispatch",
+		Title:       "decompose dispatch isolation test",
+		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
+		Acceptance:  "1. TestPostLadderDecomposerDispatchesOutsideProjectRoot\n2. cd cli && go test ./internal/agent/...",
+	}
+	require.NoError(t, store.Create(b))
+
+	children := []map[string]any{
+		{
+			"title":       "child dispatch one",
+			"description": "PROBLEM\nChild one.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
+			"acceptance":  "1. TestChildDispatchOne\n2. cd cli && go test ./internal/agent/...",
+			"labels":      []string{"phase:iterate", "area:agent"},
+		},
+	}
+	raw, err := json.Marshal(children)
+	require.NoError(t, err)
+
+	var gotWorkDir string
+	var gotPermissions string
+	var childCountBefore int
+	var parentEligSetBefore bool
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		gotWorkDir = opts.WorkDir
+		gotPermissions = opts.Permissions
+
+		all, readErr := store.ReadAll()
+		require.NoError(t, readErr)
+		for _, bb := range all {
+			if bb.Parent == b.ID {
+				childCountBefore++
+			}
+		}
+		parent, getErr := store.Get(b.ID)
+		require.NoError(t, getErr)
+		if parent.Extra != nil {
+			_, parentEligSetBefore = parent.Extra[bead.ExtraExecutionElig]
+		}
+
+		return &Result{ExitCode: 0, Output: string(raw), CostUSD: 0.0123}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result := runDecomposer(context.Background(), store, runner, rcfg, projectRoot, b.ID)
+	assert.False(t, result.Failed)
+	assert.Len(t, result.ChildIDs, 1)
+	assert.Equal(t, 0, childCountBefore, "children must not exist until after validated output is returned")
+	assert.False(t, parentEligSetBefore, "parent execution-eligible flag must not be updated before validated output is returned")
+	assert.NotEqual(t, projectRoot, gotWorkDir)
+	assert.False(t, isPathWithin(gotWorkDir, projectRoot))
+	assert.Equal(t, PermissionsReadOnlyLifecycle, gotPermissions)
+	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
+
+	parent, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig])
+
+	all, err := store.ReadAll()
+	require.NoError(t, err)
+	var childBeads []bead.Bead
+	for _, bb := range all {
+		if bb.Parent == b.ID {
+			childBeads = append(childBeads, bb)
+		}
+	}
+	assert.Len(t, childBeads, 1)
+}
+
 // TestDecomposerInvalidChildren_CountsAsFailure verifies that a stub agent
 // returning more than 5 children yields DecomposeResult{Failed:true,
 // Reason:"invalid_count"}.
@@ -209,6 +286,61 @@ func TestPreClaimDecompositionHook_ParsesAgentSplit(t *testing.T) {
 	assert.Len(t, decomp.ACMap, 2)
 	assert.Contains(t, gotPrompt, "MODE: preclaim-decompose")
 	assert.Contains(t, gotPrompt, "ac_map")
+}
+
+func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	projectRoot := t.TempDir()
+
+	b := &bead.Bead{
+		ID:          "ddx-preclaim-dispatch",
+		Title:       "preclaim dispatch isolation test",
+		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
+		Acceptance:  "1. TestPreClaimDecomposerDispatchesOutsideProjectRoot\n2. cd cli && go test ./internal/agent/...",
+		Labels:      []string{"phase:iterate", "area:agent"},
+	}
+	require.NoError(t, store.Create(b))
+
+	payload := map[string]any{
+		"children": []map[string]any{
+			{
+				"title":       "preclaim isolated child",
+				"description": "PROBLEM\nChild.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n\nPROPOSED FIX\nDo child work.\n\nNON-SCOPE\nOther work.",
+				"acceptance":  "1. TestPreClaimIsolatedChild\n2. cd cli && go test ./internal/agent/...\n3. lefthook run pre-commit",
+				"labels":      []string{"phase:iterate", "area:agent"},
+			},
+		},
+		"ac_map": []map[string]any{
+			{"parent_ac": "1. TestPreClaimDecomposerDispatchesOutsideProjectRoot", "coverage": "covered by preclaim isolated child AC 1"},
+			{"parent_ac": "2. cd cli && go test ./internal/agent/...", "coverage": "covered by preclaim isolated child AC 2"},
+		},
+		"rationale": "isolation still preserves validated child proposals",
+	}
+	raw, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var gotWorkDir string
+	var gotPermissions string
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		gotWorkDir = opts.WorkDir
+		gotPermissions = opts.Permissions
+		return &Result{ExitCode: 0, Output: string(raw)}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, projectRoot, b.ID)
+	require.NoError(t, err)
+	require.NotNil(t, decomp)
+	require.Len(t, decomp.Children, 1)
+	assert.Equal(t, "preclaim isolated child", decomp.Children[0].Title)
+	assert.Len(t, decomp.ACMap, 2)
+	assert.NotEqual(t, projectRoot, gotWorkDir)
+	assert.False(t, isPathWithin(gotWorkDir, projectRoot))
+	assert.Equal(t, PermissionsReadOnlyLifecycle, gotPermissions)
+	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 }
 
 func TestPreClaimDecompositionHook_FallsBackWhenAgentOutputEmpty(t *testing.T) {
