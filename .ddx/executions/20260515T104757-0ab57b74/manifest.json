@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260515T104757-0ab57b74",
+  "bead_id": "ddx-689471d1",
+  "base_rev": "cfaaab932bc2230097b0a8628eb8ba5164427317",
+  "created_at": "2026-05-15T10:48:02.010824081Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-689471d1",
+    "title": "readiness: accept model-output waiver and child-acceptance variants",
+    "description": "PROBLEM\n`ddx work --watch --harness codex --model gpt-5.4 --project /Users/erik/Projects/fizeau` still reports readiness decode failures and then fail-opens into execution. Two observed shapes are now known:\n- `waivers_applied` may be emitted as a flat string list, causing `json: cannot unmarshal string into Go struct field preClaimReadinessClassificationPromptResult.waivers_applied of type agent.preClaimReadinessWaiver`.\n- `suggested_child_beads[].acceptance` may be emitted as a single string, causing `json: cannot unmarshal string into Go struct field preClaimReadinessSuggestedChild.suggested_child_beads.acceptance of type []string`.\n\nBoth failures make the readiness model unavailable even though the model produced a semantically usable classification. This keeps readiness from contributing route/difficulty signals and produces noisy fail-open logs during normal `ddx work --watch` operation.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/preclaim_intake_hook.go:60-72` decodes the readiness classification payload directly into strict Go structs. `preClaimReadinessClassificationPromptResult.SuggestedChildren` is `[]preClaimReadinessSuggestedChild`, while `preClaimReadinessSuggestedChild.Acceptance` at `cli/internal/agent/preclaim_intake_hook.go:148-152` requires `[]string`. `WaiversApplied` at `cli/internal/agent/preclaim_intake_hook.go:71` requires structured objects. `decodeReadinessClassificationPayloadWithMode` at `cli/internal/agent/preclaim_intake_hook.go:584-588` fails the whole readiness classification on any JSON shape mismatch. The prompt text at `cli/internal/agent/preclaim_intake_hook.go:424-431` asks for `suggested_child_beads` and `waivers_applied` but does not give enough defensive handling for common model scalar/list variants.\n\nPROPOSED FIX\nAdd small JSON normalization types for readiness model-only fields so decoding accepts the observed variants without creating new execution paths. Specifically: normalize `waivers_applied` from omitted/null/empty array/flat string list/object list, and normalize `suggested_child_beads[].acceptance` from either a string or a string array. Keep the internal readiness result behavior unchanged unless existing code already consumes these fields. Tighten the readiness prompt so it documents the preferred shapes and explicitly says scalar fallbacks are tolerated only by the decoder.\n\nNON-SCOPE\nDo not persist readiness waiver or child-bead suggestion data to bead metadata. Do not add numeric difficulty/score metadata. Do not implement automatic decomposition behavior here. Do not change the easy/medium/hard routing contract.",
+    "acceptance": "1. Add `TestPreClaimReadiness_DecodesWaiversAppliedStringList` proving payloads with `\"waivers_applied\":[\"none\"]` decode successfully and preserve the readiness outcome.\n2. Add `TestPreClaimReadiness_DecodesWaiversAppliedObjectList` proving the existing structured waiver-object form still decodes.\n3. Add `TestPreClaimReadiness_DecodesSuggestedChildAcceptanceString` proving payloads with `\"suggested_child_beads\":[{\"title\":\"Split docs\",\"acceptance\":\"1. TestFoo passes\\n2. cd cli \u0026\u0026 go test ./internal/agent/... green\"}]` decode successfully and preserve the readiness outcome.\n4. Add `TestPreClaimReadiness_DecodesSuggestedChildAcceptanceList` proving the documented string-array child acceptance form still decodes.\n5. Add or update prompt coverage, suggested `TestPreClaimReadinessPromptSpecifiesOutputShapes`, proving the readiness prompt explicitly documents `waivers_applied` and `suggested_child_beads[].acceptance` shapes.\n6. Existing `TestPreClaimReadiness_DecodesFractionalScore` remains green.\n7. `cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestPreClaimReadiness_.*(Waiver|SuggestedChild|FractionalScore)|TestPreClaimReadinessPromptSpecifiesOutputShapes\" -count=1` passes.\n8. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:readiness",
+      "area:routing",
+      "kind:bug",
+      "phase:2",
+      "downstream:fizeau"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T104757-0ab57b74",
+    "prompt": ".ddx/executions/20260515T104757-0ab57b74/prompt.md",
+    "manifest": ".ddx/executions/20260515T104757-0ab57b74/manifest.json",
+    "result": ".ddx/executions/20260515T104757-0ab57b74/result.json",
+    "checks": ".ddx/executions/20260515T104757-0ab57b74/checks.json",
+    "usage": ".ddx/executions/20260515T104757-0ab57b74/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-689471d1-20260515T104757-0ab57b74"
+  },
+  "prompt_sha": "ac872b3b1c36e7cb406aa33daa90ac7245eb53d31d2f64a455350cc84b7a5b20"
+}
