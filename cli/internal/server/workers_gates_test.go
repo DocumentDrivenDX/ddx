@@ -344,11 +344,22 @@ func mustResolveRef(t *testing.T, root, ref string) string {
 	return strings.TrimSpace(string(out))
 }
 
+func mustCommitParents(t *testing.T, root, rev string) []string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", root, "rev-list", "--parents", "-n", "1", rev).Output()
+	require.NoError(t, err, "rev-list --parents %s", rev)
+	fields := strings.Fields(strings.TrimSpace(string(out)))
+	require.NotEmpty(t, fields, "rev-list --parents must return at least the commit SHA")
+	return fields[1:]
+}
+
 // TestWorkerReport_DistinguishesCandidateAndLandedRev proves that after
-// evaluateGatesAndSubmit lands a result, res.ImplementationRev holds the
-// worker's own commit and res.LandedRev holds the target branch tip, and
-// that a WorkerExecutionResult built from the resulting report exposes both
-// fields separately rather than collapsing them into one ResultRev field.
+// evaluateGatesAndSubmit lands a result through the merge-plus-audit path,
+// res.ImplementationRev holds the worker's own commit, res.LandedRev holds the
+// landed implementation revision, and the final target branch tip can advance
+// again for the trailing audit commit. A WorkerExecutionResult built from the
+// resulting report must keep the candidate and landed revs distinct instead of
+// collapsing them to the final branch tip.
 func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
 	const beadID = "ddx-rev-triplet"
 	const attemptID = "20260508T000000-revtriplet"
@@ -356,6 +367,12 @@ func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
 	root, initialTip := gateRepoFixture(t, "FEAT-TRIPLET", false, 0)
 	manifestRel := writeGateManifest(t, root, beadID, attemptID, nil)
 	resultRev := commitWorkerChange(t, root, "worker-triplet.txt", "worker triplet change\n")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "sibling-triplet.txt"), []byte("sibling triplet change\n"), 0o644))
+	runCmd(t, root, "git", "add", "--", "sibling-triplet.txt")
+	runCmd(t, root, "git", "-c", "user.name=Sibling", "-c", "user.email=sibling@test.local",
+		"commit", "-m", "feat: sibling triplet change")
+	siblingTip := mustResolveRef(t, root, "refs/heads/main")
+	assert.NotEqual(t, initialTip, siblingTip, "main must advance before landing so the merge path is exercised")
 
 	res := &agent.ExecuteBeadResult{
 		BeadID:       beadID,
@@ -379,10 +396,23 @@ func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
 	assert.Equal(t, resultRev, res.ImplementationRev,
 		"ImplementationRev must be the worker's own commit SHA")
 
-	// LandedRev must be the branch tip after the coordinator ran.
+	// LandedRev must be the implementation revision that landed on the target
+	// branch, not the trailing audit/final-result commit.
 	tipAfter := mustResolveRef(t, root, "refs/heads/main")
-	assert.Equal(t, tipAfter, res.LandedRev,
-		"LandedRev must equal the target branch tip after landing")
+	assert.NotEqual(t, resultRev, res.LandedRev,
+		"merge path must preserve a landed implementation revision distinct from the worker commit")
+	assert.NotEqual(t, tipAfter, res.LandedRev,
+		"trailing audit commit must not collapse LandedRev to the final branch tip")
+	landedParents := mustCommitParents(t, root, res.LandedRev)
+	require.Len(t, landedParents, 2, "LandedRev must be the merge commit created by landing")
+	assert.Equal(t, siblingTip, landedParents[0],
+		"LandedRev parent[0] must be the pre-land branch tip")
+	assert.Equal(t, resultRev, landedParents[1],
+		"LandedRev parent[1] must be the original worker commit")
+	finalParents := mustCommitParents(t, root, tipAfter)
+	require.NotEmpty(t, finalParents, "final target tip must have a parent")
+	assert.Equal(t, res.LandedRev, finalParents[0],
+		"final target tip must be the trailing audit commit on top of the landed implementation rev")
 
 	// ResultRev is the compat alias that mirrors LandedRev.
 	assert.Equal(t, res.LandedRev, res.ResultRev,
@@ -416,6 +446,8 @@ func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
 	assert.NotEmpty(t, workerResult.LandedRev, "WorkerExecutionResult.LandedRev must be set")
 	assert.Equal(t, resultRev, workerResult.ImplementationRev,
 		"WorkerExecutionResult.ImplementationRev must be the original worker commit")
-	assert.Equal(t, tipAfter, workerResult.LandedRev,
-		"WorkerExecutionResult.LandedRev must be the post-land branch tip")
+	assert.Equal(t, res.LandedRev, workerResult.LandedRev,
+		"WorkerExecutionResult.LandedRev must be the landed implementation revision")
+	assert.NotEqual(t, tipAfter, workerResult.LandedRev,
+		"WorkerExecutionResult.LandedRev must not collapse to the final target branch tip")
 }
