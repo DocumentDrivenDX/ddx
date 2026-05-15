@@ -601,45 +601,127 @@ PowerShell:
 	rootCmd.AddCommand(promptsCmd)
 }
 
-func (f *CommandFactory) warnIfInstalledBinaryBehindSource(cmd *cobra.Command) {
-	if f.Version == "" || f.Version == "dev" {
+type sourceCheckoutBinaryStaleness struct {
+	ProjectRoot  string
+	BinaryCommit string
+	SourceHead   string
+	AheadCount   string
+}
+
+func (s sourceCheckoutBinaryStaleness) recoveryCommand() string {
+	return fmt.Sprintf("cd %s && make install", s.ProjectRoot)
+}
+
+func (s sourceCheckoutBinaryStaleness) warningMessage() string {
+	return fmt.Sprintf(
+		"WARNING: installed ddx is built from %s; source tree HEAD is %s (%s commits ahead).\nproject root: %s\nbinary commit: %s\nsource HEAD: %s\ninstalled ddx binary is behind this DDx source checkout.\nrecovery: %s\nRun \"make install\" to refresh.\n",
+		s.BinaryCommit,
+		s.SourceHead,
+		s.AheadCount,
+		s.ProjectRoot,
+		s.BinaryCommit,
+		s.SourceHead,
+		s.recoveryCommand(),
+	)
+}
+
+func (s sourceCheckoutBinaryStaleness) blockingMessage(commandPath string) string {
+	commandPath = strings.TrimSpace(commandPath)
+	if commandPath == "" {
+		commandPath = "ddx"
+	}
+	return fmt.Sprintf(
+		"%s: installed ddx binary is stale for this DDx source checkout.\nproject root: %s\nbinary commit: %s\nsource HEAD: %s (%s commits ahead)\nrecovery: %s",
+		commandPath,
+		s.ProjectRoot,
+		s.BinaryCommit,
+		s.SourceHead,
+		s.AheadCount,
+		s.recoveryCommand(),
+	)
+}
+
+func silenceCommandErrorOutput(cmd *cobra.Command) {
+	if cmd == nil {
 		return
 	}
-	if f.Commit == "" || f.Commit == "unknown" {
-		return
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	if root := cmd.Root(); root != nil {
+		root.SilenceUsage = true
+		root.SilenceErrors = true
+	}
+}
+
+func (f *CommandFactory) failIfInstalledBinaryBehindSource(cmd *cobra.Command, projectRoot string, exitCode int) error {
+	staleness := f.detectInstalledBinaryBehindSource(projectRoot)
+	if staleness == nil {
+		return nil
+	}
+	silenceCommandErrorOutput(cmd)
+	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), staleness.blockingMessage(cmd.CommandPath()))
+	return NewExitError(exitCode, "")
+}
+
+func (f *CommandFactory) detectInstalledBinaryBehindSource(projectRoot string) *sourceCheckoutBinaryStaleness {
+	if f.Version == "" || f.Version == "dev" {
+		return nil
 	}
 
-	repoRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	buildCommit := normalizeVersionCommit(f.Commit)
+	if buildCommit == "" {
+		return nil
+	}
+
+	repoRoot := strings.TrimSpace(projectRoot)
+	if repoRoot == "" {
+		return nil
+	}
+	if !gitpkg.IsRepository(repoRoot) {
+		repoRoot = gitpkg.FindProjectRoot(repoRoot)
+	}
 	if repoRoot == "" || !gitpkg.IsRepository(repoRoot) {
-		return
+		return nil
 	}
 
 	originURL, err := gitCommandOutput(repoRoot, "remote", "get-url", "origin")
 	if err != nil || !isDDXOriginURL(originURL) {
-		return
+		return nil
 	}
 
-	buildSHA, err := gitResolveCommit(repoRoot, f.Commit)
+	buildSHA, err := gitResolveCommit(repoRoot, buildCommit)
 	if err != nil {
-		return
+		return nil
 	}
 	headSHA, err := gitCommandOutput(repoRoot, "rev-parse", "HEAD")
-	if err != nil {
-		return
+	if err != nil || buildSHA == headSHA {
+		return nil
 	}
 
 	if err := gitpkg.Command(context.Background(), repoRoot, "merge-base", "--is-ancestor", buildSHA, headSHA).Run(); err != nil {
-		return
+		return nil
 	}
 
 	aheadCount, err := gitCommandOutput(repoRoot, "rev-list", "--count", buildSHA+".."+headSHA)
 	if err != nil || aheadCount == "0" {
-		return
+		return nil
 	}
 
-	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-		"WARNING: installed ddx is built from %s; source tree HEAD is %s (%s commits ahead). Run \"make install\" to refresh.\n",
-		buildSHA, headSHA, aheadCount)
+	return &sourceCheckoutBinaryStaleness{
+		ProjectRoot:  repoRoot,
+		BinaryCommit: buildSHA,
+		SourceHead:   headSHA,
+		AheadCount:   aheadCount,
+	}
+}
+
+func (f *CommandFactory) warnIfInstalledBinaryBehindSource(cmd *cobra.Command) {
+	repoRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	staleness := f.detectInstalledBinaryBehindSource(repoRoot)
+	if staleness == nil {
+		return
+	}
+	_, _ = fmt.Fprint(cmd.ErrOrStderr(), staleness.warningMessage())
 }
 
 func gitCommandOutput(dir string, args ...string) (string, error) {

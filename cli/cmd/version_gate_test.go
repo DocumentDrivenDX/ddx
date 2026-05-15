@@ -2,10 +2,13 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,6 +87,23 @@ func TestCheckVersionGateExemptsRecoveryCommands(t *testing.T) {
 	}
 }
 
+func TestVersionWarnsStaleSourceBinary(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	projectRoot, buildSHA, headSHA := seedStaleSourceCheckout(t)
+
+	factory := NewCommandFactory(projectRoot)
+	factory.Version = "0.9.0"
+	factory.Commit = buildSHA
+
+	out, err := executeCommand(factory.NewRootCommand(), "version")
+	require.NoError(t, err)
+	assert.Contains(t, out, "installed ddx binary is behind this DDx source checkout.")
+	assert.Contains(t, out, "project root: "+projectRoot)
+	assert.Contains(t, out, "binary commit: "+buildSHA)
+	assert.Contains(t, out, "source HEAD: "+headSHA)
+	assert.Contains(t, out, "recovery: cd "+projectRoot+" && make install")
+}
+
 func writeProjectVersion(t *testing.T, workDir, version string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
@@ -92,4 +112,45 @@ func writeProjectVersion(t *testing.T, workDir, version string) {
 		[]byte("ddx_version: \""+version+"\"\n"),
 		0o644,
 	))
+}
+
+func seedStaleSourceCheckout(t *testing.T) (projectRoot, buildSHA, headSHA string) {
+	t.Helper()
+
+	projectRoot = minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n"), 0o644))
+
+	runStaleSourceGit(t, projectRoot, "init")
+	runStaleSourceGit(t, projectRoot, "config", "user.email", "test@example.com")
+	runStaleSourceGit(t, projectRoot, "config", "user.name", "Test User")
+	runStaleSourceGit(t, projectRoot, "remote", "add", "origin", "git@github.com:DocumentDrivenDX/ddx.git")
+	runStaleSourceGit(t, projectRoot, "add", ".")
+	runStaleSourceGit(t, projectRoot, "commit", "-m", "initial source state")
+	buildSHA = staleSourceGitOutput(t, projectRoot, "rev-parse", "HEAD")
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n\nsource ahead\n"), 0o644))
+	runStaleSourceGit(t, projectRoot, "add", "README.md")
+	runStaleSourceGit(t, projectRoot, "commit", "-m", "source ahead of installed binary")
+	headSHA = staleSourceGitOutput(t, projectRoot, "rev-parse", "HEAD")
+
+	return projectRoot, buildSHA, headSHA
+}
+
+func runStaleSourceGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = gitpkg.CleanEnv()
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %v failed: %s", args, string(out))
+}
+
+func staleSourceGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = gitpkg.CleanEnv()
+	out, err := cmd.Output()
+	require.NoError(t, err, "git %v failed", args)
+	return strings.TrimSpace(string(out))
 }
