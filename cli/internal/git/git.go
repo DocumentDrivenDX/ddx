@@ -93,11 +93,12 @@ func samePath(a, b string) bool {
 //   - the primary worktree is the operator's source of truth; linked
 //     worktrees are ephemeral execution contexts
 //
-// If the primary worktree has no .ddx/ (or we aren't in a linked worktree),
-// it falls back to walking up from startDir within the current git
-// repository.
+// If no in-tree .ddx/ exists, it falls back to the canonical project root so
+// callers can still route project state through ddxroot.Path for convention-
+// root projects.
 //
-// Returns an empty string if no .ddx/ is found.
+// Returns an empty string only when startDir is not inside a git repository
+// and no ancestor contains .ddx/.
 func FindNearestDDxWorkspace(startDir string) string {
 	abs, err := filepath.Abs(startDir)
 	if err != nil {
@@ -106,10 +107,7 @@ func FindNearestDDxWorkspace(startDir string) string {
 
 	// If we're inside a linked worktree, prefer the primary worktree's .ddx/.
 	if primary := primaryWorktreeRoot(abs); primary != "" && primary != FindProjectRoot(abs) {
-		candidate := filepath.Join(primary, ddxDirSegment)
-		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
-			return primary
-		}
+		return primary
 	}
 
 	gitRoot := FindProjectRoot(abs)
@@ -127,6 +125,10 @@ func FindNearestDDxWorkspace(startDir string) string {
 			break
 		}
 		current = parent
+	}
+
+	if IsRepository(abs) {
+		return gitRoot
 	}
 	return ""
 }

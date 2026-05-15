@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -66,8 +65,7 @@ func NewConfigLoaderWithWorkingDir(workingDir string) (*ConfigLoader, error) {
 
 // LoadConfig loads configuration from .ddx/config.yaml only
 func (cl *ConfigLoader) LoadConfig() (*NewConfig, error) {
-	// Only support new format: .ddx/config.yaml
-	configPath := ddxroot.JoinProject(cl.workingDir, "config.yaml")
+	configPath := projectStatePath(cl.workingDir, "config.yaml")
 	if _, err := os.Stat(configPath); err != nil {
 		return nil, fmt.Errorf("no configuration file found at %s", configPath)
 	}
@@ -144,7 +142,7 @@ func (cl *ConfigLoader) SaveConfig(config *NewConfig, path string) error {
 
 // DetectConfigFormat determines if .ddx/config.yaml exists in working directory
 func (cl *ConfigLoader) DetectConfigFormat() (string, string, error) {
-	configPath := ddxroot.JoinProject(cl.workingDir, "config.yaml")
+	configPath := projectStatePath(cl.workingDir, "config.yaml")
 	if _, err := os.Stat(configPath); err == nil {
 		return "new", configPath, nil
 	}

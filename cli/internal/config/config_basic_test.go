@@ -1,11 +1,13 @@
 package config
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -156,6 +158,43 @@ prose:
 	require.NotNil(t, cfg.Prose.Vocabulary)
 	assert.Contains(t, cfg.Prose.Vocabulary.Accept, "Quartz")
 	assert.Contains(t, cfg.Prose.Vocabulary.Reject, "system")
+}
+
+func TestLoadWithWorkingDir_ConventionRoot(t *testing.T) {
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	require.NoError(t, os.MkdirAll(projectRoot, 0o755))
+	initConfigTestRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	conventionRoot := ddxroot.Path(context.Background(), projectRoot)
+	configData := []byte(`version: "1.0"
+library:
+  path: "./convention-library"
+  repository:
+    url: "https://github.com/convention/repo"
+    branch: "main"
+persona_bindings:
+  author: "Convention User"
+`)
+	require.NoError(t, os.WriteFile(filepath.Join(conventionRoot, "config.yaml"), configData, 0o644))
+
+	subdir := filepath.Join(projectRoot, "nested", "dir")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	cfg, err := LoadWithWorkingDir(subdir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Library)
+	assert.Equal(t, "./convention-library", cfg.Library.Path)
+	assert.Equal(t, "Convention User", cfg.PersonaBindings["author"])
+
+	loader, err := NewConfigLoaderWithWorkingDir(subdir)
+	require.NoError(t, err)
+	format, configPath, err := loader.DetectConfigFormat()
+	require.NoError(t, err)
+	assert.Equal(t, "new", format)
+	assert.Equal(t, filepath.Join(conventionRoot, "config.yaml"), configPath)
 }
 
 // TestSaveLocal tests SaveLocal function
@@ -355,4 +394,10 @@ bead:
 	require.NoError(t, err)
 	require.NotNil(t, cfg.Bead)
 	assert.Equal(t, "axon", cfg.Bead.Backend)
+}
+
+func initConfigTestRepo(t *testing.T, dir string) {
+	t.Helper()
+	out, err := gitpkg.Command(context.Background(), dir, "init").CombinedOutput()
+	require.NoError(t, err, "git init failed: %s", out)
 }

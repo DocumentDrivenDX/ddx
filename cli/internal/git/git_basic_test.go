@@ -199,3 +199,13 @@ func TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary(t *testing.T) {
 	got = FindNearestDDxWorkspace(primary)
 	assert.Equal(t, primary, got)
 }
+
+func TestFindNearestDDxWorkspace_ConventionRootFallsBackToProjectRoot(t *testing.T) {
+	repoDir := setupTestGitRepo(t)
+
+	subdir := filepath.Join(repoDir, "nested", "dir")
+	require.NoError(t, os.MkdirAll(subdir, 0o755))
+
+	got := FindNearestDDxWorkspace(subdir)
+	assert.Equal(t, repoDir, got)
+}
