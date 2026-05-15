@@ -45,6 +45,8 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
 	effort, _ := cmd.Flags().GetString("effort")
+	ignoreCooldown, _ := cmd.Flags().GetBool("ignore-cooldown")
+	cooldownReason, _ := cmd.Flags().GetString("reason")
 	once, _ := cmd.Flags().GetBool("once")
 	watch, _ := cmd.Flags().GetBool("watch")
 	rawIdleInterval, _ := cmd.Flags().GetDuration("idle-interval")
@@ -70,6 +72,10 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	if noReview && !noReviewAck {
 		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
 	}
+	cooldownReason = strings.TrimSpace(cooldownReason)
+	if ignoreCooldown && cooldownReason == "" {
+		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--ignore-cooldown requires --reason \"<text>\"")
+	}
 	if once && watch {
 		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--once and --watch are mutually exclusive")
 	}
@@ -87,27 +93,29 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	}
 
 	spec := executeloop.ExecuteLoopSpec{
-		ProjectRoot:        projectRoot,
-		Harness:            harness,
-		Model:              model,
-		Profile:            profile,
-		Provider:           provider,
-		Effort:             effort,
-		Mode:               mode,
-		IdleInterval:       idleInterval,
-		NoReview:           noReview,
-		ReviewHarness:      reviewHarness,
-		ReviewModel:        reviewModel,
-		OpaquePassthrough:  treatPassthroughAsOpaque,
-		MaxCostUSD:         maxCostUSD,
-		MaxBeadCostUSD:     maxBeadCostUSD,
-		MaxRecoveryCostUSD: maxRecoveryCostUSD,
-		PreClaimTimeout:    executeloop.Duration{Duration: preClaimTimeout},
-		RequestTimeout:     executeloop.Duration{Duration: requestTimeout},
-		RateLimitMaxWait:   executeloop.Duration{Duration: rateLimitMaxWait},
-		MinPower:           minPower,
-		MaxPower:           maxPower,
-		FromRev:            fromRev,
+		ProjectRoot:            projectRoot,
+		Harness:                harness,
+		Model:                  model,
+		Profile:                profile,
+		Provider:               provider,
+		Effort:                 effort,
+		Mode:                   mode,
+		IdleInterval:           idleInterval,
+		NoReview:               noReview,
+		ReviewHarness:          reviewHarness,
+		ReviewModel:            reviewModel,
+		IgnoreCooldown:         ignoreCooldown,
+		CooldownOverrideReason: cooldownReason,
+		OpaquePassthrough:      treatPassthroughAsOpaque,
+		MaxCostUSD:             maxCostUSD,
+		MaxBeadCostUSD:         maxBeadCostUSD,
+		MaxRecoveryCostUSD:     maxRecoveryCostUSD,
+		PreClaimTimeout:        executeloop.Duration{Duration: preClaimTimeout},
+		RequestTimeout:         executeloop.Duration{Duration: requestTimeout},
+		RateLimitMaxWait:       executeloop.Duration{Duration: rateLimitMaxWait},
+		MinPower:               minPower,
+		MaxPower:               maxPower,
+		FromRev:                fromRev,
 	}
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
@@ -155,6 +163,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	workerStore := agent.ExecuteBeadLoopStore(store)
+	if spec.IgnoreCooldown {
+		workerStore = newIgnoreCooldownStore(store)
+	}
 	jsonOutput := dispatch.JSON == "true"
 	cleanupLog := cmd.ErrOrStderr()
 	if jsonOutput {
@@ -504,7 +516,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	worker := &agent.ExecuteBeadWorker{
-		Store:    store,
+		Store:    workerStore,
 		Reviewer: reviewer,
 		EscalationNextFloor: func(actualPower int) (int, error) {
 			return nextEscalationFloor(loadLadder(), actualPower)
@@ -520,6 +532,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Mode:                         spec.Mode,
 		IdleInterval:                 spec.IdleInterval.Duration,
+		IgnoreCooldown:               spec.IgnoreCooldown,
+		CooldownOverrideReason:       spec.CooldownOverrideReason,
 		Log:                          progressLog,
 		CleanupLog:                   cleanupLog,
 		EventSink:                    loopSink,

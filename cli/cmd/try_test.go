@@ -329,6 +329,184 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, b.Status, "bead must be closed after successful execution")
 }
 
+func TestTry_ForceClaimBypassesCooldown(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "cooldown-bead-001",
+		Title: "Cooldown bead",
+	}))
+	require.NoError(t, store.SetExecutionCooldown(
+		"cooldown-bead-001",
+		time.Now().UTC().Add(6*time.Hour),
+		agent.ExecuteBeadStatusNoChanges,
+		"retry later",
+		"base-rev-1",
+	))
+
+	var calls int
+	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		calls++
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "forced-success-rev",
+		}, nil
+	})
+
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"try", "cooldown-bead-001",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.Error(t, err, "ddx try without --force-claim must respect retry cooldown")
+	assert.Contains(t, out, "retry cooldown")
+	assert.Equal(t, 0, calls, "executor must not run without --force-claim")
+
+	out, err = executeCommand(
+		factory.NewRootCommand(),
+		"try", "cooldown-bead-001",
+		"--force-claim",
+		"--reason", "operator unblock",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "ddx try --force-claim must execute cooled bead: %s", out)
+	assert.Equal(t, 1, calls, "executor must run once when cooldown is explicitly bypassed")
+
+	got, getErr := store.Get("cooldown-bead-001")
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
+func TestTry_ForceClaimRequiresReason(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "cooldown-bead-need-reason",
+		Title: "Cooldown bead",
+	}))
+
+	out, err := executeCommand(
+		NewCommandFactory(env.Dir).NewRootCommand(),
+		"try", "cooldown-bead-need-reason",
+		"--force-claim",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.Error(t, err)
+	assert.Contains(t, out+err.Error(), "--force-claim requires --reason")
+}
+
+func TestTry_ForceClaimEmitsAuditEvent(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "cooldown-bead-audit",
+		Title: "Cooldown bead audit",
+	}))
+	require.NoError(t, store.SetExecutionCooldown(
+		"cooldown-bead-audit",
+		time.Now().UTC().Add(6*time.Hour),
+		agent.ExecuteBeadStatusNoChanges,
+		"retry later",
+		"base-rev-1",
+	))
+
+	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "audit-success-rev",
+		}, nil
+	})
+
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"try", "cooldown-bead-audit",
+		"--force-claim",
+		"--reason", "operator unblock",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, out)
+
+	events, eventsErr := store.Events("cooldown-bead-audit")
+	require.NoError(t, eventsErr)
+
+	var forceClaimEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "force-claim" {
+			forceClaimEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, forceClaimEvent, "expected force-claim event")
+	assert.Equal(t, resolveClaimAssignee(), forceClaimEvent.Actor)
+	assert.False(t, forceClaimEvent.CreatedAt.IsZero())
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(forceClaimEvent.Body), &body))
+	assert.Equal(t, "operator unblock", body["reason"])
+	assert.NotEmpty(t, body["forced_at"])
+}
+
+func TestForceClaim_PreservesCooldownFieldOnFailure(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "cooldown-bead-preserve",
+		Title: "Cooldown preserve bead",
+	}))
+
+	retryAfter := time.Now().UTC().Add(6 * time.Hour).Format(time.RFC3339)
+	require.NoError(t, store.Update(context.Background(), "cooldown-bead-preserve", func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[bead.ExtraRetryAfter] = retryAfter
+		b.Extra[bead.ExtraCooldownBaseRev] = "base-rev-1"
+		b.Extra[bead.ExtraLastStatus] = agent.ExecuteBeadStatusNoChanges
+		b.Extra[bead.ExtraLastDetail] = "retry later"
+	}))
+
+	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		return agent.ExecuteBeadReport{
+			BeadID: beadID,
+			Status: agent.ExecuteBeadStatusExecutionFailed,
+			Detail: "still failing",
+		}, nil
+	})
+
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"try", "cooldown-bead-preserve",
+		"--force-claim",
+		"--reason", "operator unblock",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.Error(t, err, "forced failure must still exit non-zero: %s", out)
+
+	got, getErr := store.Get("cooldown-bead-preserve")
+	require.NoError(t, getErr)
+	assert.Equal(t, retryAfter, got.Extra[bead.ExtraRetryAfter])
+	assert.Equal(t, "base-rev-1", got.Extra[bead.ExtraCooldownBaseRev])
+	assert.Equal(t, agent.ExecuteBeadStatusNoChanges, got.Extra[bead.ExtraLastStatus])
+	assert.Equal(t, "retry later", got.Extra[bead.ExtraLastDetail])
+}
+
 // TestTryRecordsExecutionRoutingIntent verifies that ddx try records the
 // bead-hint routing intent evidence and prints the concise routing-intent
 // line when the durable power hint metadata is present.
@@ -382,7 +560,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(intentEvent.Body), &body))
 	assert.Equal(t, "bead_hint", body["routing_intent_source"])
 	assert.Equal(t, "hard", body["estimated_difficulty"])
-	assert.Equal(t, "smart", body["inferred_power_class"])
+	assert.Equal(t, "smart", body["requested_power_class"])
 	assert.Equal(t, "claude", body["actual_harness"])
 	assert.Equal(t, "anthropic", body["actual_provider"])
 	assert.Equal(t, "claude-sonnet-4-6", body["actual_model"])
@@ -597,6 +775,8 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("model"), "try must expose --model flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("profile"), "try must expose --profile flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("provider"), "try must expose --provider flag")
+	assert.NotNil(t, tryCmd.Flags().Lookup("force-claim"), "try must expose --force-claim flag")
+	assert.NotNil(t, tryCmd.Flags().Lookup("reason"), "try must expose --reason flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review"), "try must expose --no-review flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review-i-know-what-im-doing"), "try must expose the break-glass acknowledgement flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-harness"), "try must expose --review-harness flag")

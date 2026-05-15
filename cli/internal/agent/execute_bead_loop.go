@@ -84,15 +84,17 @@ type ExecuteBeadLoopRuntime struct {
 	// Mode and IdleInterval are the runtime loop intent. Once and
 	// PollInterval remain for older tests/callers but production entry points
 	// should set Mode and IdleInterval directly.
-	Mode         executeloop.Mode
-	IdleInterval time.Duration
-	Once         bool
-	PollInterval time.Duration
-	NoReview     bool
-	LabelFilter  string
-	SessionID    string
-	WorkerID     string
-	ProjectRoot  string
+	Mode                   executeloop.Mode
+	IdleInterval           time.Duration
+	Once                   bool
+	PollInterval           time.Duration
+	NoReview               bool
+	LabelFilter            string
+	IgnoreCooldown         bool
+	CooldownOverrideReason string
+	SessionID              string
+	WorkerID               string
+	ProjectRoot            string
 	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
 	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
 	// to dispatch a single specific bead through the same claim → executor →
@@ -546,6 +548,10 @@ type claimWithOptionsStore interface {
 	ClaimWithOptions(id, assignee, session, worktree string) error
 }
 
+type cooldownOverrideReporter interface {
+	CooldownOverrideInfo(beadID string) (string, bool)
+}
+
 // NoReadyWorkBreakdown explains why the execution-ready queue is empty.
 // Populated on an ExecuteBeadLoopResult when NoReadyWork fires and the store
 // exposes ReadyExecutionBreakdown.
@@ -687,6 +693,14 @@ type ExecuteBeadWorker struct {
 	transientCandidateSkips map[string]string
 }
 
+type forcedCooldownMetadata struct {
+	Active     bool
+	RetryAfter string
+	BaseRev    string
+	LastStatus string
+	LastDetail string
+}
+
 // emitProgress sends a ProgressEvent to runtime.ProgressCh non-blocking.
 // If ch is nil or full the event is silently dropped.
 func emitProgress(ch chan<- ProgressEvent, evt ProgressEvent) {
@@ -720,6 +734,76 @@ func newProgressEvent(workerID, projectID, beadID, attemptID, harness, model, pr
 
 func randomProgressID() string {
 	return fmt.Sprintf("%x", time.Now().UnixNano())[:8]
+}
+
+func executeLoopEventSource(runtime ExecuteBeadLoopRuntime) string {
+	if runtime.TargetBeadID != "" {
+		return "ddx try"
+	}
+	return "ddx work"
+}
+
+func forcedCooldownSnapshot(b bead.Bead, retryAfter string, overridden bool) forcedCooldownMetadata {
+	if !overridden {
+		return forcedCooldownMetadata{}
+	}
+	if retryAfter == "" && b.Extra != nil {
+		retryAfter, _ = b.Extra[bead.ExtraRetryAfter].(string)
+	}
+	baseRev := ""
+	lastStatus := ""
+	lastDetail := ""
+	if b.Extra != nil {
+		baseRev, _ = b.Extra[bead.ExtraCooldownBaseRev].(string)
+		lastStatus, _ = b.Extra[bead.ExtraLastStatus].(string)
+		lastDetail, _ = b.Extra[bead.ExtraLastDetail].(string)
+	}
+	return forcedCooldownMetadata{
+		Active:     retryAfter != "",
+		RetryAfter: retryAfter,
+		BaseRev:    baseRev,
+		LastStatus: lastStatus,
+		LastDetail: lastDetail,
+	}
+}
+
+func restoreForcedCooldownMetadata(ctx context.Context, store ExecuteBeadLoopStore, beadID string, meta forcedCooldownMetadata) error {
+	if !meta.Active {
+		return nil
+	}
+	return store.Update(ctx, beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		setOrDeleteBeadExtra(b.Extra, bead.ExtraRetryAfter, meta.RetryAfter)
+		setOrDeleteBeadExtra(b.Extra, bead.ExtraCooldownBaseRev, meta.BaseRev)
+		setOrDeleteBeadExtra(b.Extra, bead.ExtraLastStatus, meta.LastStatus)
+		setOrDeleteBeadExtra(b.Extra, bead.ExtraLastDetail, meta.LastDetail)
+	})
+}
+
+func appendForceClaimEvent(store BeadEventAppender, beadID, assignee, source, reason, retryAfter string, createdAt time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	body, err := json.Marshal(map[string]any{
+		"reason":      strings.TrimSpace(reason),
+		"retry_after": retryAfter,
+		"forced_at":   createdAt.Format(time.RFC3339),
+	})
+	if err != nil {
+		body = []byte(fmt.Sprintf("reason=%s\nretry_after=%s\nforced_at=%s",
+			strings.TrimSpace(reason),
+			retryAfter,
+			createdAt.Format(time.RFC3339),
+		))
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "force-claim",
+		Summary:   "retry cooldown overridden for targeted execution",
+		Body:      string(body),
+		Actor:     assignee,
+		Source:    source,
+		CreatedAt: createdAt,
+	})
 }
 
 const preExecuteCheckpointDirtyMarker = "pre-execute-bead checkpoint: " + preDispatchCheckpointDirtyRefusalPrefix
@@ -1243,6 +1327,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				"reason":     claimErr.Error(),
 			})
 			continue
+		}
+
+		overrideRetryAfter := ""
+		overrideMeta := forcedCooldownMetadata{}
+		if runtime.IgnoreCooldown {
+			if reporter, ok := w.Store.(cooldownOverrideReporter); ok {
+				if retryAfter, overridden := reporter.CooldownOverrideInfo(candidate.ID); overridden {
+					overrideRetryAfter = retryAfter
+					overrideMeta = forcedCooldownSnapshot(candidate, retryAfter, true)
+					appendForceClaimEvent(w.Store, candidate.ID, assignee, executeLoopEventSource(runtime), runtime.CooldownOverrideReason, retryAfter, now().UTC())
+				}
+			}
 		}
 
 		emit("bead.claimed", map[string]any{
@@ -2564,6 +2660,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
+			}
+		}
+
+		if overrideMeta.Active {
+			if err := restoreForcedCooldownMetadata(context.Background(), w.Store, candidate.ID, overrideMeta); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("restoreForcedCooldownMetadata", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				continue
+			}
+			if report.Status != ExecuteBeadStatusSuccess && report.Status != ExecuteBeadStatusAlreadySatisfied {
+				report.RetryAfter = overrideRetryAfter
 			}
 		}
 

@@ -1935,14 +1935,21 @@ func lifecycleSupersededBy(b Bead) string {
 // Ready returns open beads in the derived ready bucket, sorted by priority
 // (0 = highest first).
 func (s *Store) Ready() ([]Bead, error) {
-	return s.readyFiltered(false)
+	return s.readyFiltered(false, false)
 }
 
 // ReadyExecution returns ready beads that are also execution-eligible and
 // not superseded. This is the filter HELIX uses for its build loop. It also
 // surfaces stale in_progress claims so Claim can atomically reclaim them.
 func (s *Store) ReadyExecution() ([]Bead, error) {
-	return s.readyFiltered(true)
+	return s.readyFiltered(true, false)
+}
+
+// ReadyExecutionIgnoringCooldown returns execution-ready beads while treating
+// active retry-cooldown entries as immediately claimable for this read only.
+// It does not mutate any cooldown metadata on the beads themselves.
+func (s *Store) ReadyExecutionIgnoringCooldown() ([]Bead, error) {
+	return s.readyFiltered(true, true)
 }
 
 // ProposedOperatorAttention returns operator-attention beads (status=proposed),
@@ -2128,7 +2135,7 @@ func activeForDependencyPressure(b Bead) bool {
 	}
 }
 
-func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
+func (s *Store) readyFiltered(executionOnly, ignoreCooldown bool) ([]Bead, error) {
 	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
@@ -2136,10 +2143,14 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 
 	var ready []Bead
 	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
-		if entry.Decision.Bucket != LifecycleBucketReady {
-			continue
+		switch entry.Decision.Bucket {
+		case LifecycleBucketReady:
+			ready = append(ready, entry.Bead)
+		case LifecycleBucketRetryCooldown:
+			if executionOnly && ignoreCooldown {
+				ready = append(ready, entry.Bead)
+			}
 		}
-		ready = append(ready, entry.Bead)
 	}
 
 	sortBeadsForQueue(ready)

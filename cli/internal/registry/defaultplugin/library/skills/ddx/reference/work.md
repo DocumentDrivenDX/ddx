@@ -110,7 +110,7 @@ ddx work > /tmp/ddx-worker1.log 2>&1 &   # repeat for worker2, etc.
 (tail -F /tmp/ddx-worker1.log 2>/dev/null | awk '{print "w1: "$0; fflush()}' &
  tail -F /tmp/ddx-worker2.log 2>/dev/null | awk '{print "w2: "$0; fflush()}' &
  wait) | grep -E --line-buffered \
-  "^w[0-9]+: (▶|✗|✓|→ |worker exited|attempts:|failed:|landing worktree has|lock_contention|panic|FATAL|excluded|caller_excluded|ladder exhausted|escalation|powerClass=|do route|i/o timeout|connection refused|provider error)"
+  "^w[0-9]+: (▶|✗|✓|→ |worker exited|attempts:|failed:|landing worktree has|lock_contention|panic|FATAL|excluded|caller_excluded|ladder exhausted|escalation|TriagePowerHint|do route|i/o timeout|connection refused|provider error)"
 ```
 
 Why those specific tokens — together they cover **every actionable
@@ -123,7 +123,7 @@ event** in a drain:
   is jammed if recovery doesn't kick in.
 - `lock_contention`, `panic`, `FATAL` — infrastructure problems.
 - `excluded`, `caller_excluded`, `ladder exhausted`,
-  `escalation`, `powerClass=` — the escalation path actually
+  `escalation`, `TriagePowerHint` — the escalation path actually
   firing; absence on a failed bead means the loop is silently
   no-op'ing instead of climbing the ladder.
 - `do route` — the implementation-phase routing decision, surfaces

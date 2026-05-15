@@ -47,6 +47,8 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
+	assert.NotNil(t, workCmd.Flags().Lookup("ignore-cooldown"), "ddx work must expose --ignore-cooldown")
+	assert.NotNil(t, workCmd.Flags().Lookup("reason"), "ddx work must expose --reason")
 }
 
 func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
@@ -66,6 +68,8 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("profile", "smart")
 	setFlag("provider", "anthropic")
 	setFlag("effort", "high")
+	setFlag("ignore-cooldown", "true")
+	setFlag("reason", "operator unblock")
 	setFlag("watch", "true")
 	setFlag("idle-interval", "45s")
 	setFlag("json", "true")
@@ -92,6 +96,8 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, "smart", spec.Profile)
 	assert.Equal(t, "anthropic", spec.Provider)
 	assert.Equal(t, "high", spec.Effort)
+	assert.True(t, spec.IgnoreCooldown)
+	assert.Equal(t, "operator unblock", spec.CooldownOverrideReason)
 	assert.Equal(t, executeloop.ModeWatch, spec.Mode)
 	assert.Equal(t, 45*time.Second, spec.IdleInterval.Duration)
 	assert.True(t, spec.NoReview)
@@ -108,6 +114,54 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.Equal(t, executeloop.SpecCurrentVersion, spec.SpecVersion)
 	assert.Equal(t, "true", dispatch.JSON)
 	assert.True(t, dispatch.Local)
+}
+
+func TestWork_IgnoreCooldownDrainsCooledQueue(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+
+	future := time.Now().UTC().Add(6 * time.Hour)
+	for _, tc := range []struct {
+		id       string
+		priority int
+	}{
+		{id: "cool-4", priority: 4},
+		{id: "cool-1", priority: 1},
+		{id: "cool-3", priority: 3},
+		{id: "cool-0", priority: 0},
+		{id: "cool-2", priority: 2},
+	} {
+		require.NoError(t, store.Create(&bead.Bead{
+			ID:       tc.id,
+			Title:    "Cooled " + tc.id,
+			Priority: tc.priority,
+		}))
+		require.NoError(t, store.SetExecutionCooldown(tc.id, future, agent.ExecuteBeadStatusNoChanges, "retry later", "base-rev-1"))
+	}
+
+	var got []string
+	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		got = append(got, beadID)
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "rev-" + beadID,
+		}, nil
+	})
+
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"work",
+		"--ignore-cooldown",
+		"--reason", "operator unblock",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "ddx work must drain cooled beads when override is explicit: %s", out)
+	assert.Equal(t, []string{"cool-0", "cool-1", "cool-2", "cool-3", "cool-4"}, got)
 }
 
 func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {

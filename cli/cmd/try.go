@@ -93,6 +93,8 @@ Exit codes:
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("effort", "", "Effort level")
+	cmd.Flags().Bool("force-claim", false, "Ignore retry cooldown for this targeted attempt only (requires --reason)")
+	cmd.Flags().String("reason", "", "Operator reason required by --force-claim")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
@@ -137,6 +139,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
 	effort, _ := cmd.Flags().GetString("effort")
+	forceClaim, _ := cmd.Flags().GetBool("force-claim")
+	forceReason, _ := cmd.Flags().GetString("reason")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
@@ -145,8 +149,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
 
+	forceReason = strings.TrimSpace(forceReason)
 	if noReview && !noReviewAck {
 		return fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
+	}
+	if forceClaim && forceReason == "" {
+		return fmt.Errorf("--force-claim requires --reason \"<text>\"")
 	}
 
 	if f.tryExecutorOverride == nil {
@@ -180,9 +188,22 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return &ExitError{Code: tryExitFailed, Message: ""}
 	}
 
-	// Wrap the real store so that ReadyExecution() returns only the target bead.
-	// All other operations pass through to the underlying store unchanged.
-	forcedStore := &singleBeadStore{Store: store, target: *target}
+	// Restrict the ready queue view to the targeted bead. Retry cooldown is
+	// only bypassed when --force-claim is explicitly present.
+	forcedStore := &singleBeadStore{
+		Store:         store,
+		targetID:      target.ID,
+		forceCooldown: forceClaim,
+	}
+	if !forceClaim {
+		standardReady, standardErr := store.ReadyExecution()
+		if standardErr == nil && !containsBeadID(standardReady, target.ID) {
+			if forcedReady, readyErr := store.ReadyExecutionIgnoringCooldown(); readyErr == nil && containsBeadID(forcedReady, target.ID) {
+				fmt.Fprintf(cmd.ErrOrStderr(), "bead is in retry cooldown; re-run with --force-claim --reason \"<text>\": %s\n", beadID)
+				return &ExitError{Code: tryExitFailed, Message: ""}
+			}
+		}
+	}
 
 	// Set up progress logging (same as runAgentExecuteLoopImpl).
 	loopSessionID := fmt.Sprintf("agent-loop-%d", time.Now().UnixNano())
@@ -464,19 +485,21 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		})
 	}
 	result, runErr := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                  executeloop.ModeOnce,
-		Log:                   cmd.OutOrStdout(),
-		EventSink:             loopSink,
-		WorkerID:              resolveClaimAssignee(),
-		ProjectRoot:           projectRoot,
-		ResourceChecker:       resourceChecker,
-		SessionID:             loopSessionID,
-		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreDispatchLintHook:   lintHook,
-		PostAttemptTriageHook: triageHook,
-		ProseEvidenceHook:     proseHook,
-		FinalizeDurableAudit:  f.buildAttemptAuditFinalizer(projectRoot, store),
-		NoReview:              noReview,
+		Mode:                   executeloop.ModeOnce,
+		IgnoreCooldown:         forceClaim,
+		CooldownOverrideReason: forceReason,
+		Log:                    cmd.OutOrStdout(),
+		EventSink:              loopSink,
+		WorkerID:               resolveClaimAssignee(),
+		ProjectRoot:            projectRoot,
+		ResourceChecker:        resourceChecker,
+		SessionID:              loopSessionID,
+		PreClaimHook:           buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreDispatchLintHook:    lintHook,
+		PostAttemptTriageHook:  triageHook,
+		ProseEvidenceHook:      proseHook,
+		FinalizeDurableAudit:   f.buildAttemptAuditFinalizer(projectRoot, store),
+		NoReview:               noReview,
 	})
 	if runErr != nil {
 		if (errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded)) && result != nil && len(result.Results) > 0 {
@@ -590,17 +613,4 @@ func unmetDeps(store *bead.Store, b *bead.Bead) []string {
 		}
 	}
 	return unmet
-}
-
-// singleBeadStore wraps a *bead.Store and overrides ReadyExecution to return
-// only a single target bead. All other operations are delegated unchanged.
-// This allows the execute-bead worker to treat the forced bead as if it were
-// the only entry in the execution-ready queue.
-type singleBeadStore struct {
-	*bead.Store
-	target bead.Bead
-}
-
-func (s *singleBeadStore) ReadyExecution() ([]bead.Bead, error) {
-	return []bead.Bead{s.target}, nil
 }

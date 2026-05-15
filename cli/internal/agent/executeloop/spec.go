@@ -80,9 +80,11 @@ type ExecuteLoopSpec struct {
 	// and no execution-ready work is found.
 	IdleInterval Duration `json:"idle_interval,omitempty"`
 
-	NoReview      bool   `json:"no_review,omitempty"`
-	ReviewHarness string `json:"review_harness,omitempty"`
-	ReviewModel   string `json:"review_model,omitempty"`
+	NoReview               bool   `json:"no_review,omitempty"`
+	ReviewHarness          string `json:"review_harness,omitempty"`
+	ReviewModel            string `json:"review_model,omitempty"`
+	IgnoreCooldown         bool   `json:"ignore_cooldown,omitempty"`
+	CooldownOverrideReason string `json:"cooldown_override_reason,omitempty"`
 
 	// OpaquePassthrough skips DDx-side route validation and config
 	// harness/model injection (CONTRACT-003 / FEAT-010).

@@ -80,6 +80,8 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx work does not validate)")
 	cmd.Flags().String("effort", "", "Effort level")
+	cmd.Flags().Bool("ignore-cooldown", false, "Ignore retry cooldown across this worker session (requires --reason)")
+	cmd.Flags().String("reason", "", "Operator reason required by --ignore-cooldown")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")
 	cmd.Flags().Duration("idle-interval", 30*time.Second, "Sleep duration between empty-queue scans in watch mode")
