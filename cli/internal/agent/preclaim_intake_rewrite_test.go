@@ -517,6 +517,22 @@ func TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema(t *testing.T) {
 	assert.NotContains(t, lower, "reasoning")
 }
 
+func TestPreClaimReadinessPromptSpecifiesOutputShapes(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	prompt, err := buildPreClaimIntakePrompt(root, store, b)
+	require.NoError(t, err)
+
+	lower := strings.ToLower(prompt)
+	assert.Contains(t, lower, "suggested_child_beads must be a json array of objects")
+	assert.Contains(t, lower, "prefer a json string array of numbered criteria")
+	assert.Contains(t, lower, "decoder tolerates a single string fallback")
+	assert.Contains(t, lower, "waivers_applied must be a json array")
+	assert.Contains(t, lower, "prefer waiver objects with reason, criteria, and evidence")
+	assert.Contains(t, lower, "decoder tolerates a flat string list fallback")
+}
+
 func TestBuildPreClaimIntakePrompt_ForbidsScalarReadinessChecks(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)

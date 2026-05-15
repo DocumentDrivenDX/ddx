@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -180,6 +181,72 @@ func TestPreClaimReadiness_AcceptsStringSuggestedFixes(t *testing.T) {
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Empty(t, got.SystemReason)
 	assert.Contains(t, got.Detail, "prompt polish only")
+}
+
+func TestPreClaimReadiness_DecodesWaiversAppliedStringList(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"waivers_applied":["none"]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	require.Len(t, out.WaiversApplied, 1)
+	assert.Equal(t, "none", out.WaiversApplied[0].Reason)
+	assert.Empty(t, out.WaiversApplied[0].Criteria)
+	assert.Empty(t, out.WaiversApplied[0].Evidence)
+
+	got, err := decodePreClaimIntakePayloadResult(payload)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
+}
+
+func TestPreClaimReadiness_DecodesWaiversAppliedObjectList(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"waivers_applied":[{"reason":"doc-only","criteria":["docs-only"],"evidence":"docs-only bead"}]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	require.Len(t, out.WaiversApplied, 1)
+	assert.Equal(t, "doc-only", out.WaiversApplied[0].Reason)
+	assert.Equal(t, []string{"docs-only"}, out.WaiversApplied[0].Criteria)
+	assert.Equal(t, "docs-only bead", out.WaiversApplied[0].Evidence)
+
+	got, err := decodePreClaimIntakePayloadResult(payload)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
+}
+
+func TestPreClaimReadiness_DecodesSuggestedChildAcceptanceString(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"suggested_child_beads":[{"title":"Split docs","acceptance":"1. TestFoo passes\n2. cd cli && go test ./internal/agent/... green"}]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	require.Len(t, out.SuggestedChildren, 1)
+	assert.Equal(t, []string{
+		"1. TestFoo passes",
+		"2. cd cli && go test ./internal/agent/... green",
+	}, out.SuggestedChildren[0].Acceptance)
+
+	got, err := decodePreClaimIntakePayloadResult(payload)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
+}
+
+func TestPreClaimReadiness_DecodesSuggestedChildAcceptanceList(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"suggested_child_beads":[{"title":"Split docs","acceptance":["1. TestFoo passes","2. cd cli && go test ./internal/agent/... green"]}]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	require.Len(t, out.SuggestedChildren, 1)
+	assert.Equal(t, []string{
+		"1. TestFoo passes",
+		"2. cd cli && go test ./internal/agent/... green",
+	}, out.SuggestedChildren[0].Acceptance)
+
+	got, err := decodePreClaimIntakePayloadResult(payload)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
 }
 
 func TestPreClaimReadiness_NormalizesSingletonReadinessChecksObject(t *testing.T) {

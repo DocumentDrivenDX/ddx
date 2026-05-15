@@ -68,7 +68,7 @@ type preClaimReadinessClassificationPromptResult struct {
 	ReadinessChecks   preClaimReadinessChecksPayload         `json:"readiness_checks,omitempty"`
 	SuggestedFixes    preClaimReadinessSuggestedFixesPayload `json:"suggested_fixes,omitempty"`
 	SuggestedChildren []preClaimReadinessSuggestedChild      `json:"suggested_child_beads,omitempty"`
-	WaiversApplied    []preClaimReadinessWaiver              `json:"waivers_applied,omitempty"`
+	WaiversApplied    preClaimReadinessWaiversPayload        `json:"waivers_applied,omitempty"`
 	Rewrite           preClaimIntakePromptRewrite            `json:"rewrite,omitempty"`
 }
 
@@ -145,6 +145,47 @@ func (p *preClaimReadinessSuggestedFixesPayload) UnmarshalJSON(data []byte) erro
 	return nil
 }
 
+func normalizeReadinessStringList(items []string) []string {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		out = append(out, item)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func decodeReadinessAcceptanceList(data []byte, fieldName string) ([]string, error) {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
+	switch trimmed[0] {
+	case '[':
+		var items []string
+		if err := json.Unmarshal(data, &items); err != nil {
+			return nil, err
+		}
+		return normalizeReadinessStringList(items), nil
+	case '"':
+		var item string
+		if err := json.Unmarshal(data, &item); err != nil {
+			return nil, err
+		}
+		return normalizeReadinessStringList(strings.Split(item, "\n")), nil
+	default:
+		return nil, fmt.Errorf("%s must be a string or string array", fieldName)
+	}
+}
+
 type preClaimReadinessSuggestedChild struct {
 	Title       string   `json:"title,omitempty"`
 	Description string   `json:"description,omitempty"`
@@ -154,10 +195,83 @@ type preClaimReadinessSuggestedChild struct {
 	Deps        []string `json:"deps,omitempty"`
 }
 
+func (c *preClaimReadinessSuggestedChild) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Title       string          `json:"title,omitempty"`
+		Description string          `json:"description,omitempty"`
+		Acceptance  json.RawMessage `json:"acceptance,omitempty"`
+		Labels      []string        `json:"labels,omitempty"`
+		Parent      string          `json:"parent,omitempty"`
+		Deps        []string        `json:"deps,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	acceptance, err := decodeReadinessAcceptanceList(raw.Acceptance, "suggested_child_beads[].acceptance")
+	if err != nil {
+		return err
+	}
+	c.Title = raw.Title
+	c.Description = raw.Description
+	c.Acceptance = acceptance
+	c.Labels = raw.Labels
+	c.Parent = raw.Parent
+	c.Deps = raw.Deps
+	return nil
+}
+
 type preClaimReadinessWaiver struct {
 	Reason   string   `json:"reason,omitempty"`
 	Criteria []string `json:"criteria,omitempty"`
 	Evidence string   `json:"evidence,omitempty"`
+}
+
+type preClaimReadinessWaiversPayload []preClaimReadinessWaiver
+
+func (p *preClaimReadinessWaiversPayload) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil
+	}
+	if trimmed[0] != '[' {
+		return fmt.Errorf("waivers_applied must be a JSON array")
+	}
+	var raw []json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	waivers := make([]preClaimReadinessWaiver, 0, len(raw))
+	for _, item := range raw {
+		itemTrimmed := strings.TrimSpace(string(item))
+		if itemTrimmed == "" || itemTrimmed == "null" {
+			continue
+		}
+		switch itemTrimmed[0] {
+		case '"':
+			var reason string
+			if err := json.Unmarshal(item, &reason); err != nil {
+				return err
+			}
+			reason = strings.TrimSpace(reason)
+			if reason == "" {
+				continue
+			}
+			waivers = append(waivers, preClaimReadinessWaiver{Reason: reason})
+		case '{':
+			var waiver preClaimReadinessWaiver
+			if err := json.Unmarshal(item, &waiver); err != nil {
+				return err
+			}
+			waiver.Reason = strings.TrimSpace(waiver.Reason)
+			waiver.Criteria = normalizeReadinessStringList(waiver.Criteria)
+			waiver.Evidence = strings.TrimSpace(waiver.Evidence)
+			waivers = append(waivers, waiver)
+		default:
+			return fmt.Errorf("waivers_applied entries must be strings or objects")
+		}
+	}
+	*p = waivers
+	return nil
 }
 
 type preClaimReadinessChecksPayload struct {
@@ -424,6 +538,8 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, difficulty, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
 	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")
+	sb.WriteString("suggested_child_beads MUST be a JSON array of objects. When a child includes acceptance, prefer a JSON string array of numbered criteria; the decoder tolerates a single string fallback, but do not rely on it.\n")
+	sb.WriteString("waivers_applied MUST be a JSON array. Prefer waiver objects with reason, criteria, and evidence; the decoder tolerates a flat string list fallback, but do not rely on it.\n")
 	sb.WriteString("difficulty MUST be an object with estimated_difficulty and reason. estimated_difficulty MUST be exactly one of easy, medium, or hard.\n")
 	sb.WriteString("Use medium as the default implementation difficulty when uncertain or when the task is ordinary build/test/code work; medium maps to standard dispatch.\n")
 	sb.WriteString("Use easy only for work suitable for cheap dispatch: narrow mechanical edits such as typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius.\n")
