@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/sha1"
 	"encoding/hex"
+	"encoding/json"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 )
@@ -22,7 +25,9 @@ func Path(ctx context.Context, projectRoot string) string {
 	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
 		return inTree
 	}
-	return filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
+	root := filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
+	_ = bootstrapConventionRoot(ctx, projectRoot, root)
+	return root
 }
 
 func projectsRoot() string {
@@ -129,4 +134,236 @@ func localProjectIdentity(projectRoot string) string {
 func shortPathHash(path string) string {
 	sum := sha1.Sum([]byte(path))
 	return hex.EncodeToString(sum[:])[:8]
+}
+
+const bootstrapCommitMessage = "chore: bootstrap ddx state"
+
+var bootstrapLockStaleAge = 2 * time.Minute
+
+type worktreeRegistry struct {
+	Paths  []worktreeRegistryEntry `json:"paths"`
+	Master string                  `json:"master"`
+}
+
+type worktreeRegistryEntry struct {
+	Path        string `json:"path"`
+	FirstSeenAt string `json:"first_seen_at"`
+	LastSeenAt  string `json:"last_seen_at"`
+	Hostname    string `json:"hostname"`
+}
+
+func bootstrapConventionRoot(ctx context.Context, projectRoot, root string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return withBootstrapLock(root, func() error {
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			return err
+		}
+		if err := ensureGitRepo(ctx, root); err != nil {
+			return err
+		}
+		changed, err := ensureWorktreeRegistry(projectRoot, root)
+		if err != nil {
+			return err
+		}
+		if err := ensureHeadCommit(ctx, root, changed); err != nil {
+			return err
+		}
+		return nil
+	})
+}
+
+func withBootstrapLock(root string, fn func() error) error {
+	lockDir := root + ".bootstrap.lock"
+	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
+		return err
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		err := os.Mkdir(lockDir, 0o755)
+		if err == nil {
+			_ = os.WriteFile(filepath.Join(lockDir, "pid"), []byte(strconv.Itoa(os.Getpid())), 0o644)
+			_ = os.WriteFile(filepath.Join(lockDir, "acquired_at"), []byte(time.Now().UTC().Format(time.RFC3339Nano)), 0o644)
+			defer os.RemoveAll(lockDir)
+			return fn()
+		}
+		if breakStaleBootstrapLock(lockDir) {
+			continue
+		}
+		if time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func breakStaleBootstrapLock(lockDir string) bool {
+	acquiredAt, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
+	if err == nil {
+		if ts, parseErr := time.Parse(time.RFC3339Nano, strings.TrimSpace(string(acquiredAt))); parseErr == nil && time.Since(ts) > bootstrapLockStaleAge {
+			_ = os.RemoveAll(lockDir)
+			return true
+		}
+	}
+	return false
+}
+
+func ensureGitRepo(ctx context.Context, root string) error {
+	if out, err := gitpkg.Command(ctx, root, "rev-parse", "--git-dir").CombinedOutput(); err == nil {
+		_ = out
+		return nil
+	}
+	out, err := gitpkg.Command(ctx, root, "init").CombinedOutput()
+	if err != nil {
+		return newGitError("git init", out, err)
+	}
+	return nil
+}
+
+func ensureWorktreeRegistry(projectRoot, root string) (bool, error) {
+	worktreePath, err := canonicalWorktreePath(projectRoot)
+	if err != nil {
+		return false, err
+	}
+
+	registryPath := filepath.Join(root, "worktrees.json")
+	registry, err := readWorktreeRegistry(registryPath)
+	if err != nil {
+		return false, err
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	hostname, err := os.Hostname()
+	if err != nil || strings.TrimSpace(hostname) == "" {
+		hostname = "unknown"
+	}
+
+	changed := false
+	found := false
+	for i := range registry.Paths {
+		if registry.Paths[i].Path != worktreePath {
+			continue
+		}
+		found = true
+		if registry.Paths[i].FirstSeenAt == "" {
+			registry.Paths[i].FirstSeenAt = now
+			changed = true
+		}
+		if registry.Paths[i].LastSeenAt == "" {
+			registry.Paths[i].LastSeenAt = registry.Paths[i].FirstSeenAt
+			changed = true
+		}
+		if registry.Paths[i].Hostname == "" {
+			registry.Paths[i].Hostname = hostname
+			changed = true
+		}
+		break
+	}
+	if !found {
+		registry.Paths = append(registry.Paths, worktreeRegistryEntry{
+			Path:        worktreePath,
+			FirstSeenAt: now,
+			LastSeenAt:  now,
+			Hostname:    hostname,
+		})
+		changed = true
+	}
+	if registry.Master == "" {
+		registry.Master = worktreePath
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	return true, writeWorktreeRegistry(registryPath, registry)
+}
+
+func canonicalWorktreePath(projectRoot string) (string, error) {
+	abs, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(abs), nil
+}
+
+func readWorktreeRegistry(path string) (worktreeRegistry, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return worktreeRegistry{}, nil
+		}
+		return worktreeRegistry{}, err
+	}
+	if len(data) == 0 {
+		return worktreeRegistry{}, nil
+	}
+	var registry worktreeRegistry
+	if err := json.Unmarshal(data, &registry); err != nil {
+		return worktreeRegistry{}, err
+	}
+	return registry, nil
+}
+
+func writeWorktreeRegistry(path string, registry worktreeRegistry) error {
+	data, err := json.MarshalIndent(registry, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func ensureHeadCommit(ctx context.Context, root string, stageRegistry bool) error {
+	if headExists(ctx, root) {
+		return nil
+	}
+	if stageRegistry {
+		out, err := gitpkg.Command(ctx, root, "add", "worktrees.json").CombinedOutput()
+		if err != nil {
+			return newGitError("git add worktrees.json", out, err)
+		}
+	}
+	out, err := gitpkg.Command(
+		ctx,
+		root,
+		"-c", "user.name=DDx Bootstrap",
+		"-c", "user.email=ddx-bootstrap@localhost",
+		"-c", "commit.gpgsign=false",
+		"commit", "--allow-empty", "-m", bootstrapCommitMessage,
+	).CombinedOutput()
+	if err != nil {
+		return newGitError("git commit", out, err)
+	}
+	return nil
+}
+
+func headExists(ctx context.Context, root string) bool {
+	return gitpkg.Command(ctx, root, "rev-parse", "--verify", "HEAD^{commit}").Run() == nil
+}
+
+func newGitError(op string, out []byte, err error) error {
+	msg := strings.TrimSpace(string(out))
+	if msg == "" {
+		return err
+	}
+	return &gitOperationError{op: op, msg: msg, err: err}
+}
+
+type gitOperationError struct {
+	op  string
+	msg string
+	err error
+}
+
+func (e *gitOperationError) Error() string {
+	return e.op + ": " + e.msg
+}
+
+func (e *gitOperationError) Unwrap() error {
+	return e.err
 }
