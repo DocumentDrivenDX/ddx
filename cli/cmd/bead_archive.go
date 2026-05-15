@@ -88,7 +88,7 @@ duplicate that an interrupted run could leave behind.`,
 			}
 
 			if stats.Changed() {
-				if _, err := f.beadAutoCommit(fmt.Sprintf("archive: externalize=%d archive=%d", stats.EventsExternalized, stats.Archived)); err != nil {
+				if _, err := f.beadExternalizeArchiveAutoCommit(stats); err != nil {
 					return err
 				}
 			}

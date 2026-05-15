@@ -14,6 +14,11 @@ type MigrateStats struct {
 	// EventsExternalized is the number of beads whose inline events were
 	// moved to the .ddx/attachments/<id>/events.jsonl sidecar.
 	EventsExternalized int
+	// EventRecordsExternalized is the total number of individual event rows
+	// moved out of inline bead storage and into attachment sidecars.
+	EventRecordsExternalized int
+	// AttachmentsTouched is the number of per-bead attachment files written.
+	AttachmentsTouched int
 	// Archived is the number of closed beads moved from the active
 	// collection to beads-archive.
 	Archived int
@@ -529,6 +534,8 @@ func (s *Store) MigrateDryRun() (MigrateStats, error) {
 		}
 		if hasInlineEvents(&b) {
 			stats.EventsExternalized++
+			stats.EventRecordsExternalized += inlineEventCount(&b)
+			stats.AttachmentsTouched++
 		}
 		if referenced[b.ID] {
 			continue
@@ -582,10 +589,12 @@ func (s *Store) ArchiveWithEvents(policy ArchivePolicy) (MigrateStats, error) {
 			if !hasInlineEvents(&beads[i]) {
 				continue
 			}
+			stats.EventsExternalized++
+			stats.EventRecordsExternalized += inlineEventCount(&beads[i])
+			stats.AttachmentsTouched++
 			if eerr := s.externalizeEventsInPlace(&beads[i]); eerr != nil {
 				return eerr
 			}
-			stats.EventsExternalized++
 			dirty = true
 		}
 		if !dirty {
@@ -695,4 +704,15 @@ func hasInlineEvents(b *Bead) bool {
 		return false
 	}
 	return len(decodeBeadEvents(raw)) > 0
+}
+
+func inlineEventCount(b *Bead) int {
+	if b == nil || b.Extra == nil {
+		return 0
+	}
+	raw, ok := b.Extra["events"]
+	if !ok {
+		return 0
+	}
+	return len(decodeBeadEvents(raw))
 }

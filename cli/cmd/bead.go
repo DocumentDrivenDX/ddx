@@ -69,6 +69,7 @@ Examples:
 	cmd.AddCommand(f.newBeadCooldownCommand())
 	cmd.AddCommand(f.newBeadClearCooldownCommand())
 	cmd.AddCommand(f.newBeadReconcileCommand())
+	cmd.AddCommand(f.newBeadReconcileAttachmentsCommand())
 	cmd.AddCommand(f.newBeadMigrateCommand())
 	cmd.AddCommand(f.newBeadArchiveCommand())
 	cmd.AddCommand(f.newBeadAcCheckCommand())
@@ -93,6 +94,32 @@ func (f *CommandFactory) beadAutoCommitPaths(operation string, paths []string) (
 
 func (f *CommandFactory) beadAutoCommitIncludingStaged(operation string) (string, error) {
 	return f.beadAutoCommitWithMode(operation, true)
+}
+
+func (f *CommandFactory) beadExternalizeArchiveAutoCommit(stats bead.MigrateStats) (string, error) {
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		workspaceRoot = f.WorkingDir
+	}
+	stateRoot := ddxroot.JoinProject(workspaceRoot)
+	activeFile := filepath.Join(stateRoot, "beads.jsonl")
+	archiveFile, _ := bead.DefaultRegistry().Resolve(bead.BeadsArchiveCollection).PathsUnder(stateRoot)
+
+	paths := []string{activeFile}
+	if stats.Archived > 0 {
+		paths = append(paths, archiveFile)
+	}
+	if stats.AttachmentsTouched > 0 {
+		paths = append(paths, filepath.Join(stateRoot, "attachments"))
+	}
+
+	operation := fmt.Sprintf(
+		"externalize and archive (%d events to %d attachments, %d beads archived)",
+		stats.EventRecordsExternalized,
+		stats.AttachmentsTouched,
+		stats.Archived,
+	)
+	return f.beadAutoCommitPaths(operation, paths)
 }
 
 func (f *CommandFactory) beadAutoCommitWithMode(operation string, includeStaged bool) (string, error) {

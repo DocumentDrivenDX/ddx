@@ -139,7 +139,7 @@ the migration via 'ddx bead export | diff'.`,
 				}
 				ext, arch = st.EventsExternalized, st.Archived
 				if st.Changed() {
-					if _, err := f.beadAutoCommit(fmt.Sprintf("migrate: externalize=%d archive=%d", ext, arch)); err != nil {
+					if _, err := f.beadExternalizeArchiveAutoCommit(st); err != nil {
 						return err
 					}
 				}
