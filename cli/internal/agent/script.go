@@ -227,7 +227,7 @@ func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 			shell := expand(strings.Join(args, " "))
 			cmd := exec.Command("sh", "-c", shell)
 			cmd.Dir = workDir
-			cmd.Env = scrubbedGitEnvScript()
+			cmd.Env = envWithOverrides(scrubbedGitEnvScript(), opts.Env)
 			out, err := cmd.CombinedOutput()
 			outputLines = append(outputLines, strings.TrimRight(string(out), "\n"))
 			if err != nil {
@@ -241,7 +241,7 @@ func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 				goto done
 			}
 			msg := expand(strings.Join(args, " "))
-			if err := gitCommitAll(workDir, msg); err != nil {
+			if err := gitCommitAll(workDir, msg, opts.Env); err != nil {
 				execErr = fmt.Errorf("script harness: commit: %w", err)
 				goto done
 			}
@@ -332,12 +332,13 @@ func resolvePath(workDir, path string) (string, error) {
 }
 
 // gitCommitAll runs git add -A && git commit -m msg in dir with scrubbed GIT_* env.
-func gitCommitAll(dir, msg string) error {
+func gitCommitAll(dir, msg string, extraEnv map[string]string) error {
 	for _, args := range [][]string{
 		{"add", "-A"},
 		{"commit", "-m", msg},
 	} {
 		cmd := internalgit.Command(context.Background(), dir, args...)
+		cmd.Env = envWithOverrides(cmd.Env, extraEnv)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("git %v: %w\n%s", args, err, out)
 		}
@@ -347,15 +348,7 @@ func gitCommitAll(dir, msg string) error {
 
 // scrubbedGitEnvScript returns the environment with all GIT_* variables removed.
 func scrubbedGitEnvScript() []string {
-	parent := os.Environ()
-	env := make([]string, 0, len(parent))
-	for _, kv := range parent {
-		if strings.HasPrefix(kv, "GIT_") {
-			continue
-		}
-		env = append(env, kv)
-	}
-	return env
+	return internalgit.CleanEnv()
 }
 
 // isReadableFile returns true if path points to a regular, readable file.

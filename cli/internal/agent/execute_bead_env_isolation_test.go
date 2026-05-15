@@ -191,3 +191,65 @@ func TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched(t *testi
 		t.Fatalf("bare repo config bytes mutated\n  path: %s\n  contents now:\n%s", cfgPath, string(raw))
 	}
 }
+
+func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	runGitInteg(t, projectRoot, "config", "extensions.worktreeConfig", "true")
+
+	directivePath := filepath.Join(t.TempDir(), "mutate-git-config.txt")
+	writeDirectiveFile(t, directivePath, []string{
+		"run git config --local core.bare true",
+		"run git config --local user.email fixture@ddx.test",
+		"run git config --local user.name DDxFixture",
+		"run git config --local core.worktree $PWD/redirected-worktree",
+		"run wt_gitdir=$(sed -n 's/^gitdir: //p' .git); GIT_DIR=\"$wt_gitdir\" GIT_WORK_TREE=\"$PWD\" GIT_INDEX_FILE=\"$wt_gitdir/index\" git config --local user.email nested@ddx.test",
+		"set-exit 0",
+	})
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
+		Model: directivePath,
+	}).Resolve(config.CLIOverrides{Harness: "script"})
+
+	gitOps := &RealGitOps{}
+	orchGitOps := &RealOrchestratorGitOps{}
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{}, gitOps)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	landing, lerr := LandBeadResult(projectRoot, res, orchGitOps, BeadLandingOptions{NoMerge: true})
+	require.NoError(t, lerr)
+	require.NotNil(t, landing)
+
+	_, statusErr := runGitIntegOutput(projectRoot, "status", "--short")
+	require.NoError(t, statusErr, "primary checkout must remain a valid worktree after execute-bead contamination attempt")
+
+	bareOut, bareErr := runGitIntegOutput(projectRoot, "config", "--local", "--get", "core.bare")
+	if bareErr == nil && strings.TrimSpace(bareOut) == "true" {
+		t.Fatalf("primary checkout leaked core.bare=true")
+	}
+
+	worktreeOut, worktreeErr := runGitIntegOutput(projectRoot, "config", "--local", "--get", "core.worktree")
+	require.Error(t, worktreeErr, "primary checkout must not retain core.worktree")
+	require.Empty(t, strings.TrimSpace(worktreeOut))
+
+	configPaths := []string{
+		filepath.Join(projectRoot, ".git", "config"),
+		filepath.Join(projectRoot, ".git", "config.worktree"),
+	}
+	for _, path := range configPaths {
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			if os.IsNotExist(readErr) {
+				continue
+			}
+			t.Fatalf("read primary git config %s: %v", path, readErr)
+		}
+		text := string(data)
+		for _, banned := range []string{"fixture@ddx.test", "nested@ddx.test", "DDxFixture"} {
+			if strings.Contains(text, banned) {
+				t.Fatalf("primary git config leaked %q into %s:\n%s", banned, path, text)
+			}
+		}
+	}
+}

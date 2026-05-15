@@ -827,7 +827,7 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 		ignoreProbe string
 	}{
 		{
-			pathspec:    ":(exclude).ddx/executions/*/embedded",
+			pathspec:    ":(exclude).ddx/executions/*/embedded/**",
 			ignoreProbe: ".ddx/executions/.ddx-check-ignore/embedded",
 		},
 		{
@@ -1177,11 +1177,12 @@ func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info R
 // Merge, UpdateRef, gate evaluation, preserve-ref management, and orphan
 // recovery are the parent's responsibility (see LandBeadResult, RecoverOrphans).
 //
-// Agent dispatch: production callers leave runtime.Service and runtime.AgentRunner
-// nil. ExecuteBeadWithConfig constructs a fresh agentlib.FizeauService from
-// projectRoot via NewServiceFromWorkDir and dispatches via RunViaServiceWith.
-// Tests may set runtime.AgentRunner to inject a fake that returns canned
-// Result values; when set, it takes precedence over the service path.
+// Agent dispatch: tests may set runtime.AgentRunner to inject a fake that
+// returns canned Result values; when set, it takes precedence over the normal
+// dispatch path. Production execute-bead runs with an explicit harness use the
+// local Runner path so the worker subprocess receives the execute-bead Git
+// isolation environment (PATH wrapper + scrubbed Git-local env). Unpinned
+// routes still fall back to the service path.
 func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime, gitOps GitOps) (*ExecuteBeadResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -1351,6 +1352,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if err := os.MkdirAll(embeddedStateDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating embedded state dir: %w", err)
 	}
+	gitIsolationEnv := map[string]string{}
+	if _, statErr := os.Stat(filepath.Join(wtPath, ".git")); statErr == nil {
+		var err error
+		gitIsolationEnv, err = prepareExecuteBeadGitIsolation(projectRoot, wtPath, embeddedStateDir)
+		if err != nil {
+			return nil, fmt.Errorf("preparing execute-bead git isolation: %w", err)
+		}
+	} else if !os.IsNotExist(statErr) || runtime.AgentRunner == nil {
+		return nil, fmt.Errorf("preparing execute-bead git isolation: stat worktree .git: %w", statErr)
+	}
 
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
@@ -1375,9 +1386,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
 		Role:                  "implementer",
 		CorrelationID:         beadID + ":" + attemptID,
-		Env: map[string]string{
-			DDXModeEnvKey: DDXModeBeadExecution,
-		},
+		Env:                   gitIsolationEnv,
+	}
+	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
+
+	if runtime.AgentRunner == nil && runtime.Service == nil {
+		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" {
+			runner := NewRunner(Config{SessionLogDir: ResolveLogDir(projectRoot, "")})
+			runner.WorkDir = projectRoot
+			runtime.AgentRunner = runner
+		}
 	}
 
 	// Operator-cancel mid-attempt poll (ADR-022 §Cancel SLA). The poll
@@ -1444,6 +1462,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 		agentErrMsg = agentErr.Error()
 	}
+	sanitizeExecuteBeadWorktreeConfig(wtPath)
 
 	// Capture routing evidence from the agent result. These fields are
 	// populated by RunAgent (embedded harness) and RunScript (script harness).

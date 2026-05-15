@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"io"
-	"os"
 	"os/exec"
 	"regexp"
 	"sort"
@@ -14,6 +13,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // ExecResult holds the raw output of a command execution.
@@ -157,18 +158,7 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	if extraEnv := executionEnvFromContext(ctx); len(extraEnv) > 0 {
-		env := os.Environ()
-		keys := make([]string, 0, len(extraEnv))
-		for key := range extraEnv {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			env = append(env, key+"="+extraEnv[key])
-		}
-		cmd.Env = env
-	}
+	cmd.Env = envWithOverrides(internalgit.CleanEnv(), executionEnvFromContext(ctx))
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -332,6 +322,40 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		return result, runErr
 	}
 	return result, nil
+}
+
+func envWithOverrides(base []string, overrides map[string]string) []string {
+	if len(base) == 0 && len(overrides) == 0 {
+		return nil
+	}
+	if len(overrides) == 0 {
+		return append([]string{}, base...)
+	}
+
+	skip := make(map[string]bool, len(overrides))
+	keys := make([]string, 0, len(overrides))
+	for key := range overrides {
+		skip[key] = true
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	env := make([]string, 0, len(base)+len(overrides))
+	for _, kv := range base {
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			env = append(env, kv)
+			continue
+		}
+		if skip[kv[:eq]] {
+			continue
+		}
+		env = append(env, kv)
+	}
+	for _, key := range keys {
+		env = append(env, key+"="+overrides[key])
+	}
+	return env
 }
 
 type activityWriter struct {
