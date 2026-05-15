@@ -19,6 +19,7 @@ import (
 var initGitignoreRules = []string{
 	// DDx runtime scratch — ignored
 	".ddx/agent-logs/",
+	".ddx/attachments/",
 	".ddx/workers/",
 	".ddx/exec-runs.d/",
 	".ddx/.execute-bead-wt-*/",
