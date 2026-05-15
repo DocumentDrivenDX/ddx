@@ -480,6 +480,62 @@ func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }
 
+func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = map[string]any{}
+		}
+		b.Extra[escalation.BeadEstimatedDifficultyKey] = string(escalation.DifficultyHard)
+	}))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				AttemptID:          "20260515T185832-loop",
+				Status:             ExecuteBeadStatusSuccess,
+				Detail:             "merged cleanly",
+				SessionID:          "sess-1",
+				ResultRev:          "deadbeef",
+				RequestedProfile:   "default",
+				InferredPowerClass: "smart",
+				Harness:            "claude",
+				Provider:           "anthropic",
+				Model:              "claude-sonnet-4-6",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var intent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "execution-routing-intent" {
+			intent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, intent, "execution-routing-intent event must be recorded")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(intent.Body), &body))
+	assert.Equal(t, "hard", body["estimated_difficulty"])
+	assert.Equal(t, "smart", body["requested_power_class"])
+	assert.Equal(t, "default", body["requested_profile"])
+	assert.NotContains(t, body, "smart_justification")
+	assert.Contains(t, intent.Summary, "difficulty=hard")
+	assert.Contains(t, intent.Summary, "powerClass=smart")
+}
+
 func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	require.NoError(t, store.Update(second.ID, func(b *bead.Bead) {

@@ -1,5 +1,6 @@
 // Package agentmetrics loads attempt outcomes for Story 11 aggregations
-// (success rate, cost, duration per harness/provider/model/powerClass).
+// (success rate, cost, duration per harness/provider/model/powerClass, plus
+// routing-intent rollups by estimated difficulty).
 //
 // Source priority is FEAT-010 run-store first (.ddx/exec/runs/*.json) with
 // .ddx/executions/*/result.json as the legacy fallback. Per-attempt records
@@ -42,8 +43,8 @@ type Attempt struct {
 	OutputTokens          int       `json:"output_tokens,omitempty"`
 	Source                string    `json:"source,omitempty"`
 	RoutingIntentSource   string    `json:"routing_intent_source,omitempty"`
-	InferredPowerClass    string    `json:"inferred_power_class,omitempty"`
-	SmartJustification    string    `json:"smart_justification,omitempty"`
+	EstimatedDifficulty   string    `json:"estimated_difficulty,omitempty"`
+	RequestedPowerClass   string    `json:"requested_power_class,omitempty"`
 	RejectedRoutePinCount int       `json:"rejected_route_pin_count,omitempty"`
 	RoutingIntentDegraded bool      `json:"routing_intent_degraded,omitempty"`
 	RoutingIntentNote     string    `json:"routing_intent_note,omitempty"`

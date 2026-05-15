@@ -2272,7 +2272,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				continue
 			}
-			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC(), readFailedRoutes(candidate.Extra))
+			appendLoopRoutingEvidence(w.Store, candidate, report, now().UTC(), readFailedRoutes(candidate.Extra))
 			// Story 15: when an operator-prompt bead succeeds, scan
 			// base..result for affected beads and artifacts, and append
 			// origin_operator_prompt_id back-link events. Failure is
@@ -3119,8 +3119,8 @@ func hasResultForBead(results []ExecuteBeadReport, beadID string) bool {
 // records which earlier provider/model tuples were excluded before this
 // successful (or current) route was selected. Pass nil when there is no prior
 // route-failure evidence on the bead.
-func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report ExecuteBeadReport, createdAt time.Time, failedRoutes []FailedRouteEntry) {
-	if store == nil || beadID == "" {
+func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report ExecuteBeadReport, createdAt time.Time, failedRoutes []FailedRouteEntry) {
+	if store == nil || target.ID == "" {
 		return
 	}
 	provider := report.Provider
@@ -3139,16 +3139,22 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 			"reason":       e.Reason,
 		})
 	}
+	intent := escalation.ParseExecutionHint(&target)
+	requestedPowerClass := string(intent.InferredPowerClass)
+	if report.InferredPowerClass != "" {
+		requestedPowerClass = report.InferredPowerClass
+	}
 	body, err := json.Marshal(map[string]any{
-		"resolved_provider":    provider,
-		"resolved_model":       report.Model,
-		"fallback_chain":       chain,
-		"requested_profile":    report.RequestedProfile,
-		"inferred_power_class": report.InferredPowerClass,
-		"routing_intent_note":  report.RoutingIntentNote,
-		"resolved_power_class": report.ResolvedPowerClass,
-		"escalation_count":     report.EscalationCount,
-		"final_power_class":    report.FinalPowerClass,
+		"resolved_provider":     provider,
+		"resolved_model":        report.Model,
+		"fallback_chain":        chain,
+		"estimated_difficulty":  string(intent.EstimatedDifficulty),
+		"requested_profile":     report.RequestedProfile,
+		"requested_power_class": requestedPowerClass,
+		"routing_intent_note":   report.RoutingIntentNote,
+		"resolved_power_class":  report.ResolvedPowerClass,
+		"escalation_count":      report.EscalationCount,
+		"final_power_class":     report.FinalPowerClass,
 	})
 	if err != nil {
 		return
@@ -3157,7 +3163,7 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 	if report.Model != "" {
 		summary += " model=" + report.Model
 	}
-	_ = store.AppendEvent(beadID, bead.BeadEvent{
+	_ = store.AppendEvent(target.ID, bead.BeadEvent{
 		Kind:      "routing",
 		Summary:   summary,
 		Body:      string(body),
@@ -3172,16 +3178,16 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		return
 	}
 	intent := escalation.ParseExecutionHint(&target)
-	inferredPolicy := string(intent.InferredPowerClass)
+	requestedPowerClass := string(intent.InferredPowerClass)
 	if report.InferredPowerClass != "" {
-		inferredPolicy = report.InferredPowerClass
+		requestedPowerClass = report.InferredPowerClass
 	}
 	body := map[string]any{
 		"bead_id":                 target.ID,
 		"attempt_id":              report.AttemptID,
 		"routing_intent_source":   string(intent.Source),
 		"estimated_difficulty":    string(intent.EstimatedDifficulty),
-		"inferred_power_class":    inferredPolicy,
+		"requested_power_class":   requestedPowerClass,
 		"requested_profile":       report.RequestedProfile,
 		"actual_harness":          report.Harness,
 		"actual_provider":         report.Provider,
@@ -3211,7 +3217,11 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if err != nil {
 		return
 	}
-	summary := fmt.Sprintf("source=%s powerClass=%s", intent.Source, inferredPolicy)
+	summary := fmt.Sprintf("source=%s", intent.Source)
+	if intent.EstimatedDifficulty != "" {
+		summary += fmt.Sprintf(" difficulty=%s", intent.EstimatedDifficulty)
+	}
+	summary += fmt.Sprintf(" powerClass=%s", requestedPowerClass)
 	if report.Model != "" {
 		summary += " model=" + report.Model
 	}

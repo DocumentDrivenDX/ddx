@@ -10,6 +10,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -143,9 +144,48 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	assert.True(t, found, "routing evidence must be recorded even on task_succeeded path")
 }
 
+func TestExecutionRoutingIntentRecordsEstimatedDifficulty(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	target := bead.Bead{
+		ID: "ddx-0001",
+		Extra: map[string]any{
+			escalation.BeadEstimatedDifficultyKey: string(escalation.DifficultyHard),
+		},
+	}
+	appendExecutionRoutingIntentEvidence(app, target, ExecuteBeadReport{
+		AttemptID:          "20260515T185832-test",
+		Harness:            "claude",
+		Provider:           "anthropic",
+		Model:              "claude-sonnet-4-6",
+		RequestedProfile:   "default",
+		InferredPowerClass: "smart",
+		RoutingIntentNote:  "actual route facts unavailable",
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
+
+	require.Len(t, app.events, 1)
+	assert.Equal(t, "ddx-0001", app.events[0].BeadID)
+	assert.Equal(t, "execution-routing-intent", app.events[0].Event.Kind)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
+	assert.Equal(t, "bead_hint", body["routing_intent_source"])
+	assert.Equal(t, "hard", body["estimated_difficulty"])
+	assert.Equal(t, "smart", body["requested_power_class"])
+	assert.Equal(t, "default", body["requested_profile"])
+	assert.NotContains(t, body, "smart_justification")
+	assert.Contains(t, app.events[0].Event.Summary, "difficulty=hard")
+	assert.Contains(t, app.events[0].Event.Summary, "powerClass=smart")
+}
+
 func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 	app := &stubBeadEventAppender{}
-	appendLoopRoutingEvidence(app, "ddx-0001", ExecuteBeadReport{
+	target := bead.Bead{
+		ID: "ddx-0001",
+		Extra: map[string]any{
+			escalation.BeadEstimatedDifficultyKey: string(escalation.DifficultyEasy),
+		},
+	}
+	appendLoopRoutingEvidence(app, target, ExecuteBeadReport{
 		Provider:           "openai",
 		Model:              "gpt-5.4",
 		RequestedProfile:   "default",
@@ -161,8 +201,9 @@ func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
+	assert.Equal(t, "easy", body["estimated_difficulty"])
 	assert.Equal(t, "default", body["requested_profile"])
-	assert.Equal(t, "cheap", body["inferred_power_class"])
+	assert.Equal(t, "cheap", body["requested_power_class"])
 	assert.Equal(t, "standard", body["resolved_power_class"])
 	assert.Equal(t, float64(1), body["escalation_count"])
 	assert.Equal(t, "standard", body["final_power_class"])
@@ -177,7 +218,7 @@ func TestAppendLoopRoutingEvidence_RouteFailureFallbackChain(t *testing.T) {
 	failed := []FailedRouteEntry{
 		{Provider: "bragi", Model: "qwen3.5-27b", ActualPower: 50, Reason: FailureModeProviderConnectivity},
 	}
-	appendLoopRoutingEvidence(app, "ddx-0001", ExecuteBeadReport{
+	appendLoopRoutingEvidence(app, bead.Bead{ID: "ddx-0001"}, ExecuteBeadReport{
 		Provider: "openai",
 		Model:    "gpt-5.4",
 	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC), failed)

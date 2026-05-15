@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -267,7 +268,7 @@ func TestLoadAttemptsUsesDDxRoot(t *testing.T) {
 	}
 }
 
-func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
+func TestAgentMetricsLoadsEstimatedDifficulty(t *testing.T) {
 	wd := t.TempDir()
 	writeFile(t, wd, ".ddx/executions/20260501T000000-hint/result.json", `{
 		"bead_id":"ddx-hint","attempt_id":"20260501T000000-hint",
@@ -278,8 +279,8 @@ func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
 	beadJSON := `{"id":"ddx-hint","title":"t","status":"closed",` +
 		`"issue_type":"task","priority":2,` +
 		`"created_at":"` + now + `","updated_at":"` + now + `",` +
-		`"events":[{"kind":"execution-routing-intent","summary":"source=bead_hint powerClass=smart",` +
-		`"body":"{\"routing_intent_source\":\"bead_hint\",\"inferred_power_class\":\"smart\",\"smart_justification\":\"This bead decides the durable execution-hint contract.\",\"actual_harness\":\"claude\",\"actual_provider\":\"anthropic\",\"actual_model\":\"claude-sonnet-4-6\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"rejected_route_pins\":[\"harness:claude\",\"execution-model=gpt-5.5\"]}",` +
+		`"events":[{"kind":"execution-routing-intent","summary":"source=bead_hint difficulty=hard powerClass=smart",` +
+		`"body":"{\"routing_intent_source\":\"bead_hint\",\"estimated_difficulty\":\"hard\",\"requested_power_class\":\"smart\",\"actual_harness\":\"claude\",\"actual_provider\":\"anthropic\",\"actual_model\":\"claude-sonnet-4-6\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"rejected_route_pins\":[\"harness:claude\",\"execution-model=gpt-5.5\"]}",` +
 		`"created_at":"` + now + `"}]}`
 	writeFile(t, wd, ".ddx/beads.jsonl", beadJSON+"\n")
 
@@ -294,11 +295,11 @@ func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
 	if a.RoutingIntentSource != "bead_hint" {
 		t.Fatalf("routing intent source = %q, want bead_hint", a.RoutingIntentSource)
 	}
-	if a.InferredPowerClass != "smart" {
-		t.Fatalf("requested powerClass = %q, want smart", a.InferredPowerClass)
+	if a.EstimatedDifficulty != "hard" {
+		t.Fatalf("estimated difficulty = %q, want hard", a.EstimatedDifficulty)
 	}
-	if a.SmartJustification == "" {
-		t.Fatal("smart justification must be projected")
+	if a.RequestedPowerClass != "smart" {
+		t.Fatalf("requested powerClass = %q, want smart", a.RequestedPowerClass)
 	}
 	if a.RejectedRoutePinCount != 2 {
 		t.Fatalf("rejected route pin count = %d, want 2", a.RejectedRoutePinCount)
@@ -306,19 +307,60 @@ func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
 	if !a.RoutingIntentDegraded {
 		t.Fatal("routing intent should be marked degraded")
 	}
+}
 
-	smartCount := 0
-	pinCount := 0
-	for _, attempt := range got {
-		if attempt.InferredPowerClass == "smart" && attempt.RoutingIntentSource == "bead_hint" {
-			smartCount++
-		}
-		if attempt.RejectedRoutePinCount > 0 {
-			pinCount++
-		}
+func TestAgentMetricsRollupCountsEstimatedDifficulty(t *testing.T) {
+	wd := t.TempDir()
+	writeFile(t, wd, ".ddx/executions/20260501T000000-easy/result.json", `{
+		"bead_id":"ddx-easy","attempt_id":"20260501T000000-easy",
+		"status":"success","cost_usd":0.1,"duration_ms":40,"exit_code":0,
+		"started_at":"2026-05-01T00:00:00Z"
+	}`)
+	writeFile(t, wd, ".ddx/executions/20260501T000100-hard-fail/result.json", `{
+		"bead_id":"ddx-hard-fail","attempt_id":"20260501T000100-hard-fail",
+		"status":"execution_failed","cost_usd":0.3,"duration_ms":80,"exit_code":1,
+		"started_at":"2026-05-01T00:01:00Z"
+	}`)
+	writeFile(t, wd, ".ddx/executions/20260501T000200-hard-ok/result.json", `{
+		"bead_id":"ddx-hard-ok","attempt_id":"20260501T000200-hard-ok",
+		"status":"already_satisfied","cost_usd":0.0,"duration_ms":15,"exit_code":0,
+		"started_at":"2026-05-01T00:02:00Z"
+	}`)
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	beads := []string{
+		`{"id":"ddx-easy","title":"easy","status":"closed","issue_type":"task","priority":2,"created_at":"` + now + `","updated_at":"` + now + `","events":[{"kind":"execution-routing-intent","summary":"source=bead_hint difficulty=easy powerClass=cheap","body":"{\"routing_intent_source\":\"bead_hint\",\"estimated_difficulty\":\"easy\",\"requested_power_class\":\"cheap\"}","created_at":"` + now + `"}]}`,
+		`{"id":"ddx-hard-fail","title":"hard fail","status":"open","issue_type":"task","priority":2,"created_at":"` + now + `","updated_at":"` + now + `","events":[{"kind":"execution-routing-intent","summary":"source=bead_hint difficulty=hard powerClass=smart","body":"{\"routing_intent_source\":\"bead_hint\",\"estimated_difficulty\":\"hard\",\"requested_power_class\":\"smart\"}","created_at":"` + now + `"}]}`,
+		`{"id":"ddx-hard-ok","title":"hard ok","status":"closed","issue_type":"task","priority":2,"created_at":"` + now + `","updated_at":"` + now + `","events":[{"kind":"execution-routing-intent","summary":"source=bead_hint difficulty=hard powerClass=smart","body":"{\"routing_intent_source\":\"bead_hint\",\"estimated_difficulty\":\"hard\",\"requested_power_class\":\"smart\"}","created_at":"` + now + `"}]}`,
 	}
-	if smartCount != 1 || pinCount != 1 {
-		t.Fatalf("countable projection broken: smart=%d rejected=%d", smartCount, pinCount)
+	writeFile(t, wd, ".ddx/beads.jsonl", strings.Join(beads, "\n")+"\n")
+
+	got, err := LoadAttempts(wd)
+	if err != nil {
+		t.Fatalf("LoadAttempts: %v", err)
+	}
+
+	type rollup struct {
+		Attempts   int
+		Successful int
+		CostUSD    float64
+	}
+	rollups := map[string]rollup{}
+	for _, attempt := range got {
+		entry := rollups[attempt.EstimatedDifficulty]
+		entry.Attempts++
+		if attempt.Bucket.Successful() {
+			entry.Successful++
+		}
+		entry.CostUSD += attempt.CostUSD
+		rollups[attempt.EstimatedDifficulty] = entry
+	}
+
+	if got := rollups["easy"]; got.Attempts != 1 || got.Successful != 1 || got.CostUSD != 0.1 {
+		t.Fatalf("easy rollup = %+v, want attempts=1 successful=1 cost=0.1", got)
+	}
+	if got := rollups["hard"]; got.Attempts != 2 || got.Successful != 1 || got.CostUSD != 0.3 {
+		t.Fatalf("hard rollup = %+v, want attempts=2 successful=1 cost=0.3", got)
 	}
 }
 

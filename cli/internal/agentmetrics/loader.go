@@ -229,8 +229,8 @@ type routingFacts struct {
 	Provider              string
 	Model                 string
 	RoutingIntentSource   string
-	InferredPowerClass    string
-	SmartJustification    string
+	EstimatedDifficulty   string
+	RequestedPowerClass   string
 	RejectedRoutePinCount int
 	RoutingIntentDegraded bool
 	RoutingIntentNote     string
@@ -252,8 +252,8 @@ func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
 	for _, b := range beads {
 		facts := routingFromExtra(b.Extra)
 		if facts.Harness == "" && facts.Provider == "" && facts.Model == "" &&
-			facts.RoutingIntentSource == "" && facts.InferredPowerClass == "" &&
-			facts.SmartJustification == "" && facts.RejectedRoutePinCount == 0 &&
+			facts.RoutingIntentSource == "" && facts.EstimatedDifficulty == "" &&
+			facts.RequestedPowerClass == "" && facts.RejectedRoutePinCount == 0 &&
 			!facts.RoutingIntentDegraded && facts.RoutingIntentNote == "" {
 			continue
 		}
@@ -367,8 +367,9 @@ func routingFromExtra(extra map[string]any) routingFacts {
 		case "execution-routing-intent":
 			var body struct {
 				RoutingIntentSource   string   `json:"routing_intent_source"`
-				InferredPowerClass    string   `json:"inferred_power_class"`
-				SmartJustification    string   `json:"smart_justification"`
+				EstimatedDifficulty   string   `json:"estimated_difficulty"`
+				RequestedPowerClass   string   `json:"requested_power_class"`
+				LegacyPowerClass      string   `json:"inferred_power_class"`
 				ActualHarness         string   `json:"actual_harness"`
 				ActualProvider        string   `json:"actual_provider"`
 				ActualModel           string   `json:"actual_model"`
@@ -382,11 +383,13 @@ func routingFromExtra(extra map[string]any) routingFacts {
 			if body.RoutingIntentSource != "" {
 				out.RoutingIntentSource = body.RoutingIntentSource
 			}
-			if body.InferredPowerClass != "" {
-				out.InferredPowerClass = body.InferredPowerClass
+			if body.EstimatedDifficulty != "" {
+				out.EstimatedDifficulty = body.EstimatedDifficulty
 			}
-			if body.SmartJustification != "" {
-				out.SmartJustification = body.SmartJustification
+			if body.RequestedPowerClass != "" {
+				out.RequestedPowerClass = body.RequestedPowerClass
+			} else if body.LegacyPowerClass != "" {
+				out.RequestedPowerClass = body.LegacyPowerClass
 			}
 			if body.ActualHarness != "" {
 				out.Harness = body.ActualHarness
@@ -427,11 +430,11 @@ func applyEnrichment(a *Attempt, enrich map[string]routingFacts) {
 	if a.RoutingIntentSource == "" {
 		a.RoutingIntentSource = facts.RoutingIntentSource
 	}
-	if a.InferredPowerClass == "" {
-		a.InferredPowerClass = facts.InferredPowerClass
+	if a.EstimatedDifficulty == "" {
+		a.EstimatedDifficulty = facts.EstimatedDifficulty
 	}
-	if a.SmartJustification == "" {
-		a.SmartJustification = facts.SmartJustification
+	if a.RequestedPowerClass == "" {
+		a.RequestedPowerClass = facts.RequestedPowerClass
 	}
 	if a.RejectedRoutePinCount == 0 {
 		a.RejectedRoutePinCount = facts.RejectedRoutePinCount
