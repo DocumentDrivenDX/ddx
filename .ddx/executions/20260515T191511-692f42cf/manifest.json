@@ -1,0 +1,504 @@
+{
+  "attempt_id": "20260515T191511-692f42cf",
+  "bead_id": "ddx-9395730c",
+  "base_rev": "79d7a663046540e36621becfae9b1269e5f99080",
+  "created_at": "2026-05-15T19:15:15.845083283Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9395730c",
+    "title": "artifact-types: Playwright e2e + collision fixture + truncation snapshot",
+    "description": "e2e fixture exercising type panel: single-match, multi-match (collision selector), truncation. Snapshot of truncated file display.",
+    "acceptance": "1. e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e passes.",
+    "parent": "ddx-43d67aa5",
+    "labels": [
+      "ac-quality:needs-refinement",
+      "area:tests",
+      "area:web",
+      "kind:test",
+      "phase:2",
+      "story:17"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-08T22:05:13.344968555Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-08T22:05:20.518873117Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260508T220513-af0d53e0\",\"bead_id\":\"ddx-9395730c\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-08T22:05:20.924298145Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent work",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-08T22:05:21.030087341Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx agent work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt; dirty paths: .ddx/executions/20260508T220513-af0d53e0/manifest.json, .ddx/executions/20260508T220513-af0d53e0/prompt.md, .ddx/executions/20260508T220513-af0d53e0/result.json\nresult_rev=f17118bca6ba9664d6b3eda1fe014336c6104901\nbase_rev=f17118bca6ba9664d6b3eda1fe014336c6104901\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-08T22:05:23.381761805Z",
+          "kind": "execute-bead",
+          "source": "ddx agent work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "from_status=open\nto_status=open\nremoved_labels=triage:no-changes-unjustified\ncleared_fields=work-no-changes-count",
+          "created_at": "2026-05-09T13:09:06.1826767Z",
+          "kind": "lifecycle_migrated",
+          "source": "ddx bead migrate --lifecycle",
+          "summary": "legacy lifecycle metadata was retryable autonomous work"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-13T19:40:06.654406295Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-9395730c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:40:37.018816994Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-13T20:54:05.289826973Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-9395730c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:54:35.599920786Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-14T03:56:22.778113872Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-9395730c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:56:52.690732647Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-14T04:02:00.781757584Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-9395730c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:02:30.778598344Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-14T04:07:40.219447815Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-9395730c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:08:10.131779641Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:11:42.557222264Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:24:06.528717671Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T05:24:40.701897576Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-14T15:39:48.672229111Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"target component/route identified: Bead asks for Playwright e2e covering single-match, multi-match (collision selector), and truncation snapshot, but does not specify: (a) which page/route or component renders the 'type panel', (b) what fixture data triggers single vs collision cases, (c) what selector identifies the collision UI, (d) where the snapshot is stored or how truncation is rendered, (e) which spec file to add tests to. No file:line evidence pointing to the component under test. AC #1 and #2 are not independently verifiable without these anchors. A competent sub-agent reading only this bead cannot pick a file to edit or determine fixture shape without operator hand-curation. Parent ddx-43d67aa5 and dep ddx-4fd71cf3 likely carry the context but it is not inlined.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T15:40:30.844728204Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:40:45.854301508Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:40:45.913871047Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:40:46.019439033Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-14T17:23:30.337159965Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description names a 'type panel' ui but provides no component path, route, or selector: Bead lacks file paths, fixture locations, and test names needed for a sub-agent to execute without operator hand-curation. AC items are vague: 'single-match, multi-match (collision selector), truncation' references a 'type panel' UI but does not name the component, route, or selector under test. No reference to where the e2e fixture lives, what the collision scenario looks like, or how the truncation snapshot is produced/stored. Parent ddx-43d67aa5 and dep ddx-4fd71cf3 are cited but no inline excerpt establishes the artifact-types feature surface. AC#3 names a runnable command but AC#1 and AC#2 lack named Test* functions or file paths. Bead fails rubric criteria 2 (root cause/file:line), 3 (numbered AC with specific test names), and 8 (standalone description).\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T17:24:13.814109957Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"bragi\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T17:27:42.759535345Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=bragi model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"bragi\",\"attempt_id\":\"20260514T172428-386f6367\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T17:27:42.975441701Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://bragi:1234/v1/chat/completions\\\": dial tcp 100.127.38.115:1234: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"bragi\"}",
+          "created_at": "2026-05-14T17:27:43.149030361Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=bragi model=qwen3.5-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://bragi:1234/v1/chat/completions\": dial tcp 100.127.38.115:1234: i/o timeout\npowerClass=standard\nresult_rev=527db5d48687edb2d48029551638b9358ea4ffdf\nbase_rev=527db5d48687edb2d48029551638b9358ea4ffdf\nretry_after=2026-05-14T17:42:43Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T17:27:43.292152362Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T00:42:34.110155837Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-omlx\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-15T00:44:27.459658791Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"Qwen3.6-27B-MLX-8bit\",\"actual_power\":5,\"actual_provider\":\"grendel-omlx\",\"attempt_id\":\"20260515T004337-dd7d17a3\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T00:44:27.685930844Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard model=Qwen3.6-27B-MLX-8bit harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"Qwen3.6-27B-MLX-8bit\",\"provider\":\"grendel-omlx\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-15T00:44:27.751157579Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"harness\":\"fiz\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel-omlx\"}",
+          "created_at": "2026-05-15T00:44:27.820042269Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout\npowerClass=standard\nresult_rev=7c4691e858c6e59e8748d0163daea16e97991b2e\nbase_rev=7c4691e858c6e59e8748d0163daea16e97991b2e\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-15T00:44:27.877655219Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T01:40:02.908056804Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T01:40:27.72374319Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T01:40:34.876079901Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T01:40:52.422269434Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T01:40:52.453333832Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T01:40:59.566328649Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T01:41:24.492334634Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T01:41:24.526721823Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T03:31:14.46394155Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:31:42.792638363Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:31:58.879812519Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:31:58.928138303Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T03:32:08.324728941Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9395730c\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:32:34.688064423Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:32:50.479216631Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:32:50.520266256Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"e2e covers single + collision cases. 2. Truncation snapshot stable. 3. cd cli/internal/server/frontend \\u0026\\u0026 bun run test:e2e passes.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T19:15:10.203192876Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-9395730c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T19:15:11.142624681Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "lifecycle-migrated-at": "2026-05-09T13:09:06Z",
+      "lifecycle-migrated-from-status": "open",
+      "lifecycle-migrated-to-status": "open",
+      "triage.power_hint": 6,
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T17:27:43Z",
+          "count": 1,
+          "model": "qwen3.5-27b",
+          "provider": "bragi",
+          "reason": "provider_connectivity"
+        },
+        {
+          "actual_power": 5,
+          "at": "2026-05-15T00:44:27Z",
+          "count": 1,
+          "model": "Qwen3.6-27B-MLX-8bit",
+          "provider": "grendel-omlx",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl",
+      "work-last-status": "preclaim-hook-failed"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T191511-692f42cf",
+    "prompt": ".ddx/executions/20260515T191511-692f42cf/prompt.md",
+    "manifest": ".ddx/executions/20260515T191511-692f42cf/manifest.json",
+    "result": ".ddx/executions/20260515T191511-692f42cf/result.json",
+    "checks": ".ddx/executions/20260515T191511-692f42cf/checks.json",
+    "usage": ".ddx/executions/20260515T191511-692f42cf/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-9395730c-20260515T191511-692f42cf"
+  },
+  "prompt_sha": "cd24f694cb12c5f38372bd20ed824397cfd19d91d6d50fce35f5993d415c7061"
+}
