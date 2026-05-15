@@ -676,6 +676,11 @@ type ExecuteBeadWorker struct {
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
 	// in tests to inject controlled recovery results without a real git repo.
 	conflictAutoRecoverFn func(wd, preserveRef string, gitOps LandingGitOps) (string, error)
+
+	// transientCandidateSkips is an in-memory per-Run filter for queue entries
+	// that were returned from an older snapshot but rejected by a fresh
+	// pre-claim/pre-dispatch store read. It is reset when the loop goes idle.
+	transientCandidateSkips map[string]string
 }
 
 // emitProgress sends a ProgressEvent to runtime.ProgressCh non-blocking.
@@ -791,6 +796,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 	result := &ExecuteBeadLoopResult{}
 	resultsResetIdx := 0
+	transientCandidateSkips := map[string]string{}
+	w.transientCandidateSkips = transientCandidateSkips
+	defer func() {
+		w.transientCandidateSkips = nil
+	}()
 	// pausedInfraUntil is set when a no_viable_provider outcome is recorded.
 	// The worker sleeps until this time (in Watch mode) before re-evaluating
 	// the queue, leaving all beads immediately reclaimable. Zero means no pause.
@@ -815,6 +825,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
+	}
+	clearTransientCandidateSkips := func() {
+		for beadID := range transientCandidateSkips {
+			delete(transientCandidateSkips, beadID)
+		}
 	}
 	stopAfterNonAttemptSkip := func() bool {
 		return loopMode == executeloop.ModeOnce && runtime.TargetBeadID != ""
@@ -1126,6 +1141,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				_, _ = fmt.Fprint(runtime.Log, workLog.FormatWatchIdle(idleInterval, result.QueueSnapshot, includeBlockers))
 				lastIdleQueueSignature = signature
 			}
+			clearTransientCandidateSkips()
 			wasIdle = true
 			// Watch mode treats an empty queue as idle, not terminal. --once
 			// and drain exits are classified above through work.StopCondition.
@@ -1181,6 +1197,23 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			continue
 		}
+		freshCandidate, staleSkip, refreshErr := w.refreshCandidateBeforeClaim(ctx, candidate)
+		if refreshErr != nil {
+			return result, refreshErr
+		}
+		if staleSkip != nil {
+			transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before claim: %s\n", candidate.ID, staleSkip.Detail)
+			}
+			emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_claim")
+			if stopAfterNonAttemptSkip() {
+				applyStop(work.StopInput{Once: true})
+				return result, nil
+			}
+			continue
+		}
+		candidate = *freshCandidate
 		// Claim atomically before model-backed intake and lint to prevent
 		// concurrent workers from issuing duplicate model calls or appending
 		// duplicate lint events for the same bead. Terminal non-actionable
@@ -1747,6 +1780,41 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "lint_blocked_best_effort", blockMsg, now().UTC())
 			}
 		}
+		freshCandidate, staleSkip, refreshErr = w.refreshClaimedCandidateBeforeAttempt(ctx, candidate)
+		if refreshErr != nil {
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, err
+			}
+			return result, refreshErr
+		}
+		if staleSkip != nil {
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				continue
+			}
+			transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before attempt: %s\n", candidate.ID, staleSkip.Detail)
+			}
+			emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_attempt")
+			if stopAfterNonAttemptSkip() {
+				applyStop(work.StopInput{Once: true})
+				return result, nil
+			}
+			continue
+		}
+		candidate = *freshCandidate
 
 		// Generate a provisional attempt_id for progress events.
 		// The real attempt_id is assigned inside ExecuteBead; we use this
@@ -2645,12 +2713,14 @@ func emitPickerPrioritySkips(emit func(string, map[string]any), chosen bead.Bead
 //
 // Reason values are bounded to the set named in ddx-9d55601f AC #4:
 //
-//	label_filter, in_attempted, claim_race, eligibility_filter, retry_cooldown
+//	label_filter, in_attempted, claim_race, eligibility_filter, retry_cooldown, stale_candidate
 //
 // Note: eligibility_filter and retry_cooldown are applied upstream in
 // Store.ReadyExecution (so beads filtered for those reasons never reach
-// nextCandidate at all). They are part of the reason vocabulary so future
-// picker rearrangements can re-emit them without changing the schema.
+// nextCandidate at all). stale_candidate is the transient post-selection guard
+// used when a previously returned queue row disappears on a fresh store read.
+// These remain part of the reason vocabulary so future picker rearrangements
+// can re-emit them without changing the schema.
 type pickerSkip struct {
 	BeadID   string
 	Priority int
@@ -2658,10 +2728,12 @@ type pickerSkip struct {
 	Reason   string
 }
 
+const staleCandidateSkipReason = "stale_candidate"
+
 func hasGuardSkips(skips []pickerSkip) bool {
 	for _, skip := range skips {
 		switch skip.Reason {
-		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead":
+		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason:
 			continue
 		default:
 			return true
@@ -2675,7 +2747,7 @@ func systemicPreClaimSkipDetail(skips []pickerSkip) (string, bool) {
 	seenSystemic := false
 	for _, skip := range skips {
 		switch skip.Reason {
-		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead":
+		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason:
 			continue
 		default:
 			if !work.IsSystemicPreClaimSkipReason(skip.Reason) {
@@ -2696,6 +2768,217 @@ func queueRankValue(raw any) any {
 		return nil
 	}
 	return rank
+}
+
+type candidateSkipDecision struct {
+	Reason string
+	Detail string
+}
+
+func (w *ExecuteBeadWorker) refreshCandidateBeforeClaim(ctx context.Context, candidate bead.Bead) (*bead.Bead, *candidateSkipDecision, error) {
+	fresh, skip, err := w.lookupFreshCandidate(ctx, candidate.ID)
+	if err != nil || skip != nil {
+		return fresh, skip, err
+	}
+
+	ready, err := w.Store.ReadyExecution()
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, readyBead := range ready {
+		if readyBead.ID == candidate.ID {
+			return fresh, nil, nil
+		}
+	}
+
+	return fresh, candidateSkipFromReadyView(candidate.ID, fresh, w.readyExecutionBreakdown()), nil
+}
+
+func (w *ExecuteBeadWorker) refreshClaimedCandidateBeforeAttempt(ctx context.Context, candidate bead.Bead) (*bead.Bead, *candidateSkipDecision, error) {
+	fresh, skip, err := w.lookupFreshCandidate(ctx, candidate.ID)
+	if err != nil || skip != nil {
+		return fresh, skip, err
+	}
+	if skip = candidateSkipFromClaimedState(fresh); skip != nil {
+		return fresh, skip, nil
+	}
+	return fresh, nil, nil
+}
+
+func (w *ExecuteBeadWorker) lookupFreshCandidate(ctx context.Context, beadID string) (*bead.Bead, *candidateSkipDecision, error) {
+	fresh, err := w.Store.Get(ctx, beadID)
+	if err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+			return nil, &candidateSkipDecision{
+				Reason: "missing",
+				Detail: "bead no longer exists in the tracker",
+			}, nil
+		}
+		return nil, nil, err
+	}
+	return fresh, nil, nil
+}
+
+func (w *ExecuteBeadWorker) readyExecutionBreakdown() *bead.ReadyExecutionBreakdown {
+	diag, ok := w.Store.(readyDiagnoser)
+	if !ok {
+		return nil
+	}
+	breakdown, err := diag.ReadyExecutionBreakdown()
+	if err != nil {
+		return nil
+	}
+	return &breakdown
+}
+
+func candidateSkipFromReadyView(beadID string, fresh *bead.Bead, breakdown *bead.ReadyExecutionBreakdown) *candidateSkipDecision {
+	reason := ""
+	switch {
+	case breakdown != nil && containsReadyBreakdownID(breakdown.NotEligible, beadID):
+		reason = "execution_ineligible"
+	case breakdown != nil && containsReadyBreakdownID(breakdown.Superseded, beadID):
+		reason = "superseded"
+	case breakdown != nil && containsReadyBreakdownID(breakdown.DependencyWaiting, beadID):
+		reason = "dependency_waiting"
+	case breakdown != nil && containsReadyBreakdownID(breakdown.RetryCooldown, beadID):
+		reason = "retry_cooldown"
+	case breakdown != nil && containsReadyBreakdownID(breakdown.ProposedOperatorAttention, beadID):
+		reason = "operator_attention"
+	case breakdown != nil && containsReadyBreakdownID(breakdown.ExternalBlocked, beadID):
+		reason = "external_blocked"
+	case breakdown != nil && (containsReadyBreakdownID(breakdown.Epics, beadID) || containsReadyBreakdownID(breakdown.EpicClosureCandidates, beadID)):
+		reason = "epic_container"
+	}
+	return candidateSkipFromFreshState(fresh, reason)
+}
+
+func candidateSkipFromClaimedState(fresh *bead.Bead) *candidateSkipDecision {
+	return candidateSkipFromFreshState(fresh, "")
+}
+
+func candidateSkipFromFreshState(fresh *bead.Bead, fallbackReason string) *candidateSkipDecision {
+	if fresh == nil {
+		return &candidateSkipDecision{
+			Reason: "missing",
+			Detail: "bead no longer exists in the tracker",
+		}
+	}
+	reason := fallbackReason
+	if executionEligible, known := freshCandidateExecutionEligible(*fresh); known && !executionEligible {
+		if HasBeadLabel(fresh.Labels, "decomposed") {
+			reason = "decomposed"
+		} else {
+			reason = "execution_ineligible"
+		}
+	} else if supersededBy := freshCandidateSupersededBy(*fresh); supersededBy != "" {
+		reason = "superseded"
+	} else if fresh.Status == bead.StatusProposed {
+		reason = "operator_attention"
+	} else if fresh.Status == bead.StatusBlocked {
+		reason = "external_blocked"
+	} else if fresh.Status == bead.StatusClosed || fresh.Status == bead.StatusCancelled {
+		reason = "closed"
+	}
+	if reason == "" {
+		return nil
+	}
+	return &candidateSkipDecision{
+		Reason: reason,
+		Detail: candidateSkipDetail(reason, fresh),
+	}
+}
+
+func freshCandidateExecutionEligible(b bead.Bead) (bool, bool) {
+	raw, ok := b.Extra[bead.ExtraExecutionElig]
+	if !ok {
+		return true, false
+	}
+	eligible, isBool := raw.(bool)
+	if !isBool {
+		return true, false
+	}
+	return eligible, true
+}
+
+func freshCandidateSupersededBy(b bead.Bead) string {
+	if b.Extra == nil {
+		return ""
+	}
+	raw, ok := b.Extra["superseded-by"]
+	if !ok {
+		return ""
+	}
+	value, _ := raw.(string)
+	return strings.TrimSpace(value)
+}
+
+func candidateSkipDetail(reason string, fresh *bead.Bead) string {
+	switch reason {
+	case "decomposed":
+		return "bead is marked decomposed and execution-ineligible"
+	case "execution_ineligible":
+		return "bead is no longer execution-eligible"
+	case "superseded":
+		if fresh != nil {
+			if supersededBy := freshCandidateSupersededBy(*fresh); supersededBy != "" {
+				return fmt.Sprintf("bead is superseded by %s", supersededBy)
+			}
+		}
+		return "bead is superseded"
+	case "dependency_waiting":
+		return "bead is no longer execution-ready because dependencies remain open"
+	case "retry_cooldown":
+		return "bead is in retry cooldown"
+	case "operator_attention":
+		return "bead moved to proposed/operator attention"
+	case "external_blocked":
+		return "bead is externally blocked"
+	case "epic_container":
+		return "bead is an epic container, not ordinary executable work"
+	case "closed":
+		if fresh != nil && fresh.Status != "" {
+			return fmt.Sprintf("bead moved to %s", fresh.Status)
+		}
+		return "bead is already closed"
+	case "missing":
+		return "bead no longer exists in the tracker"
+	default:
+		return "bead dropped out of the fresh execution-ready view"
+	}
+}
+
+func emitStaleCandidateSkip(emit func(string, map[string]any), beadID string, skip *candidateSkipDecision, fresh *bead.Bead, stage string) {
+	if emit == nil || skip == nil {
+		return
+	}
+	payload := map[string]any{
+		"bead_id": beadID,
+		"reason":  skip.Reason,
+		"detail":  skip.Detail,
+		"stage":   stage,
+	}
+	if fresh != nil {
+		payload["status"] = fresh.Status
+		if eligible, known := freshCandidateExecutionEligible(*fresh); known {
+			payload["execution_eligible"] = eligible
+		}
+		if HasBeadLabel(fresh.Labels, "decomposed") {
+			payload["decomposed"] = true
+		}
+		if supersededBy := freshCandidateSupersededBy(*fresh); supersededBy != "" {
+			payload["superseded_by"] = supersededBy
+		}
+	}
+	emit("picker.skip_stale_candidate", payload)
+}
+
+func containsReadyBreakdownID(ids []string, beadID string) bool {
+	for _, id := range ids {
+		if id == beadID {
+			return true
+		}
+	}
+	return false
 }
 
 // nextCandidate returns the next claimable bead from the execution-ready
@@ -2736,6 +3019,12 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 		if !ok {
 			// Should not happen; skip defensively.
 			continue
+		}
+		if w.transientCandidateSkips != nil {
+			if _, skipped := w.transientCandidateSkips[candidate.ID]; skipped {
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: staleCandidateSkipReason})
+				continue
+			}
 		}
 		if targetBeadID != "" && candidate.ID != targetBeadID {
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "target_bead"})

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -2398,6 +2399,212 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	require.Equal(t, int32(1), atomic.LoadInt32(&execCount), "executor must run exactly once")
 }
 
+func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoChanges(t *testing.T) {
+	t.Run("watch_mode_does_not_retry_same_parent", func(t *testing.T) {
+		store := bead.NewStore(t.TempDir())
+		require.NoError(t, store.Init())
+
+		parent := &bead.Bead{ID: "ddx-watch-decomp", Title: "Watch-mode decomposition parent"}
+		require.NoError(t, store.Create(parent))
+
+		decomp := &PreClaimDecomposition{
+			Rationale: "split preserved parent",
+			Children: []PreClaimDecompositionChild{
+				{Title: "Child A", Description: "child a", Acceptance: "1. do child a"},
+			},
+			ACMap: []ACMapEntry{
+				{ParentAC: "1. split work", Coverage: "covered by Child A"},
+			},
+		}
+
+		var parentExecCount int32
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				if beadID == parent.ID {
+					atomic.AddInt32(&parentExecCount, 1)
+				}
+				return ExecuteBeadReport{
+					BeadID:             beadID,
+					Status:             ExecuteBeadStatusNoChanges,
+					BaseRev:            "base-watch",
+					ResultRev:          "base-watch",
+					PreserveRef:        "refs/ddx/iterations/ddx-watch-decomp/attempt-1",
+					NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: too large for one worker pass",
+				}, nil
+			}),
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		sink := &cancelOnMatchWriter{match: `"type":"loop.idle"`, cancel: cancel}
+
+		cfgOpts := config.TestLoopConfigOpts{
+			Assignee:              "worker",
+			MaxDecompositionDepth: 3,
+		}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Mode:         executeloop.ModeWatch,
+			IdleInterval: time.Millisecond,
+			EventSink:    sink,
+			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+				err := store.Update(beadID, func(b *bead.Bead) {
+					if b.Extra == nil {
+						b.Extra = make(map[string]any)
+					}
+					b.Extra[bead.ExtraExecutionElig] = false
+					if !HasBeadLabel(b.Labels, "decomposed") {
+						b.Labels = append(b.Labels, "decomposed")
+					}
+				})
+				require.NoError(t, err)
+				return decomp, nil
+			},
+		})
+		if err != nil {
+			require.ErrorIs(t, err, context.Canceled)
+		}
+		require.NotNil(t, result)
+		assert.Equal(t, int32(1), atomic.LoadInt32(&parentExecCount), "watch worker must not dispatch the same decomposed parent twice")
+
+		got, err := store.Get(parent.ID)
+		require.NoError(t, err)
+		assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig])
+		assert.Contains(t, got.Labels, "decomposed")
+
+		events := parseLoopEvents(t, sink.String())
+		claimed := loopEventDataByType(events, "bead.claimed")
+		var parentClaimCount int
+		for _, event := range claimed {
+			if event["bead_id"] == parent.ID {
+				parentClaimCount++
+			}
+		}
+		assert.Equal(t, 1, parentClaimCount, "parent must only be claimed once in the watcher run")
+		assert.NotEmpty(t, loopEventDataByType(events, "loop.idle"), "watch worker must go idle instead of retrying the parent")
+	})
+
+	t.Run("stale_snapshot_selects_next_ready_bead", func(t *testing.T) {
+		baseStore := bead.NewStore(t.TempDir())
+		require.NoError(t, baseStore.Init())
+
+		parent := &bead.Bead{
+			ID:       "ddx-stale-parent",
+			Title:    "Decomposed parent",
+			Priority: 0,
+			Labels:   []string{"decomposed"},
+			Extra:    map[string]any{bead.ExtraExecutionElig: false},
+		}
+		next := &bead.Bead{ID: "ddx-stale-next", Title: "Next ready bead", Priority: 1}
+		require.NoError(t, baseStore.Create(parent))
+		require.NoError(t, baseStore.Create(next))
+
+		staleParent := *parent
+		staleParent.Extra = map[string]any{}
+		staleStore := &staleReadyStore{
+			Store:      baseStore,
+			staleReady: []bead.Bead{staleParent, *next},
+		}
+
+		var executed []string
+		worker := &ExecuteBeadWorker{
+			Store: staleStore,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				executed = append(executed, beadID)
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-stale-next",
+					ResultRev: "feedbeef",
+				}, nil
+			}),
+		}
+
+		var sink bytes.Buffer
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{EventSink: &sink})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, []string{next.ID}, executed, "worker must skip the stale parent and dispatch the next ready bead")
+		assert.Equal(t, 1, result.Attempts)
+		assert.Equal(t, 1, result.Successes)
+
+		events := parseLoopEvents(t, sink.String())
+		skips := loopEventDataByType(events, "picker.skip_stale_candidate")
+		require.Len(t, skips, 1)
+		assert.Equal(t, parent.ID, skips[0]["bead_id"])
+		assert.Equal(t, "decomposed", skips[0]["reason"])
+		assert.Equal(t, "pre_claim", skips[0]["stage"])
+		assert.Equal(t, false, skips[0]["execution_eligible"])
+		assert.Equal(t, true, skips[0]["decomposed"])
+
+		claimed := loopEventDataByType(events, "bead.claimed")
+		require.Len(t, claimed, 1)
+		assert.Equal(t, next.ID, claimed[0]["bead_id"], "stale parent must not be claimed")
+
+		got, err := baseStore.Get(parent.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, got.Status, "skipped parent must remain open")
+		assert.Empty(t, got.Owner, "skipped parent must not remain claimed")
+	})
+
+	t.Run("stale_snapshot_idles_with_skip_event", func(t *testing.T) {
+		baseStore := bead.NewStore(t.TempDir())
+		require.NoError(t, baseStore.Init())
+
+		parent := &bead.Bead{
+			ID:       "ddx-stale-idle",
+			Title:    "Only stale parent",
+			Priority: 0,
+			Labels:   []string{"decomposed"},
+			Extra:    map[string]any{bead.ExtraExecutionElig: false},
+		}
+		require.NoError(t, baseStore.Create(parent))
+
+		staleParent := *parent
+		staleParent.Extra = map[string]any{}
+		staleStore := &staleReadyStore{
+			Store:      baseStore,
+			staleReady: []bead.Bead{staleParent},
+		}
+
+		worker := &ExecuteBeadWorker{
+			Store: staleStore,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatalf("executor must not run for an execution-ineligible stale parent")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+
+		var sink bytes.Buffer
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:      true,
+			EventSink: &sink,
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		assert.Equal(t, 0, result.Attempts)
+		assert.True(t, result.NoReadyWork, "worker must idle once the stale parent is skipped")
+
+		events := parseLoopEvents(t, sink.String())
+		skips := loopEventDataByType(events, "picker.skip_stale_candidate")
+		require.Len(t, skips, 1)
+		assert.Equal(t, parent.ID, skips[0]["bead_id"])
+		assert.Equal(t, "decomposed", skips[0]["reason"])
+		assert.Equal(t, "pre_claim", skips[0]["stage"])
+
+		got, err := baseStore.Get(parent.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, got.Status)
+		assert.Empty(t, got.Owner)
+	})
+}
+
 func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 
@@ -2410,6 +2617,76 @@ func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead)
 	require.NoError(t, store.Create(second))
 
 	return store, first, second
+}
+
+type staleReadyStore struct {
+	*bead.Store
+	staleReady []bead.Bead
+	readyCalls int32
+}
+
+func (s *staleReadyStore) ReadyExecution() ([]bead.Bead, error) {
+	if atomic.AddInt32(&s.readyCalls, 1) <= 2 {
+		out := make([]bead.Bead, len(s.staleReady))
+		copy(out, s.staleReady)
+		return out, nil
+	}
+	return s.Store.ReadyExecution()
+}
+
+func (s *staleReadyStore) ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error) {
+	return s.Store.ReadyExecutionBreakdown()
+}
+
+type cancelOnMatchWriter struct {
+	bytes.Buffer
+	match  string
+	cancel context.CancelFunc
+	once   sync.Once
+}
+
+func (w *cancelOnMatchWriter) Write(p []byte) (int, error) {
+	n, err := w.Buffer.Write(p)
+	if w.cancel != nil && strings.Contains(string(p), w.match) {
+		w.once.Do(w.cancel)
+	}
+	return n, err
+}
+
+type loopEvent struct {
+	Type string
+	Data map[string]any
+}
+
+func parseLoopEvents(t *testing.T, raw string) []loopEvent {
+	t.Helper()
+
+	var events []loopEvent
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		typ, _ := entry["type"].(string)
+		if typ == "" {
+			continue
+		}
+		data, _ := entry["data"].(map[string]any)
+		events = append(events, loopEvent{Type: typ, Data: data})
+	}
+	return events
+}
+
+func loopEventDataByType(events []loopEvent, typ string) []map[string]any {
+	var out []map[string]any
+	for _, event := range events {
+		if event.Type == typ {
+			out = append(out, event.Data)
+		}
+	}
+	return out
 }
 
 // errorInjectingStore wraps a real ExecuteBeadLoopStore and allows individual
