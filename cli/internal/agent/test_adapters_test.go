@@ -160,12 +160,6 @@ func runnerTestProviderConnectivity(r *Runner, harnessName string, timeout time.
 	return status
 }
 
-// runQuorumWithConfig is the test-only equivalent of the retired
-// RunQuorumWithConfig. Production callers use RunQuorumWithConfigViaService.
-func runQuorumWithConfig(run RunFunc, _rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
-	return RunQuorumWith(run, runtime)
-}
-
 func TestExecutionTrace_AdapterPreservesCycleFields(t *testing.T) {
 	original := ExecuteBeadReport{
 		BeadID:       "ddx-trace",

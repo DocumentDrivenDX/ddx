@@ -336,8 +336,6 @@ func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 		"ddx run":        filepath.Join(root, "cmd", "run.go"),
 		"ddx try":        filepath.Join(root, "cmd", "try.go"),
 		"ddx work":       filepath.Join(root, "cmd", "work.go"),
-		"quorum":         filepath.Join(root, "internal", "agent", "compare_adapter.go"),
-		"compare":        filepath.Join(root, "internal", "agent", "compare_adapter.go"),
 		"service writer": filepath.Join(root, "internal", "agent", "service_run.go"),
 	}
 	for name, path := range checks {

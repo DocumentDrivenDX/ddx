@@ -82,32 +82,6 @@ func TestPromptIngressOversize(t *testing.T) {
 		assertOversizeErrorMessage(t, err, fixture)
 	})
 
-	t.Run("compare_defaultResolvePromptForCompare", func(t *testing.T) {
-		installSmallPromptCap(t)
-		fixture := writeOversizeFixture(t)
-		_, err := defaultResolvePromptForCompare(AgentRunRuntime{PromptFile: fixture})
-		assertOversizeErrorMessage(t, err, fixture)
-	})
-
-	t.Run("compare_benchmarkSuiteReader", func(t *testing.T) {
-		installSmallPromptCap(t)
-		fixture := writeOversizeFixture(t)
-		suite := &BenchmarkSuite{
-			Name:    "test",
-			Version: "v1",
-			Prompts: []BenchmarkPrompt{{ID: "p1", Name: "p1", PromptFile: fixture}},
-		}
-		runCompareCalls := 0
-		_, err := RunBenchmarkWith(func(CompareRuntime) (*ComparisonRecord, error) {
-			runCompareCalls++
-			return nil, fmt.Errorf("runCompare must not be called when prompt-file read fails")
-		}, suite)
-		if runCompareCalls != 0 {
-			t.Errorf("runCompare invoked %d times; oversize prompt file must short-circuit", runCompareCalls)
-		}
-		assertOversizeErrorMessage(t, err, fixture)
-	})
-
 	t.Run("service_run_executeOnService", func(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
@@ -195,7 +169,6 @@ func (s *promptIngressStubAgent) UsageReport(ctx context.Context, opts agentlib.
 func TestPromptIngressEvidencePrimitiveUsage(t *testing.T) {
 	files := []string{
 		"runner.go",
-		"compare_adapter.go",
 		"service_run.go",
 		"execute_bead.go",
 	}
