@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260515T232747-77e3cc78",
+  "bead_id": "ddx-3f9a89a6",
+  "base_rev": "cede93c5127dc063561da9749dba61fc1abf05f8",
+  "created_at": "2026-05-15T23:27:51.806646391Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized",
+    "min_power": 8
+  },
+  "bead": {
+    "id": "ddx-3f9a89a6",
+    "title": "bead: serialize auto-commit tracker git writes",
+    "description": "PROBLEM\nDuring the current monitor on 2026-05-15, a worker executing ddx-bdc0065e cancelled several stale beads. Multiple ddx bead update commands ran close together from the execute-bead context. The tracker ended clean, but the auto-commit audit trail was noisy: one commit subject said it updated ddx-387a0178 while it also picked up additional bead-row changes, another update failed with .git/index.lock, and another commit reported nothing to commit. That makes tracker history misleading and is the same class of dirty/index-lock noise the operator wants eliminated.\n\nROOT CAUSE WITH FILE:LINE\ncli/cmd/bead.go:134-154 builds bead auto-commit config and calls bead.AutoCommitFilesWithRecovery directly. cli/internal/bead/git_autocommit.go:10-17 wraps git add/commit with gitlock.RunGitWithIndexLockRecovery, but that only recovers from stale/transient .git/index.lock; it does not serialize the whole add/commit pair under the process-shared main git lock. cli/internal/agent/tracker_lock.go:98-118 documents and implements withMainGitLock/withTrackerLock for primary-checkout git writes, and cli/internal/gitlock/gitlock.go:22-24 says DDx writers serialize through that lock, but the bead CLI auto-commit path is outside it.\n\nPROPOSED FIX\n- Route bead CLI auto-commit add/commit operations through the same process-shared main git lock used by landing and pre-dispatch checkpointing.\n- Preserve existing stale index.lock recovery inside the lock, so stale locks are still repaired and live owners still fail or wait according to policy.\n- Add a concurrent regression where multiple bead update/create auto-commits run against one repo and produce either deterministic serialized commits or one explicitly combined commit; no index.lock failures, no misleading commit subjects that omit paths actually included.\n\nNON-SCOPE\n- Do not change .ddx/beads.jsonl format.\n- Do not remove auto-commit recovery for stale index locks.\n- Do not squash, amend, or rewrite existing execute-bead history.\n- Do not hand-edit .ddx/beads.jsonl.\n\nDEPS\nNone.",
+    "acceptance": "1. TestBeadAutoCommitSerializesThroughMainGitLock (or equivalent) runs two or more concurrent bead update/create operations with auto_commit=always against the same repo and proves all complete without .git/index.lock errors.\n2. The same regression asserts commit history is audit-correct: each auto-commit either contains only the operation named in its subject or is an explicitly named combined commit that lists every included tracker mutation.\n3. Existing stale-lock recovery tests TestBeadCreateAutoCommitRecoversStaleIndexLock, TestBeadUpdateAutoCommitRecoversStaleIndexLock, and TestBeadCloseAutoCommitRecoversStaleIndexLock remain green.\n4. cd cli \u0026\u0026 go test ./cmd -run 'TestBead(AutoCommitSerializesThroughMainGitLock|CreateAutoCommitRecoversStaleIndexLock|UpdateAutoCommitRecoversStaleIndexLock|CloseAutoCommitRecoversStaleIndexLock)' -count=1 passes.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/bead/... ./internal/gitlock/... ./internal/agent/... passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-c191e91a",
+    "labels": [
+      "phase:2",
+      "area:bead",
+      "area:git",
+      "area:execution",
+      "kind:bug",
+      "operator-ux",
+      "dirty-tree",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-3f9a89a6)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T23:27:20.917721672Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4\"}",
+          "created_at": "2026-05-15T23:27:47.469562109Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4"
+        }
+      ],
+      "triage.estimated_difficulty": "hard"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T232747-77e3cc78",
+    "prompt": ".ddx/executions/20260515T232747-77e3cc78/prompt.md",
+    "manifest": ".ddx/executions/20260515T232747-77e3cc78/manifest.json",
+    "result": ".ddx/executions/20260515T232747-77e3cc78/result.json",
+    "checks": ".ddx/executions/20260515T232747-77e3cc78/checks.json",
+    "usage": ".ddx/executions/20260515T232747-77e3cc78/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-3f9a89a6-20260515T232747-77e3cc78"
+  },
+  "prompt_sha": "57ee856054afafe76685d860dd7492ee245614b924c9b1b4c86b6c1055c52731"
+}
