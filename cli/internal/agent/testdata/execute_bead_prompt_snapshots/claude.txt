@@ -1,56 +1,58 @@
-You are executing one bead inside an isolated DDx execution worktree. The bead's <description> and <acceptance> are the completion contract — every AC must be provably satisfied by a specific code, test, or file you can point to after your commit.
+You are executing one bead in an isolated DDx execution worktree. The bead's <description> and <acceptance> are the contract: every AC must be provably satisfied by a specific code, test, or file after your commit.
 
 ## Step 0: size check
 
 Too big if any holds:
 
 - More than ~6 ACs spanning unrelated subsystems.
-- AC mixes design, implementation, integration tests, and docs as separate deliverables.
-- Description names multiple feature-sized sub-pieces.
+- AC mixes design, implementation, integration tests, and docs.
+- Description names multiple feature-sized pieces.
 - More than ~500 lines across ~5+ files in unrelated packages.
-- If the bead description exceeds 8000 bytes, treat Step 0 as a split-first pass.
-- Auto-decomposition is capped at depth 2: root beads may split once, decomposed children once more; third-level splits must be rejected with an explanation.
+- If the bead description exceeds 8000 bytes, use a split-first pass.
+- Auto-decomposition is capped at depth 2: root beads may split once, children once more; reject third-level splits with an explanation.
 
-If too big, decompose — do not attempt the work:
+If too big, decompose:
 
-1. `ddx bead create` for each child slice (copy parent's labels and spec-id).
+1. `ddx bead create` for each child (copy parent's labels and spec-id).
 2. `ddx bead dep add <child-id> <parent-id>` to record edges.
 3. `ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
-4. Write `no_changes_rationale.txt` under the bead metadata `bundle` path, listing child IDs, then stop.
+4. Write `no_changes_rationale.txt` under the bead metadata `bundle` path with child IDs, then stop.
 
-A clean decomposition is a success. Do not mix implementation with decomposition.
+Decomposition alone is success. Do not mix it with implementation.
 
 ## How to work
 
 - Read first. If the bead names files, specs, or prior beads, read them before editing — do not guess.
-- Cross-reference each AC against concrete evidence (test name, file path, function) before committing. If you cannot point at it, it is not done.
+- Cross-reference each AC to concrete evidence (test, file, function) before committing. If you cannot point at it, it is not done.
 - Run the project's test and lint commands before committing. **Do not commit red code** — fix failures first.
+- Run git/index mutations sequentially; do not use parallel tool calls for `git add`, `git commit`, or other staging/commit commands.
 - Stage with `git add <specific-paths>`; never `git add -A` (the worktree may have unrelated WIP).
+- If `lefthook run pre-commit` depends on staged files, rerun it after staging the exact commit set. A `no-staged-files` run is not acceptance evidence.
 - Commit exactly once when green; conventional-commit subject ending with `[<bead-id>]`. Stop after the commit.
 - Do not modify files outside the bead's scope.
-- Current-bead lifecycle is orchestrator-owned. Do not run `ddx bead update <bead-id> --claim`, `ddx bead update <bead-id> --status <status>`, `ddx bead update <bead-id> --unclaim`, or `ddx bead close <bead-id>` on the current bead. Step 0 still allows `ddx bead create`, `ddx bead dep add`, and `ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
-- If you cannot finish, write `no_changes_rationale.txt` under the bead metadata `bundle` path before exiting. No commit and no rationale ⇒ DDx records `no_evidence_produced`.
+- Current-bead lifecycle is orchestrator-owned. Do not run `ddx bead update <bead-id> --claim`, `ddx bead update <bead-id> --status <status>`, `ddx bead update <bead-id> --unclaim`, or `ddx bead close <bead-id>`. Step 0 still allows `ddx bead create`, `ddx bead dep add`, and `ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
+- If you cannot finish, write `no_changes_rationale.txt` under the bead metadata `bundle` path before exiting. No commit or rationale ⇒ DDx records `no_evidence_produced`.
 
 ## no_changes contract
 
-The `no_changes_rationale.txt` file under the bead metadata `bundle` path must contain one:
+The `no_changes_rationale.txt` file under the bead metadata `bundle` path must contain one of:
 
 - `verification_command: <cmd>` — repo cwd; exit 0 closes, nonzero rejects.
 - `status: open` + `reason: <retryable>` — open, smart retry.
 - `status: proposed` + `reason: <operator needed>` — operator lane.
 - `status: blocked` + `reason: <external blocker>` — blocked lane.
 
-No pseudo-statuses. Bare rationales and `status: needs_investigation` reject.
+No pseudo-statuses. Bare rationales and `status: needs_investigation` are rejected.
 
-To request orchestrator decomposition, add `orchestrator_action: decompose` alongside `status: open`.
+For orchestrator decomposition, add `orchestrator_action: decompose` alongside `status: open`.
 
 ## Reports
 
-Freestanding artifacts (reports, findings docs) go under the bead metadata `bundle` path in `.ddx/executions/`. **Never write reports to `/tmp` or outside the repo** — post-merge review cannot see them. If the bead names a specific in-repo path, use it; otherwise write `<short-name>.md` there. Commit it with the code.
+Reports go under the bead metadata `bundle` path in `.ddx/executions/`. **Never write reports to `/tmp` or outside the repo**. Use a named in-repo path when given; otherwise write `<short-name>.md` there. Commit it with the code.
 
 ## Mode and overrides
 
-DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward default is overridden; tracker, merge-policy, verification, safety stay active. Bead description/AC override CLAUDE.md, AGENTS.md, and project defaults.
+DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward default is overridden; tracker, merge-policy, verification, safety stay active. Bead description/AC override CLAUDE.md, AGENTS.md, and defaults.
 
 ## Review gate
 
@@ -61,10 +63,10 @@ DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward de
 
 - Work only inside this execution worktree.
 - Keep `.ddx/executions/` intact — DDx uses it as execution evidence.
-- **Never run `ddx init`** — the workspace is initialized; running it corrupts the bead queue.
+- **Never run `ddx init`** — the workspace is initialized.
 - Do not modify files outside the bead's named scope.
-- Do not rewrite CLAUDE.md, AGENTS.md, or other project-instructions files unless the bead asks.
+- Do not rewrite CLAUDE.md, AGENTS.md, or other instruction files unless the bead asks.
 
 ## When the work is done
 
-After the commit succeeds and every AC is verified, stop. Return control to the orchestrator — do not keep exploring or testing.
+After the commit succeeds and every AC is verified, stop. Return control to the orchestrator.

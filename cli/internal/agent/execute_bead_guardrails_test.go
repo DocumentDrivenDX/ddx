@@ -65,7 +65,9 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "commit_exactly_once", any: []string{"Commit exactly once", "commit exactly once"}},
 		{name: "git_add_specific_paths", any: []string{"git add <specific-paths>"}},
 		{name: "no_git_add_dash_a", any: []string{"never `git add -A`", "never git add -A"}},
+		{name: "sequential_git_operations", any: []string{"Run git/index mutations sequentially", "Do not use parallel tool calls for"}},
 		{name: "no_red_code", any: []string{"Do not commit red code"}},
+		{name: "rerun_staged_pre_commit_gate", any: []string{"rerun it after staging the exact commit set", "no-staged-files", "not acceptance evidence"}},
 		{name: "no_modify_outside_scope", any: []string{"outside the bead's scope", "outside the bead's named scope"}},
 		{name: "never_ddx_init", any: []string{"Never run `ddx init`", "never `ddx init`"}},
 		{name: "executions_intact", any: []string{".ddx/executions/"}},
@@ -207,6 +209,54 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 	}
 }
 
+func TestExecuteBeadInstructions_SerializesGitOperations(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	required := []string{
+		"Run git/index mutations sequentially",
+		"do not use parallel tool calls for `git add`, `git commit`, or other staging/commit commands",
+		"git add <specific-paths>",
+		"Commit exactly once when green",
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range required {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing git-serialization substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteBeadInstructions_RequiresStagedPreCommitGate(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	required := []string{
+		"lefthook run pre-commit",
+		"rerun it after staging the exact commit set",
+		"no-staged-files",
+		"not acceptance evidence",
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range required {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing staged pre-commit substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
 // TestExecuteBeadInstructionsRenderedInvariants is the AC4 substring-invariant
 // test: rendered prompts MUST contain the named substrings in every (variant,
 // non-minimal contextBudget) pair. These are the operational primitives the
@@ -221,6 +271,8 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
 		"[<bead-id>]",
 		"git add <specific-paths>",
 		"git add -A", // appears as part of "never `git add -A`"
+		"Run git/index mutations sequentially",
+		"lefthook run pre-commit",
 		"no_changes_rationale.txt",
 		".ddx/executions/",
 		"ddx bead create",
@@ -298,12 +350,12 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 }
 
 // TestPromptGuardrails_AllPresent is AC2 for ddx-fcdbc731: enumerates the
-// 20 load-bearing guardrails from the FEAT-022 comment block above the
+// 22 load-bearing guardrails from the FEAT-022 comment block above the
 // instr* constants and asserts each is present in the rendered full prompt
 // for both variants. Adding or removing a guardrail must update both the
 // comment block and this test.
 func TestPromptGuardrails_AllPresent(t *testing.T) {
-	// 19 instruction-level guardrails. Probes are XML-safe (no angle brackets)
+	// 21 instruction-level guardrails. Probes are XML-safe (no angle brackets)
 	// so they can be checked against the full XML-wrapped rendered prompt.
 	instrGuardrails := []struct{ name, probe string }{
 		{"ac_checkbox_anti_handwave", "AC must be"},
@@ -312,7 +364,9 @@ func TestPromptGuardrails_AllPresent(t *testing.T) {
 		{"commit_exactly_once", "Commit exactly once"},
 		{"git_add_specific_paths", "specific-paths"},
 		{"never_git_add_dash_a", "git add -A"},
+		{"sequential_git_operations", "Run git/index mutations sequentially"},
 		{"no_red_code", "Do not commit red code"},
+		{"rerun_staged_pre_commit_gate", "lefthook run pre-commit"},
 		{"no_modify_outside_scope", "outside the bead"},
 		{"never_ddx_init", "ddx init"},
 		{"executions_intact", ".ddx/executions/"},
