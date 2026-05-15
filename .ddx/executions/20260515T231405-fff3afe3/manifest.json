@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260515T231405-fff3afe3",
+  "bead_id": "ddx-b5039a2c",
+  "base_rev": "c20a54d73a18a6ad33e8737cfa8c13a0cfd383a2",
+  "created_at": "2026-05-15T23:14:09.619910954Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b5039a2c",
+    "title": "work: suppress false pre-dispatch dirty preservation after land",
+    "description": "PROBLEM\nDuring the current DDx monitor on 2026-05-15, ddx-b6859802 landed successfully, then the next watch iteration immediately reported: preserved pre-dispatch implementation changes in /Users/erik/Projects/ddx under refs/ddx/pre-dispatch/20260515T221109-774cab8b; released ddx-bb8e7d07 and continuing watch. dirty paths: cli/cmd/run_test_helpers.go. A primary-checkout git status immediately afterward was clean, and the retry of ddx-bb8e7d07 proceeded. The reported path was the rename/delete path from the just-landed bead, not operator WIP. This creates exactly the dirty-file complaint loop operators do not want: DDx preserves and reports its own transient post-land state even though there is nothing for the operator to commit or clean.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/execute_bead.go:738-759 treats any non-allowed pre-dispatch dirty path as implementation dirt. cli/internal/agent/execute_bead_loop.go:1994-2008 then preserves those paths under refs/ddx/pre-dispatch and continues watch mode. That path does not distinguish stable operator WIP from transient just-landed files still visible while the previous attempt finalization/checkpoint commits are settling. The result is a false dirty-tree preservation event between two worker claims.\n\nPROPOSED FIX\n- Add a regression that simulates a successful landed attempt with a rename/delete path and immediately starts the next watch iteration; the next bead must not be released because of the just-landed path.\n- Make pre-dispatch dirty handling require a stable dirty snapshot before preserving implementation paths in watch mode, or serialize next-claim pre-dispatch after the prior attempt finalization under the same project git lock so just-landed files cannot appear as operator WIP.\n- Keep the real operator-WIP behavior from ddx-ff7a7207: if an actual implementation file remains dirty after the stability check, stop or preserve according to the existing operator-attention policy.\n\nNON-SCOPE\n- Do not auto-commit arbitrary operator implementation files.\n- Do not remove the pre-dispatch dirty-tree guard.\n- Do not change execute-bead merge policy or rewrite historical attempt commits.\n- Do not hand-edit .ddx/beads.jsonl.\n\nDEPS\nNone.",
+    "acceptance": "1. TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim (or equivalent) reproduces a successful land that renames/deletes a tracked file, then proves the next ready bead is not released with loop.pre_dispatch_dirty_preserved for that just-landed path.\n2. TestPreDispatchDirtyPreserveRequiresStableImplementationDirt (or equivalent) proves a path that disappears after the stability recheck is not stashed under refs/ddx/pre-dispatch.\n3. Existing real-dirty-tree coverage from TestLoop_WatchCheckpointDirtyStopsWithoutRetry or TestWorkDirtyTreeCheckpointReturnsOperatorAttention remains green and still reports true operator WIP.\n4. cd cli \u0026\u0026 go test ./internal/agent -run 'TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim|TestPreDispatchDirtyPreserveRequiresStableImplementationDirt|TestLoop_WatchCheckpointDirtyStopsWithoutRetry' -count=1 passes.\n5. cd cli \u0026\u0026 go test ./cmd -run 'TestWorkDirtyTreeCheckpointReturnsOperatorAttention' -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-c191e91a",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:execution",
+      "area:git",
+      "kind:bug",
+      "operator-ux",
+      "dirty-tree",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-b5039a2c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T23:14:05.293501038Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "triage.estimated_difficulty": "hard"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T231405-fff3afe3",
+    "prompt": ".ddx/executions/20260515T231405-fff3afe3/prompt.md",
+    "manifest": ".ddx/executions/20260515T231405-fff3afe3/manifest.json",
+    "result": ".ddx/executions/20260515T231405-fff3afe3/result.json",
+    "checks": ".ddx/executions/20260515T231405-fff3afe3/checks.json",
+    "usage": ".ddx/executions/20260515T231405-fff3afe3/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b5039a2c-20260515T231405-fff3afe3"
+  },
+  "prompt_sha": "3a6057f4b901a15ca0e7b1a0ddfe744a63e80bbe29405c633500ed7557bbb1cd"
+}
