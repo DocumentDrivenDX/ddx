@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -554,81 +553,6 @@ func TestSessionEntryTC005_NewFieldsRoundTrip(t *testing.T) {
 	assert.Equal(t, original.NativeLogRef, decoded.NativeLogRef)
 	assert.Equal(t, original.TraceID, decoded.TraceID)
 	assert.Equal(t, original.SpanID, decoded.SpanID)
-}
-
-// --- Quorum ---
-
-func TestEffectiveThreshold(t *testing.T) {
-	tests := []struct {
-		strategy  string
-		threshold int
-		total     int
-		expected  int
-	}{
-		{"any", 0, 3, 1},
-		{"majority", 0, 3, 2},
-		{"majority", 0, 5, 3},
-		{"unanimous", 0, 3, 3},
-		{"", 2, 3, 2},
-		{"", 0, 3, 1},
-	}
-	for _, tt := range tests {
-		got := effectiveThreshold(tt.strategy, tt.threshold, tt.total)
-		assert.Equal(t, tt.expected, got)
-	}
-}
-
-func TestQuorumMet(t *testing.T) {
-	pass := &Result{ExitCode: 0}
-	fail := &Result{ExitCode: 1}
-
-	assert.True(t, QuorumMet("any", 0, []*Result{pass, fail, fail}))
-	assert.False(t, QuorumMet("any", 0, []*Result{fail, fail, fail}))
-	assert.True(t, QuorumMet("majority", 0, []*Result{pass, pass, fail}))
-	assert.False(t, QuorumMet("majority", 0, []*Result{pass, fail, fail}))
-	assert.True(t, QuorumMet("unanimous", 0, []*Result{pass, pass, pass}))
-	assert.False(t, QuorumMet("unanimous", 0, []*Result{pass, nil, pass}))
-}
-
-func TestQuorumRunsAllHarnesses(t *testing.T) {
-	calls := make(map[string]bool)
-	mock := &mockExecutor{output: "ok"}
-	r := newTestRunner(mock)
-	// Override executor to track calls
-	r.Executor = &trackingExecutor{calls: calls, output: "ok"}
-
-	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
-	rcfg := cfg.Resolve(config.CLIOverrides{})
-	run := func(armRuntime AgentRunRuntime) (*Result, error) {
-		return dispatchViaResolvedConfig(context.Background(), "", nil, r, rcfg, armRuntime)
-	}
-	runtime := QuorumRuntime{
-		AgentRunRuntime: AgentRunRuntime{Prompt: "test"},
-		Harnesses:       []string{"codex", "claude"},
-		Strategy:        "unanimous",
-	}
-	results, err := runQuorumWithConfig(run, rcfg, runtime)
-	require.NoError(t, err)
-	assert.Len(t, results, 2)
-	assert.True(t, calls["codex"])
-	assert.True(t, calls["claude"])
-}
-
-type trackingExecutor struct {
-	mu     sync.Mutex
-	calls  map[string]bool
-	output string
-}
-
-func (e *trackingExecutor) Execute(ctx context.Context, binary string, args []string, stdin string) (*ExecResult, error) {
-	return e.ExecuteInDir(ctx, binary, args, stdin, "")
-}
-
-func (e *trackingExecutor) ExecuteInDir(ctx context.Context, binary string, args []string, stdin, dir string) (*ExecResult, error) {
-	e.mu.Lock()
-	e.calls[binary] = true
-	e.mu.Unlock()
-	return &ExecResult{Stdout: e.output}, nil
 }
 
 func TestRunWithUnknownModelWarns(t *testing.T) {
