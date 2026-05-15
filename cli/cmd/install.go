@@ -721,60 +721,6 @@ func addLocalOverlayIgnores(repoRoot string, paths []string) error {
 	return os.WriteFile(excludePath, append(existing, []byte(sb.String())...), 0o644)
 }
 
-// copyDirTree copies the source directory tree into dst as real files,
-// returning the list of written file paths (relative to cwd).
-func copyDirTree(src, dst string) ([]string, error) {
-	var written []string
-	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		rel, relErr := filepath.Rel(src, path)
-		if relErr != nil {
-			return relErr
-		}
-		if shouldSkipLocalInstallPath(rel, info) {
-			if info.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		target := filepath.Join(dst, rel)
-		if info.IsDir() {
-			return os.MkdirAll(target, 0o755)
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			// Skip plugin-source symlinks — never materialize.
-			return nil
-		}
-		if !info.Mode().IsRegular() {
-			return nil
-		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-			return err
-		}
-		in, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = in.Close() }()
-		out, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
-		if err != nil {
-			return err
-		}
-		if _, copyErr := io.Copy(out, in); copyErr != nil {
-			_ = out.Close()
-			return copyErr
-		}
-		if err := out.Close(); err != nil {
-			return err
-		}
-		written = append(written, target)
-		return nil
-	})
-	return written, err
-}
-
 func filterLocalInstallValidationIssues(root string, issues []registry.ValidationIssue) []registry.ValidationIssue {
 	filtered := issues[:0]
 	roots := localInstallRootAliases(root)
@@ -874,21 +820,6 @@ func shouldSkipLocalInstallIssue(rel string) bool {
 		if strings.HasPrefix(rel, prefix) {
 			return true
 		}
-	}
-	return false
-}
-
-func shouldSkipLocalInstallPath(rel string, info os.FileInfo) bool {
-	rel = strings.TrimPrefix(filepath.ToSlash(rel), "./")
-	if rel == "." || rel == "" {
-		return false
-	}
-	if shouldSkipLocalInstallIssue(rel + "/") {
-		return true
-	}
-	if info.IsDir() {
-		base := filepath.Base(rel)
-		return base == ".git" || base == "node_modules" || base == "tmp"
 	}
 	return false
 }

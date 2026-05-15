@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -105,30 +104,4 @@ func newLocalServerClient() *http.Client {
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // local self-signed cert
 		},
 	}
-}
-
-// resolveWorktree creates or reuses a named worktree under .worktrees/.
-func resolveWorktree(repoRoot, name string) (string, error) {
-	if repoRoot == "" {
-		out, err := gitpkg.Command(context.Background(), "", "rev-parse", "--show-toplevel").Output()
-		if err != nil {
-			return "", fmt.Errorf("cannot detect repo root: %w", err)
-		}
-		repoRoot = strings.TrimSpace(string(out))
-	}
-
-	wtDir := filepath.Join(repoRoot, ".worktrees", name)
-	if _, err := os.Stat(wtDir); err == nil {
-		return wtDir, nil
-	}
-
-	cmd := gitpkg.Command(context.Background(), repoRoot, "worktree", "add", wtDir, "-b", name)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		cmd2 := gitpkg.Command(context.Background(), repoRoot, "worktree", "add", wtDir, name)
-		if out2, err2 := cmd2.CombinedOutput(); err2 != nil {
-			return "", fmt.Errorf("git worktree add failed: %s\n%s", string(out), string(out2))
-		}
-	}
-
-	return wtDir, nil
 }

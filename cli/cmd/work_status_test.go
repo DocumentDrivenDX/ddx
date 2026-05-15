@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -14,6 +15,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type fixedScanner struct {
+	workers []workerstatus.LiveWorker
+}
+
+func (s fixedScanner) Scan(_ context.Context) ([]workerstatus.LiveWorker, error) {
+	return s.workers, nil
+}
 
 // TestWorkStatusDefaultsToCurrentProjectOnly proves the default scope of
 // `ddx work status --json` is the requested project root, not every live

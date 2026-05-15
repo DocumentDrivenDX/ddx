@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -165,15 +164,4 @@ func writeWorkStatusText(out io.Writer, report WorkStatusReport) {
 		fmt.Fprintf(out, "  pid=%d age=%s project=%s bead=%s attempt=%s worktree=%s\n    %s\n",
 			w.PID, w.Age, w.ProjectRoot, bead, attempt, worktree, w.Command)
 	}
-}
-
-// fixedScanner implements workerstatus.Scanner over a static list. It is
-// only referenced from tests but lives here so production code does not
-// depend on test-only types.
-type fixedScanner struct {
-	workers []workerstatus.LiveWorker
-}
-
-func (s fixedScanner) Scan(_ context.Context) ([]workerstatus.LiveWorker, error) {
-	return s.workers, nil
 }

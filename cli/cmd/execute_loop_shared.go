@@ -428,7 +428,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if autoInferPowerClass {
 				inferredPolicy = escalation.InferPowerClass(targetBead)
 			}
-			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPowerWithInference(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder(), false)
+			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPower(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder())
 			if unavailable {
 				return unavailableReport, nil
 			}
