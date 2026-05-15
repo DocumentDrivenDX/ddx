@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260515T160340-ff913687",
+  "bead_id": "ddx-9c67bd54",
+  "base_rev": "b212ea93db867f88279a03cb7d29fe99a120add1",
+  "created_at": "2026-05-15T16:03:45.778458042Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9c67bd54",
+    "title": "work: auto-commit interrupted attempt cleanup tracker mutations",
+    "description": "PROBLEM\nWhen a ddx work watcher receives SIGINT/SIGTERM or a cancelled root context during an active attempt, it can release the bead claim and append routing/release metadata but leave .ddx/beads.jsonl modified in the main worktree. Live monitor repro on 2026-05-15: Fizeau watcher cancelled during fizeau-4cf91f64, printed \"interrupted attempt released fizeau-4cf91f64 without recording terminal outcome: context canceled\", exited, and left .ddx/beads.jsonl dirty until the operator manually committed the single event append.\n\nROOT CAUSE WITH FILE:LINE\ncli/cmd/root.go:49-55 converts SIGINT/SIGTERM into a cancelled command context. cli/internal/agent/execute_bead_loop.go:2064-2085 handles that cancellation by marking the report disrupted, unclaiming the bead, logging the release, and returning ctxErr immediately. That early return bypasses the normal outcome/evidence finalization path below cli/internal/agent/execute_bead_loop.go:2096-2103 and does not stage/commit DDx-managed tracker mutations produced during the attempt, such as routing events appended before cancellation.\n\nPROPOSED FIX\nOn interrupted-attempt cleanup, keep the existing no-terminal-outcome semantics, but make DDx-managed tracker cleanup durable before returning: unclaim the bead, append a structured interrupted-cleanup event if needed, and route the resulting .ddx/beads.jsonl/attachment mutation through the same bounded auto-commit/index-lock path used for other execute-loop bookkeeping. The main repo should not be left dirty solely because the operator stopped a watcher.\n\nNON-SCOPE\nDo not commit .ddx/run-state.json or .ddx/run-state/**; that live-state pollution is owned by ddx-108f145b. Do not close, cooldown, or mark success for interrupted attempts. Do not change OS signal handling or make a cancelled implementation attempt look like model failure. Do not hand-edit .ddx/beads.jsonl.",
+    "acceptance": "1. TestExecuteLoopInterruptedAttemptCommitsTrackerCleanup proves a cancelled loop context unclaims the bead and commits the resulting .ddx/beads.jsonl mutation, leaving no unstaged tracker diff in a temp git repo.\n2. TestExecuteLoopInterruptedAttemptDoesNotCommitRunState proves the interrupt cleanup commit excludes .ddx/run-state.json and .ddx/run-state/** even when those files are dirty.\n3. TestExecuteLoopInterruptedAttemptDoesNotRecordTerminalOutcome proves the bead remains open/retryable, is not closed, and no success/already_satisfied/no_changes terminal outcome is recorded for the cancelled attempt.\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestExecuteLoopInterruptedAttempt\" -count=1 passes.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "area:git",
+      "kind:bug",
+      "operator-ux",
+      "dirty-tree"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-9c67bd54)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T16:03:35.503055646Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T160340-ff913687",
+    "prompt": ".ddx/executions/20260515T160340-ff913687/prompt.md",
+    "manifest": ".ddx/executions/20260515T160340-ff913687/manifest.json",
+    "result": ".ddx/executions/20260515T160340-ff913687/result.json",
+    "checks": ".ddx/executions/20260515T160340-ff913687/checks.json",
+    "usage": ".ddx/executions/20260515T160340-ff913687/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-9c67bd54-20260515T160340-ff913687"
+  },
+  "prompt_sha": "fed7d6bd9cecd59ce349959f0ba12245f5f86ba0f566ae0aa0407b4fc742a39e"
+}
