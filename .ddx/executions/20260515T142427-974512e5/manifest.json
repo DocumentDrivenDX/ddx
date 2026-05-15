@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260515T142427-974512e5",
+  "bead_id": "ddx-5cc92777",
+  "base_rev": "a1fec0f61cfe86131698a61d96e29c3b65cb162f",
+  "created_at": "2026-05-15T14:24:32.54379423Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5cc92777",
+    "title": "ddx home: route residual state-root consumers through ddxroot",
+    "description": "PROBLEM\nThe landed zero-footprint refactor introduced `ddxroot.Path(ctx, projectRoot)` and a pre-commit audit, but the audit only catches `filepath.Join(..., \".ddx\", ...)`. Production code still has direct `.ddx` state-root consumers that will keep reading or committing the project worktree instead of the XDG state repository in convention mode.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/execute_bead.go:1791-1837` stats the tracker via `ddxroot.JoinProject(projectRoot, \"beads.jsonl\")`, but then checks/stages/commits literal `.ddx/beads.jsonl` in `projectRoot`. In convention mode that never commits the XDG tracker repo.\n`cli/internal/attemptmetrics/attemptmetrics.go:19-101` defines `.ddx/metrics/attempts.jsonl` as a relative constant and joins it directly under `projectRoot`, bypassing `ddxroot`.\n`cli/cmd/work_plan.go:82-87` and `cli/cmd/work_clear_cooldowns.go:46-47` open `projectRoot + \"/.ddx\"` directly, so convention-mode projects show empty or wrong queues.\nThe new audit command in `lefthook.yml` only searches for `filepath.Join(..., \".ddx\")`, so these regressions are invisible to pre-commit.\n\nPROPOSED FIX\nRoute the concrete residual state-root consumers above through `ddxroot.Path` / `ddxroot.JoinProject`. When committing tracker state in convention mode, run git in the actual DDx state root repository and stage `beads.jsonl` relative to that repo; preserve existing in-tree behavior and execute-bead merge-policy commits. Update the audit so it fails on production direct state-root patterns such as `projectRoot + \"/.ddx\"`, `WorkingDir + \"/.ddx\"`, and constants joined under projectRoot for DDx-managed state, while still allowing relative artifact path strings used inside worker prompts and git pathspec filters.\n\nNON-SCOPE\nDo not migrate this repository out of in-tree mode. Do not rewrite prompt text that intentionally tells agents where evidence appears in an execution worktree. Do not change the bead storage format or attachment externalization policy.",
+    "acceptance": "1. Add `TestCommitTrackerConventionModeCommitsXDGTracker` proving `CommitTracker(projectRoot)` commits `beads.jsonl` in the XDG ddxroot repository when `projectRoot` has no `.ddx/`, and does not try to stage `.ddx/beads.jsonl` in the project worktree.\n2. Add `TestAttemptMetricsUseDDxRootPath` proving `attemptmetrics.AppendRow`, `LoadRows`, and `LoadAttemptIDs` read/write `${ddxroot.Path(projectRoot)}/metrics/attempts.jsonl` in convention mode.\n3. Add `TestWorkPlanUsesDDxRootPath` and `TestWorkClearCooldownsUsesDDxRootPath` proving those commands read the convention-mode bead store via `ddxroot.Path` rather than `projectRoot/.ddx`.\n4. Harden the `ddxroot-path-audit` pre-commit/CI rule so a production Go file containing `projectRoot + \"/.ddx\"`, `WorkingDir + \"/.ddx\"`, or an equivalent DDx-managed state root bypass fails outside `cli/internal/ddxroot/` and documented test fixtures.\n5. `cd cli \u0026\u0026 go test ./internal/agent ./internal/attemptmetrics ./cmd -run 'TestCommitTrackerConventionModeCommitsXDGTracker|TestAttemptMetricsUseDDxRootPath|TestWorkPlanUsesDDxRootPath|TestWorkClearCooldownsUsesDDxRootPath' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-06cbaa90",
+    "labels": [
+      "area:config",
+      "area:execution",
+      "area:bead",
+      "kind:bug",
+      "initiative:zero-footprint",
+      "principle:ddx-home",
+      "review-finding"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T142427-974512e5",
+    "prompt": ".ddx/executions/20260515T142427-974512e5/prompt.md",
+    "manifest": ".ddx/executions/20260515T142427-974512e5/manifest.json",
+    "result": ".ddx/executions/20260515T142427-974512e5/result.json",
+    "checks": ".ddx/executions/20260515T142427-974512e5/checks.json",
+    "usage": ".ddx/executions/20260515T142427-974512e5/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-5cc92777-20260515T142427-974512e5"
+  },
+  "prompt_sha": "6384d302989447ab3e7aaa1ee5de6f363f05abed0623f85d8c81a9617396e0b4"
+}
