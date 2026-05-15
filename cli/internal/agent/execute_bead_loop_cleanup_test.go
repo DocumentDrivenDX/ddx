@@ -214,7 +214,7 @@ func TestWorkCleanup_RunsPeriodicallyWhilePolling(t *testing.T) {
 		atomic.AddInt32(&cleanupCalls, 1)
 		return ExecutionCleanupSummary{}, nil
 	}), time.Hour, tickCh, io.Discard, nil)
-	defer stop()
+	defer stop(false)
 
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(t, int32(0), atomic.LoadInt32(&cleanupCalls))
@@ -437,8 +437,8 @@ func TestBackgroundCleanupEndToEnd_UsesLockAndJitter(t *testing.T) {
 	}, 2*time.Second, 10*time.Millisecond)
 
 	cancel()
-	stopA()
-	stopB()
+	stopA(false)
+	stopB(false)
 }
 
 func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {

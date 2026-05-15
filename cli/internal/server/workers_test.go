@@ -307,6 +307,7 @@ func installFastSuccessWorker(m *WorkerManager) {
 // so the worker can initialize the bead store without errors.
 func setupBeadStore(t *testing.T, root string) {
 	t.Helper()
+	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ".ddx", "exec-worktrees"))
 	ddxDir := filepath.Join(root, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	// Write empty but valid JSONL

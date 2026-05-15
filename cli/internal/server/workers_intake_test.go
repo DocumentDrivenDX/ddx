@@ -131,9 +131,15 @@ func installWorkerIntakeStub(t *testing.T, stub *workerIntakeServiceStub) {
 func setupWorkerIntakeFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ".ddx", "exec-worktrees"))
 	ddxDir := filepath.Join(root, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\n"), 0o644))
+	cfg := `version: "1.0"
+bead-quality:
+  lint:
+    block_threshold_score: 1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
 	skillDir := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))

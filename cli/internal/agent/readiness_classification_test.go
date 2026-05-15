@@ -7,6 +7,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -145,6 +146,32 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 	assert.Equal(t, PreClaimIntakeActionableAtomic, refine.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, refine.Reason)
 	assert.Empty(t, refine.SystemReason)
+}
+
+func TestReadinessClassification_DecodesEstimatedDifficulty(t *testing.T) {
+	canonical, err := decodePreClaimIntakePayloadResult(`{"outcome":"actionable_atomic","reason":"ready","difficulty":{"estimated_difficulty":"easy","confidence":0.8,"reason":"mechanical docs edit"}}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, canonical.Outcome)
+	assert.Equal(t, "easy", canonical.EstimatedDifficulty)
+}
+
+func TestReadinessClassification_LegacyDecodesEstimatedDifficulty(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"ready","rationale":"ready","difficulty":{"estimated_difficulty":"hard","confidence":0.74,"reason":"multi-subsystem risk"},"readiness_checks":[]}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "hard", got.EstimatedDifficulty)
+}
+
+func TestReadinessUsesBeadDifficultyPrecedence(t *testing.T) {
+	b := &bead.Bead{
+		Extra: map[string]any{
+			escalation.BeadEstimatedDifficultyKey: string(escalation.DifficultyEasy),
+		},
+	}
+
+	got := resolveReadinessEstimatedDifficulty(b, string(escalation.DifficultyHard))
+	assert.Equal(t, escalation.DifficultyEasy, got)
+	assert.Equal(t, escalation.DifficultyMedium, resolveReadinessEstimatedDifficulty(&bead.Bead{}, "bogus"))
 }
 
 func TestPreClaimReadiness_AcceptsStringSuggestedFixes(t *testing.T) {

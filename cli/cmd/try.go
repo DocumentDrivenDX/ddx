@@ -285,7 +285,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					targetBead = b
 					inferredPolicy = escalation.InferPowerClass(targetBead)
 				} else {
-					inferredPolicy = escalation.PowerCheap
+					inferredPolicy = escalation.PowerStandard
 				}
 				if floor, ok := numericPowerFloorHint(targetBead); ok && floor > requestMinPower {
 					requestMinPower = floor
@@ -494,7 +494,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	report := result.Results[0]
 	writeTryResult(cmd.OutOrStdout(), report)
 	if intent := escalation.ParseExecutionHint(target); intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.InferredPowerClass != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: powerClass=%s source=%s\n", intent.InferredPowerClass, intent.Source)
+		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: difficulty=%s powerClass=%s source=%s\n", intent.EstimatedDifficulty, intent.InferredPowerClass, intent.Source)
 	}
 
 	return tryExitCodeForStatus(report.Status)

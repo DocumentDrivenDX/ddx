@@ -130,7 +130,7 @@ func (r *queryResolver) ProviderTrend(ctx context.Context, name string, windowDa
 	now := time.Now().UTC()
 	entries := r.sessionIndexEntries(ctx)
 
-	kind, detected := detectProviderOrHarness(ctx, r, name)
+	kind, detected := detectProviderOrHarness(ctx, r, name, entries)
 	bucketKind := agent.MatchProvider
 	if kind == ProviderKindHarness {
 		bucketKind = agent.MatchHarness
@@ -183,7 +183,13 @@ type detectedRow struct {
 
 // detectProviderOrHarness looks up a name against providers first, then
 // harnesses, returning the resolved kind and quota signal (if any).
-func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string) (ProviderKind, *detectedRow) {
+func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string, entries []agent.SessionIndexEntry) (ProviderKind, *detectedRow) {
+	if kind, detected, ok := detectProviderOrHarnessFromEntries(name, entries); ok {
+		return kind, detected
+	}
+	if sig, ok := LookupHarnessRateLimit(name); ok {
+		return ProviderKindHarness, detectedFromQuota(QuotaFromRateLimitSignal(sig))
+	}
 	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
 		harnesses, _ := svc.ListHarnesses(ctx)
 		for _, h := range harnesses {
@@ -210,6 +216,23 @@ func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string)
 		}
 	}
 	return ProviderKindEndpoint, nil
+}
+
+func detectProviderOrHarnessFromEntries(name string, entries []agent.SessionIndexEntry) (ProviderKind, *detectedRow, bool) {
+	for _, entry := range entries {
+		if strings.EqualFold(entry.Harness, name) {
+			if sig, ok := LookupHarnessRateLimit(name); ok {
+				return ProviderKindHarness, detectedFromQuota(QuotaFromRateLimitSignal(sig)), true
+			}
+			return ProviderKindHarness, nil, true
+		}
+	}
+	for _, entry := range entries {
+		if strings.EqualFold(entry.Provider, name) {
+			return ProviderKindEndpoint, nil, true
+		}
+	}
+	return ProviderKindEndpoint, nil, false
 }
 
 func detectedFromQuota(q *ProviderQuota) *detectedRow {

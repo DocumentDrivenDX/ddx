@@ -310,6 +310,13 @@ func SelectStrongestProfileAbove(snap ProfileSnapshot, floor int) string {
 	return profiles[0].Name
 }
 
+// SelectStandardProfile returns the ordinary implementation policy band. It is
+// used for lifecycle checks that need competent judgment but should not consume
+// top-tier routing unless there is explicit evidence to escalate.
+func SelectStandardProfile(snap ProfileSnapshot) string {
+	return SelectImplementationProfile(snap, escalation.PowerStandard).Name
+}
+
 // SelectImplementationProfile chooses an opaque Fizeau profile name for
 // implementation work. It ranks by policy metadata, not by hard-coded policy
 // names. Ordinary auto-routing avoids profiles with hard requirements (for

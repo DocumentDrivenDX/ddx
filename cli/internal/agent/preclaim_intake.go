@@ -24,7 +24,10 @@ type PreClaimIntakeResult struct {
 	Reason       string                `json:"reason,omitempty"`
 	SystemReason string                `json:"system_reason,omitempty"`
 	Detail       string                `json:"detail,omitempty"`
-	Rewrite      PreClaimIntakeRewrite `json:"rewrite,omitempty"`
+	// EstimatedDifficulty is the readiness model's transient easy/medium/hard
+	// assessment. It is not persisted to bead metadata.
+	EstimatedDifficulty string                `json:"estimated_difficulty,omitempty"`
+	Rewrite             PreClaimIntakeRewrite `json:"rewrite,omitempty"`
 	// Decomposition is populated when Outcome == too_large_decomposed and the
 	// hook produced a concrete split with children and AC map.
 	Decomposition *PreClaimDecomposition `json:"decomposition,omitempty"`

@@ -245,6 +245,31 @@ func TestExecuteOnService_RoleAndCorrelationIDReachServiceRequest(t *testing.T) 
 	}
 }
 
+func TestExecuteOnService_PromptFeaturesReachServiceRequest(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("", "", "", 0, 0)
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt:                "hello routing features",
+		EstimatedPromptTokens: 123,
+		RequiresTools:         true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 123, svc.lastReq.EstimatedPromptTokens)
+	assert.True(t, svc.lastReq.RequiresTools)
+}
+
+func TestExecuteOnService_EstimatesPromptTokensWhenRuntimeOmitsEstimate(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("", "", "", 0, 0)
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello routing features",
+	})
+	require.NoError(t, err)
+	assert.Greater(t, svc.lastReq.EstimatedPromptTokens, 0)
+}
+
 // TestExecuteOnService_IgnoresToolCallTranscriptProjection verifies the
 // service path keeps Fizeau tool_call/tool_result events opaque rather than
 // reconstructing a DDx tool transcript from them.

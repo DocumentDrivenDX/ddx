@@ -251,6 +251,58 @@ func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
+func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+	legacyPowerKey := "triage." + "power_hint"
+	retryFloorKey := "work-next-" + "min-power"
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			got, err := inner.Get(beadID)
+			require.NoError(t, err)
+			if got.Extra != nil {
+				require.NotContains(t, got.Extra, retryFloorKey)
+				require.NotContains(t, got.Extra, "triage.estimated_difficulty")
+				require.NotContains(t, got.Extra, legacyPowerKey)
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-readiness-power",
+				ResultRev: "readiness-power",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome:             PreClaimIntakeActionableAtomic,
+				EstimatedDifficulty: "hard",
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Successes)
+
+	got, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	if got.Extra != nil {
+		assert.NotContains(t, got.Extra, retryFloorKey)
+		assert.NotContains(t, got.Extra, "triage.estimated_difficulty")
+		assert.NotContains(t, got.Extra, legacyPowerKey)
+	}
+}
+
 func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}

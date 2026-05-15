@@ -242,23 +242,25 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}
 
 	req := agentlib.ServiceExecuteRequest{
-		Prompt:          promptText,
-		Model:           model,
-		Policy:          profile,
-		Provider:        provider,
-		Harness:         fizeauHarness(harness),
-		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
-		Permissions:     permissions,
-		WorkDir:         wd,
-		Timeout:         wall,
-		IdleTimeout:     idle,
-		ProviderTimeout: providerTimeout,
-		SessionLogDir:   sessionLogDir,
-		Metadata:        metadataWithEnv(runtime.Correlation, runtime.Env),
-		Role:            runtime.Role,
-		CorrelationID:   runtime.CorrelationID,
-		MinPower:        minPower,
-		MaxPower:        maxPower,
+		Prompt:                promptText,
+		Model:                 model,
+		Policy:                profile,
+		Provider:              provider,
+		Harness:               fizeauHarness(harness),
+		Reasoning:             agentlib.Reasoning(rcfg.Effort()),
+		Permissions:           permissions,
+		WorkDir:               wd,
+		Timeout:               wall,
+		IdleTimeout:           idle,
+		ProviderTimeout:       providerTimeout,
+		SessionLogDir:         sessionLogDir,
+		Metadata:              metadataWithEnv(runtime.Correlation, runtime.Env),
+		Role:                  runtime.Role,
+		CorrelationID:         runtime.CorrelationID,
+		MinPower:              minPower,
+		MaxPower:              maxPower,
+		EstimatedPromptTokens: firstPositiveInt(runtime.EstimatedPromptTokens, estimatePromptTokens(promptText)),
+		RequiresTools:         runtime.RequiresTools,
 	}
 	seedRecentRouteAttemptsFromTracker(ctx, svc, workDir, time.Now().UTC())
 
@@ -365,6 +367,23 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func estimatePromptTokens(prompt string) int {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return 0
+	}
+	return (len(prompt) + 3) / 4
+}
+
+func firstPositiveInt(values ...int) int {
+	for _, value := range values {
+		if value > 0 {
+			return value
+		}
+	}
+	return 0
 }
 
 func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.FizeauService, projectRoot string, now time.Time) {

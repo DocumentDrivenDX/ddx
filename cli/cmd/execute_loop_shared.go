@@ -152,6 +152,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	if tryTargetBeadID == "" && spec.Mode != executeloop.ModeWatch {
+		if breakdown, bErr := store.ReadyExecutionBreakdown(); bErr != nil {
+			return bErr
+		} else if len(breakdown.ExecutionReady) == 0 && len(breakdown.RetryCooldown) == 0 {
+			return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, agent.NewNoReadyWorkLoopResult(spec.Mode, breakdown), dispatch.JSON == "true")
+		}
+	}
 
 	loopSessionID := fmt.Sprintf("agent-loop-%d", time.Now().UnixNano())
 	loopLogDir := filepath.Join(projectRoot, agent.DefaultLogDir)

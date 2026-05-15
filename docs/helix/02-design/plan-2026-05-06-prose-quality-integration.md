@@ -324,8 +324,8 @@ small verification surface.
 Some child beads require higher-judgment execution: corpus labeling, rule
 semantics, skill behavior, and workflow-hook policy. Those beads should use the
 bead-level execution-hint policy in TD-037 rather than ad hoc model or harness
-choices. In particular, `power:smart` requires an inline `SMART JUSTIFICATION`
-in the bead description, and durable harness/provider/model pins are out of
+choices. In particular, use `triage.estimated_difficulty=hard` for beads that
+need stronger reasoning, and keep durable harness/provider/model pins out of
 scope for this plan.
 
 ### Epic
@@ -346,19 +346,19 @@ Acceptance:
 
 | Order | Bead | Scope | Suggested hint | Depends on |
 |---:|---|---|---|---|
-| 0 | `try: define and enforce bead-level execution hints` | Implement TD-037 parsing, lint, evidence, and metrics slices needed before smart hints are relied on. | `power:smart` with TD-037 justification | none |
+| 0 | `try: define and enforce bead-level execution hints` | Implement TD-037 parsing, lint, evidence, and metrics slices needed before hard difficulty hints are relied on. | `triage.estimated_difficulty=hard` | none |
 | 1 | `doctor: validate pinned Vale prose checker` | `cli/cmd/doctor.go`, doctor tests, constants for Vale version. | none | 0 |
 | 2 | `docprose: add DDx Vale style pack skeleton` | `library/checks/prose-quality/styles/DDx/`, metadata schema, no command wiring. | none | 1 |
-| 3 | `docprose: add corpus harness for normalized findings` | `cli/internal/docprose/testdata/corpus/`, corpus loader/tests, expected JSON schema. | `power:smart` for corpus design judgment | 2 |
-| 4 | `docprose: port initial rules to Vale styles` | Vale style files and corpus golden cases for unsupported claim, AI slop, filler, token cost. | `power:smart` for rule precision judgment | 3 |
+| 3 | `docprose: add corpus harness for normalized findings` | `cli/internal/docprose/testdata/corpus/`, corpus loader/tests, expected JSON schema. | `triage.estimated_difficulty=hard` for corpus design judgment | 2 |
+| 4 | `docprose: port initial rules to Vale styles` | Vale style files and corpus golden cases for unsupported claim, AI slop, filler, token cost. | `triage.estimated_difficulty=hard` for rule precision judgment | 3 |
 | 5 | `docprose: generate temporary Vale config` | config generation from DDx defaults/project config; no Vale execution yet. | none | 2 |
 | 6 | `docprose: invoke Vale and parse JSON` | Vale subprocess adapter, JSON structs, error diagnostics. | none | 5 |
-| 7 | `docprose: normalize Vale findings to DDx findings` | rule-id mapping, rationale/suggested-edit mapping, line merge behavior. | `power:smart` for finding-quality semantics | 4, 6 |
+| 7 | `docprose: normalize Vale findings to DDx findings` | rule-id mapping, rationale/suggested-edit mapping, line merge behavior. | `triage.estimated_difficulty=hard` for finding-quality semantics | 4, 6 |
 | 8 | `doc prose: switch command to Vale-backed engine` | `ddx doc prose --changed` and explicit path behavior. | none | 7 |
-| 9 | `bead review: reuse Vale-backed prose findings` | `ddx bead review --prose` path, review evidence. | `power:smart` for review-policy interaction | 8 |
-| 10 | `skills: upgrade human-writing-support workflow examples` | active and shipped skill copies, eval prompts if available. | `power:smart` for skill behavior quality | 8 |
-| 11 | `try: attach prose-check evidence for docs-changing attempts` | execute/try/work evidence capture and advisory handling. | `power:smart` for workflow-hook policy | 8, 10 |
-| 12 | `docs: run Vale-backed prose pass across DDx docs` | Apply high-signal findings to `docs/**`; record before/after finding count and word-count delta. | `power:smart` for corpus-scale editorial judgment | 11 |
+| 9 | `bead review: reuse Vale-backed prose findings` | `ddx bead review --prose` path, review evidence. | `triage.estimated_difficulty=hard` for review-policy interaction | 8 |
+| 10 | `skills: upgrade human-writing-support workflow examples` | active and shipped skill copies, eval prompts if available. | `triage.estimated_difficulty=hard` for skill behavior quality | 8 |
+| 11 | `try: attach prose-check evidence for docs-changing attempts` | execute/try/work evidence capture and advisory handling. | `triage.estimated_difficulty=hard` for workflow-hook policy | 8, 10 |
+| 12 | `docs: run Vale-backed prose pass across DDx docs` | Apply high-signal findings to `docs/**`; record before/after finding count and word-count delta. | `triage.estimated_difficulty=hard` for corpus-scale editorial judgment | 11 |
 
 ### Split Rules
 

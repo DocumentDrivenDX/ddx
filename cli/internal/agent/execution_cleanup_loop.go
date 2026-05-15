@@ -176,9 +176,9 @@ func jitteredCleanupDelay(base time.Duration, rng *rand.Rand) time.Duration {
 	return delay
 }
 
-func startExecutionCleanupWorker(ctx context.Context, projectRoot string, runner executionCleanupRunner, interval time.Duration, tickCh <-chan time.Time, log io.Writer, emit func(string, map[string]any)) (stop func()) {
+func startExecutionCleanupWorker(ctx context.Context, projectRoot string, runner executionCleanupRunner, interval time.Duration, tickCh <-chan time.Time, log io.Writer, emit func(string, map[string]any)) (stop func(runShutdownPass bool)) {
 	if runner == nil {
-		return func() {}
+		return func(bool) {}
 	}
 	if interval <= 0 {
 		interval = defaultExecutionCleanupInterval
@@ -196,7 +196,6 @@ func startExecutionCleanupWorker(ctx context.Context, projectRoot string, runner
 			if tickCh != nil {
 				select {
 				case <-workerCtx.Done():
-					_, _, _ = runExecutionCleanupPass(context.Background(), projectRoot, runner, log, emit, "shutdown")
 					return
 				case <-tickCh:
 					_, _, _ = runExecutionCleanupPass(workerCtx, projectRoot, runner, log, emit, "periodic")
@@ -208,7 +207,6 @@ func startExecutionCleanupWorker(ctx context.Context, projectRoot string, runner
 			select {
 			case <-workerCtx.Done():
 				timer.Stop()
-				_, _, _ = runExecutionCleanupPass(context.Background(), projectRoot, runner, log, emit, "shutdown")
 				return
 			case <-timer.C:
 				_, _, _ = runExecutionCleanupPass(workerCtx, projectRoot, runner, log, emit, "periodic")
@@ -216,8 +214,11 @@ func startExecutionCleanupWorker(ctx context.Context, projectRoot string, runner
 		}
 	}()
 
-	return func() {
+	return func(runShutdownPass bool) {
 		cancel()
 		<-done
+		if runShutdownPass {
+			_, _, _ = runExecutionCleanupPass(context.Background(), projectRoot, runner, log, emit, "shutdown")
+		}
 	}
 }

@@ -8,182 +8,169 @@ ddx:
     - ADR-024
   status: draft
 ---
-# Technical Design: Bead-Level Execution Hints
+# Technical Design: Bead Estimated Difficulty
 
 ## Purpose
 
-DDx needs a durable way to say what level of agent effort a bead needs without
-turning the queue into a collection of model pins. The mechanism must be
-portable across machines and providers, auditable after the fact, and hard to
-cargo-cult into concrete harness or model choices.
+DDx needs a durable way to say how difficult a bead appears before execution
+without turning the queue into route policy. The bead record must stay portable
+across machines, providers, and harnesses. It must not store concrete
+harness/provider/model choices, Fizeau profile names, or numeric power floors.
 
-This design defines bead-level execution hints as abstract power intent. It
-does not let beads choose providers, harnesses, or concrete models.
+This design defines exactly one optional bead-level hint:
 
-The governing policy is:
+```text
+triage.estimated_difficulty = easy | medium | hard
+```
 
-1. Bias toward work getting done automatically.
-2. By default, use the cheapest and fastest available profile that is likely to
-   get the work done.
-3. Reserve the most powerful profiles for the most difficult work: bead
-   breakdown, debugging, high-risk reviews, architecture-sensitive work, or
-   retries with concrete lower-power failure evidence.
+The hint describes task difficulty. It does not describe a model, provider,
+harness, profile, or numeric power value.
 
-## Current State
+## Policy
 
-`ddx try` already has a partial mechanism:
+1. If a bead explicitly sets `triage.estimated_difficulty`, DDx uses it.
+2. If the field is absent or invalid, DDx treats the bead as `medium`.
+3. DDx maps difficulty to abstract execution power only at dispatch time:
 
-- Beads preserve unknown custom fields in `Extra`, but `ddx try` does not read
-  arbitrary routing custom fields.
-- `ddx try` accepts CLI execution constraints: abstract power bounds plus raw
-  passthrough strings for profile, harness, provider, model, and model-ref.
-- When no routing flags are supplied and no project routing config exists,
-  `ddx try` calls `escalation.InferPowerClass(bead)`.
-- `InferPowerClass` treats labels `power:smart`, `power:standard`, and `power:cheap` as
-  explicit power overrides before falling back to priority, kind, and scope
-  heuristics.
-- DDx has Fizeau profile snapshot helpers that can read `ListPolicies` and
-  `ListModels`, but implementation dispatch must use those helpers to select a
-  profile/policy for inferred power intent instead of falling through to
-  Fizeau's default policy.
+   | Estimated difficulty | Dispatch power class |
+   |---|---|
+   | `easy` | `cheap` |
+   | `medium` | `standard` |
+   | `hard` | `smart` |
 
-That gives DDx a usable short-term path, but it is underspecified. It does not
-define when `power:smart` is justified, how the choice is audited, or how to
-reject durable model/harness cargo culting.
+4. Fizeau still owns concrete route selection inside the requested power bounds
+   or selected policy. DDx must not persist route-side choices back onto the bead.
+5. Retry escalation may raise the next attempt's requested `MinPower`, but that
+   retry state is execution policy, not bead triage metadata. Numeric retry
+   floors must not be written to bead `Extra`.
 
-## Design
+## Durable Hint Surface
 
-### Durable Hint Surface
+DDx recognizes exactly one durable bead-level hint surface:
 
-DDx recognizes exactly one durable bead-level hint surface in v1:
-
-| Surface | Values | Meaning |
+| Field | Values | Meaning |
 |---|---|---|
-| `power:cheap` label | cheap | Mechanical work where low-cost models should be enough. |
-| `power:standard` label | standard | Ordinary implementation or review work. |
-| `power:smart` label | smart | High-judgment, broad, ambiguous, or architecture-sensitive work. |
+| `triage.estimated_difficulty` | `easy`, `medium`, `hard` | Optional task-difficulty estimate used to choose the initial abstract power class. |
 
-The label is a request for abstract execution power. It is not a model name,
-provider name, harness name, or Fizeau profile name. Fizeau may expose
-shortcut profile names, but those names are configurable and DDx must not
-treat them as canonical. At the DDx request-construction boundary, DDx maps the
-hint to a Fizeau profile/policy by inspecting Fizeau-owned profile metadata.
-Fizeau still owns the concrete route inside that profile.
+No other bead metadata affects power inference. In particular, DDx must not
+read or write any of these as power hints:
 
-### Profile Selection Policy
+- `triage.power_hint`;
+- labels such as `power:smart`, `power:standard`, `power:cheap`, or
+  `power:hint=...`;
+- bead priority, issue type, kind labels, title length, description length, or
+  acceptance length;
+- numeric values in bead `Extra`.
 
-For `ddx try` and `ddx work`, when no explicit routing flags and no project
-routing configuration are present, DDx selects request-level profile intent as
-follows:
+Invalid `triage.estimated_difficulty` values are ignored and resolve to
+`medium`.
 
-1. Infer what the task needs: difficulty/power band, breadth, risk, likely
-   context size, need for tools, review/debug/breakdown role, and retry history.
-2. Fetch Fizeau profile and model metadata via `ListPolicies` and `ListModels`.
-3. Treat Fizeau profile names as opaque. Do not hard-code names such as
+## Difficulty Definitions
+
+Use `easy` only for narrow mechanical work with low blast radius:
+
+- typo, formatting, or wording fixes;
+- simple docs/prose edits;
+- straightforward fixture updates;
+- one-file transforms where the expected edit is obvious.
+
+Use `medium` for ordinary implementation work:
+
+- normal build/test/code changes;
+- routine bug fixes;
+- localized refactors;
+- tasks where the correct path is clear enough for a standard implementer.
+
+Use `hard` only when stronger reasoning is materially useful:
+
+- architecture, API, or data-model tradeoffs;
+- ambiguous or competing requirements;
+- multi-subsystem work with high blast radius;
+- security, data-loss, migration, or concurrency risk;
+- prior attempts showing `standard` power was insufficient.
+
+Do not choose `hard` just because a bead is important, long, or could be
+written more cleanly. Low readiness means refine, split, or block the bead; it
+does not mean the bead is hard.
+
+## Power Inference
+
+`escalation.InferPowerClass(bead)` must be intentionally small:
+
+1. Read `triage.estimated_difficulty` from bead `Extra`.
+2. If it is `easy`, return `cheap`.
+3. If it is `medium`, return `standard`.
+4. If it is `hard`, return `smart`.
+5. Otherwise return `standard`.
+
+There is no heuristic fallback. There is no label fallback. There is no numeric
+fallback. The default is `standard` because ordinary implementation work should
+not start at the weakest model without a signal that the work is mechanical.
+
+## Readiness Classification
+
+The readiness model may estimate task difficulty as part of its structured
+result. It must use the same bead-facing vocabulary:
+
+```json
+{
+  "difficulty": {
+    "estimated_difficulty": "easy|medium|hard",
+    "reason": "short reason"
+  }
+}
+```
+
+Readiness score and difficulty are separate judgments. Readiness answers
+whether the bead is executable as written. Difficulty answers what initial
+abstract power class is appropriate if the bead is executable.
+
+If the bead already has `triage.estimated_difficulty`, that authored metadata
+takes precedence over readiness output. If the bead has no difficulty hint,
+readiness output may be used for the current dispatch decision. It must not be
+stored as `triage.power_hint`, a Fizeau profile, a numeric power floor, or any
+second durable hint field.
+
+## Dispatch Mapping
+
+For `ddx try` and `ddx work`, when no explicit CLI routing flags and no project
+routing configuration are present, DDx maps the inferred power class to a
+request-level profile or power bound using Fizeau-owned metadata:
+
+1. Fetch Fizeau policy/model metadata when available.
+2. Treat Fizeau profile names as opaque. Do not hard-code names such as
    `cheap`, `standard`, `smart`, `frontier`, or provider-specific aliases.
-4. Classify candidate profiles by metadata: power range, availability,
-   auto-routable model coverage, hard policy requirements, cost/billing data,
-   speed/perf signals, and later diversity signals when exposed.
-5. Choose the profile that best satisfies the task need while optimizing for
-   forward progress, then cost and speed. For default implementation work, this
-   normally means the weakest no-extra-requirement profile expected to complete
-   the task.
-6. If the requested band has no viable profile but another free provider is
-   available, try the best available free/low-cost profile instead of blocking
-   the bead. Record the downgrade in routing-intent evidence.
-7. If no provider/profile is available at all, return an execution error. Do
-   not park the bead as a capability blocker.
-8. Escalate only after DDx-owned evidence shows the lower profile did not get
-   the work done.
-9. Break ties inside that band by preferring profiles that are cheaper and faster
-   while still available, auto-routable, and appropriate for default execution.
-10. Send only the selected Fizeau profile/policy name and abstract power bounds.
-   Do not send a concrete harness, provider, or model unless the operator
-   supplied that passthrough explicitly.
+3. Select the profile that best matches the abstract power class while
+   respecting Fizeau policy metadata and availability.
+4. Send only the selected Fizeau profile/policy name and/or abstract power
+   bounds. Do not send a concrete harness, provider, or model unless the
+   operator supplied that passthrough explicitly.
 
-DDx must treat policy requirements such as local-only/no-remote as hard routing
-semantics, not as ordinary low-power profile variants. A requirement-bearing
-profile is eligible for automatic selection only when DDx has explicit matching
-intent; otherwise DDx leaves it for explicit `--profile` passthrough or a
-future explicit local-only workflow. DDx must not duplicate Fizeau's provider
-preference mappings such as local-first, subscription-first, or local-only
-ordering. Fizeau owns provider preference and concrete route choice inside the
-selected policy. When a retry raises `MinPower` above every available
-no-extra-requirement profile, DDx may drop the previously selected policy and
-send `MinPower` only rather than reusing a stale lower-power policy; Fizeau then
-routes from live availability or returns its normal no-eligible-candidate error.
+Fizeau owns provider preference and concrete route choice inside the selected
+policy or power bounds.
 
-For ordinary implementation work, DDx should select the medium/default band by
-metadata, not by a hard-coded Fizeau profile name. It should not drift to the
-highest-power profile merely because a stronger subscription model is
-available. The strongest band is appropriate when the bead carries an explicit
-strong-power hint, the work is breakdown/debug/high-risk by policy, or prior
-attempt evidence shows a weaker profile could not meet acceptance criteria.
-
-If Fizeau profile metadata is unavailable, DDx may fall back to a `MinPower`
-floor. That fallback must preserve the same weak-first policy: ordinary
-implementation work uses a medium-band lower-bound floor, not the top available
-model. If that floor is unsatisfied but a weaker free/available provider exists,
-DDx should try it and record a degraded route rather than failing before
-attempting the bead. Escalation raises profile/power only after DDx-owned
-evidence shows the lower-power attempt did not complete the work.
-
-DDx should not add bead-level `harness`, `provider`, `model`, or `model-ref`
-fields. Those remain operator-supplied CLI passthrough constraints for one
-attempt, or project/Fizeau configuration when a workspace intentionally pins
-routing policy.
-
-### Smart-Power Justification
-
-`power:smart` requires a justification in the bead description. The justification
-must name the reason the bead is likely capability-sensitive, using one or more
-of these categories:
-
-- cross-cutting behavior or multiple subsystems;
-- architecture, API, or data-model decision;
-- ambiguous or competing requirements that need reconciliation;
-- high-risk review, security, data-loss, or migration concern;
-- evaluation of non-deterministic output quality;
-- decomposition or planning work where weak reasoning creates downstream waste.
-
-Valid example:
-
-```text
-SMART JUSTIFICATION: This bead decides the durable execution-hint contract and
-its precedence against ADR-024 routing policy. A weak implementation could
-persist concrete model pins into queue metadata.
-```
-
-Invalid example:
-
-```text
-SMART JUSTIFICATION: Claude worked well last time.
-```
-
-The first enforcement step should live in the bead lifecycle lint hook so
-authors and agents get feedback before dispatch. A later hardening pass may add
-the same validation to `ddx bead create` and `ddx bead update`, but lint is the
-minimum gate because all automated execution passes through it.
-
-### Precedence
+## Precedence
 
 Execution intent resolves in this order:
 
 1. Explicit CLI flags for the current invocation.
 2. Project/Fizeau routing configuration.
-3. Durable bead hint label.
-4. DDx heuristic inference from priority, kind, issue type, and scope.
-5. DDx default.
+3. Bead `triage.estimated_difficulty`.
+4. Default `medium` difficulty, which maps to `standard`.
 
-CLI flags win because they are operator actions for one attempt and are visible
-in the command/evidence. Durable bead hints win over heuristics because they are
-part of the reviewed work item.
+There are no additional bead-level paths.
 
-If a project has explicit routing configuration, `ddx try` must not silently
-override it with a bead label. The label should still be recorded as requested
-intent so operators can audit divergence between requested and actual routing.
+## Retry Escalation
 
-### Rejected Durable Route Pins
+DDx owns retry policy. After a failed attempt, DDx may raise the next attempt's
+requested `MinPower` based on DDx-owned evidence: execution status, no-changes
+rationale, review verdicts, route failures, retry budget, and cooldowns.
+
+Retry escalation must not mutate `triage.estimated_difficulty` and must not
+write numeric floors to bead `Extra`. The bead field is a triage estimate, not a
+retry-state register.
+
+## Rejected Durable Route Pins
 
 Bead metadata must not persist concrete route choices. The lint hook should
 reject or block execution when a bead includes durable fields or labels that
@@ -202,27 +189,21 @@ explicit operator constraint:
 ddx try <id> --harness claude
 ```
 
-This keeps durable queue metadata portable and prevents agents from copying
-route choices that happened to work once.
-
-### Audit Evidence
+## Audit Evidence
 
 Every `ddx try` / `ddx work` attempt should record routing-intent evidence
-before execution starts. The evidence should be append-only and attached to the
-attempt/run record, not only printed to stdout.
-
-Minimum fields:
+before execution starts. Minimum fields:
 
 | Field | Meaning |
 |---|---|
 | `bead_id` | Target bead. |
 | `attempt_id` | Attempt/run id. |
-| `routing_intent_source` | `cli`, `project_config`, `bead_hint`, `heuristic`, or `default`. |
+| `routing_intent_source` | `cli`, `project_config`, `bead_hint`, `readiness`, or `default`. |
+| `estimated_difficulty` | `easy`, `medium`, `hard`, or empty when not difficulty-based. |
 | `requested_power_class` | `cheap`, `standard`, `smart`, or empty when not power-based. |
 | `requested_profile` | Fizeau profile/policy name DDx requested, when selected. |
 | `requested_min_power` | Resolved `MinPower`, when available. |
 | `requested_max_power` | Resolved `MaxPower`, when available. |
-| `smart_justification` | Extracted justification text when `requested_power_class=smart`. |
 | `actual_harness` | Harness reported by Fizeau/agent after execution. |
 | `actual_provider` | Provider reported after execution. |
 | `actual_model` | Model reported after execution. |
@@ -231,60 +212,34 @@ Minimum fields:
 | `routing_intent_note` | Short reason for degradation or override. |
 
 The evidence event name should be stable, for example
-`execution-routing-intent`. Existing attempt result fields already capture some
-actual route facts; this event ties those facts back to why DDx requested that
-power.
+`execution-routing-intent`.
 
-### Metrics
+## Metrics
 
-The agent metrics rollup should ingest the routing-intent fields once they are
+The agent metrics rollup should ingest routing-intent fields once they are
 present in run evidence. At minimum, operators need to answer:
 
-- How many attempts used `power:smart`?
-- Which beads requested smart, and what was the justification?
-- What was the success rate and cost of smart-hinted work compared with
-  heuristic or default work?
-- How often did CLI or project config override a bead hint?
+- How many attempts started from each estimated difficulty?
+- What success rate and cost did each difficulty/power mapping produce?
+- How often did CLI or project config override bead difficulty?
 - Which beads carried rejected durable route pins?
-- Which authors or agents are adding smart hints repeatedly?
-
-Initial metrics can be implemented by extending the normalized attempt
-projection used by TD-032. A materialized rollup is not required.
-
-Suggested dimensions:
-
-| Dimension | Example |
-|---|---|
-| `routing_intent_source` | `bead_hint` |
-| `requested_power_class` | `smart` |
-| `actual_power_bucket` | `>=80` |
-| `degraded` | `true` |
-| `bead_author` | `erik` or agent id when available |
-| `smart_reason_category` | `architecture` |
 
 Suggested counters:
 
+- attempts by estimated difficulty and source;
 - attempts by requested power class and source;
-- success rate by requested power class;
-- cost and token usage by requested power class;
-- smart-hint count by bead author/agent;
+- success rate by estimated difficulty;
+- cost and token usage by estimated difficulty;
 - rejected durable route-pin count;
 - override/degradation count.
 
-### Operator Reporting
+## Operator Reporting
 
 `ddx try` output should stay concise, but it should include the source when a
-bead hint affects execution:
+bead difficulty affects execution:
 
 ```text
-routing intent: powerClass=smart source=bead_hint
-```
-
-If `power:smart` is present without justification, the lint failure should be
-plain:
-
-```text
-bead uses power:smart but has no SMART JUSTIFICATION section
+routing intent: difficulty=hard powerClass=smart source=bead_hint
 ```
 
 If a durable concrete pin is found:
@@ -296,76 +251,110 @@ allowed. Use ddx try <id> --model ... for one-off debugging.
 
 ## Implementation Plan
 
-### Bead 1: specify and test hint parsing
+This is one cleanup pass, not a new routing subsystem. The only durable bead
+field added or read by this design is `triage.estimated_difficulty`.
 
-Scope:
+### 1. Replace the bead hint parser
 
-- Parse `power:*` labels into a typed execution hint.
-- Extract `SMART JUSTIFICATION:` from bead descriptions.
-- Detect forbidden durable route-pin fields and labels.
-
-Acceptance:
-
-1. Tests cover valid `power:cheap`, `power:standard`, and `power:smart`.
-2. Tests cover missing smart justification.
-3. Tests cover forbidden concrete route-pin fields and labels.
-4. Existing heuristic inference behavior remains unchanged when no hint exists.
-
-### Bead 2: enforce hints in bead lifecycle lint
-
-Scope:
-
-- Add lint findings for missing smart justification.
-- Add lint failures for durable concrete route pins.
-- Keep diagnostics actionable.
+- Introduce one constant: `EstimatedDifficultyKey =
+  "triage.estimated_difficulty"`.
+- Introduce one enum/parser for `easy`, `medium`, and `hard`.
+- Make `InferPowerClass(bead)` do only this:
+  1. read `triage.estimated_difficulty`;
+  2. map `easy -> cheap`, `medium -> standard`, `hard -> smart`;
+  3. return `standard` when absent or invalid.
+- Delete the production `BeadPowerHint`/`TriagePowerHint` inference helpers.
+- Do not read `triage.power_hint`, `power:*` labels, priority, kind, issue type,
+  text length, acceptance length, or numeric `Extra` values.
 
 Acceptance:
 
-1. A smart bead without justification fails lint.
-2. A bead with `harness:claude` or `execution-model=...` fails lint.
-3. A bead with valid `power:smart` and justification passes lint.
+1. Tests cover `easy`, `medium`, `hard`, absent, and invalid values.
+2. Tests prove `triage.power_hint`, `power:*` labels, priority, kind, issue
+   type, text length, acceptance length, and numeric `Extra` values are ignored.
+3. No production inference path references `BeadPowerHint`,
+   `TriagePowerHintKey`, or `triage.power_hint`.
 
-### Bead 3: record routing-intent evidence
+### 2. Make readiness estimate difficulty, not power
 
-Scope:
+- Change the readiness prompt to request:
 
-- Resolve execution-intent source during `ddx try` / `ddx work`.
-- Attach `execution-routing-intent` evidence before execution.
-- Update result/evidence tests.
+  ```json
+  {"difficulty":{"estimated_difficulty":"easy|medium|hard","reason":"..."}}
+  ```
 
-Acceptance:
-
-1. Attempts with `power:smart` record source `bead_hint`.
-2. CLI routing flags record source `cli`.
-3. Heuristic inference records source `heuristic`.
-4. Actual route facts are linked to requested intent when the attempt finishes.
-
-### Bead 4: expose audit metrics
-
-Scope:
-
-- Extend the TD-032 normalized attempt projection with routing-intent fields.
-- Add rollup dimensions/counters for requested power class, source, degradation, and
-  rejected pins.
+- Decode canonical and legacy readiness payloads into an in-memory
+  `EstimatedDifficulty` field.
+- Apply precedence in memory: bead `triage.estimated_difficulty` first,
+  readiness estimate second, default `medium` last.
+- Do not write readiness difficulty to any bead `Extra` key during the normal
+  readiness path.
+- Do not create a second durable hint field for readiness.
 
 Acceptance:
 
-1. Metrics can report smart-hinted attempt count over a time window.
-2. Metrics can list smart-hinted beads and justifications.
-3. Metrics can compare success/cost for bead-hinted vs heuristic/default work.
+1. Readiness prompt and tests use `easy`, `medium`, and `hard`.
+2. Canonical and legacy readiness JSON decode `estimated_difficulty`.
+3. A bead-authored difficulty wins over readiness difficulty.
+4. Readiness can affect the current dispatch request without mutating bead
+   metadata.
+5. Tests assert readiness does not write `triage.power_hint`,
+   `triage.estimated_difficulty`, or numeric power values to bead `Extra`.
 
-### Bead 5: update bead authoring guidance
+### 3. Delete numeric bead retry floors
 
-Scope:
-
-- Update bead authoring docs and DDx skills.
-- Add examples for justified smart hints and rejected cargo-cult pins.
+- Delete `numericPowerFloorHint` and remove every call to it.
+- Remove all writes of numeric floors to bead `Extra`.
+- Remove all writes of power-class strings to `TriagePowerHintKey`.
+- Remove stale comments/log messages that describe escalating
+  `TriagePowerHintKey`.
+- If a retry needs a higher `MinPower`, carry that as retry policy inside the
+  current execution path, not as bead metadata. If that state is not already
+  available in memory, do not add a replacement bead key.
 
 Acceptance:
 
-1. Bead authoring template explains when to use `power:smart`.
-2. DDx skill guidance says not to persist harness/provider/model choices.
-3. Skill validation passes.
+1. `ddx try`, investigation retry, no-changes retry, route-exclusion retry,
+   review-block triage, and post-review escalation do not read or write numeric
+   bead `Extra` values as MinPower.
+2. Tests that currently assert `TriagePowerHintKey` numeric mutation are
+   replaced with tests that assert bead difficulty metadata is unchanged.
+3. No production code writes `triage.power_hint`.
+
+### 4. Simplify lint and evidence
+
+- Keep lint for durable concrete route pins only.
+- Remove `SMART JUSTIFICATION` enforcement for difficulty metadata.
+- Record routing intent as `estimated_difficulty` plus mapped
+  `requested_power_class`.
+- Remove `smart_justification` from new routing-intent evidence.
+- Historical attempt parsing may keep old fields only for old evidence records;
+  it must not affect current inference.
+
+Acceptance:
+
+1. `LintExecutionHints` rejects durable harness/provider/model pins and does not
+   reject `triage.estimated_difficulty=hard` for missing prose.
+2. Attempts with `triage.estimated_difficulty=hard` record
+   `estimated_difficulty=hard` and `requested_power_class=smart`.
+3. Metrics can report attempts, cost, and success by estimated difficulty.
+
+### 5. Update tests and docs references
+
+- Update active and shipped DDx skill references so they do not teach
+  `TriagePowerHintKey`, `triage.power_hint`, or `power:*` as durable hint
+  mechanisms.
+- Update command, agent, escalation, readiness, route-exclusion, no-changes,
+  review-block, post-review, routing-evidence, and metrics tests to match the
+  single-field contract.
+
+Acceptance:
+
+1. `rg` over production code finds no current inference or retry path for
+   `triage.power_hint`, `TriagePowerHintKey`, or `numericPowerFloorHint`.
+2. `rg` over tests finds no assertions that numeric floors are written to bead
+   `Extra`.
+3. Bead authoring docs document only `triage.estimated_difficulty`.
 
 ## Non-Goals
 
@@ -373,16 +362,7 @@ Acceptance:
 - No DDx-side concrete route ranking or fallback.
 - No change to Fizeau's routing algorithm.
 - No materialized metrics store in the first implementation.
-- No automatic promotion to `power:smart` solely because a previous attempt used
-  a particular harness or model.
-- No default use of the strongest profile for ordinary implementation work.
-
-## Open Questions
-
-- Should `power:smart` without justification be a hard blocker immediately, or
-  start as a warning for one release?
-- Should `power:*` remain labels long term, or should DDx eventually expose a
-  first-class `execution-power` field while continuing to read labels for
-  compatibility?
-- Which additional Fizeau profile facts should participate in tie-breaking
-  after power, speed, cost, and availability are stable across providers?
+- No `triage.power_hint` compatibility path.
+- No `power:*` label compatibility path.
+- No heuristic power inference from priority, kind, issue type, or text length.
+- No numeric retry floors stored on beads.

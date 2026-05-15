@@ -224,28 +224,28 @@ ACCEPTANCE
 
 ---
 
-## 7. Power-hint label: `power:hint=<name>`
+## 7. Optional difficulty hint: `triage.estimated_difficulty`
 
-Add a `power:hint=<name>` label to tell the work which power class to
-start from. This is an operator-level hint for beads where the default
-cheap-first start is likely to waste a full cheap attempt.
+Use the bead metadata field `triage.estimated_difficulty` only when there is a
+specific reason to override the default medium task-difficulty estimate. Valid
+values are `easy`, `medium`, and `hard`.
 
-| Label | Resolved floor | When to use |
+| Value | Dispatch mapping | When to use |
 |---|---|---|
-| `power:hint=cheap` | 0 (unconstrained, same as default) | Mechanical tasks; cheap models expected to succeed |
-| `power:hint=standard` | Second viable floor in catalog | Ordinary implementation work; cheap power likely to fail |
-| `power:hint=smart` | Highest viable floor in catalog | Hard/broad/architecture-sensitive work; requires strong reasoning |
+| `easy` | `cheap` | Narrow mechanical tasks: typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius |
+| `medium` | `standard` | Ordinary implementation work; this is also the default when the hint is absent |
+| `hard` | `smart` | Architecture or ambiguous tradeoff judgment, multi-subsystem high-blast-radius work, security/data-loss/concurrency risk, or prior attempts showing standard power is insufficient |
 
-**Composition with `--min-power`:** the label sets a floor. The `--min-power`
-flag can raise the floor further but cannot lower it below the label value.
+Do not choose `hard` just because a bead is important, long, or could be
+written more cleanly. Low readiness means refine, split, or block; it is not a
+reason to spend a smarter implementation model.
 
-**Invalid power hint names** (anything other than `cheap`, `standard`, `smart`) are
-silently ignored and the default floor is used.
+This is the only durable bead-level difficulty/power hint. Do not add
+`triage.power_hint`, `power:*` labels, Fizeau profile names, harness/provider/
+model pins, or numeric power floors to bead metadata.
 
-`power:hint=<name>` is distinct from `power:smart` / `power:standard` / `power:cheap`
-(the older heuristic-override labels). The `power:hint=` prefix marks it as an
-explicit floor hint; the plain `power:` prefix is still recognized by `InferPowerClass`
-for heuristic routing. Both can appear on the same bead.
+Invalid hint values are ignored and the default medium difficulty maps to
+standard power.
 
 ---
 

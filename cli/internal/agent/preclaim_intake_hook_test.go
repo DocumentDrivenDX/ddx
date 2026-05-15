@@ -133,17 +133,25 @@ func intakeHookTestConfig() config.ResolvedConfig {
 	return cfg.Resolve(config.CLIOverrides{})
 }
 
-func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *testing.T) {
+func preClaimPolicyInfo(name string, minPower, maxPower int) agentlib.PolicyInfo {
+	policy := agentlib.PolicyInfo{Name: name, MinPower: minPower}
+	policy.MaxPower = maxPower
+	return policy
+}
+
+func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
 		listPolicies: []agentlib.PolicyInfo{
-			{Name: "cheap", MinPower: 5, MaxPower: 5},
-			{Name: "smart", MinPower: 9, MaxPower: 10},
+			preClaimPolicyInfo("cheap", 5, 5),
+			preClaimPolicyInfo("default", 7, 8),
+			preClaimPolicyInfo("smart", 9, 10),
 		},
 		listModels: []agentlib.ModelInfo{
 			{ID: "cheap", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "default", Power: 7, Available: true, AutoRoutable: true},
 			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
 		},
 		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
@@ -159,9 +167,11 @@ func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Equal(t, "smart", svc.lastReq.Policy)
+	assert.Equal(t, "default", svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
+	assert.Greater(t, svc.lastReq.EstimatedPromptTokens, 0)
+	assert.False(t, svc.lastReq.RequiresTools)
 }
 
 func TestPreClaimIntakeHookWithLogDoesNotEmitPromptByDefault(t *testing.T) {
@@ -205,6 +215,21 @@ func TestPreClaimIntakeHookWithVerboseLogEmitsPromptBody(t *testing.T) {
 	assert.Contains(t, out, "MODE: intake")
 	assert.Contains(t, out, b.Title)
 	assert.Contains(t, out, "readiness prompt "+b.ID+" end")
+}
+
+func TestPreClaimIntakePromptIncludesEstimatedDifficultyGuidance(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	prompt, err := buildPreClaimIntakePrompt(root, store, b)
+	require.NoError(t, err)
+
+	assert.Contains(t, prompt, "difficulty MUST be an object with estimated_difficulty and reason")
+	assert.Contains(t, prompt, "estimated_difficulty MUST be exactly one of easy, medium, or hard")
+	assert.Contains(t, prompt, "Use medium as the default implementation difficulty when uncertain")
+	assert.Contains(t, prompt, "Use easy only for work suitable for cheap dispatch")
+	assert.Contains(t, prompt, "Use hard only for work suitable for smart dispatch")
+	assert.Contains(t, prompt, "Readiness score and difficulty are separate")
 }
 
 func TestDecompositionHook_CatalogUnavailableUsesAutoRouteWithoutMagicPower(t *testing.T) {
@@ -299,11 +324,13 @@ func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToF
 
 	intakeSvc := &preClaimIntakeHookServiceStub{
 		listPolicies: []agentlib.PolicyInfo{
-			{Name: "cheap", MinPower: 5, MaxPower: 5},
-			{Name: "smart", MinPower: 9, MaxPower: 10},
+			preClaimPolicyInfo("cheap", 5, 5),
+			preClaimPolicyInfo("default", 7, 8),
+			preClaimPolicyInfo("smart", 9, 10),
 		},
 		listModels: []agentlib.ModelInfo{
 			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
 			{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
 		},
 		finalText: `{"classification":"atomic","confidence":0.95,"reasoning":"profile selected"}`,
@@ -312,15 +339,15 @@ func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToF
 	intake, err := intakeHook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, intake.Outcome)
-	assert.Equal(t, "smart", intakeSvc.lastReq.Policy)
+	assert.Equal(t, "default", intakeSvc.lastReq.Policy)
 	assert.Empty(t, intakeSvc.lastReq.Harness)
 	assert.Empty(t, intakeSvc.lastReq.Provider)
 	assert.Empty(t, intakeSvc.lastReq.Model)
 
 	lintSvc := &passthroughTestService{
 		listPolicies: []agentlib.PolicyInfo{
-			{Name: "standard", MinPower: 7, MaxPower: 8},
-			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			preClaimPolicyInfo("standard", 7, 8),
+			preClaimPolicyInfo("cheap", 5, 5),
 		},
 		listModels: []agentlib.ModelInfo{
 			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
@@ -367,7 +394,7 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 
 	svc := &preClaimIntakeHookServiceStub{
 		listPolicies: []agentlib.PolicyInfo{
-			{Name: "smart", MinPower: 9, MaxPower: 10},
+			preClaimPolicyInfo("smart", 9, 10),
 		},
 		listModels: []agentlib.ModelInfo{
 			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
@@ -386,10 +413,11 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{
-		Harness:  "claude",
-		MaxPower: 8,
-	})
+	}).Resolve(func() config.CLIOverrides {
+		overrides := config.CLIOverrides{Harness: "claude"}
+		overrides.MaxPower = 8
+		return overrides
+	}())
 
 	hook := NewPreClaimIntakeHook(root, store, rcfg, svc, nil)
 	got, err := hook(context.Background(), b.ID)
@@ -414,11 +442,11 @@ func TestDecompositionHook_RoutingFailureReturnsIntakeErrorWithoutDDxPins(t *tes
 	}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{
-		Harness:  "claude",
-		MinPower: 7,
-		MaxPower: 8,
-	})
+	}).Resolve(func() config.CLIOverrides {
+		overrides := config.CLIOverrides{Harness: "claude", MinPower: 7}
+		overrides.MaxPower = 8
+		return overrides
+	}())
 
 	hook := NewPreClaimIntakeHook(root, store, rcfg, svc, nil)
 	got, err := hook(context.Background(), b.ID)
@@ -577,6 +605,13 @@ func TestPreClaimReadiness_UnknownReasonActionableError(t *testing.T) {
 	assert.Contains(t, err.Error(), "not_a_real_outcome")
 	assert.Contains(t, err.Error(), "actionable_atomic")
 	assert.Contains(t, err.Error(), "system_unready")
+}
+
+func TestPreClaimReadiness_DecodesFractionalScore(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[]}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
 }
 
 func TestDecompositionHook_ActionableButRewrittenParsesRewrite(t *testing.T) {

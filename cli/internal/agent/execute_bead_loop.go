@@ -778,19 +778,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		"mode":         string(loopMode),
 		"once":         loopMode == executeloop.ModeOnce,
 	})
-	cleanupLog := runtime.CleanupLog
-	if cleanupLog == nil {
-		cleanupLog = runtime.Log
-	}
-	cleanupStop := startExecutionCleanupWorker(ctx, runtime.ProjectRoot, runtime.CleanupRunner, runtime.CleanupInterval, runtime.CleanupTickCh, cleanupLog, emit)
-	defer cleanupStop()
-	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
 	// exitReason is populated as the loop exits to surface a structured reason
 	// in the loop.end event (ddx-dc157075 AC #4). Work-owned terminal reasons
 	// are classified through work.StopCondition; fatal_config,
 	// preflight_failed, resource_exhausted, and future provider exhaustion are
 	// still subsystem-specific exits.
 	exitReason := ""
+	cleanupLog := runtime.CleanupLog
+	if cleanupLog == nil {
+		cleanupLog = runtime.Log
+	}
+	cleanupStop := startExecutionCleanupWorker(ctx, runtime.ProjectRoot, runtime.CleanupRunner, runtime.CleanupInterval, runtime.CleanupTickCh, cleanupLog, emit)
+	attemptStarted := false
+	defer func() {
+		cleanupStop(ctx.Err() != nil && attemptStarted)
+	}()
+	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
 	setExit := func(condition, reason string) {
 		exitReason = reason
 		result.StopCondition = condition
@@ -1675,6 +1678,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			// heartbeat interval before the sidecar reflects the current bead.
 			liveness.OnTick(now())
 		}
+		attemptStarted = true
 		attemptOut, err := work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 				Bead:                candidate,
@@ -2484,6 +2488,26 @@ func queueSnapshotFromLifecycle(b bead.ReadyExecutionBreakdown) QueueSnapshot {
 	}
 }
 
+// NewNoReadyWorkLoopResult builds the same terminal loop result used by the
+// worker's empty-queue path without starting the long-lived worker machinery.
+func NewNoReadyWorkLoopResult(mode executeloop.Mode, b bead.ReadyExecutionBreakdown) *ExecuteBeadLoopResult {
+	result := &ExecuteBeadLoopResult{
+		NoReadyWork:       true,
+		NoReadyWorkDetail: noReadyWorkBreakdownFromLifecycle(b),
+	}
+	snapshot := queueSnapshotFromLifecycle(b)
+	result.QueueSnapshot = &snapshot
+	if decision, ok := work.ClassifyStop(work.StopInput{
+		NoReadyWork: true,
+		Once:        mode == executeloop.ModeOnce,
+		Mode:        mode,
+	}); ok {
+		result.StopCondition = string(decision.Condition)
+		result.ExitReason = decision.ExitReason
+	}
+	return result
+}
+
 // emitPickerPrioritySkips fires a picker.priority_skip event when the picker
 // chose `chosen` while at least one strictly higher-priority bead was passed
 // over (ddx-9d55601f AC #4). Skips at the same priority as `chosen` are NOT
@@ -2730,9 +2754,9 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		"bead_id":                 target.ID,
 		"attempt_id":              report.AttemptID,
 		"routing_intent_source":   string(intent.Source),
+		"estimated_difficulty":    string(intent.EstimatedDifficulty),
 		"inferred_power_class":    inferredPolicy,
 		"requested_profile":       report.RequestedProfile,
-		"smart_justification":     intent.SmartJustification,
 		"actual_harness":          report.Harness,
 		"actual_provider":         report.Provider,
 		"actual_model":            report.Model,
@@ -2743,10 +2767,6 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	}
 	degraded := false
 	note := ""
-	if intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.InferredPowerClass == escalation.PowerSmart && strings.TrimSpace(intent.SmartJustification) == "" {
-		degraded = true
-		note = "missing SMART JUSTIFICATION"
-	}
 	if strings.TrimSpace(report.RoutingIntentNote) != "" {
 		degraded = true
 		if note == "" {

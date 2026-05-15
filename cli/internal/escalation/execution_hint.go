@@ -21,14 +21,14 @@ const (
 // can infer from bead metadata without binding to a concrete harness/provider
 // pin.
 type ExecutionHint struct {
-	Source             ExecutionIntentSource
-	InferredPowerClass PowerClass
-	SmartJustification string
-	RejectedRoutePins  []string
+	Source              ExecutionIntentSource
+	EstimatedDifficulty EstimatedDifficulty
+	InferredPowerClass  PowerClass
+	RejectedRoutePins   []string
 }
 
 // ExecutionHintFinding is a single lint finding emitted when bead metadata
-// carries a durable route pin or a missing smart-powerClass justification.
+// carries a durable route pin.
 type ExecutionHintFinding struct {
 	Field   string `json:"field"`
 	Value   string `json:"value,omitempty"`
@@ -36,28 +36,24 @@ type ExecutionHintFinding struct {
 }
 
 // ParseExecutionHint derives the bead's abstract execution intent from its
-// durable metadata. A powerClass label wins over heuristics and marks the source as
-// bead_hint; otherwise the caller should fall back to heuristics/defaults.
+// durable metadata. Only triage.estimated_difficulty is recognized as a
+// bead-level difficulty hint; labels such as kind, priority, or power do not
+// affect routing intent.
 func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 	if b == nil {
 		return ExecutionHint{Source: ExecutionIntentSourceDefault}
 	}
 
 	hint := ExecutionHint{
-		Source:             ExecutionIntentSourceHeuristic,
+		Source:             ExecutionIntentSourceDefault,
 		InferredPowerClass: InferPowerClass(b),
-		SmartJustification: extractSmartJustification(b.Description),
 	}
-	if hint.InferredPowerClass == "" {
-		hint.Source = ExecutionIntentSourceDefault
+	if difficulty, ok := BeadEstimatedDifficulty(b); ok {
+		hint.Source = ExecutionIntentSourceBeadHint
+		hint.EstimatedDifficulty = difficulty
 	}
 
 	for _, raw := range b.Labels {
-		powerClass, ok := parsePowerLabel(raw)
-		if ok {
-			hint.Source = ExecutionIntentSourceBeadHint
-			hint.InferredPowerClass = powerClass
-		}
 		if pin, ok := parseDurableRoutePinLabel(raw); ok {
 			hint.RejectedRoutePins = append(hint.RejectedRoutePins, pin)
 		}
@@ -70,59 +66,24 @@ func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 		}
 	}
 
-	// The smart-powerClass justification is only meaningful when the bead explicitly
-	// asks for smart. Heuristic smart inference does not require the authored
-	// SMART JUSTIFICATION section.
-	if hint.InferredPowerClass != PowerSmart {
-		hint.SmartJustification = ""
-	}
 	return hint
 }
 
 // LintExecutionHints returns durable-routing findings for the bead. The lint
-// surface is intentionally narrow: it rejects smart-powerClass beads without an
-// explicit justification and durable model/provider/harness pins that should
-// stay on one-off CLI flags.
+// surface is intentionally narrow: it rejects durable model/provider/harness
+// pins that should stay on one-off CLI flags.
 func LintExecutionHints(b *bead.Bead) []ExecutionHintFinding {
 	if b == nil {
 		return nil
 	}
 	hint := ParseExecutionHint(b)
-	findings := make([]ExecutionHintFinding, 0, len(hint.RejectedRoutePins)+1)
-
-	if hint.Source == ExecutionIntentSourceBeadHint && hint.InferredPowerClass == PowerSmart && strings.TrimSpace(hint.SmartJustification) == "" {
-		findings = append(findings, ExecutionHintFinding{
-			Field:   "description",
-			Message: "bead uses power:smart but has no SMART JUSTIFICATION section",
-		})
-	}
+	findings := make([]ExecutionHintFinding, 0, len(hint.RejectedRoutePins))
 
 	for _, pin := range hint.RejectedRoutePins {
 		findings = append(findings, durableRoutePinFinding(b.ID, pin))
 	}
 
 	return findings
-}
-
-func parsePowerLabel(raw string) (PowerClass, bool) {
-	l := strings.ToLower(strings.TrimSpace(raw))
-	if l == "" {
-		return "", false
-	}
-	powerClass, ok := strings.CutPrefix(l, "power:")
-	if !ok {
-		return "", false
-	}
-	switch strings.TrimSpace(powerClass) {
-	case string(PowerSmart):
-		return PowerSmart, true
-	case string(PowerStandard):
-		return PowerStandard, true
-	case string(PowerCheap):
-		return PowerCheap, true
-	default:
-		return "", false
-	}
 }
 
 func parseDurableRoutePinLabel(raw string) (string, bool) {
@@ -186,60 +147,4 @@ func durableRoutePinFinding(beadID, pin string) ExecutionHintFinding {
 		Value:   pin,
 		Message: message,
 	}
-}
-
-var smartJustificationPrefix = "SMART JUSTIFICATION:"
-
-func extractSmartJustification(description string) string {
-	desc := strings.TrimSpace(description)
-	if desc == "" {
-		return ""
-	}
-
-	lines := strings.Split(desc, "\n")
-	for i, line := range lines {
-		if strings.TrimSpace(line) != smartJustificationPrefix {
-			continue
-		}
-		var b strings.Builder
-		for _, next := range lines[i+1:] {
-			trimmed := strings.TrimSpace(next)
-			if trimmed == "" {
-				if b.Len() > 0 {
-					b.WriteByte('\n')
-				}
-				continue
-			}
-			if isSectionHeading(trimmed) {
-				break
-			}
-			if b.Len() > 0 {
-				b.WriteByte('\n')
-			}
-			b.WriteString(trimmed)
-		}
-		return strings.TrimSpace(b.String())
-	}
-
-	return ""
-}
-
-func isSectionHeading(line string) bool {
-	if !strings.HasSuffix(line, ":") {
-		return false
-	}
-	head := strings.TrimSuffix(line, ":")
-	if head == "" {
-		return false
-	}
-	for _, r := range head {
-		switch {
-		case r >= 'A' && r <= 'Z':
-		case r >= '0' && r <= '9':
-		case r == ' ', r == '_', r == '-', r == '/':
-		default:
-			return false
-		}
-	}
-	return true
 }

@@ -625,7 +625,7 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 	switch action {
 	case triage.ActionEscalatePower:
 		nextPowerClass := nextEscalatedPowerClass(currentPowerClass)
-		body["power_hint"] = string(nextPowerClass)
+		body["next_power_class"] = string(nextPowerClass)
 		_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)

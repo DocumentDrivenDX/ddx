@@ -14,6 +14,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -282,7 +283,7 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 
 // TestTryRecordsExecutionRoutingIntent verifies that ddx try records the
 // bead-hint routing intent evidence and prints the concise routing-intent
-// line when a durable powerClass label is present.
+// line when the durable power hint metadata is present.
 func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	env := NewTestEnvironment(t)
 	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
@@ -292,10 +293,9 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:          "hint-bead-001",
-		Title:       "Hinted bead",
-		Labels:      []string{"power:smart"},
-		Description: "PROBLEM\nhard decision\n\nSMART JUSTIFICATION:\nThis bead decides the durable execution-hint contract.\n",
+		ID:    "hint-bead-001",
+		Title: "Hinted bead",
+		Extra: map[string]any{policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyHard)},
 	}))
 
 	factory := NewCommandFactory(env.Dir)
@@ -315,8 +315,8 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	root := factory.NewRootCommand()
 
 	out, err := executeCommand(root, "try", "hint-bead-001", "--harness=claude", "--no-review", "--no-review-i-know-what-im-doing")
-	require.NoError(t, err, "ddx try with a smart bead hint must succeed: %s", out)
-	assert.Contains(t, out, "routing intent: powerClass=smart source=bead_hint")
+	require.NoError(t, err, "ddx try with a hard bead hint must succeed: %s", out)
+	assert.Contains(t, out, "routing intent: difficulty=hard powerClass=smart source=bead_hint")
 
 	events, err := store.Events("hint-bead-001")
 	require.NoError(t, err)
@@ -333,8 +333,8 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	var body map[string]any
 	require.NoError(t, json.Unmarshal([]byte(intentEvent.Body), &body))
 	assert.Equal(t, "bead_hint", body["routing_intent_source"])
+	assert.Equal(t, "hard", body["estimated_difficulty"])
 	assert.Equal(t, "smart", body["inferred_power_class"])
-	assert.Contains(t, body["smart_justification"], "durable execution-hint contract")
 	assert.Equal(t, "claude", body["actual_harness"])
 	assert.Equal(t, "anthropic", body["actual_provider"])
 	assert.Equal(t, "claude-sonnet-4-6", body["actual_model"])
@@ -384,7 +384,7 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
 }
 
-func TestTryZeroConfigCheapTaskSkipsRequirementProfile(t *testing.T) {
+func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -399,9 +399,9 @@ func TestTryZeroConfigCheapTaskSkipsRequirementProfile(t *testing.T) {
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:        "ddx-zero-config-try-powerClass-cheap",
-		Title:     "Try with inferred cheap routing powerClass",
-		IssueType: "chore",
+		ID:    "ddx-zero-config-try-powerClass-cheap",
+		Title: "Try with explicit cheap routing powerClass",
+		Extra: map[string]any{policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyEasy)},
 	}))
 
 	factory := NewCommandFactory(dir)

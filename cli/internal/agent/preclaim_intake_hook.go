@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -49,19 +50,21 @@ type preClaimIntakePromptRewrite struct {
 // preClaimReadinessPromptResult is the canonical readiness JSON schema returned
 // by skills that use the FEAT-010/ADR-023 outcome vocabulary.
 type preClaimReadinessPromptResult struct {
-	Outcome string                      `json:"outcome"`
-	Reason  string                      `json:"reason,omitempty"`
-	Detail  string                      `json:"detail,omitempty"`
-	Rewrite preClaimIntakePromptRewrite `json:"rewrite,omitempty"`
+	Outcome    string                      `json:"outcome"`
+	Reason     string                      `json:"reason,omitempty"`
+	Detail     string                      `json:"detail,omitempty"`
+	Difficulty preClaimReadinessDifficulty `json:"difficulty,omitempty"`
+	Rewrite    preClaimIntakePromptRewrite `json:"rewrite,omitempty"`
 }
 
 type preClaimReadinessClassificationPromptResult struct {
 	Classification    string                                 `json:"classification"`
 	Tractability      string                                 `json:"tractability,omitempty"`
-	Score             int                                    `json:"score,omitempty"`
+	Score             preClaimReadinessScore                 `json:"score,omitempty"`
 	Rationale         string                                 `json:"rationale,omitempty"`
 	Detail            string                                 `json:"detail,omitempty"`
 	Reasoning         string                                 `json:"reasoning,omitempty"`
+	Difficulty        preClaimReadinessDifficulty            `json:"difficulty,omitempty"`
 	ReadinessChecks   preClaimReadinessChecksPayload         `json:"readiness_checks,omitempty"`
 	SuggestedFixes    preClaimReadinessSuggestedFixesPayload `json:"suggested_fixes,omitempty"`
 	SuggestedChildren []preClaimReadinessSuggestedChild      `json:"suggested_child_beads,omitempty"`
@@ -79,6 +82,24 @@ type preClaimReadinessCheck struct {
 type preClaimReadinessSuggestedFix struct {
 	Target string `json:"target,omitempty"`
 	Fix    string `json:"fix,omitempty"`
+}
+
+type preClaimReadinessDifficulty struct {
+	EstimatedDifficulty string `json:"estimated_difficulty,omitempty"`
+	Reason              string `json:"reason,omitempty"`
+}
+
+type preClaimReadinessScore struct {
+	Present bool
+}
+
+func (s *preClaimReadinessScore) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil
+	}
+	s.Present = true
+	return nil
 }
 
 type preClaimReadinessSuggestedFixesPayload []preClaimReadinessSuggestedFix
@@ -205,7 +226,6 @@ func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg con
 // NewPreClaimIntakeHookWithLogVerbose constructs the pre-claim intake hook and
 // prints the full prompt only when promptVerbose is true.
 func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer, promptVerbose bool) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-	WarmProfileSnapshotForProject(projectRoot, svc, runner)
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -241,10 +261,10 @@ func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, r
 			Correlation:   map[string]string{"bead_id": beadID},
 			ClearProfile:  true,
 			ClearMinPower: true,
-			ClearMaxPower: true,
 		}
+		runtime.ClearMaxPower = true
 		logPreClaimIntakePrompt(log, projectRoot, beadID, prompt, runtime, promptVerbose)
-		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
+		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStandardProfile)
 		logPreClaimIntakeRoute(log, beadID, runtime, promptVerbose)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
@@ -401,9 +421,14 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("MODE: intake\n")
 	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
 	sb.WriteString("Do not rewrite bead fields in intake mode. If the bead is executable as written, classify it as ready even when the prose could be cleaner.\n")
-	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
+	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, difficulty, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
 	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")
+	sb.WriteString("difficulty MUST be an object with estimated_difficulty and reason. estimated_difficulty MUST be exactly one of easy, medium, or hard.\n")
+	sb.WriteString("Use medium as the default implementation difficulty when uncertain or when the task is ordinary build/test/code work; medium maps to standard dispatch.\n")
+	sb.WriteString("Use easy only for work suitable for cheap dispatch: narrow mechanical edits such as typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius.\n")
+	sb.WriteString("Use hard only for work suitable for smart dispatch: architecture or ambiguous tradeoff judgment, multiple subsystems with high blast radius, security/data-loss/concurrency risk, or prior attempts showing standard power is insufficient.\n")
+	sb.WriteString("Do not choose hard just because a bead is important, long, or could be written more cleanly. Readiness score and difficulty are separate: low readiness means refine/split/block, not hard.\n")
 	sb.WriteString("If the bead is not executable as written but can be made executable by a narrow, semantics-preserving metadata/AC rewrite, emit rewrite with changed_fields, description, and acceptance.\n")
 	sb.WriteString("Put prompt-quality improvements in suggested_fixes only; keep operator_required for actual blockers.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
@@ -472,7 +497,8 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 		Outcome         string                                 `json:"outcome"`
 		Tractability    string                                 `json:"tractability"`
 		Rationale       string                                 `json:"rationale"`
-		Score           *int                                   `json:"score"`
+		Score           preClaimReadinessScore                 `json:"score"`
+		Difficulty      preClaimReadinessDifficulty            `json:"difficulty"`
 		ReadinessChecks preClaimReadinessChecksPayload         `json:"readiness_checks"`
 		SuggestedFixes  preClaimReadinessSuggestedFixesPayload `json:"suggested_fixes"`
 	}
@@ -483,7 +509,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 		return decodeCanonicalReadinessPayloadWithMode(payload, qualityMode)
 	}
 	if probe.Classification != "" {
-		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score, probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
+		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score.Present, normalizeReadinessEstimatedDifficulty(probe.Difficulty.EstimatedDifficulty) != "", probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
 			return decodeReadinessClassificationPayloadWithMode(payload, qualityMode)
 		}
 		return decodeLegacyIntakePayload(payload)
@@ -491,7 +517,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 	return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification or outcome field")
 }
 
-func isReadinessClassificationPayload(classification, tractability, rationale string, score *int, readinessChecksPresent bool, checkCount, fixCount int) bool {
+func isReadinessClassificationPayload(classification, tractability, rationale string, scorePresent, difficultyPresent bool, readinessChecksPresent bool, checkCount, fixCount int) bool {
 	switch strings.ToLower(strings.TrimSpace(classification)) {
 	case ReadinessClassificationSystemUnready,
 		"readiness_error",
@@ -504,7 +530,8 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 		return readinessChecksPresent ||
 			strings.TrimSpace(tractability) != "" ||
 			strings.TrimSpace(rationale) != "" ||
-			score != nil ||
+			scorePresent ||
+			difficultyPresent ||
 			checkCount > 0 ||
 			fixCount > 0
 	default:
@@ -526,15 +553,16 @@ func decodeCanonicalReadinessPayloadWithMode(payload string, qualityMode string)
 		Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
 		ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
 	}
+	estimatedDifficulty := normalizeReadinessEstimatedDifficulty(out.Difficulty.EstimatedDifficulty)
 	switch strings.ToLower(strings.TrimSpace(out.Outcome)) {
 	case "actionable_atomic":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: detail}, nil
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: detail, EstimatedDifficulty: estimatedDifficulty}, nil
 	case "actionable_but_rewritten":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableButRewritten, Detail: detail, Rewrite: rewrite}, nil
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableButRewritten, Detail: detail, EstimatedDifficulty: estimatedDifficulty, Rewrite: rewrite}, nil
 	case "too_large_decomposed":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Reason: ReadinessReasonTooLarge, Detail: detail}, nil
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Reason: ReadinessReasonTooLarge, Detail: detail, EstimatedDifficulty: estimatedDifficulty}, nil
 	case "operator_required", "human_review_required":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeOperatorRequired, Reason: ReadinessReasonAmbiguousScope, Detail: detail}, nil
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeOperatorRequired, Reason: ReadinessReasonAmbiguousScope, Detail: detail, EstimatedDifficulty: estimatedDifficulty}, nil
 	case "ambiguous_needs_human", "needs_human":
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: legacy readiness outcome %q removed by lifecycle migration; use %q", out.Outcome, PreClaimIntakeOperatorRequired)
 	case "readiness_error", "system_unready":
@@ -582,10 +610,11 @@ func decodeReadinessClassificationPayloadWithMode(payload string, qualityMode st
 		ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
 	}
 	result := PreClaimIntakeResult{
-		Outcome:      classified.IntakeOutcome,
-		Reason:       classified.Reason,
-		SystemReason: classified.SystemReason,
-		Detail:       detail,
+		Outcome:             classified.IntakeOutcome,
+		Reason:              classified.Reason,
+		SystemReason:        classified.SystemReason,
+		Detail:              detail,
+		EstimatedDifficulty: normalizeReadinessEstimatedDifficulty(out.Difficulty.EstimatedDifficulty),
 	}
 	if classified.Classification == ReadinessClassificationNeedsRefine && hasPreClaimIntakeRewrite(rewrite) {
 		result.Outcome = PreClaimIntakeActionableButRewritten
@@ -659,6 +688,33 @@ func hasPreClaimIntakeRewrite(rewrite PreClaimIntakeRewrite) bool {
 	return strings.TrimSpace(rewrite.Description) != "" ||
 		strings.TrimSpace(rewrite.Acceptance) != "" ||
 		len(rewrite.ChangedFields) > 0
+}
+
+func normalizeReadinessEstimatedDifficulty(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case string(escalation.DifficultyEasy):
+		return string(escalation.DifficultyEasy)
+	case string(escalation.DifficultyMedium):
+		return string(escalation.DifficultyMedium)
+	case string(escalation.DifficultyHard):
+		return string(escalation.DifficultyHard)
+	default:
+		return ""
+	}
+}
+
+func resolveReadinessEstimatedDifficulty(b *bead.Bead, readinessEstimate string) escalation.EstimatedDifficulty {
+	if difficulty, ok := escalation.BeadEstimatedDifficulty(b); ok {
+		return difficulty
+	}
+	switch normalizeReadinessEstimatedDifficulty(readinessEstimate) {
+	case string(escalation.DifficultyEasy):
+		return escalation.DifficultyEasy
+	case string(escalation.DifficultyHard):
+		return escalation.DifficultyHard
+	default:
+		return escalation.DifficultyMedium
+	}
 }
 
 func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {

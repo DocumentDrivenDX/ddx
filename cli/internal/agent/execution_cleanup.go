@@ -226,11 +226,14 @@ func executionCleanupRetainDays(projectRoot string) int {
 // run-state file and git worktree registry, and conservatively removes stale
 // DDx-owned temp resources.
 func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanupSummary, error) {
-	_ = ctx
-
 	summary := ExecutionCleanupSummary{
 		ProjectRoot: m.ProjectRoot,
 		TempRoot:    m.tempRoot(),
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
 	}
 	if summary.TempRoot == "" {
 		summary.TempRoot = executionCleanupTempRoot(m.ProjectRoot)
@@ -266,6 +269,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			}
 		}
 	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
 
 	runStates, runStateErr := ReadRunStates(m.ProjectRoot)
 	if runStateErr != nil {
@@ -275,6 +283,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			Message: runStateErr.Error(),
 		})
 	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
 
 	entries, err := os.ReadDir(summary.TempRoot)
 	if err != nil {
@@ -283,6 +296,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
+		}
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return summary, err
+			}
 		}
 		if !strings.HasPrefix(entry.Name(), ExecuteBeadWtPrefix) {
 			continue
@@ -373,7 +391,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				})
 				continue
 			}
-			reclaimedBytes, reclaimedInodes, measureErr := measureTree(path)
+			reclaimedBytes, reclaimedInodes, measureErr := measureTreeWithContext(ctx, path)
 			if measureErr != nil {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 					Path:    path,
@@ -409,7 +427,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			continue
 		}
 
-		reclaimedBytes, reclaimedInodes, measureErr := measureTree(path)
+		reclaimedBytes, reclaimedInodes, measureErr := measureTreeWithContext(ctx, path)
 		if measureErr != nil {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 				Path:    path,
@@ -444,7 +462,9 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		})
 	}
 
-	m.cleanupScratchRoots(&summary, runStates, registered, probe, now())
+	if err := m.cleanupScratchRoots(ctx, &summary, runStates, registered, probe, now()); err != nil {
+		return summary, err
+	}
 
 	if m.GitOps != nil && summary.RemovedRegisteredWorktrees > 0 && !m.DryRun {
 		if err := m.GitOps.WorktreePrune(m.ProjectRoot); err != nil {
@@ -472,22 +492,47 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		}
 	}
 
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ExecuteBeadArtifactDir, "manifest.json", "result.json", &summary)
 	m.pruneEvidenceDirs(ctx, &summary, runStates, now())
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
 	m.pruneAgentLogs(ctx, &summary, runStates, now())
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
 	m.pruneWorkerDirs(ctx, &summary, now())
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 	m.cleanupDurableLandedCandidateRefs(&summary)
 
 	return summary, nil
 }
 
-func (m *ExecutionCleanupManager) cleanupScratchRoots(summary *ExecutionCleanupSummary, runStates []RunState, registered map[string]struct{}, probe ExecutionCleanupLivenessProbe, now time.Time) {
+func (m *ExecutionCleanupManager) cleanupScratchRoots(ctx context.Context, summary *ExecutionCleanupSummary, runStates []RunState, registered map[string]struct{}, probe ExecutionCleanupLivenessProbe, now time.Time) error {
 	prefixes := m.scratchPrefixes()
 	minAge := m.scratchMinAge()
 	tempRoot := filepath.Clean(summary.TempRoot)
 
 	for _, root := range m.scratchRoots(summary.TempRoot) {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		entries, err := os.ReadDir(root)
 		if err != nil {
 			if !os.IsNotExist(err) {
@@ -502,6 +547,11 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(summary *ExecutionCleanupS
 		for _, entry := range entries {
 			if !entry.IsDir() || !hasAnyPrefix(entry.Name(), prefixes) {
 				continue
+			}
+			if ctx != nil {
+				if err := ctx.Err(); err != nil {
+					return err
+				}
 			}
 			path := filepath.Join(root, entry.Name())
 			if sameCleanPath(path, tempRoot) || isPathWithin(path, tempRoot) {
@@ -590,7 +640,7 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(summary *ExecutionCleanupS
 				continue
 			}
 
-			reclaimedBytes, reclaimedInodes, measureErr := measureTree(path)
+			reclaimedBytes, reclaimedInodes, measureErr := measureTreeWithContext(ctx, path)
 			if measureErr != nil {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 					Path:    path,
@@ -627,6 +677,7 @@ func (m *ExecutionCleanupManager) cleanupScratchRoots(summary *ExecutionCleanupS
 			})
 		}
 	}
+	return nil
 }
 
 func (m *ExecutionCleanupManager) runStatesForMetadata(meta ExecutionCleanupMetadata, fallback []RunState, summary *ExecutionCleanupSummary) []RunState {
@@ -1026,6 +1077,15 @@ func ReadExecutionCleanupMetadata(dir string) (ExecutionCleanupMetadata, error) 
 }
 
 func measureTree(path string) (bytes int64, inodes int64, err error) {
+	return measureTreeWithContext(context.Background(), path)
+}
+
+func measureTreeWithContext(ctx context.Context, path string) (bytes int64, inodes int64, err error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
+	}
 	info, err := os.Lstat(path)
 	if err != nil {
 		return 0, 0, err
@@ -1034,6 +1094,11 @@ func measureTree(path string) (bytes int64, inodes int64, err error) {
 		return info.Size(), 1, nil
 	}
 	err = filepath.WalkDir(path, func(p string, d os.DirEntry, walkErr error) error {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+		}
 		if walkErr != nil {
 			return walkErr
 		}
@@ -1053,6 +1118,9 @@ func measureTree(path string) (bytes int64, inodes int64, err error) {
 // a result.json are preserved. No-op when RetainDays == 0 (disabled).
 func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary *ExecutionCleanupSummary, runStates []RunState, now time.Time) {
 	if m.RetainDays == 0 {
+		return
+	}
+	if ctx != nil && ctx.Err() != nil {
 		return
 	}
 	cutoff := now.AddDate(0, 0, -m.RetainDays)
@@ -1078,6 +1146,9 @@ func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary
 	}
 
 	for _, entry := range entries {
+		if ctx != nil && ctx.Err() != nil {
+			return
+		}
 		if !entry.IsDir() {
 			continue
 		}
@@ -1161,8 +1232,11 @@ func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath
 // pruneAgentLogs deletes .ddx/agent-logs/agent-*.jsonl and svc-*.jsonl files
 // whose mtime is older than m.RetainDays. Files whose session_id matches an
 // active run-state are skipped. No-op when RetainDays == 0.
-func (m *ExecutionCleanupManager) pruneAgentLogs(_ context.Context, summary *ExecutionCleanupSummary, runStates []RunState, now time.Time) {
+func (m *ExecutionCleanupManager) pruneAgentLogs(ctx context.Context, summary *ExecutionCleanupSummary, runStates []RunState, now time.Time) {
 	if m.RetainDays == 0 {
+		return
+	}
+	if ctx != nil && ctx.Err() != nil {
 		return
 	}
 	cutoff := now.AddDate(0, 0, -m.RetainDays)
@@ -1188,6 +1262,9 @@ func (m *ExecutionCleanupManager) pruneAgentLogs(_ context.Context, summary *Exe
 	}
 
 	for _, entry := range entries {
+		if ctx != nil && ctx.Err() != nil {
+			return
+		}
 		if entry.IsDir() {
 			continue
 		}
@@ -1264,8 +1341,11 @@ func workerDirPID(dirPath string) int {
 // pruneWorkerDirs deletes .ddx/workers/<id>/ directories whose mtime is older
 // than m.RetainDays. Directories whose status.json PID is still alive are
 // skipped. No-op when RetainDays == 0.
-func (m *ExecutionCleanupManager) pruneWorkerDirs(_ context.Context, summary *ExecutionCleanupSummary, now time.Time) {
+func (m *ExecutionCleanupManager) pruneWorkerDirs(ctx context.Context, summary *ExecutionCleanupSummary, now time.Time) {
 	if m.RetainDays == 0 {
+		return
+	}
+	if ctx != nil && ctx.Err() != nil {
 		return
 	}
 	cutoff := now.AddDate(0, 0, -m.RetainDays)
@@ -1284,6 +1364,9 @@ func (m *ExecutionCleanupManager) pruneWorkerDirs(_ context.Context, summary *Ex
 	}
 
 	for _, entry := range entries {
+		if ctx != nil && ctx.Err() != nil {
+			return
+		}
 		if !entry.IsDir() {
 			continue
 		}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -74,37 +73,6 @@ func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, 
 			return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
 		}
 		return floor, agent.ExecuteBeadReport{}, false
-	}
-	if powerClass, ok := triagePowerHint(b); ok && powerClass == policyescalation.PowerSmart {
-		floor, err := highestViableEscalationFloor(ladder)
-		if err != nil {
-			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, err), true
-		}
-		if baseMinPower > floor {
-			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
-		}
-		if maxPower > 0 && floor >= maxPower {
-			return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
-		}
-		return floor, agent.ExecuteBeadReport{}, false
-	}
-	if b != nil {
-		if powerClass, ok := policyescalation.ParseBeadPowerHintLabel(b.Labels); ok {
-			labelFloor, hasFloor := resolvePowerFloor(powerClass, ladder)
-			if !hasFloor {
-				labelFloor = baseMinPower
-			}
-			floor := labelFloor
-			if baseMinPower > floor {
-				floor = baseMinPower
-			}
-			if maxPower > 0 && floor >= maxPower {
-				return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
-			}
-			return floor, agent.ExecuteBeadReport{}, false
-		} else if policyescalation.HasBeadPowerHintLabel(b.Labels) {
-			fmt.Fprintf(os.Stderr, "ddx: bead %s has unrecognized power:hint label; using default MinPower\n", b.ID)
-		}
 	}
 	if inferZeroConfig {
 		return zeroConfigInferredMinPower(b, baseMinPower, maxPower, ladder)
@@ -322,26 +290,6 @@ func numericPowerFloorHint(b *bead.Bead) (int, bool) {
 		return int(v), int(v) > 0
 	default:
 		return 0, false
-	}
-}
-
-func triagePowerHint(b *bead.Bead) (policyescalation.PowerClass, bool) {
-	if b == nil || b.Extra == nil {
-		return "", false
-	}
-	raw, ok := b.Extra[agent.TriagePowerHintKey]
-	if !ok {
-		return "", false
-	}
-	switch strings.ToLower(strings.TrimSpace(fmt.Sprint(raw))) {
-	case string(policyescalation.PowerSmart):
-		return policyescalation.PowerSmart, true
-	case string(policyescalation.PowerStandard):
-		return policyescalation.PowerStandard, true
-	case string(policyescalation.PowerCheap):
-		return policyescalation.PowerCheap, true
-	default:
-		return "", false
 	}
 }
 
