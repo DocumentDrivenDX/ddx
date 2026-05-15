@@ -183,6 +183,9 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 			if final.Usage.OutputTokens != nil {
 				result.OutputTokens = *final.Usage.OutputTokens
 			}
+			if final.Usage.CacheReadTokens != nil {
+				result.CachedTokens = *final.Usage.CacheReadTokens
+			}
 			if final.Usage.TotalTokens != nil {
 				result.Tokens = *final.Usage.TotalTokens
 			}

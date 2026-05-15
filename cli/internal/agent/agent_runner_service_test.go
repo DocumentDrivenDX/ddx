@@ -265,3 +265,36 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	assert.Equal(t, "done", result.Output)
 	assert.Equal(t, 0, result.ExitCode)
 }
+
+func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {
+	stub := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
+				Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done","cost_usd":0.003,"usage":{"input_tokens":200,"output_tokens":500,"cache_read_tokens":800,"total_tokens":1500}}`),
+			},
+		},
+	}
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		return stub, nil
+	})
+	t.Cleanup(func() {
+		SetServiceRunFactory(nil)
+	})
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "claude-sonnet-4-6",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
+
+	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 200, result.InputTokens)
+	assert.Equal(t, 800, result.CachedTokens)
+	assert.Equal(t, 500, result.OutputTokens)
+	assert.Equal(t, 1500, result.Tokens)
+	assert.Equal(t, 0.003, result.CostUSD)
+}

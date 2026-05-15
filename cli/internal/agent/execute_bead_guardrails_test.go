@@ -5,18 +5,16 @@ import (
 	"testing"
 )
 
-// renderInstructionsForGuardrails returns the post-{{.AttemptDir}}-substitution
-// instructions string for the given harness selector. Guardrail tests assert
-// on this pre-XML-escape form so substring checks against `<bead-id>`,
-// `<specific-paths>`, etc. are not distorted by XML entity encoding (the
-// rendered prompt encloses instructions in <instructions>...</instructions>
-// and so escapes angle brackets and apostrophes). The bead body itself is
-// excluded — invariants must come from the static prompt, not the bead.
+// renderInstructionsForGuardrails returns the pre-XML-escape instructions
+// string for the given harness selector. Guardrail tests assert on this form
+// so substring checks against `<bead-id>`, `<specific-paths>`, etc. are not
+// distorted by XML entity encoding (the rendered prompt encloses instructions
+// in <instructions>...</instructions> and so escapes angle brackets and
+// apostrophes). The bead body itself is excluded — invariants must come from
+// the static prompt, not the bead.
 func renderInstructionsForGuardrails(t *testing.T, harness, contextBudget string) string {
 	t.Helper()
-	const attemptDir = ".ddx/executions/20260101T000000-guardrails"
-	raw := executeBeadInstructionsText(harness)
-	return strings.ReplaceAll(raw, "{{.AttemptDir}}", attemptDir)
+	return executeBeadInstructionsText(harness)
 }
 
 // renderFullPromptForGuardrails returns the byte-for-byte rendered prompt
@@ -73,7 +71,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "executions_intact", any: []string{".ddx/executions/"}},
 		{name: "no_rewrite_claude_md", any: []string{"CLAUDE.md, AGENTS.md"}},
 		{name: "bead_overrides_defaults", any: []string{"override CLAUDE.md", "overrides project defaults"}},
-		{name: "reports_attempt_dir", any: []string{".ddx/executions/20260101T000000-guardrails/"}},
+		{name: "reports_bundle_path", any: []string{"metadata `bundle` path"}},
 		{name: "reports_no_tmp", any: []string{"/tmp"}},
 		{name: "no_changes_rationale", any: []string{"no_changes_rationale.txt"}},
 		{name: "step0_size_check", any: []string{"## Step 0: size check"}},

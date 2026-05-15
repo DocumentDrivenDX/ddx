@@ -1555,6 +1555,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	exitCode := 0
 	tokens := 0
 	inputTokens := 0
+	cachedTokens := 0
 	outputTokens := 0
 	costUSD := 0.0
 	resultModel := rcfg.Model()
@@ -1571,6 +1572,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		exitCode = agentResult.ExitCode
 		tokens = agentResult.Tokens
 		inputTokens = agentResult.InputTokens
+		cachedTokens = agentResult.CachedTokens
 		outputTokens = agentResult.OutputTokens
 		costUSD = agentResult.CostUSD
 		if agentResult.Error != "" {
@@ -1680,7 +1682,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Done before SynthesizeCommit so usage data is available in the
 	// preliminary result written for commit-message sourcing.
 	var usageFileRel string
-	if tokens > 0 || costUSD > 0 {
+	if tokens > 0 || inputTokens > 0 || cachedTokens > 0 || outputTokens > 0 || costUSD > 0 {
 		usage := executeBeadUsage{
 			AttemptID:    attemptID,
 			Harness:      resultHarness,
@@ -1688,6 +1690,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			Model:        resultModel,
 			Tokens:       tokens,
 			InputTokens:  inputTokens,
+			CachedTokens: cachedTokens,
+			CacheHitRate: executeBeadCacheHitRate(inputTokens, cachedTokens),
 			OutputTokens: outputTokens,
 			CostUSD:      costUSD,
 		}
@@ -2194,7 +2198,8 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // 11. Keep .ddx/executions/ intact
 // 12. Do not rewrite CLAUDE.md / AGENTS.md unless asked
 // 13. Bead description overrides CLAUDE.md / YAGNI defaults
-// 14. Reports go under {{.AttemptDir}}/, never /tmp, committed alongside code
+// 14. Reports go under the bead metadata bundle path, never /tmp, committed
+//     alongside code
 // 15. Write no_changes_rationale.txt before exiting empty
 // 16. Step 0 size-check + decomposition (ddx bead create / dep add / update)
 // 17. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
@@ -2223,7 +2228,7 @@ If too big, decompose — do not attempt the work:
 1. ` + "`ddx bead create`" + ` for each child slice (copy parent's labels and spec-id).
 2. ` + "`ddx bead dep add <child-id> <parent-id>`" + ` to record edges.
 3. ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
-4. Write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` listing child IDs, then stop.
+4. Write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path, listing child IDs, then stop.
 
 A clean decomposition is a success. Do not mix implementation with decomposition.`
 
@@ -2232,7 +2237,7 @@ const instrNoChangesContract = `
 
 ## no_changes contract
 
-` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` must contain one:
+The ` + "`no_changes_rationale.txt`" + ` file under the bead metadata ` + "`bundle`" + ` path must contain one:
 
 - ` + "`verification_command: <cmd>`" + ` — repo cwd; exit 0 closes, nonzero rejects.
 - ` + "`status: open`" + ` + ` + "`reason: <retryable>`" + ` — open, smart retry.
@@ -2248,7 +2253,7 @@ const instrInvestigationReports = `
 
 ## Reports
 
-Freestanding artifacts (investigation reports, findings docs) go under ` + "`{{.AttemptDir}}/`" + ` under ` + "`.ddx/executions/`" + `. **Never write reports to ` + "`/tmp`" + ` or outside the repository** — post-merge review cannot see them. If the bead names a specific in-repo path, use it; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside code.`
+Freestanding artifacts (reports, findings docs) go under the bead metadata ` + "`bundle`" + ` path in ` + "`.ddx/executions/`" + `. **Never write reports to ` + "`/tmp`" + ` or outside the repo** — post-merge review cannot see them. If the bead names a specific in-repo path, use it; otherwise write ` + "`<short-name>.md`" + ` there. Commit it with the code.`
 
 // instrReviewGate is the shared review-as-gate rule.
 const instrReviewGate = `
@@ -2293,7 +2298,7 @@ const executeBeadInstructionsClaudeText = `You are executing one bead inside an 
 - Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Stop after the commit.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + ` on the current bead. Step 0 still allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + `, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
-- If you cannot finish, write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` (what is done, what blocks, what a follow-up needs) before exiting. No commit and no rationale ⇒ DDx records ` + "`no_evidence_produced`" + `. A well-justified no_changes beats a bad commit.` +
+- If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit and no rationale ⇒ DDx records ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
 	instrBeadOverride +
@@ -2310,23 +2315,23 @@ After the commit succeeds and every AC is verified, stop. Return control to the 
 // embedded). It composes an agent-specific preamble + tool-aware process
 // body with the shared instr* blocks. The Agent variant carries the
 // stop-after-commit runaway guard (codex catch).
-const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. Tools: read, write, edit, bash, ls, grep, find. Use them — not ` + "`bash: cat`" + `, ` + "`bash: rg`" + `, or ` + "`bash: ls`" + `.
+const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. Tools: read, write, edit, bash, ls, grep, find. Use them, not ` + "`bash: cat`" + `, ` + "`bash: rg`" + `, or ` + "`bash: ls`" + `.
 
-The bead's <description> and <acceptance> are the completion contract. Every AC must be satisfied by code in this pass.` +
+The bead's <description> and <acceptance> are the contract. Every AC must be satisfied by code here.` +
 	instrStep0SizeCheck +
 	`
 
 ## Process
 
 - Read first. Read the files the bead names before editing — do not guess.
-- Use ` + "`edit`" + ` for existing files, ` + "`write`" + ` for new files, and ` + "`read`" + ` / ` + "`grep`" + ` / ` + "`ls`" + ` for inspection (never the bash equivalents).
+- Use ` + "`edit`" + `, ` + "`write`" + `, ` + "`read`" + `, ` + "`grep`" + `, and ` + "`ls`" + `; never the bash equivalents.
 - Run the project's test and lint commands before committing. **Do not commit red code**.
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + `.
-- Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Implementation and tests in the same commit.
-- Stop immediately after the commit succeeds. Do not keep reading, testing, or following up.
+- Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `.
+- Stop immediately after the commit succeeds. Do not keep reading or testing.
 - Do not modify files outside the bead's scope.
 - Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + ` on the current bead. Step 0 still allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + `, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
-- If you cannot finish, write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` (done / blocking / follow-up) before exiting. No commit and no rationale ⇒ ` + "`no_evidence_produced`" + `.` +
+- If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit and no rationale ⇒ ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
 	instrBeadOverride +
@@ -2390,10 +2395,11 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	var sb strings.Builder
 	sb.WriteString("<execute-bead>\n")
 
-	instructions := strings.ReplaceAll(executeBeadInstructionsText(harness), "{{.AttemptDir}}", artifacts.DirRel)
-	instructions += executeBeadDynamicStep0Hints(workDir, b)
-	// Put the largely static instructions first so prefix caches can reuse as
-	// much of the prompt as possible before the bead-specific XML starts.
+	instructions := executeBeadInstructionsText(harness) + executeBeadDynamicStep0Hints(workDir, b)
+	// Keep the initial prefix stable for provider prefix caches: the shared
+	// instructions render first, bead-specific hints append at the end of that
+	// block, and the attempt-specific bundle path only appears later on
+	// <metadata bundle="..."/>.
 	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
 
 	fmt.Fprintf(&sb, "  <bead id=\"%s\">\n", xmlAttrEscape(b.ID))
@@ -2563,8 +2569,18 @@ type executeBeadUsage struct {
 	Model        string  `json:"model,omitempty"`
 	Tokens       int     `json:"tokens"`
 	InputTokens  int     `json:"input_tokens,omitempty"`
+	CachedTokens int     `json:"cached_tokens,omitempty"`
+	CacheHitRate float64 `json:"cache_hit_rate,omitempty"`
 	OutputTokens int     `json:"output_tokens,omitempty"`
 	CostUSD      float64 `json:"cost_usd,omitempty"`
+}
+
+func executeBeadCacheHitRate(inputTokens, cachedTokens int) float64 {
+	totalPromptInput := inputTokens + cachedTokens
+	if cachedTokens <= 0 || totalPromptInput <= 0 {
+		return 0
+	}
+	return float64(cachedTokens) / float64(totalPromptInput)
 }
 
 // VerifyCleanWorktree checks that the project root's working tree has no

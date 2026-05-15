@@ -603,7 +603,8 @@ func TestExecuteBead_UsageArtifact(t *testing.T) {
 			Provider:     "test-provider",
 			Model:        "test-model",
 			Tokens:       1500,
-			InputTokens:  1000,
+			InputTokens:  200,
+			CachedTokens: 800,
 			OutputTokens: 500,
 			CostUSD:      0.003,
 		},
@@ -636,8 +637,14 @@ func TestExecuteBead_UsageArtifact(t *testing.T) {
 	if u.Tokens != 1500 {
 		t.Errorf("usage.tokens = %d, want 1500", u.Tokens)
 	}
-	if u.InputTokens != 1000 {
-		t.Errorf("usage.input_tokens = %d, want 1000", u.InputTokens)
+	if u.InputTokens != 200 {
+		t.Errorf("usage.input_tokens = %d, want 200", u.InputTokens)
+	}
+	if u.CachedTokens != 800 {
+		t.Errorf("usage.cached_tokens = %d, want 800", u.CachedTokens)
+	}
+	if u.CacheHitRate != 0.8 {
+		t.Errorf("usage.cache_hit_rate = %f, want 0.8", u.CacheHitRate)
 	}
 	if u.OutputTokens != 500 {
 		t.Errorf("usage.output_tokens = %d, want 500", u.OutputTokens)
@@ -730,15 +737,11 @@ func TestExecuteBead_DeterministicPromptContent(t *testing.T) {
 		t.Errorf("expected prompt source=synthesized, got %q/%q", src1, src2)
 	}
 
-	// The prompts must be structurally identical except for the bundle path
-	// (which differs by attemptID). Strip those two lines and compare the rest.
-	normalize := func(p []byte) string {
-		return string(p)
+	normalize := func(p []byte, bundle string) string {
+		return strings.ReplaceAll(string(p), fmt.Sprintf(`bundle="%s"`, bundle), `bundle="BUNDLE"`)
 	}
-	if normalize(prompt1) == normalize(prompt2) {
-		// Different attempt IDs → the bundle attribute differs; that is fine
-		// if the rest is identical.
-		t.Log("prompts are byte-identical (unexpected but acceptable)")
+	if got1, got2 := normalize(prompt1, arts1.DirRel), normalize(prompt2, arts2.DirRel); got1 != got2 {
+		t.Fatalf("prompts must differ only in metadata bundle path")
 	}
 	// Ensure each prompt is valid XML-ish text with expected sections.
 	for i, p := range [][]byte{prompt1, prompt2} {
