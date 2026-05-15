@@ -1670,6 +1670,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		StartedAt:                   startedAt,
 		FinishedAt:                  finishedAt,
 	}
+	if resultRev != baseRev {
+		res.ImplementationRev = resultRev
+	}
 
 	// Classify worker outcome: task_succeeded / task_failed / task_no_changes /
 	// task_no_evidence. A clean agent exit with no commit is only a legitimate
@@ -1769,6 +1772,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// without copying from the project root (AC: no live-worker noise in main).
 	if resultRev != baseRev && exitCode == 0 {
 		if newRev := commitEvidenceBundleInWorktree(wtPath, artifacts.DirRel, attemptID); newRev != "" {
+			if res.ImplementationRev != "" && newRev != res.ImplementationRev {
+				res.EvidenceRev = newRev
+			}
 			res.ResultRev = newRev
 			evidenceCommittedInWt = true
 		}

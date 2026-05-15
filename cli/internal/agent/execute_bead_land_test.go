@@ -10,6 +10,7 @@ package agent
 // the worker saw at execution time.
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -173,6 +174,89 @@ func (r *landTestRepo) commitDeleteOn(baseSHA, path, msg string) string {
 	ref := fmt.Sprintf("refs/ddx/test-pins/%s", sha[:12])
 	r.runGit("update-ref", ref, sha)
 	return sha
+}
+
+func writeExecuteBeadBundle(t *testing.T, root string, res *ExecuteBeadResult, extraFiles map[string]string) {
+	t.Helper()
+	evidenceDir := filepath.Join(root, filepath.FromSlash(res.ExecutionDir))
+	if err := os.MkdirAll(evidenceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeArtifactJSON(filepath.Join(evidenceDir, "manifest.json"), map[string]string{
+		"attempt_id": res.AttemptID,
+		"bead_id":    res.BeadID,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeArtifactJSON(filepath.Join(evidenceDir, "result.json"), res); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(evidenceDir, "prompt.md"), []byte("# Prompt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for rel, content := range extraFiles {
+		full := filepath.Join(evidenceDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func (r *landTestRepo) commitExecuteBeadEvidence(baseSHA string, res *ExecuteBeadResult, extraFiles map[string]string) string {
+	r.t.Helper()
+	wt, err := os.MkdirTemp("", "land-test-evidence-wt-*")
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	_ = os.RemoveAll(wt)
+	r.runGit("worktree", "add", "--detach", wt, baseSHA)
+	defer func() {
+		r.runGit("worktree", "remove", "--force", wt)
+		_ = os.RemoveAll(wt)
+	}()
+
+	writeExecuteBeadBundle(r.t, wt, res, extraFiles)
+
+	cmd := exec.Command("git", "-C", wt, "add", "--", filepath.FromSlash(res.ExecutionDir))
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("git add evidence: %s: %v", string(out), err)
+	}
+	cmd = exec.Command("git", "-C", wt,
+		"-c", "user.name=ddx-land-coordinator",
+		"-c", "user.email=coordinator@ddx.local",
+		"commit", "--no-verify", "-m", "chore: add execution evidence ["+res.AttemptID[:16]+"]",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("git commit evidence: %s: %v", string(out), err)
+	}
+	out, err := exec.Command("git", "-C", wt, "rev-parse", "HEAD").Output()
+	if err != nil {
+		r.t.Fatalf("git rev-parse HEAD: %v", err)
+	}
+	sha := strings.TrimSpace(string(out))
+	ref := "refs/ddx/test-pins/" + sha[:12]
+	r.runGit("update-ref", ref, sha)
+	return sha
+}
+
+func (r *landTestRepo) changedFiles(sha string) []string {
+	r.t.Helper()
+	out := r.runGit("show", "--pretty=format:", "--name-only", sha)
+	if strings.TrimSpace(out) == "" {
+		return nil
+	}
+	lines := strings.Split(out, "\n")
+	files := make([]string, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			files = append(files, line)
+		}
+	}
+	return files
 }
 
 func largeFileLines(n int) string {
@@ -1395,6 +1479,184 @@ func TestLand_MergeRequired_IndexCleanAfterMerge(t *testing.T) {
 	}
 }
 
+func TestExecuteBeadLandingCommitsFinalResultArtifact(t *testing.T) {
+	r := newLandTestRepo(t)
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature content\n", "feat: worker change [ddx-final-result]")
+
+	attemptID := "20260515T170000-finalresult"
+	evidenceDir := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", attemptID))
+	prelim := &ExecuteBeadResult{
+		BeadID:            "ddx-final-result",
+		AttemptID:         attemptID,
+		BaseRev:           r.baseSHA,
+		ResultRev:         workerSHA,
+		ImplementationRev: workerSHA,
+		ExecutionDir:      evidenceDir,
+		PromptFile:        filepath.ToSlash(filepath.Join(evidenceDir, "prompt.md")),
+		ManifestFile:      filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json")),
+		ResultFile:        filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
+		Outcome:           ExecuteBeadOutcomeTaskSucceeded,
+		Status:            ExecuteBeadStatusSuccess,
+		ExitCode:          0,
+	}
+	evidenceSHA := r.commitExecuteBeadEvidence(workerSHA, prelim, nil)
+
+	res := *prelim
+	res.ResultRev = evidenceSHA
+	res.EvidenceRev = evidenceSHA
+
+	land, err := Land(r.dir, LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    evidenceSHA,
+		BeadID:       res.BeadID,
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  evidenceDir,
+	}, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
+	}
+
+	ApplyLandResultToExecuteBeadResult(&res, land)
+	if err := WriteExecuteBeadResultArtifact(r.dir, &res); err != nil {
+		t.Fatalf("WriteExecuteBeadResultArtifact: %v", err)
+	}
+
+	resultRel := filepath.ToSlash(filepath.Join(evidenceDir, "result.json"))
+	if staged := strings.TrimSpace(r.runGit("diff", "--cached", "--name-only", "--", resultRel)); staged != "" {
+		t.Fatalf("final result artifact left staged diff: %s", staged)
+	}
+	if status := strings.TrimSpace(r.runGit("status", "--porcelain", "--", resultRel)); status != "" {
+		t.Fatalf("final result artifact left working tree diff: %s", status)
+	}
+
+	resultPath := filepath.Join(r.dir, filepath.FromSlash(resultRel))
+	raw, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatalf("read final result.json: %v", err)
+	}
+	var got ExecuteBeadResult
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("parse final result.json: %v", err)
+	}
+	if got.ImplementationRev != workerSHA {
+		t.Fatalf("implementation_rev = %q, want %q", got.ImplementationRev, workerSHA)
+	}
+	if got.LandedRev != land.LandedTip {
+		t.Fatalf("landed_rev = %q, want %q", got.LandedRev, land.LandedTip)
+	}
+	if got.TargetBranch != "main" {
+		t.Fatalf("landed_branch = %q, want %q", got.TargetBranch, "main")
+	}
+	if got.Outcome != "merged" {
+		t.Fatalf("outcome = %q, want %q", got.Outcome, "merged")
+	}
+	if got.OrchestratorStatus != ExecuteBeadStatusSuccess {
+		t.Fatalf("orchestrator_status = %q, want %q", got.OrchestratorStatus, ExecuteBeadStatusSuccess)
+	}
+}
+
+func TestExecuteBeadLandingFinalResultSkipsEmbeddedEvidence(t *testing.T) {
+	r := newLandTestRepo(t)
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature content\n", "feat: worker change [ddx-final-embedded]")
+
+	attemptID := "20260515T170100-finalembed"
+	evidenceDir := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", attemptID))
+	prelim := &ExecuteBeadResult{
+		BeadID:            "ddx-final-embedded",
+		AttemptID:         attemptID,
+		BaseRev:           r.baseSHA,
+		ResultRev:         workerSHA,
+		ImplementationRev: workerSHA,
+		ExecutionDir:      evidenceDir,
+		ResultFile:        filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
+		Outcome:           ExecuteBeadOutcomeTaskSucceeded,
+		Status:            ExecuteBeadStatusSuccess,
+		ExitCode:          0,
+	}
+	writeExecuteBeadBundle(t, r.dir, prelim, map[string]string{
+		"embedded/agent-001.jsonl": "{\"type\":\"result\"}\n",
+	})
+
+	land, err := Land(r.dir, LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       prelim.BeadID,
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  evidenceDir,
+	}, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.EvidenceCommitSHA == "" {
+		t.Fatalf("expected evidence commit SHA")
+	}
+
+	embeddedPath := filepath.ToSlash(filepath.Join(evidenceDir, "embedded", "agent-001.jsonl"))
+	for _, path := range r.changedFiles(land.EvidenceCommitSHA) {
+		if path == embeddedPath {
+			t.Fatalf("final-result commit staged embedded session log %s", embeddedPath)
+		}
+	}
+}
+
+func TestExecuteBeadLandingFinalResultSkipsRunStateFiles(t *testing.T) {
+	r := newLandTestRepo(t)
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature content\n", "feat: worker change [ddx-final-runstate]")
+
+	attemptID := "20260515T170200-finalstate"
+	evidenceDir := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", attemptID))
+	prelim := &ExecuteBeadResult{
+		BeadID:            "ddx-final-runstate",
+		AttemptID:         attemptID,
+		BaseRev:           r.baseSHA,
+		ResultRev:         workerSHA,
+		ImplementationRev: workerSHA,
+		ExecutionDir:      evidenceDir,
+		ResultFile:        filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
+		Outcome:           ExecuteBeadOutcomeTaskSucceeded,
+		Status:            ExecuteBeadStatusSuccess,
+		ExitCode:          0,
+	}
+	writeExecuteBeadBundle(t, r.dir, prelim, nil)
+	runStatePath := filepath.Join(r.dir, ddxroot.DirName, "run-state", attemptID+".json")
+	if err := os.MkdirAll(filepath.Dir(runStatePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(runStatePath, []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	land, err := Land(r.dir, LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       prelim.BeadID,
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  evidenceDir,
+	}, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.EvidenceCommitSHA == "" {
+		t.Fatalf("expected evidence commit SHA")
+	}
+
+	runStateRel := filepath.ToSlash(filepath.Join(ddxroot.DirName, "run-state", attemptID+".json"))
+	for _, path := range r.changedFiles(land.EvidenceCommitSHA) {
+		if path == runStateRel {
+			t.Fatalf("final-result commit staged run-state file %s", runStateRel)
+		}
+	}
+}
+
 // Deterministic test clock helper — avoids unused time import when no test
 // overrides NowFunc.
 var _ = time.Now
@@ -1547,6 +1809,30 @@ func TestBuildLandRequest_UsesImplementationRevNotEvidenceRev(t *testing.T) {
 	// Sanity: base rev is passed through unchanged.
 	if req.BaseRev != res.BaseRev {
 		t.Errorf("LandRequest.BaseRev: want %q, got %q", res.BaseRev, req.BaseRev)
+	}
+}
+
+// TestBuildLandRequest_UsesResultRevBeforeFirstLand ensures the first landing
+// still submits the evidence-bundle commit when ResultRev already points at
+// that trailing audit commit but LandedRev has not been set yet.
+func TestBuildLandRequest_UsesResultRevBeforeFirstLand(t *testing.T) {
+	const implSHA = "impl1111impl2222impl3333impl4444impl5555"
+	const evidenceSHA = "evid1111evid2222evid3333evid4444evid5555"
+
+	res := &ExecuteBeadResult{
+		BeadID:            "ddx-test",
+		AttemptID:         "20260101T000000-deadbeef",
+		BaseRev:           "base1111base2222base3333base4444base5555",
+		ResultRev:         evidenceSHA,
+		ImplementationRev: implSHA,
+		EvidenceRev:       evidenceSHA,
+		ExecutionDir:      ".ddx/executions/20260101T000000-deadbeef",
+	}
+
+	req := BuildLandRequestFromResult("/some/project/root", res)
+
+	if req.ResultRev != evidenceSHA {
+		t.Errorf("LandRequest.ResultRev: want first-land evidence rev %q, got %q", evidenceSHA, req.ResultRev)
 	}
 }
 

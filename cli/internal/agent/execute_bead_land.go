@@ -125,6 +125,12 @@ type LandResult struct {
 	// tip and ResultRev). Empty when preserved or no-changes.
 	NewTip string
 
+	// LandedTip is the target branch tip immediately after the implementation
+	// (or already-committed evidence bundle) lands, but before any trailing
+	// audit-only evidence/final-result commit. When no trailing commit is
+	// created it matches NewTip.
+	LandedTip string
+
 	// TargetBranch is the resolved branch name that Land() advanced or attempted
 	// to advance. It is set on landed and preserved results so callers can make
 	// branch-local recovery explicit in terminal output and evidence.
@@ -887,6 +893,59 @@ func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps
 	return nil
 }
 
+func rewriteFinalResultArtifactForLand(wd string, req LandRequest, land *LandResult) error {
+	if req.EvidenceDir == "" || land == nil {
+		return nil
+	}
+	resultPath := filepath.Join(wd, filepath.FromSlash(req.EvidenceDir), "result.json")
+	raw, err := os.ReadFile(resultPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read result.json: %w", err)
+	}
+
+	var res ExecuteBeadResult
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return fmt.Errorf("parse result.json: %w", err)
+	}
+	if res.BeadID == "" {
+		res.BeadID = req.BeadID
+	}
+	if res.AttemptID == "" {
+		res.AttemptID = req.AttemptID
+	}
+	if res.BaseRev == "" {
+		res.BaseRev = req.BaseRev
+	}
+	if res.ExecutionDir == "" {
+		res.ExecutionDir = filepath.ToSlash(req.EvidenceDir)
+	}
+	if res.ResultFile == "" {
+		res.ResultFile = filepath.ToSlash(filepath.Join(req.EvidenceDir, "result.json"))
+	}
+	if res.ResultRev == "" {
+		if res.ImplementationRev != "" {
+			res.ResultRev = res.ImplementationRev
+		} else {
+			res.ResultRev = req.ResultRev
+		}
+	}
+	if res.ImplementationRev == "" && res.ResultRev != "" {
+		res.ImplementationRev = res.ResultRev
+	}
+	if res.EvidenceRev == "" &&
+		req.ResultRev != "" &&
+		res.ImplementationRev != "" &&
+		req.ResultRev != res.ImplementationRev {
+		res.EvidenceRev = req.ResultRev
+	}
+
+	ApplyLandResultToExecuteBeadResult(&res, land)
+	return writeArtifactJSON(resultPath, &res)
+}
+
 // evidenceDirHasTrackedFiles reports whether any files under dirRel are tracked
 // in git at wd. Used by landEvidence to distinguish "nothing staged because
 // already committed" from "nothing staged because evidence is absent."
@@ -1102,6 +1161,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		result := &LandResult{
 			Status:            "landed",
 			NewTip:            req.ResultRev,
+			LandedTip:         req.ResultRev,
 			TargetBranch:      targetBranch,
 			Merged:            false,
 			MergedCommitCount: contribCount,
@@ -1119,6 +1179,9 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		if req.EvidenceDir != "" {
 			if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
 				return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
+			}
+			if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
+				return nil, fmt.Errorf("rewriting final result artifact: %w", err)
 			}
 			if err := landEvidence(finalWD, targetBranch, req, gitOps, result); err != nil {
 				return preserveAfterEvidenceFailure(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil, err)
@@ -1176,6 +1239,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 	result := &LandResult{
 		Status:            "landed",
 		NewTip:            mergeSHA,
+		LandedTip:         mergeSHA,
 		TargetBranch:      targetBranch,
 		Merged:            true,
 		MergedCommitCount: contribCount,
@@ -1193,6 +1257,9 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 	if req.EvidenceDir != "" {
 		if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
 			return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
+		}
+		if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
+			return nil, fmt.Errorf("rewriting final result artifact: %w", err)
 		}
 		if err := landEvidence(finalWD, targetBranch, req, gitOps, result); err != nil {
 			return preserveAfterEvidenceFailure(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil, err)
@@ -1561,15 +1628,22 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 				res.Reason += "; " + detail
 			}
 		}
-		// NewTip reflects the ref actually on the target branch (either
-		// ResultRev on the ff path or the merge commit SHA on the merge path).
-		if land.NewTip != "" {
+		landedTip := land.NewTip
+		if land.LandedTip != "" {
+			landedTip = land.LandedTip
+		}
+		// LandedTip reflects the ref that actually landed the implementation:
+		// either ResultRev on the ff path or the merge commit SHA on the merge
+		// path. A trailing final-result/evidence audit commit may advance NewTip
+		// beyond this landed revision, but callers should keep ResultRev/LandedRev
+		// pointing at the landed implementation state.
+		if landedTip != "" {
 			// Preserve the implementation rev before rewriting the compat alias.
 			if res.ImplementationRev == "" {
 				res.ImplementationRev = res.ResultRev
 			}
-			res.LandedRev = land.NewTip
-			res.ResultRev = land.NewTip // backwards-compat alias mirrors LandedRev
+			res.LandedRev = landedTip
+			res.ResultRev = landedTip // backwards-compat alias mirrors LandedRev
 		}
 	case "preserved":
 		res.Outcome = "preserved"
@@ -1607,13 +1681,18 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 // workdir — the worker's original worktree has already been cleaned up by the
 // time Land() runs.
 func BuildLandRequestFromResult(projectRoot string, res *ExecuteBeadResult) LandRequest {
-	// Use the pre-landing implementation revision. If ImplementationRev is set
-	// (i.e. the result was already landed once and ResultRev was rewritten to
-	// the branch tip), prefer it so the coordinator always sees the candidate
-	// commit rather than an already-landed or evidence rev.
-	candidateRev := res.ImplementationRev
+	// Before the first land, ResultRev points at the candidate that must be
+	// submitted (either the implementation commit itself or a trailing
+	// evidence-bundle commit). After a result has already landed once,
+	// ResultRev is rewritten to the landed branch tip; in that case prefer the
+	// preserved ImplementationRev so re-submission does not try to land the
+	// already-landed branch tip.
+	candidateRev := res.ResultRev
+	if res.LandedRev != "" && res.ImplementationRev != "" {
+		candidateRev = res.ImplementationRev
+	}
 	if candidateRev == "" {
-		candidateRev = res.ResultRev
+		candidateRev = res.ImplementationRev
 	}
 	return LandRequest{
 		WorktreeDir:  projectRoot,

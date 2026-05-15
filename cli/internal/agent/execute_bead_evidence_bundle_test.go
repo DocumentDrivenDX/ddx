@@ -129,15 +129,15 @@ func TestLand_EvidenceCommitUsesWorktreeBundleWithoutProjectCopy(t *testing.T) {
 		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
 	}
 
-	// Evidence commit SHA is set — it's the ResultRev itself (already committed).
+	// Evidence commit SHA is set. On the worktree-origin path, landing now
+	// rewrites result.json to the final orchestrator fields before staging the
+	// bundle, so a trailing commit may advance HEAD beyond the pre-land
+	// evidenceSHA.
 	if land.EvidenceCommitSHA == "" {
 		t.Error("EvidenceCommitSHA must be set")
 	}
-
-	// No separate trailing commit: NewTip == evidenceSHA (the ResultRev that
-	// already contains the evidence bundle).
-	if land.NewTip != evidenceSHA {
-		t.Errorf("NewTip = %s, want evidenceSHA %s (no separate trailing commit needed)", land.NewTip, evidenceSHA)
+	if !r.shaReachable(land.NewTip, evidenceSHA) {
+		t.Errorf("evidence SHA %s must remain reachable from landed tip %s", evidenceSHA, land.NewTip)
 	}
 
 	// copyEvidenceDirForLanding was NOT called from project root: verify by
