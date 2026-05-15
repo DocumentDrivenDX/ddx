@@ -16,8 +16,8 @@ func TestVersion_StaleWarning_PrintsToStderr(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	repoDir := initVersionTestRepo(t, "https://github.com/DocumentDrivenDX/ddx.git")
-	initialSHA := gitCommitFile(t, repoDir, "README.md", "# initial\n", "initial")
-	_ = gitCommitFile(t, repoDir, "notes.txt", "stale\n", "stale")
+	initialSHA := gitCommitFile(t, repoDir, "cli/cmd/main.go", "package main\n", "initial")
+	_ = gitCommitFile(t, repoDir, "cli/cmd/stale.go", "package main\n", "stale")
 
 	stdout, stderr, err := runVersionCommand(t, repoDir, "v1.2.3", initialSHA)
 	require.NoError(t, err)
@@ -32,7 +32,7 @@ func TestVersion_NoWarningWhenInSync(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	repoDir := initVersionTestRepo(t, "https://github.com/DocumentDrivenDX/ddx.git")
-	headSHA := gitCommitFile(t, repoDir, "README.md", "# initial\n", "initial")
+	headSHA := gitCommitFile(t, repoDir, "cli/cmd/main.go", "package main\n", "initial")
 
 	_, stderr, err := runVersionCommand(t, repoDir, "v1.2.3", headSHA)
 	require.NoError(t, err)
@@ -44,8 +44,8 @@ func TestVersion_NoWarningOutsideDDxRepo(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	repoDir := initVersionTestRepo(t, "https://github.com/example/not-ddx.git")
-	initialSHA := gitCommitFile(t, repoDir, "README.md", "# initial\n", "initial")
-	_ = gitCommitFile(t, repoDir, "notes.txt", "stale\n", "stale")
+	initialSHA := gitCommitFile(t, repoDir, "cli/cmd/main.go", "package main\n", "initial")
+	_ = gitCommitFile(t, repoDir, "cli/cmd/stale.go", "package main\n", "stale")
 
 	_, stderr, err := runVersionCommand(t, repoDir, "v1.2.3", initialSHA)
 	require.NoError(t, err)
@@ -57,8 +57,8 @@ func TestVersion_HandlesDetachedHead(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	repoDir := initVersionTestRepo(t, "https://github.com/DocumentDrivenDX/ddx.git")
-	initialSHA := gitCommitFile(t, repoDir, "README.md", "# initial\n", "initial")
-	headSHA := gitCommitFile(t, repoDir, "notes.txt", "detached\n", "detached")
+	initialSHA := gitCommitFile(t, repoDir, "cli/cmd/main.go", "package main\n", "initial")
+	headSHA := gitCommitFile(t, repoDir, "cli/cmd/detached.go", "package main\n", "detached")
 
 	detach := exec.Command("git", "checkout", "--detach", headSHA)
 	detach.Dir = repoDir

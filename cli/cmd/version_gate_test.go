@@ -104,6 +104,45 @@ func TestVersionWarnsStaleSourceBinary(t *testing.T) {
 	assert.Contains(t, out, "recovery: cd "+projectRoot+" && make install")
 }
 
+func TestDetectInstalledBinaryBehindSourceIgnoresTrackerOnlyAheadCommit(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	projectRoot := minimalProjectDir(t)
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n"), 0o644))
+
+	runStaleSourceGit(t, projectRoot, "init")
+	runStaleSourceGit(t, projectRoot, "config", "user.email", "test@example.com")
+	runStaleSourceGit(t, projectRoot, "config", "user.name", "Test User")
+	runStaleSourceGit(t, projectRoot, "remote", "add", "origin", "git@github.com:DocumentDrivenDX/ddx.git")
+	runStaleSourceGit(t, projectRoot, "add", ".")
+	runStaleSourceGit(t, projectRoot, "commit", "-m", "installed source state")
+	buildSHA := staleSourceGitOutput(t, projectRoot, "rev-parse", "HEAD")
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl"),
+		[]byte(`{"id":"ddx-tracker-only","title":"tracker only"}`+"\n"),
+		0o644,
+	))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-1"), 0o755))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-1", "result.json"),
+		[]byte(`{"status":"success"}`+"\n"),
+		0o644,
+	))
+	runStaleSourceGit(t, projectRoot, "add", filepath.Join(ddxroot.DirName, "beads.jsonl"), filepath.Join(ddxroot.DirName, "executions", "attempt-1", "result.json"))
+	runStaleSourceGit(t, projectRoot, "commit", "-m", "tracker only")
+
+	factory := NewCommandFactory(projectRoot)
+	factory.Version = "0.9.0"
+	factory.Commit = buildSHA
+
+	assert.Nil(t, factory.detectInstalledBinaryBehindSource(projectRoot))
+
+	out, err := executeCommand(factory.NewRootCommand(), "version")
+	require.NoError(t, err)
+	assert.NotContains(t, out, "installed ddx binary is behind this DDx source checkout.")
+}
+
 func writeProjectVersion(t *testing.T, workDir, version string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
@@ -119,6 +158,8 @@ func seedStaleSourceCheckout(t *testing.T) (projectRoot, buildSHA, headSHA strin
 
 	projectRoot = minimalProjectDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "cli", "cmd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "cli", "cmd", "main.go"), []byte("package main\n"), 0o644))
 
 	runStaleSourceGit(t, projectRoot, "init")
 	runStaleSourceGit(t, projectRoot, "config", "user.email", "test@example.com")
@@ -128,8 +169,8 @@ func seedStaleSourceCheckout(t *testing.T) (projectRoot, buildSHA, headSHA strin
 	runStaleSourceGit(t, projectRoot, "commit", "-m", "initial source state")
 	buildSHA = staleSourceGitOutput(t, projectRoot, "rev-parse", "HEAD")
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n\nsource ahead\n"), 0o644))
-	runStaleSourceGit(t, projectRoot, "add", "README.md")
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "cli", "cmd", "stale.go"), []byte("package main\n"), 0o644))
+	runStaleSourceGit(t, projectRoot, "add", filepath.Join("cli", "cmd", "stale.go"))
 	runStaleSourceGit(t, projectRoot, "commit", "-m", "source ahead of installed binary")
 	headSHA = staleSourceGitOutput(t, projectRoot, "rev-parse", "HEAD")
 

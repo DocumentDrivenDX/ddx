@@ -608,6 +608,12 @@ type sourceCheckoutBinaryStaleness struct {
 	AheadCount   string
 }
 
+var ddxBinaryStalenessPathspecs = []string{
+	"Makefile",
+	"install.sh",
+	"cli",
+}
+
 func (s sourceCheckoutBinaryStaleness) recoveryCommand() string {
 	return fmt.Sprintf("cd %s && make install", s.ProjectRoot)
 }
@@ -706,6 +712,9 @@ func (f *CommandFactory) detectInstalledBinaryBehindSource(projectRoot string) *
 	if err != nil || aheadCount == "0" {
 		return nil
 	}
+	if !hasDDXBinaryAffectingDiff(repoRoot, buildSHA, headSHA) {
+		return nil
+	}
 
 	return &sourceCheckoutBinaryStaleness{
 		ProjectRoot:  repoRoot,
@@ -722,6 +731,13 @@ func (f *CommandFactory) warnIfInstalledBinaryBehindSource(cmd *cobra.Command) {
 		return
 	}
 	_, _ = fmt.Fprint(cmd.ErrOrStderr(), staleness.warningMessage())
+}
+
+func hasDDXBinaryAffectingDiff(repoRoot, baseSHA, headSHA string) bool {
+	args := []string{"diff", "--name-only", baseSHA + ".." + headSHA, "--"}
+	args = append(args, ddxBinaryStalenessPathspecs...)
+	out, err := gitCommandOutput(repoRoot, args...)
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 func gitCommandOutput(dir string, args ...string) (string, error) {
