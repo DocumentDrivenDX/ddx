@@ -1,0 +1,90 @@
+{
+  "attempt_id": "20260515T064010-6fbfbb43",
+  "bead_id": "ddx-887e2bd3",
+  "base_rev": "905bcb63fd61e82f8b7d743cae39b91c3403a8bd",
+  "created_at": "2026-05-15T06:40:14.829179207Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-887e2bd3",
+    "title": "housekeeping: reap orphan ddx worktrees and stale worker/execution state: part 2",
+    "description": "PROBLEM\nParent bead ddx-c191e91a is too broad for one execution pass. This child owns part 2 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nDDx-managed filesystem state accumulates indefinitely. On the Fizeau project (sibling repo, /Users/erik/Projects/fizeau) on 2026-05-14:\n- /var/tmp/ddx-exec-wt/ contained 9,735 inodes across ~9700+ directories. Many were .execute-bead-wt-* worktrees dating back to 2026-05-07 (a week stale). Each is a full repo checkout, multiplying repo size on disk.\n- .ddx/workers/ held 35 agent-loop-\u003cnano-id\u003e/ directories. Most show last_activity_at older than 1 hour with no live process. They keep persisting per-attempt status.json entries.\n- .ddx/executions/ held 44 attempt directories. Some have unmerged result.json state (a previous merge or worker crash left them in DU). No automatic GC.\n- .ddx/attachments/ holds 355 per-bead artifact directories. They flood `git status` as untracked since nothing gitignores them.\n\nROOT CAUSE\n- `ddx try` creates a worktree under `/var/tmp/ddx-exec-wt/.execute-bead-wt-\u003cbead\u003e-\u003ctimestamp\u003e-\u003chash\u003e/` and only sometimes cleans up. Failure paths (worktree_lost, execution_failed, process crash) consistently leave the worktree behind. There's no startup reaper for stale worktrees.\n- `ddx work` and `ddx try` write a worker status.json under .ddx/workers/agent-loop-\u003cnano-id\u003e/ and the writer is responsible for cleanup. Process crashes leave the directory behind; no startup reaper claims them.\n- .ddx/executions/\u003ctimestamp\u003e/ is meant to be retained as evidence (per CONTRACT-003 / FEAT-010 evidence pile). But there's no retention policy: directories accumulate forever. Some land in unmerged git state after partial commits.\n- .ddx/attachments/ and .ddx/run-state*.json are written by every ddx invocation, but the project's .gitignore policy for them is inconsistent (.ddx/executions is ignored; .ddx/attachments and .ddx/run-state.json appear in `git status` constantly).\n\nPROPOSED FIX\n1. Add a startup reaper to `ddx work` and `ddx try`: on launch, scan /var/tmp/ddx-exec-wt/, identify worktrees whose parent ddx-try/ddx-work process is dead (no PID match), `git worktree remove` + `rm -rf` them. Bound the scan to N=200 per launch so a cold start doesn't take forever. Configurable via DDX_WORKTREE_REAP_MAX_AGE (default 72h).\n2. Add a startup reaper for `.ddx/workers/agent-loop-*/`: read status.json's `pid` and `last_activity_at`; if pid is gone OR activity \u003e 30 min stale, remove the directory.\n3. Add a configurable execution-evidence retention policy:\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- TestWorkStartup_ReapsStaleWorkerDirs asserts that .ddx/workers/agent-loop-*/ directories whose status.json shows pid=dead or last_activity_at \u003e 30 min stale are removed at startup.\n- TestExecutionsRetention_ArchivesOldEvidence asserts that .ddx/executions/\u003ctimestamp\u003e/ entries older than DDX_EXECUTION_RETAIN_DAYS are moved under .ddx/executions-archive/\u003cyear\u003e/\u003cmonth\u003e/ (or deleted if DDX_EXECUTION_RETAIN_DAYS=0).\n- `ddx doctor` reports the count of stale worktrees, worker dirs, and execution dirs without making changes. `ddx doctor --apply` runs the reaper paths.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. TestWorkStartup_ReapsStaleWorkerDirs asserts that .ddx/workers/agent-loop-*/ directories whose status.json shows pid=dead or last_activity_at \u003e 30 min stale are removed at startup.\n2. TestExecutionsRetention_ArchivesOldEvidence asserts that .ddx/executions/\u003ctimestamp\u003e/ entries older than DDX_EXECUTION_RETAIN_DAYS are moved under .ddx/executions-archive/\u003cyear\u003e/\u003cmonth\u003e/ (or deleted if DDX_EXECUTION_RETAIN_DAYS=0).\n3. `ddx doctor` reports the count of stale worktrees, worker dirs, and execution dirs without making changes. `ddx doctor --apply` runs the reaper paths.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-c191e91a",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "kind:cleanup",
+      "decomposed"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-15T06:35:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4026275",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-887e2bd3\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:28:04.081090974Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:28:21.344479119Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:28:21.382828247Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-887e2bd3\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:28:57.605292387Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:29:13.752735184Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:29:13.798703969Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-heartbeat-at": "2026-05-15T06:35:45.061749456Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T064010-6fbfbb43",
+    "prompt": ".ddx/executions/20260515T064010-6fbfbb43/prompt.md",
+    "manifest": ".ddx/executions/20260515T064010-6fbfbb43/manifest.json",
+    "result": ".ddx/executions/20260515T064010-6fbfbb43/result.json",
+    "checks": ".ddx/executions/20260515T064010-6fbfbb43/checks.json",
+    "usage": ".ddx/executions/20260515T064010-6fbfbb43/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-887e2bd3-20260515T064010-6fbfbb43"
+  },
+  "prompt_sha": "632efd2c494568b30f82ab3d30482a9f7834d25b7118ecfe0862ae405fe086d1"
+}
