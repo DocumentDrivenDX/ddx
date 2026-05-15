@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260515T181058-c4a94e51",
+  "bead_id": "ddx-06b3162c",
+  "base_rev": "839d8c2681fd8b0552e720d04e85163bfcadfefd",
+  "created_at": "2026-05-15T18:11:02.219858823Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-06b3162c",
+    "title": "server: fix worker report landed-rev gate contract",
+    "description": "PROBLEM\n`cd cli \u0026\u0026 go test ./internal/server -run TestWorkerReport_DistinguishesCandidateAndLandedRev -count=1 -v` fails on current `main`. The failure blocks broad `cd cli \u0026\u0026 go test ./... -count=1` proof for parent bead `ddx-06cbaa90` and any other full CLI gate.\n\nObserved failure on 2026-05-15:\n- `cli/internal/server/workers_gates_test.go:384` expects `res.LandedRev` to equal `refs/heads/main` after `evaluateGatesAndSubmit`, but `res.LandedRev` remains the candidate/implementation landing SHA while `refs/heads/main` has advanced.\n- `cli/internal/server/workers_gates_test.go:419` repeats the same mismatch through the synthesized `WorkerExecutionResult`.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/workers_gates_test.go:347-389` documents and asserts that `LandedRev` is the final target branch tip after landing.\n- `cli/internal/agent/execute_bead_land.go:128-132` defines `LandResult.LandedTip` as the target branch tip immediately after implementation landing, before any trailing audit-only evidence/final-result commit.\n- `cli/internal/agent/execute_bead_land.go:1631-1646` intentionally maps `ExecuteBeadResult.LandedRev` and the compatibility `ResultRev` alias to `land.LandedTip`, not necessarily `land.NewTip`.\n- `cli/internal/server/workers.go:1790-1799` submits through the land coordinator and applies that mapping, so the failing server test is exercising the existing land-result contract rather than a random flake.\n\nPROPOSED FIX\nMake the server worker report contract explicit and green. Either update `TestWorkerReport_DistinguishesCandidateAndLandedRev` to match the intended `LandedTip` semantics and add an assertion for the final branch/audit tip separately, or change the mapping contract if the correct product behavior is that `LandedRev` should always equal the final target branch tip. Do not paper over the failure by deleting the test; preserve separate evidence for implementation rev, landed implementation rev, and final target tip when they differ.\n\nIN-SCOPE FILES\n- cli/internal/server/workers_gates_test.go\n- cli/internal/server/workers.go, only if worker-result construction needs a field/contract update\n- cli/internal/agent/execute_bead_land.go, only if the intended land-result mapping contract changes\n- adjacent tests under cli/internal/agent or cli/internal/server that encode the same rev-triplet contract\n\nNON-SCOPE\n- Do not change queue selection, route selection, or readiness behavior.\n- Do not remove evidence/final-result commits.\n- Do not weaken unrelated worker gate tests.\n\nDEPS\nNone.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/server -run TestWorkerReport_DistinguishesCandidateAndLandedRev -count=1 -v` passes.\n2. The fixed or updated test proves the rev-triplet contract explicitly: original implementation commit, landed implementation revision, and final target/audit tip are not collapsed when a trailing evidence/final-result commit advances the branch.\n3. `cd cli \u0026\u0026 go test ./internal/server/... -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./... -count=1` passes, or any remaining failure is filed as a separate bead with the failing `Test*` symbol and command.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "area:agent",
+      "kind:bug",
+      "reliability",
+      "gate-failure"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-06b3162c)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T18:10:58.133201474Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T181058-c4a94e51",
+    "prompt": ".ddx/executions/20260515T181058-c4a94e51/prompt.md",
+    "manifest": ".ddx/executions/20260515T181058-c4a94e51/manifest.json",
+    "result": ".ddx/executions/20260515T181058-c4a94e51/result.json",
+    "checks": ".ddx/executions/20260515T181058-c4a94e51/checks.json",
+    "usage": ".ddx/executions/20260515T181058-c4a94e51/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-06b3162c-20260515T181058-c4a94e51"
+  },
+  "prompt_sha": "415bd393827a9d6d5edf0151988d57027cd7ce3aab164ace9650c2bcfde9fa41"
+}
