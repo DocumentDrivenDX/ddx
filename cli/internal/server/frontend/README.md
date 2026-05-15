@@ -24,6 +24,11 @@ Build for production (outputs to `build/`):
 bun run build
 ```
 
+The repository keeps `build/.gitkeep` checked in so `cd cli && go test ./...`
+and other Go-only commands can compile in a fresh checkout before the frontend
+bundle exists. Run `make frontend-build` or `bun run build` before exercising
+the server UI or frontend end-to-end tests.
+
 Preview the production build:
 
 ```sh
