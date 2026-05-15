@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260515T170329-207d532e",
+  "bead_id": "ddx-1c952784",
+  "base_rev": "3290ef18cc5d8347c6f9d774d6c201fe30f145f0",
+  "created_at": "2026-05-15T17:03:34.52880195Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1c952784",
+    "title": "work: preserve and clear pre-dispatch implementation dirt instead of stopping watch",
+    "description": "PROBLEM\n`ddx work --watch` still stops the entire drain when the project checkout contains implementation-file dirt before the next bead dispatch. During the Fizeau monitor on 2026-05-15, `fizeau-126f03c0` landed successfully, then the watcher attempted `fizeau-f02ada30` and exited with operator attention: project worktree `/Users/erik/Projects/fizeau` had uncommitted implementation changes in internal/routing/engine.go, internal/routing/score.go, service.go, service_aliveness.go, service_execute.go, service_execute_dispatch.go, and service_routing.go. The operator had to stash/restore files by hand before the queue could continue.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/execute_bead.go:575-599` treats any non-DDx dirty implementation path as a hard pre-dispatch checkpoint refusal. `cli/internal/agent/execute_bead_loop.go:1880-1912` converts that refusal into `operator_attention`, unclaims the candidate, logs “commit or clean”, and returns from the work loop. That behavior is safe for arbitrary user WIP, but it is not robust for DDx-managed watch drains where leaked lifecycle/root edits or generated artifacts must be preserved and the worker should keep draining.\n\nPROPOSED FIX\nReplace the hard stop with an audited preserve-and-clean path for pre-dispatch dirt in managed `ddx work --watch` flows: write a named preservation artifact or git stash/ref containing the dirty patch, record the dirty paths and preserve handle in the attempt/work log, restore the affected paths to HEAD, unclaim the candidate without losing the patch, and keep the watch loop alive so the next scan can proceed. The implementation must still avoid silently discarding operator WIP: the preserve handle and affected paths must be visible in events/log output and the root must be clean before dispatching the next bead.\n\nNON-SCOPE\nDo not hand-edit `.ddx/beads.jsonl`. Do not weaken checkpoint filtering for `.ddx` bookkeeping paths. Do not squash/rewrite execute-bead history. Do not hide dirty root evidence without a recoverable preservation handle.",
+    "acceptance": "1. Add TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues (or exact equivalent) proving a dirty implementation file before the next dispatch is preserved with a recoverable handle, restored to HEAD, and the watch loop does not exit with operator_attention.\n2. Add or extend a checkpoint test proving the preservation event/log includes the original dirty paths and a stash/ref/artifact handle operators can recover.\n3. Add a negative test proving dirty paths are never silently discarded: if preservation fails, the old operator_attention path still fires with the dirty path list.\n4. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues|Test.*PreDispatch.*Dirty.*Preserve|Test.*Checkpoint.*Dirty\" -count=1 passes.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "operator-ux",
+      "release-blocker"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-1c952784)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T17:03:24.600257649Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T170329-207d532e",
+    "prompt": ".ddx/executions/20260515T170329-207d532e/prompt.md",
+    "manifest": ".ddx/executions/20260515T170329-207d532e/manifest.json",
+    "result": ".ddx/executions/20260515T170329-207d532e/result.json",
+    "checks": ".ddx/executions/20260515T170329-207d532e/checks.json",
+    "usage": ".ddx/executions/20260515T170329-207d532e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1c952784-20260515T170329-207d532e"
+  },
+  "prompt_sha": "407439ade419b297e136f10070b71dc1b0ec9e79713699bba028bbe94bc76309"
+}
