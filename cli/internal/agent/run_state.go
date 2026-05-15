@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // RunStateFileName is the basename of the live run-state file, relative to
@@ -54,11 +56,11 @@ type RunState struct {
 // runStatePath returns the absolute path of the run-state file for the
 // project rooted at projectRoot.
 func runStatePath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".ddx", RunStateFileName)
+	return ddxroot.JoinProject(projectRoot, RunStateFileName)
 }
 
 func runStateDirPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".ddx", RunStateDirName)
+	return ddxroot.JoinProject(projectRoot, RunStateDirName)
 }
 
 func runStateAttemptPath(projectRoot, attemptID string) (string, error) {
@@ -110,7 +112,7 @@ func WriteRunState(projectRoot string, state RunState) error {
 	if err != nil {
 		return err
 	}
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := ddxroot.JoinProject(projectRoot)
 	attemptDir := filepath.Dir(attemptPath)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		return fmt.Errorf("run-state: mkdir .ddx: %w", err)

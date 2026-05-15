@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -86,7 +87,7 @@ func makeExecution(projectID, id, beadID, harness, verdict string) *ddxgraphql.E
 
 func writeExecutionFixture(t *testing.T, projectRoot, id, bead string) {
 	t.Helper()
-	dir := filepath.Join(projectRoot, ".ddx", "executions", id)
+	dir := filepath.Join(projectRoot, ddxroot.DirName, "executions", id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

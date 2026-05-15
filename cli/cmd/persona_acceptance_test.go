@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -24,7 +25,7 @@ func setupPersonaTestProject(t *testing.T) *TestEnvironment {
 func setupMockPersonas(t *testing.T, env *TestEnvironment) {
 	t.Helper()
 
-	libPath := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
+	libPath := filepath.Join(env.Dir, ddxroot.DirName, "plugins", "ddx")
 	personasDir := filepath.Join(libPath, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -107,7 +108,7 @@ func TestAcceptance_US030_LoadPersonasForSession(t *testing.T) {
 				workDir := t.TempDir()
 
 				// Create .ddx/config.yaml with persona bindings
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"
 library:
@@ -134,7 +135,7 @@ This is my project's guidance for Claude.
 ## Project Context
 This is a test project for validating persona functionality.`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(workDir, "CLAUDE.md"),
 					[]byte(claudeContent),
@@ -145,7 +146,7 @@ This is a test project for validating persona functionality.`
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -203,21 +204,21 @@ You think in terms of system boundaries, data flow, and long-term evolution.
 - Consider operational concerns early
 - Document architectural decisions`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "code-reviewer.md"),
 					[]byte(codeReviewerContent),
 					0644,
 				))
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "test-engineer.md"),
 					[]byte(testEngineerContent),
 					0644,
 				))
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "architect.md"),
 					[]byte(architectContent),
@@ -279,7 +280,7 @@ You think in terms of system boundaries, data flow, and long-term evolution.
 				claudeContent := `# CLAUDE.md
 
 Project guidance for my application.`
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(workDir, "CLAUDE.md"),
 					[]byte(claudeContent),
@@ -295,9 +296,9 @@ library:
     branch: "main"
 persona_bindings: {}`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(workDir, ".ddx", "config.yaml"),
+					filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
 					[]byte(config),
 					0644,
 				))
@@ -306,7 +307,7 @@ persona_bindings: {}`
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -321,7 +322,7 @@ tags: [security, vulnerability, compliance]
 
 You are a security analyst focused on identifying vulnerabilities and security issues.`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "security-analyst.md"),
 					[]byte(personaContent),
@@ -402,9 +403,9 @@ library:
 persona_bindings:
   project_name: "team-project"`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(workDir, ".ddx", "config.yaml"),
+					filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
 					[]byte(config),
 					0644,
 				))
@@ -413,7 +414,7 @@ persona_bindings:
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -428,7 +429,7 @@ tags: [balanced, pragmatic, team]
 
 You provide constructive, balanced code reviews that consider both quality and team velocity.`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "balanced-code-reviewer.md"),
 					[]byte(personaContent),
@@ -454,7 +455,7 @@ You provide constructive, balanced code reviews that consider both quality and t
 				assert.NoError(t, err, "Binding persona should succeed")
 
 				// Verify .ddx.yml has been updated with persona binding
-				configPath := filepath.Join(workDir, ".ddx", "config.yaml")
+				configPath := filepath.Join(workDir, ddxroot.DirName, "config.yaml")
 				content, readErr := os.ReadFile(configPath)
 				require.NoError(t, readErr)
 
@@ -487,9 +488,9 @@ persona_bindings:
   code-reviewer: "old-reviewer"
   test-engineer: "current-tester"`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(workDir, ".ddx", "config.yaml"),
+					filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
 					[]byte(config),
 					0644,
 				))
@@ -498,7 +499,7 @@ persona_bindings:
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -511,7 +512,7 @@ tags: [modern, efficient]
 
 # New Reviewer`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "new-reviewer.md"),
 					[]byte(personaContent),
@@ -537,7 +538,7 @@ tags: [modern, efficient]
 				assert.NoError(t, err, "Updating binding should succeed")
 
 				// Verify binding was updated
-				configPath := filepath.Join(workDir, ".ddx", "config.yaml")
+				configPath := filepath.Join(workDir, ddxroot.DirName, "config.yaml")
 				content, readErr := os.ReadFile(configPath)
 				require.NoError(t, readErr)
 
@@ -614,7 +615,7 @@ artifacts:
 
 				workflowDir := filepath.Join(workDir, "workflows", "test-workflow")
 				require.NoError(t, os.MkdirAll(workflowDir, 0755))
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(workflowDir, "workflow.yml"),
 					[]byte(workflowContent),
@@ -627,9 +628,9 @@ persona_bindings:
   architect: "architect"
   test-engineer: "test-engineer"`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(workDir, ".ddx", "config.yaml"),
+					filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
 					[]byte(config),
 					0644,
 				))
@@ -637,7 +638,7 @@ persona_bindings:
 				// Create required personas
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				personasDir := filepath.Join(homeDir, ".ddx", "personas")
+				personasDir := filepath.Join(homeDir, ddxroot.DirName, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				architectContent := `---
@@ -656,14 +657,14 @@ tags: [testing]
 ---
 # Test Engineer`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "architect.md"),
 					[]byte(architectContent),
 					0644,
 				))
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "test-engineer.md"),
 					[]byte(testEngineerContent),
@@ -744,9 +745,9 @@ repository:
   url: "https://github.com/ddx-toolkit/ddx"
   branch: "main"`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(workDir, ".ddx", "config.yaml"),
+					filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
 					[]byte(config),
 					0644,
 				))
@@ -759,7 +760,7 @@ repository:
 			when: func(t *testing.T, workDir string) error {
 				// When: I create a new persona file in the personas directory
 				homeDir := os.Getenv("HOME")
-				personasDir := filepath.Join(homeDir, ".ddx", "personas")
+				personasDir := filepath.Join(homeDir, ddxroot.DirName, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				// Developer creates new persona
@@ -803,7 +804,7 @@ Your reviews prioritize performance characteristics and efficient resource utili
 
 				// Verify persona was created with correct format
 				homeDir := os.Getenv("HOME")
-				personaPath := filepath.Join(homeDir, ".ddx", "personas", "performance-optimizer.md")
+				personaPath := filepath.Join(homeDir, ddxroot.DirName, "personas", "performance-optimizer.md")
 
 				content, readErr := os.ReadFile(personaPath)
 				require.NoError(t, readErr)
@@ -860,7 +861,7 @@ func TestAcceptance_US034_DeveloperDiscoveringPersonas(t *testing.T) {
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -899,7 +900,7 @@ tags: [security, vulnerability]
 				}
 
 				for filename, content := range personas {
-					require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+					require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 					require.NoError(t, os.WriteFile(
 						filepath.Join(personasDir, filename),
 						[]byte(content),
@@ -946,7 +947,7 @@ tags: [security, vulnerability]
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 				// Set library path to project-local library
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -977,7 +978,7 @@ tags: [security, code-review, strict]
 				}
 
 				for filename, content := range personas {
-					require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+					require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 					require.NoError(t, os.WriteFile(
 						filepath.Join(personasDir, filename),
 						[]byte(content),
@@ -1053,9 +1054,9 @@ overrides:
   performance-workflow:
     test-engineer: "test-engineer-bdd"  # Use BDD approach for performance testing`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
-					filepath.Join(workDir, ".ddx", "config.yaml"),
+					filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
 					[]byte(config),
 					0644,
 				))
@@ -1063,7 +1064,7 @@ overrides:
 				// Create personas
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				personasDir := filepath.Join(homeDir, ".ddx", "personas")
+				personasDir := filepath.Join(homeDir, ddxroot.DirName, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				testEngineerContent := `---
@@ -1082,14 +1083,14 @@ tags: [bdd, behavior]
 ---
 # BDD Engineer`
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "test-engineer.md"),
 					[]byte(testEngineerContent),
 					0644,
 				))
 
-				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0755))
+				require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(personasDir, "test-engineer-bdd.md"),
 					[]byte(bddContent),
@@ -1102,7 +1103,7 @@ tags: [bdd, behavior]
 				// When: I execute the performance workflow
 				// TODO: This would be done by workflow engine
 				// For now, just verify the configuration structure is correct
-				configPath := filepath.Join(workDir, ".ddx", "config.yaml")
+				configPath := filepath.Join(workDir, ddxroot.DirName, "config.yaml")
 				_, err := os.Stat(configPath)
 				return err
 			},
@@ -1111,7 +1112,7 @@ tags: [bdd, behavior]
 				assert.NoError(t, err, "Configuration should exist")
 
 				// Verify override configuration structure
-				configPath := filepath.Join(workDir, ".ddx", "config.yaml")
+				configPath := filepath.Join(workDir, ddxroot.DirName, "config.yaml")
 				content, readErr := os.ReadFile(configPath)
 				require.NoError(t, readErr)
 

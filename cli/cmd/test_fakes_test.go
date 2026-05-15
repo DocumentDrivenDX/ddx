@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -87,9 +88,9 @@ func (f *fakeExecuteBeadGit) WorktreeAdd(dir, wtPath, rev string) error {
 	if err := os.MkdirAll(wtPath, 0o755); err != nil {
 		return err
 	}
-	beadFile := filepath.Join(dir, ".ddx", "beads.jsonl")
+	beadFile := filepath.Join(dir, ddxroot.DirName, "beads.jsonl")
 	if _, err := os.Stat(beadFile); err == nil {
-		if err := copyTestFile(beadFile, filepath.Join(wtPath, ".ddx", "beads.jsonl")); err != nil {
+		if err := copyTestFile(beadFile, filepath.Join(wtPath, ddxroot.DirName, "beads.jsonl")); err != nil {
 			return err
 		}
 	}
@@ -257,7 +258,7 @@ func parseExecuteBeadJSON(t *testing.T, out string) agent.ExecuteBeadResult {
 
 func seedExecuteBead(t *testing.T, workDir string, b *bead.Bead) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(workDir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	if _, err := store.Get(b.ID); err == nil {
 		return

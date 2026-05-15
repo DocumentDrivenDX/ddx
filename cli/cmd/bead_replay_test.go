@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +21,7 @@ import (
 // .ddx/executions/<attemptID>/ under dir.
 func writeReplayManifest(t *testing.T, dir, attemptID, beadID, baseRev, harness, model, promptContent string) {
 	t.Helper()
-	execDir := filepath.Join(dir, ".ddx", "executions", attemptID)
+	execDir := filepath.Join(dir, ddxroot.DirName, "executions", attemptID)
 	require.NoError(t, os.MkdirAll(execDir, 0o755))
 
 	// Write prompt.md.
@@ -36,8 +37,8 @@ func writeReplayManifest(t *testing.T, dir, attemptID, beadID, baseRev, harness,
 			"model":   model,
 		},
 		"paths": map[string]any{
-			"prompt":   filepath.ToSlash(filepath.Join(".ddx", "executions", attemptID, "prompt.md")),
-			"manifest": filepath.ToSlash(filepath.Join(".ddx", "executions", attemptID, "manifest.json")),
+			"prompt":   filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", attemptID, "prompt.md")),
+			"manifest": filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", attemptID, "manifest.json")),
 		},
 	}
 	raw, err := json.Marshal(m)
@@ -83,7 +84,7 @@ func TestReplay_OverridesAppliedToDispatch(t *testing.T) {
 	writeReplayManifest(t, dir, attemptID, beadID, "base-sha", "claude", "sonnet", "original prompt")
 
 	// Seed bead tracker.
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Test bead", Status: bead.StatusOpen,
@@ -149,7 +150,7 @@ func TestReplay_DoesNotCountTowardBeadAttemptHistory(t *testing.T) {
 	beadID := "hist-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha1", "claude", "sonnet", "test prompt")
 
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "History bead", Status: bead.StatusOpen,
@@ -191,7 +192,7 @@ func TestReplay_AppendsMetricsRowWithReplayOf(t *testing.T) {
 	beadID := "metrics-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha2", "claude", "sonnet", "metrics test")
 
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Metrics bead", Status: bead.StatusOpen,
@@ -248,7 +249,7 @@ func TestReplay_PrintsComparison(t *testing.T) {
 	beadID := "compare-bead"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha3", "claude", "sonnet", "compare test")
 
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Compare bead", Status: bead.StatusOpen,
@@ -299,7 +300,7 @@ func TestReplayBench_MultipleVariantsInParallel(t *testing.T) {
 	attemptID := "20260501T170000-deadbeef"
 	writeReplayManifest(t, dir, attemptID, beadID, "sha4", "claude", "sonnet", "bench prompt")
 
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Bench bead", Status: bead.StatusOpen,

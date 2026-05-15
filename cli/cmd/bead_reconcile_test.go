@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBeadReconcileCommandDryRunDoesNotMutate(t *testing.T) {
 	dir := t.TempDir()
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	b := &bead.Bead{
 		ID:     "ddx-stale",
@@ -36,7 +37,7 @@ func TestBeadReconcileCommandDryRunDoesNotMutate(t *testing.T) {
 
 func TestBeadReconcileCommandApplyMutatesThroughStore(t *testing.T) {
 	dir := t.TempDir()
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	b := &bead.Bead{
 		ID:     "ddx-stale",

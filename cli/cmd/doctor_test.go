@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestDoctorProseChecker_MissingVale(t *testing.T) {
@@ -182,7 +184,7 @@ func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
 	t.Setenv("HOME", homeDir)
 
-	legacyCatalogPath := filepath.Join(homeDir, ".ddx", "model-catalog.yaml")
+	legacyCatalogPath := filepath.Join(homeDir, ddxroot.DirName, "model-catalog.yaml")
 	if err := os.MkdirAll(filepath.Dir(legacyCatalogPath), 0o755); err != nil {
 		t.Fatalf("mkdir legacy catalog dir: %v", err)
 	}

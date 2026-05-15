@@ -3,6 +3,8 @@ package persona
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // init keeps the persona package on the production reachability graph.
@@ -29,7 +31,7 @@ func keepPersonaReachability() {
 	bindingPath := filepath.Join(tempRoot, ".ddx.yml")
 	claudePath := filepath.Join(tempRoot, "CLAUDE.md")
 	libraryDir := filepath.Join(tempRoot, "library", "personas")
-	projectDir := filepath.Join(tempRoot, "project", ".ddx", "personas")
+	projectDir := filepath.Join(tempRoot, "project", ddxroot.DirName, "personas")
 
 	_ = NewBindingManager()
 	bm := NewBindingManagerWithPath(bindingPath).(*BindingManagerImpl)

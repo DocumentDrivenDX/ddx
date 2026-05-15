@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -43,7 +44,7 @@ func TestExecuteBead_DirtyParentTree_CheckpointCommitted(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"),
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"),
 		[]byte(`{"attempt_id":"checkpoint-test"}`+"\n"), 0o644))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
@@ -111,7 +112,7 @@ func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"hook-test"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"hook-test"}`+"\n"), 0o644))
 
 	markerPath := filepath.Join(projectRoot, "hook-invoked.txt")
 	hookPath := filepath.Join(projectRoot, ".git", "hooks", "pre-commit")
@@ -132,12 +133,12 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260513T000001-allow000"
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"allow"}`+"\n"), 0o644))
-	evidenceRel := filepath.Join(".ddx", "executions", attemptID, "manifest.json")
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"allow"}`+"\n"), 0o644))
+	evidenceRel := filepath.Join(ddxroot.DirName, "executions", attemptID, "manifest.json")
 	evidencePath := filepath.Join(projectRoot, evidenceRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
 	require.NoError(t, os.WriteFile(evidencePath, []byte(`{"attempt_id":"`+attemptID+`"}`+"\n"), 0o644))
-	metricsRel := filepath.Join(".ddx", "metrics", "attempts.jsonl")
+	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
 	metricsPath := filepath.Join(projectRoot, metricsRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
 	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n"), 0o644))
@@ -187,9 +188,9 @@ func TestCheckpointPreDispatchDirtIgnoresGitIgnoredGeneratedPaths(t *testing.T) 
 	runGitInteg(t, projectRoot, "commit", "-m", "test: ignore generated paths")
 
 	ignoredFiles := map[string]string{
-		filepath.Join("cli", "build", "ddx"):             "binary",
-		filepath.Join("website", "public", "index.html"): "<html></html>",
-		filepath.Join(".ddx", "agent-logs", "log.jsonl"): "{}\n",
+		filepath.Join("cli", "build", "ddx"):                      "binary",
+		filepath.Join("website", "public", "index.html"):          "<html></html>",
+		filepath.Join(ddxroot.DirName, "agent-logs", "log.jsonl"): "{}\n",
 	}
 	for rel, content := range ignoredFiles {
 		path := filepath.Join(projectRoot, rel)
@@ -209,7 +210,7 @@ func TestCheckpointPreDispatchDirtPreservesSkipWorktreeLocalOverlay(t *testing.T
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260514T000001-overlay"
 
-	pluginFileRel := filepath.Join(".ddx", "plugins", "helix", "README.md")
+	pluginFileRel := filepath.Join(ddxroot.DirName, "plugins", "helix", "README.md")
 	pluginFile := filepath.Join(projectRoot, pluginFileRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(pluginFile), 0o755))
 	require.NoError(t, os.WriteFile(pluginFile, []byte("tracked plugin copy\n"), 0o644))
@@ -222,7 +223,7 @@ func TestCheckpointPreDispatchDirtPreservesSkipWorktreeLocalOverlay(t *testing.T
 	require.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", pluginFileRel),
 		"skip-worktree local overlay changes must start hidden")
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"overlay"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"overlay"}`+"\n"), 0o644))
 	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
 	require.NoError(t, err)
 	require.True(t, committed, "allowed DDx bookkeeping should still checkpoint")
@@ -269,7 +270,7 @@ func TestPreDispatchCheckpoint_IgnoresWorkerSidecarsWithoutGitignore(t *testing.
 	const attemptID = "20260514T000002-workers"
 
 	// No .gitignore rule for .ddx/workers/ — simulate an older repo.
-	workerRel := filepath.Join(".ddx", "workers", "agent-loop-test", "status.json")
+	workerRel := filepath.Join(ddxroot.DirName, "workers", "agent-loop-test", "status.json")
 	workerPath := filepath.Join(projectRoot, workerRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(workerPath), 0o755))
 	require.NoError(t, os.WriteFile(workerPath, []byte(`{"alive":true}`+"\n"), 0o644))
@@ -309,7 +310,7 @@ func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"exec-test"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"exec-test"}`+"\n"), 0o644))
 	implPath := filepath.Join(projectRoot, "cli", "internal", "agent", "dirty_impl.go")
 	require.NoError(t, os.MkdirAll(filepath.Dir(implPath), 0o755))
 	require.NoError(t, os.WriteFile(implPath, []byte("package agent\n"), 0o644))

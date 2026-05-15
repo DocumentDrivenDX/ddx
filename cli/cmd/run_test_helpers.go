@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/require"
 )
@@ -203,7 +204,7 @@ func minimalProjectDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := ddxroot.JoinProject(dir)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	cfg := `version: "1.0"
 library:
@@ -232,7 +233,7 @@ library:
 
 func appendTestRoutingEvidence(t *testing.T, dir, beadID, harness, provider, model, routeReason, baseURL string) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(dir))
 	body := struct {
 		ResolvedProvider string   `json:"resolved_provider"`
 		ResolvedModel    string   `json:"resolved_model,omitempty"`
@@ -268,7 +269,7 @@ func setupWorkIntakeFixture(t *testing.T) string {
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
 
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(dir))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-intake-test",

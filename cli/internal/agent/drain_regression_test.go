@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ import (
 // boundary so no harness binary is ever shelled out.
 func TestDrainQueueHistoricalConfigDoesNotFanOut(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
 	cfgYAML := `version: "1.0"
 library:
   path: ".ddx/plugins/ddx"
@@ -47,7 +48,7 @@ agent:
       host: "127.0.0.1"
       port: 1236
 `
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfgYAML), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfgYAML), 0o644))
 
 	// LoadAndResolve with empty overrides except Assignee (the empty-spec case).
 	rcfg, err := config.LoadAndResolve(root, config.CLIOverrides{Assignee: "worker"})

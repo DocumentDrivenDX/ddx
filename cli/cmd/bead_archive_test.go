@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,13 +30,13 @@ func TestBeadArchiveBelowThresholdIsNoop(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
 
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-c1","title":"closed","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
 		`{"id":"ddx-open","title":"open","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "archive", "--json")
 	require.NoError(t, err)
@@ -43,7 +44,7 @@ func TestBeadArchiveBelowThresholdIsNoop(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &stats))
 	assert.True(t, stats.Skipped, "small active file must not trigger archival")
 	assert.Equal(t, 0, stats.Archived)
-	assert.NoFileExists(t, filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
+	assert.NoFileExists(t, filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl"))
 }
 
 // TestBeadArchiveSizeTrigger covers AC7: synthetic 5MB beads.jsonl shrinks
@@ -52,14 +53,14 @@ func TestBeadArchiveSizeTrigger(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
 
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 
 	// Build a synthetic active beads.jsonl just over 5MB. Each closed bead
 	// carries ~4KB of inline padding so the file passes the 4MB default
 	// threshold and a substantial number of rows is eligible for archive.
 	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
 	padding := strings.Repeat("x", 4000)
-	beadsPath := filepath.Join(workingDir, ".ddx", "beads.jsonl")
+	beadsPath := filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl")
 	f, err := os.Create(beadsPath)
 	require.NoError(t, err)
 
@@ -95,7 +96,7 @@ func TestBeadArchiveSizeTrigger(t *testing.T) {
 	assert.Less(t, stats.ActiveSizeAfter, int64(4*1024*1024), "active file must shrink under 4MB threshold")
 
 	// AC4: archive grew, active shrank.
-	archiveInfo, err := os.Stat(filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
+	archiveInfo, err := os.Stat(filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl"))
 	require.NoError(t, err)
 	assert.Greater(t, archiveInfo.Size(), int64(0))
 
@@ -116,7 +117,7 @@ func TestBeadArchiveSizeTrigger(t *testing.T) {
 func TestBeadArchiveFlagOverrides(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 
 	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
 	recent := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
@@ -125,7 +126,7 @@ func TestBeadArchiveFlagOverrides(t *testing.T) {
 		`{"id":"ddx-recent","title":"recent","status":"closed","priority":2,"issue_type":"task","created_at":"` + recent + `","updated_at":"` + recent + `"}`,
 		`{"id":"ddx-other","title":"other","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
 
 	// --max-size=0 disables the size gate; --older-than 720h skips the
 	// recently-closed bead; --max-count 1 caps the run at one bead.

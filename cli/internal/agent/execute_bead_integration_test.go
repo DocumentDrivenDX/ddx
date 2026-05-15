@@ -21,6 +21,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ import (
 // the bead is closed with a closing_commit_sha and that git log shows +1 commit.
 func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	// Count commits before execution.
@@ -92,7 +93,7 @@ func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 // adjudication threshold.
 func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	commitsBefore := gitCommitCount(t, projectRoot, "HEAD")
@@ -149,7 +150,7 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 // not record terminal/no_changes/loop-error queue noise.
 func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
@@ -246,7 +247,7 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 // the result is merged onto main with the new files present.
 func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	// Directive creates a file but does NOT call "commit".
@@ -295,7 +296,7 @@ func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
 // unchanged beyond the tracker commit.
 func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	mainBefore := runGitInteg(t, projectRoot, "rev-parse", "refs/heads/main")
@@ -366,7 +367,7 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 	const n = 5
 	projectRoot, initialSHA := newScriptHarnessRepo(t, n)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	// Each bead gets its own directive file: create a unique file and commit.
 	dirFiles := make([]string, n)
@@ -461,7 +462,7 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 // claim acceptance test.
 func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
@@ -538,7 +539,7 @@ func TestIntegration_ScriptHarness_MergeConflict_Preserved(t *testing.T) {
 // between iterations was not checked before claiming the next candidate).
 func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 2)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{
@@ -591,7 +592,7 @@ func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) 
 // closes as already_satisfied on the first attempt.
 func TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	rationale := "verification_command: true"

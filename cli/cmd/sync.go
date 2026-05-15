@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -107,7 +108,7 @@ func (f *CommandFactory) runSync(cmd *cobra.Command, runner syncGitRunner, watch
 
 	s := &syncer{
 		repoRoot: repoRoot,
-		ddxDir:   filepath.Join(ddxWorkspace, ".ddx"),
+		ddxDir:   ddxroot.JoinProject(ddxWorkspace),
 		runner:   runner,
 		out:      cmd.OutOrStdout(),
 	}

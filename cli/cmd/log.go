@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -144,7 +145,7 @@ func logHistory(workingDir string, opts LogOptions) ([]LogEntry, error) {
 	// Determine DDX directory path
 	ddxDir := ".ddx"
 	if workingDir != "" {
-		ddxDir = filepath.Join(workingDir, ".ddx")
+		ddxDir = ddxroot.JoinProject(workingDir)
 	}
 
 	// Verify DDX project exists
@@ -177,7 +178,7 @@ func isDDXProjectInDir(workingDir string) bool {
 		return true
 	}
 
-	ddxDir := filepath.Join(workingDir, ".ddx")
+	ddxDir := ddxroot.JoinProject(workingDir)
 	if _, err := os.Stat(ddxDir); err == nil {
 		return true
 	}

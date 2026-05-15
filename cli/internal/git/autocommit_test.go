@@ -39,7 +39,7 @@ func TestAutoCommit_RelativeNestedPath(t *testing.T) {
 func TestAutoCommit_TargetOnlyPreservesUnrelatedStagedChanges(t *testing.T) {
 	repoDir := setupTestGitRepo(t)
 
-	beadsPath := filepath.Join(repoDir, ".ddx", "beads.jsonl")
+	beadsPath := filepath.Join(repoDir, ddxDirSegment, "beads.jsonl")
 	require.NoError(t, os.MkdirAll(filepath.Dir(beadsPath), 0o755))
 	require.NoError(t, os.WriteFile(beadsPath, []byte("initial\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(repoDir, "unrelated.txt"), []byte("initial\n"), 0o644))

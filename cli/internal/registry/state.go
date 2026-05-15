@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -30,7 +31,7 @@ func installedStatePath() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".ddx", "installed.yaml"), nil
+	return ddxroot.JoinHome(home, "installed.yaml"), nil
 }
 
 // LoadState reads installed.yaml, returning an empty state if the file doesn't exist.

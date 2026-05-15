@@ -9,13 +9,14 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
@@ -94,7 +95,7 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 
 func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")

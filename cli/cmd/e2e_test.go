@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +85,7 @@ func TestE2E_BasicWorkflow(t *testing.T) {
 		}
 
 		// Verify config file created in new format
-		assert.FileExists(t, filepath.Join(workspace, ".ddx", "config.yaml"))
+		assert.FileExists(t, filepath.Join(workspace, ddxroot.DirName, "config.yaml"))
 	})
 
 	// Step 2: List available resources
@@ -145,7 +146,7 @@ func TestE2E_TemplateWithVariables(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 
 	// Create a template with variables
-	templateDir := filepath.Join(homeDir, ".ddx", "templates", "test")
+	templateDir := filepath.Join(homeDir, ddxroot.DirName, "templates", "test")
 	require.NoError(t, os.MkdirAll(templateDir, 0755))
 
 	// Create template files
@@ -174,7 +175,7 @@ persona_bindings:
   project_name: "MyProject"
   version: "1.0.0"
   port: "8080"`
-	ddxDir := filepath.Join(projectDir, ".ddx")
+	ddxDir := filepath.Join(projectDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 
@@ -230,7 +231,7 @@ persona_bindings: {}
 sync:
   last_update: "2024-01-01T00:00:00Z"
   upstream_commit: "abc123"`
-	ddxDir := filepath.Join(workspace, ".ddx")
+	ddxDir := filepath.Join(workspace, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 

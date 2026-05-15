@@ -14,6 +14,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -147,7 +148,7 @@ func (s *cleanupAdvanceClaimStore) Claim(id, assignee string) error {
 
 func TestWorkCleanup_RunsAtStartup(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 
 	tempRoot := t.TempDir()
 	t.Setenv("DDX_EXEC_WT_DIR", tempRoot)
@@ -203,7 +204,7 @@ func TestWorkCleanup_RunsAtStartup(t *testing.T) {
 
 func TestWorkCleanup_RunsPeriodicallyWhilePolling(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 
 	var cleanupCalls int32
 	tickCh := make(chan time.Time, 8)
@@ -229,7 +230,7 @@ func TestWorkCleanup_RunsPeriodicallyWhilePolling(t *testing.T) {
 
 func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 
 	inner, first, second := newExecuteLoopTestStore(t)
 	var appendCalls int32
@@ -315,7 +316,7 @@ func (r *blockingCleanupRunner) Cleanup(ctx context.Context) (ExecutionCleanupSu
 
 func TestWorkCleanup_UsesProjectLock(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 
 	runner := &blockingCleanupRunner{
 		started: make(chan struct{}),
@@ -353,7 +354,7 @@ func TestWorkCleanup_UsesProjectLock(t *testing.T) {
 
 func TestBackgroundCleanupEndToEnd_UsesLockAndJitter(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 
 	delay := jitteredCleanupDelay(10*time.Minute, rand.New(rand.NewSource(1)))
 	assert.GreaterOrEqual(t, delay, 8*time.Minute)
@@ -365,7 +366,7 @@ func TestBackgroundCleanupEndToEnd_UsesLockAndJitter(t *testing.T) {
 	}
 	runnerSummary := ExecutionCleanupSummary{
 		ProjectRoot:          projectRoot,
-		TempRoot:             filepath.Join(projectRoot, ".ddx", "tmp"),
+		TempRoot:             filepath.Join(projectRoot, ddxroot.DirName, "tmp"),
 		RemovedRunStateFiles: 1,
 		BytesReclaimed:       1,
 		InodesReclaimed:      1,
@@ -443,7 +444,7 @@ func TestBackgroundCleanupEndToEnd_UsesLockAndJitter(t *testing.T) {
 
 func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 
 	inner, first, _ := newExecuteLoopTestStore(t)
 

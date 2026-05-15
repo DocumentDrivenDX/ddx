@@ -383,6 +383,16 @@ pre-commit:
         exit 0
       fail_text: "NewCommandFactory(\"/tmp\") found in cli/cmd/*_test.go — use t.TempDir() instead"
 
+    ddxroot-path-audit:
+      name: "Guard hardcoded .ddx filepath.Join callsites"
+      run: |
+        if rg 'filepath\.Join\([^)]*"\.ddx"' cli/ --type go | grep -v '^cli/internal/ddxroot/'; then
+          echo "Hardcoded .ddx filepath.Join callsites found outside cli/internal/ddxroot/"
+          exit 1
+        fi
+        exit 0
+      fail_text: "Hardcoded .ddx filepath.Join callsites found outside cli/internal/ddxroot/. Route project state paths through internal/ddxroot."
+
     skill-dir-anchor:
       name: "Skill dirs must have SKILL.md"
       run: |
@@ -502,6 +512,15 @@ ci:
       name: "Runtime Lint (SD-024 forbidden runtime fields + legacy options) — full tree"
       root: "cli/"
       run: 'go run ./tools/lint/runtimelint/cmd/runtimelint ./...'
+
+    ddxroot-path-audit-all:
+      name: "Guard hardcoded .ddx filepath.Join callsites — full tree"
+      run: |
+        if rg 'filepath\.Join\([^)]*"\.ddx"' cli/ --type go | grep -v '^cli/internal/ddxroot/'; then
+          echo "Hardcoded .ddx filepath.Join callsites found outside cli/internal/ddxroot/"
+          exit 1
+        fi
+        exit 0
 
     # FEAT-006 routing-lint: dead-code / anti-reintroduction gate for
     # the compensating DDx-side routing helpers retired by ddx-3bd7396a

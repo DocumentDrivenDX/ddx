@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TC-BEAD-MUT-PARITY-001: REST and MCP create surfaces accept parent and custom (set) fields.
@@ -66,7 +67,7 @@ func TestBeadCreateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Extra is json:"-" on Bead so it is not in the REST response; read from store.
-		store := bead.NewStore(filepath.Join(dir, ".ddx"))
+		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 		b, err := store.Get(got.ID)
 		if err != nil {
 			t.Fatalf("store.Get: %v", err)
@@ -138,7 +139,7 @@ func TestBeadCreateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 		if err := json.Unmarshal([]byte(text), &got); err != nil {
 			t.Fatalf("parse bead JSON: %v", err)
 		}
-		store := bead.NewStore(filepath.Join(dir, ".ddx"))
+		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 		b, err := store.Get(got.ID)
 		if err != nil {
 			t.Fatalf("store.Get: %v", err)
@@ -244,7 +245,7 @@ func TestBeadUpdateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 			t.Fatalf("set: expected 200, got %d: %s", w.Code, w.Body.String())
 		}
 
-		store := bead.NewStore(filepath.Join(dir, ".ddx"))
+		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 		b, err := store.Get("bx-001")
 		if err != nil {
 			t.Fatalf("store.Get after set: %v", err)
@@ -401,7 +402,7 @@ func TestBeadUpdateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 			t.Fatalf("unexpected MCP error on set: %+v", result)
 		}
 
-		store := bead.NewStore(filepath.Join(dir, ".ddx"))
+		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 		b, err := store.Get("bx-001")
 		if err != nil {
 			t.Fatalf("store.Get after MCP set: %v", err)
@@ -462,7 +463,7 @@ func TestBeadClaimUnclaimAreDedicatedEndpoints(t *testing.T) {
 		t.Errorf("expected owner='test-worker', got %q", got.Owner)
 	}
 	// Verify no claimed-at Extra key was set (claim flow is dedicated, not generic).
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	b, err := store.Get("bx-001")
 	if err != nil {
 		t.Fatalf("store.Get: %v", err)

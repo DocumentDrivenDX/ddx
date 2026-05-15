@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLifecycleMigrationGateDetectsLegacyQueue(t *testing.T) {
 	dir := t.TempDir()
-	store := NewStore(filepath.Join(dir, ".ddx"))
+	store := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, os.MkdirAll(store.Dir, 0o755))
 
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
@@ -40,7 +41,7 @@ func TestLifecycleMigrationGateDetectsLegacyQueue(t *testing.T) {
 
 func TestLifecycleMigrationGateReportsMarkerlessCleanQueueWithoutBlocking(t *testing.T) {
 	dir := t.TempDir()
-	store := NewStore(filepath.Join(dir, ".ddx"))
+	store := NewStore(filepath.Join(dir, ddxroot.DirName))
 
 	missing, err := store.DetectLifecycleMigrationRequired()
 	require.NoError(t, err)
@@ -63,7 +64,7 @@ func TestLifecycleMigrationGateReportsMarkerlessCleanQueueWithoutBlocking(t *tes
 
 func TestLifecycleMigrationGateDoesNotRequireCleanMarkedQueue(t *testing.T) {
 	dir := t.TempDir()
-	store := NewStore(filepath.Join(dir, ".ddx"))
+	store := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(testCtx()))
 	require.NoError(t, store.WriteLifecycleSchemaMarker(time.Now().UTC()))
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -80,7 +81,7 @@ func TestLifecycleMigrationGateDoesNotRequireCleanMarkedQueue(t *testing.T) {
 
 func TestLifecycleMigrationGateRequiresOldMarker(t *testing.T) {
 	dir := t.TempDir()
-	store := NewStore(filepath.Join(dir, ".ddx"))
+	store := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(testCtx()))
 	require.NoError(t, os.WriteFile(store.LifecycleSchemaMarkerPath(), []byte(`{"version":0}`+"\n"), 0o644))
 

@@ -12,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -210,7 +211,7 @@ func TestWorkResourcePreflight_ContinuesAfterCleanupRestoresBudget(t *testing.T)
 		ProjectRoot: projectRoot,
 		TempRoot:    tempRoot,
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ".ddx", "executions"),
+			filepath.Join(projectRoot, ddxroot.DirName, "executions"),
 		},
 		SoftMinFreeBytes:  100,
 		SoftMinFreeInodes: 100,
@@ -279,7 +280,7 @@ func TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup(t *testing.T) {
 		ProjectRoot: projectRoot,
 		TempRoot:    tempRoot,
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ".ddx", "executions"),
+			filepath.Join(projectRoot, ddxroot.DirName, "executions"),
 		},
 		SoftMinFreeBytes:  100,
 		SoftMinFreeInodes: 100,
@@ -340,7 +341,7 @@ func TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup(t *testing.T) {
 
 func TestWorkResourcePreflight_ReportsBeforeAfterCapacity(t *testing.T) {
 	projectRoot := t.TempDir()
-	tempRoot := filepath.Join(projectRoot, ".ddx", "tmp")
+	tempRoot := filepath.Join(projectRoot, ddxroot.DirName, "tmp")
 	inner, _, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 
@@ -348,7 +349,7 @@ func TestWorkResourcePreflight_ReportsBeforeAfterCapacity(t *testing.T) {
 		ProjectRoot: projectRoot,
 		TempRoot:    tempRoot,
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ".ddx", "executions"),
+			filepath.Join(projectRoot, ddxroot.DirName, "executions"),
 		},
 		BeforeRootChecks: []ExecutionResourceRootCheck{
 			{Path: tempRoot, Writable: true, BytesFree: 1, InodesFree: 2},

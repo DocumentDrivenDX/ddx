@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+const ddxDirSegment = ".ddx"
+
 // FindProjectRoot walks up from startDir to find the git repository root.
 // It returns the top-level directory of the git working tree. If startDir
 // is not inside a git repository, it returns startDir unchanged.
@@ -104,7 +106,7 @@ func FindNearestDDxWorkspace(startDir string) string {
 
 	// If we're inside a linked worktree, prefer the primary worktree's .ddx/.
 	if primary := primaryWorktreeRoot(abs); primary != "" && primary != FindProjectRoot(abs) {
-		candidate := filepath.Join(primary, ".ddx")
+		candidate := filepath.Join(primary, ddxDirSegment)
 		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
 			return primary
 		}
@@ -113,7 +115,7 @@ func FindNearestDDxWorkspace(startDir string) string {
 	gitRoot := FindProjectRoot(abs)
 	current := abs
 	for {
-		candidate := filepath.Join(current, ".ddx")
+		candidate := filepath.Join(current, ddxDirSegment)
 		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
 			return current
 		}

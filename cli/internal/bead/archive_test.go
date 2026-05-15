@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 // archiveTestStore returns a fresh active store rooted at a temp .ddx dir.
 func archiveTestStore(t *testing.T) (*Store, string) {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), ".ddx")
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	s := NewStore(dir)
 	require.NoError(t, s.Init(testCtx()))

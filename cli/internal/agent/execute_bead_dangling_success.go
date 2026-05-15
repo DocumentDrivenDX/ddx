@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -155,7 +156,7 @@ func DetectDanglingSuccessBeads(projectRoot string) ([]DanglingSuccessFinding, e
 	}
 
 	// Read the tracker to find in_progress beads.
-	beadsPath := filepath.Join(projectRoot, ".ddx", "beads.jsonl")
+	beadsPath := ddxroot.JoinProject(projectRoot, "beads.jsonl")
 	raw, err := os.ReadFile(beadsPath)
 	if err != nil {
 		if os.IsNotExist(err) {

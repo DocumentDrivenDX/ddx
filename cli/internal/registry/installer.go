@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // InstallPackage downloads the source release tarball and copies declared install mappings
@@ -304,7 +306,7 @@ func InstallResource(resourcePath string) (InstalledEntry, error) {
 	resourceType, resourceName := parts[0], parts[1]
 
 	// Determine target directory relative to cwd.
-	target := filepath.Join(".ddx", "plugins", "ddx", resourceType+"s")
+	target := ddxroot.JoinRelative("plugins", "ddx", resourceType+"s")
 	if err := os.MkdirAll(target, 0755); err != nil {
 		return entry, fmt.Errorf("creating target directory %s: %w", target, err)
 	}

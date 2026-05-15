@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,17 +24,17 @@ func TestSynthesizeCommit_GitignoredDirsDoNotFail(t *testing.T) {
 	runGitInteg(t, root, "add", ".gitignore")
 	runGitInteg(t, root, "commit", "-m", "chore: add gitignore")
 
-	logsDir := filepath.Join(root, ".ddx", "agent-logs")
+	logsDir := filepath.Join(root, ddxroot.DirName, "agent-logs")
 	require.NoError(t, os.MkdirAll(logsDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(logsDir, "log.jsonl"),
 		[]byte(`{"ts":1}`), 0644))
 
-	workersDir := filepath.Join(root, ".ddx", "workers")
+	workersDir := filepath.Join(root, ddxroot.DirName, "workers")
 	require.NoError(t, os.MkdirAll(workersDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(workersDir, "w.json"),
 		[]byte(`{}`), 0644))
 
-	executionsDir := filepath.Join(root, ".ddx", "executions", "attempt", "embedded")
+	executionsDir := filepath.Join(root, ddxroot.DirName, "executions", "attempt", "embedded")
 	require.NoError(t, os.MkdirAll(executionsDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "session.jsonl"),
 		[]byte(`{"ts":1}`), 0644))

@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -190,7 +191,7 @@ func TestRunPersonaInjectsBodyIntoPrompt(t *testing.T) {
 	dir := minimalProjectDir(t)
 
 	// Write a minimal persona file.
-	personasDir := filepath.Join(dir, ".ddx", "personas")
+	personasDir := filepath.Join(dir, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0o755))
 	personaBody := `---
 name: test-reviewer

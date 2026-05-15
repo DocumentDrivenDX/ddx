@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,8 +132,8 @@ func installWorkerIntakeStub(t *testing.T, stub *workerIntakeServiceStub) {
 func setupWorkerIntakeFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ".ddx", "exec-worktrees"))
-	ddxDir := filepath.Join(root, ".ddx")
+	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	cfg := `version: "1.0"
 bead-quality:

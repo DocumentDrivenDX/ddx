@@ -35,6 +35,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
@@ -322,7 +323,7 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	s.installSingletonReleaseOnSignal(release)
 	if certFile == "" || keyFile == "" {
 		var err error
-		tlsDir := filepath.Join(s.WorkingDir, ".ddx", "server", "tls")
+		tlsDir := ddxroot.JoinProject(s.WorkingDir, "server", "tls")
 		certFile, keyFile, err = ensureSelfSignedCert(tlsDir)
 		if err != nil {
 			return fmt.Errorf("generating self-signed cert: %w", err)
@@ -499,7 +500,7 @@ func (s *Server) listenTsnet() error {
 	}
 	stateDir := tc.StateDir
 	if stateDir == "" {
-		stateDir = filepath.Join(s.WorkingDir, ".ddx", "tsnet")
+		stateDir = ddxroot.JoinProject(s.WorkingDir, "tsnet")
 	}
 
 	ts := &tsnet.Server{
@@ -793,7 +794,7 @@ func (s *Server) libraryPathForRequest(r *http.Request) string {
 
 // beadStoreForRequest returns a bead store rooted at the request's project.
 func (s *Server) beadStoreForRequest(r *http.Request) *bead.Store {
-	return bead.NewStore(filepath.Join(s.workingDirForRequest(r), ".ddx"))
+	return bead.NewStore(ddxroot.JoinProject(s.workingDirForRequest(r)))
 }
 
 // buildDocGraphForRequest builds the docgraph from the request's project root.
@@ -1564,7 +1565,7 @@ func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 		if projectFilter != "" && proj.ID != projectFilter {
 			continue
 		}
-		store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+		store := bead.NewStore(ddxroot.JoinProject(proj.Path))
 		beads, err := store.ReadAll()
 		if err != nil {
 			continue
@@ -2736,7 +2737,7 @@ func (s *Server) handleAgentWorkerPrompt(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no attempt available"})
 		return
 	}
-	promptPath := filepath.Join(s.workingDirForRequest(r), ".ddx", "executions", attemptID, "prompt.md")
+	promptPath := ddxroot.JoinProject(s.workingDirForRequest(r), "executions", attemptID, "prompt.md")
 	data, err := os.ReadFile(promptPath)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "prompt not found"})
@@ -4318,7 +4319,7 @@ func (s *Server) mcpResolvePersona(workingDir, role string) mcpToolResult {
 }
 
 func (s *Server) mcpListBeads(workingDir, status, label string) mcpToolResult {
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	beads, err := store.List(status, label, nil)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
@@ -4337,7 +4338,7 @@ func (s *Server) mcpShowBead(workingDir, id string) mcpToolResult {
 			IsError: true,
 		}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	b, err := store.Get(id)
 	if err != nil {
 		return mcpToolResult{
@@ -4386,7 +4387,7 @@ func (s *Server) mcpShowProject(id, path string) mcpToolResult {
 }
 
 func (s *Server) mcpBeadReady(workingDir string) mcpToolResult {
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	ready, err := store.Ready()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
@@ -4399,7 +4400,7 @@ func (s *Server) mcpBeadReady(workingDir string) mcpToolResult {
 }
 
 func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	counts, err := store.Status()
 	if err != nil {
 		return mcpToolResult{
@@ -4412,7 +4413,7 @@ func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
 }
 
 func (s *Server) mcpBeadBlocked(workingDir string) mcpToolResult {
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	blocked, err := store.ExternalBlocked()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
@@ -4425,7 +4426,7 @@ func (s *Server) mcpBeadBlocked(workingDir string) mcpToolResult {
 }
 
 func (s *Server) mcpBeadDependencyWaiting(workingDir string) mcpToolResult {
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	waiting, err := store.DependencyWaiting()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
@@ -4444,7 +4445,7 @@ func (s *Server) mcpBeadDepTree(workingDir, id string) mcpToolResult {
 			IsError: true,
 		}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	tree, err := store.DepTree(id)
 	if err != nil {
 		return mcpToolResult{
@@ -4640,7 +4641,7 @@ func (s *Server) mcpBeadCreate(workingDir string, req BeadCreateRequest) mcpTool
 			IsError: true,
 		}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	b := &bead.Bead{}
 	if err := applyBeadCreateRequest(b, req); err != nil {
 		return mcpToolResult{
@@ -4665,7 +4666,7 @@ func (s *Server) mcpBeadUpdate(workingDir, id string, req BeadUpdateRequest) mcp
 			IsError: true,
 		}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	mutate := func(b *bead.Bead) error {
 		return applyBeadUpdateRequest(b, req)
 	}
@@ -4698,7 +4699,7 @@ func (s *Server) mcpBeadClaim(workingDir, id, assignee string) mcpToolResult {
 			IsError: true,
 		}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	if err := store.ClaimWithOptions(id, assignee, "", ""); err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(err.Error())},
@@ -5039,7 +5040,7 @@ func (s *Server) libraryPathFor(workingDir string) string {
 }
 
 func (s *Server) beadStore() *bead.Store {
-	return bead.NewStore(filepath.Join(s.WorkingDir, ".ddx"))
+	return bead.NewStore(ddxroot.JoinProject(s.WorkingDir))
 }
 
 func (s *Server) buildDocGraph() (*docgraph.Graph, error) {
@@ -5349,7 +5350,7 @@ func (s *Server) mcpBeadEvidence(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	events, err := store.Events(id)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
@@ -5362,7 +5363,7 @@ func (s *Server) mcpBeadCooldown(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	b, err := store.Get(id)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
@@ -5383,7 +5384,7 @@ func (s *Server) mcpBeadRouting(workingDir, id string) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	events, err := store.EventsByKind(id, "routing")
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}

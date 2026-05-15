@@ -25,9 +25,9 @@ func readSkillCopies(t *testing.T) map[string]string {
 
 	root := testRepoRoot(t)
 	paths := map[string]string{
-		"agents": filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
-		"claude": filepath.Join(root, ".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
-		"cli":    filepath.Join(root, "cli", "internal", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		"library":  filepath.Join(root, "library", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		"cli":      filepath.Join(root, "cli", "internal", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		"embedded": filepath.Join(root, "cli", "internal", "registry", "defaultplugin", "library", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
 	}
 	out := make(map[string]string, len(paths))
 	for name, path := range paths {
@@ -148,7 +148,9 @@ func TestLintHook_RejectsMalformedRationaleShape(t *testing.T) {
 
 func TestBeadLifecycleSkillFilesStayInSyncOnContractTerms(t *testing.T) {
 	skills := readSkillCopies(t)
-	agents := strings.TrimSpace(skills["agents"])
-	claude := strings.TrimSpace(skills["claude"])
-	assert.Equal(t, agents, claude, "skill copies should stay in sync for the documented lifecycle contract")
+	library := strings.TrimSpace(skills["library"])
+	cli := strings.TrimSpace(skills["cli"])
+	embedded := strings.TrimSpace(skills["embedded"])
+	assert.Equal(t, library, cli, "skill copies should stay in sync for the documented lifecycle contract")
+	assert.Equal(t, library, embedded, "embedded default-plugin skill copy should stay in sync with the source skill")
 }

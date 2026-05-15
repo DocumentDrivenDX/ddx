@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // seedDocsProject creates a temp project rooted at root with a single
@@ -22,7 +24,7 @@ import (
 func seedDocsProject(t *testing.T, root, name, docID, title string) (string, string) {
 	t.Helper()
 	projectPath := filepath.Join(root, name)
-	if err := os.MkdirAll(filepath.Join(projectPath, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(projectPath, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := `version: "1.0"
@@ -32,7 +34,7 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 `
-	if err := os.WriteFile(filepath.Join(projectPath, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectPath, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	docsDir := filepath.Join(projectPath, "docs")
@@ -154,7 +156,7 @@ func TestGraphQL_ScopedRoute_RejectsUnregisteredProject(t *testing.T) {
 func newMinimalFixtureRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := `version: "1.0"
@@ -164,7 +166,7 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 `
-	if err := os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return root

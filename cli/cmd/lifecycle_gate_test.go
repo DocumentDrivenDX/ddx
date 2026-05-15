@@ -9,19 +9,20 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func seedLegacyLifecycleQueue(t *testing.T, workingDir string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"]}`,
 		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","work-last-detail":"rerun with smart agent"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
 }
 
 func TestLifecycleQueueGate_BlocksWorkAndServerOnLegacyQueue(t *testing.T) {
@@ -94,5 +95,5 @@ func TestLifecycleQueueGate_MigrateApplyClearsGate(t *testing.T) {
 	afterOut, afterErr := executeCommand(newBeadTestRoot(t, workingDir).NewRootCommand(), "bead", "ready", "--json")
 	require.NoError(t, afterErr)
 	assert.NotContains(t, afterOut, bead.LifecycleMigrationGateCodeRequired)
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, bead.LifecycleSchemaMarkerFile))
 }

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ tags: []
 	require.NoError(t, os.WriteFile(filepath.Join(libPersonasDir, "architect.md"), []byte(libPersona), 0o644))
 
 	cfg := "version: \"2.0\"\nlibrary:\n  path: library\n"
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
 
@@ -61,7 +62,7 @@ tags: []
 	// new: creates a project-local persona.
 	out, err := run("persona", "new", "our-reviewer", "--body", bodyFile)
 	require.NoError(t, err, out)
-	projectFile := filepath.Join(workDir, ".ddx", "personas", "our-reviewer.md")
+	projectFile := filepath.Join(workDir, ddxroot.DirName, "personas", "our-reviewer.md")
 	assert.FileExists(t, projectFile)
 
 	// edit: updates via --body.
@@ -71,7 +72,7 @@ tags: []
 	// fork: copies the library persona into the project dir.
 	out, err = run("persona", "fork", "architect", "--as", "architect-local")
 	require.NoError(t, err, out)
-	assert.FileExists(t, filepath.Join(workDir, ".ddx", "personas", "architect-local.md"))
+	assert.FileExists(t, filepath.Join(workDir, ddxroot.DirName, "personas", "architect-local.md"))
 
 	// edit: library persona is rejected.
 	_, err = run("persona", "edit", "architect", "--body", bodyFile)
@@ -102,7 +103,7 @@ func TestPersonaCLI_GraphQLParity(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(libPersonasDir, "architect.md"), []byte(libPersona), 0o644))
 
 	cfg := "version: \"2.0\"\nlibrary:\n  path: library\n"
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
 
@@ -135,7 +136,7 @@ func TestPersonaCLI_LoadUsesProjectOverride(t *testing.T) {
 	workDir := t.TempDir()
 	libraryRoot := filepath.Join(workDir, "library")
 	libPersonasDir := filepath.Join(libraryRoot, "personas")
-	projectPersonasDir := filepath.Join(workDir, ".ddx", "personas")
+	projectPersonasDir := filepath.Join(workDir, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(libPersonasDir, 0o755))
 	require.NoError(t, os.MkdirAll(projectPersonasDir, 0o755))
 
@@ -145,7 +146,7 @@ library:
 persona_bindings:
   code-reviewer: code-reviewer
 `
-	require.NoError(t, os.WriteFile(filepath.Join(workDir, ".ddx", "config.yaml"), []byte(cfg), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(libPersonasDir, "code-reviewer.md"), []byte(`---
 name: code-reviewer
 roles: [code-reviewer]

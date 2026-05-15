@@ -14,6 +14,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // postLoopback sends a JSON POST to path with body and returns the recorder.
@@ -38,7 +40,7 @@ func postLoopback(t *testing.T, srv *Server, path string, body any) *httptest.Re
 // a parsed loggedEvent. Returns an empty slice when the file does not exist.
 func readWorkerEventsLog(t *testing.T, workingDir string) []loggedEvent {
 	t.Helper()
-	path := filepath.Join(workingDir, ".ddx", "server", "worker-events.jsonl")
+	path := filepath.Join(workingDir, ddxroot.DirName, "server", "worker-events.jsonl")
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -18,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
@@ -226,7 +227,7 @@ func (r *mutationResolver) ComparisonDispatch(ctx context.Context, arms []*Compa
 // PersonaBind is the resolver for the personaBind field.
 func (r *mutationResolver) PersonaBind(ctx context.Context, role string, personaName string, projectID string) (*PersonaBindResult, error) {
 	root := r.projectRoot(ctx, projectID)
-	configPath := filepath.Join(root, ".ddx", "config.yaml")
+	configPath := ddxroot.JoinProject(root, "config.yaml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return nil, err
 	}
@@ -296,7 +297,7 @@ func personaGraphQLError(err error) error {
 
 // QueueSummary is the resolver for the queueSummary field.
 func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error) {
-	store := bead.NewStore(filepath.Join(r.projectRoot(ctx, projectID), ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(r.projectRoot(ctx, projectID)))
 	counts, err := store.Status()
 	if err != nil {
 		return nil, err
@@ -322,7 +323,7 @@ func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID st
 	// indicator does not surface an unrelated project's queue depth.
 	if r.State != nil {
 		if proj, ok := r.State.GetProjectSnapshotByID(projectID); ok && proj.Path != "" {
-			store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+			store := bead.NewStore(ddxroot.JoinProject(proj.Path))
 			if ready, err := store.Ready(); err == nil {
 				out.ReadyBeads = len(ready)
 			}
@@ -563,7 +564,7 @@ func installRegistryPlugin(workingDir string, state *registry.InstalledState, na
 }
 
 func readComparisonRecords(workingDir string) ([]comparisonDispatchRecord, error) {
-	dir := filepath.Join(workingDir, ".ddx", "comparisons")
+	dir := ddxroot.JoinProject(workingDir, "comparisons")
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
 		return []comparisonDispatchRecord{}, nil
@@ -599,7 +600,7 @@ func readComparisonRecords(workingDir string) ([]comparisonDispatchRecord, error
 }
 
 func writeJSONRecord(workingDir string, kind string, id string, record any) error {
-	dir := filepath.Join(workingDir, ".ddx", kind)
+	dir := ddxroot.JoinProject(workingDir, kind)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -711,7 +712,7 @@ func enrichPluginInfoFromDisk(info *PluginInfo, workingDir string, name string, 
 	if workingDir == "" {
 		return
 	}
-	root := filepath.Join(workingDir, ".ddx", "plugins", name)
+	root := ddxroot.JoinProject(workingDir, "plugins", name)
 	if stat, err := os.Stat(root); err != nil || !stat.IsDir() {
 		return
 	}
@@ -1107,7 +1108,7 @@ func collectPaletteMatches(query string, workingDir string) []paletteMatch {
 		}
 	}
 
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workingDir))
 	if beads, err := store.ReadAll(context.Background()); err == nil {
 		for _, b := range beads {
 			if score, ok := paletteScore(query, b.ID, b.Title); ok {

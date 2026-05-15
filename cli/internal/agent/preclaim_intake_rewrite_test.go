@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -145,7 +146,7 @@ func TestPreClaimIntakeRewrite_RejectsDeletedCommitment(t *testing.T) {
 // without duplicating it in the replacement body. (AC4)
 func TestPreClaimIntakeRewrite_RecordsReplacementEvidence(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 
 	oldDesc := "PROBLEM\nstale chat noise from RFC-47\n\n" +
@@ -314,7 +315,7 @@ func TestAcceptancePreservesCriteria_StrongBead_AxonFixture(t *testing.T) {
 // as operator_required (AC1 from ddx-ea3e3415).
 func TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 
 	// Strong bead fixture derived from axon-11508cde: 7 numbered ACs with
@@ -358,7 +359,7 @@ func TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired(t *testing.T) {
 // altered") (AC4 from ddx-ea3e3415).
 func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 
 	strongBead := &bead.Bead{
@@ -397,7 +398,7 @@ func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
 // (AC2 from ddx-ea3e3415).
 func TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 
 	// Weak bead fixture derived from axon-044a5b5b (pre-refinement): vague AC.

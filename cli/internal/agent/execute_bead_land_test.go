@@ -18,6 +18,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // ----------------------------------------------------------------------------
@@ -352,7 +354,7 @@ func TestLand_EvidenceCommitUsesCleanLandingWorktree(t *testing.T) {
 	ops := RealLandingGitOps{}
 
 	attemptID := "20260507T000000-cleanwt"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(r.dir, evidenceDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -406,7 +408,7 @@ func TestLand_StagedOperatorFilesBlockLanding(t *testing.T) {
 	ops := RealLandingGitOps{}
 
 	attemptID := "20260507T000001-staged"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(r.dir, evidenceDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -448,7 +450,7 @@ func TestLand_EvidenceCommitFailurePreservesAndRestoresTarget(t *testing.T) {
 	ops := RealLandingGitOps{}
 
 	attemptID := "20260507T000003-noevidence"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(r.dir, evidenceDir, "embedded")
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -1306,7 +1308,7 @@ func TestLand_MergeRequired_IndexCleanAfterMerge(t *testing.T) {
 	// (Evidence triggers landingFinalizationWorktree and landEvidence, which
 	// is the code path that existed when ddx-7e659c95 was filed.)
 	attemptID := "20260508T000000-7e659c95"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullEvidenceDir := filepath.Join(r.dir, evidenceDir)
 	if err := os.MkdirAll(fullEvidenceDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -1580,7 +1582,7 @@ func TestSyncWorkTreeToHead_DoesNotClobberBeadsJSONL(t *testing.T) {
 		t.Fatalf("SyncWorkTreeToHead: %v", err)
 	}
 
-	got, err := os.ReadFile(filepath.Join(r.dir, ".ddx", "beads.jsonl"))
+	got, err := os.ReadFile(filepath.Join(r.dir, ddxroot.DirName, "beads.jsonl"))
 	if err != nil {
 		t.Fatalf("reading beads.jsonl: %v", err)
 	}
@@ -1615,7 +1617,7 @@ func TestStageDirForcesGitIgnored(t *testing.T) {
 
 	// Create evidence file under the gitignored directory.
 	attemptID := "20260510T000000-gitignore-stagetest"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(dir, evidenceDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -1655,7 +1657,7 @@ func TestEvidenceCommitSucceedsWhenGitignored(t *testing.T) {
 	baseSHA := r.resolveRef("refs/heads/main")
 
 	attemptID := "20260510T000000-gitignore-e2e"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(r.dir, evidenceDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -1713,7 +1715,7 @@ func TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL(t *testing.T) {
 		t.Fatalf("SyncWorkTreeToHead: %v", err)
 	}
 
-	got, err := os.ReadFile(filepath.Join(r.dir, ".ddx", "beads-archive.jsonl"))
+	got, err := os.ReadFile(filepath.Join(r.dir, ddxroot.DirName, "beads-archive.jsonl"))
 	if err != nil {
 		t.Fatalf("reading beads-archive.jsonl: %v", err)
 	}

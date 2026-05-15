@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -60,7 +61,7 @@ func TestLoadConfig_LocalConfig_Basic(t *testing.T) {
 	configData, err := yaml.Marshal(localConfig)
 	require.NoError(t, err)
 
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	configPath := filepath.Join(ddxDir, "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, configData, 0644))
@@ -97,7 +98,7 @@ func TestLoadLocal_Basic(t *testing.T) {
 	configData, err := yaml.Marshal(localConfig)
 	require.NoError(t, err)
 
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	configPath := filepath.Join(ddxDir, "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, configData, 0644))
@@ -137,7 +138,7 @@ prose:
       - system
 `)
 
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), configData, 0644))
 
@@ -175,7 +176,7 @@ func TestSaveLocal_Basic(t *testing.T) {
 	}
 
 	// Save config locally in new format
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	configPath := filepath.Join(ddxDir, "config.yaml")
 	configData, err := yaml.Marshal(config)
@@ -206,7 +207,7 @@ repository:
   url: https://github.com/test
   branch: [this is invalid
 `
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	configPath := filepath.Join(ddxDir, "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(invalidYAML), 0644))
@@ -238,7 +239,7 @@ agent:
       - high
 `
 
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0644))
 
@@ -323,7 +324,7 @@ bead:
   id_prefix: "nif"
 `
 
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0o644))
 
@@ -346,7 +347,7 @@ bead:
   backend: axon
 `
 
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0o644))
 

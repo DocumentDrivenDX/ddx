@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agentmetrics"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // agentMetricsCacheEntry is one cached aggregation. fingerprint is the
@@ -237,10 +238,10 @@ func percentileInt(xs []int, p int) int {
 // because the archive file is included.
 func agentMetricsFingerprint(workingDir string) string {
 	h := sha256.New()
-	addDir(h, filepath.Join(workingDir, ".ddx", "exec", "runs"), "")
-	addDir(h, filepath.Join(workingDir, ".ddx", "executions"), "result.json")
-	addStat(h, filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
-	addStat(h, filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	addDir(h, ddxroot.JoinProject(workingDir, "exec", "runs"), "")
+	addDir(h, ddxroot.JoinProject(workingDir, "executions"), "result.json")
+	addStat(h, ddxroot.JoinProject(workingDir, "beads-archive.jsonl"))
+	addStat(h, ddxroot.JoinProject(workingDir, "beads.jsonl"))
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

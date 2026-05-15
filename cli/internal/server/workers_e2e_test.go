@@ -12,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,7 +99,7 @@ func TestReviewRetryThresholdFromConfigServer(t *testing.T) {
 	)
 
 	projectRoot := t.TempDir()
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	// Real on-disk .ddx/config.yaml — this is the file the server

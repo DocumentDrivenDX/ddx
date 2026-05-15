@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestSessionsCostSummaryBucketsAndEmptyWindow(t *testing.T) {
@@ -78,7 +79,7 @@ func stateWithProject(workDir string) *ServerState {
 
 func writeConfig(t *testing.T, workDir, content string) {
 	t.Helper()
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

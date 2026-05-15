@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +32,7 @@ func newGateCtxRepo(t *testing.T) (root, headSHA string) {
 // bundle-relative manifest path the way ExecuteBead would set it on the result.
 func writeManifest(t *testing.T, projectRoot, attemptID string, governingIDs []string) string {
 	t.Helper()
-	dirRel := filepath.Join(".ddx", "executions", attemptID)
+	dirRel := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	dirAbs := filepath.Join(projectRoot, dirRel)
 	require.NoError(t, os.MkdirAll(dirAbs, 0o755))
 

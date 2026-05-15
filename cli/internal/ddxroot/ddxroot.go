@@ -15,13 +15,46 @@ import (
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
+const DirName = ".ddx"
+
+type WorktreeRegistry = worktreeRegistry
+type WorktreeRegistryEntry = worktreeRegistryEntry
+
+func InTree(projectRoot string, elems ...string) string {
+	parts := append([]string{projectRoot, DirName}, elems...)
+	return filepath.Join(parts...)
+}
+
+func JoinHome(home string, elems ...string) string {
+	parts := append([]string{home, DirName}, elems...)
+	return filepath.Join(parts...)
+}
+
+func JoinRelative(elems ...string) string {
+	parts := append([]string{DirName}, elems...)
+	return filepath.Join(parts...)
+}
+
+func ProjectPath(projectRoot string) string {
+	return Path(context.Background(), projectRoot)
+}
+
+func JoinProject(projectRoot string, elems ...string) string {
+	return JoinProjectContext(context.Background(), projectRoot, elems...)
+}
+
+func JoinProjectContext(ctx context.Context, projectRoot string, elems ...string) string {
+	parts := append([]string{Path(ctx, projectRoot)}, elems...)
+	return filepath.Join(parts...)
+}
+
 // Path returns the DDx state root for projectRoot.
 //
 // When the project already has an in-tree `.ddx/`, that remains authoritative.
 // Otherwise DDx falls back to an XDG-scoped convention root derived from the
 // project's canonical git remote, or a deterministic local identity.
 func Path(ctx context.Context, projectRoot string) string {
-	inTree := filepath.Join(projectRoot, ".ddx")
+	inTree := InTree(projectRoot)
 	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
 		return inTree
 	}
@@ -43,6 +76,47 @@ func xdgDataHome() string {
 		return filepath.Join(os.TempDir(), "ddx-xdg")
 	}
 	return filepath.Join(home, ".local", "share")
+}
+
+func LoadWorktreeRegistry(ctx context.Context, projectRoot string) (WorktreeRegistry, error) {
+	root := Path(ctx, projectRoot)
+	return readWorktreeRegistry(filepath.Join(root, "worktrees.json"))
+}
+
+func SetMasterWorktree(ctx context.Context, projectRoot, masterPath string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	root := Path(ctx, projectRoot)
+	return withBootstrapLock(root, func() error {
+		registryPath := filepath.Join(root, "worktrees.json")
+		registry, err := readWorktreeRegistry(registryPath)
+		if err != nil {
+			return err
+		}
+
+		canonicalPath, err := canonicalWorktreePath(masterPath)
+		if err != nil {
+			return err
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		hostname, err := os.Hostname()
+		if err != nil || strings.TrimSpace(hostname) == "" {
+			hostname = "unknown"
+		}
+
+		changed := upsertWorktreeRegistryEntry(&registry, canonicalPath, now, hostname)
+		if registry.Master != canonicalPath {
+			registry.Master = canonicalPath
+			changed = true
+		}
+		if !changed {
+			return nil
+		}
+		return writeWorktreeRegistry(registryPath, registry)
+	})
 }
 
 func projectIdentity(ctx context.Context, projectRoot string) string {
@@ -239,36 +313,7 @@ func ensureWorktreeRegistry(projectRoot, root string) (bool, error) {
 		hostname = "unknown"
 	}
 
-	changed := false
-	found := false
-	for i := range registry.Paths {
-		if registry.Paths[i].Path != worktreePath {
-			continue
-		}
-		found = true
-		if registry.Paths[i].FirstSeenAt == "" {
-			registry.Paths[i].FirstSeenAt = now
-			changed = true
-		}
-		if registry.Paths[i].LastSeenAt == "" {
-			registry.Paths[i].LastSeenAt = registry.Paths[i].FirstSeenAt
-			changed = true
-		}
-		if registry.Paths[i].Hostname == "" {
-			registry.Paths[i].Hostname = hostname
-			changed = true
-		}
-		break
-	}
-	if !found {
-		registry.Paths = append(registry.Paths, worktreeRegistryEntry{
-			Path:        worktreePath,
-			FirstSeenAt: now,
-			LastSeenAt:  now,
-			Hostname:    hostname,
-		})
-		changed = true
-	}
+	changed := upsertWorktreeRegistryEntry(&registry, worktreePath, now, hostname)
 	if registry.Master == "" {
 		registry.Master = worktreePath
 		changed = true
@@ -277,6 +322,41 @@ func ensureWorktreeRegistry(projectRoot, root string) (bool, error) {
 		return false, nil
 	}
 	return true, writeWorktreeRegistry(registryPath, registry)
+}
+
+func upsertWorktreeRegistryEntry(registry *worktreeRegistry, worktreePath, now, hostname string) bool {
+	for i := range registry.Paths {
+		if registry.Paths[i].Path != worktreePath {
+			continue
+		}
+		changed := false
+		if registry.Paths[i].FirstSeenAt == "" {
+			registry.Paths[i].FirstSeenAt = now
+			changed = true
+		}
+		if registry.Paths[i].LastSeenAt != now {
+			if registry.Paths[i].LastSeenAt == "" {
+				registry.Paths[i].LastSeenAt = registry.Paths[i].FirstSeenAt
+			}
+			if registry.Paths[i].LastSeenAt != now {
+				registry.Paths[i].LastSeenAt = now
+			}
+			changed = true
+		}
+		if registry.Paths[i].Hostname == "" {
+			registry.Paths[i].Hostname = hostname
+			changed = true
+		}
+		return changed
+	}
+
+	registry.Paths = append(registry.Paths, worktreeRegistryEntry{
+		Path:        worktreePath,
+		FirstSeenAt: now,
+		LastSeenAt:  now,
+		Hostname:    hostname,
+	})
+	return true
 }
 
 func canonicalWorktreePath(projectRoot string) (string, error) {

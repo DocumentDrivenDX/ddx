@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 const ExecutionWorktreeRootEnv = "DDX_EXEC_WT_DIR"
@@ -17,14 +19,14 @@ func ExecutionWorktreeRoot(projectRoot string) string {
 		return normalizeExecutionWorktreeRoot(env, projectRoot)
 	}
 	if projectRoot != "" {
-		projectConfig := filepath.Join(projectRoot, ".ddx", "config.yaml")
+		projectConfig := ddxroot.JoinProject(projectRoot, "config.yaml")
 		if root := executionWorktreeRootFromFile(projectConfig, projectRoot); root != "" {
 			return root
 		}
 	}
 	home, err := os.UserHomeDir()
 	if err == nil && home != "" {
-		globalConfig := filepath.Join(home, ".ddx", "config.yaml")
+		globalConfig := ddxroot.JoinHome(home, "config.yaml")
 		if root := executionWorktreeRootFromFile(globalConfig, home); root != "" {
 			return root
 		}

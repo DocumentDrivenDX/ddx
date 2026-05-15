@@ -9,10 +9,17 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
+func newRunStateProjectRoot(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	return t.TempDir()
+}
+
 func TestRunState_WriteReadCleanupCycle(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := newRunStateProjectRoot(t)
 
 	// Read before any write returns (nil, nil).
 	if s, err := ReadRunState(projectRoot); err != nil || s != nil {
@@ -31,7 +38,7 @@ func TestRunState_WriteReadCleanupCycle(t *testing.T) {
 		t.Fatalf("WriteRunState: %v", err)
 	}
 
-	path := filepath.Join(projectRoot, ".ddx", "run-state.json")
+	path := runStatePath(projectRoot)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected %s to exist after write: %v", path, err)
 	}
@@ -51,7 +58,7 @@ func TestRunState_WriteReadCleanupCycle(t *testing.T) {
 	}
 
 	// No tmp files left behind by atomic rename.
-	entries, _ := os.ReadDir(filepath.Join(projectRoot, ".ddx"))
+	entries, _ := os.ReadDir(filepath.Dir(path))
 	for _, e := range entries {
 		if name := e.Name(); name != "run-state.json" {
 			if filepath.Ext(name) == ".tmp" || (len(name) > 4 && name[len(name)-4:] == ".tmp") {
@@ -79,7 +86,7 @@ func TestRunState_WriteReadCleanupCycle(t *testing.T) {
 }
 
 func TestRunState_CandidateCycleFieldsRoundTrip(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := newRunStateProjectRoot(t)
 	want := RunState{
 		BeadID:              "ddx-cycle",
 		AttemptID:           "attempt-cycle",
@@ -109,8 +116,8 @@ func TestRunState_CandidateCycleFieldsRoundTrip(t *testing.T) {
 }
 
 func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
-	projectRoot := t.TempDir()
-	requireDir := filepath.Join(projectRoot, ".ddx")
+	projectRoot := newRunStateProjectRoot(t)
+	requireDir := ddxroot.InTree(projectRoot)
 	if err := os.MkdirAll(requireDir, 0o755); err != nil {
 		t.Fatalf("mkdir .ddx: %v", err)
 	}
@@ -129,7 +136,7 @@ func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
 }
 
 func TestRunState_WriteOverwritesExisting(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := newRunStateProjectRoot(t)
 	if err := WriteRunState(projectRoot, RunState{BeadID: "first", AttemptID: "a1", StartedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
@@ -146,7 +153,7 @@ func TestRunState_WriteOverwritesExisting(t *testing.T) {
 }
 
 func TestRunState_MultipleAttemptsDoNotClobber(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := newRunStateProjectRoot(t)
 	first := RunState{
 		BeadID:       "ddx-first",
 		AttemptID:    "attempt-one",
@@ -183,16 +190,16 @@ func TestRunState_MultipleAttemptsDoNotClobber(t *testing.T) {
 	if got["attempt-two"].BeadID != "ddx-second" {
 		t.Fatalf("second attempt missing: %+v", got["attempt-two"])
 	}
-	if _, err := os.Stat(filepath.Join(projectRoot, ".ddx", RunStateDirName, "attempt-one.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(runStateDirPath(projectRoot), "attempt-one.json")); err != nil {
 		t.Fatalf("first per-attempt file missing: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(projectRoot, ".ddx", RunStateDirName, "attempt-two.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(runStateDirPath(projectRoot), "attempt-two.json")); err != nil {
 		t.Fatalf("second per-attempt file missing: %v", err)
 	}
 }
 
 func TestRunState_AggregateCompatibilityView(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := newRunStateProjectRoot(t)
 	first := RunState{
 		BeadID:       "ddx-first",
 		AttemptID:    "attempt-one",
@@ -234,7 +241,7 @@ func TestRunState_AggregateCompatibilityView(t *testing.T) {
 }
 
 func TestRunState_ClearOneAttemptPreservesOthers(t *testing.T) {
-	projectRoot := t.TempDir()
+	projectRoot := newRunStateProjectRoot(t)
 	first := RunState{
 		BeadID:       "ddx-first",
 		AttemptID:    "attempt-one",
@@ -264,7 +271,7 @@ func TestRunState_ClearOneAttemptPreservesOthers(t *testing.T) {
 	if len(states) != 1 || states[0].AttemptID != "attempt-two" {
 		t.Fatalf("got states %+v, want only attempt-two", states)
 	}
-	if _, err := os.Stat(filepath.Join(projectRoot, ".ddx", RunStateDirName, "attempt-one.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(runStateDirPath(projectRoot), "attempt-one.json")); !os.IsNotExist(err) {
 		t.Fatalf("cleared attempt file still present: %v", err)
 	}
 	compat, err := ReadRunState(projectRoot)

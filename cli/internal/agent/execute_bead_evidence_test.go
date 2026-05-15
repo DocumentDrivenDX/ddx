@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestExecuteBeadLandsEvidence is the AC (1) regression test: a simulated
@@ -18,7 +20,7 @@ func TestExecuteBeadLandsEvidence(t *testing.T) {
 
 	// Simulate the orchestrator materializing evidence files in the project root.
 	attemptID := "20260416T181205-aabb1122"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(r.dir, evidenceDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -96,7 +98,7 @@ func TestExecuteBeadLandsEvidence_MergePath(t *testing.T) {
 	r := newLandTestRepo(t)
 
 	attemptID := "20260416T181206-ccdd3344"
-	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	fullDir := filepath.Join(r.dir, evidenceDir)
 	if err := os.MkdirAll(fullDir, 0o755); err != nil {
 		t.Fatal(err)

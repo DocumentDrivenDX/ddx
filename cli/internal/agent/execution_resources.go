@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"golang.org/x/sys/unix"
 )
 
@@ -91,8 +92,7 @@ func NewExecutionResourceChecker(projectRoot string, gitOps GitOps) *ExecutionRe
 		ProjectRoot: projectRoot,
 		TempRoot:    executionCleanupTempRoot(projectRoot),
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ExecuteBeadArtifactDir),
-			filepath.Join(projectRoot, ".ddx", "runs"),
+			filepath.Join(projectRoot, ExecuteBeadArtifactDir), ddxroot.JoinProject(projectRoot, "runs"),
 		},
 		GitOps:        gitOps,
 		CleanupRunner: NewExecutionCleanupManager(projectRoot, gitOps),

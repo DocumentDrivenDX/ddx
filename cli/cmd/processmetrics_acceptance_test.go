@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +15,7 @@ import (
 func writeProcessMetricsFixture(t *testing.T, workingDir string) {
 	t.Helper()
 
-	ddxDir := filepath.Join(workingDir, ".ddx")
+	ddxDir := filepath.Join(workingDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
 
 	beads := []string{

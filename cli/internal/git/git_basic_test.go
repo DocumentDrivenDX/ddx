@@ -171,7 +171,7 @@ func TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary(t *testing.T) {
 	primary := setupTestGitRepo(t)
 
 	// Create the primary's .ddx/ with a marker file so we can tell them apart.
-	primaryDdx := filepath.Join(primary, ".ddx")
+	primaryDdx := filepath.Join(primary, ddxDirSegment)
 	require.NoError(t, os.MkdirAll(primaryDdx, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(primaryDdx, "marker.txt"), []byte("primary"), 0644))
 
@@ -181,7 +181,7 @@ func TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary(t *testing.T) {
 
 	// Create the linked worktree's own .ddx/ — this is the trap. Without the
 	// fix, FindNearestDDxWorkspace would return the linked dir.
-	linkedDdx := filepath.Join(linked, ".ddx")
+	linkedDdx := filepath.Join(linked, ddxDirSegment)
 	require.NoError(t, os.MkdirAll(linkedDdx, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(linkedDdx, "marker.txt"), []byte("linked"), 0644))
 

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // maxReviewerEventBody is the hard cap on bytes written to an event body for
@@ -34,17 +36,20 @@ func PersistReviewerStream(projectRoot, beadID, attemptID, fullStream string) (s
 	}
 
 	var dir, filename string
+	var rel string
 	if attemptID != "" {
-		dir = filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+		dir = ddxroot.JoinProject(projectRoot, "executions", attemptID)
 		filename = "reviewer-stream.log"
+		rel = ddxroot.JoinRelative("executions", attemptID, filename)
 	} else {
-		dir = filepath.Join(projectRoot, ".ddx", "executions", "reviewer-streams")
+		dir = ddxroot.JoinProject(projectRoot, "executions", "reviewer-streams")
 		ts := time.Now().UTC().Format("20060102T150405")
 		bid := beadID
 		if bid == "" {
 			bid = "unknown"
 		}
 		filename = ts + "-" + bid + ".log"
+		rel = ddxroot.JoinRelative("executions", "reviewer-streams", filename)
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -55,11 +60,6 @@ func PersistReviewerStream(projectRoot, beadID, attemptID, fullStream string) (s
 		return "", fmt.Errorf("reviewer stream artifact: write %s: %w", path, err)
 	}
 
-	rel, err := filepath.Rel(projectRoot, path)
-	if err != nil {
-		// Not fatal — return the absolute path so the reference still works.
-		return path, nil
-	}
 	return rel, nil
 }
 

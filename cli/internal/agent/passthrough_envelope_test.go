@@ -18,6 +18,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -359,7 +360,7 @@ func TestExecuteOnService_RecordsFailedRouteAttempt(t *testing.T) {
 
 func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: "seed-route-001", Title: "seed route"}))
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
@@ -382,7 +383,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing
 
 func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
 	require.NoError(t, store.Create(&bead.Bead{
@@ -418,7 +419,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T)
 // keep selecting the failed provider.
 func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
 
@@ -487,7 +488,7 @@ func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 // Execute requires only that DDx populate the store before each dispatch.
 func TestRecordRouteAttemptRouteHealthGatesPolicyExecute(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    "hardgate-001",

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -100,7 +101,7 @@ func writeExecutionCleanupCandidateWithoutMetadata(t *testing.T, dir string, fil
 func setupExecutionCleanupProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
 	return root
 }
 
@@ -274,12 +275,12 @@ func TestExecutionCleanup_PreservesActiveAndPreservedAttempts(t *testing.T) {
 		WorktreePath: activePath,
 	}))
 
-	executionsDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-complete")
+	executionsDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-complete")
 	require.NoError(t, os.MkdirAll(executionsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "manifest.json"), []byte(`{"attempt_id":"attempt-complete"}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
 
-	runsDir := filepath.Join(projectRoot, ".ddx", "runs", "run-complete")
+	runsDir := filepath.Join(projectRoot, ddxroot.DirName, "runs", "run-complete")
 	require.NoError(t, os.MkdirAll(runsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runsDir, "record.json"), []byte(`{"run_id":"run-complete"}`), 0o644))
 
@@ -557,7 +558,7 @@ func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 		WorktreePath: stalePath,
 	}, map[string]string{"payload.txt": strings.Repeat("x", 64)})
 
-	executionsDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-summary")
+	executionsDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-summary")
 	require.NoError(t, os.MkdirAll(executionsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "manifest.json"), []byte(`{"attempt_id":"attempt-summary"}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
@@ -698,8 +699,8 @@ func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 	tempRoot := t.TempDir()
 	staleProjectRoot := filepath.Join(t.TempDir(), "stale-project")
 	activeProjectRoot := filepath.Join(t.TempDir(), "active-project")
-	require.NoError(t, os.MkdirAll(filepath.Join(staleProjectRoot, ".ddx"), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(activeProjectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(staleProjectRoot, ddxroot.DirName), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(activeProjectRoot, ddxroot.DirName), 0o755))
 
 	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-foreign-20260508T120000-deadbeef")
 	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-foreign-20260508T120000-feedface")
@@ -845,7 +846,7 @@ func TestExecutionCleanup_PrunesTemporaryCandidateRefs(t *testing.T) {
 	candidateRef := "refs/ddx/iterations/20260509T023000-aabbccdd/0"
 	retainedRef := "refs/ddx/iterations/20260509T023100-eeff0011/0"
 
-	resultDir := filepath.Join(projectRoot, ".ddx", "executions", "20260509T023000-aabbccdd")
+	resultDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "20260509T023000-aabbccdd")
 	require.NoError(t, os.MkdirAll(resultDir, 0o755))
 	require.NoError(t, writeArtifactJSON(filepath.Join(resultDir, "manifest.json"), map[string]string{"attempt_id": "20260509T023000-aabbccdd"}))
 	require.NoError(t, writeArtifactJSON(filepath.Join(resultDir, "result.json"), map[string]any{
@@ -857,7 +858,7 @@ func TestExecutionCleanup_PrunesTemporaryCandidateRefs(t *testing.T) {
 		"result_rev":    "result",
 	}))
 
-	retainedDir := filepath.Join(projectRoot, ".ddx", "executions", "20260509T023100-eeff0011")
+	retainedDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "20260509T023100-eeff0011")
 	require.NoError(t, os.MkdirAll(retainedDir, 0o755))
 	require.NoError(t, writeArtifactJSON(filepath.Join(retainedDir, "manifest.json"), map[string]string{"attempt_id": "20260509T023100-eeff0011"}))
 	require.NoError(t, writeArtifactJSON(filepath.Join(retainedDir, "result.json"), map[string]any{
@@ -883,7 +884,7 @@ func TestExecutionCleanup_PrunesTemporaryCandidateRefs(t *testing.T) {
 
 func setupEvidenceDir(t *testing.T, projectRoot, attemptID string, mtime time.Time) string {
 	t.Helper()
-	dir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	dir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"status":"success"}`), 0o644))
 	require.NoError(t, os.Chtimes(dir, mtime, mtime))
@@ -1004,7 +1005,7 @@ func TestExecutionCleanup_DeletesOldExecutionDirs(t *testing.T) {
 func TestExecutionCleanup_DeletesOldAgentLogs(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
-	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	logDir := filepath.Join(projectRoot, ddxroot.DirName, "agent-logs")
 	require.NoError(t, os.MkdirAll(logDir, 0o755))
 
 	oldTime := time.Now().AddDate(0, 0, -20)
@@ -1037,7 +1038,7 @@ func TestExecutionCleanup_DeletesOldAgentLogs(t *testing.T) {
 func TestExecutionCleanup_DeletesOldWorkerDirs(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
-	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	workersDir := filepath.Join(projectRoot, ddxroot.DirName, "workers")
 	require.NoError(t, os.MkdirAll(workersDir, 0o755))
 
 	oldTime := time.Now().AddDate(0, 0, -20)
@@ -1079,14 +1080,14 @@ func TestExecutionCleanup_PreservesActiveItems(t *testing.T) {
 	}))
 
 	// agent log: same session ID as active run-state
-	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	logDir := filepath.Join(projectRoot, ddxroot.DirName, "agent-logs")
 	require.NoError(t, os.MkdirAll(logDir, 0o755))
 	activeLog := filepath.Join(logDir, "agent-"+activeSessionID+".jsonl")
 	require.NoError(t, os.WriteFile(activeLog, []byte("data\n"), 0o644))
 	require.NoError(t, os.Chtimes(activeLog, oldTime, oldTime))
 
 	// worker dir: PID 0 but not old enough to be pruned (use recent mtime to preserve)
-	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	workersDir := filepath.Join(projectRoot, ddxroot.DirName, "workers")
 	require.NoError(t, os.MkdirAll(workersDir, 0o755))
 	preservedWorker := filepath.Join(workersDir, "worker-preserved")
 	require.NoError(t, os.MkdirAll(preservedWorker, 0o755))
@@ -1113,7 +1114,7 @@ func TestExecutionCleanup_PreservesActiveItems(t *testing.T) {
 func TestExecutionCleanup_DefaultRetainDays90(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	projectRoot := setupExecutionCleanupProjectRoot(t)
-	configPath := filepath.Join(projectRoot, ".ddx", "config.yaml")
+	configPath := filepath.Join(projectRoot, ddxroot.DirName, "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte("version: \"1.0\"\n"), 0o644))
 
 	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
@@ -1131,7 +1132,7 @@ func TestExecutionCleanup_RecordsCounts(t *testing.T) {
 	}
 
 	// 3 old agent logs
-	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	logDir := filepath.Join(projectRoot, ddxroot.DirName, "agent-logs")
 	require.NoError(t, os.MkdirAll(logDir, 0o755))
 	for _, name := range []string{"agent-s1.jsonl", "agent-s2.jsonl", "svc-s1.jsonl"} {
 		p := filepath.Join(logDir, name)
@@ -1140,7 +1141,7 @@ func TestExecutionCleanup_RecordsCounts(t *testing.T) {
 	}
 
 	// 2 old worker dirs
-	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	workersDir := filepath.Join(projectRoot, ddxroot.DirName, "workers")
 	require.NoError(t, os.MkdirAll(workersDir, 0o755))
 	for _, id := range []string{"worker-cnt1", "worker-cnt2"} {
 		d := filepath.Join(workersDir, id)

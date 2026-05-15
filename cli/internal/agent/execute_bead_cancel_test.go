@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // newCancelTestBeadStore returns a real *bead.Store rooted at projectRoot/.ddx,
@@ -19,7 +20,7 @@ import (
 // per-attempt worktree, but the cancel poll reads from projectRoot's store.
 func newCancelTestBeadStore(t *testing.T, projectRoot, beadID string) *bead.Store {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}

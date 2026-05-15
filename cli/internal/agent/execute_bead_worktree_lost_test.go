@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 type worktreeLostGitOps struct {
@@ -38,7 +39,7 @@ func (g *worktreeLostGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 	if err := os.MkdirAll(wtPath, 0o755); err != nil {
 		return err
 	}
-	ddxDir := filepath.Join(wtPath, ".ddx")
+	ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		return err
 	}

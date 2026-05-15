@@ -12,6 +12,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // seedDocsRoot creates a minimal DDx-tracked project at root with one
@@ -19,7 +21,7 @@ import (
 // repo-relative path.
 func seedDocsRoot(t *testing.T, root, docID, title string) string {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(root, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	cfg := `version: "1.0"
@@ -29,7 +31,7 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 `
-	if err := os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	docsDir := filepath.Join(root, "docs")

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +94,7 @@ func TestProjectPersonaWriter(t *testing.T) {
 
 	// Point resolveLibraryPersonasDir at libDir by synthesizing a config
 	// file that the loader will pick up.
-	configPath := filepath.Join(workingDir, ".ddx", "config.yaml")
+	configPath := filepath.Join(workingDir, ddxroot.DirName, "config.yaml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(configPath), 0o755))
 	require.NoError(t, os.WriteFile(configPath, []byte(
 		"version: \"2.0\"\nlibrary:\n  path: lib\n"), 0o644))
@@ -138,7 +139,7 @@ tags: []
 	_, err = writer.Update("our-reviewer", body)
 	require.NoError(t, err)
 	require.NoError(t, writer.Delete("our-reviewer"))
-	_, err = os.Stat(filepath.Join(workingDir, ".ddx", "personas", "our-reviewer.md"))
+	_, err = os.Stat(filepath.Join(workingDir, ddxroot.DirName, "personas", "our-reviewer.md"))
 	assert.True(t, os.IsNotExist(err))
 }
 

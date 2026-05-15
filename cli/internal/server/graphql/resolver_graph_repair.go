@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"gopkg.in/yaml.v3"
 )
@@ -269,7 +270,7 @@ func repairCleanPathMap(workingDir string, issue docgraph.GraphIssue) error {
 	if issue.ID == "" {
 		return fmt.Errorf("id_to_path issue has no id")
 	}
-	cfgDir := filepath.Join(workingDir, ".ddx", "graphs")
+	cfgDir := ddxroot.JoinProject(workingDir, "graphs")
 	entries, err := os.ReadDir(cfgDir)
 	if err != nil {
 		return fmt.Errorf("read graph config dir: %w", err)

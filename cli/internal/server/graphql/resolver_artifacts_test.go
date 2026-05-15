@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // setupSearchFixtureInDir builds a fixture for body/metadata search tests.
@@ -27,7 +29,7 @@ import (
 // match field; this lets each AC field be probed in isolation.
 func setupSearchFixtureInDir(t *testing.T, workDir string) string {
 	t.Helper()
-	dir := filepath.Join(workDir, ".ddx", "plugins", "search")
+	dir := filepath.Join(workDir, ddxroot.DirName, "plugins", "search")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

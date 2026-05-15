@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +28,7 @@ func newAxonStore(t *testing.T) *Store {
 
 func newAxonStoreWithTransport(t *testing.T) (*Store, *fakeAxonGraphQLTransport) {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), ".ddx")
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	transport := newFakeAxonGraphQLTransport()
 	s := NewStore(dir)
 	s.backend = NewAxonBackend(dir, s.LockWait,
@@ -114,7 +115,7 @@ func (stubAxonGraphQLTransport) Query(context.Context, string, map[string]any, a
 func TestAxonBackend_GraphQLClientBoundary(t *testing.T) {
 	t.Parallel()
 
-	dir := filepath.Join(t.TempDir(), ".ddx")
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	transport := stubAxonGraphQLTransport{}
 	client := struct{ Name string }{Name: "stub"}
 

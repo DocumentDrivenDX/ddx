@@ -7,13 +7,14 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func seedQueueBeads(t *testing.T, workingDir string, beads []bead.Bead) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(workingDir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.WriteAll(beads))
 }

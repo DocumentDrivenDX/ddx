@@ -563,6 +563,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newUpdateCommand())
 	rootCmd.AddCommand(f.newUpgradeCommand())
 	rootCmd.AddCommand(f.newConfigCommand())
+	rootCmd.AddCommand(f.newProjectCommand())
 	rootCmd.AddCommand(f.newPersonaCommand())
 	rootCmd.AddCommand(f.newStatusCommand())
 	rootCmd.AddCommand(f.newLogCommand())

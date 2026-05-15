@@ -14,6 +14,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -353,7 +354,7 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-try-powerClass-standard",
@@ -396,7 +397,7 @@ func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    "ddx-zero-config-try-powerClass-cheap",
@@ -626,7 +627,7 @@ func TestTry_RecoversOrphanedWorktreesBeforeSpawn(t *testing.T) {
 		Title: "Recover orphaned worktrees",
 	}))
 
-	orphan := filepath.Join(env.Dir, ".ddx", agent.ExecuteBeadWtPrefix+"recover-bead-001-old")
+	orphan := filepath.Join(env.Dir, ddxroot.DirName, agent.ExecuteBeadWtPrefix+"recover-bead-001-old")
 	git := &tryGitOpsStub{
 		worktrees: []string{orphan, filepath.Join(env.Dir, "unrelated")},
 	}

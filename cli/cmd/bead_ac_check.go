@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +71,7 @@ Examples:
 
 			// Persist to .ddx/executions/<attempt-id>/ac-check.json when we have one.
 			if attemptID != "" {
-				path := filepath.Join(workspace, ".ddx", "executions", attemptID, "ac-check.json")
+				path := ddxroot.JoinProject(workspace, "executions", attemptID, "ac-check.json")
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 					return fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 				}

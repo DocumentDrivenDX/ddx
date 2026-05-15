@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -74,7 +75,7 @@ func resolveProjectPersonasDir(workingDir string) string {
 	if workingDir == "" {
 		return ""
 	}
-	return filepath.Join(workingDir, ".ddx", "personas")
+	return ddxroot.JoinProject(workingDir, "personas")
 }
 
 // LoadPersona loads a persona by name. Project-local personas override

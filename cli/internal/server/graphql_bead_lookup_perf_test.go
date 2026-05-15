@@ -18,6 +18,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -118,7 +119,7 @@ func setupBeadLookupFixture(tb testing.TB) *beadLookupFixture {
 
 func seedBeadLookupProject(tb testing.TB, projectPath string, projectIdx, beadCount int) []bead.Bead {
 	tb.Helper()
-	store := bead.NewStore(filepath.Join(projectPath, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
 	if err := store.Init(); err != nil {
 		tb.Fatalf("init bead store: %v", err)
 	}
@@ -351,7 +352,7 @@ func runDDXBeadUpdate(t *testing.T, projectPath, beadID, title string) {
 	cmd.Dir = moduleRoot
 	cmd.Env = append(os.Environ(),
 		"DDX_DISABLE_UPDATE_CHECK=1",
-		"DDX_BEAD_DIR="+filepath.Join(projectPath, ".ddx"),
+		"DDX_BEAD_DIR="+filepath.Join(projectPath, ddxroot.DirName),
 	)
 	out, err := cmd.CombinedOutput()
 	if err != nil {

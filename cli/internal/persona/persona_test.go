@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -200,7 +201,7 @@ func TestPersonaLoader_LoadPersona(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
-	personasDir := filepath.Join(tempHome, ".ddx", "personas")
+	personasDir := filepath.Join(tempHome, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	// Create test persona file
@@ -292,7 +293,7 @@ func TestPersonaLoader_ListPersonas(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
-	personasDir := filepath.Join(tempHome, ".ddx", "personas")
+	personasDir := filepath.Join(tempHome, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	// Create multiple test personas
@@ -377,7 +378,7 @@ func TestPersonaLoader_FindByRole(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
-	personasDir := filepath.Join(tempHome, ".ddx", "personas")
+	personasDir := filepath.Join(tempHome, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	// Create personas with different roles
@@ -469,7 +470,7 @@ func TestPersonaLoader_FindByTags(t *testing.T) {
 	tempHome := t.TempDir()
 	t.Setenv("HOME", tempHome)
 
-	personasDir := filepath.Join(tempHome, ".ddx", "personas")
+	personasDir := filepath.Join(tempHome, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	// Create personas with different tags

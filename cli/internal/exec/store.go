@@ -20,6 +20,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
@@ -51,8 +52,8 @@ func (s *Store) buildGraph() (*docgraph.Graph, error) {
 }
 
 func NewStore(workingDir string) *Store {
-	base := filepath.Join(workingDir, ".ddx", "exec")
-	beadRoot := filepath.Join(workingDir, ".ddx")
+	base := ddxroot.JoinProject(workingDir, "exec")
+	beadRoot := ddxroot.JoinProject(workingDir)
 	return &Store{
 		WorkingDir:           workingDir,
 		ExecDir:              base,

@@ -7,6 +7,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -64,7 +65,7 @@ For each finding, reports whether result_rev is reachable from HEAD:
 			if workspace == "" {
 				return fmt.Errorf("bead doctor: no .ddx workspace found")
 			}
-			path := filepath.Join(workspace, ".ddx", "beads.jsonl")
+			path := ddxroot.JoinProject(workspace, "beads.jsonl")
 
 			doFix, _ := cmd.Flags().GetBool("fix")
 			asJSON, _ := cmd.Flags().GetBool("json")

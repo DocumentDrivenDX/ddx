@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // writeBeadEventsFixture writes a minimal beads.jsonl and events.jsonl so
@@ -17,7 +18,7 @@ import (
 func writeBeadEventsFixture(t *testing.T, beadID string, events []map[string]any) string {
 	t.Helper()
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatalf("mkdir .ddx: %v", err)
 	}

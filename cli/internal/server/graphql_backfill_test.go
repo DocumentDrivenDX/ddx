@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
@@ -29,7 +30,7 @@ import (
 // so the GraphQL workers resolver can read it without a live worker.
 func writeWorkerRecord(t *testing.T, workDir string, rec WorkerRecord) {
 	t.Helper()
-	dir := filepath.Join(workDir, ".ddx", "workers", rec.ID)
+	dir := filepath.Join(workDir, ddxroot.DirName, "workers", rec.ID)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +46,7 @@ func writeWorkerRecord(t *testing.T, workDir string, rec WorkerRecord) {
 // writeSessionsJSONL writes session entries to the sharded session index.
 func writeSessionsJSONL(t *testing.T, workDir string, entries []map[string]any) {
 	t.Helper()
-	dir := filepath.Join(workDir, ".ddx", "agent-logs")
+	dir := filepath.Join(workDir, ddxroot.DirName, "agent-logs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -608,7 +609,7 @@ func TestGraphQLPersonas(t *testing.T) {
 	t.Setenv("DDX_NODE_NAME", "gql-persona-test-node")
 
 	workDir := setupTestDir(t)
-	libDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+	libDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 	// Override library path so NewPersonaLoader resolves to an absolute dir.
 	t.Setenv("DDX_LIBRARY_BASE_PATH", libDir)
 

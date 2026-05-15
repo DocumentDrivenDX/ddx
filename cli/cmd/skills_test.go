@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ description: Valid test skill.
 
 # Plugin Foo
 `)
-	writeSkillFile(t, filepath.Join(dir, ".ddx", "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"), `---
+	writeSkillFile(t, filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"), `---
 name: human-writing-support
 description: Valid shipped skill.
 ---

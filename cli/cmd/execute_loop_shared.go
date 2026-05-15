@@ -22,6 +22,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
@@ -154,7 +155,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}
 	}
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	jsonOutput := dispatch.JSON == "true"
 	cleanupLog := cmd.ErrOrStderr()
 	if jsonOutput {
@@ -210,8 +211,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if !spec.NoReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-			BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
+			BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
 			Harness:     spec.ReviewHarness,
 			Model:       spec.ReviewModel,
 		}
@@ -260,7 +261,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
-			Events:      bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			Events:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
 			Actor:       resolveClaimAssignee(),
 			Source:      "ddx work",
 		})
@@ -336,7 +337,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, executeLoopAttemptRuntime(
 			spec,
 			cmd.OutOrStdout(),
-			bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			bead.NewStore(ddxroot.JoinProject(projectRoot)),
 			f.AgentRunnerOverride,
 			resourceChecker,
 		), gitOps)
@@ -355,7 +356,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-				bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				bead.NewStore(ddxroot.JoinProject(projectRoot)),
 				resolveClaimAssignee(), "ddx work",
 				nil,
 			)
@@ -684,7 +685,7 @@ func projectHasRoutingConfig(projectRoot string) bool {
 	if projectRoot == "" {
 		return false
 	}
-	cfgPath := filepath.Join(projectRoot, ".ddx", "config.yaml")
+	cfgPath := ddxroot.JoinProject(projectRoot, "config.yaml")
 	if _, err := os.Stat(cfgPath); err != nil {
 		return false
 	}

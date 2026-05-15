@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -27,7 +28,7 @@ func TestNoChangesWithoutRationaleDoesNotUseNoProgressCooldown(t *testing.T) {
 	)
 
 	projectRoot := t.TempDir()
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	// Real on-disk .ddx/config.yaml. max_no_changes_before_close is set
@@ -105,7 +106,7 @@ func TestMaxNoChangesBeforeCloseFromConfig(t *testing.T) {
 	)
 
 	projectRoot := t.TempDir()
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	cfgYAML := `version: "1.0"

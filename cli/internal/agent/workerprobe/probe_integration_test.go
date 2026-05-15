@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 )
 
@@ -96,7 +97,7 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 
 	// Wait up to 5s for the server's worker-events.jsonl log to receive at
 	// least one event mirrored from the worker subprocess.
-	logPath := filepath.Join(proj, ".ddx", "server", "worker-events.jsonl")
+	logPath := filepath.Join(proj, ddxroot.DirName, "server", "worker-events.jsonl")
 	deadline := time.Now().Add(5 * time.Second)
 	var lines []string
 	for time.Now().Before(deadline) {

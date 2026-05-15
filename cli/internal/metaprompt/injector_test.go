@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestInjectMetaPrompt tests meta-prompt injection
@@ -75,7 +77,7 @@ func TestInjectMetaPrompt(t *testing.T) {
 			// Setup test directory
 			testDir := t.TempDir()
 			claudePath := filepath.Join(testDir, "CLAUDE.md")
-			libraryPath := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+			libraryPath := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 
 			// Create library directory structure
 			promptDir := filepath.Join(libraryPath, "prompts", filepath.Dir(tt.promptPath))
@@ -101,7 +103,7 @@ func TestInjectMetaPrompt(t *testing.T) {
 			// Create injector
 			injector := NewMetaPromptInjectorWithPaths(
 				"CLAUDE.md",
-				filepath.Join(".ddx", "plugins", "ddx"),
+				filepath.Join(ddxroot.DirName, "plugins", "ddx"),
 				testDir,
 			)
 
@@ -146,7 +148,7 @@ func TestIsInSync(t *testing.T) {
 	t.Run("in sync after injection", func(t *testing.T) {
 		// Setup test directory
 		testDir := t.TempDir()
-		libraryPath := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+		libraryPath := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 		promptPath := "claude/system-prompts/test.md"
 		promptContent := "Test prompt content"
 
@@ -161,7 +163,7 @@ func TestIsInSync(t *testing.T) {
 		}
 
 		// Create injector and inject
-		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(".ddx", "plugins", "ddx"), testDir)
+		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(ddxroot.DirName, "plugins", "ddx"), testDir)
 		if err := injector.InjectMetaPrompt(promptPath); err != nil {
 			t.Fatalf("Failed to inject: %v", err)
 		}
@@ -179,7 +181,7 @@ func TestIsInSync(t *testing.T) {
 	t.Run("out of sync after library change", func(t *testing.T) {
 		// Setup test directory
 		testDir := t.TempDir()
-		libraryPath := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+		libraryPath := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 		promptPath := "claude/system-prompts/test.md"
 
 		// Create library prompt
@@ -193,7 +195,7 @@ func TestIsInSync(t *testing.T) {
 		}
 
 		// Inject old content
-		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(".ddx", "plugins", "ddx"), testDir)
+		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(ddxroot.DirName, "plugins", "ddx"), testDir)
 		if err := injector.InjectMetaPrompt(promptPath); err != nil {
 			t.Fatalf("Failed to inject: %v", err)
 		}
@@ -222,7 +224,7 @@ func TestIsInSync(t *testing.T) {
 			t.Fatalf("Failed to create CLAUDE.md: %v", err)
 		}
 
-		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(".ddx", "plugins", "ddx"), testDir)
+		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(ddxroot.DirName, "plugins", "ddx"), testDir)
 		_, err := injector.IsInSync()
 
 		if err == nil {
@@ -233,7 +235,7 @@ func TestIsInSync(t *testing.T) {
 	t.Run("whitespace differences ignored", func(t *testing.T) {
 		// Setup test directory
 		testDir := t.TempDir()
-		libraryPath := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+		libraryPath := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 		promptPath := "claude/system-prompts/test.md"
 
 		// Create library prompt with specific whitespace
@@ -247,7 +249,7 @@ func TestIsInSync(t *testing.T) {
 		}
 
 		// Inject
-		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(".ddx", "plugins", "ddx"), testDir)
+		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(ddxroot.DirName, "plugins", "ddx"), testDir)
 		if err := injector.InjectMetaPrompt(promptPath); err != nil {
 			t.Fatalf("Failed to inject: %v", err)
 		}
@@ -277,7 +279,7 @@ func TestIsInSync(t *testing.T) {
 			t.Fatalf("Failed to create CLAUDE.md: %v", err)
 		}
 
-		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(".ddx", "plugins", "ddx"), testDir)
+		injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", filepath.Join(ddxroot.DirName, "plugins", "ddx"), testDir)
 		inSync, err := injector.IsInSync()
 
 		if err != nil {
@@ -351,7 +353,7 @@ func TestRemoveMetaPrompt(t *testing.T) {
 			// Create injector
 			injector := NewMetaPromptInjectorWithPaths(
 				"CLAUDE.md",
-				filepath.Join(".ddx", "plugins", "ddx"),
+				filepath.Join(ddxroot.DirName, "plugins", "ddx"),
 				testDir,
 			)
 
@@ -428,7 +430,7 @@ func TestGetCurrentMetaPrompt(t *testing.T) {
 			// Create injector
 			injector := NewMetaPromptInjectorWithPaths(
 				"CLAUDE.md",
-				filepath.Join(".ddx", "plugins", "ddx"),
+				filepath.Join(ddxroot.DirName, "plugins", "ddx"),
 				testDir,
 			)
 

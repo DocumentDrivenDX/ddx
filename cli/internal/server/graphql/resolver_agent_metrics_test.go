@@ -6,12 +6,14 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // writeRun seeds one FEAT-010 run-store record under workingDir.
 func writeRun(t *testing.T, workingDir, name, body string) {
 	t.Helper()
-	dir := filepath.Join(workingDir, ".ddx", "exec", "runs")
+	dir := filepath.Join(workingDir, ddxroot.DirName, "exec", "runs")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -301,10 +303,10 @@ func TestAgentMetrics_RevisionSurvivesArchiveMove(t *testing.T) {
 		t.Fatalf("first: %v", err)
 	}
 	// Materialize an archive file — this is the ADR-004 archive surface.
-	if err := os.MkdirAll(filepath.Join(wd, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(wd, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(wd, ".ddx", "beads-archive.jsonl"), []byte(`{"id":"x"}`+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(wd, ddxroot.DirName, "beads-archive.jsonl"), []byte(`{"id":"x"}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	second, err := r.AgentMetrics(context.Background(), AgentMetricsWindowW7d, AgentMetricsAxisModel)

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,7 +24,7 @@ func (f *fakeExecutionCleanupRunner) Cleanup(ctx context.Context) (ExecutionClea
 
 func TestTryResourcePreflight_ChecksEvidenceAndTempRoots(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	tempRoot := t.TempDir()
 	t.Setenv("DDX_EXEC_WT_DIR", tempRoot)
 
@@ -34,18 +35,18 @@ func TestTryResourcePreflight_ChecksEvidenceAndTempRoots(t *testing.T) {
 	assert.Equal(t, tempRoot, result.TempRoot)
 	assert.ElementsMatch(t, []string{
 		filepath.Join(projectRoot, ExecuteBeadArtifactDir),
-		filepath.Join(projectRoot, ".ddx", "runs"),
+		filepath.Join(projectRoot, ddxroot.DirName, "runs"),
 	}, result.EvidenceRoots)
 
 	require.Len(t, result.RootChecks, 3)
 	assert.Equal(t, tempRoot, result.RootChecks[0].Path)
 	assert.Equal(t, filepath.Join(projectRoot, ExecuteBeadArtifactDir), result.RootChecks[1].Path)
-	assert.Equal(t, filepath.Join(projectRoot, ".ddx", "runs"), result.RootChecks[2].Path)
+	assert.Equal(t, filepath.Join(projectRoot, ddxroot.DirName, "runs"), result.RootChecks[2].Path)
 }
 
 func TestTryResourcePreflight_RechecksAfterCleanup(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	tempRoot := t.TempDir()
 
 	healthy := false
@@ -88,7 +89,7 @@ func TestTryResourcePreflight_RechecksAfterCleanup(t *testing.T) {
 
 func TestWorkResourcePreflight_RunsCleanupBelowSoftFloor(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	tempRoot := filepath.Join(t.TempDir(), "ddx-exec-wt")
 
 	runner := &fakeExecutionCleanupRunner{}

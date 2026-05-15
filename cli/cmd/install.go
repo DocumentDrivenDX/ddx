@@ -12,6 +12,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
@@ -208,9 +209,7 @@ func installPathContainsAny(parent string, files []string) bool {
 // Non-fatal: if git operations fail (not a repo, nothing to commit), it's silently skipped.
 func commitPluginChanges(name, version string) {
 	// Stage the project-local plugin tree and the skill copies.
-	paths := []string{
-		filepath.Join(".ddx", "plugins", name) + string(filepath.Separator),
-		".agents/skills/",
+	paths := []string{ddxroot.JoinRelative("plugins", name) + string(filepath.Separator), ".agents/skills/",
 		".claude/skills/",
 	}
 	ctx := context.Background()
@@ -478,7 +477,7 @@ func localOverlayPaths(pluginName string, files []string) []string {
 		}
 	}
 
-	add(filepath.ToSlash(filepath.Join(".ddx", "plugins", pluginName)))
+	add(filepath.ToSlash(ddxroot.JoinRelative("plugins", pluginName)))
 	for _, file := range files {
 		p := filepath.ToSlash(file)
 		for _, prefix := range []string{".agents/skills/", ".claude/skills/"} {

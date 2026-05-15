@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -43,7 +44,7 @@ library:
 persona_bindings:
   project_name: "test-project"`
 
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	configPath := filepath.Join(ddxDir, "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(initialConfig), 0644))
@@ -60,7 +61,7 @@ This is a test project for validating persona workflows.`
 	require.NoError(t, os.WriteFile(claudePath, []byte(initialClaude), 0644))
 
 	// Set library path to project-local library
-	libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+	libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 
 	// Create personas directory with test personas
 	personasDir := filepath.Join(libraryDir, "personas")
@@ -492,7 +493,7 @@ persona_bindings:
 			setup: func(t *testing.T) {
 				// Create persona with invalid YAML
 				workSubDir := filepath.Join(workDir, "load_persona_with_invalid_content")
-				libraryDir := filepath.Join(workSubDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workSubDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -509,7 +510,7 @@ description: Invalid YAML - missing bracket
 				config := `version: "1.0"
 persona_bindings:
   code-reviewer: invalid-persona`
-				configPath := filepath.Join(workSubDir, ".ddx", "config.yaml")
+				configPath := filepath.Join(workSubDir, ddxroot.DirName, "config.yaml")
 				require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
 			},
 			operation: func(t *testing.T) error {
@@ -526,7 +527,7 @@ persona_bindings:
 			setup: func(t *testing.T) {
 				// Create empty personas directory
 				tempDir := t.TempDir()
-				libraryDir := filepath.Join(tempDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(tempDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 			},
@@ -585,12 +586,12 @@ func TestPersonaIntegration_ConcurrentAccess(t *testing.T) {
 persona_bindings:
   code-reviewer: test-reviewer`
 
-	configPath := filepath.Join(workDir, ".ddx", "config.yaml")
+	configPath := filepath.Join(workDir, ddxroot.DirName, "config.yaml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(configPath), 0755))
 	require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
 
 	// Create test persona
-	personasDir := filepath.Join(tempHome, ".ddx", "plugins", "ddx", "personas")
+	personasDir := filepath.Join(tempHome, ddxroot.DirName, "plugins", "ddx", "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	personaContent := `---

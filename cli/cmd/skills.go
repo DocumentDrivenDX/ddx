@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/spf13/cobra"
@@ -76,9 +77,7 @@ func (f *CommandFactory) defaultSkillCheckPaths() []string {
 	candidates := []string{
 		filepath.Join(projectRoot, "skills"),
 		filepath.Join(projectRoot, ".agents", "skills"),
-		filepath.Join(projectRoot, ".claude", "skills"),
-		filepath.Join(projectRoot, ".ddx", "plugins", "ddx"),
-		filepath.Join(projectRoot, "cli", "internal", "skills"),
+		filepath.Join(projectRoot, ".claude", "skills"), ddxroot.JoinProject(projectRoot, "plugins", "ddx"), filepath.Join(projectRoot, "cli", "internal", "skills"),
 	}
 
 	var paths []string

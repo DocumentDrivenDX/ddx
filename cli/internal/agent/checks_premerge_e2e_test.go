@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // preMergeRepo is a focused version of landTestRepo specialised for these
@@ -50,7 +51,7 @@ func newPreMergeRepo(t *testing.T) *preMergeRepo {
 	r.runGit("commit", "-m", "init")
 	r.baseSHA = strings.TrimSpace(r.runGit("rev-parse", "HEAD"))
 
-	r.store = bead.NewStore(filepath.Join(dir, ".ddx"))
+	r.store = bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	if err := r.store.Init(); err != nil {
 		t.Fatalf("store init: %v", err)
 	}
@@ -108,7 +109,7 @@ func (r *preMergeRepo) commitNoOp() string {
 // file says block", not "command crashed").
 func (r *preMergeRepo) writeDummyFailCheck() {
 	r.t.Helper()
-	checkDir := filepath.Join(r.dir, ".ddx", "checks")
+	checkDir := filepath.Join(r.dir, ddxroot.DirName, "checks")
 	if err := os.MkdirAll(checkDir, 0o755); err != nil {
 		r.t.Fatal(err)
 	}
@@ -170,7 +171,7 @@ func TestSubmitWithPreMergeChecks_DummyFailAbortsMerge(t *testing.T) {
 		BeadID:       b.ID,
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
 		Status:       ExecuteBeadStatusSuccess,
 		ExitCode:     0,
@@ -321,7 +322,7 @@ func TestSubmitWithPreMergeChecks_BypassAllowsMerge(t *testing.T) {
 		BeadID:       b.ID,
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 	}
 
 	submitCalled := false
@@ -395,7 +396,7 @@ func TestSubmitWithPreMergeChecks_BypassMissingReasonRejected(t *testing.T) {
 		BeadID:       b.ID,
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 	}
 
 	submitCalled := false

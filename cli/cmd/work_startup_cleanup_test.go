@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,7 +75,7 @@ func TestWorkStartup_PreservesLiveWorktrees(t *testing.T) {
 func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	projectRoot, _ := setupWorkStartupCleanupProject(t)
 
-	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	workersDir := filepath.Join(projectRoot, ddxroot.DirName, "workers")
 	require.NoError(t, os.MkdirAll(workersDir, 0o755))
 
 	deadWorkerID := "agent-loop-dead"
@@ -128,7 +129,7 @@ func TestExecutionsRetention_ArchivesOldEvidence(t *testing.T) {
 		report, err := runner.scan(context.Background(), true)
 		require.NoError(t, err)
 
-		archivedDir := filepath.Join(projectRoot, ".ddx", "executions-archive", "2026", "01", oldAttemptID)
+		archivedDir := filepath.Join(projectRoot, ddxroot.DirName, "executions-archive", "2026", "01", oldAttemptID)
 		assert.NoDirExists(t, oldDir)
 		assert.DirExists(t, archivedDir)
 		assert.DirExists(t, recentDir)
@@ -150,7 +151,7 @@ func TestExecutionsRetention_ArchivesOldEvidence(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.NoDirExists(t, oldDir)
-		assert.NoDirExists(t, filepath.Join(projectRoot, ".ddx", "executions-archive", "2026", "01", oldAttemptID))
+		assert.NoDirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "executions-archive", "2026", "01", oldAttemptID))
 		assert.Equal(t, int64(1), report.StaleExecutionDirs)
 		assert.Equal(t, int64(0), report.ArchivedExecutionDirs)
 		assert.Equal(t, int64(1), report.DeletedExecutionDirs)
@@ -174,14 +175,14 @@ func setupWorkStartupCleanupProjectRoot(t *testing.T) string {
 	t.Helper()
 
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	return projectRoot
 }
 
 func setupWorkStartupEvidenceDir(t *testing.T, projectRoot, attemptID string, mtime time.Time) string {
 	t.Helper()
 
-	dir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	dir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"status":"success"}`), 0o644))
 	require.NoError(t, os.Chtimes(dir, mtime, mtime))

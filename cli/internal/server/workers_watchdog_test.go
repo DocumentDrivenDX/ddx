@@ -14,6 +14,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -54,7 +55,7 @@ func newIdleHandle(t *testing.T, m *WorkerManager, id string, beadID string, sta
 // to do. Returns the bead store.
 func seedClaimedBead(t *testing.T, root string, beadID string) *bead.Store {
 	t.Helper()
-	ddx := filepath.Join(root, ".ddx")
+	ddx := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddx, 0o755))
 	store := bead.NewStore(ddx)
 	require.NoError(t, store.Create(&bead.Bead{
@@ -195,7 +196,7 @@ func TestWatchdogSweepReapIsIdempotent(t *testing.T) {
 // flow into the manager via LoadWithWorkingDir.
 func TestWatchdogDeadlinesConfigurable(t *testing.T) {
 	root := t.TempDir()
-	ddx := filepath.Join(root, ".ddx")
+	ddx := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddx, 0o755))
 	// Minimal config.yaml with a server.watchdog_deadline / stall_deadline override.
 	cfgPath := filepath.Join(ddx, "config.yaml")

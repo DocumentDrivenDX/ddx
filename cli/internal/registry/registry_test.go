@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -286,7 +287,7 @@ func TestInstallSkills_NoSymlinksAnywhere(t *testing.T) {
 	projectRoot := t.TempDir()
 
 	// Simulate the post-install layout: plugin tree + skill copies as real files.
-	pluginTree := filepath.Join(projectRoot, ".ddx", "plugins", "sample")
+	pluginTree := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "sample")
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginTree, ".agents", "skills", "sample-skill"), 0o755))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(pluginTree, ".agents", "skills", "sample-skill", "SKILL.md"),

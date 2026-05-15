@@ -3,11 +3,11 @@ package graphql
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	gqlgraphql "github.com/99designs/gqlgen/graphql"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // RunsStateProvider is the optional sub-interface a StateProvider may
@@ -121,7 +121,7 @@ func (r *queryResolver) recordRunDetailView(ctx context.Context, run *Run) {
 		return
 	}
 
-	store := bead.NewStore(filepath.Join(wd, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(wd))
 	if existing, err := store.EventsByKind(*run.BeadID, runDetailViewEventKind); err == nil {
 		for _, ev := range existing {
 			if strings.Contains(ev.Body, "run_id="+run.ID) {
@@ -194,7 +194,7 @@ func (r *queryResolver) recordRawTranscriptViewed(ctx context.Context, run *Run)
 		return
 	}
 
-	store := bead.NewStore(filepath.Join(wd, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(wd))
 	if existing, err := store.EventsByKind(*run.BeadID, rawTranscriptViewedEventKind); err == nil {
 		for _, ev := range existing {
 			if strings.Contains(ev.Body, "run_id="+run.ID) {

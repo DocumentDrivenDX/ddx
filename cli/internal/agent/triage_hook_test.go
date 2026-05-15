@@ -15,6 +15,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,7 +39,7 @@ func (r *triageHookRunnerStub) Run(opts RunArgs) (*Result, error) {
 func newTriageHookTestRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ResolveLogDir(root, "")), 0o755))
 	skillDir := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))
@@ -48,7 +49,7 @@ func newTriageHookTestRoot(t *testing.T) string {
 
 func newTriageHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	b := &bead.Bead{
 		ID:          "ddx-triage-1",
@@ -462,7 +463,7 @@ func TestTriageHook_UnknownClassificationRecordsWarningWithoutOutcomeReason(t *t
 func TestPostAttemptTriageHook_EmptyOutputRecordsWarningEvent(t *testing.T) {
 	root := newTriageHookTestRoot(t)
 
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	candidate := &bead.Bead{ID: "ddx-triage-empty", Title: "empty output triage", Priority: 0}
 	require.NoError(t, store.Create(candidate))

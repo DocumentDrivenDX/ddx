@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -17,7 +18,7 @@ import (
 func setupWorkFocusEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 	t.Helper()
 	env := NewTestEnvironment(t)
-	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))
@@ -142,7 +143,7 @@ func TestWorkFocusJSONIncludesUnknownHazards(t *testing.T) {
 	env := setupWorkFocusEnv(t, b)
 
 	// Claim the bead to move it to in_progress.
-	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Claim(b.ID, "test-worker"))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
@@ -218,7 +219,7 @@ func TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus(t *testing.T) {
 	}
 	env := setupWorkFocusEnv(t, b)
 
-	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Claim(b.ID, "test-worker"))
 
 	// Write a fresh worker status sidecar so the focus report can detect

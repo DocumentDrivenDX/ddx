@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +29,7 @@ func SetupTestEnvironment(t *testing.T) *TestFixtures {
 	// Don't change working directory - tests should use absolute paths
 
 	// Create personas directory
-	personasDir := filepath.Join(homeDir, ".ddx", "personas")
+	personasDir := filepath.Join(homeDir, ddxroot.DirName, "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 	fixtures := &TestFixtures{

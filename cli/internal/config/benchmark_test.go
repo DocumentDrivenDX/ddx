@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"gopkg.in/yaml.v3"
 )
 
@@ -55,7 +56,7 @@ func BenchmarkLoadWithWorkingDir_ConfigPresent(b *testing.B) {
 		b.Fatalf("yaml.Marshal failed: %v", err)
 	}
 
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		b.Fatalf("MkdirAll failed: %v", err)
 	}

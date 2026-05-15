@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,7 +31,7 @@ func initRepoWithBead(t *testing.T, beadID string, labels []string, checkYAML st
 	gitInit("add", ".")
 	gitInit("commit", "-q", "-m", "init")
 
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init())
@@ -109,7 +110,7 @@ applies_to:
 func TestAcRun_OnlyFlag(t *testing.T) {
 	beadID := "ddx-ac-only"
 	root := initRepoWithBead(t, beadID, nil, "")
-	checksDir := filepath.Join(root, ".ddx", "checks")
+	checksDir := filepath.Join(root, ddxroot.DirName, "checks")
 	require.NoError(t, os.MkdirAll(checksDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(checksDir, "a.yaml"), []byte(`
 name: alpha

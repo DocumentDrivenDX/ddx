@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // writeFakeWorkerRecord dumps a status.json into the manager's workers
@@ -40,7 +41,7 @@ func TestWorkerDispatchAdapterEnforcesMaxCount(t *testing.T) {
 	setupBeadStore(t, root)
 
 	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  max_count: 1\n"
-	if err := os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,7 +75,7 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 	setupBeadStore(t, root)
 
 	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  max_count: 2\n  default_spec:\n    profile: cheap\n    effort: low\n"
-	if err := os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

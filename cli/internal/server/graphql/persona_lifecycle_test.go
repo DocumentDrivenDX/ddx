@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	ddxcmd "github.com/DocumentDrivenDX/ddx/cmd"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestIntegration_PersonaLifecycle covers AC #3 and AC #4:
@@ -50,7 +51,7 @@ library:
 bead:
   id_prefix: "it"
 `
-	if err := os.WriteFile(filepath.Join(workDir, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("DDX_LIBRARY_BASE_PATH", libraryRoot)
@@ -73,7 +74,7 @@ bead:
 	if resp["data"] == nil {
 		t.Fatalf("no data: %s", resp["errors"])
 	}
-	assertFileExists(t, filepath.Join(workDir, ".ddx", "personas", "our-reviewer.md"))
+	assertFileExists(t, filepath.Join(workDir, ddxroot.DirName, "personas", "our-reviewer.md"))
 
 	// AC#3: update the project persona.
 	updateQuery := `mutation($name: String!, $body: String!, $pid: String!) {
@@ -138,7 +139,7 @@ bead:
 	if resp["errors"] != nil {
 		t.Fatalf("unexpected errors: %s", resp["errors"])
 	}
-	if _, err := os.Stat(filepath.Join(workDir, ".ddx", "personas", "our-reviewer.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(workDir, ddxroot.DirName, "personas", "our-reviewer.md")); !os.IsNotExist(err) {
 		t.Fatalf("expected our-reviewer.md removed; got err=%v", err)
 	}
 
@@ -155,7 +156,7 @@ bead:
 	if resp["errors"] != nil {
 		t.Fatalf("fork error: %s", resp["errors"])
 	}
-	assertFileExists(t, filepath.Join(workDir, ".ddx", "personas", "architect-local.md"))
+	assertFileExists(t, filepath.Join(workDir, ddxroot.DirName, "personas", "architect-local.md"))
 }
 
 func runPersonaCommand(t *testing.T, workDir string, args ...string) {

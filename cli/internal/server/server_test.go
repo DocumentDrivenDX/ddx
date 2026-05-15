@@ -16,6 +16,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
@@ -72,7 +73,7 @@ func setupTestDir(t *testing.T) string {
 	dir := t.TempDir()
 
 	// Create .ddx/config.yaml so the server can find the library
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +89,7 @@ library:
 	}
 
 	// Create library with sample documents
-	libDir := filepath.Join(dir, ".ddx", "plugins", "ddx")
+	libDir := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx")
 	for _, cat := range []string{"prompts", "templates", "personas"} {
 		catDir := filepath.Join(libDir, cat)
 		if err := os.MkdirAll(catDir, 0o755); err != nil {
@@ -168,7 +169,7 @@ func setupProcessMetricsTestDir(t *testing.T) string {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(filepath.Join(dir, agent.DefaultLogDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -657,7 +658,7 @@ func TestMCPMetricTrend(t *testing.T) {
 // endpoints have data to read.
 func seedBeadEvidence(t *testing.T, dir string) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	t0, _ := time.Parse(time.RFC3339, "2026-04-04T15:00:00Z")
 	if err := store.AppendEvent("bx-001", bead.BeadEvent{
 		Kind:      "work",
@@ -1120,7 +1121,7 @@ func setupProjectWithBeads(t *testing.T, beadPrefix string) string {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -2545,6 +2546,9 @@ func TestMCPDocTools(t *testing.T) {
 // --- SvelteKit SPA embed tests (Stage 4.16: SvelteKit build output verified) ---
 
 func TestSPAServesIndexHTML(t *testing.T) {
+	if _, err := frontendFiles.Open("frontend/build/index.html"); err != nil {
+		t.Skip("embedded frontend build unavailable in this checkout")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -2563,6 +2567,9 @@ func TestSPAServesIndexHTML(t *testing.T) {
 }
 
 func TestSPAFallbackForClientRoute(t *testing.T) {
+	if _, err := frontendFiles.Open("frontend/build/index.html"); err != nil {
+		t.Skip("embedded frontend build unavailable in this checkout")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -2586,7 +2593,7 @@ func setupExecTestDir(t *testing.T) string {
 	t.Helper()
 	dir := setupTestDir(t)
 
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 
 	// Create exec-definitions.jsonl
 	defBead := `{"id":"bench-startup","title":"Execution definition for MET-startup","status":"open","priority":2,"issue_type":"exec_definition","created_at":"2026-04-01T00:00:00Z","updated_at":"2026-04-01T00:00:00Z","labels":["artifact:MET-startup","executor:command"],"definition":{"id":"bench-startup","artifact_ids":["MET-startup"],"executor":{"kind":"command","command":["go","test","-bench=."],"timeout_ms":30000},"result":{"metric":{"unit":"ms"}},"evaluation":{"comparison":"lower-is-better"},"active":true,"created_at":"2026-04-01T00:00:00Z"}}`
@@ -4383,7 +4390,7 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 // .ddx/workers/<id>/ directory — the same layout used by WorkerManager.
 func writeTestWorkerRecord(t *testing.T, projectRoot, id string, rec WorkerRecord) {
 	t.Helper()
-	dir := filepath.Join(projectRoot, ".ddx", "workers", id)
+	dir := filepath.Join(projectRoot, ddxroot.DirName, "workers", id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}

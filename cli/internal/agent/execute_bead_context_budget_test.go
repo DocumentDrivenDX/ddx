@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestExecuteBead_ContextBudgetMinimal verifies that when ContextBudget is
@@ -313,7 +314,7 @@ func TestExecuteBead_LargeDescriptionGetsStep0Hint(t *testing.T) {
 func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testing.T) {
 	root := t.TempDir()
 	wt := t.TempDir()
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

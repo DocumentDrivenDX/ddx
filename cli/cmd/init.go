@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
@@ -150,7 +151,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	}
 
 	// Check if config already exists
-	configPath := filepath.Join(workingDir, ".ddx", "config.yaml")
+	configPath := ddxroot.JoinProject(workingDir, "config.yaml")
 	if _, err := os.Stat(configPath); err == nil {
 		if !opts.Force {
 			// Config exists and --force not used - exit code 2 per contract
@@ -221,7 +222,7 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	}
 
 	// Create .ddx directory first
-	localDDxPath := filepath.Join(workingDir, ".ddx")
+	localDDxPath := ddxroot.JoinProject(workingDir)
 	if err := os.MkdirAll(localDDxPath, 0755); err != nil {
 		return nil, NewExitError(1, fmt.Sprintf("Failed to create .ddx directory: %v", err))
 	}
@@ -345,7 +346,7 @@ func writeProjectVersions(workingDir, ddxVersion string) {
 	if ddxVersion == "" || ddxVersion == "dev" {
 		ddxVersion = "dev"
 	}
-	versionsPath := filepath.Join(workingDir, ".ddx", "versions.yaml")
+	versionsPath := ddxroot.JoinProject(workingDir, "versions.yaml")
 	content := fmt.Sprintf("ddx_version: %q\n", ddxVersion)
 	if err := os.WriteFile(versionsPath, []byte(content), 0644); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "Warning: could not write .ddx/versions.yaml: %v\n", err)
@@ -355,7 +356,7 @@ func writeProjectVersions(workingDir, ddxVersion string) {
 // readProjectVersions reads ddx_version from .ddx/versions.yaml.
 // Returns empty string if the file doesn't exist or can't be parsed.
 func readProjectVersions(workingDir string) string {
-	versionsPath := filepath.Join(workingDir, ".ddx", "versions.yaml")
+	versionsPath := ddxroot.JoinProject(workingDir, "versions.yaml")
 	data, err := os.ReadFile(versionsPath)
 	if err != nil {
 		return ""
@@ -503,7 +504,7 @@ func findParentDDxWorkspace(dir string) string {
 	// Walk up from the parent to the git root (inclusive).
 	current := filepath.Dir(abs)
 	for {
-		candidate := filepath.Join(current, ".ddx")
+		candidate := ddxroot.InTree(current)
 		if info, statErr := os.Stat(candidate); statErr == nil && info.IsDir() {
 			return current
 		}

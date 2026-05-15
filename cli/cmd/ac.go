@@ -6,12 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/checks"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -65,7 +65,7 @@ Exits 1 if any check returns block or error.`,
 				return fmt.Errorf("diff paths: %w", err)
 			}
 
-			all, err := checks.LoadDir(filepath.Join(projectRoot, ".ddx", "checks"))
+			all, err := checks.LoadDir(ddxroot.JoinProject(projectRoot, "checks"))
 			if err != nil {
 				return err
 			}
@@ -77,7 +77,7 @@ Exits 1 if any check returns block or error.`,
 			}
 
 			attemptID := newAttemptID()
-			evidenceDir := filepath.Join(projectRoot, ".ddx", "executions", "ac-"+attemptID)
+			evidenceDir := ddxroot.JoinProject(projectRoot, "executions", "ac-"+attemptID)
 			ictx := checks.InvocationContext{
 				BeadID:       beadID,
 				DiffBase:     diffBase,
@@ -129,7 +129,7 @@ Exits 1 if any check returns block or error.`,
 }
 
 func loadBead(projectRoot, id string) (*bead.Bead, error) {
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	return store.Get(context.Background(), id)
 }
 

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -32,7 +33,7 @@ func createFreshPersonaCmd(workingDir string) *cobra.Command {
 // createPersonaTestConfig creates .ddx/config.yaml with proper schema format
 func createPersonaTestConfig(t *testing.T, testWorkDir string) {
 	t.Helper()
-	ddxDir := filepath.Join(testWorkDir, ".ddx")
+	ddxDir := filepath.Join(testWorkDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 
 	configContent := `version: "1.0"
@@ -74,7 +75,7 @@ func TestPersonaListCommand_Contract(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 
 				// Create .ddx directory structure
-				ddxDir := filepath.Join(testWorkDir, ".ddx")
+				ddxDir := filepath.Join(testWorkDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 
 				// Create config with new schema format
@@ -92,7 +93,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testWorkDir, ddxroot.DirName, "plugins", "ddx")
 
 				// Create personas directory with sample personas
 				personasDir := filepath.Join(libraryDir, "personas")
@@ -136,7 +137,7 @@ You are a test code reviewer.`
 				t.Setenv("HOME", homeDir)
 
 				// Create .ddx directory structure
-				ddxDir := filepath.Join(testWorkDir, ".ddx")
+				ddxDir := filepath.Join(testWorkDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 
 				// Create config with new schema format
@@ -154,7 +155,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testWorkDir, ddxroot.DirName, "plugins", "ddx")
 
 				// Create empty personas directory
 				personasDir := filepath.Join(libraryDir, "personas")
@@ -179,7 +180,7 @@ persona_bindings: {}
 				t.Setenv("HOME", homeDir)
 
 				// Create .ddx directory structure
-				ddxDir := filepath.Join(testWorkDir, ".ddx")
+				ddxDir := filepath.Join(testWorkDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 
 				// Create config with new schema format
@@ -197,7 +198,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testWorkDir, ddxroot.DirName, "plugins", "ddx")
 
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
@@ -251,7 +252,7 @@ tags: [test, testing]
 				t.Setenv("HOME", homeDir)
 
 				// Create .ddx directory structure
-				ddxDir := filepath.Join(testWorkDir, ".ddx")
+				ddxDir := filepath.Join(testWorkDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 
 				// Create config with new schema format
@@ -269,7 +270,7 @@ persona_bindings: {}
 					0644,
 				))
 
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testWorkDir, ddxroot.DirName, "plugins", "ddx")
 
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
@@ -364,7 +365,7 @@ func TestPersonaShowCommand_Contract(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 
 				createPersonaTestConfig(t, testWorkDir)
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testWorkDir, ddxroot.DirName, "plugins", "ddx")
 
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
@@ -415,7 +416,7 @@ You are an experienced code reviewer who enforces high standards.
 				t.Setenv("HOME", homeDir)
 
 				createPersonaTestConfig(t, testWorkDir)
-				libraryDir := filepath.Join(testWorkDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testWorkDir, ddxroot.DirName, "plugins", "ddx")
 
 				// Create empty personas directory
 				personasDir := filepath.Join(libraryDir, "personas")
@@ -478,7 +479,7 @@ func TestPersonaBindCommand_Contract(t *testing.T) {
 				workDir := t.TempDir()
 
 				// Create .ddx/config.yaml configuration
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"
 library:
@@ -496,7 +497,7 @@ persona_bindings: {}`
 				// Create personas directory with target persona
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -539,7 +540,7 @@ tags: [strict]
 			setup: func(t *testing.T) string {
 				workDir := t.TempDir()
 
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"`
 				require.NoError(t, os.WriteFile(
@@ -551,7 +552,7 @@ tags: [strict]
 				// Create empty personas directory
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				personasDir := filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
+				personasDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "ddx", "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				return workDir
@@ -646,7 +647,7 @@ library:
 persona_bindings:
   code-reviewer: strict-reviewer
   test-engineer: tdd-engineer`
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -667,7 +668,7 @@ This is the project guidance.`
 				// Create personas
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -739,7 +740,7 @@ library:
     branch: main
 persona_bindings:
   code-reviewer: strict-reviewer`
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -760,7 +761,7 @@ This is the project guidance.`
 				// Create persona
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				libraryDir := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 				personasDir := filepath.Join(libraryDir, "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
@@ -807,7 +808,7 @@ You are a strict code reviewer.`
 				// Create empty personas directory
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				personasDir := filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas")
+				personasDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "ddx", "personas")
 				require.NoError(t, os.MkdirAll(personasDir, 0755))
 
 				return workDir
@@ -887,7 +888,7 @@ persona_bindings:
   code-reviewer: strict-reviewer
   test-engineer: tdd-engineer
   architect: systems-architect`
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -917,7 +918,7 @@ persona_bindings:
 				workDir := t.TempDir()
 
 				// Create .ddx/config.yaml without persona bindings
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				config := `version: "1.0"
 library:

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,16 +51,16 @@ func TestDoctor_ReportsAndAppliesHousekeepingCounts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, dryRunOutput, "stale worktrees=1, stale worker dirs=1, stale execution dirs=1")
 	assert.DirExists(t, staleWorktree)
-	assert.DirExists(t, filepath.Join(projectRoot, ".ddx", "workers", staleWorkerID))
+	assert.DirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "workers", staleWorkerID))
 	assert.DirExists(t, oldEvidence)
 
 	applyOutput, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--apply")
 	require.NoError(t, err)
 	assert.Contains(t, applyOutput, "stale worktrees=1, stale worker dirs=1, stale execution dirs=1 (applied)")
 	assert.NoDirExists(t, staleWorktree)
-	assert.NoDirExists(t, filepath.Join(projectRoot, ".ddx", "workers", staleWorkerID))
+	assert.NoDirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "workers", staleWorkerID))
 	assert.NoDirExists(t, oldEvidence)
-	assert.DirExists(t, filepath.Join(projectRoot, ".ddx", "executions-archive", "2026", "01", oldAttemptID))
+	assert.DirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "executions-archive", "2026", "01", oldAttemptID))
 
 	if strings.Contains(applyOutput, "Execution housekeeping scan failed") {
 		t.Fatalf("doctor --apply reported housekeeping failure:\n%s", applyOutput)

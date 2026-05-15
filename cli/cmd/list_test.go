@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func TestListCommand(t *testing.T) {
 				testDir := t.TempDir()
 
 				// Create library structure in .ddx/plugins/ddx
-				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 
 				// Create mcp-servers directories
 				mcpDir := filepath.Join(libraryDir, "mcp-servers")
@@ -46,7 +47,7 @@ library:
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
-				require.NoError(t, os.WriteFile(filepath.Join(testDir, ".ddx", "config.yaml"), config, 0644))
+				require.NoError(t, os.WriteFile(filepath.Join(testDir, ddxroot.DirName, "config.yaml"), config, 0644))
 
 				return testDir
 			},
@@ -61,7 +62,7 @@ library:
 			setup: func(t *testing.T) string {
 				testDir := t.TempDir()
 
-				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
@@ -73,7 +74,7 @@ library:
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
-				require.NoError(t, os.WriteFile(filepath.Join(testDir, ".ddx", "config.yaml"), config, 0644))
+				require.NoError(t, os.WriteFile(filepath.Join(testDir, ddxroot.DirName, "config.yaml"), config, 0644))
 
 				return testDir
 			},

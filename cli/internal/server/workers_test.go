@@ -18,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -206,7 +207,7 @@ func TestWorkerManagerWritesStatusToDisk(t *testing.T) {
 	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
 
 	// Check that status.json was written to disk
-	dir := filepath.Join(root, ".ddx", "workers", record.ID)
+	dir := filepath.Join(root, ddxroot.DirName, "workers", record.ID)
 	data, err := os.ReadFile(filepath.Join(dir, "status.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), record.ID)
@@ -307,8 +308,8 @@ func installFastSuccessWorker(m *WorkerManager) {
 // so the worker can initialize the bead store without errors.
 func setupBeadStore(t *testing.T, root string) {
 	t.Helper()
-	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ".ddx", "exec-worktrees"))
-	ddxDir := filepath.Join(root, ".ddx")
+	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	// Write empty but valid JSONL
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
@@ -344,7 +345,8 @@ func TestWorkerManagerCancelledContext(t *testing.T) {
 
 func setupBeadStoreWithReadyBead(t *testing.T, root string) {
 	t.Helper()
-	ddxDir := filepath.Join(root, ".ddx")
+	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	store := bead.NewStore(ddxDir)
@@ -693,8 +695,8 @@ func TestFormatServiceProgressEntries(t *testing.T) {
 
 func TestWorkerManagerLogsDoesNotRenderSessionLogs(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx", "agent-logs"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".ddx", "agent-logs", "agent-live.jsonl"), []byte(strings.Join([]string{
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName, "agent-logs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ddxroot.DirName, "agent-logs", "agent-live.jsonl"), []byte(strings.Join([]string{
 		`{"type":"progress","data":{"phase":"thinking","state":"complete","message":"ddx-99419bc1 #1 thought 5.0s","output_tokens":8,"duration_ms":5000}}`,
 	}, "\n")+"\n"), 0o644))
 
@@ -734,7 +736,7 @@ func TestWorkerScopeToProject(t *testing.T) {
 	_ = waitForWorkerExit(t, mA, record.ID, 10*time.Second)
 
 	// Worker directory must exist under project A's .ddx/workers/.
-	workerDirA := filepath.Join(rootA, ".ddx", "workers", record.ID)
+	workerDirA := filepath.Join(rootA, ddxroot.DirName, "workers", record.ID)
 	if _, err := os.Stat(workerDirA); err != nil {
 		t.Errorf("worker dir not found under project A: %v", err)
 	}
@@ -751,7 +753,7 @@ func TestWorkerScopeToProject(t *testing.T) {
 
 	// Verify that a completely separate project B directory has no worker artifacts.
 	rootB := t.TempDir()
-	workersDirB := filepath.Join(rootB, ".ddx", "workers")
+	workersDirB := filepath.Join(rootB, ddxroot.DirName, "workers")
 	if _, err := os.Stat(workersDirB); err == nil {
 		entries, _ := os.ReadDir(workersDirB)
 		assert.Empty(t, entries, "project B's .ddx/workers/ must be empty")
@@ -770,7 +772,7 @@ func TestWorkerLiveCounters(t *testing.T) {
 		t.Skip("requires work goroutine timing; too slow for -short")
 	}
 	root := t.TempDir()
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	// Initialise a git repo so CloseWithEvidence can write bead events.
@@ -877,7 +879,7 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	initialTip := strings.TrimSpace(string(initialTipOut))
 
 	// Seed the bead store with one ready bead.
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Create(&bead.Bead{
@@ -996,7 +998,7 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	require.NoError(t, err)
 	initialTip := strings.TrimSpace(string(initialTipOut))
 
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Create(&bead.Bead{
@@ -1009,7 +1011,7 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	attemptID := "20260416T000001-evid"
-	evidenceRelDir := filepath.Join(".ddx", "executions", attemptID)
+	evidenceRelDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
 
 	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
 		return &agent.ExecuteBeadWorker{
@@ -1346,8 +1348,8 @@ func TestConcurrentWorkersFromDifferentProjects(t *testing.T) {
 	assert.NotEqual(t, "running", finalB.State, "worker B should have exited")
 
 	// Worker A's artifact must exist only under rootA, not rootB.
-	workerDirA := filepath.Join(rootA, ".ddx", "workers", recA.ID)
-	workerDirB := filepath.Join(rootB, ".ddx", "workers", recB.ID)
+	workerDirA := filepath.Join(rootA, ddxroot.DirName, "workers", recA.ID)
+	workerDirB := filepath.Join(rootB, ddxroot.DirName, "workers", recB.ID)
 
 	if _, err := os.Stat(workerDirA); err != nil {
 		t.Errorf("worker A dir not found under rootA: %v", err)
@@ -1357,13 +1359,13 @@ func TestConcurrentWorkersFromDifferentProjects(t *testing.T) {
 	}
 
 	// Worker B's ID must NOT appear under rootA.
-	crossPath := filepath.Join(rootA, ".ddx", "workers", recB.ID)
+	crossPath := filepath.Join(rootA, ddxroot.DirName, "workers", recB.ID)
 	if _, err := os.Stat(crossPath); err == nil {
 		t.Errorf("worker B artifact found under rootA — cross-project write detected")
 	}
 
 	// Worker A's ID must NOT appear under rootB.
-	crossPathB := filepath.Join(rootB, ".ddx", "workers", recA.ID)
+	crossPathB := filepath.Join(rootB, ddxroot.DirName, "workers", recA.ID)
 	if _, err := os.Stat(crossPathB); err == nil {
 		t.Errorf("worker A artifact found under rootB — cross-project write detected")
 	}

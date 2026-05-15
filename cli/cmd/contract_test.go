@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,7 +79,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				gitConfigName.Dir = workDir
 				require.NoError(t, gitConfigName.Run())
 				// Create existing config in new format
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -111,7 +112,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				gitName.Dir = workDir
 				require.NoError(t, gitName.Run())
 				// Create existing config in new format
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -194,7 +195,7 @@ func TestListCommand_Contract(t *testing.T) {
 				require.NoError(t, initCmd.Execute())
 
 				// Create test resources in the library
-				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -230,7 +231,7 @@ func TestListCommand_Contract(t *testing.T) {
 				require.NoError(t, initCmd.Execute())
 
 				// Create test resources in the library
-				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -318,7 +319,7 @@ repository:
   url: "https://github.com/test/repo"
 persona_bindings:
   test: "value"`
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir
@@ -337,7 +338,7 @@ persona_bindings:
 				workDir := t.TempDir()
 
 				config := `version: "1.0"`
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir

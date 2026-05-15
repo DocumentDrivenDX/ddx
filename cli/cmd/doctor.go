@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
@@ -287,9 +288,9 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 11: Sync failure marker — surfaces aborted 'ddx sync' runs.
 	fmt.Print("✓ Checking Sync Status... ")
-	syncFailurePath := filepath.Join(f.WorkingDir, ".ddx", "sync-failure.json")
+	syncFailurePath := ddxroot.JoinProject(f.WorkingDir, "sync-failure.json")
 	if ws := gitpkg.FindNearestDDxWorkspace(f.WorkingDir); ws != "" {
-		syncFailurePath = filepath.Join(ws, ".ddx", "sync-failure.json")
+		syncFailurePath = ddxroot.JoinProject(ws, "sync-failure.json")
 	}
 	if syncIssue := checkSyncFailure(syncFailurePath); syncIssue != nil {
 		fmt.Println("⚠️  Sync aborted")
@@ -584,7 +585,7 @@ func checkLegacyModelCatalogFile() *DiagnosticIssue {
 	if err != nil || homeDir == "" {
 		return nil
 	}
-	path := filepath.Join(homeDir, ".ddx", "model-catalog.yaml")
+	path := ddxroot.JoinHome(homeDir, "model-catalog.yaml")
 	if _, err := os.Stat(path); err != nil {
 		return nil
 	}

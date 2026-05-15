@@ -3,11 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -57,7 +57,7 @@ events in beads.jsonl. It does NOT read .ddx/executions/ directories.`,
 			projectFlag, _ := cmd.Flags().GetString("project")
 			projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
-			store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 			allBeads, err := store.ReadAll(context.Background())
 			if err != nil {
 				return fmt.Errorf("read beads: %w", err)

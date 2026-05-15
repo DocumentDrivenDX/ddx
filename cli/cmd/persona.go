@@ -11,6 +11,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -380,7 +381,7 @@ func personaList(workingDir string, roleFilter, tagFilter string) ([]PersonaInfo
 	}
 	projectDir := ""
 	if workingDir != "" {
-		projectDir = filepath.Join(workingDir, ".ddx", "personas")
+		projectDir = ddxroot.JoinProject(workingDir, "personas")
 	}
 
 	seen := map[string]bool{}
@@ -472,7 +473,7 @@ func personaShow(workingDir string, personaName string) (*PersonaInfo, error) {
 		candidates = append(candidates, struct {
 			path   string
 			source string
-		}{filepath.Join(workingDir, ".ddx", "personas", personaName+".md"), persona.SourceProject})
+		}{ddxroot.JoinProject(workingDir, "personas", personaName+".md"), persona.SourceProject})
 	}
 	if libPath, err := getPersonaLibraryPath(workingDir); err == nil {
 		candidates = append(candidates, struct {
@@ -510,7 +511,7 @@ func personaShow(workingDir string, personaName string) (*PersonaInfo, error) {
 func personaBind(workingDir string, role, personaName string) error {
 	projectPath := ""
 	if workingDir != "" {
-		projectPath = filepath.Join(workingDir, ".ddx", "personas", personaName+".md")
+		projectPath = ddxroot.JoinProject(workingDir, "personas", personaName+".md")
 	}
 	libPath, err := getPersonaLibraryPath(workingDir)
 	if err != nil {

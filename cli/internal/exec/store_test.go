@@ -12,10 +12,17 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newExecTestWorkingDir(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	return t.TempDir()
+}
 
 type mockAgentRunner struct {
 	result *agent.Result
@@ -41,7 +48,7 @@ func writeExecDefinition(t *testing.T, wd string, def Definition) {
 }
 
 func TestValidateRunHistoryAndBundle(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeExecDefinition(t, wd, Definition{
 		ID:          "exec-metric-startup-time@1",
@@ -76,10 +83,10 @@ func TestValidateRunHistoryAndBundle(t *testing.T) {
 	assert.Equal(t, "ms", rec.Result.Metric.Unit)
 	assert.Equal(t, "MET-001", rec.Result.Metric.ArtifactID)
 
-	manifestPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "manifest.json")
-	resultPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "result.json")
-	stdoutPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "stdout.log")
-	stderrPath := filepath.Join(wd, ".ddx", execRunAttachmentDir, rec.RunID, "stderr.log")
+	manifestPath := ddxroot.JoinProject(wd, execRunAttachmentDir, rec.RunID, "manifest.json")
+	resultPath := ddxroot.JoinProject(wd, execRunAttachmentDir, rec.RunID, "result.json")
+	stdoutPath := ddxroot.JoinProject(wd, execRunAttachmentDir, rec.RunID, "stdout.log")
+	stderrPath := ddxroot.JoinProject(wd, execRunAttachmentDir, rec.RunID, "stderr.log")
 	for _, path := range []string{manifestPath, resultPath, stdoutPath, stderrPath} {
 		_, err := os.Stat(path)
 		require.NoError(t, err)
@@ -102,7 +109,7 @@ func TestValidateRunHistoryAndBundle(t *testing.T) {
 }
 
 func TestConcurrentRunBundleWrites(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeExecDefinition(t, wd, Definition{
 		ID:          "exec-metric-startup-time@1",
@@ -139,7 +146,7 @@ func TestConcurrentRunBundleWrites(t *testing.T) {
 	assert.Len(t, history, writers)
 
 	manifestCount := 0
-	runRoot := filepath.Join(wd, ".ddx", execRunAttachmentDir)
+	runRoot := ddxroot.JoinProject(wd, execRunAttachmentDir)
 	err = filepath.WalkDir(runRoot, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -154,7 +161,7 @@ func TestConcurrentRunBundleWrites(t *testing.T) {
 }
 
 func TestRunBuildsDocGraphAtMostOnce(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeExecDefinition(t, wd, Definition{
 		ID:          "exec-metric-startup-time@1",
@@ -193,7 +200,7 @@ func writeAgentExecDefinition(t *testing.T, wd string, def Definition) {
 }
 
 func TestAgentExecutorDelegation(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeAgentExecDefinition(t, wd, Definition{
 		ID:          "exec-agent-task@1",
@@ -234,7 +241,7 @@ func TestAgentExecutorDelegation(t *testing.T) {
 }
 
 func TestAgentExecutorDelegationFailure(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeAgentExecDefinition(t, wd, Definition{
 		ID:          "exec-agent-task@1",
@@ -266,7 +273,7 @@ func TestAgentExecutorDelegationFailure(t *testing.T) {
 }
 
 func TestAgentExecutorDelegationTimeout(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeAgentExecDefinition(t, wd, Definition{
 		ID:          "exec-agent-task@1",
@@ -296,7 +303,7 @@ func TestAgentExecutorDelegationTimeout(t *testing.T) {
 }
 
 func TestAgentExecutorDelegationRunnerError(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeAgentExecDefinition(t, wd, Definition{
 		ID:          "exec-agent-task@1",
@@ -328,7 +335,7 @@ func TestAgentExecutorDelegationRunnerError(t *testing.T) {
 }
 
 func TestAgentExecutorNilRunner(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-001")
 	writeAgentExecDefinition(t, wd, Definition{
 		ID:          "exec-agent-task@1",
@@ -350,7 +357,7 @@ func TestAgentExecutorNilRunner(t *testing.T) {
 }
 
 func TestDefinitionRoundTrips(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	store := NewStore(wd)
 	def := Definition{
 		ID:          "exec-metric-startup-time@1",
@@ -372,8 +379,8 @@ func TestDefinitionRoundTrips(t *testing.T) {
 }
 
 func TestListDefinitionsFallsBackToLegacyExecDirectory(t *testing.T) {
-	wd := t.TempDir()
-	legacyDir := filepath.Join(wd, ".ddx", "exec", "definitions")
+	wd := newExecTestWorkingDir(t)
+	legacyDir := filepath.Join(wd, ddxroot.DirName, "exec", "definitions")
 	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
 	legacyDef := Definition{
 		ID:          "exec-metric-startup-time@legacy",
@@ -397,8 +404,8 @@ func TestListDefinitionsFallsBackToLegacyExecDirectory(t *testing.T) {
 }
 
 func TestHistoryFallsBackToLegacyExecBundle(t *testing.T) {
-	wd := t.TempDir()
-	legacyRunDir := filepath.Join(wd, ".ddx", "exec", "runs", "exec-metric-startup-time@legacy")
+	wd := newExecTestWorkingDir(t)
+	legacyRunDir := filepath.Join(wd, ddxroot.DirName, "exec", "runs", "exec-metric-startup-time@legacy")
 	require.NoError(t, os.MkdirAll(legacyRunDir, 0o755))
 	manifest := RunManifest{
 		RunID:        "exec-metric-startup-time@legacy",
@@ -460,7 +467,7 @@ func writeGraphExecDoc(t *testing.T, wd, id, artifactID, kind string, command []
 }
 
 func TestGraphAuthoredDefinitionPrecedence(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	// Write the artifact document
 	writeExecArtifact(t, wd, "MET-001")
 	// Write a graph-authored exec doc with a different command than the runtime-managed one
@@ -492,7 +499,7 @@ func TestGraphAuthoredDefinitionPrecedence(t *testing.T) {
 }
 
 func TestGraphAuthoredDefinitionFallbackToRuntime(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-002")
 	// No graph-authored exec doc; only runtime-managed
 	writeExecDefinition(t, wd, Definition{
@@ -514,7 +521,7 @@ func TestGraphAuthoredDefinitionFallbackToRuntime(t *testing.T) {
 }
 
 func TestRequiredFlagMergeBlockingOnFailure(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-003")
 	writeGraphExecDoc(t, wd, "required-exec", "MET-003", ExecutorKindCommand,
 		[]string{"sh", "-c", "exit 1"}, true, true)
@@ -527,7 +534,7 @@ func TestRequiredFlagMergeBlockingOnFailure(t *testing.T) {
 }
 
 func TestRequiredFlagNoMergeBlockingOnSuccess(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-004")
 	writeGraphExecDoc(t, wd, "required-pass-exec", "MET-004", ExecutorKindCommand,
 		[]string{"sh", "-c", "printf 'ok\\n'"}, true, true)
@@ -543,7 +550,7 @@ func TestSelfModifyingContractPrevention(t *testing.T) {
 	// Graph-authored definitions are read from git-tracked files before any agent run.
 	// Even if a runtime-managed definition with the same ID is saved later,
 	// the graph-authored one should still take precedence on subsequent loads.
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-005")
 	writeGraphExecDoc(t, wd, "self-mod-exec", "MET-005", ExecutorKindCommand,
 		[]string{"sh", "-c", "printf 'original\\n'"}, false, true)
@@ -572,7 +579,7 @@ func TestSelfModifyingContractPrevention(t *testing.T) {
 }
 
 func TestGraphAuthoredDefinitionInspection(t *testing.T) {
-	wd := t.TempDir()
+	wd := newExecTestWorkingDir(t)
 	writeExecArtifact(t, wd, "MET-006")
 	writeGraphExecDoc(t, wd, "inspect-exec", "MET-006", ExecutorKindCommand,
 		[]string{"sh", "-c", "printf '42ms\\n'"}, false, true)

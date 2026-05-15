@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,7 +31,7 @@ persona_bindings:
   author: "Test User"
   email: "test@example.com"
 `
-		ddxDir := filepath.Join(tempDir, ".ddx")
+		ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(ddxDir, 0755))
 		configPath := filepath.Join(ddxDir, "config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
@@ -68,7 +69,7 @@ persona_bindings:
 persona_bindings:
   author: "Old User"
 `
-		ddxDir := filepath.Join(tempDir, ".ddx")
+		ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(ddxDir, 0755))
 		configPath := filepath.Join(ddxDir, "config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
@@ -103,7 +104,7 @@ library:
 persona_bindings:
   author: "Specific User"
 `
-		ddxDir := filepath.Join(tempDir, ".ddx")
+		ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(ddxDir, 0755))
 		configPath := filepath.Join(ddxDir, "config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
@@ -131,7 +132,7 @@ persona_bindings:
 		t.Setenv("HOME", homeDir)
 
 		// Create global config
-		globalConfigDir := filepath.Join(homeDir, ".ddx")
+		globalConfigDir := filepath.Join(homeDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
 		globalConfig := `version: "1.0"
 library:
@@ -157,7 +158,7 @@ library:
 persona_bindings:
   author: "Project User"
 `
-		localDdxDir := filepath.Join(projectDir, ".ddx")
+		localDdxDir := filepath.Join(projectDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(localDdxDir, 0755))
 		localConfigPath := filepath.Join(localDdxDir, "config.yaml")
 		require.NoError(t, os.WriteFile(localConfigPath, []byte(localConfig), 0644))

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ func setupBeadHumanEnv(t *testing.T, beads ...*bead.Bead) (string, *CommandFacto
 	t.Helper()
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(workingDir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))

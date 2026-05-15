@@ -10,10 +10,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func newMetricTestWorkingDir(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	return t.TempDir()
+}
 
 func writeMetricArtifact(t *testing.T, wd, id string) {
 	t.Helper()
@@ -61,7 +68,7 @@ func writeMetricDefinition(t *testing.T, wd string, def Definition) {
 }
 
 func TestValidateRunAndHistory(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 	writeMetricArtifact(t, wd, "MET-001")
 	writeMetricDefinition(t, wd, Definition{
 		DefinitionID: "metric-startup-time@1",
@@ -93,7 +100,7 @@ func TestValidateRunAndHistory(t *testing.T) {
 }
 
 func TestDefinitionAndHistoryPreferMetricArtifactID(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 	writeMetricArtifact(t, wd, "MET-001")
 	writeArtifact(t, wd, "misc", "DOC-001")
 	writeMetricDefinition(t, wd, Definition{
@@ -124,7 +131,7 @@ func TestDefinitionAndHistoryPreferMetricArtifactID(t *testing.T) {
 }
 
 func TestCompareAndTrend(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 	writeMetricArtifact(t, wd, "MET-001")
 	writeMetricDefinition(t, wd, Definition{
 		DefinitionID: "metric-startup-time@1",
@@ -166,7 +173,7 @@ func TestCompareAndTrend(t *testing.T) {
 }
 
 func TestCompareAndTrendRejectMixedUnitsAndGroupHistoryByUnit(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 	writeMetricArtifact(t, wd, "MET-001")
 	writeMetricDefinition(t, wd, Definition{
 		DefinitionID: "metric-startup-time@1",
@@ -212,7 +219,7 @@ func TestCompareAndTrendRejectMixedUnitsAndGroupHistoryByUnit(t *testing.T) {
 }
 
 func TestConcurrentHistoryWrites(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 	writeMetricArtifact(t, wd, "MET-001")
 	writeMetricDefinition(t, wd, Definition{
 		DefinitionID: "metric-startup-time@1",
@@ -242,7 +249,7 @@ func TestConcurrentHistoryWrites(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	raw, err := os.ReadFile(filepath.Join(wd, ".ddx", "exec-runs.jsonl"))
+	raw, err := os.ReadFile(ddxroot.JoinProject(wd, "exec-runs.jsonl"))
 	require.NoError(t, err)
 	lines := 0
 	for _, b := range raw {
@@ -268,10 +275,10 @@ func mustTime(t *testing.T, value string) time.Time {
 // left over from a pre-release build does not cause DDx to crash. The current
 // metric store delegates to the exec substrate and never reads .ddx/metrics/.
 func TestLegacyMetricsDirIgnored(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 
 	// Simulate old-format .ddx/metrics/ data written by the pre-exec metric store.
-	metricsDir := filepath.Join(wd, ".ddx", "metrics")
+	metricsDir := filepath.Join(wd, ddxroot.DirName, "metrics")
 	defsDir := filepath.Join(metricsDir, "definitions")
 	require.NoError(t, os.MkdirAll(defsDir, 0o755))
 
@@ -291,7 +298,7 @@ func TestLegacyMetricsDirIgnored(t *testing.T) {
 }
 
 func TestSaveDefinitionRoundTrips(t *testing.T) {
-	wd := t.TempDir()
+	wd := newMetricTestWorkingDir(t)
 	store := ddxexec.NewStore(wd)
 	def := Definition{
 		DefinitionID: "metric-startup-time@1",

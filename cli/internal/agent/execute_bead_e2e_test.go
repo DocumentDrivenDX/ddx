@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // gateTestGitOps is a minimal GitOps mock for execute-bead gate enforcement tests.
@@ -108,7 +109,7 @@ func (r *gateTestResultRunner) Run(opts RunArgs) (*Result, error) {
 func setupGateTestProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +122,7 @@ func setupGateTestWorktree(t *testing.T, wtPath, beadID, specID string, withGate
 	t.Helper()
 
 	// Bead store in the worktree
-	ddxDir := filepath.Join(wtPath, ".ddx")
+	ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +324,7 @@ func (r *rationaleTestRunner) Run(opts RunArgs) (*Result, error) {
 	if attemptID == "" {
 		return &Result{ExitCode: 0}, nil
 	}
-	dir := filepath.Join(opts.WorkDir, ".ddx", "executions", attemptID)
+	dir := filepath.Join(opts.WorkDir, ddxroot.DirName, "executions", attemptID)
 	_ = os.MkdirAll(dir, 0o755)
 	_ = os.WriteFile(filepath.Join(dir, "no_changes_rationale.txt"), []byte(r.rationale), 0o644)
 	return &Result{ExitCode: 0}, nil
@@ -347,7 +348,7 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 		resultRev:   fixedRev,
 		wtSetupFn: func(wtPath string) {
 			// Populate a minimal bead store so prepareArtifacts succeeds.
-			ddxDir := filepath.Join(wtPath, ".ddx")
+			ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -393,7 +394,7 @@ func TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence(t 
 		baseRev:     baseRev,
 		resultRev:   resultRev,
 		wtSetupFn: func(wtPath string) {
-			ddxDir := filepath.Join(wtPath, ".ddx")
+			ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -465,7 +466,7 @@ func TestExecuteBead_NoEvidenceProducedWhenRationaleAbsent(t *testing.T) {
 		baseRev:     fixedRev,
 		resultRev:   fixedRev,
 		wtSetupFn: func(wtPath string) {
-			ddxDir := filepath.Join(wtPath, ".ddx")
+			ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 				t.Fatal(err)
 			}
@@ -513,7 +514,7 @@ func TestExecuteBead_ServiceErrorWithZeroExitIsExecutionFailed(t *testing.T) {
 		baseRev:     fixedRev,
 		resultRev:   fixedRev,
 		wtSetupFn: func(wtPath string) {
-			ddxDir := filepath.Join(wtPath, ".ddx")
+			ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 				t.Fatal(err)
 			}

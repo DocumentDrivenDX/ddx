@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +17,7 @@ func TestBeadMetrics(t *testing.T) {
 	t.Setenv("DDX_BEAD_DIR", "")
 
 	dir := t.TempDir()
-	execRoot := filepath.Join(dir, ".ddx", "executions")
+	execRoot := filepath.Join(dir, ddxroot.DirName, "executions")
 
 	// ddx-1: 2 attempts (one succeeded, one failed). Total tokens 3000, cost 1.50.
 	writeExecResult(t, execRoot, "20260401T100000-aaaa0001", map[string]any{
@@ -69,7 +70,7 @@ func TestBeadMetrics(t *testing.T) {
 	// Use bead create + update to set custom IDs is not supported, so write beads.jsonl directly.
 
 	// Direct seed of beads.jsonl with the IDs used above.
-	beadsPath := filepath.Join(dir, ".ddx", "beads.jsonl")
+	beadsPath := filepath.Join(dir, ddxroot.DirName, "beads.jsonl")
 	require.NoError(t, os.WriteFile(beadsPath, []byte(
 		`{"id":"ddx-1","title":"First bead","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-01T00:00:00Z","updated_at":"2026-04-01T00:00:00Z"}`+"\n"+
 			`{"id":"ddx-2","title":"Second bead","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-01T00:00:00Z","updated_at":"2026-04-01T00:00:00Z"}`+"\n"),
@@ -126,7 +127,7 @@ func TestBeadMetricsShowJSONIncludesMetrics(t *testing.T) {
 	t.Setenv("DDX_BEAD_DIR", "")
 
 	dir := t.TempDir()
-	execRoot := filepath.Join(dir, ".ddx", "executions")
+	execRoot := filepath.Join(dir, ddxroot.DirName, "executions")
 
 	writeExecResult(t, execRoot, "20260401T100000-aaaa0001", map[string]any{
 		"bead_id":     "ddx-1",
@@ -145,7 +146,7 @@ func TestBeadMetricsShowJSONIncludesMetrics(t *testing.T) {
 		"cost_usd":    1.0,
 	})
 
-	beadsPath := filepath.Join(dir, ".ddx", "beads.jsonl")
+	beadsPath := filepath.Join(dir, ddxroot.DirName, "beads.jsonl")
 	require.NoError(t, os.MkdirAll(filepath.Dir(beadsPath), 0o755))
 	require.NoError(t, os.WriteFile(beadsPath, []byte(
 		`{"id":"ddx-1","title":"First bead","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-01T00:00:00Z","updated_at":"2026-04-01T00:00:00Z"}`+"\n"),

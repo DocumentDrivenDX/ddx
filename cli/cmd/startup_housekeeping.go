@@ -12,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
@@ -219,7 +220,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 }
 
 func (r *startupHousekeepingRunner) scanWorkerDirs(ctx context.Context, now time.Time, apply bool, report *startupHousekeepingReport) error {
-	root := filepath.Join(r.projectRoot, ".ddx", "workers")
+	root := ddxroot.JoinProject(r.projectRoot, "workers")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -278,7 +279,7 @@ func (r *startupHousekeepingRunner) scanExecutionDirs(ctx context.Context, now t
 		return nil
 	}
 
-	root := filepath.Join(r.projectRoot, ".ddx", "executions")
+	root := ddxroot.JoinProject(r.projectRoot, "executions")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -378,7 +379,7 @@ func resolveExecutionRetentionPolicy(projectRoot string) executionRetentionPolic
 		}
 	}
 
-	cfgPath := filepath.Join(projectRoot, ".ddx", "config.yaml")
+	cfgPath := ddxroot.JoinProject(projectRoot, "config.yaml")
 	cfg, err := config.LoadFromFile(cfgPath)
 	if err != nil || cfg == nil || cfg.Executions == nil {
 		return executionRetentionPolicy{days: 90, mode: executionRetentionArchive}
