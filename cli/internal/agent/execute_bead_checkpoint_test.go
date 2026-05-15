@@ -272,6 +272,31 @@ func TestPreDispatchCheckpointRejectsImplementationDirtyPaths(t *testing.T) {
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
 }
 
+func TestPreservePreDispatchDirtyPathsCreatesRecoverableRef(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+
+	implRel := filepath.Join("cli", "internal", "agent", "dirty_impl.go")
+	implPath := filepath.Join(projectRoot, implRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(implPath), 0o755))
+	require.NoError(t, os.WriteFile(implPath, []byte("package agent\n"), 0o644))
+
+	preserved, err := preservePreDispatchDirtyPaths(projectRoot, []string{filepath.ToSlash(implRel)})
+	require.NoError(t, err)
+	require.NotNil(t, preserved)
+	assert.Equal(t, []string{filepath.ToSlash(implRel)}, preserved.DirtyPaths)
+	assert.Contains(t, preserved.PreserveRef, preDispatchDirtyPreserveRefPrefix)
+	assert.Equal(t, "git stash apply "+preserved.PreserveRef, preserved.RecoverCommand)
+	assert.NotEmpty(t, runGitInteg(t, projectRoot, "rev-parse", preserved.PreserveRef))
+	assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(implRel)))
+
+	_, showErr := runGitIntegOutput(projectRoot, "show", "HEAD:"+filepath.ToSlash(implRel))
+	require.Error(t, showErr, "the preserved file must be restored to HEAD before redispatch")
+
+	out, applyErr := runGitIntegOutput(projectRoot, "stash", "apply", preserved.PreserveRef)
+	require.NoError(t, applyErr, out)
+	assert.Contains(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(implRel)), "?? "+filepath.ToSlash(implRel))
+}
+
 func TestCheckpointPreDispatchDirtIgnoresGitIgnoredGeneratedPaths(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260513T000003-ignore000"

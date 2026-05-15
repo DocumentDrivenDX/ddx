@@ -553,6 +553,129 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 // error so those changes can be committed in the bead's substantive
 // [ddx-<id>] commit instead of being folded into the checkpoint.
 const preDispatchCheckpointDirtyRefusalPrefix = "checkpoint refused to absorb implementation changes outside DDx bookkeeping: "
+const preDispatchDirtyPreserveRefPrefix = "refs/ddx/pre-dispatch/"
+
+// PreDispatchDirtyPreservation records the recoverable handle DDx created when
+// it preserved implementation dirt before a watch-mode redispatch.
+type PreDispatchDirtyPreservation struct {
+	DirtyPaths     []string
+	PreserveRef    string
+	RecoverCommand string
+}
+
+func normalizePreDispatchDirtyPaths(paths []string) []string {
+	seen := make(map[string]bool, len(paths))
+	normalized := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		normalized = append(normalized, path)
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func intersectPreDispatchDirtyPaths(current, want []string) []string {
+	if len(current) == 0 || len(want) == 0 {
+		return nil
+	}
+	wantSet := make(map[string]bool, len(want))
+	for _, path := range want {
+		wantSet[path] = true
+	}
+	var overlap []string
+	for _, path := range current {
+		if wantSet[path] {
+			overlap = append(overlap, path)
+		}
+	}
+	sort.Strings(overlap)
+	return overlap
+}
+
+func resolveOptionalGitRef(dir, ref string) (string, bool) {
+	out, err := internalgit.Command(context.Background(), dir, "rev-parse", "-q", "--verify", ref).Output()
+	if err != nil {
+		return "", false
+	}
+	sha := strings.TrimSpace(string(out))
+	if sha == "" {
+		return "", false
+	}
+	return sha, true
+}
+
+func preDispatchDirtyRecoverCommand(preserveRef string) string {
+	if preserveRef == "" {
+		return ""
+	}
+	return "git stash apply " + preserveRef
+}
+
+func preservePreDispatchDirtyPaths(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error) {
+	if projectRoot == "" {
+		return nil, fmt.Errorf("project root is required for pre-dispatch dirty preservation")
+	}
+	normalized := normalizePreDispatchDirtyPaths(dirtyPaths)
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("no dirty implementation paths to preserve")
+	}
+
+	var preserved *PreDispatchDirtyPreservation
+	if err := withTrackerLock(projectRoot, func() error {
+		var err error
+		preserved, err = preservePreDispatchDirtyPathsLocked(projectRoot, normalized)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return preserved, nil
+}
+
+func preservePreDispatchDirtyPathsLocked(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error) {
+	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return nil, fmt.Errorf("verifying project worktree for pre-dispatch preservation: %w", err)
+	}
+	if out, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("resolving HEAD for pre-dispatch preservation: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	stashBefore, _ := resolveOptionalGitRef(projectRoot, "refs/stash")
+	preserveID := GenerateAttemptID()
+	preserveRef := preDispatchDirtyPreserveRefPrefix + preserveID
+	stashMsg := "ddx pre-dispatch preserve " + preserveID
+	stashArgs := []string{"stash", "push", "--include-untracked", "--message", stashMsg, "--"}
+	stashArgs = append(stashArgs, dirtyPaths...)
+	if out, err := internalgit.Command(context.Background(), projectRoot, stashArgs...).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("preserving pre-dispatch dirty implementation paths: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	stashAfter, ok := resolveOptionalGitRef(projectRoot, "refs/stash")
+	if !ok || stashAfter == "" || stashAfter == stashBefore {
+		return nil, fmt.Errorf("preserving pre-dispatch dirty implementation paths did not create a recoverable stash entry")
+	}
+	if out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", preserveRef, stashAfter).CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("pinning pre-dispatch dirty preservation ref: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	_, _ = internalgit.Command(context.Background(), projectRoot, "stash", "drop", "stash@{0}").CombinedOutput()
+
+	remainingPaths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	if err != nil {
+		return nil, fmt.Errorf("verifying preserved pre-dispatch dirt: %w", err)
+	}
+	if overlap := intersectPreDispatchDirtyPaths(remainingPaths, dirtyPaths); len(overlap) > 0 {
+		return nil, fmt.Errorf("preserving pre-dispatch dirty implementation paths left the project worktree dirty: %s", strings.Join(overlap, ", "))
+	}
+
+	return &PreDispatchDirtyPreservation{
+		DirtyPaths:     append([]string(nil), dirtyPaths...),
+		PreserveRef:    preserveRef,
+		RecoverCommand: preDispatchDirtyRecoverCommand(preserveRef),
+	}, nil
+}
 
 func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {

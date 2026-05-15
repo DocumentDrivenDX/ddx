@@ -676,6 +676,10 @@ type ExecuteBeadWorker struct {
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
 	// in tests to inject controlled recovery results without a real git repo.
 	conflictAutoRecoverFn func(wd, preserveRef string, gitOps LandingGitOps) (string, error)
+	// preDispatchDirtyPreserver replaces the watch-mode preserve-and-clean path
+	// in tests so checkpoint dirt fallback behavior can be exercised without a
+	// real git repo.
+	preDispatchDirtyPreserver func(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error)
 
 	// transientCandidateSkips is an in-memory per-Run filter for queue entries
 	// that were returned from an older snapshot but rejected by a fresh
@@ -1890,6 +1894,34 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
 			if detail == "" && err != nil {
 				detail = strings.TrimSpace(err.Error())
+			}
+			if loopMode == executeloop.ModeWatch && runtime.ProjectRoot != "" {
+				preserveDirty := w.preDispatchDirtyPreserver
+				if preserveDirty == nil {
+					preserveDirty = preservePreDispatchDirtyPaths
+				}
+				if preserved, preserveErr := preserveDirty(runtime.ProjectRoot, checkpointDirty.DirtyPaths); preserveErr == nil && preserved != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log,
+							"preserved pre-dispatch implementation changes in %s under %s; released %s and continuing watch. dirty paths: %s. recover with %s\n",
+							runtime.ProjectRoot,
+							preserved.PreserveRef,
+							candidate.ID,
+							strings.Join(preserved.DirtyPaths, ", "),
+							preserved.RecoverCommand,
+						)
+					}
+					emit("loop.pre_dispatch_dirty_preserved", map[string]any{
+						"reason":          checkpointDirty.Reason,
+						"bead_id":         candidate.ID,
+						"project_root":    runtime.ProjectRoot,
+						"dirty_paths":     preserved.DirtyPaths,
+						"preserve_ref":    preserved.PreserveRef,
+						"recover_command": preserved.RecoverCommand,
+						"detail":          detail,
+					})
+					continue
+				}
 			}
 			result.OperatorAttention = checkpointDirty
 			setExit("OperatorAttention", "operator_attention")

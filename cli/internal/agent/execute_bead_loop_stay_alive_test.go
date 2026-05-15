@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -156,6 +159,112 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(out, "systemic; leaving beads untouched"))
 }
 
+func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	first := &bead.Bead{ID: "ddx-preserve-0001", Title: "Preserve dirty root", IssueType: "task"}
+	require.NoError(t, store.Create(first))
+
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	dirtyRel := filepath.Join("cli", "internal", "agent", "dirty_impl.go")
+	dirtyPath := filepath.Join(projectRoot, dirtyRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(dirtyPath), 0o755))
+	dirtyContent := "package agent\n"
+	require.NoError(t, os.WriteFile(dirtyPath, []byte(dirtyContent), 0o644))
+
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			call := atomic.AddInt32(&execCalls, 1)
+			if call == 1 {
+				return ExecuteBeadReport{}, fmt.Errorf(
+					"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
+					preExecuteCheckpointDirtyMarker,
+					filepath.ToSlash(dirtyRel),
+				)
+			}
+			require.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(dirtyRel)),
+				"preserved dirty path must be restored to HEAD before the next dispatch")
+			_, showErr := runGitIntegOutput(projectRoot, "show", "HEAD:"+filepath.ToSlash(dirtyRel))
+			require.Error(t, showErr, "the dirty implementation file must not be folded into HEAD")
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "merged cleanly",
+				SessionID: "sess-preserved",
+				ResultRev: "c0ffee",
+			}, nil
+		}),
+	}
+
+	var logBuf, eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		Log:          &logBuf,
+		WakeCh:       make(chan struct{}),
+		EventSink:    &eventSink,
+		ProjectRoot:  projectRoot,
+		SessionID:    "sess-preserve-watch",
+		WorkerID:     "worker-preserve-watch",
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, result)
+	assert.Nil(t, result.OperatorAttention)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&execCalls), "watch mode must redispatch after preserving root dirt")
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, gotFirst.Status)
+
+	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
+	var preserved map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["type"] != "loop.pre_dispatch_dirty_preserved" {
+			continue
+		}
+		data, ok := entry["data"].(map[string]any)
+		require.True(t, ok, "loop.pre_dispatch_dirty_preserved must include data")
+		preserved = data
+		break
+	}
+	require.NotNil(t, preserved, "watch mode must emit a preservation event instead of operator attention")
+	assert.Equal(t, first.ID, preserved["bead_id"])
+	assert.Equal(t, projectRoot, preserved["project_root"])
+	require.Len(t, preserved["dirty_paths"], 1)
+	assert.Contains(t, preserved["dirty_paths"], filepath.ToSlash(dirtyRel))
+	preserveRef, ok := preserved["preserve_ref"].(string)
+	require.True(t, ok)
+	require.NotEmpty(t, preserveRef)
+	recoverCommand, ok := preserved["recover_command"].(string)
+	require.True(t, ok)
+	assert.Equal(t, "git stash apply "+preserveRef, recoverCommand)
+	assert.NotEmpty(t, runGitInteg(t, projectRoot, "rev-parse", preserveRef))
+
+	out := logBuf.String()
+	assert.Contains(t, out, preserveRef)
+	assert.Contains(t, out, filepath.ToSlash(dirtyRel))
+	assert.Contains(t, out, recoverCommand)
+	assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(dirtyRel)))
+
+	applyOut, applyErr := runGitIntegOutput(projectRoot, "stash", "apply", preserveRef)
+	require.NoError(t, applyErr, applyOut)
+	assert.Contains(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(dirtyRel)), "?? "+filepath.ToSlash(dirtyRel))
+}
+
 func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
 	inner, first, second := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
@@ -242,6 +351,56 @@ func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
 	assert.Equal(t, "checkpoint_dirty", operatorAttention["reason"])
 	assert.Contains(t, operatorAttention["message"], "commit or clean")
 	require.Len(t, operatorAttention["dirty_paths"], len(dirtyPaths))
+}
+
+func TestLoop_WatchCheckpointDirtyPreserveFailureFallsBackToOperatorAttention(t *testing.T) {
+	inner, first, second := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	dirtyPaths := []string{"cli/internal/agent/dirty_impl.go"}
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{}, fmt.Errorf(
+				"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
+				preExecuteCheckpointDirtyMarker,
+				strings.Join(dirtyPaths, ", "),
+			)
+		}),
+		preDispatchDirtyPreserver: func(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error) {
+			return nil, errors.New("stash failed")
+		},
+	}
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:        executeloop.ModeWatch,
+		Log:         &logBuf,
+		ProjectRoot: "/repo/watch",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "checkpoint_dirty", result.OperatorAttention.Reason)
+	assert.Equal(t, first.ID, result.OperatorAttention.BeadID)
+	assert.Equal(t, "/repo/watch", result.OperatorAttention.ProjectRoot)
+	assert.Equal(t, dirtyPaths, result.OperatorAttention.DirtyPaths)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "checkpoint dirt fallback must still stop before a second claim")
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Empty(t, gotFirst.Owner)
+	assert.Empty(t, gotSecond.Owner)
+	assert.Contains(t, logBuf.String(), "commit or clean")
 }
 
 func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
