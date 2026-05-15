@@ -1,2 +1,1 @@
 {"actor":"erik","body":"{\"detail\":\"description drops commitment \\\"non_scope:Do not rewrite the already-landed `ddx-ef9e8aec` history.\\\"\",\"intake_outcome\":\"operator_required\"}","created_at":"2026-05-12T08:13:13.853806475Z","kind":"intake.blocked","source":"ddx agent work","summary":"operator_required"}
-{"actor":"erik","body":"Restored the missing non-scope contract line; retrying with unchanged acceptance.","created_at":"2026-05-12T12:22:44.817724589Z","kind":"needs_human_resolved","source":"ddx bead human resolve","summary":"action=retry"}

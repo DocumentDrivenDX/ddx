@@ -1,1 +1,1 @@
-{"actor":"erik","body":"{\"detail\":\"acceptance criteria dropped or altered\",\"intake_outcome\":\"ambiguous_needs_human\"}","created_at":"2026-05-08T19:08:30.816511102Z","kind":"intake.blocked","source":"ddx agent work","summary":"ambiguous_needs_human"}
+{"actor":"ddx","body":"from_status=closed\nto_status=closed\nremoved_labels=needs_human","created_at":"2026-05-09T13:09:06.1826767Z","kind":"lifecycle_migrated","source":"ddx bead migrate --lifecycle","summary":"terminal bead legacy lifecycle metadata archived as explanatory history"}
