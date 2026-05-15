@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // artifactTestGitOps is a GitOps mock for artifact-focused tests. It lets
@@ -64,7 +65,7 @@ func (r *artifactTestAgentRunner) Run(opts RunArgs) (*Result, error) {
 func setupArtifactTestProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -74,7 +75,7 @@ func setupArtifactTestProjectRoot(t *testing.T) string {
 // bead. Optionally includes a governing spec and a required gate.
 func setupArtifactTestWorktree(t *testing.T, wtPath, beadID, specID string, withGate bool, gateExit int) {
 	t.Helper()
-	ddxDir := filepath.Join(wtPath, ".ddx")
+	ddxDir := filepath.Join(wtPath, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +160,7 @@ func TestExecuteBead_ArtifactsCreated(t *testing.T) {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID)
 	for _, name := range []string{"prompt.md", "manifest.json", "result.json"} {
 		p := filepath.Join(bundleDir, name)
 		if _, err := os.Stat(p); err != nil {
@@ -169,7 +170,7 @@ func TestExecuteBead_ArtifactsCreated(t *testing.T) {
 }
 
 func TestWriteArtifactJSONCreatesParentDirectory(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".ddx", "executions", "attempt-1", "result.json")
+	path := filepath.Join(t.TempDir(), ddxroot.DirName, "executions", "attempt-1", "result.json")
 	if err := writeArtifactJSON(path, map[string]string{"status": "execution_failed"}); err != nil {
 		t.Fatalf("writeArtifactJSON: %v", err)
 	}
@@ -202,7 +203,7 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
 
-	manifestPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "manifest.json")
+	manifestPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "manifest.json")
 	raw, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("reading manifest.json: %v", err)
@@ -296,7 +297,7 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 	}
 	// The recorded prompt_sha must match the on-disk prompt.md so analytics
 	// grouping by prompt_sha addresses the exact bytes the agent saw.
-	promptPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "prompt.md")
+	promptPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "prompt.md")
 	// evidence:allow-unbounded reason="test reads our own freshly-written prompt artifact to verify manifest.prompt_sha matches the bytes on disk; size is bounded by buildPrompt"
 	promptBytes, err := os.ReadFile(promptPath)
 	if err != nil {
@@ -328,7 +329,7 @@ func TestExecuteBead_ResultShape(t *testing.T) {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
 
-	resultPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "result.json")
+	resultPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "result.json")
 	raw, err := os.ReadFile(resultPath)
 	if err != nil {
 		t.Fatalf("reading result.json: %v", err)
@@ -421,7 +422,7 @@ func TestExecuteBead_ReportIncludesRouteEconomics(t *testing.T) {
 		t.Fatalf("ExecuteBead: %v", err)
 	}
 
-	resultPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "result.json")
+	resultPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "result.json")
 	raw, err := os.ReadFile(resultPath)
 	if err != nil {
 		t.Fatalf("reading result.json: %v", err)
@@ -575,7 +576,7 @@ func TestExecuteBead_NoChecksArtifactWhenNoGates(t *testing.T) {
 	if res.ChecksFile != "" {
 		t.Errorf("checks_file must be empty when no gates ran, got %q", res.ChecksFile)
 	}
-	checksPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "checks.json")
+	checksPath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "checks.json")
 	if _, err := os.Stat(checksPath); err == nil {
 		t.Error("checks.json must not be created when no gates ran")
 	}
@@ -618,7 +619,7 @@ func TestExecuteBead_UsageArtifact(t *testing.T) {
 		t.Fatal("ExecuteBeadResult.usage_file must be set when harness reports usage")
 	}
 
-	usagePath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "usage.json")
+	usagePath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "usage.json")
 	raw, err := os.ReadFile(usagePath)
 	if err != nil {
 		t.Fatalf("reading usage.json: %v", err)
@@ -683,7 +684,7 @@ func TestExecuteBead_NoUsageArtifactWhenNoTokens(t *testing.T) {
 	if res.UsageFile != "" {
 		t.Errorf("usage_file must be empty when no usage reported, got %q", res.UsageFile)
 	}
-	usagePath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "usage.json")
+	usagePath := filepath.Join(projectRoot, ddxroot.DirName, "executions", res.AttemptID, "usage.json")
 	if _, err := os.Stat(usagePath); err == nil {
 		t.Error("usage.json must not be created when tokens=0 and cost=0")
 	}

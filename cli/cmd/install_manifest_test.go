@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -65,11 +66,11 @@ install:
 	assert.Contains(t, err.Error(), "missing SKILL.md")
 	assert.False(t, strings.Contains(output, "Installed sample-plugin"), "install should stop before writing state")
 
-	pluginDir := filepath.Join(workDir, ".ddx", "plugins", "sample-plugin")
+	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Stat(pluginDir)
 	assert.True(t, os.IsNotExist(statErr), "plugin root should not be created on validation failure")
 
-	installedState := filepath.Join(homeDir, ".ddx", "installed.yaml")
+	installedState := filepath.Join(homeDir, ddxroot.DirName, "installed.yaml")
 	_, statErr = os.Stat(installedState)
 	assert.True(t, os.IsNotExist(statErr), "installed.yaml should not be written on validation failure")
 }
@@ -102,7 +103,7 @@ install:
 	assert.Contains(t, err.Error(), "FEAT-015")
 	assert.Contains(t, err.Error(), "project-relative")
 
-	globalPluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	globalPluginDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Lstat(globalPluginDir)
 	assert.True(t, os.IsNotExist(statErr), "no plugin tree should be written under $HOME on rejection")
 }
@@ -115,7 +116,7 @@ func TestInstallLocalPreservesExistingProjectPluginDirUnlessForced(t *testing.T)
 	localPlugin := t.TempDir()
 
 	t.Cleanup(func() {
-		_ = os.RemoveAll(filepath.Join(workDir, ".ddx"))
+		_ = os.RemoveAll(filepath.Join(workDir, ddxroot.DirName))
 		_ = os.RemoveAll(filepath.Join(workDir, ".agents"))
 		_ = os.RemoveAll(filepath.Join(workDir, ".claude"))
 	})
@@ -142,7 +143,7 @@ description: Sample skill
 Sample skill body.
 `), 0o644))
 
-	projectPluginDir := filepath.Join(workDir, ".ddx", "plugins", "sample-plugin")
+	projectPluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin")
 	require.NoError(t, os.MkdirAll(projectPluginDir, 0o755))
 	sentinel := filepath.Join(projectPluginDir, "sentinel.txt")
 	require.NoError(t, os.WriteFile(sentinel, []byte("keep me"), 0o644))
@@ -152,7 +153,7 @@ Sample skill body.
 	require.Error(t, err, output)
 	assert.Contains(t, err.Error(), "already exists")
 
-	homePluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	homePluginDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Lstat(homePluginDir)
 	assert.True(t, os.IsNotExist(statErr), "no plugin tree should ever be created under $HOME (FEAT-015)")
 
@@ -192,7 +193,7 @@ func TestPluginInstallLocalDoesNotRewriteInstalledState(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	statePath := filepath.Join(homeDir, ".ddx", "installed.yaml")
+	statePath := filepath.Join(homeDir, ddxroot.DirName, "installed.yaml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(statePath), 0o755))
 	beforeState := `installed:
   - name: helix
@@ -239,8 +240,8 @@ Local skill body.
 	require.NoError(t, err)
 	assert.Equal(t, beforeState, string(afterState), "local installs must not rewrite the recorded plugin pin")
 
-	assert.FileExists(t, filepath.Join(workDir, ".ddx", "plugins", "helix", "package.yaml"))
-	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "helix"), localPlugin)
+	assert.FileExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "helix", "package.yaml"))
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "helix"), localPlugin)
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix-build"), filepath.Join(localPlugin, ".agents", "skills", "helix-build"))
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "helix-build"), filepath.Join(localPlugin, ".agents", "skills", "helix-build"))
 }
@@ -268,9 +269,9 @@ description: Local HELIX skill
 
 Local HELIX skill body.
 `), 0o644))
-	staleOverlay := filepath.Join(localPlugin, ".ddx", "plugins", "helix")
+	staleOverlay := filepath.Join(localPlugin, ddxroot.DirName, "plugins", "helix")
 	require.NoError(t, os.MkdirAll(filepath.Dir(staleOverlay), 0o755))
-	if err := os.Symlink(filepath.Join(t.TempDir(), ".ddx", "plugins", "helix"), staleOverlay); err != nil {
+	if err := os.Symlink(filepath.Join(t.TempDir(), ddxroot.DirName, "plugins", "helix"), staleOverlay); err != nil {
 		t.Skipf("symlink creation unsupported: %v", err)
 	}
 
@@ -278,7 +279,7 @@ Local HELIX skill body.
 	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "helix", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
-	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "helix"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "helix"), localPlugin)
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix"), filepath.Join(localPlugin, ".agents", "skills", "helix"))
 	assert.NoFileExists(t, filepath.Join(homeDir, ".local", "bin", "helix"))
 	assert.NotContains(t, output, "helix script")
@@ -318,7 +319,7 @@ Custom skill body.
 	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "sample-plugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
-	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "sample-plugin"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin"), localPlugin)
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "custom-skill"), filepath.Join(localPlugin, "agent-components", "custom-skill"))
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "custom-skill"), filepath.Join(localPlugin, "agent-components", "custom-skill"))
 	assert.NoDirExists(t, filepath.Join(workDir, ".agents", "skills", "sample-plugin"))
@@ -367,7 +368,7 @@ Body.
 	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "ddx", "--local", "library", "--force")
 	require.NoError(t, err, output)
 
-	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "ddx"), libraryRoot)
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"), libraryRoot)
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "ddx"), skillDir)
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "ddx"), skillDir)
 }
@@ -462,8 +463,8 @@ Local skill body.
 	require.NoError(t, err, output)
 	assert.Contains(t, output, "recorded plugin pin unchanged")
 
-	assert.FileExists(t, filepath.Join(workDir, ".ddx", "plugins", "helix", "skills", "helix-input", "SKILL.md"))
-	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "helix"), localPlugin)
+	assert.FileExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "helix", "skills", "helix-input", "SKILL.md"))
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "helix"), localPlugin)
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix-input"), filepath.Join(localPlugin, "skills", "helix-input"))
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "helix-input"), filepath.Join(localPlugin, "skills", "helix-input"))
 }
@@ -508,7 +509,7 @@ install:
 	require.Error(t, installErr)
 	assert.Contains(t, installErr.Error(), "missing SKILL.md")
 
-	pluginDir := filepath.Join(workDir, ".ddx", "plugins", "sample-plugin")
+	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Stat(pluginDir)
 	assert.True(t, os.IsNotExist(statErr), "plugin root should not be created on validation failure")
 }
@@ -708,12 +709,12 @@ Sample body.
 	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.NoError(t, err, output)
 
-	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "sample-plugin"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin"), localPlugin)
 	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "sample-skill"), filepath.Join(localPlugin, ".agents", "skills", "sample-skill"))
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "sample-skill"), filepath.Join(localPlugin, ".agents", "skills", "sample-skill"))
 
 	// And no plugin tree leaked into $HOME.
-	homePluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	homePluginDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Stat(homePluginDir)
 	assert.True(t, os.IsNotExist(statErr), "FEAT-015: nothing must land under $HOME/.ddx/plugins/")
 }

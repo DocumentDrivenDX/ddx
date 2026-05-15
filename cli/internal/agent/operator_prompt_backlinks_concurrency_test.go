@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // AC: "two operator prompts mutating same bead exercises land-coordinator
@@ -19,7 +20,7 @@ import (
 // origin's audit trail may be lost or interleaved into a malformed entry.
 func TestRecordOperatorPromptBacklinks_ConcurrentTargetSameBead(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

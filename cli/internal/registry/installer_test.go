@@ -14,6 +14,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -214,7 +215,7 @@ func TestInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
 	require.NoError(t, err)
 
 	// Root mapping: package.yaml from the embedded FS lands under .ddx/plugins/<name>/.
-	rootManifest := filepath.Join(projectRoot, ".ddx", "plugins", "sample-plugin", "package.yaml")
+	rootManifest := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "sample-plugin", "package.yaml")
 	_, statErr := os.Stat(rootManifest)
 	require.NoError(t, statErr, "package.yaml should be installed via root mapping")
 
@@ -253,7 +254,7 @@ func TestInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, rel := range []string{
-		filepath.Join(".ddx", "plugins", "ddx", "package.yaml"),
+		filepath.Join(ddxroot.DirName, "plugins", "ddx", "package.yaml"),
 		filepath.Join(".agents", "skills", "ddx", "SKILL.md"),
 		filepath.Join(".claude", "skills", "ddx", "SKILL.md"),
 	} {

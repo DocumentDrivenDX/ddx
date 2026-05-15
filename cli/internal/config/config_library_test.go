@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -25,7 +26,7 @@ func writeConfig(t *testing.T, dir, libraryPath string) {
 	}
 	data, err := yaml.Marshal(cfg)
 	require.NoError(t, err)
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), data, 0644))
 }

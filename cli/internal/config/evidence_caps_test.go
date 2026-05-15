@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
@@ -24,7 +25,7 @@ func TestResolveEvidenceCaps_DefaultsWhenNil(t *testing.T) {
 // the resolved caps for each harness.
 func TestResolveEvidenceCaps_LoadedFromYAML(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	yaml := `version: "1.0"
@@ -42,7 +43,7 @@ evidence_caps:
     grader:
       max_diff_bytes: 100
 `
-	if err := os.WriteFile(filepath.Join(tmp, ".ddx", "config.yaml"), []byte(yaml), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, ddxroot.DirName, "config.yaml"), []byte(yaml), 0o600); err != nil {
 		t.Fatal(err)
 	}
 

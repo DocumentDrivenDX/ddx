@@ -15,6 +15,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
@@ -1193,7 +1194,7 @@ func resolveBodyLinkText(text string, docs map[string]*Document) string {
 }
 
 func LoadGraphConfigs(workingDir string) ([]GraphConfig, error) {
-	cfgDir := filepath.Join(workingDir, ".ddx", "graphs")
+	cfgDir := ddxroot.JoinProject(workingDir, "graphs")
 	entries, err := os.ReadDir(cfgDir)
 	if err != nil {
 		if os.IsNotExist(err) {

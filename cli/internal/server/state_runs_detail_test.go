@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestRunBundleFile_PathTraversalRejected covers AC: bundleFile rejects path
@@ -26,7 +27,7 @@ func TestRunBundleFile_PathTraversalRejected(t *testing.T) {
 		{"dotdot prefix", "../../etc/passwd"},
 		{"dotdot mid", "subdir/../../escape.txt"},
 		{"absolute path", "/etc/passwd"},
-		{"absolute under workdir", filepath.Join(workDir, ".ddx", "config.yaml")},
+		{"absolute under workdir", filepath.Join(workDir, ddxroot.DirName, "config.yaml")},
 	}
 
 	for _, tc := range cases {

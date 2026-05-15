@@ -9,14 +9,15 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBeadWorkspaceRoot_RelativeEnvInsideLinkedWorktreeUsesPrimaryWorkspace(t *testing.T) {
 	tmp := t.TempDir()
 	projectRoot := filepath.Join(tmp, "ddx")
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"ddx\"\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"ddx\"\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("fixture\n"), 0o644))
 
 	runGitForWorkspaceTest(t, projectRoot, "init")
@@ -43,7 +44,7 @@ func TestBeadWorkspaceRoot_RelativeEnvInsideLinkedWorktreeUsesPrimaryWorkspace(t
 func TestBeadCreate_RelativeEnvInsideLinkedWorktreeUsesPrimaryNamingAndStore(t *testing.T) {
 	tmp := t.TempDir()
 	projectRoot := filepath.Join(tmp, "origin-tree")
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"origin\"\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), nil, 0o644))
@@ -62,7 +63,7 @@ func TestBeadCreate_RelativeEnvInsideLinkedWorktreeUsesPrimaryNamingAndStore(t *
 		_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", worktreeRoot).Run()
 	})
 
-	worktreeDDX := filepath.Join(worktreeRoot, ".ddx")
+	worktreeDDX := filepath.Join(worktreeRoot, ddxroot.DirName)
 	require.NoError(t, os.WriteFile(filepath.Join(worktreeDDX, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"worktree\"\n"), 0o644))
 
 	t.Setenv("DDX_BEAD_DIR", ".ddx")
@@ -93,7 +94,7 @@ func TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix(t *testing.T) {
 
 	tmp := t.TempDir()
 	projectRoot := filepath.Join(tmp, "origin-tree")
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"origin\"\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), nil, 0o644))
@@ -112,7 +113,7 @@ func TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix(t *testing.T) {
 		_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", worktreeRoot).Run()
 	})
 
-	worktreeDDX := filepath.Join(worktreeRoot, ".ddx")
+	worktreeDDX := filepath.Join(worktreeRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(worktreeDDX, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(worktreeDDX, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"worktree\"\n"), 0o644))
 

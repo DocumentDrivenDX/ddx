@@ -12,6 +12,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // ADR-022 §Worker-server interface (rev 5). Workers are autonomous; the
@@ -88,7 +90,7 @@ type workerIngestRegistry struct {
 func newWorkerIngestRegistry(workingDir string) *workerIngestRegistry {
 	return &workerIngestRegistry{
 		workers: make(map[string]*workerRecord),
-		logPath: filepath.Join(workingDir, ".ddx", "server", "worker-events.jsonl"),
+		logPath: ddxroot.JoinProject(workingDir, "server", "worker-events.jsonl"),
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestEmbeddedSkillsHaveValidMetadata(t *testing.T) {
@@ -51,7 +53,7 @@ func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 		filepath.Join(repoRoot, "library", ".agents", "skills", "*", "SKILL.md"),
 		filepath.Join(repoRoot, ".agents", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
 		filepath.Join(repoRoot, ".claude", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
-		filepath.Join(repoRoot, ".ddx", "plugins", "ddx", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "*", "SKILL.md"),
 	}
 
 	var matches []string
@@ -90,7 +92,7 @@ func TestHumanWritingSupportSkillContent(t *testing.T) {
 		filepath.Join(repoRoot, "library", ".agents", "skills", "human-writing-support", "SKILL.md"),
 		filepath.Join(repoRoot, ".agents", "skills", "human-writing-support", "SKILL.md"),
 		filepath.Join(repoRoot, ".claude", "skills", "human-writing-support", "SKILL.md"),
-		filepath.Join(repoRoot, ".ddx", "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"),
+		filepath.Join(repoRoot, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"),
 	}
 
 	// Required substrings: workflow command (AC3) and preservation rule

@@ -21,6 +21,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/easel/fizeau"
 )
@@ -262,7 +263,7 @@ func (m *WorkerManager) WakeProject(projectRoot string) int {
 func NewWorkerManager(projectRoot string) *WorkerManager {
 	m := &WorkerManager{
 		projectRoot:      projectRoot,
-		rootDir:          filepath.Join(projectRoot, ".ddx", "workers"),
+		rootDir:          ddxroot.JoinProject(projectRoot, "workers"),
 		workers:          map[string]*workerHandle{},
 		LandCoordinators: newCoordinatorRegistry(),
 		watchdogStop:     make(chan struct{}),
@@ -711,7 +712,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	overrides := config.CLIOverrides{
 		Assignee:          "ddx",
 		Harness:           spec.Harness,
@@ -778,7 +779,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				loopOverrides.ProviderRequestTimeout = &requestTimeout
 			}
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
-			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			beadStore := bead.NewStore(ddxroot.JoinProject(projectRoot))
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				FromRev:          spec.FromRev,
 				BeadEvents:       beadStore,
@@ -935,8 +936,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		if !spec.NoReview {
 			reviewer = &agent.DefaultBeadReviewer{
 				ProjectRoot: projectRoot,
-				BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-				BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
+				BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
 				Harness:     spec.ReviewHarness,
 				Model:       spec.ReviewModel,
 			}
@@ -1159,7 +1160,7 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	}
 
 	if beadID != "" {
-		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		body := fmt.Sprintf(
 			"worker=%s pid=%d reason=stop-stale",
 			id, rec.PID,
@@ -1238,7 +1239,7 @@ func (m *WorkerManager) Stop(id string) error {
 	// Release the bead claim first — this is durable and must not be
 	// leaked even if the SIGKILL path blocks for the full grace window.
 	if beadID != "" {
-		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		runtime := time.Duration(0)
 		if !startedAt.IsZero() {
 			runtime = now.Sub(startedAt)
@@ -1413,7 +1414,7 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	// 1. Emit the reap event and release the bead claim before killing, so
 	//    the claim is not leaked even if the kill blocks for the full grace.
 	if beadID != "" {
-		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		body := fmt.Sprintf(
 			"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
 			id, runtime.Round(time.Second), stalled.Round(time.Second), pid, reason,
@@ -1894,7 +1895,7 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 		}
 
 		if beadID != "" {
-			store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 			body := fmt.Sprintf("worker=%s pid=%d reason=prune %s", rec.ID, rec.PID, reason)
 			_ = store.AppendEvent(beadID, bead.BeadEvent{
 				Kind:      "bead.reaped",
@@ -1988,7 +1989,7 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		}
 
 		if beadID != "" {
-			store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 			body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
 			_ = store.AppendEvent(beadID, bead.BeadEvent{
 				Kind:      "bead.reaped",

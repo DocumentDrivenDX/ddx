@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // fakeSyncGit records every git invocation and returns queued responses in order.
@@ -79,7 +81,7 @@ func dirtySyncSequence() []fakeGitResp {
 func makeTempDDxDir(t *testing.T) (repoRoot, ddxDir string) {
 	t.Helper()
 	repoRoot = t.TempDir()
-	ddxDir = filepath.Join(repoRoot, ".ddx")
+	ddxDir = filepath.Join(repoRoot, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatalf("mkdir .ddx: %v", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,7 +79,7 @@ func reviewPairingTestSetup(t *testing.T) (projectRoot, head string, store *bead
 	projectRoot = t.TempDir()
 	out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
 	require.NoError(t, err, string(out))
-	store = bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store = bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:         "ddx-pairing",

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -43,8 +44,10 @@ func isolateCmdTestTempRoot() func() {
 	}
 	oldTmpDir, hadTmpDir := os.LookupEnv("TMPDIR")
 	oldTmp, hadTmp := os.LookupEnv("TMP")
+	oldXDG, hadXDG := os.LookupEnv("XDG_DATA_HOME")
 	_ = os.Setenv("TMPDIR", tempRoot)
 	_ = os.Setenv("TMP", tempRoot)
+	_ = os.Setenv("XDG_DATA_HOME", filepath.Join(tempRoot, "xdg"))
 	return func() {
 		if hadTmpDir {
 			_ = os.Setenv("TMPDIR", oldTmpDir)
@@ -55,6 +58,11 @@ func isolateCmdTestTempRoot() func() {
 			_ = os.Setenv("TMP", oldTmp)
 		} else {
 			_ = os.Unsetenv("TMP")
+		}
+		if hadXDG {
+			_ = os.Setenv("XDG_DATA_HOME", oldXDG)
+		} else {
+			_ = os.Unsetenv("XDG_DATA_HOME")
 		}
 		_ = os.RemoveAll(tempRoot)
 	}
@@ -205,7 +213,7 @@ func NewTestEnvironment(t *testing.T, opts ...TestEnvOption) *TestEnvironment {
 	t.Helper()
 
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	configPath := filepath.Join(ddxDir, "config.yaml")
 
 	te := &TestEnvironment{

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sort"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // LivenessRecord is the worker-side sidecar written under
@@ -39,7 +41,7 @@ var LivenessTTL = 90 * time.Second
 
 // LivenessDir returns the worker sidecar directory for a project.
 func LivenessDir(projectRoot string) string {
-	return filepath.Join(projectRoot, ".ddx", "workers")
+	return ddxroot.JoinProject(projectRoot, "workers")
 }
 
 // LivenessPath returns the status.json path for a worker under projectRoot.

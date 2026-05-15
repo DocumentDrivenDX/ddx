@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,9 +29,9 @@ func (c *workResourceExhaustedChecker) Check(ctx context.Context) (agent.Executi
 	}
 	result := agent.ExecutionResourceCheckResult{
 		ProjectRoot: c.projectRoot,
-		TempRoot:    filepath.Join(c.projectRoot, ".ddx", "tmp"),
+		TempRoot:    filepath.Join(c.projectRoot, ddxroot.DirName, "tmp"),
 		EvidenceRoots: []string{
-			filepath.Join(c.projectRoot, ".ddx", "executions"),
+			filepath.Join(c.projectRoot, ddxroot.DirName, "executions"),
 		},
 	}
 	if n == failOn {
@@ -92,9 +93,9 @@ default_provider: testprov
 	t.Setenv("HOME", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
 
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "config.yaml"), []byte(`version: "1.0"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), []byte(`version: "1.0"
 library:
   path: ./library
   repository:
@@ -135,7 +136,7 @@ library:
 	require.Contains(t, outStr, agent.ResourceExhaustedStopMessage)
 	require.Equal(t, int32(2), atomic.LoadInt32(&checker.calls))
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	first, err := store.Get("resource-bead-1")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, first.Status)
@@ -171,9 +172,9 @@ default_provider: testprov
 	t.Setenv("HOME", homeDir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
 
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# ddx\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "config.yaml"), []byte(`version: "1.0"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), []byte(`version: "1.0"
 library:
   path: ./library
   repository:
@@ -219,7 +220,7 @@ library:
 	require.Contains(t, outStr, agent.ResourceExhaustedStopMessage)
 	require.Equal(t, int32(3), atomic.LoadInt32(&checker.calls))
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	first, err := store.Get("resource-e2e-first")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, first.Status)

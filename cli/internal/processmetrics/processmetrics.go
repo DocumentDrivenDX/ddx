@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -664,7 +665,7 @@ func (s *Service) beadStore() *bead.Store {
 	if s.store != nil {
 		return s.store
 	}
-	dir := filepath.Join(s.WorkingDir, ".ddx")
+	dir := ddxroot.JoinProject(s.WorkingDir)
 	s.store = bead.NewStore(dir)
 	return s.store
 }

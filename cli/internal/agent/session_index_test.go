@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestSessionIndexWritesMonthlyShards(t *testing.T) {
-	logDir := filepath.Join(t.TempDir(), ".ddx", "agent-logs")
+	logDir := filepath.Join(t.TempDir(), ddxroot.DirName, "agent-logs")
 	jan := time.Date(2026, 1, 31, 23, 59, 0, 0, time.UTC)
 	feb := time.Date(2026, 2, 1, 0, 1, 0, 0, time.UTC)
 
@@ -34,7 +35,7 @@ func TestSessionIndexWritesMonthlyShards(t *testing.T) {
 }
 
 func TestAppendSessionIndexDerivesAndValidatesBillingMode(t *testing.T) {
-	logDir := filepath.Join(t.TempDir(), ".ddx", "agent-logs")
+	logDir := filepath.Join(t.TempDir(), ddxroot.DirName, "agent-logs")
 	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
 
 	for _, mode := range []string{BillingModePaid, BillingModeSubscription, BillingModeLocal} {
@@ -237,7 +238,7 @@ func TestSessionIndexPreservesPromptSHACorrelation(t *testing.T) {
 }
 
 func TestSessionIndexShardFilesSelectsOnlyIntersectingDateRange(t *testing.T) {
-	logDir := filepath.Join(t.TempDir(), ".ddx", "agent-logs")
+	logDir := filepath.Join(t.TempDir(), ddxroot.DirName, "agent-logs")
 	for month := time.January; month <= time.June; month++ {
 		ts := time.Date(2026, month, 2, 0, 0, 0, 0, time.UTC)
 		if err := AppendSessionIndex(logDir, SessionIndexEntry{ID: month.String(), Harness: "agent", StartedAt: ts}, ts); err != nil {
@@ -371,7 +372,7 @@ func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 }
 
 func BenchmarkReadSessionIndexDefaultWindow(b *testing.B) {
-	logDir := filepath.Join(b.TempDir(), ".ddx", "agent-logs")
+	logDir := filepath.Join(b.TempDir(), ddxroot.DirName, "agent-logs")
 	start := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
 	for month := 0; month < 12; month++ {
 		ts := start.AddDate(0, month, 0)
@@ -405,7 +406,7 @@ func BenchmarkReadSessionIndexDefaultWindow(b *testing.B) {
 }
 
 func BenchmarkLegacySessionsJSONLFullScan(b *testing.B) {
-	logDir := filepath.Join(b.TempDir(), ".ddx", "agent-logs")
+	logDir := filepath.Join(b.TempDir(), ddxroot.DirName, "agent-logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		b.Fatal(err)
 	}

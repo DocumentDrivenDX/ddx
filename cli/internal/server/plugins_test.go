@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"gopkg.in/yaml.v3"
 )
@@ -39,7 +40,7 @@ func TestListMCPServers_WithData(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	libDir := filepath.Join(dir, ".ddx", "plugins", "ddx")
+	libDir := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx")
 	mcpDir := filepath.Join(libDir, "mcp-servers")
 	if err := os.MkdirAll(mcpDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -123,7 +124,7 @@ func TestListPlugins_WithData(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	ddxDir := filepath.Join(home, ".ddx")
+	ddxDir := filepath.Join(home, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +188,7 @@ func TestMCPListMCPServersToolCall(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	libDir := filepath.Join(dir, ".ddx", "plugins", "ddx")
+	libDir := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx")
 	mcpDir := filepath.Join(libDir, "mcp-servers")
 	if err := os.MkdirAll(mcpDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -225,7 +226,7 @@ func TestMCPListPluginsToolCall(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	ddxDir := filepath.Join(home, ".ddx")
+	ddxDir := filepath.Join(home, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

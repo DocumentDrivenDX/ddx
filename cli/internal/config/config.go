@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/triage"
 	"gopkg.in/yaml.v3"
 )
@@ -110,7 +111,7 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 	// removed agent.routing fields before the schema validator sees the file.
 	// This happens before LoadConfig so the migration message is what the
 	// operator sees.
-	configPath := filepath.Join(workingDir, ".ddx", "config.yaml")
+	configPath := ddxroot.JoinProject(workingDir, "config.yaml")
 	if data, readErr := os.ReadFile(configPath); readErr == nil {
 		if migErr := checkRoutingMigration(configPath, data); migErr != nil {
 			return nil, migErr

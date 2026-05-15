@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -41,10 +42,10 @@ func TestInitInstallsDDxPluginPackage(t *testing.T) {
 	require.NoError(t, err)
 
 	// Plugin root installed under .ddx/plugins/ddx (root mapping target).
-	assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx"),
+	assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"),
 		".ddx/plugins/ddx must be created by the embedded package installer")
 	// Package manifest from the embedded library lands under the plugin root.
-	assert.FileExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx", "package.yaml"),
+	assert.FileExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx", "package.yaml"),
 		".ddx/plugins/ddx/package.yaml must be present after install")
 
 	// Skill outputs installed via install.skills[*] mappings.
@@ -75,7 +76,7 @@ func TestInitWorksOfflineWithEmbeddedDefaultPlugin(t *testing.T) {
 	_, err := te.RunCommand("init", "--no-git")
 	require.NoError(t, err, "ddx init must succeed offline via the embedded default plugin")
 
-	assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx"),
+	assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"),
 		"embedded package install must produce .ddx/plugins/ddx offline")
 	assert.FileExists(t, filepath.Join(te.Dir, ".agents", "skills", "ddx", "SKILL.md"),
 		"embedded package install must produce .agents/skills/ddx/SKILL.md offline")
@@ -92,7 +93,7 @@ func TestInitDoesNotCreateBootstrapDDxSkillMirror(t *testing.T) {
 	require.NoError(t, err)
 
 	// The bootstrap mirror path must not exist after init.
-	bootstrapMirror := filepath.Join(te.Dir, ".ddx", "skills", "ddx")
+	bootstrapMirror := filepath.Join(te.Dir, ddxroot.DirName, "skills", "ddx")
 	_, statErr := os.Stat(bootstrapMirror)
 	assert.True(t, os.IsNotExist(statErr),
 		".ddx/skills/ddx must not be created as a separate bootstrap mirror; got stat err=%v", statErr)
@@ -563,7 +564,7 @@ library:
 				assert.NotContains(t, output, "backup")
 
 				// Should NOT have backup file
-				backupFiles, _ := filepath.Glob(filepath.Join(te.Dir, ".ddx", "config.yaml.backup.*"))
+				backupFiles, _ := filepath.Glob(filepath.Join(te.Dir, ddxroot.DirName, "config.yaml.backup.*"))
 				assert.Equal(t, 0, len(backupFiles), "Should not create backup file")
 
 				// Should successfully overwrite config
@@ -636,8 +637,8 @@ library:
 				assert.Contains(t, string(lsOutput), ".ddx/config.yaml", "Config file should be tracked in git")
 
 				// Verify library directory structure exists (init creates it even if sync fails)
-				assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx"), "Library directory should exist")
-				assert.DirExists(t, filepath.Join(te.Dir, ".ddx", "plugins", "ddx", "prompts"), "Prompts directory should exist")
+				assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"), "Library directory should exist")
+				assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx", "prompts"), "Prompts directory should exist")
 			},
 			expectError: false,
 		},

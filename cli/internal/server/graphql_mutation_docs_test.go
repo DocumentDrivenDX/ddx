@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TC-GQL-MUT-006: documentWrite creates or updates a document in the library.
@@ -48,7 +50,7 @@ func TestGraphQLDocumentWrite(t *testing.T) {
 	}
 
 	// Verify the file was actually written to the library path.
-	libPath := filepath.Join(workDir, ".ddx", "plugins", "ddx")
+	libPath := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
 	written := filepath.Join(libPath, "prompts", "new-doc.md")
 	content, err := os.ReadFile(written)
 	if err != nil {

@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
@@ -639,7 +640,7 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# review test\n"), 0o644))
 	require.NoError(t, store.Create(&bead.Bead{
@@ -931,7 +932,7 @@ func TestGitShowExcludesEvidenceNoiseFromReviewDiff(t *testing.T) {
 	// Synthetic evidence commit that adds a multi-thousand-line session log
 	// PLUS a legitimate implementation change. The fix must exclude the
 	// session log from the diff while keeping the implementation change.
-	evidenceDir := filepath.Join(root, ".ddx", "executions", "20260417T000000-testattempt", "embedded")
+	evidenceDir := filepath.Join(root, ddxroot.DirName, "executions", "20260417T000000-testattempt", "embedded")
 	if err := os.MkdirAll(evidenceDir, 0o755); err != nil {
 		t.Fatalf("mkdir evidence: %v", err)
 	}

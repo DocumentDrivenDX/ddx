@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // runGit runs a git command in dir, failing the test on error.
@@ -32,7 +33,7 @@ func setupBacklinkRepo(t *testing.T) (dir, baseSHA, tipSHA, originatorID, affect
 	runGit(t, dir, "init", "-b", "main")
 	runGit(t, dir, "config", "user.name", "Test")
 	runGit(t, dir, "config", "user.email", "test@test.local")
-	if err := os.MkdirAll(filepath.Join(dir, ".ddx"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ddxroot.DirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -40,7 +41,7 @@ func setupBacklinkRepo(t *testing.T) (dir, baseSHA, tipSHA, originatorID, affect
 	affectedBeadID = "op-affected"
 
 	baseLine := `{"id":"` + originatorID + `","title":"originator","status":"open","issue_type":"operator-prompt"}` + "\n"
-	if err := os.WriteFile(filepath.Join(dir, ".ddx", "beads.jsonl"), []byte(baseLine), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ddxroot.DirName, "beads.jsonl"), []byte(baseLine), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# initial\n"), 0o644); err != nil {
@@ -52,7 +53,7 @@ func setupBacklinkRepo(t *testing.T) (dir, baseSHA, tipSHA, originatorID, affect
 
 	// Tip: adds a second bead + an artifact change.
 	addedLine := `{"id":"` + affectedBeadID + `","title":"affected","status":"open"}` + "\n"
-	if err := os.WriteFile(filepath.Join(dir, ".ddx", "beads.jsonl"), []byte(baseLine+addedLine), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ddxroot.DirName, "beads.jsonl"), []byte(baseLine+addedLine), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "docs", "concerns.md"), []byte("- operator-prompt-test\n"), 0o644); err == nil {
@@ -108,7 +109,7 @@ func TestComputeOperatorPromptAffected_DiffsBeadsAndArtifacts(t *testing.T) {
 // originator. Both are queryable via the bead store afterwards.
 func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +174,7 @@ func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *t
 // pollute the bead-event ledger.
 func TestRecordOperatorPromptBacklinks_EmptyAffectedNoEvents(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

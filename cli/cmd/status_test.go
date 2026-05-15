@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,7 +43,7 @@ func setupStatusTestDir(t *testing.T) (string, func()) {
 	// Change to temp directory
 
 	// Create basic DDX structure
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	err := os.MkdirAll(ddxDir, 0755)
 	require.NoError(t, err)
 
@@ -95,7 +96,7 @@ func TestAcceptance_US012_TrackAssetVersions(t *testing.T) {
 		defer func() { _ = os.RemoveAll(testDir) }()
 
 		// Modify a DDX resource
-		promptsDir := filepath.Join(testDir, ".ddx", "prompts")
+		promptsDir := filepath.Join(testDir, ddxroot.DirName, "prompts")
 		_ = os.MkdirAll(promptsDir, 0755)
 		modifiedFile := filepath.Join(promptsDir, "test-prompt.md")
 		err := os.WriteFile(modifiedFile, []byte("# Modified prompt\nThis is a local change"), 0644)
@@ -156,7 +157,7 @@ func TestAcceptance_US012_TrackAssetVersions(t *testing.T) {
 		defer func() { _ = os.RemoveAll(testDir) }()
 
 		// Create some changes
-		changesDir := filepath.Join(testDir, ".ddx", "patterns")
+		changesDir := filepath.Join(testDir, ddxroot.DirName, "patterns")
 		_ = os.MkdirAll(changesDir, 0755)
 		changeFile := filepath.Join(changesDir, "auth-pattern.go")
 		_ = os.WriteFile(changeFile, []byte("modified content"), 0644)
@@ -248,7 +249,7 @@ func TestStatusIncludesAgentUsage(t *testing.T) {
 		defer cleanup()
 		defer func() { _ = os.RemoveAll(testDir) }()
 
-		logDir := filepath.Join(testDir, ".ddx", "agent-logs")
+		logDir := filepath.Join(testDir, ddxroot.DirName, "agent-logs")
 		require.NoError(t, os.MkdirAll(logDir, 0755))
 		entry := agent.SessionEntry{
 			ID:           "sess-1",
@@ -327,17 +328,15 @@ func TestStatusCommand_Contract(t *testing.T) {
 		}
 	})
 
-	t.Run("requires_ddx_project", func(t *testing.T) {
-		// Should fail in non-DDX directory
+	t.Run("supports_convention_root_without_in_tree_ddx", func(t *testing.T) {
 		tempDir := t.TempDir()
-		//	// originalDir, _ := os.Getwd() // REMOVED: Using CommandFactory injection // REMOVED: Using CommandFactory injection
 
 		factory := NewCommandFactory(tempDir)
 		rootCmd := factory.NewRootCommand()
-		_, err := executeStatusCommand(rootCmd, "status")
+		output, err := executeStatusCommand(rootCmd, "status")
 
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "not a DDX project")
+		assert.NoError(t, err)
+		assert.NotEmpty(t, output)
 	})
 
 	t.Run("performance_requirements", func(t *testing.T) {

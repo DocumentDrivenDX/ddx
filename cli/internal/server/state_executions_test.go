@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -153,7 +154,7 @@ func TestExecutions_ListAndDetail(t *testing.T) {
 	if exec.SessionID == nil || *exec.SessionID == "" {
 		t.Fatal("expected sessionId to be present")
 	}
-	if exec.AgentLogPath == nil || *exec.AgentLogPath != filepath.ToSlash(filepath.Join(".ddx", "agent-logs", "agent-eb-20260423T020000-bbbb2222.jsonl")) {
+	if exec.AgentLogPath == nil || *exec.AgentLogPath != filepath.ToSlash(filepath.Join(ddxroot.DirName, "agent-logs", "agent-eb-20260423T020000-bbbb2222.jsonl")) {
 		t.Fatalf("expected agent log path pointer, got %#v", exec.AgentLogPath)
 	}
 

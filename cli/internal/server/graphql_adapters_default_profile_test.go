@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestWorkerDispatchAdapterEmptyArgsDefaultsProfile pins ddx-755f5881 AC #1:
@@ -26,7 +27,7 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 
 	// Bare config — no workers block, no agent.routing block.
 	cfg := "version: \"1.0\"\nlibrary:\n  path: \".ddx/plugins/ddx\"\n  repository:\n    url: \"https://example.com/lib\"\n    branch: \"main\"\n"
-	if err := writeFile(filepath.Join(root, ".ddx", "config.yaml"), cfg); err != nil {
+	if err := writeFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -108,7 +109,7 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 `
-	if err := writeFile(filepath.Join(root, ".ddx", "config.yaml"), cfg); err != nil {
+	if err := writeFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -161,7 +162,7 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 	setupBeadStore(t, root)
 
 	cfg := "version: \"1.0\"\nlibrary:\n  path: \".ddx/plugins/ddx\"\n  repository:\n    url: \"https://example.com/lib\"\n    branch: \"main\"\n"
-	if err := writeFile(filepath.Join(root, ".ddx", "config.yaml"), cfg); err != nil {
+	if err := writeFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), cfg); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +279,7 @@ func TestGraphQL_WorkerDispatch_DefaultSpec(t *testing.T) {
 	setupBeadStore(t, root)
 
 	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  default_spec:\n    profile: cheap\n    effort: low\n"
-	if err := os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

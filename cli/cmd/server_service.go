@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/service"
 	"github.com/spf13/cobra"
 )
@@ -64,7 +64,7 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 			return backend.Install(service.Config{
 				ExecPath: resolvedExec,
 				WorkDir:  resolvedWork,
-				LogPath:  filepath.Join(resolvedWork, ".ddx", "logs", "ddx-server.log"),
+				LogPath:  ddxroot.JoinProject(resolvedWork, "logs", "ddx-server.log"),
 				Env:      env,
 			})
 		},

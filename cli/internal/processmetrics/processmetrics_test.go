@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,7 +32,7 @@ func writeMetricsFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
 
 	beads := []string{
@@ -54,7 +55,7 @@ func writeZeroCostFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
 
 	beads := []string{
@@ -76,7 +77,7 @@ func writeWindowedMetricsFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
 
 	beads := []string{
@@ -98,7 +99,7 @@ func writeLateUpdateNoFactsFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
 
 	beads := []string{
@@ -170,7 +171,7 @@ func writeLifecycleStatusMetricsFixture(t *testing.T) string {
 	t.Helper()
 
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
 
 	beads := []string{

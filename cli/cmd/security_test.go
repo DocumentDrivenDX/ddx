@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -141,7 +142,7 @@ persona_bindings:
 				t.Setenv("HOME", homeDir)
 
 				// Create template with potential secrets
-				templateDir := filepath.Join(homeDir, ".ddx", "templates", "bad")
+				templateDir := filepath.Join(homeDir, ddxroot.DirName, "templates", "bad")
 				require.NoError(t, os.MkdirAll(templateDir, 0755))
 
 				templateFile := filepath.Join(templateDir, "config.js")
@@ -377,7 +378,7 @@ func TestSecurity_ResourceLimits(t *testing.T) {
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
 
-				templateDir := filepath.Join(homeDir, ".ddx", "templates", "large")
+				templateDir := filepath.Join(homeDir, ddxroot.DirName, "templates", "large")
 				require.NoError(t, os.MkdirAll(templateDir, 0755))
 
 				// Create a large file (but not too large for testing)
@@ -400,7 +401,7 @@ func TestSecurity_ResourceLimits(t *testing.T) {
 				t.Setenv("HOME", homeDir)
 
 				// Create deeply nested structure
-				deepPath := filepath.Join(homeDir, ".ddx", "templates")
+				deepPath := filepath.Join(homeDir, ddxroot.DirName, "templates")
 				for i := 0; i < 20; i++ {
 					deepPath = filepath.Join(deepPath, "level")
 				}

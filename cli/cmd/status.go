@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -201,7 +202,7 @@ func getVersionInfoFromDir(workingDir string) (version, hash string, err error) 
 	// Get git commit hash from .ddx directory
 	ddxDir := ".ddx"
 	if workingDir != "" {
-		ddxDir = filepath.Join(workingDir, ".ddx")
+		ddxDir = ddxroot.JoinProject(workingDir)
 	}
 
 	if _, err := os.Stat(ddxDir); os.IsNotExist(err) {
@@ -250,7 +251,7 @@ func getLocalModificationsFromDir(workingDir string) ([]ModifiedFile, error) {
 
 	ddxDir := ".ddx"
 	if workingDir != "" {
-		ddxDir = filepath.Join(workingDir, ".ddx")
+		ddxDir = ddxroot.JoinProject(workingDir)
 	}
 
 	if _, err := os.Stat(ddxDir); os.IsNotExist(err) {
@@ -353,7 +354,7 @@ func getStatusResourcesFromDir(workingDir string) ([]StatusResourceInfo, error) 
 
 	ddxDir := ".ddx"
 	if workingDir != "" {
-		ddxDir = filepath.Join(workingDir, ".ddx")
+		ddxDir = ddxroot.JoinProject(workingDir)
 	}
 
 	if _, err := os.Stat(ddxDir); os.IsNotExist(err) {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,7 +38,7 @@ func initTrackerRepo(t *testing.T) string {
 	run("add", "seed.txt")
 	run("commit", "-m", "chore: initial seed")
 
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 	run("add", ".ddx/beads.jsonl")
@@ -53,7 +54,7 @@ func initTrackerRepo(t *testing.T) string {
 // File exists." (See bead description for the observed Phase 2 drain failure.)
 func TestTrackerCommit_ConcurrentSafety(t *testing.T) {
 	root := initTrackerRepo(t)
-	tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+	tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
 
 	const goroutines = 2
 	const iterations = 8
@@ -110,7 +111,7 @@ func TestTrackerCommit_ConcurrentSafety(t *testing.T) {
 
 func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {
 	root := initTrackerRepo(t)
-	tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+	tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "operator.txt"), []byte("operator staged\n"), 0o644))
 	cmd := exec.Command("git", "add", "operator.txt")
@@ -148,7 +149,7 @@ func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {
 // removed with single-path removal and that CommitTracker then succeeds.
 func TestTrackerCommit_MalformedRegularFileLockRecovery(t *testing.T) {
 	root := initTrackerRepo(t)
-	tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+	tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
 
 	lockPath := trackerLockPath(root)
 	require.NoError(t, os.WriteFile(lockPath, []byte("stale"), 0o644))
@@ -302,7 +303,7 @@ func TestTrackerCommit_MissingOwnerDoesNotReportUnknown(t *testing.T) {
 // CommitTracker call can proceed.
 func TestTrackerCommit_StaleLockRecovery(t *testing.T) {
 	root := initTrackerRepo(t)
-	tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+	tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
 
 	// Simulate a crash: create the lock dir manually with an old timestamp
 	// and a pid that does not exist.
@@ -425,7 +426,7 @@ func TestTrackerCommit_RetryBackoffPolicy(t *testing.T) {
 
 	t.Run("retry succeeds when contender releases mid-curve", func(t *testing.T) {
 		root := initTrackerRepo(t)
-		tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+		tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
 		require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-retry-test"}`+"\n"), 0o644))
 
 		// Hold the lock for ~50ms then release.

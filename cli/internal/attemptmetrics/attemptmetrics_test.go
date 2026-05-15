@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestMetrics_SchemaVersion(t *testing.T) {
@@ -252,7 +253,7 @@ func TestMetrics_BackfillSkipsMalformedCostEvents(t *testing.T) {
 
 func TestMetrics_AttemptsPathUnderDdxMetrics(t *testing.T) {
 	path := attemptmetrics.AttemptsPath("/project/root")
-	want := filepath.Join("/project/root", ".ddx", "metrics", "attempts.jsonl")
+	want := filepath.Join("/project/root", ddxroot.DirName, "metrics", "attempts.jsonl")
 	if path != want {
 		t.Errorf("AttemptsPath=%q, want %q", path, want)
 	}

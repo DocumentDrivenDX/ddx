@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
 	"github.com/spf13/cobra"
@@ -99,7 +100,7 @@ func (f *CommandFactory) beadAutoCommitWithMode(operation string, includeStaged 
 	if workspaceRoot == "" {
 		workspaceRoot = f.WorkingDir
 	}
-	beadsFile := filepath.Join(workspaceRoot, ".ddx", "beads.jsonl")
+	beadsFile := ddxroot.JoinProject(workspaceRoot, "beads.jsonl")
 	return f.beadAutoCommitPathsWithMode(operation, []string{beadsFile}, includeStaged)
 }
 
@@ -258,7 +259,7 @@ func (f *CommandFactory) beadStore() *bead.Store {
 	if workspaceRoot == "" {
 		return bead.NewStore("")
 	}
-	return bead.NewStore(filepath.Join(workspaceRoot, ".ddx"))
+	return bead.NewStore(ddxroot.JoinProject(workspaceRoot))
 }
 
 func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
@@ -1549,7 +1550,7 @@ scalar fields that required deterministic conflict resolution.
 This command is not a general hand-edit workflow for bead tracker data.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			path := filepath.Join(".ddx", "beads.jsonl")
+			path := ddxroot.JoinRelative("beads.jsonl")
 			if len(args) > 0 {
 				path = args[0]
 			}

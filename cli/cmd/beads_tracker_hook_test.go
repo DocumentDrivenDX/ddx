@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ func initRepoWithTrackedBeadsFile(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	initTestRepo(t, dir)
-	trackerDir := filepath.Join(dir, ".ddx")
+	trackerDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(trackerDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(trackerDir, "beads.jsonl"), []byte(`{"id":"ddx-test","status":"open"}`+"\n"), 0o644))
 	runGitForBeadsHookTest(t, dir, "add", ".ddx/beads.jsonl")
@@ -46,7 +47,7 @@ func runBeadsTrackerHook(t *testing.T, repoRoot string) (string, error) {
 
 func appendTrackerLine(t *testing.T, repoRoot, id string) {
 	t.Helper()
-	path := filepath.Join(repoRoot, ".ddx", "beads.jsonl")
+	path := filepath.Join(repoRoot, ddxroot.DirName, "beads.jsonl")
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
 	require.NoError(t, err)
 	defer f.Close()

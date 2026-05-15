@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
@@ -104,7 +105,7 @@ func (s *ServerState) beadSnapshotsForProjectEntry(proj ProjectEntry, pred func(
 	if beadStoreOpenHook != nil {
 		beadStoreOpenHook(proj.Path)
 	}
-	store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(proj.Path))
 	beads, err := store.ReadAllFiltered(pred)
 	if err != nil {
 		return nil
@@ -192,7 +193,7 @@ func (s *ServerState) forgetBeadLocation(id string) {
 }
 
 func readBeadSnapshotFromProject(proj ProjectEntry, id string) (*ddxgraphql.BeadSnapshot, bool) {
-	store := bead.NewStore(filepath.Join(proj.Path, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(proj.Path))
 	b, err := store.Get(context.Background(), id)
 	if err != nil {
 		return nil, false
@@ -278,7 +279,7 @@ func (s *ServerState) GetWorkersGraphQL(projectID string) []*ddxgraphql.Worker {
 		}
 		expectedPath = proj.Path
 	}
-	workersDir := filepath.Join(s.workingDir, ".ddx", "workers")
+	workersDir := ddxroot.JoinProject(s.workingDir, "workers")
 	entries, err := os.ReadDir(workersDir)
 	if err != nil {
 		return nil
@@ -319,7 +320,7 @@ func (s *ServerState) GetWorkerGraphQL(id string) (*ddxgraphql.Worker, bool) {
 	if s.workingDir == "" {
 		return nil, false
 	}
-	data, err := os.ReadFile(filepath.Join(s.workingDir, ".ddx", "workers", id, "status.json"))
+	data, err := os.ReadFile(ddxroot.JoinProject(s.workingDir, "workers", id, "status.json"))
 	if err != nil {
 		return nil, false
 	}
@@ -336,7 +337,7 @@ func (s *ServerState) GetWorkerLogGraphQL(id string) *ddxgraphql.WorkerLog {
 		return &ddxgraphql.WorkerLog{}
 	}
 	// Read the worker record to find the log path.
-	data, err := os.ReadFile(filepath.Join(s.workingDir, ".ddx", "workers", id, "status.json"))
+	data, err := os.ReadFile(ddxroot.JoinProject(s.workingDir, "workers", id, "status.json"))
 	if err != nil {
 		return &ddxgraphql.WorkerLog{}
 	}
@@ -362,7 +363,7 @@ func (s *ServerState) GetWorkerProgressGraphQL(id string) []*ddxgraphql.PhaseTra
 	if s.workingDir == "" {
 		return nil
 	}
-	data, err := os.ReadFile(filepath.Join(s.workingDir, ".ddx", "workers", id, "status.json"))
+	data, err := os.ReadFile(ddxroot.JoinProject(s.workingDir, "workers", id, "status.json"))
 	if err != nil {
 		return nil
 	}
@@ -386,7 +387,7 @@ func (s *ServerState) GetWorkerPromptGraphQL(id string) string {
 	if s.workingDir == "" {
 		return ""
 	}
-	raw, err := os.ReadFile(filepath.Join(s.workingDir, ".ddx", "workers", id, "spec.json"))
+	raw, err := os.ReadFile(ddxroot.JoinProject(s.workingDir, "workers", id, "spec.json"))
 	if err != nil {
 		return ""
 	}

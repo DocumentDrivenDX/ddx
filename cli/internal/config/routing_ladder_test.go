@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -47,7 +48,7 @@ endpoints:
 
 func TestLoadConfigWarnsForLegacyProfilePriority(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:

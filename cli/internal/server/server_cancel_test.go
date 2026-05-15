@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestOperatorCancel_SetsBeadExtra: POST /api/beads/<id>/cancel writes
@@ -24,7 +25,7 @@ func TestOperatorCancel_SetsBeadExtra(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	b, err := store.Get("bx-001")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -40,7 +41,7 @@ func TestOperatorCancel_SetsBeadExtra(t *testing.T) {
 func TestOperatorCancel_Idempotent(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 
 	// First cancel.
 	req := httptest.NewRequest("POST", "/api/beads/bx-001/cancel", nil)

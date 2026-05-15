@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestReviewMaxRetriesConfig covers FEAT-022 §14: the review_max_retries
@@ -33,7 +35,7 @@ func TestReviewMaxRetriesConfig(t *testing.T) {
 
 	t.Run("override_loaded_from_yaml", func(t *testing.T) {
 		tmp := t.TempDir()
-		if err := os.MkdirAll(filepath.Join(tmp, ".ddx"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(tmp, ddxroot.DirName), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		yaml := `version: "1.0"
@@ -44,7 +46,7 @@ library:
     branch: main
 review_max_retries: 5
 `
-		if err := os.WriteFile(filepath.Join(tmp, ".ddx", "config.yaml"), []byte(yaml), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(tmp, ddxroot.DirName, "config.yaml"), []byte(yaml), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		loader, err := NewConfigLoaderWithWorkingDir(tmp)

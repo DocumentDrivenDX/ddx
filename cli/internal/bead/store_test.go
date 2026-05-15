@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +35,7 @@ func TestMain(m *testing.M) {
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	dir := t.TempDir()
-	s := NewStore(filepath.Join(dir, ".ddx"))
+	s := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, s.Init(context.Background()))
 	return s
 }
@@ -45,7 +46,7 @@ func newConfiguredStore(t *testing.T, backend string) *Store {
 	if backend != "" {
 		writeStoreConfig(t, dir, backend)
 	}
-	s := NewStore(filepath.Join(dir, ".ddx"))
+	s := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, s.Init(context.Background()))
 	return s
 }
@@ -57,7 +58,7 @@ func newJSONLStore(t *testing.T) *Store {
 
 func writeStoreConfig(t *testing.T, dir string, backend string) {
 	t.Helper()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	content := fmt.Sprintf(`version: "1.0"
 library:
@@ -73,7 +74,7 @@ bead:
 
 func TestInit(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStore(filepath.Join(dir, ".ddx"))
+	s := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, s.Init(context.Background()))
 
 	_, err := os.Stat(s.File)
@@ -82,10 +83,10 @@ func TestInit(t *testing.T) {
 
 func TestInitUsesCollectionFile(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStoreWithCollection(filepath.Join(dir, ".ddx"), "exec-runs")
+	s := NewStoreWithCollection(filepath.Join(dir, ddxroot.DirName), "exec-runs")
 	require.Equal(t, "exec-runs", s.Collection)
-	require.Equal(t, filepath.Join(dir, ".ddx", "exec-runs.jsonl"), s.File)
-	require.Equal(t, filepath.Join(dir, ".ddx", "exec-runs.lock"), s.LockDir)
+	require.Equal(t, filepath.Join(dir, ddxroot.DirName, "exec-runs.jsonl"), s.File)
+	require.Equal(t, filepath.Join(dir, ddxroot.DirName, "exec-runs.lock"), s.LockDir)
 	require.NoError(t, s.Init(context.Background()))
 
 	_, err := os.Stat(s.File)
@@ -93,7 +94,7 @@ func TestInitUsesCollectionFile(t *testing.T) {
 }
 
 func TestNewStore_DefaultsToJSONL(t *testing.T) {
-	s := NewStore(filepath.Join(t.TempDir(), ".ddx"))
+	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
 	assert.Nil(t, s.backend)
 }
 
@@ -102,16 +103,16 @@ func TestNewStore_SelectsAxonFromConfig(t *testing.T) {
 	writeStoreConfig(t, tempDir, BackendAxon)
 	t.Setenv(AxonExperimentalEnv, "0")
 
-	s := NewStore(filepath.Join(tempDir, ".ddx"))
+	s := NewStore(filepath.Join(tempDir, ddxroot.DirName))
 	_, ok := s.backend.(*AxonBackend)
 	assert.True(t, ok, "bead.backend: axon must select AxonBackend without requiring DDX_AXON_EXPERIMENTAL")
 }
 
 func TestWithCollectionNormalizesJSONLExtension(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStore(filepath.Join(dir, ".ddx"), WithCollection("agent-sessions.jsonl"))
+	s := NewStore(filepath.Join(dir, ddxroot.DirName), WithCollection("agent-sessions.jsonl"))
 	assert.Equal(t, "agent-sessions", s.Collection)
-	assert.Equal(t, filepath.Join(dir, ".ddx", "agent-sessions.jsonl"), s.File)
+	assert.Equal(t, filepath.Join(dir, ddxroot.DirName, "agent-sessions.jsonl"), s.File)
 }
 
 func TestExternalBackendCarriesLogicalCollectionName(t *testing.T) {
@@ -131,7 +132,7 @@ func TestExternalBackendCarriesLogicalCollectionName(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("DDX_BEAD_BACKEND", tc.backend)
-			s := NewStore(filepath.Join(t.TempDir(), ".ddx"), WithCollection(tc.collection))
+			s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName), WithCollection(tc.collection))
 			backend, ok := s.backend.(*ExternalBackend)
 			require.True(t, ok)
 			assert.Equal(t, tc.backend, backend.Tool)
@@ -157,7 +158,7 @@ func TestNewStore_PreservesExternalBackends(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tempDir := t.TempDir()
 			writeStoreConfig(t, tempDir, tc.backend)
-			s := NewStore(filepath.Join(tempDir, ".ddx"), WithCollection(tc.collection))
+			s := NewStore(filepath.Join(tempDir, ddxroot.DirName), WithCollection(tc.collection))
 			backend, ok := s.backend.(*ExternalBackend)
 			require.True(t, ok)
 			assert.Equal(t, tc.backend, backend.Tool)
@@ -170,7 +171,7 @@ func TestExternalBackendFallsBackWhenToolMissing(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Setenv("DDX_BEAD_BACKEND", "bd")
 
-	s := NewStore(filepath.Join(t.TempDir(), ".ddx"), WithCollection("exec-runs"))
+	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName), WithCollection("exec-runs"))
 	assert.Nil(t, s.backend)
 }
 
@@ -192,7 +193,7 @@ func TestExternalBackendOpensBeadsArchiveWithFallback(t *testing.T) {
 	t.Setenv("DDX_BEAD_BACKEND", "bd")
 
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	s := NewStore(ddxDir, WithCollection(BeadsArchiveCollection))
 
 	backend, ok := s.backend.(*ExternalBackend)
@@ -232,7 +233,7 @@ func TestExternalBackendDefaultCollectionHasNoFallback(t *testing.T) {
 	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("DDX_BEAD_BACKEND", "bd")
 
-	s := NewStore(filepath.Join(t.TempDir(), ".ddx"))
+	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
 	backend, ok := s.backend.(*ExternalBackend)
 	require.True(t, ok)
 	assert.Equal(t, DefaultCollection, backend.Collection)
@@ -268,7 +269,7 @@ func TestCreateAndGet(t *testing.T) {
 func TestCreateUsesConfiguredPrefix(t *testing.T) {
 	t.Setenv("DDX_BEAD_PREFIX", "")
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:
@@ -280,7 +281,7 @@ bead:
   id_prefix: "nif"
 `), 0o644))
 
-	s := NewStore(filepath.Join(tempDir, ".ddx"))
+	s := NewStore(filepath.Join(tempDir, ddxroot.DirName))
 	require.NoError(t, s.Init(testCtx()))
 
 	b := &Bead{Title: "Configured prefix"}
@@ -291,7 +292,7 @@ bead:
 
 func TestCreateUsesEnvPrefixOverConfig(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:
@@ -305,7 +306,7 @@ bead:
 
 	t.Setenv("DDX_BEAD_PREFIX", "env")
 
-	s := NewStore(filepath.Join(tempDir, ".ddx"))
+	s := NewStore(filepath.Join(tempDir, ddxroot.DirName))
 	require.NoError(t, s.Init(testCtx()))
 
 	b := &Bead{Title: "Env prefix"}
@@ -831,12 +832,12 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 
 	root := t.TempDir()
 	realRoot := filepath.Join(root, "repo")
-	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, ddxroot.DirName), 0o755))
 	aliasRoot := filepath.Join(root, "repo-alias")
 	require.NoError(t, os.Symlink(realRoot, aliasRoot))
 
-	sReal := NewStore(filepath.Join(realRoot, ".ddx"))
-	sAlias := NewStore(filepath.Join(aliasRoot, ".ddx"))
+	sReal := NewStore(filepath.Join(realRoot, ddxroot.DirName))
+	sAlias := NewStore(filepath.Join(aliasRoot, ddxroot.DirName))
 	b := &Bead{ID: "ddx-hb-alias", Title: "Live claim through alias"}
 	require.NoError(t, sReal.Create(context.Background(), b))
 	require.NoError(t, sReal.Claim(b.ID, "worker-a"))

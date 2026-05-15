@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -362,7 +363,7 @@ func (env *InstallationTestEnvironment) RunCommand(command string) InstallationR
 		result := env.ExecuteInstallCommand("install")
 		// FEAT-015: simulate project-local plugin layout under the
 		// "project" (HomeDir acts as the project root for these tests).
-		libPath := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
+		libPath := filepath.Join(env.HomeDir, ddxroot.DirName, "plugins", "ddx")
 		_ = os.MkdirAll(libPath, 0755)
 		_ = os.WriteFile(filepath.Join(libPath, "README.md"), []byte("# DDx Library"), 0644)
 		return result
@@ -770,7 +771,7 @@ func TestAcceptance_US034_OfflineInstallation(t *testing.T) {
 			// FEAT-015: plugins live in the PROJECT layout (.ddx/plugins/<name>),
 			// not under $HOME. In this test, env.HomeDir is the project root
 			// (cmd.Dir is set to env.HomeDir for ddx doctor invocations).
-			projectPluginDir := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
+			projectPluginDir := filepath.Join(env.HomeDir, ddxroot.DirName, "plugins", "ddx")
 			_, statErr := os.Stat(projectPluginDir)
 			assert.NoError(t, statErr, "Library resources should be installed under <project>/.ddx/plugins/ddx (FEAT-015 project-local)")
 		})
@@ -1041,7 +1042,7 @@ func (env *InstallationTestEnvironment) setupInstallationState(state string) err
 		// Install DDX properly
 		env.ExecuteInstallCommand("install")
 		// Create library directory for doctor check
-		libDir := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
+		libDir := filepath.Join(env.HomeDir, ddxroot.DirName, "plugins", "ddx")
 		_ = os.MkdirAll(libDir, 0755)
 		// Create some sample resources so library appears valid
 		_ = os.MkdirAll(filepath.Join(libDir, "workflows"), 0755)
@@ -1053,13 +1054,13 @@ library:
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
-		_ = os.WriteFile(filepath.Join(env.HomeDir, ".ddx", "config.yaml"), configContent, 0644)
+		_ = os.WriteFile(filepath.Join(env.HomeDir, ddxroot.DirName, "config.yaml"), configContent, 0644)
 		return nil
 	case "broken_path":
 		// Install DDX but without PATH configuration
 		env.ExecuteInstallCommand("install")
 		// Create library directory for doctor check
-		libDir := filepath.Join(env.HomeDir, ".ddx", "plugins", "ddx")
+		libDir := filepath.Join(env.HomeDir, ddxroot.DirName, "plugins", "ddx")
 		_ = os.MkdirAll(libDir, 0755)
 		// Create some sample resources so library appears valid
 		_ = os.MkdirAll(filepath.Join(libDir, "workflows"), 0755)
@@ -1071,7 +1072,7 @@ library:
   repository:
     url: https://github.com/DocumentDrivenDX/ddx-library
     branch: main`)
-		_ = os.WriteFile(filepath.Join(env.HomeDir, ".ddx", "config.yaml"), configContent, 0644)
+		_ = os.WriteFile(filepath.Join(env.HomeDir, ddxroot.DirName, "config.yaml"), configContent, 0644)
 		// Remove PATH configuration from shell profiles
 		profileFiles := []string{"~/.bashrc", "~/.zshrc", "~/.profile"}
 		for _, profileFile := range profileFiles {

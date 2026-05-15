@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -142,7 +143,7 @@ func TestWorkConcurrentAttempts_DirtyCheckoutDoesNotLoseSuccessfulResult(t *test
 
 func TestWorkConcurrentAttempts_WorktreeLostLeavesBeadRetryable(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
 
 	beadRcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Harness: "test-harness"}).

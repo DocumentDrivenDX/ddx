@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -35,7 +36,7 @@ func TestAcceptance_US015_ViewChangeHistory(t *testing.T) {
 		defer func() { _ = os.RemoveAll(testDir) }()
 
 		// Create test resource at specific path
-		patternsDir := filepath.Join(testDir, ".ddx", "patterns")
+		patternsDir := filepath.Join(testDir, ddxroot.DirName, "patterns")
 		_ = os.MkdirAll(patternsDir, 0755)
 		patternFile := filepath.Join(patternsDir, "auth-pattern.md")
 		_ = os.WriteFile(patternFile, []byte("# Auth Pattern\nTest content"), 0644)
@@ -272,7 +273,7 @@ func TestLogCommand_US015_ValidationScenarios(t *testing.T) {
 		// Create multiple files to simulate updates
 		updateDirs := []string{"patterns", "templates", "prompts"}
 		for _, dir := range updateDirs {
-			fullDir := filepath.Join(testDir, ".ddx", dir)
+			fullDir := filepath.Join(testDir, ddxroot.DirName, dir)
 			_ = os.MkdirAll(fullDir, 0755)
 			_ = os.WriteFile(filepath.Join(fullDir, "test.md"), []byte("content"), 0644)
 		}
@@ -294,7 +295,7 @@ func TestLogCommand_US015_ValidationScenarios(t *testing.T) {
 		defer cleanup()
 		defer func() { _ = os.RemoveAll(testDir) }()
 
-		authDir := filepath.Join(testDir, ".ddx", "patterns", "auth")
+		authDir := filepath.Join(testDir, ddxroot.DirName, "patterns", "auth")
 		_ = os.MkdirAll(authDir, 0755)
 		_ = os.WriteFile(filepath.Join(authDir, "oauth.md"), []byte("OAuth pattern"), 0644)
 

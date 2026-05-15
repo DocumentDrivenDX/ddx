@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,7 +36,7 @@ persona_bindings:
   project_name: "test-project"
   port: "8080"
 `
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir
@@ -61,7 +62,7 @@ library:
 persona_bindings:
   author: "Test User"
 `
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir
@@ -81,14 +82,14 @@ persona_bindings:
 persona_bindings:
   existing: "value"
 `
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir
 			},
 			validate: func(t *testing.T, workDir string, output string, cmdErr error) {
 				// Read config to verify change
-				data, err := os.ReadFile(filepath.Join(workDir, ".ddx", "config.yaml"))
+				data, err := os.ReadFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"))
 				if err == nil {
 					var config map[string]interface{}
 					_ = yaml.Unmarshal(data, &config)
@@ -126,7 +127,7 @@ repository:
   url: "https://github.com/test/repo"
   branch: "main"
 `
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir
@@ -147,7 +148,7 @@ repository:
 repository:
   url: [this is invalid
 `
-				ddxDir := filepath.Join(workDir, ".ddx")
+				ddxDir := filepath.Join(workDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 				return workDir
@@ -204,7 +205,7 @@ func TestConfigCommand_Global(t *testing.T) {
 	t.Setenv("HOME", homeDir)
 
 	// Create global config using new format
-	globalConfigDir := filepath.Join(homeDir, ".ddx")
+	globalConfigDir := filepath.Join(homeDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(globalConfigDir, 0755))
 
 	globalConfig := `version: "1.0"

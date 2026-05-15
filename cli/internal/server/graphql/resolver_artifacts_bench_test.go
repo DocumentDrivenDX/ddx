@@ -11,6 +11,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // BenchmarkArtifactsSearch_500Fixture builds the 500-artifact fixture defined
@@ -76,7 +78,7 @@ func BenchmarkArtifactsSearch_500Fixture(b *testing.B) {
 func buildBench500Fixture(tb testing.TB) string {
 	tb.Helper()
 	root := tb.TempDir()
-	pluginDir := filepath.Join(root, ".ddx", "plugins", "bench")
+	pluginDir := filepath.Join(root, ddxroot.DirName, "plugins", "bench")
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		tb.Fatal(err)
 	}

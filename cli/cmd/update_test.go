@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
@@ -190,7 +191,7 @@ func TestUpdate_DiscardLocalOverwritesDirty(t *testing.T) {
 		"--discard-local should suppress the dirty-file block; got: %q", output)
 
 	// Backup directory must exist under .ddx/update-backup/<timestamp>/
-	backupRoot := filepath.Join(te.Dir, ".ddx", "update-backup")
+	backupRoot := filepath.Join(te.Dir, ddxroot.DirName, "update-backup")
 	entries, readErr := os.ReadDir(backupRoot)
 	require.NoError(t, readErr, "update-backup directory should be created")
 	require.NotEmpty(t, entries, "at least one timestamped backup dir should exist")

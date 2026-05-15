@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +43,7 @@ func setupCleanupCommandProject(t *testing.T) (string, string) {
 	tempParent := t.TempDir()
 	tempRoot := filepath.Join(tempParent, "ddx-exec-wt")
 	t.Setenv("DDX_EXEC_WT_DIR", tempRoot)
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
 	return projectRoot, tempRoot
 }
@@ -73,7 +74,7 @@ func runCleanupCommandGit(t *testing.T, dir string, args ...string) string {
 func TestCleanupCommand_DryRunReportsWithoutDeleting(t *testing.T) {
 	projectRoot, tempRoot := setupCleanupCommandProject(t)
 	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-dryrun-20260506T154739-deadbeef", projectRoot, "20260506T154739-deadbeef")
-	runStatePath := filepath.Join(projectRoot, ".ddx", agent.RunStateFileName)
+	runStatePath := filepath.Join(projectRoot, ddxroot.DirName, agent.RunStateFileName)
 	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
 		BeadID:       "ddx-cleanup",
 		AttemptID:    "20260506T154739-live-feedface",
@@ -94,14 +95,14 @@ func TestCleanupCommand_DryRunReportsWithoutDeleting(t *testing.T) {
 func TestCleanupCommand_ApplyRemovesStaleDDxResources(t *testing.T) {
 	projectRoot, tempRoot := setupCleanupCommandProject(t)
 	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-apply-20260506T154739-feedface", projectRoot, "20260506T154739-feedface")
-	runStatePath := filepath.Join(projectRoot, ".ddx", agent.RunStateFileName)
+	runStatePath := filepath.Join(projectRoot, ddxroot.DirName, agent.RunStateFileName)
 	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
 		BeadID:       "ddx-cleanup",
 		AttemptID:    "20260506T154739-live-cafebabe",
 		StartedAt:    time.Now().UTC(),
 		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
 	}))
-	evidenceDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-complete")
+	evidenceDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-complete")
 	require.NoError(t, os.MkdirAll(evidenceDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(evidenceDir, "manifest.json"), []byte(`{"attempt_id":"attempt-complete"}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(evidenceDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
@@ -155,11 +156,11 @@ func TestCleanupCommand_DoesNotRemovePreservedEvidence(t *testing.T) {
 		WorktreePath: preservedPath,
 		Preserved:    true,
 	}))
-	evidenceDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-complete")
+	evidenceDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-complete")
 	require.NoError(t, os.MkdirAll(evidenceDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(evidenceDir, "manifest.json"), []byte(`{"attempt_id":"attempt-complete"}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(evidenceDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
-	runsDir := filepath.Join(projectRoot, ".ddx", "runs", "run-complete")
+	runsDir := filepath.Join(projectRoot, ddxroot.DirName, "runs", "run-complete")
 	require.NoError(t, os.MkdirAll(runsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runsDir, "record.json"), []byte(`{"run_id":"run-complete"}`), 0o644))
 
@@ -180,12 +181,12 @@ func TestCleanupEndToEnd_PreservesPublishedEvidence(t *testing.T) {
 	projectRoot, tempRoot := setupCleanupCommandProject(t)
 	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-published-20260508T120000-abcdef12", projectRoot, "20260508T120000-abcdef12")
 
-	executionsDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-published")
+	executionsDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "attempt-published")
 	require.NoError(t, os.MkdirAll(executionsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "manifest.json"), []byte(`{"attempt_id":"attempt-published"}`), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
 
-	runsDir := filepath.Join(projectRoot, ".ddx", "runs", "run-published")
+	runsDir := filepath.Join(projectRoot, ddxroot.DirName, "runs", "run-published")
 	require.NoError(t, os.MkdirAll(runsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(runsDir, "record.json"), []byte(`{"run_id":"run-published"}`), 0o644))
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
@@ -213,7 +214,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	// Backup dirty files before overwriting when --discard-local is set.
 	var backupPath string
 	if len(dirtyFiles) > 0 && opts.DiscardLocal {
-		backupPath = filepath.Join(workingDir, ".ddx", "update-backup",
+		backupPath = ddxroot.JoinProject(workingDir, "update-backup",
 			time.Now().UTC().Format("20060102T150405"))
 		for _, f := range dirtyFiles {
 			_ = backupUpdateFile(workingDir, f, backupPath)

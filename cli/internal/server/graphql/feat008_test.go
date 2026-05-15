@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 )
 
@@ -26,7 +27,7 @@ func TestIntegration_FEAT008BackendOperations(t *testing.T) {
 	}
 
 	// Place the plugin at the project-local path (FEAT-015: no global installs).
-	pluginRoot := filepath.Join(workDir, ".ddx", "plugins", "local-ui")
+	pluginRoot := filepath.Join(workDir, ddxroot.DirName, "plugins", "local-ui")
 	if err := os.MkdirAll(filepath.Join(pluginRoot, "skills", "ui-polish"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +116,7 @@ install:
 		InputTokens:  1200,
 		OutputTokens: 450,
 		Outcome:      "success",
-		BundlePath:   filepath.ToSlash(filepath.Join(".ddx", "executions", "attempt-001")),
+		BundlePath:   filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", "attempt-001")),
 	}, started); err != nil {
 		t.Fatal(err)
 	}
@@ -256,13 +257,13 @@ install:
 	if strings.HasPrefix(mutationData.PluginDispatch.ID, "queued-plugin-") || mutationData.PluginDispatch.State != "installed" || mutationData.PluginDispatch.Action != "install" {
 		t.Fatalf("pluginDispatch did not run the real plugin path: %+v", mutationData.PluginDispatch)
 	}
-	if _, err := os.Stat(filepath.Join(workDir, ".ddx", "plugin-dispatches", mutationData.PluginDispatch.ID+".json")); err != nil {
+	if _, err := os.Stat(filepath.Join(workDir, ddxroot.DirName, "plugin-dispatches", mutationData.PluginDispatch.ID+".json")); err != nil {
 		t.Fatalf("pluginDispatch did not write an audit record: %v", err)
 	}
 	if strings.HasPrefix(mutationData.ComparisonDispatch.ID, "queued-comparison-") || mutationData.ComparisonDispatch.State != "queued" || mutationData.ComparisonDispatch.ArmCount != 2 {
 		t.Fatalf("comparisonDispatch did not create a real queued record: %+v", mutationData.ComparisonDispatch)
 	}
-	comparisonPath := filepath.Join(workDir, ".ddx", "comparisons", mutationData.ComparisonDispatch.ID+".json")
+	comparisonPath := filepath.Join(workDir, ddxroot.DirName, "comparisons", mutationData.ComparisonDispatch.ID+".json")
 	if _, err := os.Stat(comparisonPath); err != nil {
 		t.Fatalf("comparisonDispatch did not write a comparison record: %v", err)
 	}
@@ -282,7 +283,7 @@ install:
 		t.Fatalf("comparisons did not read back dispatched record: %+v", comparisonData.Comparisons)
 	}
 
-	cfgData, err := os.ReadFile(filepath.Join(workDir, ".ddx", "config.yaml"))
+	cfgData, err := os.ReadFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

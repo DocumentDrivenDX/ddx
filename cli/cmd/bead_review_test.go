@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // beadReviewFixture returns the deterministic inputs used by both the
@@ -129,7 +130,7 @@ func TestBeadReviewCommandWiring(t *testing.T) {
 	}
 	sha := strings.TrimSpace(string(shaOut))
 
-	ddxDir := filepath.Join(tmp, ".ddx")
+	ddxDir := filepath.Join(tmp, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +220,7 @@ func TestBeadReviewCommandWithProseIncludesAdvisoryFindings(t *testing.T) {
 	}
 	sha := strings.TrimSpace(string(shaOut))
 
-	ddxDir := filepath.Join(tmp, ".ddx")
+	ddxDir := filepath.Join(tmp, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

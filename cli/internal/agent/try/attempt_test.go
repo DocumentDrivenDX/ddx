@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -380,7 +381,7 @@ func TestDeclinedNeedsDecomposition_NotEligible(t *testing.T) {
 
 func TestDeclinedNeedsDecomposition_NotInReady(t *testing.T) {
 	dir := t.TempDir()
-	s := bead.NewStore(filepath.Join(dir, ".ddx"))
+	s := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, s.Init())
 
 	b := &bead.Bead{Title: "too-big bead", IssueType: "task", Priority: 1}

@@ -10,12 +10,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -390,7 +390,7 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 	if svc == nil || strings.TrimSpace(projectRoot) == "" {
 		return
 	}
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	beads, err := store.List("", "", nil)
 	if err != nil {
 		return

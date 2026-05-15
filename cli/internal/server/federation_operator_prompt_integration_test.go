@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -203,7 +204,7 @@ func TestFederation_OperatorPromptSubmit_CoordinatorToSpoke_IdentityUnchanged(t 
 		t.Fatal("first forwarded submission must not be deduplicated")
 	}
 
-	spokeStore := bead.NewStore(filepath.Join(spokeDir, ".ddx"))
+	spokeStore := bead.NewStore(filepath.Join(spokeDir, ddxroot.DirName))
 	persisted, err := spokeStore.Get(out.Data.OperatorPromptSubmit.Bead.ID)
 	if err != nil {
 		t.Fatalf("read spoke bead: %v", err)

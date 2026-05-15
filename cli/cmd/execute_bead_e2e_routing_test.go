@@ -7,6 +7,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestExecuteBeadRoutingEvidencePersisted(t *testing.T) {
 	// Read routing events directly from the bead store that runAgentExecuteBead
 	// created (backed by f.WorkingDir/.ddx). This verifies end-to-end persistence,
 	// not just that appendBeadRoutingEvidence was called in isolation.
-	store := bead.NewStore(filepath.Join(f.WorkingDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(f.WorkingDir, ddxroot.DirName))
 	routingEvents, err := store.EventsByKind("my-bead", "routing")
 	require.NoError(t, err)
 	require.Len(t, routingEvents, 1, "expected exactly one kind:routing event")
@@ -95,7 +96,7 @@ func TestExecuteBeadRoutingEvidenceProviderFallsBackToHarness(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 	require.Equal(t, "merged", res.Outcome)
 
-	store := bead.NewStore(filepath.Join(f.WorkingDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(f.WorkingDir, ddxroot.DirName))
 	routingEvents, err := store.EventsByKind("my-bead", "routing")
 	require.NoError(t, err)
 	require.Len(t, routingEvents, 1)
@@ -132,7 +133,7 @@ func TestExecuteBeadRoutingEvidenceNoEvidence(t *testing.T) {
 	res := runExecuteBead(t, f, git, "my-bead")
 	require.Equal(t, "no-evidence", res.Outcome)
 
-	store := bead.NewStore(filepath.Join(f.WorkingDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(f.WorkingDir, ddxroot.DirName))
 	routingEvents, err := store.EventsByKind("my-bead", "routing")
 	require.NoError(t, err)
 	require.Len(t, routingEvents, 1, "routing event should be persisted even on no-evidence outcome")

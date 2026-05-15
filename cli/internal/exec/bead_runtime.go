@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
@@ -418,7 +419,7 @@ func (s *Store) saveRunRecord(rec RunRecord) error {
 	rec.Attachments["stderr"] = runAttachmentRef(s.WorkingDir, rec.RunID, "stderr.log")
 	rec.Attachments["result"] = runAttachmentRef(s.WorkingDir, rec.RunID, "result.json")
 
-	attachmentRoot := filepath.Join(s.WorkingDir, ".ddx", execRunAttachmentDir)
+	attachmentRoot := ddxroot.JoinProject(s.WorkingDir, execRunAttachmentDir)
 	if err := os.MkdirAll(attachmentRoot, 0o755); err != nil {
 		return err
 	}
@@ -481,7 +482,7 @@ func (s *Store) saveRunRecord(rec RunRecord) error {
 }
 
 func (s *Store) runBundleDir(runID string) string {
-	return filepath.Join(s.WorkingDir, ".ddx", execRunAttachmentDir, runID)
+	return ddxroot.JoinProject(s.WorkingDir, execRunAttachmentDir, runID)
 }
 
 func runAttachmentRef(workingDir, runID, name string) string {
@@ -503,7 +504,7 @@ func attachmentPath(workingDir, ref string) string {
 	if filepath.IsAbs(ref) {
 		return ref
 	}
-	return filepath.Join(workingDir, ".ddx", filepath.FromSlash(ref))
+	return ddxroot.JoinProject(workingDir, filepath.FromSlash(ref))
 }
 
 func beadRunStatus(status string) string {

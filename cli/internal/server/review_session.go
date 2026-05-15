@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // Stable refusal codes returned when a review turn cannot proceed. These are
@@ -326,7 +328,7 @@ func (s *ReviewSessionStore) sessionRoot(sessionID string) (string, error) {
 	if sessionID == "." || sessionID == ".." || strings.ContainsAny(sessionID, "/\\") {
 		return "", fmt.Errorf("review session store: invalid session id %q", sessionID)
 	}
-	return filepath.Join(s.projectRoot, ".ddx", reviewSessionsDirName, sessionID), nil
+	return ddxroot.JoinProject(s.projectRoot, reviewSessionsDirName, sessionID), nil
 }
 
 func reviewSessionManifestFrom(session ReviewSession) reviewSessionManifest {

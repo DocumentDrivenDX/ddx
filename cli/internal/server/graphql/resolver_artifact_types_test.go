@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 type gqlArtifactTypeFile struct {
@@ -53,7 +55,7 @@ type gqlArtifactTypeDefinitionResponse struct {
 func writeArtifactTypeFixture(t *testing.T, root, pluginName, typeID, prefix, templateContent, promptContent string, exampleContent *string) {
 	t.Helper()
 
-	typeDir := filepath.Join(root, ".ddx", "plugins", pluginName, "workflows", "phases", "01-frame", "artifacts", typeID)
+	typeDir := filepath.Join(root, ddxroot.DirName, "plugins", pluginName, "workflows", "phases", "01-frame", "artifacts", typeID)
 	if err := os.MkdirAll(typeDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

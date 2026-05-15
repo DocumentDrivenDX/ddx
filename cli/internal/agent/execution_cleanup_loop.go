@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 const defaultExecutionCleanupInterval = 10 * time.Minute
@@ -16,7 +18,7 @@ const executionCleanupJitterFraction = 0.20
 const executionCleanupLockDirName = ".cleanup.lock"
 
 func executionCleanupLockPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".ddx", executionCleanupLockDirName)
+	return ddxroot.JoinProject(projectRoot, executionCleanupLockDirName)
 }
 
 // runExecutionCleanupPass conservatively runs the shared cleanup manager under

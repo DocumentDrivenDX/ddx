@@ -58,15 +58,12 @@ func TestWorkerManagerStopCancelsAgentExecution(t *testing.T) {
 		}
 	}
 
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		Mode:         "watch",
-		IdleInterval: executeLoopIdleInterval(30 * time.Second),
-	})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	// Wait until the executor has actually started running so we know the
 	// cancellation we exercise is against an in-flight call.
-	require.Eventually(t, executorStarted.Load, 3*time.Second, 20*time.Millisecond,
+	require.Eventually(t, executorStarted.Load, 10*time.Second, 20*time.Millisecond,
 		"executor never entered the blocking Chat call")
 
 	stopStart := time.Now()

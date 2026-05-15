@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func writeExecutionRootConfig(t *testing.T, path, root string) {
@@ -23,8 +25,8 @@ func TestExecutionWorktreeRoot_ProjectConfigBeatsGlobal(t *testing.T) {
 	t.Setenv("HOME", home)
 	projectRoot := t.TempDir()
 
-	writeExecutionRootConfig(t, filepath.Join(home, ".ddx", "config.yaml"), "global-root")
-	writeExecutionRootConfig(t, filepath.Join(projectRoot, ".ddx", "config.yaml"), "project-root")
+	writeExecutionRootConfig(t, filepath.Join(home, ddxroot.DirName, "config.yaml"), "global-root")
+	writeExecutionRootConfig(t, filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), "project-root")
 
 	got := ExecutionWorktreeRoot(projectRoot)
 	want := filepath.Join(projectRoot, "project-root")
@@ -39,7 +41,7 @@ func TestExecutionWorktreeRoot_GlobalConfigWhenProjectUnset(t *testing.T) {
 	t.Setenv("HOME", home)
 	projectRoot := t.TempDir()
 
-	writeExecutionRootConfig(t, filepath.Join(home, ".ddx", "config.yaml"), "global-root")
+	writeExecutionRootConfig(t, filepath.Join(home, ddxroot.DirName, "config.yaml"), "global-root")
 
 	got := ExecutionWorktreeRoot(projectRoot)
 	want := filepath.Join(home, "global-root")
@@ -54,7 +56,7 @@ func TestExecutionWorktreeRoot_EnvOverridesConfig(t *testing.T) {
 	projectRoot := t.TempDir()
 	t.Setenv(ExecutionWorktreeRootEnv, filepath.Join(home, "env-root"))
 
-	writeExecutionRootConfig(t, filepath.Join(projectRoot, ".ddx", "config.yaml"), "project-root")
+	writeExecutionRootConfig(t, filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), "project-root")
 
 	got := ExecutionWorktreeRoot(projectRoot)
 	want := filepath.Join(home, "env-root")
@@ -69,7 +71,7 @@ func TestExecutionWorktreeRoot_ExpandsTilde(t *testing.T) {
 	t.Setenv("HOME", home)
 	projectRoot := t.TempDir()
 
-	writeExecutionRootConfig(t, filepath.Join(projectRoot, ".ddx", "config.yaml"), "~/ddx-worktrees")
+	writeExecutionRootConfig(t, filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), "~/ddx-worktrees")
 
 	got := ExecutionWorktreeRoot(projectRoot)
 	want := filepath.Join(home, "ddx-worktrees")

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestRenderMirrorPath verifies the four supported placeholders are
@@ -68,7 +69,7 @@ func TestMirrorBundle_LocalDirRoundtrip(t *testing.T) {
 	const beadID = "ddx-mirror-roundtrip"
 
 	// Build the bundle on disk.
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(filepath.Join(bundleDir, "embedded"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +169,7 @@ func TestMirrorBundle_LocalDirRoundtrip(t *testing.T) {
 // unsupported backend kind must be logged but never panic or be returned.
 func TestMirrorOrLog_FailureDoesNotPanic(t *testing.T) {
 	projectRoot := t.TempDir()
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", "x")
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", "x")
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +290,7 @@ func TestMirror_CopiesExecutionDir(t *testing.T) {
 	const attemptID = "20260511T010101-aabbccdd"
 	const beadID = "ddx-copy-exec-dir"
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +333,7 @@ func TestMirror_CopiesAgentLog(t *testing.T) {
 	const beadID = "ddx-copy-agent-log"
 	const sessionID = "test-session-xyz"
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -340,7 +341,7 @@ func TestMirror_CopiesAgentLog(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	logDir := filepath.Join(projectRoot, ddxroot.DirName, "agent-logs")
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -383,7 +384,7 @@ func TestMirror_CopiesWorkerDirWhenIncluded(t *testing.T) {
 	const beadID = "ddx-copy-worker-dir"
 	const workerID = "worker-include-test"
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +392,7 @@ func TestMirror_CopiesWorkerDirWhenIncluded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	workerDir := filepath.Join(projectRoot, ".ddx", "workers", workerID)
+	workerDir := filepath.Join(projectRoot, ddxroot.DirName, "workers", workerID)
 	if err := os.MkdirAll(workerDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +435,7 @@ func TestMirror_SkipsWorkerDirWhenExcluded(t *testing.T) {
 	const beadID = "ddx-skip-worker-dir"
 	const workerID = "worker-exclude-test"
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -442,7 +443,7 @@ func TestMirror_SkipsWorkerDirWhenExcluded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	workerDir := filepath.Join(projectRoot, ".ddx", "workers", workerID)
+	workerDir := filepath.Join(projectRoot, ddxroot.DirName, "workers", workerID)
 	if err := os.MkdirAll(workerDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -487,7 +488,7 @@ func TestMirror_CopyFailure_DoesNotBlockFinalization(t *testing.T) {
 	const beadID = "ddx-copy-fail"
 	const workerID = "worker-fail-test"
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -496,7 +497,7 @@ func TestMirror_CopyFailure_DoesNotBlockFinalization(t *testing.T) {
 	}
 
 	// Create a worker dir that exists so the copy is attempted.
-	workerDir := filepath.Join(projectRoot, ".ddx", "workers", workerID)
+	workerDir := filepath.Join(projectRoot, ddxroot.DirName, "workers", workerID)
 	if err := os.MkdirAll(workerDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -541,7 +542,7 @@ func TestMirror_PathAutoCreate(t *testing.T) {
 	const attemptID = "20260511T060606-ffeeddcc"
 	const beadID = "ddx-path-autocreate"
 
-	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	bundleDir := filepath.Join(projectRoot, ddxroot.DirName, "executions", attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

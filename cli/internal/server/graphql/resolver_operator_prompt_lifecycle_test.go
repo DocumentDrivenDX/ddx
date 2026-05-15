@@ -13,6 +13,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -32,7 +33,7 @@ func setupApprovalHarness(t *testing.T, allowlist []string, tsnetUser string) (h
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(workDir) })
 
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

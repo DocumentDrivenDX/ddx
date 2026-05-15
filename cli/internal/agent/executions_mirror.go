@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // ExecutionsMirrorIndexFile is the local pointer file that lists every
@@ -207,7 +208,7 @@ func copyAgentLogToMirror(req MirrorRequest, destRoot string) error {
 // <destRoot>/workers/<WorkerID>/. No-ops silently when the worker directory
 // doesn't exist.
 func copyWorkerDirToMirror(req MirrorRequest, destRoot string) error {
-	srcDir := filepath.Join(req.ProjectRoot, ".ddx", "workers", req.WorkerID)
+	srcDir := ddxroot.JoinProject(req.ProjectRoot, "workers", req.WorkerID)
 	if _, err := os.Stat(srcDir); err != nil {
 		return nil // worker dir absent — silently skip
 	}

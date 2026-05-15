@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,8 @@ import (
 func newBeadTestRoot(t *testing.T, workingDir string) *CommandFactory {
 	t.Helper()
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
-	t.Setenv("DDX_BEAD_DIR", "")
+	t.Setenv("DDX_BEAD_DIR", ".ddx")
+	require.NoError(t, os.MkdirAll(ddxroot.InTree(workingDir), 0o755))
 	return NewCommandFactory(workingDir)
 }
 
@@ -31,7 +33,7 @@ func TestBeadCommandsCRUDLifecycle(t *testing.T) {
 
 	createdID := strings.TrimSpace(createOut)
 	require.NotEmpty(t, createdID)
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"))
 
 	showOut, err := executeCommand(rootCmd, "bead", "show", createdID, "--json")
 	require.NoError(t, err)
@@ -800,7 +802,7 @@ git:
   commit_prefix: beads
 `)
 
-	notesPath := filepath.Join(env.Dir, ".ddx", "notes.txt")
+	notesPath := filepath.Join(env.Dir, ddxroot.DirName, "notes.txt")
 	require.NoError(t, os.MkdirAll(filepath.Dir(notesPath), 0o755))
 	require.NoError(t, os.WriteFile(notesPath, []byte("tracked ddx notes\n"), 0o644))
 	gitAddAndCommit(t, env.Dir, "track ddx config and notes", ".ddx/config.yaml", ".ddx/notes.txt")
@@ -1033,7 +1035,7 @@ func TestBeadBlockedExcludesDependencyWaiting(t *testing.T) {
 	_, err = executeCommand(rootCmd, "bead", "dep", "add", depBlockedID, depRootID)
 	require.NoError(t, err)
 
-	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(workingDir, ddxroot.DirName))
 	until := time.Now().UTC().Add(3 * time.Hour).Truncate(time.Second)
 	require.NoError(t, store.SetExecutionCooldown(parkedID, until, "no_changes", "agent made no commits", ""))
 

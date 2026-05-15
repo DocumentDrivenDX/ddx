@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +15,7 @@ import (
 func setupCooldownEnv(t *testing.T, beads ...*bead.Bead) (*TestEnvironment, *bead.Store) {
 	t.Helper()
 	env := NewTestEnvironment(t)
-	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))

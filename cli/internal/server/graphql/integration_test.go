@@ -27,6 +27,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 	"github.com/gorilla/websocket"
 )
@@ -77,7 +78,7 @@ func setupIntegrationDir(t *testing.T) (workDir string, store *bead.Store) {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

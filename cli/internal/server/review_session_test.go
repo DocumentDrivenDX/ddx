@@ -4,15 +4,22 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
+func newReviewSessionTestRoot(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	return t.TempDir()
+}
+
 func TestReviewSession_CreatePersistsManifest(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	session := ReviewSession{
 		ID:             "review-001",
@@ -31,7 +38,7 @@ func TestReviewSession_CreatePersistsManifest(t *testing.T) {
 		t.Fatalf("Create() error = %v", err)
 	}
 
-	manifestPath := filepath.Join(workDir, ".ddx", reviewSessionsDirName, session.ID, reviewManifestName)
+	manifestPath := ddxroot.JoinProject(workDir, reviewSessionsDirName, session.ID, reviewManifestName)
 	data, err := os.ReadFile(manifestPath)
 	if err != nil {
 		t.Fatalf("reading manifest.json: %v", err)
@@ -48,7 +55,7 @@ func TestReviewSession_CreatePersistsManifest(t *testing.T) {
 }
 
 func TestReviewSession_AppendTurn_TurnsJsonl(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	sessionID := "review-append-001"
 	if err := store.Create(ReviewSession{ID: sessionID, Status: "open"}); err != nil {
@@ -65,7 +72,7 @@ func TestReviewSession_AppendTurn_TurnsJsonl(t *testing.T) {
 		t.Fatalf("AppendTurn() error = %v", err)
 	}
 
-	turnsPath := filepath.Join(workDir, ".ddx", reviewSessionsDirName, sessionID, reviewTurnsName)
+	turnsPath := ddxroot.JoinProject(workDir, reviewSessionsDirName, sessionID, reviewTurnsName)
 	data, err := os.ReadFile(turnsPath)
 	if err != nil {
 		t.Fatalf("reading turns.jsonl: %v", err)
@@ -84,7 +91,7 @@ func TestReviewSession_AppendTurn_TurnsJsonl(t *testing.T) {
 }
 
 func TestReviewSession_RoundTrip(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	sessionID := "review-roundtrip-001"
 	want := ReviewSession{
@@ -141,7 +148,7 @@ func TestReviewSession_RoundTrip(t *testing.T) {
 // cost would push the session past MaxBillableUSD, and that the turn was NOT
 // written to turns.jsonl.
 func TestReview_CostCap_ReturnsCostCapExceeded(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	sessionID := "review-cap-001"
 	// Session with a tight $0.50 cap; seed with $0.40 already spent.
@@ -176,7 +183,7 @@ func TestReview_CostCap_ReturnsCostCapExceeded(t *testing.T) {
 	}
 
 	// The turn must NOT have been written.
-	turnsPath := filepath.Join(workDir, ".ddx", reviewSessionsDirName, sessionID, reviewTurnsName)
+	turnsPath := ddxroot.JoinProject(workDir, reviewSessionsDirName, sessionID, reviewTurnsName)
 	data, err := os.ReadFile(turnsPath)
 	if err != nil {
 		t.Fatalf("reading turns.jsonl: %v", err)

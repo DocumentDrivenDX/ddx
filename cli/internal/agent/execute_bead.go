@@ -17,9 +17,11 @@ import (
 	"time"
 
 	"errors"
+
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
@@ -1787,7 +1789,7 @@ func CommitTracker(projectRoot string) error {
 // on the parent's HEAD ref (regression: niflheim concurrent `ddx work` hit
 // "cannot lock ref 'HEAD'" between unlocked CommitTracker and SynthesizeCommit).
 func commitTrackerLocked(projectRoot string) error {
-	trackerFile := filepath.Join(projectRoot, ".ddx", "beads.jsonl")
+	trackerFile := ddxroot.JoinProject(projectRoot, "beads.jsonl")
 	info, err := os.Stat(trackerFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1916,7 +1918,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 }
 
 func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
-	store := bead.NewStore(filepath.Join(wtPath, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(wtPath))
 	b, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
@@ -2310,7 +2312,7 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 		return 0
 	}
 
-	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
+	store := bead.NewStore(ddxroot.JoinProject(workDir))
 	depth := beadDecomposedChildDepth(b)
 	seen := map[string]struct{}{}
 	current := b

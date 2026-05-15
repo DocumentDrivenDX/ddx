@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // TestArtifactRegenerate_NoGeneratorMetadata asserts that artifacts without a
@@ -77,7 +79,7 @@ func TestArtifactRegenerate_SuccessDispatches(t *testing.T) {
 	workDir = setupArtifactFixtureInDir(t, workDir)
 
 	// Add an artifact with a generated_by block so the resolver can dispatch.
-	assetsDir := filepath.Join(workDir, ".ddx", "plugins", "assets")
+	assetsDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "assets")
 	if err := os.WriteFile(filepath.Join(assetsDir, "report.md"), []byte("# Report\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +117,7 @@ func TestArtifactRegenerate_SuccessDispatches(t *testing.T) {
 	}
 
 	// The dispatch record should have been persisted.
-	matches, err := filepath.Glob(filepath.Join(workDir, ".ddx", "artifact-regenerations", "*.json"))
+	matches, err := filepath.Glob(filepath.Join(workDir, ddxroot.DirName, "artifact-regenerations", "*.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

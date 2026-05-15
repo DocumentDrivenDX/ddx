@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -146,7 +147,7 @@ func TestLookupInline(t *testing.T) {
 
 func TestRunVirtualWithInlineResponses(t *testing.T) {
 	dir := t.TempDir()
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	logDir := filepath.Join(dir, ddxroot.DirName, "agent-logs")
 	require.NoError(t, os.MkdirAll(logDir, 0755))
 
 	runner := NewRunner(Config{
@@ -183,7 +184,7 @@ func TestRunVirtualWithInlineResponses(t *testing.T) {
 
 func TestRunVirtual(t *testing.T) {
 	dir := t.TempDir()
-	dictDir := filepath.Join(dir, ".ddx", "agent-dictionary")
+	dictDir := filepath.Join(dir, ddxroot.DirName, "agent-dictionary")
 
 	// Record a response.
 	entry := &VirtualEntry{
@@ -197,7 +198,7 @@ func TestRunVirtual(t *testing.T) {
 	require.NoError(t, RecordEntry(dictDir, entry))
 
 	// Create runner with virtual harness.
-	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	logDir := filepath.Join(dir, ddxroot.DirName, "agent-logs")
 	require.NoError(t, os.MkdirAll(logDir, 0755))
 
 	runner := NewRunner(Config{

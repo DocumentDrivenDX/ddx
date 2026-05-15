@@ -18,11 +18,12 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestEfficacyRowsReadsSessionIndexAsStrictSupersetOfLegacyEvidence(t *testing.T) {
 	workDir := t.TempDir()
-	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
+	store := bead.NewStore(filepath.Join(workDir, ddxroot.DirName))
 	closed := &bead.Bead{Title: "closed legacy evidence", Status: bead.StatusOpen}
 	if err := store.Create(closed); err != nil {
 		t.Fatal(err)

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -72,7 +73,7 @@ func TestBeadDoctor_DetectsOversizedFields(t *testing.T) {
 // sidecars on every run.
 func TestBeadDoctorFix_RewriteIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	path := filepath.Join(ddxDir, "beads.jsonl")
 
@@ -109,7 +110,7 @@ func TestBeadDoctorFix_RewriteIsIdempotent(t *testing.T) {
 // the pre-fix state and audit the truncated payload.
 func TestBeadDoctorFix_WritesBackupAndArtifact(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	path := filepath.Join(ddxDir, "beads.jsonl")
 
@@ -175,7 +176,7 @@ func TestBeadDoctorFix_WritesBackupAndArtifact(t *testing.T) {
 // works against a non-synthesized case.
 func TestBeadDoctorFix_OversizedLineFromFixture(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	path := filepath.Join(ddxDir, "beads.jsonl")
 

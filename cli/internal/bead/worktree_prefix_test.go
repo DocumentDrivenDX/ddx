@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -40,7 +41,7 @@ func TestGenID_WorktreePrefix(t *testing.T) {
 
 	// NewStore receives an absolute path rooted at the real project, not the
 	// worktree.  workingDir inside NewStore will be projectDir.
-	ddxDir := filepath.Join(projectDir, ".ddx")
+	ddxDir := filepath.Join(projectDir, ddxroot.DirName)
 	s := NewStore(ddxDir)
 	require.NoError(t, s.Init(testCtx()))
 

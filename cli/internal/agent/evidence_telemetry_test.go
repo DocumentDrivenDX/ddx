@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +28,7 @@ func TestEvidenceAssemblyTelemetry(t *testing.T) {
 		out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
 		require.NoError(t, err, string(out))
 
-		store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+		store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 		require.NoError(t, store.Init())
 		// Write a governing doc whose body is large enough to be clamped
 		// under the small caps used below (forces truncation_reason).
@@ -215,7 +216,7 @@ func TestReviewPromptTelemetryIncludesSectionBytes(t *testing.T) {
 	out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:          "ddx-telemetry-bytes",

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -304,7 +305,7 @@ func TestLifecycleCancelledDoesNotSatisfyDependents(t *testing.T) {
 // triggers a migration-required error from DetectLifecycleMigrationRequired.
 func TestStartupGateRefusesUnmigratedQueue(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStore(filepath.Join(dir, ".ddx"))
+	s := NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, os.MkdirAll(s.Dir, 0o755))
 
 	// Seed an unmigrated beads.jsonl: open bead with needs_human label.

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
@@ -44,7 +45,7 @@ func TestAcceptance_US001_InitializeProject(t *testing.T) {
 			},
 			then: func(t *testing.T, dir string, err error) {
 				// Then: a `.ddx/config.yaml` configuration file exists with my settings
-				configPath := filepath.Join(dir, ".ddx", "config.yaml")
+				configPath := filepath.Join(dir, ddxroot.DirName, "config.yaml")
 				if _, statErr := os.Stat(configPath); statErr == nil {
 					// Config file exists - validate structure
 					data, readErr := os.ReadFile(configPath)
@@ -69,7 +70,7 @@ func TestAcceptance_US001_InitializeProject(t *testing.T) {
 				// Setup mock template
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
-				templateDir := filepath.Join(homeDir, ".ddx", "templates", "test-template")
+				templateDir := filepath.Join(homeDir, ddxroot.DirName, "templates", "test-template")
 				require.NoError(t, os.MkdirAll(templateDir, 0755))
 
 				return tempDir
@@ -115,7 +116,7 @@ library:
   repository:
     url: "https://github.com/test/repo"
     branch: "main"`
-				ddxDir := filepath.Join(tempDir, ".ddx")
+				ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 				require.NoError(t, os.MkdirAll(ddxDir, 0755))
 				require.NoError(t, os.WriteFile(
 					filepath.Join(ddxDir, "config.yaml"),
@@ -177,7 +178,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env.InitWithDDx()
 
 				// Create various resources in library directory
-				libDir := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
+				libDir := filepath.Join(env.Dir, ddxroot.DirName, "plugins", "ddx")
 
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -211,7 +212,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env := NewTestEnvironment(t)
 				env.InitWithDDx()
 
-				libDir := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
+				libDir := filepath.Join(env.Dir, ddxroot.DirName, "plugins", "ddx")
 
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
@@ -253,7 +254,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				require.NoError(t, initCmd.Execute())
 
 				// Create test resources in the library
-				libraryDir := filepath.Join(testDir, ".ddx", "plugins", "ddx")
+				libraryDir := filepath.Join(testDir, ddxroot.DirName, "plugins", "ddx")
 
 				promptsDir := filepath.Join(libraryDir, "prompts")
 				claudeDir := filepath.Join(promptsDir, "claude")
@@ -295,7 +296,7 @@ func TestAcceptance_US002_ListAvailableAssets(t *testing.T) {
 				env := NewTestEnvironment(t)
 				env.InitWithDDx()
 
-				libDir := filepath.Join(env.Dir, ".ddx", "plugins", "ddx")
+				libDir := filepath.Join(env.Dir, ddxroot.DirName, "plugins", "ddx")
 				promptsDir := filepath.Join(libDir, "prompts")
 				require.NoError(t, os.MkdirAll(filepath.Join(promptsDir, "claude"), 0755))
 				require.NoError(t, os.WriteFile(filepath.Join(promptsDir, "claude", "prompt.md"), []byte("# Prompt"), 0644))
@@ -347,7 +348,7 @@ library:
     branch: "main"
 persona_bindings:
   environment: "development"`
-		ddxDir := filepath.Join(tempDir, ".ddx")
+		ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(ddxDir, 0755))
 		require.NoError(t, os.WriteFile(
 			filepath.Join(ddxDir, "config.yaml"),
@@ -376,7 +377,7 @@ library:
   path: "./library"
 persona_bindings:
   old_value: "original"`
-		ddxDir := filepath.Join(tempDir, ".ddx")
+		ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(ddxDir, 0755))
 		configPath := filepath.Join(ddxDir, "config.yaml")
 		require.NoError(t, os.WriteFile(configPath, []byte(config), 0644))
@@ -426,7 +427,7 @@ library:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`)
-		ddxDir := filepath.Join(tempDir, ".ddx")
+		ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 		require.NoError(t, os.MkdirAll(ddxDir, 0755))
 		require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), config, 0644))
 
@@ -485,7 +486,7 @@ library:
     url: "https://github.com/DocumentDrivenDX/ddx-library"
     branch: "main"
 persona_bindings: {}`
-					ddxDir := filepath.Join(tempDir, ".ddx")
+					ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 					_ = os.MkdirAll(ddxDir, 0755)
 					_ = os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644)
 					return tempDir

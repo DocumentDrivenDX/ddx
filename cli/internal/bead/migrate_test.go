@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -267,7 +268,7 @@ func TestMigrateLargeFixtureSplits(t *testing.T) {
 
 func loadMigrateToAxonFixture(t *testing.T) (*Store, bytes.Buffer) {
 	t.Helper()
-	dir := filepath.Join(t.TempDir(), ".ddx")
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
 	copyFixture := func(src, dst string) {
@@ -359,7 +360,7 @@ func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
 // TestMigrateToAxonNoSources is a defensive sanity test: an empty .ddx with
 // no source files must not error and produces an empty axon snapshot.
 func TestMigrateToAxonNoSources(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), ".ddx")
+	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	s := NewStore(dir)
 	stats, err := s.MigrateToAxon()

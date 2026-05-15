@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
@@ -39,7 +40,7 @@ func TestServerBoundedEgress(t *testing.T) {
 	t.Run("mcp_read_document_truncated", func(t *testing.T) {
 		dir := setupTestDir(t)
 		// Overwrite the fixture prompt with an oversized body.
-		fixturePath := filepath.Join(dir, ".ddx", "plugins", "ddx", "prompts", "hello.md")
+		fixturePath := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", "prompts", "hello.md")
 		if err := os.WriteFile(fixturePath, []byte(bigBody), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +67,7 @@ func TestServerBoundedEgress(t *testing.T) {
 
 	t.Run("mcp_read_document_not_truncated", func(t *testing.T) {
 		dir := setupTestDir(t)
-		fixturePath := filepath.Join(dir, ".ddx", "plugins", "ddx", "prompts", "hello.md")
+		fixturePath := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", "prompts", "hello.md")
 		if err := os.WriteFile(fixturePath, []byte(smallBody), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -89,7 +90,7 @@ func TestServerBoundedEgress(t *testing.T) {
 
 	t.Run("rest_read_document_truncated", func(t *testing.T) {
 		dir := setupTestDir(t)
-		fixturePath := filepath.Join(dir, ".ddx", "plugins", "ddx", "prompts", "hello.md")
+		fixturePath := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", "prompts", "hello.md")
 		if err := os.WriteFile(fixturePath, []byte(bigBody), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -122,7 +123,7 @@ func TestServerBoundedEgress(t *testing.T) {
 
 	t.Run("rest_read_document_not_truncated", func(t *testing.T) {
 		dir := setupTestDir(t)
-		fixturePath := filepath.Join(dir, ".ddx", "plugins", "ddx", "prompts", "hello.md")
+		fixturePath := filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", "prompts", "hello.md")
 		if err := os.WriteFile(fixturePath, []byte(smallBody), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +253,7 @@ func TestServerBoundedEgress(t *testing.T) {
 		// resolves the attempt via WorkerManager.Show.
 		srv := New(":0", dir)
 		attemptID := "20260425T100000-be01"
-		bundleDir := filepath.Join(dir, ".ddx", "executions", attemptID)
+		bundleDir := filepath.Join(dir, ddxroot.DirName, "executions", attemptID)
 		if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -290,7 +291,7 @@ func TestServerBoundedEgress(t *testing.T) {
 	t.Run("state_executions_load_bundle_detail_truncated", func(t *testing.T) {
 		dir := setupTestDir(t)
 		bundleID := "20260425T100000-bd01"
-		bundleDir := filepath.Join(dir, ".ddx", "executions", bundleID)
+		bundleDir := filepath.Join(dir, ddxroot.DirName, "executions", bundleID)
 		if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 			t.Fatal(err)
 		}

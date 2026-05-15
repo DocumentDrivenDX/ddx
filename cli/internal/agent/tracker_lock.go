@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // LockRetryPolicy describes the retry/backoff curve used when attempting to
@@ -90,7 +92,7 @@ var trackerLockPolicy = DefaultLockRetryPolicy()
 // the tracker lock, but the lock now protects all primary-checkout git writes:
 // tracker commits, pre-dispatch checkpoint/ref updates, and landing.
 func trackerLockPath(projectRoot string) string {
-	return filepath.Join(projectRoot, ".ddx", ".git-tracker.lock")
+	return ddxroot.JoinProject(projectRoot, ".git-tracker.lock")
 }
 
 // withMainGitLock acquires the process-shared main-git lock for the

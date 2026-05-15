@@ -3,17 +3,17 @@ package graphql
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // beadStore returns a bead.Store rooted at the per-request working directory
 // (from ctx via WithWorkingDir, falling back to r.WorkingDir).
 func (r *mutationResolver) beadStore(ctx context.Context) *bead.Store {
-	return bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
+	return bead.NewStore(ddxroot.JoinProject(r.workingDir(ctx)))
 }
 
 // beadModelFromBead converts a bead.Bead to the GraphQL Bead model.

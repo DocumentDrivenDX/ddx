@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -112,10 +113,10 @@ func (f *CommandFactory) runConfig(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return fmt.Errorf("failed to get home directory: %w", err)
 			}
-			configPath = filepath.Join(homeDir, ".ddx", "config.yaml")
+			configPath = ddxroot.JoinHome(homeDir, "config.yaml")
 		} else {
 			// Use local config path
-			configPath = filepath.Join(f.WorkingDir, ".ddx", "config.yaml")
+			configPath = ddxroot.JoinProject(f.WorkingDir, "config.yaml")
 		}
 
 		content, err := os.ReadFile(configPath)
@@ -243,7 +244,7 @@ func configListFiles(workingDir string) []ConfigFileInfo {
 	// Current directory config
 	localConfig := ".ddx/config.yaml"
 	if workingDir != "" {
-		localConfig = filepath.Join(workingDir, ".ddx", "config.yaml")
+		localConfig = ddxroot.JoinProject(workingDir, "config.yaml")
 	}
 	if _, err := os.Stat(localConfig); err == nil {
 		files = append(files, ConfigFileInfo{Path: localConfig, Type: "project", Exists: true})
@@ -254,7 +255,7 @@ func configListFiles(workingDir string) []ConfigFileInfo {
 	// Global config
 	home, err := os.UserHomeDir()
 	if err == nil {
-		globalConfig := filepath.Join(home, ".ddx", "config.yaml")
+		globalConfig := ddxroot.JoinHome(home, "config.yaml")
 		if _, err := os.Stat(globalConfig); err == nil {
 			files = append(files, ConfigFileInfo{Path: globalConfig, Type: "global", Exists: true})
 		} else {
@@ -262,7 +263,7 @@ func configListFiles(workingDir string) []ConfigFileInfo {
 		}
 
 		// Config directory
-		configDir := filepath.Join(home, ".ddx")
+		configDir := ddxroot.JoinHome(home)
 		if _, err := os.Stat(configDir); err == nil {
 			files = append(files, ConfigFileInfo{Path: configDir, Type: "directory", Exists: true})
 		} else {
@@ -280,10 +281,10 @@ func configGetPath(workingDir string, global bool) string {
 		if err != nil {
 			return "~/.ddx/config.yaml"
 		}
-		return filepath.Join(home, ".ddx", "config.yaml")
+		return ddxroot.JoinHome(home, "config.yaml")
 	}
 	if workingDir != "" {
-		return filepath.Join(workingDir, ".ddx", "config.yaml")
+		return ddxroot.JoinProject(workingDir, "config.yaml")
 	}
 	return ".ddx/config.yaml"
 }

@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // reviewDispatchRunnerStub is a test stub for agent.AgentRunner that captures
@@ -25,7 +25,7 @@ func (r *reviewDispatchRunnerStub) Run(opts agent.RunArgs) (*agent.Result, error
 }
 
 func TestReviewDispatcher_DispatchTurn_RecordsTurn(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	sessionID := "dispatcher-record-001"
 	session := ReviewSession{
@@ -60,7 +60,7 @@ func TestReviewDispatcher_DispatchTurn_RecordsTurn(t *testing.T) {
 	}
 
 	// Verify the turn was appended to turns.jsonl.
-	turnsPath := filepath.Join(workDir, ".ddx", reviewSessionsDirName, sessionID, reviewTurnsName)
+	turnsPath := ddxroot.JoinProject(workDir, reviewSessionsDirName, sessionID, reviewTurnsName)
 	data, err := os.ReadFile(turnsPath)
 	if err != nil {
 		t.Fatalf("reading turns.jsonl: %v", err)
@@ -85,7 +85,7 @@ func TestReviewDispatcher_DispatchTurn_RecordsTurn(t *testing.T) {
 // carries agent.PermissionsReadOnlyReviewer in RunArgs.Permissions, which the
 // claude harness translates into disabled tool use before sending the request.
 func TestReviewDispatcher_NoToolMode_ClaudeHarness(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	sessionID := "dispatcher-notool-001"
 	session := ReviewSession{
@@ -120,7 +120,7 @@ func TestReviewDispatcher_NoToolMode_ClaudeHarness(t *testing.T) {
 // path: prompt assembly includes prior turns + new user turn, the reviewer
 // harness is called, and the resulting turn lands in turns.jsonl.
 func TestReview_FullTurnLifecycle(t *testing.T) {
-	workDir := t.TempDir()
+	workDir := newReviewSessionTestRoot(t)
 	store := NewReviewSessionStore(workDir)
 	sessionID := "dispatcher-lifecycle-001"
 	session := ReviewSession{
@@ -168,7 +168,7 @@ func TestReview_FullTurnLifecycle(t *testing.T) {
 	}
 
 	// Verify the turn was recorded in turns.jsonl.
-	turnsPath := filepath.Join(workDir, ".ddx", reviewSessionsDirName, sessionID, reviewTurnsName)
+	turnsPath := ddxroot.JoinProject(workDir, reviewSessionsDirName, sessionID, reviewTurnsName)
 	data, err := os.ReadFile(turnsPath)
 	if err != nil {
 		t.Fatalf("reading turns.jsonl: %v", err)

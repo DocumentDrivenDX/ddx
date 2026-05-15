@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -239,7 +240,7 @@ func newReviewArtifactsFixture(t *testing.T) (projectRoot, head string, store *b
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(out))
 
-	store = bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store = bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# review test\n"), 0o644))
 	require.NoError(t, store.Create(&bead.Bead{

@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +38,7 @@ func (f *fakeCleanupRunner) Cleanup(ctx context.Context) (agent.ExecutionCleanup
 
 func seedOpenBead(t *testing.T, root, beadID string) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "resource preflight bead"}))
 }
@@ -53,7 +54,7 @@ func TestTryResourcePreflight_FailsBeforeClaim(t *testing.T) {
 		ProjectRoot: projectRoot,
 		TempRoot:    tempRoot,
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ".ddx", "executions"),
+			filepath.Join(projectRoot, ddxroot.DirName, "executions"),
 		},
 		CleanupRunner: cleanup,
 		RootProbe: func(path string) (agent.ExecutionResourceRootCheck, error) {
@@ -78,7 +79,7 @@ func TestTryResourcePreflight_FailsBeforeClaim(t *testing.T) {
 	assert.Contains(t, out, "resource_exhausted")
 	assert.Equal(t, 1, cleanup.calls)
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
@@ -103,7 +104,7 @@ func TestWorkResourcePreflight_FailsBeforeClaim(t *testing.T) {
 	assert.Contains(t, strings.ToLower(out), "resource_exhausted")
 	assert.Equal(t, 1, checker.calls)
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
@@ -116,13 +117,13 @@ func TestTryResourceExhaustionEndToEnd_Reclaimable(t *testing.T) {
 
 	result := agent.ExecutionResourceCheckResult{
 		ProjectRoot: projectRoot,
-		TempRoot:    filepath.Join(projectRoot, ".ddx", "tmp"),
+		TempRoot:    filepath.Join(projectRoot, ddxroot.DirName, "tmp"),
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ".ddx", "executions"),
+			filepath.Join(projectRoot, ddxroot.DirName, "executions"),
 		},
 		CleanupSummary: agent.ExecutionCleanupSummary{
 			ProjectRoot:                 projectRoot,
-			TempRoot:                    filepath.Join(projectRoot, ".ddx", "tmp"),
+			TempRoot:                    filepath.Join(projectRoot, ddxroot.DirName, "tmp"),
 			RemovedUnregisteredTempDirs: 1,
 			BytesReclaimed:              1024,
 		},
@@ -147,7 +148,7 @@ func TestTryResourceExhaustionEndToEnd_Reclaimable(t *testing.T) {
 	assert.Contains(t, out, "resource_exhausted")
 	assert.Equal(t, 1, checker.calls)
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)

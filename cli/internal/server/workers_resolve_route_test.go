@@ -16,6 +16,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -132,7 +133,7 @@ func setupWorkerResolveRouteRepo(t *testing.T) string {
 	runCmd(t, root, "git", "add", "-A")
 	runCmd(t, root, "git", "commit", "-m", "init")
 
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:
@@ -153,7 +154,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 
 	svc := installResolveRouteFailingService(t)
 	root := setupWorkerResolveRouteRepo(t)
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    "ddx-worker-resolve-route-test",

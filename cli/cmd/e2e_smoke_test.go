@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -118,11 +119,11 @@ func TestE2ESmokeJourney(t *testing.T) {
 		)
 		t.Logf("init output: %s", out)
 		assert.Equal(t, 0, code, "ddx init should exit 0")
-		assert.FileExists(t, filepath.Join(workDir, ".ddx", "config.yaml"))
+		assert.FileExists(t, filepath.Join(workDir, ddxroot.DirName, "config.yaml"))
 	})
 
 	// Seed a .md persona so persona commands can find it
-	personasDir := filepath.Join(workDir, ".ddx", "plugins", "ddx", "personas")
+	personasDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx", "personas")
 	require.NoError(t, os.MkdirAll(personasDir, 0755))
 	personaContent := `---
 name: code-reviewer

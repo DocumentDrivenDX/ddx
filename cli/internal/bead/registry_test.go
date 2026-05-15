@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,8 +46,8 @@ func TestRegistryRegisterOverridesDefaults(t *testing.T) {
 
 func TestStoreUsesRegistrySpecForBeads(t *testing.T) {
 	dir := t.TempDir()
-	s := NewStore(filepath.Join(dir, ".ddx"))
+	s := NewStore(filepath.Join(dir, ddxroot.DirName))
 	assert.Equal(t, DefaultCollection, s.Collection)
-	assert.Equal(t, filepath.Join(dir, ".ddx", "beads.jsonl"), s.File)
-	assert.Equal(t, filepath.Join(dir, ".ddx", "beads.lock"), s.LockDir)
+	assert.Equal(t, filepath.Join(dir, ddxroot.DirName, "beads.jsonl"), s.File)
+	assert.Equal(t, filepath.Join(dir, ddxroot.DirName, "beads.lock"), s.LockDir)
 }

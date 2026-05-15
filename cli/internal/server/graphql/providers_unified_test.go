@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -17,7 +18,7 @@ import (
 // so agent.NewServiceFromWorkDir can load. No endpoints configured.
 func writeMinimalConfig(t *testing.T, workDir string) {
 	t.Helper()
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -29,7 +30,7 @@ func writeMinimalConfig(t *testing.T, workDir string) {
 
 func writeEndpointConfig(t *testing.T, workDir string) string {
 	t.Helper()
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +594,7 @@ func TestBuildSparklineSuppressesBelowFloor(t *testing.T) {
 // writeMultiEndpointConfig writes a 5-endpoint config used by the perf test.
 func writeMultiEndpointConfig(t *testing.T, workDir string) {
 	t.Helper()
-	ddxDir := filepath.Join(workDir, ".ddx")
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

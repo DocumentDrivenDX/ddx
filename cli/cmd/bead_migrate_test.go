@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,14 +20,14 @@ func TestMigrateCommand(t *testing.T) {
 
 	// Seed two closed beads (one with inline events, one without) plus an
 	// open bead, then run `ddx bead migrate`.
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-c1","title":"closed with events","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"deadbeef","events":[{"kind":"review","summary":"APPROVE","body":"ok","created_at":"` + old + `"}]}`,
 		`{"id":"ddx-c2","title":"closed no events","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"deadbeef"}`,
 		`{"id":"ddx-open","title":"open","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
 
 	beforeStatus, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
 	require.NoError(t, err)
@@ -42,8 +43,8 @@ func TestMigrateCommand(t *testing.T) {
 	assert.Equal(t, 2, stats.Archived)
 
 	// AC2: archive + attachments populated.
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "attachments", "ddx-c1", "events.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "attachments", "ddx-c1", "events.jsonl"))
 
 	// AC3: status totals identical pre/post.
 	afterStatus, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
@@ -94,7 +95,7 @@ func TestMigrateCommandToAxon(t *testing.T) {
 	assert.Contains(t, helpOut, "--to", "--help must advertise the --to flag")
 	assert.Contains(t, helpOut, "axon", "--help must advertise the axon target")
 
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
 	activeRows := strings.Join([]string{
 		`{"id":"ddx-mta-1","title":"open","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
@@ -103,8 +104,8 @@ func TestMigrateCommandToAxon(t *testing.T) {
 	archiveRows := strings.Join([]string{
 		`{"id":"ddx-mta-3","title":"closed and archived","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"abc1230000","archived_at":"` + old + `"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(activeRows), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"), []byte(archiveRows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(activeRows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl"), []byte(archiveRows), 0o644))
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to", "axon", "--json")
 	require.NoError(t, err)
@@ -119,18 +120,18 @@ func TestMigrateCommandToAxon(t *testing.T) {
 	assert.Equal(t, "axon", view.To)
 
 	// Source files left intact (operator removes after verification).
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "beads.jsonl"))
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl"))
 
 	// Axon collection files written.
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "axon", "ddx_beads.jsonl"))
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", "axon", "ddx_bead_events.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "axon", "ddx_beads.jsonl"))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "axon", "ddx_bead_events.jsonl"))
 
 	// AC §3: a second invocation reports the same counts and produces
 	// byte-identical files (no duplicates).
-	beadsBefore, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "axon", "ddx_beads.jsonl"))
+	beadsBefore, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "axon", "ddx_beads.jsonl"))
 	require.NoError(t, err)
-	eventsBefore, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "axon", "ddx_bead_events.jsonl"))
+	eventsBefore, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "axon", "ddx_bead_events.jsonl"))
 	require.NoError(t, err)
 
 	out2, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--to", "axon", "--json")
@@ -143,9 +144,9 @@ func TestMigrateCommandToAxon(t *testing.T) {
 	assert.Equal(t, 3, view2.BeadsMigrated)
 	assert.Equal(t, 1, view2.EventsMigrated)
 
-	beadsAfter, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "axon", "ddx_beads.jsonl"))
+	beadsAfter, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "axon", "ddx_beads.jsonl"))
 	require.NoError(t, err)
-	eventsAfter, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "axon", "ddx_bead_events.jsonl"))
+	eventsAfter, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "axon", "ddx_bead_events.jsonl"))
 	require.NoError(t, err)
 	assert.Equal(t, string(beadsBefore), string(beadsAfter))
 	assert.Equal(t, string(eventsBefore), string(eventsAfter))
@@ -155,14 +156,14 @@ func TestMigrateCommandDryRun(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
 
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-c1","title":"closed with events","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"deadbeef","events":[{"kind":"review","summary":"APPROVE","body":"ok","created_at":"` + old + `"}]}`,
 		`{"id":"ddx-c2","title":"closed no events","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"deadbeef"}`,
 		`{"id":"ddx-open","title":"open","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
 	}, "\n") + "\n"
-	beadsPath := filepath.Join(workingDir, ".ddx", "beads.jsonl")
+	beadsPath := filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl")
 	require.NoError(t, os.WriteFile(beadsPath, []byte(rows), 0o644))
 	before, err := os.ReadFile(beadsPath)
 	require.NoError(t, err)
@@ -183,23 +184,23 @@ func TestMigrateCommandDryRun(t *testing.T) {
 	after, err := os.ReadFile(beadsPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after))
-	_, statErr := os.Stat(filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
+	_, statErr := os.Stat(filepath.Join(workingDir, ddxroot.DirName, "beads-archive.jsonl"))
 	assert.True(t, os.IsNotExist(statErr), "dry-run must not create archive file")
-	_, statErr = os.Stat(filepath.Join(workingDir, ".ddx", "attachments", "ddx-c1", "events.jsonl"))
+	_, statErr = os.Stat(filepath.Join(workingDir, ddxroot.DirName, "attachments", "ddx-c1", "events.jsonl"))
 	assert.True(t, os.IsNotExist(statErr), "dry-run must not create attachments")
 }
 
 func TestBeadMigrateLifecycleDryRunReportsLegacyCounts(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"]}`,
 		`{"id":"ddx-investigate","title":"investigate","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["triage:needs-investigation"],"work-last-detail":"rerun with smart agent"}`,
 		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","work-last-detail":"rerun with stronger model"}`,
 	}, "\n") + "\n"
-	beadsPath := filepath.Join(workingDir, ".ddx", "beads.jsonl")
+	beadsPath := filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl")
 	require.NoError(t, os.WriteFile(beadsPath, []byte(rows), 0o644))
 	before, err := os.ReadFile(beadsPath)
 	require.NoError(t, err)
@@ -219,18 +220,18 @@ func TestBeadMigrateLifecycleDryRunReportsLegacyCounts(t *testing.T) {
 	after, err := os.ReadFile(beadsPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after), "lifecycle dry-run must not touch beads.jsonl")
-	assert.NoFileExists(t, filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile))
+	assert.NoFileExists(t, filepath.Join(workingDir, ddxroot.DirName, bead.LifecycleSchemaMarkerFile))
 }
 
 func TestBeadMigrateLifecycleApplyWritesSchemaMarker(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"],"needs-human-reason":"manual approval required"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--apply", "--json")
 	require.NoError(t, err)
@@ -246,25 +247,25 @@ func TestBeadMigrateLifecycleApplyWritesSchemaMarker(t *testing.T) {
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(showOut), &got))
 	assert.Equal(t, bead.StatusProposed, got["status"])
-	assert.FileExists(t, filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile))
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, bead.LifecycleSchemaMarkerFile))
 }
 
 func TestBeadMigrateLifecycleIsIdempotent(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	rows := strings.Join([]string{
 		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","work-last-detail":"rerun with smart agent"}`,
 	}, "\n") + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"), []byte(rows), 0o644))
 
 	_, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--apply", "--json")
 	require.NoError(t, err)
-	markerPath := filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile)
+	markerPath := filepath.Join(workingDir, ddxroot.DirName, bead.LifecycleSchemaMarkerFile)
 	beforeMarker, err := os.ReadFile(markerPath)
 	require.NoError(t, err)
-	beforeRows, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	beforeRows, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"))
 	require.NoError(t, err)
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--apply", "--json")
@@ -278,7 +279,7 @@ func TestBeadMigrateLifecycleIsIdempotent(t *testing.T) {
 
 	afterMarker, err := os.ReadFile(markerPath)
 	require.NoError(t, err)
-	afterRows, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	afterRows, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"))
 	require.NoError(t, err)
 	assert.Equal(t, string(beforeMarker), string(afterMarker))
 	assert.Equal(t, string(beforeRows), string(afterRows))

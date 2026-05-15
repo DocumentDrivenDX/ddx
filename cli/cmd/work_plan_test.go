@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +19,7 @@ import (
 func setupWorkPlanEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 	t.Helper()
 	env := NewTestEnvironment(t)
-	store := bead.NewStore(filepath.Join(env.Dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))

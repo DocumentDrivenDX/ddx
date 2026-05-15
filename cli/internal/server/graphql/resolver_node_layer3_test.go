@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
@@ -22,7 +23,7 @@ import (
 // having the supplied id and title.
 func seedBeadProject(t *testing.T, root, beadID, title string) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	b := &bead.Bead{ID: beadID, Title: title, Status: bead.StatusOpen}
 	if err := store.Create(b); err != nil {
 		t.Fatalf("create bead in %s: %v", root, err)
@@ -47,7 +48,7 @@ func seedExecRunProject(t *testing.T, root, runID, status string) {
 	}); err != nil {
 		t.Fatalf("save definition in %s: %v", root, err)
 	}
-	bundleDir := filepath.Join(root, ".ddx", "exec", "runs", runID)
+	bundleDir := filepath.Join(root, ddxroot.DirName, "exec", "runs", runID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatalf("mkdir run bundle in %s: %v", root, err)
 	}

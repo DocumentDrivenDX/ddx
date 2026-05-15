@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"gopkg.in/yaml.v3"
 )
@@ -575,7 +576,7 @@ func collectDocArtifacts(root string) ([]*Artifact, error) {
 // files, then builds an Artifact for each corresponding artifact file.
 // Files whose sidecar is missing or unreadable are silently skipped.
 func collectSidecarArtifacts(root string) ([]*Artifact, error) {
-	pluginsDir := filepath.Join(root, ".ddx", "plugins")
+	pluginsDir := ddxroot.JoinProject(root, "plugins")
 	if _, err := os.Stat(pluginsDir); os.IsNotExist(err) {
 		return nil, nil
 	}

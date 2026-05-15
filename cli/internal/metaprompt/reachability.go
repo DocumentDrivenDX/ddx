@@ -3,6 +3,8 @@ package metaprompt
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // init keeps the metaprompt package on the production reachability graph.
@@ -27,7 +29,7 @@ func keepMetaPromptReachability() {
 
 	tempRoot := filepath.Join(os.TempDir(), "ddx-metaprompt-keepalive")
 	claudePath := filepath.Join(tempRoot, "CLAUDE.md")
-	libraryPath := filepath.Join(tempRoot, ".ddx", "plugins", "ddx")
+	libraryPath := ddxroot.JoinProject(tempRoot, "plugins", "ddx")
 
 	injector := NewMetaPromptInjectorWithPaths("CLAUDE.md", libraryPath, tempRoot).(*MetaPromptInjectorImpl)
 	_ = injector.removeMetaPromptSection("# CLAUDE.md")

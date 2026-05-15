@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,6 +15,7 @@ import (
 // reviewer stream persists to the attempt's execution bundle; the returned
 // relative path is suitable for an event-body reference.
 func TestPersistReviewerStream_WritesToBundle(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	projectRoot := t.TempDir()
 	attemptID := "20260420T150000-abc123"
 	beadID := "ddx-test-f8a11202"
@@ -24,11 +26,11 @@ func TestPersistReviewerStream_WritesToBundle(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, rel)
 
-	abs := filepath.Join(projectRoot, rel)
+	abs := ddxroot.JoinProject(projectRoot, "executions", attemptID, "reviewer-stream.log")
 	data, err := os.ReadFile(abs)
 	require.NoError(t, err)
 	assert.Equal(t, len(stream), len(data), "full stream must land on disk verbatim; truncation here loses audit evidence")
-	assert.Equal(t, filepath.Join(".ddx", "executions", attemptID, "reviewer-stream.log"), rel,
+	assert.Equal(t, filepath.Join(ddxroot.DirName, "executions", attemptID, "reviewer-stream.log"), rel,
 		"artifact location must follow the .ddx/executions/<attempt>/ convention so existing tooling discovers it")
 }
 
@@ -37,14 +39,15 @@ func TestPersistReviewerStream_WritesToBundle(t *testing.T) {
 // invocations). The stream still persists — in a grouped reviewer-streams
 // directory — so evidence is never dropped.
 func TestPersistReviewerStream_FallbackWhenAttemptMissing(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	projectRoot := t.TempDir()
 
 	rel, err := PersistReviewerStream(projectRoot, "ddx-test", "", "verdict text")
 	require.NoError(t, err)
 	require.NotEmpty(t, rel)
-	assert.Contains(t, rel, filepath.Join(".ddx", "executions", "reviewer-streams"),
+	assert.Contains(t, rel, filepath.Join(ddxroot.DirName, "executions", "reviewer-streams"),
 		"fallback location must be discoverable via the same .ddx/executions/ root")
-	abs := filepath.Join(projectRoot, rel)
+	abs := ddxroot.JoinProject(projectRoot, "executions", "reviewer-streams", filepath.Base(rel))
 	_, err = os.Stat(abs)
 	require.NoError(t, err, "fallback must actually write the file, not just return a path")
 }

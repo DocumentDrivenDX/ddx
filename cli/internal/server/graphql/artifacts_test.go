@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // newArtifactGQLHandler builds a GQL handler whose workDir is the project root.
@@ -421,7 +422,7 @@ func setupArtifactFixtureInDir(t *testing.T, workDir string) string {
 	}
 
 	// Image artifact with .ddx.yaml sidecar.
-	assetsDir := filepath.Join(workDir, ".ddx", "plugins", "assets")
+	assetsDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "assets")
 	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

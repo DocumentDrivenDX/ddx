@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func writeAgentExecutionRootConfig(t *testing.T, projectRoot, root string) {
 	t.Helper()
-	path := filepath.Join(projectRoot, ".ddx", "config.yaml")
+	path := filepath.Join(projectRoot, ddxroot.DirName, "config.yaml")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("mkdir config dir: %v", err)
 	}

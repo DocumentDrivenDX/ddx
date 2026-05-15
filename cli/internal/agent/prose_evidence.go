@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docprose"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
@@ -121,12 +122,12 @@ func AttachProseEvidence(ctx context.Context, beadID string, report ExecuteBeadR
 	}
 
 	if cfg.ProjectRoot != "" && strings.TrimSpace(report.AttemptID) != "" {
-		evidenceDir := filepath.Join(cfg.ProjectRoot, ".ddx", "executions", report.AttemptID)
+		evidenceDir := ddxroot.JoinProject(cfg.ProjectRoot, "executions", report.AttemptID)
 		if mkErr := os.MkdirAll(evidenceDir, 0o755); mkErr == nil {
 			payload, _ := json.MarshalIndent(result, "", "  ")
 			evidencePath := filepath.Join(evidenceDir, "prose-findings.json")
 			if writeErr := os.WriteFile(evidencePath, payload, 0o644); writeErr == nil {
-				result.EvidencePath = filepath.Join(".ddx", "executions", report.AttemptID, "prose-findings.json")
+				result.EvidencePath = ddxroot.JoinRelative("executions", report.AttemptID, "prose-findings.json")
 			}
 		}
 	}

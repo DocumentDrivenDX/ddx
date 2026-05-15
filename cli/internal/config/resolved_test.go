@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
@@ -367,7 +368,7 @@ func TestResolveDeepCopy(t *testing.T) {
 
 func TestLoadAndResolveSuccess(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -401,7 +402,7 @@ agent:
 
 func TestLoadAndResolveOverridesWinOverConfig(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -428,7 +429,7 @@ agent: {}
 
 func TestLoadAndResolveLoadError(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -553,7 +554,7 @@ func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T
 
 func TestFizeauAutoRoutingLocalProvidersNotDefaultBeforeValidation(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}

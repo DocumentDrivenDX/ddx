@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func setupTestRepo(t *testing.T, files map[string]string) string {
@@ -666,7 +668,7 @@ func TestBuildGraph_ExcludesDDxPluginsTree(t *testing.T) {
 	// Direct walk into `.ddx/plugins/...`: simulates a graph config that
 	// pointed roots at the plugin tree. The path-based defense must still
 	// skip the contents.
-	pluginRoot := filepath.Join(root, ".ddx", "plugins", "helix", "docs")
+	pluginRoot := filepath.Join(root, ddxroot.DirName, "plugins", "helix", "docs")
 	files, err := findMarkdownFiles(root, []string{pluginRoot})
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,9 +86,9 @@ func TestCheckVersionGateExemptsRecoveryCommands(t *testing.T) {
 
 func writeProjectVersion(t *testing.T, workDir, version string) {
 	t.Helper()
-	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
 	require.NoError(t, os.WriteFile(
-		filepath.Join(workDir, ".ddx", "versions.yaml"),
+		filepath.Join(workDir, ddxroot.DirName, "versions.yaml"),
 		[]byte("ddx_version: \""+version+"\"\n"),
 		0o644,
 	))

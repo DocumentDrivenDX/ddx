@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -19,7 +20,7 @@ func TestDoctorPluginsFlagReportsMissingManifest(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	pluginRoot := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
 
 	state := &registry.InstalledState{
@@ -46,7 +47,7 @@ func TestDoctorPluginsFlagAuditsLegacyUntypedPluginEntries(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "legacy-plugin")
+	pluginRoot := filepath.Join(homeDir, ddxroot.DirName, "plugins", "legacy-plugin")
 	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
 
 	state := &registry.InstalledState{
@@ -72,10 +73,10 @@ func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
+	pluginRoot := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
 
-	resourceFile := filepath.Join(homeDir, ".ddx", "plugins", "ddx", "personas", "example.md")
+	resourceFile := filepath.Join(homeDir, ddxroot.DirName, "plugins", "ddx", "personas", "example.md")
 	require.NoError(t, os.MkdirAll(filepath.Dir(resourceFile), 0o755))
 	require.NoError(t, os.WriteFile(resourceFile, []byte("# Example resource\n"), 0o644))
 
@@ -127,7 +128,7 @@ func TestDoctorPluginsFlagReportsBothManifestSchemaAndStructuralIssues(t *testin
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "broken-plugin")
+	pluginRoot := filepath.Join(homeDir, ddxroot.DirName, "plugins", "broken-plugin")
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginRoot, "skills", "missing-skill"), 0o755))
 	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(pluginRoot, "broken-link")))
 
@@ -181,7 +182,7 @@ func TestDoctorPluginsFlagReportsLostExecutablePermission(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "exec-plugin")
+	pluginRoot := filepath.Join(homeDir, ddxroot.DirName, "plugins", "exec-plugin")
 	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
 
 	// A hook script that MUST be executable per the manifest, installed
@@ -232,7 +233,7 @@ func TestDoctorPluginsFlagReportsOrphanSymlinkTarget(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
-	pluginRoot := filepath.Join(homeDir, ".ddx", "plugins", "orphan-plugin")
+	pluginRoot := filepath.Join(homeDir, ddxroot.DirName, "plugins", "orphan-plugin")
 	require.NoError(t, os.MkdirAll(pluginRoot, 0o755))
 	// A symlink that points somewhere that does not exist. This is the
 	// shape left behind when a prior plugin version's skill directory was

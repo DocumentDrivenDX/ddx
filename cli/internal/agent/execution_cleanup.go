@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -213,7 +214,7 @@ func NewExecutionCleanupManager(projectRoot string, gitOps GitOps) *ExecutionCle
 // dirs, defaulting to defaultEvidenceRetainDays when not set in config.
 func executionCleanupRetainDays(projectRoot string) int {
 	if projectRoot != "" {
-		projectConfig := filepath.Join(projectRoot, ".ddx", "config.yaml")
+		projectConfig := ddxroot.JoinProject(projectRoot, "config.yaml")
 		cfg, err := config.LoadFromFile(projectConfig)
 		if err == nil && cfg != nil && cfg.Executions != nil {
 			return cfg.Executions.ResolveRetainDays()
@@ -1248,7 +1249,7 @@ func (m *ExecutionCleanupManager) pruneAgentLogs(ctx context.Context, summary *E
 		}
 	}
 
-	root := filepath.Join(m.ProjectRoot, ".ddx", "agent-logs")
+	root := ddxroot.JoinProject(m.ProjectRoot, "agent-logs")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
@@ -1350,7 +1351,7 @@ func (m *ExecutionCleanupManager) pruneWorkerDirs(ctx context.Context, summary *
 	}
 	cutoff := now.AddDate(0, 0, -m.RetainDays)
 
-	root := filepath.Join(m.ProjectRoot, ".ddx", "workers")
+	root := ddxroot.JoinProject(m.ProjectRoot, "workers")
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDDxRoot_InTreeMode(t *testing.T) {
@@ -146,6 +147,46 @@ func TestWorktreeRegistry_FirstWorktreeIsMaster(t *testing.T) {
 	if entry.Hostname == "" {
 		t.Fatalf("hostname should be populated")
 	}
+}
+
+func TestWorktreeRegistry_SubsequentRegisterNonMaster(t *testing.T) {
+	firstProjectRoot := filepath.Join(t.TempDir(), "demo-project-a")
+	require.NoError(t, os.MkdirAll(firstProjectRoot, 0o755))
+	initGitRepo(t, firstProjectRoot)
+	runGit(t, firstProjectRoot, "remote", "add", "origin", "git@github.com:easel/ddx.git")
+
+	secondProjectRoot := filepath.Join(t.TempDir(), "demo-project-b")
+	require.NoError(t, os.MkdirAll(secondProjectRoot, 0o755))
+	initGitRepo(t, secondProjectRoot)
+	runGit(t, secondProjectRoot, "remote", "add", "origin", "git@github.com:easel/ddx.git")
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	firstRoot := Path(context.Background(), firstProjectRoot)
+	secondRoot := Path(context.Background(), secondProjectRoot)
+	require.Equal(t, firstRoot, secondRoot)
+
+	var registry worktreeRegistry
+	readJSONFile(t, filepath.Join(firstRoot, "worktrees.json"), &registry)
+
+	firstAbs, err := filepath.Abs(firstProjectRoot)
+	require.NoError(t, err)
+	secondAbs, err := filepath.Abs(secondProjectRoot)
+	require.NoError(t, err)
+
+	require.Equal(t, firstAbs, registry.Master)
+	require.Len(t, registry.Paths, 2)
+
+	paths := map[string]worktreeRegistryEntry{}
+	for _, entry := range registry.Paths {
+		paths[entry.Path] = entry
+	}
+
+	require.Contains(t, paths, firstAbs)
+	require.Contains(t, paths, secondAbs)
+	require.NotEmpty(t, paths[secondAbs].FirstSeenAt)
+	require.NotEmpty(t, paths[secondAbs].LastSeenAt)
 }
 
 func TestDDxRoot_ConventionMode_LocalFallback(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,7 +26,7 @@ import (
 // failure is downstream of the routing decision and unrelated to AC1.
 func TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified(t *testing.T) {
 	projectDir := t.TempDir()
-	ddxDir := filepath.Join(projectDir, ".ddx")
+	ddxDir := filepath.Join(projectDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	// Single trivial open bead so the loop has something to route.

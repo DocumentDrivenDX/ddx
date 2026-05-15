@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +17,7 @@ import (
 // returns the error to its caller).
 func TestLoadConfigHardErrorsOnDefaultHarness(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:
@@ -46,7 +47,7 @@ agent:
 // a config carrying agent.routing.profile_ladders must fail to load.
 func TestLoadConfigHardErrorsOnProfileLadders(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:
@@ -79,7 +80,7 @@ agent:
 // a config carrying agent.routing.model_overrides must fail to load.
 func TestLoadConfigHardErrorsOnModelOverrides(t *testing.T) {
 	tempDir := t.TempDir()
-	ddxDir := filepath.Join(tempDir, ".ddx")
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
 library:

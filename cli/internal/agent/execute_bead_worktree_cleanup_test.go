@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,8 +48,8 @@ func (g *worktreeAddFailGitOps) DeleteRef(dir, ref string) error      { return n
 
 func TestExecuteBeadWorktreeAddFailure_RemovesPartialDir(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "beads.jsonl"), []byte("{}\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "beads.jsonl"), []byte("{}\n"), 0o644))
 
 	tempRoot := t.TempDir()
 	t.Setenv("DDX_EXEC_WT_DIR", tempRoot)

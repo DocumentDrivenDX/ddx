@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -145,7 +146,7 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-powerClass-standard",
@@ -201,7 +202,7 @@ func TestWorkZeroConfigStandardPolicyDoesNotDowngradeToCheapPolicy(t *testing.T)
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:          "ddx-zero-config-work-standard-no-cheap",
@@ -324,7 +325,7 @@ agent:
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
-			ddxDir := filepath.Join(dir, ".ddx")
+			ddxDir := filepath.Join(dir, ddxroot.DirName)
 			require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 			if tc.writeCfg {
 				require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(tc.yaml), 0o644))
@@ -366,7 +367,7 @@ func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) 
 	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
-	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-powerClass-retry",

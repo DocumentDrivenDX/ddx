@@ -18,6 +18,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -147,7 +148,7 @@ func TestLatestTaskSucceededResult_ReturnsMostRecent(t *testing.T) {
 // not stale in_progress are never touched.
 func TestRecoverDanglingSuccess_NopWhenNotInProgress(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-test", Title: "test bead", IssueType: "task"}))
 
@@ -160,7 +161,7 @@ func TestRecoverDanglingSuccess_NopWhenNotInProgress(t *testing.T) {
 // in_progress bead with no prior task_succeeded result is not recovered.
 func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-test", Title: "test bead", IssueType: "task"}))
 	require.NoError(t, store.Claim("ddx-test", "worker"))
@@ -182,7 +183,7 @@ func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Claim(beadID, "worker"))
 
 	// Write a result.json whose result_rev is a fake SHA (not in this repo).
@@ -226,7 +227,7 @@ func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T)
 func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	// Step 1: simulate a successful merge — create a commit on main that
 	// represents the merged agent result.
@@ -310,7 +311,7 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 func TestDanglingSuccess_AC1_NormalRetryWhenNoPriorSuccess(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	store := bead.NewStore(ddxDir)
 	// Directly claim the bead to simulate a stale in_progress state.
@@ -362,7 +363,7 @@ func TestDanglingSuccess_AC1_NormalRetryWhenNoPriorSuccess(t *testing.T) {
 func TestDetectDanglingSuccessBeads_FindsInProgressWithPriorSuccess(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	// Create a real commit on HEAD (represents the merged result).
 	mergedSHA := gitCommitFile(t, projectRoot, "found.txt", "found\n",
@@ -396,7 +397,7 @@ func TestDetectDanglingSuccessBeads_FindsInProgressWithPriorSuccess(t *testing.T
 func TestDetectDanglingSuccessBeads_MarksDanglingUnreachable(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	// Write a result.json with a fake (unreachable) SHA.
 	writeResultJSON(t, projectRoot, "20260508T100000-dangling", ExecuteBeadResult{
@@ -423,7 +424,7 @@ func TestDetectDanglingSuccessBeads_MarksDanglingUnreachable(t *testing.T) {
 func TestDetectDanglingSuccessBeads_IgnoresClosedBeads(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	mergedSHA := gitCommitFile(t, projectRoot, "done.txt", "done\n",
 		"chore: done "+beadID)
@@ -461,7 +462,7 @@ func newExecuteLoopProjectRoot(t *testing.T) (projectRoot string, beadID string)
 	runGitInteg(t, root, "add", ".")
 	runGitInteg(t, root, "commit", "-m", "chore: seed")
 
-	ddxDir := filepath.Join(root, ".ddx")
+	ddxDir := filepath.Join(root, ddxroot.DirName)
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init())
 
@@ -480,7 +481,7 @@ func newExecuteLoopProjectRoot(t *testing.T) (projectRoot string, beadID string)
 // → recoverDanglingSuccess closes the bead and returns recovered=true.
 func TestDanglingSuccess_RecoverFromResultRevAlreadyMerged(t *testing.T) {
 	projectRoot, beadID := newExecuteLoopProjectRoot(t)
-	ddxDir := filepath.Join(projectRoot, ".ddx")
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
 	// Create a commit to act as the merged result.
 	mergedSHA := gitCommitFile(t, projectRoot, "result.txt", "work\n",

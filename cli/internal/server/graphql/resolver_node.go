@@ -2,11 +2,11 @@ package graphql
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
@@ -117,7 +117,7 @@ func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
 		if wd == "" {
 			return nil, nil
 		}
-		store := bead.NewStore(filepath.Join(wd, ".ddx"))
+		store := bead.NewStore(ddxroot.JoinProject(wd))
 		b, err := store.Get(ctx, beadID)
 		if err != nil || b == nil {
 			return nil, nil

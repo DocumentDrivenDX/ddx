@@ -9,12 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBeadMergeCommandReadsGitStages(t *testing.T) {
 	workingDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ddxroot.DirName), 0o755))
 	runGit(t, workingDir, "init")
 
 	base := `{"id":"ddx-base","title":"Base","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`
@@ -32,7 +33,7 @@ func TestBeadMergeCommandReadsGitStages(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, output, "Merged .ddx/beads.jsonl: 3 records")
 
-	data, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	data, err := os.ReadFile(filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"))
 	require.NoError(t, err)
 	records := readCommandMergeRecords(t, data)
 	require.Contains(t, records, "ddx-base")

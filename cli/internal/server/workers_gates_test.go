@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -82,7 +83,7 @@ func intToStr(n int) string {
 // worker would set it on the result.
 func writeGateManifest(t *testing.T, projectRoot, beadID, attemptID string, governingIDs []string) string {
 	t.Helper()
-	dirRel := filepath.Join(".ddx", "executions", attemptID)
+	dirRel := filepath.Join(ddxroot.DirName, "executions", attemptID)
 	dirAbs := filepath.Join(projectRoot, dirRel)
 	require.NoError(t, os.MkdirAll(dirAbs, 0o755))
 
@@ -142,8 +143,8 @@ func (r *recordingSubmitter) Submit(req agent.LandRequest) (*agent.LandResult, e
 
 func TestPostLandCommandFromConfig(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(`version: "1.0"
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(`version: "1.0"
 library:
   path: "./library"
   repository:
@@ -180,7 +181,7 @@ func TestWorker_RequiredGatePass_LandsViaCoordinator(t *testing.T) {
 		ResultRev:    resultRev,
 		ExitCode:     0,
 		Outcome:      agent.ExecuteBeadOutcomeTaskSucceeded,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 		ManifestFile: manifestRel,
 	}
 
@@ -199,7 +200,7 @@ func TestWorker_RequiredGatePass_LandsViaCoordinator(t *testing.T) {
 	assert.NotEqual(t, initialTip, tipAfter, "main must advance when required gate passes")
 
 	// checks.json MUST exist with summary=pass.
-	checksAbs := filepath.Join(root, ".ddx", "executions", attemptID, "checks.json")
+	checksAbs := filepath.Join(root, ddxroot.DirName, "executions", attemptID, "checks.json")
 	require.FileExists(t, checksAbs)
 	raw, err := os.ReadFile(checksAbs)
 	require.NoError(t, err)
@@ -235,7 +236,7 @@ func TestWorker_RequiredGateFail_PreservesWithoutCoordinator(t *testing.T) {
 		ResultRev:    resultRev,
 		ExitCode:     0,
 		Outcome:      agent.ExecuteBeadOutcomeTaskSucceeded,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 		ManifestFile: manifestRel,
 	}
 
@@ -260,7 +261,7 @@ func TestWorker_RequiredGateFail_PreservesWithoutCoordinator(t *testing.T) {
 	assert.Equal(t, resultRev, iterSHA, "iteration ref must point at ResultRev")
 
 	// checks.json MUST exist with summary=fail.
-	checksAbs := filepath.Join(root, ".ddx", "executions", attemptID, "checks.json")
+	checksAbs := filepath.Join(root, ddxroot.DirName, "executions", attemptID, "checks.json")
 	require.FileExists(t, checksAbs)
 	raw, err := os.ReadFile(checksAbs)
 	require.NoError(t, err)
@@ -301,7 +302,7 @@ func TestWorker_NoGoverningIDs_LandsViaCoordinator(t *testing.T) {
 		ResultRev:    resultRev,
 		ExitCode:     0,
 		Outcome:      agent.ExecuteBeadOutcomeTaskSucceeded,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 		ManifestFile: manifestRel,
 	}
 
@@ -320,7 +321,7 @@ func TestWorker_NoGoverningIDs_LandsViaCoordinator(t *testing.T) {
 	assert.NotEqual(t, initialTip, tipAfter, "main must advance when no governing IDs")
 
 	// NO checks.json should exist (gate eval did not run).
-	checksAbs := filepath.Join(root, ".ddx", "executions", attemptID, "checks.json")
+	checksAbs := filepath.Join(root, ddxroot.DirName, "executions", attemptID, "checks.json")
 	_, statErr := os.Stat(checksAbs)
 	assert.True(t, os.IsNotExist(statErr), "checks.json must not exist when no governing IDs")
 
@@ -363,7 +364,7 @@ func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
 		ResultRev:    resultRev,
 		ExitCode:     0,
 		Outcome:      agent.ExecuteBeadOutcomeTaskSucceeded,
-		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
 		ManifestFile: manifestRel,
 	}
 
