@@ -19,7 +19,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
-	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -406,13 +405,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		return ladder
 	}
 
-	worker := &agent.ExecuteBeadWorker{
-		Store:    store,
-		Reviewer: reviewer,
-		EscalationNextFloor: func(actualPower int) (int, error) {
-			return nextEscalationFloor(loadLadder(), actualPower)
-		},
-		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+	executor := f.tryExecutorOverride
+	if executor == nil {
+		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 			targetBead, err := store.Get(context.Background(), beadID)
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
@@ -505,7 +500,16 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				accumulateBilledCost(report)
 			}
 			return report, err
-		}),
+		})
+	}
+
+	worker := &agent.ExecuteBeadWorker{
+		Store:    store,
+		Reviewer: reviewer,
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			return nextEscalationFloor(loadLadder(), actualPower)
+		},
+		Executor: executor,
 	}
 
 	cliLandingOps := agent.RealLandingGitOps{}
@@ -536,7 +540,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		NoReview:                     spec.NoReview,
 		TargetBeadID:                 tryTargetBeadID,
 		ReviewCostCap:                costCap,
-		OnAttemptFinalized:           buildAttemptMetricsHook(projectRoot, store, spec.Profile),
+		FinalizeDurableAudit:         f.buildAttemptAuditFinalizer(projectRoot, store),
 		PostLadderExhaustionHook:     recoveryHook,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
@@ -551,41 +555,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
 }
 
-func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile string) func(agent.ExecuteBeadReport) {
-	return func(report agent.ExecuteBeadReport) {
-		if report.AttemptID == "" {
-			return
-		}
-		specID := ""
-		if report.BeadID != "" && store != nil {
-			if b, err := store.Get(context.Background(), report.BeadID); err == nil {
-				specID, _ = b.Extra["spec-id"].(string)
-			}
-		}
-		tsEnd := attemptmetrics.Rfc3339(time.Now().UTC())
-		tsStart := ""
-		if report.DurationMS > 0 {
-			start := time.Now().UTC().Add(-time.Duration(report.DurationMS) * time.Millisecond)
-			tsStart = attemptmetrics.Rfc3339(start)
-		}
-		row := attemptmetrics.AttemptRow{
-			SchemaVersion: attemptmetrics.SchemaVersion,
-			AttemptID:     report.AttemptID,
-			BeadID:        report.BeadID,
-			SessionID:     report.SessionID,
-			TSStart:       tsStart,
-			TSEnd:         tsEnd,
-			Model:         report.Model,
-			Harness:       report.Harness,
-			Profile:       profile,
-			Provider:      report.Provider,
-			SpecID:        specID,
-			Outcome:       report.Status,
-			CostUSD:       report.CostUSD,
-			DurationMS:    int(report.DurationMS),
-			ReviewVerdict: report.ReviewVerdict,
-		}
-		_ = attemptmetrics.AppendRow(projectRoot, row)
+func (f *CommandFactory) buildAttemptAuditFinalizer(projectRoot string, store *bead.Store) func(agent.ExecuteBeadReport) error {
+	if f.durableAuditFinalizeOverride != nil {
+		return f.durableAuditFinalizeOverride
+	}
+	return func(report agent.ExecuteBeadReport) error {
+		return agent.FinalizeDurableAttemptAudit(projectRoot, store, report)
 	}
 }
 

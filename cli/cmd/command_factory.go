@@ -80,6 +80,11 @@ type CommandFactory struct {
 	// running real git/docprose commands.
 	proseEvidenceHookOverride agent.ProseEvidenceHook
 
+	// durableAuditFinalizeOverride, when non-nil, replaces the default
+	// DDx-managed audit finalizer used by ddx try and ddx work after an
+	// attempt's durable tracker mutations are complete.
+	durableAuditFinalizeOverride func(report agent.ExecuteBeadReport) error
+
 	// resourceCheckerOverride, when non-nil, replaces the default execution
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker

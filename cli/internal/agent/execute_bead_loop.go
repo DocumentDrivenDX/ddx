@@ -106,10 +106,11 @@ type ExecuteBeadLoopRuntime struct {
 	// receive on WakeCh during the idle sleep, never elsewhere.
 	WakeCh <-chan struct{}
 
-	// OnAttemptFinalized, when non-nil, is called once per finalized attempt
-	// immediately after the report is appended to loop results. Best-effort:
-	// the hook must not block and its errors are silently discarded.
-	OnAttemptFinalized func(report ExecuteBeadReport)
+	// FinalizeDurableAudit, when non-nil, is called once per finalized attempt
+	// after the loop has finished writing the attempt's durable tracker state.
+	// Errors are terminal for autonomous work: the worker stops so DDx-managed
+	// audit outputs are not left dirty while more beads are claimed.
+	FinalizeDurableAudit func(report ExecuteBeadReport) error
 	// PostLadderExhaustionHook, when non-nil, is called when a bead's
 	// consecutive_ladder_exhaustions counter reaches the auto-recovery
 	// threshold (>= 2). A nil hook or Attempted=false result falls through to
@@ -852,6 +853,40 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		exitReason = reason
 		result.StopCondition = condition
 		result.ExitReason = reason
+	}
+	finalizeDurableAuditOrStop := func(candidateID string, report ExecuteBeadReport) bool {
+		if runtime.FinalizeDurableAudit == nil {
+			return false
+		}
+		if err := runtime.FinalizeDurableAudit(report); err != nil {
+			projectRoot := strings.TrimSpace(firstNonEmpty(report.ProjectRoot, runtime.ProjectRoot))
+			dirtyPaths := append([]string(nil), durableAuditManagedPathspecs...)
+			result.OperatorAttention = &OperatorAttentionStop{
+				Reason:      "durable_audit_commit_failed",
+				BeadID:      candidateID,
+				ProjectRoot: projectRoot,
+				DirtyPaths:  dirtyPaths,
+				Message:     "DDx could not commit durable audit outputs; resolve the git failure before continuing autonomous work.",
+			}
+			setExit("OperatorAttention", "operator_attention")
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log,
+					"operator attention: failed to commit durable audit outputs for %s; stopping work. %v\n",
+					candidateID,
+					err,
+				)
+			}
+			emit("loop.operator_attention", map[string]any{
+				"reason":       "durable_audit_commit_failed",
+				"bead_id":      candidateID,
+				"project_root": projectRoot,
+				"dirty_paths":  dirtyPaths,
+				"message":      result.OperatorAttention.Message,
+				"detail":       strings.TrimSpace(err.Error()),
+			})
+			return true
+		}
+		return false
 	}
 	applyStop := func(input work.StopInput) bool {
 		decision, ok := work.ClassifyStop(input)
@@ -1818,7 +1853,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			emitResourceExhausted(emit, w.Store, candidate.ID, report, assignee, now().UTC())
 			result.Results = append(result.Results, report)
-			callAttemptFinalized(runtime.OnAttemptFinalized, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -1829,6 +1863,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					return result, ctx.Err()
 				}
 				return result, err
+			}
+			if finalizeDurableAuditOrStop(candidate.ID, report) {
+				return result, nil
 			}
 			finalAttemptID := report.AttemptID
 			if finalAttemptID == "" {
@@ -1885,7 +1922,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				report.DisruptionReason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
 			appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
 			result.Results = append(result.Results, report)
-			callAttemptFinalized(runtime.OnAttemptFinalized, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -1896,6 +1932,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					return result, ctx.Err()
 				}
 				return result, err
+			}
+			if finalizeDurableAuditOrStop(candidate.ID, report) {
+				return result, nil
 			}
 			finalAttemptID := report.AttemptID
 			if finalAttemptID == "" {
@@ -1988,9 +2027,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 			}
 			result.Results = append(result.Results, report)
-			callAttemptFinalized(runtime.OnAttemptFinalized, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
+			if finalizeDurableAuditOrStop(candidate.ID, report) {
+				return result, nil
+			}
 			emit("bead.result", map[string]any{
 				"bead_id":              candidate.ID,
 				"status":               report.Status,
@@ -2420,7 +2461,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		result.Results = append(result.Results, report)
-		callAttemptFinalized(runtime.OnAttemptFinalized, report)
 
 		// Skip the late execute-bead append for already-satisfied beads —
 		// the satisfied path appends its own terminal event before
@@ -2445,6 +2485,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				continue
 			}
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return result, nil
 		}
 
 		// Use the real attempt_id from the report if available.
@@ -2911,14 +2954,6 @@ func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result L
 		Source:    "ddx work",
 		CreatedAt: createdAt,
 	})
-}
-
-// callAttemptFinalized invokes hook when non-nil. Best-effort: panics inside
-// the hook are not recovered; callers should ensure hooks are non-blocking.
-func callAttemptFinalized(hook func(ExecuteBeadReport), report ExecuteBeadReport) {
-	if hook != nil {
-		hook(report)
-	}
 }
 
 func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time.Time) bead.BeadEvent {

@@ -478,6 +478,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		PreDispatchLintHook:   lintHook,
 		PostAttemptTriageHook: triageHook,
 		ProseEvidenceHook:     proseHook,
+		FinalizeDurableAudit:  f.buildAttemptAuditFinalizer(projectRoot, store),
 		NoReview:              noReview,
 	})
 	if runErr != nil {
