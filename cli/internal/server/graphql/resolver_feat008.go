@@ -297,7 +297,7 @@ func personaGraphQLError(err error) error {
 
 // QueueSummary is the resolver for the queueSummary field.
 func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error) {
-	store := bead.NewStore(ddxroot.JoinProject(r.projectRoot(ctx, projectID)))
+	store := projectBeadStore(r.projectRoot(ctx, projectID))
 	counts, err := store.Status()
 	if err != nil {
 		return nil, err
@@ -323,7 +323,7 @@ func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID st
 	// indicator does not surface an unrelated project's queue depth.
 	if r.State != nil {
 		if proj, ok := r.State.GetProjectSnapshotByID(projectID); ok && proj.Path != "" {
-			store := bead.NewStore(ddxroot.JoinProject(proj.Path))
+			store := projectBeadStore(proj.Path)
 			if ready, err := store.Ready(); err == nil {
 				out.ReadyBeads = len(ready)
 			}
@@ -1108,7 +1108,7 @@ func collectPaletteMatches(query string, workingDir string) []paletteMatch {
 		}
 	}
 
-	store := bead.NewStore(ddxroot.JoinProject(workingDir))
+	store := projectBeadStore(workingDir)
 	if beads, err := store.ReadAll(context.Background()); err == nil {
 		for _, b := range beads {
 			if score, ok := paletteScore(query, b.ID, b.Title); ok {

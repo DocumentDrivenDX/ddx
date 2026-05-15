@@ -245,7 +245,7 @@ func loadExecutionBundleDetail(projectID, projectRoot, bundleDirAbs, bundleID st
 // scanExecutionBundles enumerates `.ddx/executions/` for one project, returns
 // merged Execution records sorted newest-first.
 func scanExecutionBundles(projectID, projectRoot string) []*ddxgraphql.Execution {
-	dir := filepath.Join(projectRoot, agent.ExecuteBeadArtifactDir)
+	dir := resolveProjectStatePath(projectRoot, agent.ExecuteBeadArtifactDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -392,7 +392,7 @@ func (s *ServerState) GetExecutionGraphQL(id string) (*ddxgraphql.Execution, boo
 		return nil, false
 	}
 	for _, proj := range s.GetProjects(false) {
-		bundleDirAbs := filepath.Join(proj.Path, agent.ExecuteBeadArtifactDir, id)
+		bundleDirAbs := resolveProjectStatePath(proj.Path, filepath.Join(agent.ExecuteBeadArtifactDir, id))
 		if info, err := os.Stat(bundleDirAbs); err != nil || !info.IsDir() {
 			continue
 		}
@@ -429,7 +429,7 @@ func (s *ServerState) GetExecutionToolCallsGraphQL(id string) []*ddxgraphql.Exec
 		return nil
 	}
 	for _, proj := range s.GetProjects(false) {
-		bundleDirAbs := filepath.Join(proj.Path, agent.ExecuteBeadArtifactDir, id)
+		bundleDirAbs := resolveProjectStatePath(proj.Path, filepath.Join(agent.ExecuteBeadArtifactDir, id))
 		if info, err := os.Stat(bundleDirAbs); err != nil || !info.IsDir() {
 			continue
 		}
@@ -443,7 +443,7 @@ func (s *ServerState) GetExecutionToolCallsGraphQL(id string) []*ddxgraphql.Exec
 		if exec.AgentLogPath != nil {
 			abs := *exec.AgentLogPath
 			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(proj.Path, abs)
+				abs = resolveProjectStatePath(proj.Path, abs)
 			}
 			paths = append(paths, abs)
 		}

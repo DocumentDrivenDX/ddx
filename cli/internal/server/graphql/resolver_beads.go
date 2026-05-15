@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // Beads is the resolver for the beads field.
@@ -230,7 +229,7 @@ func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *strin
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
-	store := bead.NewStore(ddxroot.JoinProject(r.workingDir(ctx)))
+	store := projectBeadStore(r.workingDir(ctx))
 	beads, err := store.Ready()
 	if err != nil {
 		return nil, err
@@ -244,7 +243,7 @@ func (r *queryResolver) BeadsBlocked(ctx context.Context, first *int, after *str
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
-	store := bead.NewStore(ddxroot.JoinProject(r.workingDir(ctx)))
+	store := projectBeadStore(r.workingDir(ctx))
 	beads, err := store.ExternalBlocked()
 	if err != nil {
 		return nil, err
@@ -258,7 +257,7 @@ func (r *queryResolver) BeadsDependencyWaiting(ctx context.Context, first *int, 
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
-	store := bead.NewStore(ddxroot.JoinProject(r.workingDir(ctx)))
+	store := projectBeadStore(r.workingDir(ctx))
 	beads, err := store.DependencyWaiting()
 	if err != nil {
 		return nil, err
@@ -271,7 +270,7 @@ func (r *queryResolver) BeadsStatus(ctx context.Context) (*BeadStatusCounts, err
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
-	store := bead.NewStore(ddxroot.JoinProject(r.workingDir(ctx)))
+	store := projectBeadStore(r.workingDir(ctx))
 	counts, err := store.Status()
 	if err != nil {
 		return nil, err

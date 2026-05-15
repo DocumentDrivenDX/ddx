@@ -45,7 +45,7 @@ func (s *ServerState) runBundleRoot(runID string) (bundleRoot, projectRoot strin
 		if bundleID == "" {
 			continue
 		}
-		root := filepath.Join(proj.Path, agent.ExecuteBeadArtifactDir, bundleID)
+		root := resolveProjectStatePath(proj.Path, filepath.Join(agent.ExecuteBeadArtifactDir, bundleID))
 		info, err := os.Stat(root)
 		if err != nil || !info.IsDir() {
 			continue

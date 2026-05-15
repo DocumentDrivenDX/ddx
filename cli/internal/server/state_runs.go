@@ -12,7 +12,7 @@ import (
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
-// runStoreDir is the FEAT-010 run store directory relative to the project root.
+// runStoreDir is the logical FEAT-010 run store path under DDx project state.
 const runStoreDir = ".ddx/exec/runs"
 
 // runRecord is the on-disk JSON format for a FEAT-010 run file.
@@ -163,7 +163,7 @@ func runRecordToGQL(rec runRecord) *ddxgraphql.Run {
 
 // scanRunStore reads FEAT-010 run JSON files from .ddx/exec/runs/.
 func scanRunStore(projectRoot string) []*ddxgraphql.Run {
-	dir := filepath.Join(projectRoot, runStoreDir)
+	dir := resolveProjectStatePath(projectRoot, runStoreDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
@@ -191,7 +191,7 @@ func scanRunStore(projectRoot string) []*ddxgraphql.Run {
 // three-layer model). Run-layer records are synthesized separately from the
 // AgentSession index, since multiple agent invocations may share a try.
 func synthesizeRunsFromBundles(projectID, projectRoot string) []*ddxgraphql.Run {
-	dir := filepath.Join(projectRoot, agent.ExecuteBeadArtifactDir)
+	dir := resolveProjectStatePath(projectRoot, agent.ExecuteBeadArtifactDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil
