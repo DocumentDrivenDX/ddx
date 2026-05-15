@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
@@ -38,9 +39,12 @@ Output columns (terminal):
   COMMAND     — the worker's command line (truncated for terminals)
   BEAD        — active bead id when it can be inferred from argv or the
                 isolated execute-bead worktree
+  ATTEMPT     — active attempt id when a fresh worker liveness sidecar
+                records one for the live worker
   WORKTREE    — execute-bead worktree path when the worker is inside one
 
-JSON output preserves the full set of fields including project_root.`,
+JSON output preserves the full set of fields including project_root,
+attempt_id, phase, child_pid, and last_activity_at when available.`,
 		Example: `  # Show live workers for the current project
   ddx work status
 
@@ -85,7 +89,7 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
-		Workers:     filterAndSortWorkers(all, projectRoot, allProjects),
+		Workers:     workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), time.Now().UTC()),
 	}
 	if allProjects {
 		report.Scope = "all-projects"
@@ -150,12 +154,16 @@ func writeWorkStatusText(out io.Writer, report WorkStatusReport) {
 		if bead == "" {
 			bead = "-"
 		}
+		attempt := w.AttemptID
+		if attempt == "" {
+			attempt = "-"
+		}
 		worktree := w.ExecutionWorktree
 		if worktree == "" {
 			worktree = "-"
 		}
-		fmt.Fprintf(out, "  pid=%d age=%s project=%s bead=%s worktree=%s\n    %s\n",
-			w.PID, w.Age, w.ProjectRoot, bead, worktree, w.Command)
+		fmt.Fprintf(out, "  pid=%d age=%s project=%s bead=%s attempt=%s worktree=%s\n    %s\n",
+			w.PID, w.Age, w.ProjectRoot, bead, attempt, worktree, w.Command)
 	}
 }
 

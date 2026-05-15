@@ -2,6 +2,10 @@ package cmd
 
 import (
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -170,6 +174,183 @@ func TestWorkStatusInfersBeadAndExecutionWorktree(t *testing.T) {
 	assert.Equal(t, projectA, w.ProjectRoot)
 	assert.Equal(t, "ddx-c3219628", w.BeadID)
 	assert.Equal(t, worktree, w.ExecutionWorktree)
+}
+
+func TestWorkStatusUsesFreshLivenessSidecarForActiveAttempt(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("process cwd inspection for sidecar child pid is linux-only")
+	}
+
+	projectRoot := t.TempDir()
+	worktree := filepath.Join(t.TempDir(), ".execute-bead-wt-ddx-aabbccdd-20260515T120840-2c0aa694")
+	require.NoError(t, os.MkdirAll(worktree, 0o755))
+
+	child := exec.Command("sleep", "30")
+	child.Dir = worktree
+	require.NoError(t, child.Start())
+	t.Cleanup(func() {
+		if child.Process != nil {
+			_ = child.Process.Kill()
+			_ = child.Wait()
+		}
+	})
+
+	startedAt := time.Now().Add(-2 * time.Minute).UTC()
+	parentPID := 4242
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         parentPID,
+			Command:     "ddx work --watch --project " + projectRoot,
+			ProjectRoot: projectRoot,
+			StartedAt:   startedAt,
+			Age:         "2m",
+			AgeSeconds:  120,
+		},
+	}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-active", workerstatus.LivenessRecord{
+		WorkerID:       "worker-active",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-aabbccdd",
+		AttemptID:      "20260515T120840-2c0aa694",
+		Phase:          "running",
+		PID:            parentPID,
+		ChildPID:       child.Process.Pid,
+		StartedAt:      startedAt,
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	textOut, err := executeCommand(root, "work", "status", "--project", projectRoot)
+	require.NoError(t, err)
+
+	assert.Contains(t, textOut, "bead=ddx-aabbccdd")
+	assert.Contains(t, textOut, "attempt=20260515T120840-2c0aa694")
+	assert.Contains(t, textOut, "worktree="+worktree)
+	assert.NotContains(t, textOut, "bead=-")
+
+	jsonOut, err := executeCommand(factory.NewRootCommand(), "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, "ddx-aabbccdd", report.Workers[0].BeadID)
+	assert.Equal(t, "20260515T120840-2c0aa694", report.Workers[0].AttemptID)
+	assert.Equal(t, "running", report.Workers[0].Phase)
+	assert.Equal(t, child.Process.Pid, report.Workers[0].ChildPID)
+	assert.Equal(t, worktree, report.Workers[0].ExecutionWorktree)
+	assert.False(t, report.Workers[0].LastActivityAt.IsZero())
+}
+
+func TestWorkStatusAllProjectsEnrichesActiveBeads(t *testing.T) {
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+	now := time.Now().UTC()
+
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         1001,
+			Command:     "ddx work --watch --project " + projectA,
+			ProjectRoot: projectA,
+			StartedAt:   now.Add(-5 * time.Minute),
+			Age:         "5m",
+			AgeSeconds:  300,
+		},
+		{
+			PID:         2002,
+			Command:     "ddx work --watch --project " + projectB,
+			ProjectRoot: projectB,
+			StartedAt:   now.Add(-3 * time.Minute),
+			Age:         "3m",
+			AgeSeconds:  180,
+		},
+	}
+
+	require.NoError(t, workerstatus.WriteLiveness(projectA, "worker-a", workerstatus.LivenessRecord{
+		WorkerID:       "worker-a",
+		ProjectRoot:    projectA,
+		CurrentBead:    "ddx-aaaabbbb",
+		AttemptID:      "20260515T120840-a1",
+		Phase:          "running",
+		PID:            1001,
+		StartedAt:      scannerWorkers[0].StartedAt,
+		LastActivityAt: now,
+	}))
+	require.NoError(t, workerstatus.WriteLiveness(projectB, "worker-b", workerstatus.LivenessRecord{
+		WorkerID:       "worker-b",
+		ProjectRoot:    projectB,
+		CurrentBead:    "ddx-ccccdddd",
+		AttemptID:      "20260515T121500-b2",
+		Phase:          "running",
+		PID:            2002,
+		StartedAt:      scannerWorkers[1].StartedAt,
+		LastActivityAt: now,
+	}))
+
+	factory := NewCommandFactory(projectA)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectA, "--all-projects", "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.Equal(t, "all-projects", report.Scope)
+	require.Len(t, report.Workers, 2)
+
+	byProject := make(map[string]workerstatus.LiveWorker, len(report.Workers))
+	for _, w := range report.Workers {
+		byProject[w.ProjectRoot] = w
+	}
+	require.Contains(t, byProject, projectA)
+	require.Contains(t, byProject, projectB)
+	assert.Equal(t, "ddx-aaaabbbb", byProject[projectA].BeadID)
+	assert.Equal(t, "20260515T120840-a1", byProject[projectA].AttemptID)
+	assert.Equal(t, "ddx-ccccdddd", byProject[projectB].BeadID)
+	assert.Equal(t, "20260515T121500-b2", byProject[projectB].AttemptID)
+}
+
+func TestWorkStatusIgnoresStaleLivenessSidecar(t *testing.T) {
+	projectRoot := t.TempDir()
+	startedAt := time.Now().Add(-2 * time.Minute).UTC()
+
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         5151,
+			Command:     "ddx work --watch --project " + projectRoot,
+			ProjectRoot: projectRoot,
+			StartedAt:   startedAt,
+			Age:         "2m",
+			AgeSeconds:  120,
+		},
+	}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-stale", workerstatus.LivenessRecord{
+		WorkerID:       "worker-stale",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-deadbeef",
+		AttemptID:      "20260515T115959-stale",
+		Phase:          "running",
+		PID:            5151,
+		StartedAt:      startedAt,
+		LastActivityAt: time.Now().Add(-workerstatus.LivenessTTL - time.Second).UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Empty(t, report.Workers[0].BeadID, "stale sidecars must not make an idle parent look active")
+	assert.Empty(t, report.Workers[0].AttemptID, "stale sidecars must not contribute attempt metadata")
 }
 
 // TestWorkStatus_EmptyAllProjectsMessage verifies the all-projects empty

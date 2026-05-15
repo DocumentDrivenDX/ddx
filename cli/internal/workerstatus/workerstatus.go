@@ -26,6 +26,10 @@ type LiveWorker struct {
 	Age               string    `json:"age"`
 	ProjectRoot       string    `json:"project_root"`
 	BeadID            string    `json:"bead_id,omitempty"`
+	AttemptID         string    `json:"attempt_id,omitempty"`
+	Phase             string    `json:"phase,omitempty"`
+	ChildPID          int       `json:"child_pid,omitempty"`
+	LastActivityAt    time.Time `json:"last_activity_at,omitempty"`
 	ExecutionWorktree string    `json:"execution_worktree,omitempty"`
 	Cwd               string    `json:"cwd,omitempty"`
 }
@@ -94,7 +98,15 @@ func extractWorktreePath(s string) string {
 	if matches == nil {
 		return ""
 	}
+	start := matches[0]
 	end := matches[1]
+	for start > 0 {
+		r := s[start-1]
+		if r == ' ' || r == '\x00' || r == '\t' {
+			break
+		}
+		start--
+	}
 	for end < len(s) {
 		r := s[end]
 		if r == ' ' || r == '\x00' || r == '\t' {
@@ -102,7 +114,7 @@ func extractWorktreePath(s string) string {
 		}
 		end++
 	}
-	return s[:end]
+	return s[start:end]
 }
 
 // FilterByProject returns workers whose ProjectRoot resolves to the same path

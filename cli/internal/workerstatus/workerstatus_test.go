@@ -32,6 +32,18 @@ func TestInferBead_FromTryPositionalArg(t *testing.T) {
 	}
 }
 
+func TestWorkStatusInferBead_FromCommandLineWorktreeFlag(t *testing.T) {
+	cmdline := "codex exec -C /tmp/ddx-exec-wt/.execute-bead-wt-ddx-c3219628-20260513T231309-0e6f776b"
+
+	beadID, worktree := InferBead(cmdline, "")
+	if beadID != "ddx-c3219628" {
+		t.Fatalf("bead id mismatch: got %q", beadID)
+	}
+	if worktree != "/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c3219628-20260513T231309-0e6f776b" {
+		t.Fatalf("worktree mismatch: got %q", worktree)
+	}
+}
+
 func TestInferBead_NoSignal(t *testing.T) {
 	beadID, worktree := InferBead("ddx work --watch", "/home/user/project")
 	if beadID != "" {
