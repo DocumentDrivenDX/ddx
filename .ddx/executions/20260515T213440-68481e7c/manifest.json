@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260515T213440-68481e7c",
+  "bead_id": "ddx-039d932b",
+  "base_rev": "d99061b95b1a2214410446650e7610aeffcf5e2a",
+  "created_at": "2026-05-15T21:34:45.431818382Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-039d932b",
+    "title": "build: restore frontend/build for go test setup",
+    "description": "PROBLEM\n`cd cli \u0026\u0026 go test ./...` currently fails in package setup before any `Test*` executes because `internal/server/embed.go` embeds `all:frontend/build`, but that directory is absent in this checkout.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/embed.go:5` declares `//go:embed all:frontend/build`.\n- On 2026-05-15, `cd cli \u0026\u0026 go test ./...` failed with `internal/server/embed.go:5:12: pattern all:frontend/build: no matching files found` in `github.com/DocumentDrivenDX/ddx`, `cmd`, `internal/agent/workerprobe`, `internal/server`, `internal/server/graphql`, and `tools/gendoc`.\n- `cli/frontend/` is absent from the current worktree, so the embed target cannot resolve.\n\nPROPOSED FIX\nDecide whether the repository should commit the built frontend assets, generate them as part of the Go test setup, or change the embed/test arrangement so `go test ./...` can compile without a prebuilt frontend bundle. Restore the expected path or adjust the build/test contract accordingly.\n\nNON-SCOPE\n- Do not change the production-reachability closure evidence artifacts.\n- Do not hand-edit tracker storage.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./...` no longer fails with `internal/server/embed.go:5:12: pattern all:frontend/build: no matching files found`.\n2. The fix documents or codifies how `frontend/build` is produced or located for local/test builds.\n3. `lefthook run pre-commit` passes with the staged fix.",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "kind:build",
+      "observed-failure"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-039d932b)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T21:34:40.787203537Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T213440-68481e7c",
+    "prompt": ".ddx/executions/20260515T213440-68481e7c/prompt.md",
+    "manifest": ".ddx/executions/20260515T213440-68481e7c/manifest.json",
+    "result": ".ddx/executions/20260515T213440-68481e7c/result.json",
+    "checks": ".ddx/executions/20260515T213440-68481e7c/checks.json",
+    "usage": ".ddx/executions/20260515T213440-68481e7c/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-039d932b-20260515T213440-68481e7c"
+  },
+  "prompt_sha": "d27808063329835b457fd7ea5c976809c1dcd0f92c4ce19ed3094ed4a100eb45"
+}
