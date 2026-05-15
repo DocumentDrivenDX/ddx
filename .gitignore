@@ -447,6 +447,9 @@ cli/.ddx/
 .forge/
 cli/.forge/
 
+# Fizeau runtime health/session state from local route checks
+.fizeau/
+
 # Codex agent scratch
 .codex
 .codex/
