@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	agentlib "github.com/easel/fizeau"
@@ -25,6 +26,8 @@ import (
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
 )
+
+const defaultWorktreeReapMaxAge = 72 * time.Hour
 
 func hostnameOrEmpty() string {
 	h, err := os.Hostname()
@@ -152,11 +155,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	jsonOutput := dispatch.JSON == "true"
+	cleanupLog := cmd.ErrOrStderr()
+	if jsonOutput {
+		cleanupLog = io.Discard
+	}
+	cleanupRunner := newWorkStartupCleanupRunner(projectRoot)
 	if tryTargetBeadID == "" && spec.Mode != executeloop.ModeWatch {
 		if breakdown, bErr := store.ReadyExecutionBreakdown(); bErr != nil {
 			return bErr
 		} else if len(breakdown.ExecutionReady) == 0 && len(breakdown.RetryCooldown) == 0 {
-			return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, agent.NewNoReadyWorkLoopResult(spec.Mode, breakdown), dispatch.JSON == "true")
+			if _, cleanupErr := cleanupRunner.Cleanup(cmd.Context()); cleanupErr != nil {
+				return cleanupErr
+			}
+			return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, agent.NewNoReadyWorkLoopResult(spec.Mode, breakdown), jsonOutput)
 		}
 	}
 
@@ -497,11 +509,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	cliLandingOps := agent.RealLandingGitOps{}
 	progressLog := cmd.OutOrStdout()
-	cleanupLog := cmd.ErrOrStderr()
-	jsonOutput := dispatch.JSON == "true"
 	if jsonOutput {
 		progressLog = io.Discard
-		cleanupLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Mode:                         spec.Mode,
@@ -511,7 +520,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		EventSink:                    loopSink,
 		WorkerID:                     resolveClaimAssignee(),
 		ProjectRoot:                  projectRoot,
-		CleanupRunner:                agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		CleanupRunner:                cleanupRunner,
 		ResourceChecker:              resourceChecker,
 		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID),
 		SessionID:                    loopSessionID,
@@ -577,6 +586,186 @@ func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile stri
 		}
 		_ = attemptmetrics.AppendRow(projectRoot, row)
 	}
+}
+
+type workStartupCleanupRunner struct {
+	projectRoot string
+	tempRoot    string
+	maxAge      time.Duration
+	now         func() time.Time
+}
+
+func newWorkStartupCleanupRunner(projectRoot string) *workStartupCleanupRunner {
+	tempRoot := config.ExecutionWorktreeRoot(projectRoot)
+	if tempRoot == "" {
+		tempRoot = filepath.Join(os.TempDir(), agent.ExecuteBeadTmpSubdir)
+	}
+	return &workStartupCleanupRunner{
+		projectRoot: projectRoot,
+		tempRoot:    tempRoot,
+		maxAge:      worktreeReapMaxAgeFromEnv(),
+	}
+}
+
+func (r *workStartupCleanupRunner) Cleanup(ctx context.Context) (agent.ExecutionCleanupSummary, error) {
+	if r == nil {
+		return agent.ExecutionCleanupSummary{}, nil
+	}
+	summary := agent.ExecutionCleanupSummary{
+		ProjectRoot: r.projectRoot,
+		TempRoot:    r.tempRoot,
+	}
+	if r.projectRoot == "" || r.tempRoot == "" {
+		return summary, nil
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
+	entries, err := os.ReadDir(r.tempRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return summary, nil
+		}
+		return summary, err
+	}
+	runStates, err := agent.ReadRunStates(r.projectRoot)
+	if err != nil {
+		return summary, err
+	}
+	now := time.Now().UTC()
+	if r.now != nil {
+		now = r.now()
+	}
+	registered := map[string]struct{}{}
+	if paths, listErr := (&agent.RealGitOps{}).WorktreeList(r.projectRoot); listErr == nil {
+		for _, path := range paths {
+			registered[filepath.Clean(path)] = struct{}{}
+		}
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {
+			continue
+		}
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return summary, err
+			}
+		}
+		summary.ScannedTempDirs++
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()) < r.maxAge {
+			continue
+		}
+		path := filepath.Join(r.tempRoot, entry.Name())
+		meta, metaErr := agent.ReadExecutionCleanupMetadata(path)
+		if metaErr == nil {
+			meta.WorktreePath = firstNonEmpty(meta.WorktreePath, path)
+		} else {
+			meta = agent.ExecutionCleanupMetadata{WorktreePath: path}
+		}
+		if worktreeStillLive(meta, runStates, now) {
+			continue
+		}
+		if _, ok := registered[filepath.Clean(path)]; ok {
+			_ = (&agent.RealGitOps{}).WorktreeRemove(r.projectRoot, path)
+			summary.RemovedRegisteredWorktrees++
+			continue
+		}
+		if err := os.RemoveAll(path); err == nil {
+			summary.RemovedUnregisteredTempDirs++
+		}
+	}
+	return summary, nil
+}
+
+func worktreeStillLive(meta agent.ExecutionCleanupMetadata, runStates []agent.RunState, now time.Time) bool {
+	if meta.Preserved || meta.ActiveCandidateCycle || strings.TrimSpace(meta.CandidateRef) != "" {
+		return true
+	}
+	if worktreeLivenessAlive(meta.Liveness, now) {
+		return true
+	}
+	for _, state := range runStates {
+		if !runStateMatchesWorktree(state, meta) {
+			continue
+		}
+		if strings.TrimSpace(state.CandidateCyclePhase) != "" || strings.TrimSpace(state.CandidateRef) != "" {
+			return true
+		}
+		if worktreeRunStateAlive(state, now) {
+			return true
+		}
+	}
+	return false
+}
+
+func worktreeLivenessAlive(liveness *agent.ExecutionCleanupLiveness, now time.Time) bool {
+	if liveness == nil {
+		return false
+	}
+	if processAlive(liveness.PID) {
+		return true
+	}
+	if !liveness.ExpiresAt.IsZero() && now.Before(liveness.ExpiresAt) {
+		return true
+	}
+	return !liveness.RefreshedAt.IsZero() && now.Sub(liveness.RefreshedAt) <= 2*time.Minute
+}
+
+func worktreeRunStateAlive(state agent.RunState, now time.Time) bool {
+	if processAlive(state.PID) {
+		return true
+	}
+	if !state.ExpiresAt.IsZero() && now.Before(state.ExpiresAt) {
+		return true
+	}
+	return !state.RefreshedAt.IsZero() && now.Sub(state.RefreshedAt) <= agent.RunStateLivenessTTL
+}
+
+func runStateMatchesWorktree(state agent.RunState, meta agent.ExecutionCleanupMetadata) bool {
+	if meta.AttemptID != "" && state.AttemptID == meta.AttemptID {
+		return true
+	}
+	return meta.WorktreePath != "" &&
+		state.WorktreePath != "" &&
+		filepath.Clean(state.WorktreePath) == filepath.Clean(meta.WorktreePath)
+}
+
+func processAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return proc.Signal(syscall.Signal(0)) == nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func worktreeReapMaxAgeFromEnv() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("DDX_WORKTREE_REAP_MAX_AGE"))
+	if raw == "" {
+		return defaultWorktreeReapMaxAge
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		return defaultWorktreeReapMaxAge
+	}
+	return d
 }
 
 // projectHasRoutingConfig reports whether the project's .ddx/config.yaml pins a
