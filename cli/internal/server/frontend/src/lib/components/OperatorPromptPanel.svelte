@@ -98,7 +98,7 @@
 			const data = await gqlRequest<OperatorPromptSubmitResult>(OPERATOR_PROMPT_SUBMIT_MUTATION, {
 				input: {
 					prompt: trimmed,
-					tier,
+					priority,
 					idempotencyKey: newIdempotencyKey(),
 					autoApprove: false
 				}

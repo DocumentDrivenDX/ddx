@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
+	import { resolve } from '$app/paths';
+	import { onDestroy, onMount } from 'svelte';
 	import {
 		AlertTriangle,
 		Loader2,
@@ -11,13 +12,23 @@
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
 	import {
+		getCsrfToken,
+		OPERATOR_PROMPT_SUBMIT_MUTATION,
+		type OperatorPromptBead,
+		type OperatorPromptSubmitResult
+	} from '$lib/gql/operator-prompts';
+	import {
 		subscribeReviewSessionEvents,
 		type ReviewSessionEvent as StreamingReviewSessionEvent
 	} from '$lib/gql/subscriptions';
 	import {
 		activeReviewCount,
 		applyReviewSessionEvent,
+		buildReviewFindingFollowUp,
+		buildReviewFindingOperatorPrompt,
+		extractReviewFindings,
 		sessionHasShaDrift,
+		type ReviewFinding,
 		type ReviewSession
 	} from './reviewPanel';
 
@@ -25,6 +36,8 @@
 		artifactId: string;
 		artifactTitle: string;
 		artifactSha: string | null;
+		nodeId: string;
+		projectId: string;
 	};
 
 	type ReviewSessionEnvelope = {
@@ -39,7 +52,22 @@
 		reviewSessionCancel: boolean;
 	};
 
-	let { artifactId, artifactTitle, artifactSha }: Props = $props();
+	type MutationCapabilitiesEnvelope = {
+		__type?: {
+			fields?: Array<{ name: string }> | null;
+		} | null;
+	};
+
+	type ReviewFindingBeadCreateEnvelope = {
+		beadCreate: OperatorPromptBead;
+	};
+
+	type ReviewFindingResult = {
+		beadId: string;
+		mode: 'operatorPrompt' | 'followUp';
+	};
+
+	let { artifactId, artifactTitle, artifactSha, nodeId, projectId }: Props = $props();
 
 	const REVIEW_SESSION_START_MUTATION = gql`
 		mutation ReviewSessionStart($input: ReviewSessionStartInput!) {
@@ -85,18 +113,49 @@
 		}
 	`;
 
+	const REVIEW_PANEL_MUTATION_CAPABILITIES_QUERY = gql`
+		query ReviewPanelMutationCapabilities {
+			__type(name: "Mutation") {
+				fields {
+					name
+				}
+			}
+		}
+	`;
+
+	const REVIEW_FINDING_BEAD_CREATE_MUTATION = gql`
+		mutation ReviewFindingBeadCreate($input: BeadInput!) {
+			beadCreate(input: $input) {
+				id
+				title
+				status
+				priority
+				issueType
+				createdAt
+				updatedAt
+				labels
+				description
+			}
+		}
+	`;
+
 	let session = $state<ReviewSession | null>(null);
 	let draft = $state('');
 	let alertMessage = $state<string | null>(null);
 	let submitting = $state(false);
 	let cancelling = $state(false);
 	let pendingReviewerDelta = $state('');
+	let operatorPromptAvailable = $state<boolean | null>(null);
+	let submittingFindingId = $state<string | null>(null);
+	let findingAlertMessage = $state<string | null>(null);
+	let findingResults = $state<Record<string, ReviewFindingResult>>({});
 	let subscribedSessionId: string | null = null;
 	let unsubscribe: (() => void) | null = null;
 
 	const activeSessions = $derived(session ? [session] : []);
 	const activeCount = $derived(activeReviewCount(activeSessions));
 	const drifted = $derived(sessionHasShaDrift(session, artifactSha));
+	const findings = $derived(extractReviewFindings(session));
 	const submitLabel = $derived(session ? 'Send follow-up' : 'Start review');
 	const submitDisabled = $derived(
 		submitting ||
@@ -122,6 +181,17 @@
 		return 'Unknown error.';
 	}
 
+	function isOperatorPromptUnavailable(err: unknown): boolean {
+		const message = errorText(err).toLowerCase();
+		return (
+			(message.includes('operatorpromptsubmit') &&
+				(message.includes('cannot query field') ||
+					message.includes('unknown field') ||
+					message.includes('does not exist'))) ||
+			message.includes('operator prompts not supported')
+		);
+	}
+
 	function sessionBadgeClass(status: string | null | undefined): string {
 		switch (status) {
 			case 'active':
@@ -139,6 +209,94 @@
 		return actor === 'reviewer'
 			? 'bg-bg-surface text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-ink'
 			: 'bg-accent-lever/10 text-fg-ink dark:bg-dark-accent-lever/15 dark:text-dark-fg-ink';
+	}
+
+	function findingActionLabel(): string {
+		return operatorPromptAvailable === false ? 'Create follow-up bead' : 'Use as edit prompt';
+	}
+
+	function findingResultLabel(mode: ReviewFindingResult['mode']): string {
+		return mode === 'operatorPrompt' ? 'Created operator-prompt bead' : 'Created follow-up bead';
+	}
+
+	function beadHref(beadId: string): string {
+		return resolve('/nodes/[nodeId]/projects/[projectId]/beads/[beadId]', {
+			nodeId,
+			projectId,
+			beadId
+		});
+	}
+
+	async function writeGraphqlRequest<T>(
+		query: string,
+		variables: Record<string, unknown>
+	): Promise<T> {
+		const token = await getCsrfToken();
+		const resp = await fetch('/graphql', {
+			method: 'POST',
+			credentials: 'same-origin',
+			headers: {
+				'Content-Type': 'application/json',
+				'X-CSRF-Token': token
+			},
+			body: JSON.stringify({ query, variables })
+		});
+		const body = (await resp.json()) as {
+			data?: T;
+			errors?: Array<{ message: string }>;
+		};
+		if (body.errors?.length) {
+			throw new Error(body.errors.map((entry) => entry.message).join('; '));
+		}
+		if (!body.data) {
+			throw new Error(`graphql request failed: ${resp.status}`);
+		}
+		return body.data;
+	}
+
+	function newIdempotencyKey(): string {
+		if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+			return crypto.randomUUID();
+		}
+		return `review-finding-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+	}
+
+	async function detectOperatorPromptAvailability() {
+		try {
+			const client = createClient();
+			const data = await client.request<MutationCapabilitiesEnvelope>(
+				REVIEW_PANEL_MUTATION_CAPABILITIES_QUERY
+			);
+			const fieldNames = new Set((data.__type?.fields ?? []).map((field) => field.name));
+			operatorPromptAvailable = fieldNames.has('operatorPromptSubmit');
+		} catch {
+			operatorPromptAvailable = null;
+		}
+	}
+
+	async function createOperatorPromptBead(finding: ReviewFinding): Promise<OperatorPromptBead> {
+		const data = await writeGraphqlRequest<OperatorPromptSubmitResult>(
+			OPERATOR_PROMPT_SUBMIT_MUTATION,
+			{
+				input: {
+					prompt: buildReviewFindingOperatorPrompt(artifactTitle, artifactId, finding),
+					priority: 2,
+					idempotencyKey: newIdempotencyKey(),
+					autoApprove: false
+				}
+			}
+		);
+		return data.operatorPromptSubmit.bead;
+	}
+
+	async function createFollowUpBead(finding: ReviewFinding): Promise<OperatorPromptBead> {
+		const data = await writeGraphqlRequest<ReviewFindingBeadCreateEnvelope>(
+			REVIEW_FINDING_BEAD_CREATE_MUTATION,
+			{
+				input: buildReviewFindingFollowUp(artifactTitle, artifactId, finding)
+			}
+		);
+		return data.beadCreate;
 	}
 
 	function teardownSubscription() {
@@ -235,6 +393,44 @@
 		}
 	}
 
+	async function handleFindingAction(finding: ReviewFinding) {
+		submittingFindingId = finding.id;
+		findingAlertMessage = null;
+		try {
+			let bead: OperatorPromptBead;
+			let mode: ReviewFindingResult['mode'];
+
+			if (operatorPromptAvailable === false) {
+				bead = await createFollowUpBead(finding);
+				mode = 'followUp';
+			} else {
+				try {
+					bead = await createOperatorPromptBead(finding);
+					mode = 'operatorPrompt';
+					operatorPromptAvailable = true;
+				} catch (err) {
+					if (!isOperatorPromptUnavailable(err)) throw err;
+					operatorPromptAvailable = false;
+					bead = await createFollowUpBead(finding);
+					mode = 'followUp';
+				}
+			}
+
+			findingResults = {
+				...findingResults,
+				[finding.id]: { beadId: bead.id, mode }
+			};
+		} catch (err) {
+			findingAlertMessage = `Could not create follow-up work. ${errorText(err)}`;
+		} finally {
+			submittingFindingId = null;
+		}
+	}
+
+	onMount(() => {
+		void detectOperatorPromptAvailability();
+	});
+
 	onDestroy(() => {
 		teardownSubscription();
 	});
@@ -280,6 +476,16 @@
 			class="border-error/30 bg-error/10 text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error rounded-md border px-3 py-2 text-sm"
 		>
 			{alertMessage}
+		</div>
+	{/if}
+
+	{#if findingAlertMessage}
+		<div
+			role="alert"
+			data-testid="review-finding-alert"
+			class="border-error/30 bg-error/10 text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error rounded-md border px-3 py-2 text-sm"
+		>
+			{findingAlertMessage}
 		</div>
 	{/if}
 
@@ -400,6 +606,59 @@
 					<p class="text-sm whitespace-pre-wrap">{pendingReviewerDelta}</p>
 				</div>
 			{/if}
+		</div>
+	{/if}
+
+	{#if findings.length > 0}
+		<div
+			data-testid="review-findings"
+			class="border-border-line dark:border-dark-border-line space-y-3 border p-3"
+		>
+			<div class="flex items-center justify-between gap-2">
+				<h3 class="text-fg-ink dark:text-dark-fg-ink text-sm font-medium">Findings</h3>
+				<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
+					{findings.length} finding{findings.length === 1 ? '' : 's'}
+				</span>
+			</div>
+			<div class="space-y-3">
+				{#each findings as finding}
+					<div
+						data-testid="review-finding"
+						class="border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface space-y-3 rounded-md border p-3"
+					>
+						<p class="text-fg-ink dark:text-dark-fg-ink text-sm">{finding.message}</p>
+						<div class="flex flex-wrap items-center gap-3">
+							<button
+								type="button"
+								data-testid="review-finding-action"
+								disabled={submittingFindingId !== null}
+								onclick={() => handleFindingAction(finding)}
+								class="bg-accent-lever text-bg-canvas disabled:bg-fg-muted disabled:text-bg-surface dark:bg-dark-accent-lever dark:text-dark-bg-canvas dark:disabled:bg-dark-fg-muted dark:disabled:text-dark-bg-surface inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium disabled:cursor-not-allowed"
+							>
+								{#if submittingFindingId === finding.id}
+									<Loader2 class="h-4 w-4 animate-spin" />
+								{/if}
+								{findingActionLabel()}
+							</button>
+							{#if findingResults[finding.id]}
+								<p
+									data-testid="review-finding-result"
+									class="text-body-sm text-fg-muted dark:text-dark-fg-muted"
+								>
+									{findingResultLabel(findingResults[finding.id].mode)}
+									<a
+										data-testid="review-finding-link"
+										href={beadHref(findingResults[finding.id].beadId)}
+										class="text-accent-lever dark:text-dark-accent-lever ml-1 font-medium hover:underline"
+									>
+										{findingResults[finding.id].beadId}
+									</a>
+								</p>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
 		</div>
 	{/if}
 </section>

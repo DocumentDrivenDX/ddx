@@ -278,6 +278,8 @@
 			artifactId={data.artifact.id}
 			artifactTitle={data.artifact.title}
 			artifactSha={data.artifact.sha256}
+			nodeId={data.nodeId}
+			projectId={data.projectId}
 		/>
 
 		<!-- Renderer -->

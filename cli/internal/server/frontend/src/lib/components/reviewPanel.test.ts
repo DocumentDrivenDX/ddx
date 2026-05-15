@@ -4,6 +4,9 @@ import ReviewPanel from './ReviewPanel.svelte';
 import {
 	activeReviewCount,
 	applyReviewSessionEvent,
+	buildReviewFindingFollowUp,
+	buildReviewFindingOperatorPrompt,
+	extractReviewFindings,
 	sessionHasShaDrift,
 	type ReviewSession
 } from './reviewPanel';
@@ -27,7 +30,9 @@ describe('ReviewPanel component', () => {
 			props: {
 				artifactId: 'artifact-001',
 				artifactTitle: 'Artifact Under Review',
-				artifactSha: 'sha-current'
+				artifactSha: 'sha-current',
+				nodeId: 'node-001',
+				projectId: 'project-001'
 			}
 		});
 
@@ -41,7 +46,9 @@ describe('ReviewPanel component', () => {
 			props: {
 				artifactId: 'artifact-001',
 				artifactTitle: 'Artifact Under Review',
-				artifactSha: 'sha-after'
+				artifactSha: 'sha-after',
+				nodeId: 'node-001',
+				projectId: 'project-001'
 			}
 		});
 
@@ -105,5 +112,45 @@ describe('reviewPanel helpers', () => {
 			timestamp: '2026-05-15T18:00:02Z'
 		});
 		expect(deduped.session.turns).toHaveLength(2);
+	});
+
+	it('extracts reviewer findings from bullet lists and deduplicates repeats', () => {
+		const findings = extractReviewFindings(
+			session({
+				turns: [
+					{
+						actor: 'reviewer',
+						content: '- Missing nil check\n- Add regression test\n- Missing nil check',
+						costUSD: 0,
+						createdAt: '2026-05-15T18:00:00Z'
+					}
+				]
+			})
+		);
+
+		expect(findings).toHaveLength(2);
+		expect(findings[0]?.message).toBe('Missing nil check');
+		expect(findings[1]?.message).toBe('Add regression test');
+	});
+
+	it('builds operator-prompt and fallback bead payloads from a finding', () => {
+		const finding = {
+			id: 'finding-1',
+			message: 'Missing nil check',
+			summary: 'Missing nil check',
+			sourceTurnIndex: 0
+		};
+		expect(
+			buildReviewFindingOperatorPrompt('Artifact Under Review', 'artifact-001', finding)
+		).toContain('Finding to address:\nMissing nil check');
+
+		expect(
+			buildReviewFindingFollowUp('Artifact Under Review', 'artifact-001', finding)
+		).toMatchObject({
+			title: 'Follow up review finding: Missing nil check',
+			status: 'open',
+			priority: 2,
+			issueType: 'task'
+		});
 	});
 });
