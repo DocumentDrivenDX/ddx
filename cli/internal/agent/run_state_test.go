@@ -60,6 +60,25 @@ func TestRunStatePathUsesDDxRoot(t *testing.T) {
 	}
 }
 
+func TestRunStateReadDoesNotBootstrapConventionRoot(t *testing.T) {
+	projectRoot := newRunStateProjectRoot(t)
+	xdgRoot := filepath.Join(os.Getenv("XDG_DATA_HOME"), "ddx", "projects")
+
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunStates: %v", err)
+	}
+	if len(states) != 0 {
+		t.Fatalf("ReadRunStates len=%d, want 0", len(states))
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("ReadRunStates should not initialize a git repo: %v", err)
+	}
+	if _, err := os.Stat(xdgRoot); !os.IsNotExist(err) {
+		t.Fatalf("ReadRunStates should not bootstrap convention DDx root: %v", err)
+	}
+}
+
 func TestRunState_WriteReadCleanupCycle(t *testing.T) {
 	projectRoot := newRunStateProjectRoot(t)
 

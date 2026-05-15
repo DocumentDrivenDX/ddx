@@ -39,6 +39,29 @@ func ProjectPath(projectRoot string) string {
 	return Path(context.Background(), projectRoot)
 }
 
+// ExistingPath returns the DDx state root for projectRoot only when it already
+// exists. Unlike Path, it never bootstraps a convention root.
+func ExistingPath(ctx context.Context, projectRoot string) (string, bool) {
+	inTree := InTree(projectRoot)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return inTree, true
+	}
+	root := filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
+	if info, err := os.Stat(root); err == nil && info.IsDir() {
+		return root, true
+	}
+	return "", false
+}
+
+func ExistingJoinProject(ctx context.Context, projectRoot string, elems ...string) (string, bool) {
+	root, ok := ExistingPath(ctx, projectRoot)
+	if !ok {
+		return "", false
+	}
+	parts := append([]string{root}, elems...)
+	return filepath.Join(parts...), true
+}
+
 func JoinProject(projectRoot string, elems ...string) string {
 	return JoinProjectContext(context.Background(), projectRoot, elems...)
 }

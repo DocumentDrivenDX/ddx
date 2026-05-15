@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,14 @@ func runStatePath(projectRoot string) string {
 
 func runStateDirPath(projectRoot string) string {
 	return ddxroot.JoinProject(projectRoot, RunStateDirName)
+}
+
+func existingRunStatePath(projectRoot string) (string, bool) {
+	return ddxroot.ExistingJoinProject(context.Background(), projectRoot, RunStateFileName)
+}
+
+func existingRunStateDirPath(projectRoot string) (string, bool) {
+	return ddxroot.ExistingJoinProject(context.Background(), projectRoot, RunStateDirName)
 }
 
 func runStateAttemptPath(projectRoot, attemptID string) (string, error) {
@@ -163,7 +172,11 @@ func writeRunStateJSON(final string, state RunState) error {
 // surfaces as an error; if the compatibility file is missing, the newest
 // per-attempt record is returned.
 func ReadRunState(projectRoot string) (*RunState, error) {
-	state, err := readRunStateFile(runStatePath(projectRoot))
+	path, ok := existingRunStatePath(projectRoot)
+	if !ok {
+		return nil, nil
+	}
+	state, err := readRunStateFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
 			return nil, err
@@ -206,7 +219,11 @@ func ReadRunStates(projectRoot string) ([]RunState, error) {
 	if len(states) > 0 {
 		return states, nil
 	}
-	state, err := readRunStateFile(runStatePath(projectRoot))
+	path, ok := existingRunStatePath(projectRoot)
+	if !ok {
+		return nil, nil
+	}
+	state, err := readRunStateFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -220,7 +237,10 @@ func ReadRunStates(projectRoot string) ([]RunState, error) {
 }
 
 func readRunStateAttemptFiles(projectRoot string) ([]RunState, error) {
-	dir := runStateDirPath(projectRoot)
+	dir, ok := existingRunStateDirPath(projectRoot)
+	if !ok {
+		return nil, nil
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
