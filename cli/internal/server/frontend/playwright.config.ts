@@ -25,6 +25,7 @@ const bootCommand = [
 	`(cd "${FRONTEND_DIR}" && bun run build >&2)`,
 	`TMP=$(mktemp -d -t ddx-e2e-XXXXXX)`,
 	`cp -R "${FIXTURE_DIR}/." "$TMP/"`,
+	`export XDG_DATA_HOME="$TMP/.xdg-data"`,
 	// Build deterministically so VCS metadata does not block fixture boot.
 	`(cd "${CLI_PKG_DIR}" && go build -buildvcs=false -o "$TMP/ddx" .)`,
 	`cd "$TMP"`,

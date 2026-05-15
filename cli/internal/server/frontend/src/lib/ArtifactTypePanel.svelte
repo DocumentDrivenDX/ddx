@@ -85,6 +85,7 @@
 				<label class="space-y-1 text-sm text-fg-muted dark:text-dark-fg-muted">
 					<span class="block font-medium">Type definition</span>
 					<select
+						data-testid="artifact-type-selector"
 						class="border-border-line dark:border-dark-border-line bg-bg-canvas dark:bg-dark-bg-canvas text-fg-ink dark:text-dark-fg-ink rounded-md border px-3 py-2"
 						bind:value={selectedTypeDefKey}
 						onchange={() => selectTypeDefinition(selectedTypeDefKey)}
@@ -104,6 +105,7 @@
 				{#each ARTIFACT_TYPE_TABS as tab}
 					<button
 						type="button"
+						data-testid={`artifact-type-tab-${tab.value}`}
 						class="rounded-full px-3 py-1 text-sm transition-colors {activeTab === tab.value
 							? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
 							: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
@@ -120,7 +122,7 @@
 
 		<div class="space-y-4 p-4">
 			{#if activeTab === 'referencePrompt'}
-				<div class="space-y-2">
+				<div class="space-y-2" data-testid="artifact-type-reference-prompt">
 					<div class="text-xs font-semibold uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 						Reference Prompt
 					</div>
@@ -135,7 +137,7 @@
 					<pre class="bg-bg-canvas dark:bg-dark-bg-canvas overflow-auto rounded-md border border-border-line p-3 text-sm whitespace-pre-wrap dark:border-dark-border-line">{selectedTypeDefinition.prompt.content}</pre>
 				</div>
 			{:else if activeTab === 'template'}
-				<div class="space-y-2">
+				<div class="space-y-2" data-testid="artifact-type-template">
 					<div class="text-xs font-semibold uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 						Template
 					</div>
@@ -150,7 +152,7 @@
 					<pre class="bg-bg-canvas dark:bg-dark-bg-canvas overflow-auto rounded-md border border-border-line p-3 text-sm whitespace-pre-wrap dark:border-dark-border-line">{selectedTypeDefinition.template.content}</pre>
 				</div>
 			{:else}
-				<div class="space-y-3">
+				<div class="space-y-3" data-testid="artifact-type-examples">
 					<div class="text-xs font-semibold uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">
 						Examples
 					</div>

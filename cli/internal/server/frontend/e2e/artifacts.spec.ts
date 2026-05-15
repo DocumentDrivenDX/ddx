@@ -46,6 +46,240 @@ interface MockState {
 	lastArtifactId: string | null;
 }
 
+interface MockArtifactTypeFile {
+	path: string;
+	content: string;
+	isTruncated: boolean;
+	sizeBytes: number;
+}
+
+interface MockArtifactTypeExample extends MockArtifactTypeFile {
+	description?: string | null;
+}
+
+interface MockArtifactTypeDefinition {
+	plugin: string;
+	typeId: string;
+	name: string;
+	description: string;
+	prefix: string;
+	pattern: string;
+	phase: string;
+	sourceMetaPath: string;
+	template: MockArtifactTypeFile;
+	prompt: MockArtifactTypeFile;
+	examples: MockArtifactTypeExample[];
+}
+
+interface MockArtifactDetail {
+	id: string;
+	path: string;
+	title: string;
+	mediaType: string;
+	staleness: string;
+	description: string | null;
+	updatedAt: string | null;
+	ddxFrontmatter: string | null;
+	content: string | null;
+	typeDefinitions: MockArtifactTypeDefinition[];
+	generatedBy: {
+		runId: string;
+		promptSummary: string;
+		sourceHashMatch: boolean;
+	} | null;
+}
+
+function typeFile(
+	path: string,
+	content: string,
+	overrides?: Partial<MockArtifactTypeFile>
+): MockArtifactTypeFile {
+	return {
+		path,
+		content,
+		isTruncated: false,
+		sizeBytes: content.length,
+		...overrides
+	};
+}
+
+function typeDefinition(
+	overrides?: Partial<MockArtifactTypeDefinition>
+): MockArtifactTypeDefinition {
+	return {
+		plugin: 'ddx',
+		typeId: 'docs-sample',
+		name: 'Docs sample',
+		description: 'Sample artifact type definition',
+		prefix: 'docs',
+		pattern: 'docs/*.md',
+		phase: 'frame',
+		sourceMetaPath: 'plugins/ddx/workflows/phases/01-frame/artifacts/docs-sample/meta.yml',
+		template: typeFile('template.md', '# template one'),
+		prompt: typeFile('prompt.md', '# prompt one'),
+		examples: [],
+		...overrides
+	};
+}
+
+const ARTIFACT_TYPE_SINGLE: MockArtifactDetail = {
+	id: 'artifact-type-single-001',
+	path: 'docs/helix/01-frame/single.md',
+	title: 'Artifact Type Single',
+	mediaType: 'text/markdown',
+	staleness: 'fresh',
+	description: 'Artifact detail fixture with one matching type definition',
+	updatedAt: '2026-05-01T12:00:00Z',
+	ddxFrontmatter: JSON.stringify({ id: 'artifact-type-single-001' }),
+	content: '# Single artifact\n',
+	typeDefinitions: [
+		typeDefinition({
+			description: 'Single definition rendered without a collision selector',
+			template: typeFile('template.md', '# template one\n\nBody.\n'),
+			prompt: typeFile('prompt.md', '# prompt one\n\nReference prompt.\n'),
+			examples: [
+				{
+					path: 'example.md',
+					description: 'Worked example',
+					content: '# example\n\nUseful example content.\n',
+					isTruncated: false,
+					sizeBytes: 33
+				}
+			]
+		})
+	],
+	generatedBy: null
+};
+
+const ARTIFACT_TYPE_COLLISION: MockArtifactDetail = {
+	id: 'artifact-type-collision-001',
+	path: 'docs/helix/01-frame/collision.md',
+	title: 'Artifact Type Collision',
+	mediaType: 'text/markdown',
+	staleness: 'fresh',
+	description: 'Artifact detail fixture with two matching type definitions',
+	updatedAt: '2026-05-01T12:00:00Z',
+	ddxFrontmatter: JSON.stringify({ id: 'artifact-type-collision-001' }),
+	content: '# Collision artifact\n',
+	typeDefinitions: [
+		typeDefinition({
+			plugin: 'alpha',
+			typeId: 'docs-alpha',
+			name: 'Alpha docs',
+			description: 'First matching definition',
+			sourceMetaPath: 'plugins/alpha/workflows/phases/01-frame/artifacts/docs-alpha/meta.yml',
+			template: typeFile('alpha-template.md', '# alpha template\n'),
+			prompt: typeFile('alpha-prompt.md', '# alpha prompt\n')
+		}),
+		typeDefinition({
+			plugin: 'beta',
+			typeId: 'docs-beta',
+			name: 'Beta docs',
+			description: 'Second matching definition',
+			sourceMetaPath: 'plugins/beta/workflows/phases/01-frame/artifacts/docs-beta/meta.yml',
+			template: typeFile('beta-template.md', '# beta template\n'),
+			prompt: typeFile('beta-prompt.md', '# beta prompt\n')
+		})
+	],
+	generatedBy: null
+};
+
+const TRUNCATED_TEMPLATE_CONTENT = [
+	'# large template preview',
+	'',
+	'## Section A',
+	'This is a stable truncated preview for the artifact type template panel.',
+	'',
+	'## Section B',
+	'- keep the path label visible',
+	'- keep the truncated badge visible',
+	'- keep the inline content preview visible',
+	'',
+	'## Section C',
+	'The underlying source file is larger than 64KB, but the UI only renders',
+	'the truncated preview returned by the GraphQL resolver.'
+].join('\n');
+
+const ARTIFACT_TYPE_TRUNCATED: MockArtifactDetail = {
+	id: 'artifact-type-truncated-001',
+	path: 'docs/helix/01-frame/large.md',
+	title: 'Artifact Type Truncated',
+	mediaType: 'text/markdown',
+	staleness: 'fresh',
+	description: 'Artifact detail fixture with a truncated template payload',
+	updatedAt: '2026-05-01T12:00:00Z',
+	ddxFrontmatter: JSON.stringify({ id: 'artifact-type-truncated-001' }),
+	content: '# Truncated artifact\n',
+	typeDefinitions: [
+		typeDefinition({
+			typeId: 'docs-large',
+			name: 'Docs large',
+			description: 'Large template fixture for screenshot coverage',
+			sourceMetaPath: 'plugins/ddx/workflows/phases/01-frame/artifacts/docs-large/meta.yml',
+			template: typeFile('template.md', TRUNCATED_TEMPLATE_CONTENT, {
+				isTruncated: true,
+				sizeBytes: 70 * 1024
+			}),
+			prompt: typeFile('prompt.md', '# small prompt\n')
+		})
+	],
+	generatedBy: null
+};
+
+function artifactDetailHref(artifactID: string): string {
+	return `${BASE_URL}/${encodeURIComponent(artifactID)}`;
+}
+
+async function mockArtifactTypeRoutes(
+	page: import('@playwright/test').Page,
+	artifacts: MockArtifactDetail[]
+) {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, string>;
+		};
+		const q = body.query;
+
+		if (q.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (q.includes('Projects') && !q.includes('projectID')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+			return;
+		}
+		if (q.includes('ArtifactDetail')) {
+			const artifact = artifacts.find((item) => item.id === body.variables?.id) ?? null;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact } })
+			});
+			return;
+		}
+		if (q.includes('RunExists')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+}
+
 async function mockRoutes(page: import('@playwright/test').Page, state: MockState) {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
@@ -152,6 +386,68 @@ async function mockRoutes(page: import('@playwright/test').Page, state: MockStat
 		await route.continue();
 	});
 }
+
+test('artifact type panel: single match renders without a collision selector', async ({
+	page
+}) => {
+	await mockArtifactTypeRoutes(page, [ARTIFACT_TYPE_SINGLE]);
+
+	await page.goto(artifactDetailHref(ARTIFACT_TYPE_SINGLE.id), { waitUntil: 'networkidle' });
+
+	const panel = page.getByTestId('artifact-type-panel');
+	await expect(panel).toBeVisible();
+	await expect(panel).toContainText('Artifact type');
+	await expect(panel).toContainText('Prefix docs');
+	await expect(panel).toContainText('Docs sample');
+	await expect(panel).toContainText(/ddx\/\s*docs-sample/);
+	await expect(page.getByTestId('artifact-type-selector')).toHaveCount(0);
+
+	await expect(page.getByTestId('artifact-type-reference-prompt')).toContainText('# prompt one');
+	await page.getByTestId('artifact-type-tab-template').click();
+	await expect(page.getByTestId('artifact-type-template')).toContainText('# template one');
+	await page.getByTestId('artifact-type-tab-examples').click();
+	await expect(page.getByTestId('artifact-type-examples')).toContainText('Worked example');
+	await expect(page.getByTestId('artifact-type-examples')).toContainText('Useful example content.');
+});
+
+test('artifact type panel: collision selector switches definitions and survives refresh', async ({
+	page
+}) => {
+	await mockArtifactTypeRoutes(page, [ARTIFACT_TYPE_COLLISION]);
+
+	await page.goto(artifactDetailHref(ARTIFACT_TYPE_COLLISION.id), { waitUntil: 'networkidle' });
+
+	const selector = page.getByTestId('artifact-type-selector');
+	const betaKey =
+		'beta::docs-beta::plugins/beta/workflows/phases/01-frame/artifacts/docs-beta/meta.yml';
+
+	await expect(selector).toBeVisible();
+	await expect(page.getByTestId('artifact-type-reference-prompt')).toContainText('# alpha prompt');
+
+	await selector.selectOption(betaKey);
+	await expect(page).toHaveURL(/typeDef=beta%3A%3Adocs-beta%3A%3Aplugins%2Fbeta/);
+	await expect(page.getByTestId('artifact-type-reference-prompt')).toContainText('# beta prompt');
+
+	await page.reload({ waitUntil: 'networkidle' });
+	await expect(selector).toHaveValue(betaKey);
+	await expect(page.getByTestId('artifact-type-reference-prompt')).toContainText('# beta prompt');
+});
+
+test('artifact type panel: truncated template snapshot is stable', async ({ page }) => {
+	await mockArtifactTypeRoutes(page, [ARTIFACT_TYPE_TRUNCATED]);
+	await page.setViewportSize({ width: 1100, height: 900 });
+
+	await page.goto(artifactDetailHref(ARTIFACT_TYPE_TRUNCATED.id), { waitUntil: 'networkidle' });
+	await page.getByTestId('artifact-type-tab-template').click();
+
+	const templatePanel = page.getByTestId('artifact-type-template');
+	await expect(templatePanel).toBeVisible();
+	await expect(templatePanel).toContainText('Truncated');
+	await expect(templatePanel).toHaveScreenshot('artifact-type-template-truncated.png', {
+		animations: 'disabled',
+		caret: 'hide'
+	});
+});
 
 // Full US-081b workflow: list → filter → open → renderer → provenance →
 // Regenerate → run id shown → follow run link → navigate back to artifact.
