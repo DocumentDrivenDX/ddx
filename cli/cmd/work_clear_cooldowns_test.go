@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,6 +23,17 @@ func setupCooldownEnv(t *testing.T, beads ...*bead.Bead) (*TestEnvironment, *bea
 		require.NoError(t, store.Create(b))
 	}
 	return env, store
+}
+
+func setupConventionCooldownProject(t *testing.T, beads ...*bead.Bead) (string, *bead.Store) {
+	t.Helper()
+	projectRoot := minimalProjectDir(t)
+	store := bead.NewStore(ddxroot.Path(context.Background(), projectRoot))
+	require.NoError(t, store.Init())
+	for _, b := range beads {
+		require.NoError(t, store.Create(b))
+	}
+	return projectRoot, store
 }
 
 func TestClearCooldowns_All(t *testing.T) {
@@ -110,4 +123,25 @@ func TestClearCooldowns_DryRun(t *testing.T) {
 
 	// Verify the output says "would clear" not "cleared"
 	assert.False(t, strings.Contains(out, "cleared "), "dry-run must not say 'cleared'")
+}
+
+func TestWorkClearCooldownsUsesDDxRootPath(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	beadWithCooldown := &bead.Bead{ID: "ddx-convention-cooldown", Title: "Convention cooldown"}
+	projectRoot, store := setupConventionCooldownProject(t, beadWithCooldown)
+
+	_, statErr := os.Stat(filepath.Join(projectRoot, ddxroot.DirName))
+	require.True(t, os.IsNotExist(statErr), "project root must stay in convention mode for this test")
+
+	until := time.Now().Add(24 * time.Hour)
+	require.NoError(t, store.SetExecutionCooldown(beadWithCooldown.ID, until, "push_failed", "detail", ""))
+
+	out, err := executeCommand(NewCommandFactory(projectRoot).NewRootCommand(), "work", "clear-cooldowns", "--all")
+	require.NoError(t, err)
+	assert.Contains(t, out, "cleared 1 cooldown(s)")
+
+	got, err := store.Get(beadWithCooldown.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got.Extra[bead.ExtraRetryAfter])
 }

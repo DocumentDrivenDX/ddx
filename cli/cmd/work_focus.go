@@ -1,12 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
@@ -267,7 +269,7 @@ Use --json for machine-readable output with stable keys:
 func (f *CommandFactory) runWorkFocus(cmd *cobra.Command, _ []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	ddxDir := f.WorkingDir + "/.ddx"
+	ddxDir := ddxroot.Path(context.Background(), f.WorkingDir)
 	store := bead.NewStore(ddxDir)
 
 	report, err := buildWorkFocusReport(store, f.WorkingDir)

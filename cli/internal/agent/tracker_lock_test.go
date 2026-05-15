@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,6 +46,22 @@ func initTrackerRepo(t *testing.T) string {
 	run("commit", "-m", "chore: seed tracker")
 
 	return root
+}
+
+func initConventionTrackerRepo(t *testing.T) (string, string) {
+	t.Helper()
+
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	root := t.TempDir()
+	runGitInteg(t, root, "init", "-b", "main")
+	runGitInteg(t, root, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, root, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("seed\n"), 0o644))
+	runGitInteg(t, root, "add", "seed.txt")
+	runGitInteg(t, root, "commit", "-m", "chore: initial seed")
+
+	return root, ddxroot.Path(context.Background(), root)
 }
 
 // TestTrackerCommit_ConcurrentSafety verifies that two goroutines invoking
@@ -142,6 +159,23 @@ func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {
 	if strings.TrimSpace(string(cachedOut)) != "operator.txt" {
 		t.Fatalf("pre-staged operator file was not preserved in index: %q", string(cachedOut))
 	}
+}
+
+func TestCommitTrackerConventionModeCommitsXDGTracker(t *testing.T) {
+	projectRoot, stateRoot := initConventionTrackerRepo(t)
+	tracker := filepath.Join(stateRoot, "beads.jsonl")
+
+	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-convention-tracker"}`+"\n"), 0o644))
+	require.NoError(t, CommitTracker(projectRoot))
+
+	show := runGitInteg(t, stateRoot, "show", "--name-only", "--format=", "HEAD")
+	require.Equal(t, "beads.jsonl", strings.TrimSpace(show))
+
+	headTracker := runGitInteg(t, stateRoot, "show", "HEAD:beads.jsonl")
+	require.Contains(t, headTracker, "ddx-convention-tracker")
+
+	projectStatus := runGitInteg(t, projectRoot, "status", "--short", "--", ".ddx/beads.jsonl")
+	require.Empty(t, projectStatus)
 }
 
 // TestTrackerCommit_MalformedRegularFileLockRecovery verifies that a stale

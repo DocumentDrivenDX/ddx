@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -43,7 +44,7 @@ func (f *CommandFactory) runWorkClearCooldowns(cmd *cobra.Command, _ []string) e
 		return fmt.Errorf("requires --all or --status <value>")
 	}
 
-	ddxDir := f.WorkingDir + "/.ddx"
+	ddxDir := ddxroot.Path(context.Background(), f.WorkingDir)
 	store := bead.NewStore(ddxDir)
 
 	var filter func(bead.Bead) bool

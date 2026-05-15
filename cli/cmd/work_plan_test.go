@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"regexp"
 	"testing"
@@ -25,6 +27,17 @@ func setupWorkPlanEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 		require.NoError(t, store.Create(b))
 	}
 	return env
+}
+
+func setupConventionWorkPlanProject(t *testing.T, beads ...*bead.Bead) string {
+	t.Helper()
+	projectRoot := minimalProjectDir(t)
+	store := bead.NewStore(ddxroot.Path(context.Background(), projectRoot))
+	require.NoError(t, store.Init())
+	for _, b := range beads {
+		require.NoError(t, store.Create(b))
+	}
+	return projectRoot
 }
 
 // TestWorkPlan_CLI_TextOutput verifies that the default text output contains the
@@ -192,4 +205,25 @@ func TestWorkPlan_EmptyQueue(t *testing.T) {
 	out, err := executeCommand(root, "work", "plan")
 	require.NoError(t, err)
 	assert.Contains(t, out, "No execution-eligible beads")
+}
+
+func TestWorkPlanUsesDDxRootPath(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	projectRoot := setupConventionWorkPlanProject(t, &bead.Bead{
+		ID:       "ddx-convention-plan",
+		Title:    "Convention queue bead",
+		Priority: 0,
+	})
+
+	_, statErr := os.Stat(filepath.Join(projectRoot, ddxroot.DirName))
+	require.True(t, os.IsNotExist(statErr), "project root must stay in convention mode for this test")
+
+	out, err := executeCommand(NewCommandFactory(projectRoot).NewRootCommand(), "work", "plan", "--json")
+	require.NoError(t, err)
+
+	var entries []agent.QueueEntry
+	require.NoError(t, json.Unmarshal([]byte(out), &entries))
+	require.Len(t, entries, 1)
+	assert.Equal(t, "ddx-convention-plan", entries[0].BeadID)
 }

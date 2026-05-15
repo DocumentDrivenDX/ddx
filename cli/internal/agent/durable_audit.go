@@ -88,14 +88,16 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	out, err := internalgit.Command(ctx, projectRoot, "rev-parse", "--is-inside-work-tree").Output()
+	gitDir, managedPathspecs := ddxStateGitScope(projectRoot, durableAuditManagedPathspecs...)
+
+	out, err := internalgit.Command(ctx, gitDir, "rev-parse", "--is-inside-work-tree").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		return nil
 	}
 
 	statusArgs := []string{"status", "--short", "--untracked-files=all", "--"}
-	statusArgs = append(statusArgs, durableAuditManagedPathspecs...)
-	statusOut, err := internalgit.Command(ctx, projectRoot, statusArgs...).Output()
+	statusArgs = append(statusArgs, managedPathspecs...)
+	statusOut, err := internalgit.Command(ctx, gitDir, statusArgs...).Output()
 	if err != nil {
 		return fmt.Errorf("checking durable audit status: %w", err)
 	}
@@ -106,20 +108,21 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 
 	addArgs := []string{"add", "-A", "--"}
 	addArgs = append(addArgs, dirtyPaths...)
-	addOut, err := runGitWithIndexLockRecovery(ctx, projectRoot, addArgs...)
+	addOut, err := runGitWithIndexLockRecovery(ctx, gitDir, addArgs...)
 	if err != nil {
 		return fmt.Errorf("staging durable audit outputs: %s: %w", strings.TrimSpace(string(addOut)), err)
 	}
 
 	cachedArgs := []string{"diff", "--cached", "--"}
 	cachedArgs = append(cachedArgs, dirtyPaths...)
-	if cached, err := internalgit.Command(ctx, projectRoot, cachedArgs...).Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
+	if cached, err := internalgit.Command(ctx, gitDir, cachedArgs...).Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
 		return nil
 	}
 
 	commitArgs := []string{"commit", "--no-verify", "--only", "-m", durableAuditCommitMessage(attemptID), "--"}
 	commitArgs = append(commitArgs, dirtyPaths...)
-	commitOut, err := runGitWithIndexLockRecovery(ctx, projectRoot, commitArgs...)
+	commitArgs = ddxStateCommitArgs(projectRoot, gitDir, commitArgs...)
+	commitOut, err := runGitWithIndexLockRecovery(ctx, gitDir, commitArgs...)
 	if err != nil {
 		return fmt.Errorf("committing durable audit outputs: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}

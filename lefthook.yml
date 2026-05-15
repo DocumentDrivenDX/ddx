@@ -384,14 +384,14 @@ pre-commit:
       fail_text: "NewCommandFactory(\"/tmp\") found in cli/cmd/*_test.go — use t.TempDir() instead"
 
     ddxroot-path-audit:
-      name: "Guard hardcoded .ddx filepath.Join callsites"
+      name: "Guard hardcoded DDx state-root callsites"
       run: |
-        if rg 'filepath\.Join\([^)]*"\.ddx"' cli/ --type go | grep -v '^cli/internal/ddxroot/'; then
-          echo "Hardcoded .ddx filepath.Join callsites found outside cli/internal/ddxroot/"
+        if rg -n 'filepath\.Join\([^)]*"\.ddx"|filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)|(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")' cli/ --type go | grep -Ev '(^cli/internal/ddxroot/)|(_test\.go$)'; then
+          echo "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/ and approved test fixtures"
           exit 1
         fi
         exit 0
-      fail_text: "Hardcoded .ddx filepath.Join callsites found outside cli/internal/ddxroot/. Route project state paths through internal/ddxroot."
+      fail_text: "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/. Route project state paths through internal/ddxroot."
 
     skill-dir-anchor:
       name: "Skill dirs must have SKILL.md"
@@ -514,10 +514,10 @@ ci:
       run: 'go run ./tools/lint/runtimelint/cmd/runtimelint ./...'
 
     ddxroot-path-audit-all:
-      name: "Guard hardcoded .ddx filepath.Join callsites — full tree"
+      name: "Guard hardcoded DDx state-root callsites — full tree"
       run: |
-        if rg 'filepath\.Join\([^)]*"\.ddx"' cli/ --type go | grep -v '^cli/internal/ddxroot/'; then
-          echo "Hardcoded .ddx filepath.Join callsites found outside cli/internal/ddxroot/"
+        if rg -n 'filepath\.Join\([^)]*"\.ddx"|filepath\.Join\(\s*(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*,\s*[A-Za-z_][A-Za-z0-9_]*RelPath\s*\)|(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")' cli/ --type go | grep -Ev '(^cli/internal/ddxroot/)|(_test\.go$)'; then
+          echo "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/ and approved test fixtures"
           exit 1
         fi
         exit 0
