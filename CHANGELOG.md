@@ -4,6 +4,38 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: startup housekeeping reapers and execution retention controls
+
+`ddx work`, `ddx try`, and `ddx doctor --apply` now reap stale DDx runtime
+state on startup instead of letting orphan worktrees, dead worker sidecars, and
+old execution bundles accumulate indefinitely.
+
+**What changed:**
+
+- Stale execute-bead worktrees under the configured temp root are removed once
+  they age past the startup reap window and no matching live attempt/process is
+  found.
+- Stale `.ddx/workers/agent-loop-*/` liveness sidecars are removed when the PID
+  is dead or the last activity timestamp is older than the built-in 30 minute
+  freshness window.
+- Old in-tree execution evidence under `.ddx/executions/` now follows the
+  configured retention policy: by default DDx archives bundles older than 90
+  days into `.ddx/executions-archive/YYYY/MM/`; setting retention to `0`
+  disables in-tree retention from config and the env override can force
+  immediate delete semantics.
+- `ddx init` now writes `.gitignore` rules for `.ddx/attachments/`,
+  `.ddx/run-state.json`, `.ddx/run-state/`, and `.ddx/workers/` so per-run DDx
+  scratch stops polluting `git status` in newly initialized projects.
+
+**Knobs:**
+
+- `DDX_WORKTREE_REAP_MAX_AGE` overrides the stale-worktree age threshold
+  (default `72h`).
+- `executions.retain_days` in `.ddx/config.yaml` controls in-tree execution
+  retention (default `90`, explicit `0` disables config-driven pruning).
+- `DDX_EXECUTION_RETAIN_DAYS` overrides the execution retention policy at
+  runtime; `0` forces delete instead of archive.
+
 ### Added: Prose quality support user guide
 
 DDx now includes user-facing prose-quality documentation at

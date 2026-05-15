@@ -700,6 +700,7 @@ func TestInitGitignoreRules(t *testing.T) {
 
 	// Runtime scratch must be ignored
 	assert.Contains(t, content, ".ddx/agent-logs/", ".ddx/agent-logs/ must be ignored")
+	assert.Contains(t, content, ".ddx/attachments/", ".ddx/attachments/ must be ignored")
 	assert.Contains(t, content, ".ddx/workers/", ".ddx/workers/ must be ignored")
 	assert.Contains(t, content, ".ddx/exec-runs.d/", ".ddx/exec-runs.d/ must be ignored")
 	assert.Contains(t, content, ".ddx/server.env", ".ddx/server.env must be ignored")
