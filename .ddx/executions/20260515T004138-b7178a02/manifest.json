@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260515T004138-b7178a02",
+  "bead_id": "ddx-843b11b1",
+  "base_rev": "38eba04a6d1f9f5e74b00cf420c086d0f8ca542a",
+  "created_at": "2026-05-15T00:41:54.975134093Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-843b11b1",
+    "title": "prompts: TD for prompt_version + DDX_PROMPT_VARIANT selector + offline-comparison roadmap",
+    "description": "TD for prompt versioning + variant selection (DDX_PROMPT_VARIANT) + offline A/B comparison roadmap. v1 ships prompt_sha only; full A/B infra deferred.",
+    "acceptance": "1. TD authored. 2. References Story 12 v1 work + roadmap to A/B.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "area:specs",
+      "kind:design",
+      "phase:2",
+      "story:12",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-15T00:39:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2239551",
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T00:39:56.264558118Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        }
+      ],
+      "work-heartbeat-at": "2026-05-15T00:39:56.175798028Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T004138-b7178a02",
+    "prompt": ".ddx/executions/20260515T004138-b7178a02/prompt.md",
+    "manifest": ".ddx/executions/20260515T004138-b7178a02/manifest.json",
+    "result": ".ddx/executions/20260515T004138-b7178a02/result.json",
+    "checks": ".ddx/executions/20260515T004138-b7178a02/checks.json",
+    "usage": ".ddx/executions/20260515T004138-b7178a02/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-843b11b1-20260515T004138-b7178a02"
+  },
+  "prompt_sha": "9a22616dd2c85cc5b3963a3030f3830a2e923e77b9d39e4c1ffd9f568f3159c4"
+}
