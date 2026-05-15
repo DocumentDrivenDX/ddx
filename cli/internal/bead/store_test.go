@@ -715,7 +715,7 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 
 	// Forge a stale runtime lease and a stale legacy tracker heartbeat.
 	stale := time.Now().UTC().Add(-1 * time.Hour)
-	staleRec := claimLivenessRecord{
+	staleRec := ClaimLeaseRecord{
 		BeadID:    b.ID,
 		UpdatedAt: stale,
 		PID:       os.Getpid(),
@@ -744,7 +744,7 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	orig := &Bead{ID: "ddx-hb-stale-2", Title: "Stale claim 2"}
 	require.NoError(t, s2.Create(testCtx(), orig))
 	require.NoError(t, s2.Claim(orig.ID, "worker-a"))
-	staleLease := claimLivenessRecord{
+	staleLease := ClaimLeaseRecord{
 		BeadID:    orig.ID,
 		UpdatedAt: time.Now().UTC().Add(-1 * time.Hour),
 		PID:       os.Getpid(),
@@ -770,7 +770,7 @@ func TestReady_StaleClaimedInProgressIsReady(t *testing.T) {
 
 	// Forge a stale liveness lease so the claim is no longer fresh.
 	stale := time.Now().UTC().Add(-1 * time.Hour)
-	staleRec := claimLivenessRecord{
+	staleRec := ClaimLeaseRecord{
 		BeadID:    b.ID,
 		UpdatedAt: stale,
 		PID:       os.Getpid(),
@@ -878,6 +878,74 @@ func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	leasePath := claimLivenessPath(s.Dir, b.ID)
 	_, err = os.Stat(leasePath)
 	require.NoError(t, err, "heartbeat must be recorded in the external lease file")
+}
+
+func TestWorkerClaimLeaseDoesNotMutateTracker(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-worker-lease", Title: "Worker lease only"}
+	require.NoError(t, s.Create(testCtx(), b))
+
+	before, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+
+	require.NoError(t, s.ClaimWithOptions(b.ID, "worker-a", "sess-lease", "/tmp/wt"))
+
+	after, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+	require.Equal(t, string(before), string(after), "worker claim lease must not rewrite beads.jsonl")
+
+	got, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+
+	lease, found, err := s.ClaimLease(b.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, b.ID, lease.BeadID)
+	assert.Equal(t, "worker-a", lease.Owner)
+	assert.Equal(t, "sess-lease", lease.Session)
+	assert.Equal(t, "/tmp/wt", lease.Worktree)
+	assert.False(t, lease.StartedAt.IsZero())
+	assert.False(t, lease.UpdatedAt.IsZero())
+	assert.NotZero(t, lease.PID)
+}
+
+func TestReadyExecutionExcludesFreshSidecarLease(t *testing.T) {
+	withHeartbeat(t, 10*time.Millisecond, 50*time.Millisecond)
+
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-fresh-worker-lease", Title: "Fresh worker lease"}
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.ClaimWithOptions(b.ID, "worker-a", "sess-ready", ""))
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	assert.Empty(t, ready, "fresh worker claim leases must suppress execution-ready selection")
+}
+
+func TestReadyExecutionReclaimsStaleSidecarLease(t *testing.T) {
+	withHeartbeat(t, 10*time.Millisecond, 50*time.Millisecond)
+
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-stale-worker-lease", Title: "Stale worker lease"}
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.ClaimWithOptions(b.ID, "worker-a", "sess-stale", ""))
+
+	stale := time.Now().UTC().Add(-1 * time.Hour)
+	require.NoError(t, s.writeClaimHeartbeat(ClaimLeaseRecord{
+		BeadID:    b.ID,
+		Owner:     "worker-a",
+		Session:   "sess-stale",
+		StartedAt: stale,
+		UpdatedAt: stale,
+		PID:       os.Getpid(),
+	}))
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID)
 }
 
 func TestAtomicClaimUnderContention(t *testing.T) {

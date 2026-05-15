@@ -403,12 +403,21 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 					metrics = &beadMetricsSummary{}
 				}
 				obj["metrics"] = metrics
+				if lease, found, err := s.ClaimLease(b.ID); err != nil {
+					return err
+				} else if found {
+					mergeClaimLeaseIntoJSON(obj, b, lease)
+				}
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(obj)
 			}
 
 			out := cmd.OutOrStdout()
+			lease, leaseFound, err := s.ClaimLease(b.ID)
+			if err != nil {
+				return err
+			}
 			fmt.Fprintf(out, "ID:       %s\n", b.ID)
 			fmt.Fprintf(out, "Title:    %s\n", b.Title)
 			fmt.Fprintf(out, "Type:     %s\n", b.IssueType)
@@ -417,8 +426,10 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 			if len(b.Labels) > 0 {
 				fmt.Fprintf(out, "Labels:   %s\n", strings.Join(b.Labels, ", "))
 			}
-			if b.Owner != "" {
-				fmt.Fprintf(out, "Owner:    %s\n", b.Owner)
+			if owner := strings.TrimSpace(b.Owner); owner != "" {
+				fmt.Fprintf(out, "Owner:    %s\n", owner)
+			} else if leaseFound && strings.TrimSpace(lease.Owner) != "" {
+				fmt.Fprintf(out, "Owner:    %s\n", lease.Owner)
 			}
 			if b.Parent != "" {
 				fmt.Fprintf(out, "Parent:   %s\n", b.Parent)
@@ -460,15 +471,23 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 				}
 				if v, ok := b.Extra["claimed-at"]; ok {
 					fmt.Fprintf(out, "Claimed:  %v\n", v)
+				} else if leaseFound && !lease.StartedAt.IsZero() {
+					fmt.Fprintf(out, "Claimed:  %s\n", lease.StartedAt.Format(time.RFC3339))
 				}
 				if v, ok := b.Extra["claimed-machine"]; ok {
 					fmt.Fprintf(out, "Machine:  %v\n", v)
+				} else if leaseFound && lease.Machine != "" {
+					fmt.Fprintf(out, "Machine:  %s\n", lease.Machine)
 				}
 				if v, ok := b.Extra["claimed-session"]; ok {
 					fmt.Fprintf(out, "Session:  %v\n", v)
+				} else if leaseFound && lease.Session != "" {
+					fmt.Fprintf(out, "Session:  %s\n", lease.Session)
 				}
 				if v, ok := b.Extra["claimed-worktree"]; ok {
 					fmt.Fprintf(out, "Worktree: %v\n", v)
+				} else if leaseFound && lease.Worktree != "" {
+					fmt.Fprintf(out, "Worktree: %s\n", lease.Worktree)
 				}
 			}
 			claimKeys := map[string]bool{
@@ -669,6 +688,30 @@ func resolveClaimAssignee() string {
 		}
 	}
 	return "ddx"
+}
+
+func mergeClaimLeaseIntoJSON(obj map[string]any, b *bead.Bead, lease bead.ClaimLeaseRecord) {
+	if obj == nil || b == nil {
+		return
+	}
+	if strings.TrimSpace(b.Owner) == "" && lease.Owner != "" {
+		obj["owner"] = lease.Owner
+	}
+	if _, ok := obj["claimed-at"]; !ok && !lease.StartedAt.IsZero() {
+		obj["claimed-at"] = lease.StartedAt.Format(time.RFC3339)
+	}
+	if _, ok := obj["claimed-pid"]; !ok && lease.PID != 0 {
+		obj["claimed-pid"] = lease.PID
+	}
+	if _, ok := obj["claimed-machine"]; !ok && lease.Machine != "" {
+		obj["claimed-machine"] = lease.Machine
+	}
+	if _, ok := obj["claimed-session"]; !ok && lease.Session != "" {
+		obj["claimed-session"] = lease.Session
+	}
+	if _, ok := obj["claimed-worktree"]; !ok && lease.Worktree != "" {
+		obj["claimed-worktree"] = lease.Worktree
+	}
 }
 
 func isProtectedBeadExtraKey(key string) bool {

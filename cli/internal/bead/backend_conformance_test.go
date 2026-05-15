@@ -95,8 +95,6 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 		require.NoError(t, err)
 		assert.Equal(t, StatusInProgress, got.Status)
 		assert.Equal(t, "alice", got.Owner)
-		require.NotNil(t, got.Extra)
-		assert.NotEmpty(t, got.Extra["claimed-at"])
 
 		err = s.Claim(b.ID, "bob")
 		require.Error(t, err)
@@ -300,6 +298,13 @@ func TestBackendConformance_TransitionMatrix(t *testing.T) {
 			b := &Bead{Title: "reopen-claim-cleanup"}
 			require.NoError(t, s.Create(testCtx(), b))
 			require.NoError(t, s.Claim(b.ID, "worker"))
+			require.NoError(t, s.Update(testCtx(), b.ID, func(b *Bead) {
+				if b.Extra == nil {
+					b.Extra = make(map[string]any)
+				}
+				b.Extra["claimed-at"] = "legacy-claim"
+				b.Extra["claimed-pid"] = "12345"
+			}))
 			require.NoError(t, s.Close(testCtx(), b.ID))
 
 			pre, err := s.Get(testCtx(), b.ID)

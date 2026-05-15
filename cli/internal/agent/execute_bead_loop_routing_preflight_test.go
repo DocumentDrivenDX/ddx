@@ -33,6 +33,14 @@ func (s *claimCountingStore) Claim(id, assignee string) error {
 	return s.Store.Claim(id, assignee)
 }
 
+func (s *claimCountingStore) ClaimWithOptions(id, assignee, session, worktree string) error {
+	if s.beforeClaim != nil {
+		s.beforeClaim()
+	}
+	atomic.AddInt32(&s.claimCalls, 1)
+	return s.Store.ClaimWithOptions(id, assignee, session, worktree)
+}
+
 func (s *claimCountingStore) TouchClaimHeartbeat(id string) error {
 	return s.Store.TouchClaimHeartbeat(id)
 }

@@ -743,6 +743,36 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Error(t, err, ".ddx/executions/abc123/usage.json must NOT be ignored by git")
 }
 
+func TestInitGitignoreRunStateMigration(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+	runCleanupCommandGit(t, te.Dir, "init", "-b", "main")
+	runCleanupCommandGit(t, te.Dir, "config", "user.email", "test@test.com")
+	runCleanupCommandGit(t, te.Dir, "config", "user.name", "Test")
+
+	ddxDir := filepath.Join(te.Dir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "run-state"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "run-state.json"), []byte(`{"attempt_id":"legacy-root"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "run-state", "legacy-attempt.json"), []byte(`{"attempt_id":"legacy-attempt"}`+"\n"), 0o644))
+	runCleanupCommandGit(t, te.Dir, "add", ".ddx/run-state.json", ".ddx/run-state/legacy-attempt.json")
+	runCleanupCommandGit(t, te.Dir, "commit", "-m", "test: track legacy run-state")
+
+	_, err := te.RunCommand("init")
+	require.NoError(t, err)
+
+	assert.FileExists(t, filepath.Join(ddxDir, "run-state.json"))
+	assert.FileExists(t, filepath.Join(ddxDir, "run-state", "legacy-attempt.json"))
+	assert.Empty(t, runCleanupCommandGit(t, te.Dir, "ls-files", "--", ".ddx/run-state.json", ".ddx/run-state"),
+		"legacy run-state files must be removed from the git index by init migration")
+	assert.Empty(t, runCleanupCommandGit(t, te.Dir, "status", "--short", "--", ".ddx/run-state.json", ".ddx/run-state"),
+		"init migration must not leave run-state deletions or modifications behind")
+
+	data, err := os.ReadFile(filepath.Join(te.Dir, ".gitignore"))
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, ".ddx/run-state.json")
+	assert.Contains(t, content, ".ddx/run-state/")
+}
+
 // TestInitCommand_US014_SynchronizationSetup tests US-014 synchronization initialization
 func TestInitCommand_US014_SynchronizationSetup(t *testing.T) {
 	tests := []struct {

@@ -12,8 +12,13 @@ import (
 
 const claimLivenessNamespace = "ddx-claim-heartbeats"
 
-type claimLivenessRecord struct {
+type ClaimLeaseRecord struct {
 	BeadID    string    `json:"bead_id"`
+	Owner     string    `json:"owner,omitempty"`
+	Session   string    `json:"session,omitempty"`
+	Worktree  string    `json:"worktree,omitempty"`
+	Machine   string    `json:"machine,omitempty"`
+	StartedAt time.Time `json:"started_at,omitempty"`
 	UpdatedAt time.Time `json:"updated_at"`
 	PID       int       `json:"pid,omitempty"`
 }
@@ -61,11 +66,54 @@ func writeAtomicClaimFile(path string, data []byte) error {
 	return nil
 }
 
-func (s *Store) TouchClaimHeartbeat(id string) error {
-	rec := claimLivenessRecord{
-		BeadID:    id,
-		UpdatedAt: time.Now().UTC(),
-		PID:       os.Getpid(),
+func (s *Store) writeClaimHeartbeat(rec ClaimLeaseRecord) error {
+	data, err := json.Marshal(rec)
+	if err != nil {
+		return fmt.Errorf("bead: marshal claim liveness: %w", err)
+	}
+	data = append(data, '\n')
+	return writeAtomicClaimFile(claimLivenessPath(s.Dir, rec.BeadID), data)
+}
+
+func (s *Store) readClaimHeartbeat(id string) (ClaimLeaseRecord, bool, error) {
+	data, err := os.ReadFile(claimLivenessPath(s.Dir, id))
+	if os.IsNotExist(err) {
+		return ClaimLeaseRecord{}, false, nil
+	}
+	if err != nil {
+		return ClaimLeaseRecord{}, false, fmt.Errorf("bead: read claim liveness: %w", err)
+	}
+	var rec ClaimLeaseRecord
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return ClaimLeaseRecord{}, true, fmt.Errorf("bead: parse claim liveness: %w", err)
+	}
+	return rec, true, nil
+}
+
+func (s *Store) upsertClaimHeartbeat(id string, mutate func(*ClaimLeaseRecord)) error {
+	rec, found, err := s.readClaimHeartbeat(id)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	if !found {
+		rec = ClaimLeaseRecord{
+			BeadID:    id,
+			StartedAt: now,
+		}
+	}
+	if rec.BeadID == "" {
+		rec.BeadID = id
+	}
+	if rec.StartedAt.IsZero() {
+		rec.StartedAt = now
+	}
+	rec.UpdatedAt = now
+	if rec.PID == 0 {
+		rec.PID = os.Getpid()
+	}
+	if mutate != nil {
+		mutate(&rec)
 	}
 	data, err := json.Marshal(rec)
 	if err != nil {
@@ -73,6 +121,10 @@ func (s *Store) TouchClaimHeartbeat(id string) error {
 	}
 	data = append(data, '\n')
 	return writeAtomicClaimFile(claimLivenessPath(s.Dir, id), data)
+}
+
+func (s *Store) TouchClaimHeartbeat(id string) error {
+	return s.upsertClaimHeartbeat(id, nil)
 }
 
 func (s *Store) RemoveClaimHeartbeat(id string) error {
@@ -84,19 +136,22 @@ func (s *Store) RemoveClaimHeartbeat(id string) error {
 }
 
 func (s *Store) ClaimHeartbeatFresh(id string) (bool, bool, error) {
-	data, err := os.ReadFile(claimLivenessPath(s.Dir, id))
-	if os.IsNotExist(err) {
-		return false, false, nil
-	}
+	rec, found, err := s.readClaimHeartbeat(id)
 	if err != nil {
-		return false, false, fmt.Errorf("bead: read claim liveness: %w", err)
+		return false, false, err
 	}
-	var rec claimLivenessRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return false, true, fmt.Errorf("bead: parse claim liveness: %w", err)
+	if !found {
+		return false, false, nil
 	}
 	if rec.UpdatedAt.IsZero() {
 		return false, true, nil
 	}
 	return time.Since(rec.UpdatedAt) <= HeartbeatTTL, true, nil
+}
+
+// ClaimLease returns the external worker/manual claim sidecar for id when one
+// exists. The record is the operator-facing live claim surface for workers; the
+// tracker still carries any explicit manual lifecycle status change.
+func (s *Store) ClaimLease(id string) (ClaimLeaseRecord, bool, error) {
+	return s.readClaimHeartbeat(id)
 }

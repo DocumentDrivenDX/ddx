@@ -670,12 +670,10 @@ func clearReviewTriageClaimMetadata(b *bead.Bead) {
 	if b.Extra == nil {
 		return
 	}
-	delete(b.Extra, "claimed-at")
-	delete(b.Extra, "claimed-pid")
-	delete(b.Extra, "claimed-machine")
-	delete(b.Extra, "claimed-session")
-	delete(b.Extra, "claimed-worktree")
-	delete(b.Extra, "work-heartbeat-at")
+	for _, key := range bead.ClaimMetadataExtraKeys {
+		delete(b.Extra, key)
+	}
+	delete(b.Extra, bead.ClaimHeartbeatExtraKey)
 }
 
 // nextEscalatedPowerClass returns the next powerClass above `current`. An unrecognised or

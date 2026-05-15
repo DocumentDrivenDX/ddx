@@ -23,8 +23,16 @@ func TestClaimRecordsMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 	assert.Equal(t, "agent-1", got.Owner)
-	assert.NotEmpty(t, got.Extra["claimed-at"])
-	assert.NotEmpty(t, got.Extra["claimed-pid"])
+	assert.Nil(t, got.Extra["claimed-at"])
+	assert.Nil(t, got.Extra["claimed-pid"])
+
+	lease, found, err := s.ClaimLease(b.ID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, b.ID, lease.BeadID)
+	assert.Equal(t, "agent-1", lease.Owner)
+	assert.False(t, lease.StartedAt.IsZero())
+	assert.NotZero(t, lease.PID)
 }
 
 func TestUnclaimClearsMetadata(t *testing.T) {
@@ -41,6 +49,10 @@ func TestUnclaimClearsMetadata(t *testing.T) {
 	assert.Empty(t, got.Owner)
 	assert.Nil(t, got.Extra["claimed-at"])
 	assert.Nil(t, got.Extra["claimed-pid"])
+
+	_, found, err := s.ClaimLease(b.ID)
+	require.NoError(t, err)
+	assert.False(t, found)
 }
 
 func TestInProgressNotReady(t *testing.T) {

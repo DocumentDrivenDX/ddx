@@ -462,12 +462,10 @@ func clearClaimMetadata(b *Bead) {
 	if b.Extra == nil {
 		return
 	}
-	delete(b.Extra, "claimed-at")
-	delete(b.Extra, "claimed-pid")
-	delete(b.Extra, "claimed-machine")
-	delete(b.Extra, "claimed-session")
-	delete(b.Extra, "claimed-worktree")
-	delete(b.Extra, "work-heartbeat-at")
+	for _, key := range ClaimMetadataExtraKeys {
+		delete(b.Extra, key)
+	}
+	delete(b.Extra, ClaimHeartbeatExtraKey)
 }
 
 func firstNonEmpty(values ...string) string {
