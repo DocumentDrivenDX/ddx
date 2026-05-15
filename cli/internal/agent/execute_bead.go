@@ -603,6 +603,10 @@ type PreDispatchDirtyPreservation struct {
 	RecoverCommand string
 }
 
+var preDispatchDirtyPathLister = func(projectRoot string) ([]string, error) {
+	return preDispatchCheckpointDirtyPaths(projectRoot)
+}
+
 func normalizePreDispatchDirtyPaths(paths []string) []string {
 	seen := make(map[string]bool, len(paths))
 	normalized := make([]string, 0, len(paths))
@@ -634,6 +638,34 @@ func intersectPreDispatchDirtyPaths(current, want []string) []string {
 	}
 	sort.Strings(overlap)
 	return overlap
+}
+
+func classifyPreDispatchDirtyPaths(dirtyPaths []string) (allowedPaths, blockedPaths []string) {
+	for _, path := range normalizePreDispatchDirtyPaths(dirtyPaths) {
+		if preDispatchCheckpointAllowedPath(path) {
+			allowedPaths = append(allowedPaths, path)
+			continue
+		}
+		blockedPaths = append(blockedPaths, path)
+	}
+	return allowedPaths, blockedPaths
+}
+
+// stablePreDispatchImplementationDirtyPaths re-reads the project dirt and only
+// treats implementation paths as actionable when they survive the immediate
+// recheck. This filters transient rename/delete paths that can briefly appear
+// in watch mode right after a successful land.
+func stablePreDispatchImplementationDirtyPaths(projectRoot string, dirtyPaths []string) ([]string, []string, error) {
+	normalized := normalizePreDispatchDirtyPaths(dirtyPaths)
+	if projectRoot == "" || len(normalized) == 0 {
+		return normalized, normalized, nil
+	}
+
+	currentPaths, err := preDispatchDirtyPathLister(projectRoot)
+	if err != nil {
+		return nil, nil, fmt.Errorf("rechecking pre-dispatch dirt: %w", err)
+	}
+	return intersectPreDispatchDirtyPaths(currentPaths, normalized), currentPaths, nil
 }
 
 func resolveOptionalGitRef(dir, ref string) (string, bool) {
@@ -702,7 +734,7 @@ func preservePreDispatchDirtyPathsLocked(projectRoot string, dirtyPaths []string
 	}
 	_, _ = internalgit.Command(context.Background(), projectRoot, "stash", "drop", "stash@{0}").CombinedOutput()
 
-	remainingPaths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	remainingPaths, err := preDispatchDirtyPathLister(projectRoot)
 	if err != nil {
 		return nil, fmt.Errorf("verifying preserved pre-dispatch dirt: %w", err)
 	}
@@ -735,7 +767,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return false, err
 	}
 
-	dirtyPaths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	dirtyPaths, err := preDispatchDirtyPathLister(projectRoot)
 	if err != nil {
 		return false, err
 	}
@@ -743,23 +775,20 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return false, nil
 	}
 
-	allowedPaths := make([]string, 0, len(dirtyPaths))
-	blockedPaths := make([]string, 0)
-	for _, path := range dirtyPaths {
-		if preDispatchCheckpointAllowedPath(path) {
-			allowedPaths = append(allowedPaths, path)
-			continue
-		}
-		blockedPaths = append(blockedPaths, path)
-	}
-	sort.Strings(allowedPaths)
-	sort.Strings(blockedPaths)
+	allowedPaths, blockedPaths := classifyPreDispatchDirtyPaths(dirtyPaths)
 	if len(blockedPaths) > 0 {
-		return false, fmt.Errorf(
-			"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
-			preDispatchCheckpointDirtyRefusalPrefix,
-			strings.Join(blockedPaths, ", "),
-		)
+		stableBlockedPaths, currentDirtyPaths, err := stablePreDispatchImplementationDirtyPaths(projectRoot, blockedPaths)
+		if err != nil {
+			return false, err
+		}
+		if len(stableBlockedPaths) > 0 {
+			return false, fmt.Errorf(
+				"%s%s; commit or clean those files before rerunning so the bead's [ddx-<id>] substantive commit stays intentional",
+				preDispatchCheckpointDirtyRefusalPrefix,
+				strings.Join(stableBlockedPaths, ", "),
+			)
+		}
+		allowedPaths, _ = classifyPreDispatchDirtyPaths(currentDirtyPaths)
 	}
 	if len(allowedPaths) == 0 {
 		return false, nil

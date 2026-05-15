@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -263,6 +264,149 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 	applyOut, applyErr := runGitIntegOutput(projectRoot, "stash", "apply", preserveRef)
 	require.NoError(t, applyErr, applyOut)
 	assert.Contains(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(dirtyRel)), "?? "+filepath.ToSlash(dirtyRel))
+}
+
+func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 2)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+
+	trackedRel := filepath.Join("cli", "cmd", "run_test_helpers.go")
+	trackedPath := filepath.Join(projectRoot, trackedRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(trackedPath), 0o755))
+	require.NoError(t, os.WriteFile(trackedPath, []byte("package cmd\n"), 0o644))
+	runGitInteg(t, projectRoot, "add", trackedRel)
+	runGitInteg(t, projectRoot, "commit", "-m", "test: seed tracked helper")
+
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{
+		`run if [ "$DDX_BEAD_ID" = "ddx-int-0001" ]; then mv cli/cmd/run_test_helpers.go cli/cmd/run_test_helpers_renamed.go; else printf 'package cmd\n' > cli/cmd/second_dispatch.go; fi`,
+		`commit test: ${DDX_BEAD_ID}`,
+	})
+
+	originalLister := preDispatchDirtyPathLister
+	t.Cleanup(func() {
+		preDispatchDirtyPathLister = originalLister
+	})
+	callCount := 0
+	preDispatchDirtyPathLister = func(root string) ([]string, error) {
+		require.Equal(t, projectRoot, root)
+		callCount++
+		switch callCount {
+		case 1:
+			return nil, nil
+		case 2:
+			return []string{
+				filepath.ToSlash(trackedRel),
+				"cli/cmd/run_test_helpers_renamed.go",
+			}, nil
+		case 3:
+			return nil, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store:    store,
+		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
+	}
+
+	var eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		EventSink:    &eventSink,
+		ProjectRoot:  projectRoot,
+		SessionID:    "sess-watch-stable-predispatch",
+		WorkerID:     "worker-watch-stable-predispatch",
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, result)
+	assert.Equal(t, 2, result.Attempts)
+	assert.Equal(t, 2, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+	assert.Nil(t, result.OperatorAttention)
+	assert.NotContains(t, eventSink.String(), `"type":"loop.pre_dispatch_dirty_preserved"`)
+
+	first, getErr := store.Get("ddx-int-0001")
+	require.NoError(t, getErr)
+	second, getErr := store.Get("ddx-int-0002")
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusClosed, first.Status)
+	assert.Equal(t, bead.StatusClosed, second.Status)
+
+	refsOut, refsErr := runGitIntegOutput(projectRoot, "for-each-ref", "--format=%(refname)", "refs/ddx/pre-dispatch")
+	require.NoError(t, refsErr)
+	assert.Empty(t, strings.TrimSpace(refsOut))
+}
+
+func TestPreDispatchDirtyPreserveRequiresStableImplementationDirt(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{
+		`create-file stable_after_recheck.txt ok`,
+		`commit test: ${DDX_BEAD_ID}`,
+	})
+
+	originalLister := preDispatchDirtyPathLister
+	t.Cleanup(func() {
+		preDispatchDirtyPathLister = originalLister
+	})
+	callCount := 0
+	preDispatchDirtyPathLister = func(root string) ([]string, error) {
+		require.Equal(t, projectRoot, root)
+		callCount++
+		switch callCount {
+		case 1:
+			return []string{"cli/internal/agent/transient_impl.go"}, nil
+		case 2:
+			return nil, nil
+		default:
+			return nil, nil
+		}
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store:    store,
+		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
+	}
+
+	var eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		EventSink:    &eventSink,
+		ProjectRoot:  projectRoot,
+		SessionID:    "sess-watch-transient-predispatch",
+		WorkerID:     "worker-watch-transient-predispatch",
+	})
+
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+	assert.Nil(t, result.OperatorAttention)
+	assert.NotContains(t, eventSink.String(), `"type":"loop.pre_dispatch_dirty_preserved"`)
+
+	got, getErr := store.Get("ddx-int-0001")
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+
+	refsOut, refsErr := runGitIntegOutput(projectRoot, "for-each-ref", "--format=%(refname)", "refs/ddx/pre-dispatch")
+	require.NoError(t, refsErr)
+	assert.Empty(t, strings.TrimSpace(refsOut))
 }
 
 func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
