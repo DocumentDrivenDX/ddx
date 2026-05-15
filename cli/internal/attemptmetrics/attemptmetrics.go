@@ -12,12 +12,10 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
-const (
-	SchemaVersion   = 1
-	attemptsRelPath = ".ddx/metrics/attempts.jsonl"
-)
+const SchemaVersion = 1
 
 // AttemptRow is one row in .ddx/metrics/attempts.jsonl.
 type AttemptRow struct {
@@ -95,10 +93,10 @@ type costEventBody struct {
 	ExitCode     int     `json:"exit_code"`
 }
 
-// AttemptsPath returns the absolute path to .ddx/metrics/attempts.jsonl
-// under projectRoot.
+// AttemptsPath returns the absolute path to metrics/attempts.jsonl under the
+// project's DDx state root.
 func AttemptsPath(projectRoot string) string {
-	return filepath.Join(projectRoot, attemptsRelPath)
+	return ddxroot.JoinProject(projectRoot, "metrics", "attempts.jsonl")
 }
 
 // AppendRow appends row to .ddx/metrics/attempts.jsonl under projectRoot using

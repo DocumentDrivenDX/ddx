@@ -1832,7 +1832,10 @@ func commitTrackerLocked(projectRoot string) error {
 		return nil
 	}
 
-	out, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Output()
+	gitDir, trackerPathspecs := ddxStateGitScope(projectRoot, ".ddx/beads.jsonl")
+	trackerPathspec := trackerPathspecs[0]
+
+	out, err := internalgit.Command(context.Background(), gitDir, "rev-parse", "--is-inside-work-tree").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		return nil
 	}
@@ -1841,12 +1844,12 @@ func commitTrackerLocked(projectRoot string) error {
 
 	// Re-check inside the lock: a sibling worker may have already
 	// committed the tracker changes between our pre-lock check and now.
-	diff, err := internalgit.Command(context.Background(), projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
+	diff, err := internalgit.Command(context.Background(), gitDir, "diff", "--", trackerPathspec).Output()
 	if err != nil {
 		return fmt.Errorf("checking tracker diff: %w", err)
 	}
 	if strings.TrimSpace(string(diff)) == "" {
-		untracked, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
+		untracked, err := internalgit.Command(context.Background(), gitDir, "ls-files", "--others", "--exclude-standard", trackerPathspec).Output()
 		if err != nil {
 			return fmt.Errorf("checking tracker untracked: %w", err)
 		}
@@ -1855,17 +1858,18 @@ func commitTrackerLocked(projectRoot string) error {
 		}
 	}
 
-	commitOut, err := runGitWithIndexLockRecovery(context.Background(), projectRoot, "add", ".ddx/beads.jsonl")
+	commitOut, err := runGitWithIndexLockRecovery(context.Background(), gitDir, "add", trackerPathspec)
 	if err != nil {
 		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
 	// `git commit` would fail with "nothing to commit" if the file's
 	// content is byte-identical to HEAD even though `git diff` saw a
 	// diff (e.g. mode/whitespace race). Bail cleanly in that case.
-	if cached, err := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--", ".ddx/beads.jsonl").Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
+	if cached, err := internalgit.Command(context.Background(), gitDir, "diff", "--cached", "--", trackerPathspec).Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
 		return nil
 	}
-	commitOut, err = runGitWithIndexLockRecovery(context.Background(), projectRoot, "commit", "--no-verify", "--only", "-m", msg, "--", ".ddx/beads.jsonl")
+	commitArgs := ddxStateCommitArgs(projectRoot, gitDir, "commit", "--no-verify", "--only", "-m", msg, "--", trackerPathspec)
+	commitOut, err = runGitWithIndexLockRecovery(context.Background(), gitDir, commitArgs...)
 	if err != nil {
 		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}

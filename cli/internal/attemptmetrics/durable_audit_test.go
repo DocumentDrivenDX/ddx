@@ -1,6 +1,7 @@
 package attemptmetrics_test
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,10 +36,11 @@ func TestAttemptMetricsAppendLeavesNoDirtyTrackedFile(t *testing.T) {
 	}
 	require.NoError(t, agent.FinalizeDurableAttemptAudit(projectRoot, store, report))
 
-	status := runGitAttemptMetrics(t, projectRoot, "status", "--short", "--", ".ddx/metrics/attempts.jsonl")
+	stateRoot := ddxroot.Path(context.Background(), projectRoot)
+	status := runGitAttemptMetrics(t, stateRoot, "status", "--short", "--", "metrics/attempts.jsonl")
 	assert.Empty(t, status)
 
-	subject := runGitAttemptMetrics(t, projectRoot, "log", "-1", "--pretty=%s")
+	subject := runGitAttemptMetrics(t, stateRoot, "log", "-1", "--pretty=%s")
 	assert.Equal(t, "chore: update tracker (execute-bead 20260515T101828-metrics-clean)", subject)
 
 	raw, err := os.ReadFile(ddxroot.JoinProject(projectRoot, "metrics", "attempts.jsonl"))

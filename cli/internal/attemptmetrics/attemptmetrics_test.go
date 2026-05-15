@@ -1,6 +1,7 @@
 package attemptmetrics_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMetrics_SchemaVersion(t *testing.T) {
@@ -22,8 +24,14 @@ func TestMetrics_SchemaVersion(t *testing.T) {
 	}
 }
 
+func newAttemptMetricsProjectRoot(t *testing.T) string {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	return t.TempDir()
+}
+
 func TestMetrics_AppendRowOnFinalization(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	row := attemptmetrics.AttemptRow{
 		SchemaVersion: attemptmetrics.SchemaVersion,
 		AttemptID:     "20260101T000000-aabbccdd",
@@ -93,7 +101,7 @@ func TestMetrics_AppendRowOnFinalization(t *testing.T) {
 }
 
 func TestMetrics_AppendRowMultiple(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	for i := range 3 {
 		row := attemptmetrics.AttemptRow{
 			SchemaVersion: attemptmetrics.SchemaVersion,
@@ -115,7 +123,7 @@ func TestMetrics_AppendRowMultiple(t *testing.T) {
 }
 
 func TestMetrics_BackfillFromEvents(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	costBody := `{"attempt_id":"20260101T120000-abcd1234","harness":"claude","provider":"anthropic","model":"claude-sonnet-4-6","input_tokens":1000,"output_tokens":500,"total_tokens":1500,"cost_usd":0.75,"duration_ms":60000,"exit_code":0}`
@@ -186,7 +194,7 @@ func TestMetrics_BackfillFromEvents(t *testing.T) {
 }
 
 func TestMetrics_BackfillIdempotent(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 
 	costBody := `{"attempt_id":"idempotent-attempt-1","harness":"claude","input_tokens":100,"output_tokens":50,"total_tokens":150,"cost_usd":0.01,"duration_ms":1000,"exit_code":0}`
@@ -227,7 +235,7 @@ func TestMetrics_BackfillIdempotent(t *testing.T) {
 }
 
 func TestMetrics_BackfillSkipsMalformedCostEvents(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	events := []bead.BeadEvent{
 		// Missing attempt_id → should be skipped.
@@ -251,16 +259,8 @@ func TestMetrics_BackfillSkipsMalformedCostEvents(t *testing.T) {
 	}
 }
 
-func TestMetrics_AttemptsPathUnderDdxMetrics(t *testing.T) {
-	path := attemptmetrics.AttemptsPath("/project/root")
-	want := filepath.Join("/project/root", ddxroot.DirName, "metrics", "attempts.jsonl")
-	if path != want {
-		t.Errorf("AttemptsPath=%q, want %q", path, want)
-	}
-}
-
 func TestMetrics_LoadAttemptIDs_EmptyWhenMissing(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	ids, err := attemptmetrics.LoadAttemptIDs(dir)
 	if err != nil {
 		t.Fatalf("LoadAttemptIDs: %v", err)
@@ -271,7 +271,7 @@ func TestMetrics_LoadAttemptIDs_EmptyWhenMissing(t *testing.T) {
 }
 
 func TestMetrics_BackfillMultipleBeads(t *testing.T) {
-	dir := t.TempDir()
+	dir := newAttemptMetricsProjectRoot(t)
 	now := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 
 	makeCostBody := func(id, harness string) string {
@@ -322,4 +322,34 @@ func TestMetrics_BackfillMultipleBeads(t *testing.T) {
 	if rowB.Outcome != "review_block" {
 		t.Errorf("attempt-B outcome=%q, want review_block", rowB.Outcome)
 	}
+}
+
+func TestAttemptMetricsUseDDxRootPath(t *testing.T) {
+	projectRoot := newAttemptMetricsProjectRoot(t)
+	stateRoot := ddxroot.Path(context.Background(), projectRoot)
+
+	row := attemptmetrics.AttemptRow{
+		SchemaVersion: attemptmetrics.SchemaVersion,
+		AttemptID:     "attempt-ddxroot-001",
+		BeadID:        "ddx-metrics-root",
+		Outcome:       "task_succeeded",
+	}
+	require.NoError(t, attemptmetrics.AppendRow(projectRoot, row))
+
+	raw, err := os.ReadFile(filepath.Join(stateRoot, "metrics", "attempts.jsonl"))
+	require.NoError(t, err)
+	require.Contains(t, string(raw), row.AttemptID)
+
+	rows, err := attemptmetrics.LoadRows(projectRoot)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, row.AttemptID, rows[0].AttemptID)
+
+	ids, err := attemptmetrics.LoadAttemptIDs(projectRoot)
+	require.NoError(t, err)
+	_, ok := ids[row.AttemptID]
+	require.True(t, ok)
+
+	_, statErr := os.Stat(filepath.Join(projectRoot, ddxroot.DirName))
+	require.True(t, os.IsNotExist(statErr), "convention-mode project root must not grow an in-tree .ddx")
 }

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -83,7 +85,7 @@ func (f *CommandFactory) runWorkPlan(cmd *cobra.Command, _ []string) error {
 	projectRoot := f.WorkingDir
 
 	// Open the bead store directly — same path ReadyExecution uses.
-	ddxDir := projectRoot + "/.ddx"
+	ddxDir := ddxroot.Path(context.Background(), projectRoot)
 	store := bead.NewStore(ddxDir)
 
 	filters := agent.PickerFilters{

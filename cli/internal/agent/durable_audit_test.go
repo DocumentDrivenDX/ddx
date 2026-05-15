@@ -93,8 +93,12 @@ func TestCommitOutcomeDurableMutationUsesAuditCommit(t *testing.T) {
 	status := runGitInteg(t, projectRoot, "status", "--short", "--", ".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl", ".ddx/attachments")
 	assert.Empty(t, status)
 
-	subject := runGitInteg(t, projectRoot, "log", "-1", "--pretty=%s")
+	stateRoot := ddxroot.Path(context.Background(), projectRoot)
+	subject := runGitInteg(t, stateRoot, "log", "-1", "--pretty=%s")
 	assert.Equal(t, "chore: update tracker (execute-bead 20260515T101828-audit-commit)", subject)
+
+	stateStatus := runGitInteg(t, stateRoot, "status", "--short", "--", "beads.jsonl", "metrics/attempts.jsonl", "attachments")
+	assert.Empty(t, stateStatus)
 
 	rows, err := attemptmetrics.LoadRows(projectRoot)
 	require.NoError(t, err)
