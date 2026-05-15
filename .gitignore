@@ -436,6 +436,7 @@ cli/internal/agent/.ddx/
 .helix-logs/
 
 .ddx/executions/
+.ddx/executions-archive/
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/

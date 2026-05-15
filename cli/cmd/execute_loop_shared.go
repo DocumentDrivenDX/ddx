@@ -160,7 +160,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if jsonOutput {
 		cleanupLog = io.Discard
 	}
-	cleanupRunner := newWorkStartupCleanupRunner(projectRoot)
+	cleanupRunner := newStartupHousekeepingRunner(projectRoot)
 	if tryTargetBeadID == "" && spec.Mode != executeloop.ModeWatch {
 		if breakdown, bErr := store.ReadyExecutionBreakdown(); bErr != nil {
 			return bErr
@@ -586,101 +586,6 @@ func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile stri
 		}
 		_ = attemptmetrics.AppendRow(projectRoot, row)
 	}
-}
-
-type workStartupCleanupRunner struct {
-	projectRoot string
-	tempRoot    string
-	maxAge      time.Duration
-	now         func() time.Time
-}
-
-func newWorkStartupCleanupRunner(projectRoot string) *workStartupCleanupRunner {
-	tempRoot := config.ExecutionWorktreeRoot(projectRoot)
-	if tempRoot == "" {
-		tempRoot = filepath.Join(os.TempDir(), agent.ExecuteBeadTmpSubdir)
-	}
-	return &workStartupCleanupRunner{
-		projectRoot: projectRoot,
-		tempRoot:    tempRoot,
-		maxAge:      worktreeReapMaxAgeFromEnv(),
-	}
-}
-
-func (r *workStartupCleanupRunner) Cleanup(ctx context.Context) (agent.ExecutionCleanupSummary, error) {
-	if r == nil {
-		return agent.ExecutionCleanupSummary{}, nil
-	}
-	summary := agent.ExecutionCleanupSummary{
-		ProjectRoot: r.projectRoot,
-		TempRoot:    r.tempRoot,
-	}
-	if r.projectRoot == "" || r.tempRoot == "" {
-		return summary, nil
-	}
-	if ctx != nil {
-		if err := ctx.Err(); err != nil {
-			return summary, err
-		}
-	}
-	entries, err := os.ReadDir(r.tempRoot)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return summary, nil
-		}
-		return summary, err
-	}
-	runStates, err := agent.ReadRunStates(r.projectRoot)
-	if err != nil {
-		return summary, err
-	}
-	now := time.Now().UTC()
-	if r.now != nil {
-		now = r.now()
-	}
-	registered := map[string]struct{}{}
-	if paths, listErr := (&agent.RealGitOps{}).WorktreeList(r.projectRoot); listErr == nil {
-		for _, path := range paths {
-			registered[filepath.Clean(path)] = struct{}{}
-		}
-	}
-	for _, entry := range entries {
-		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {
-			continue
-		}
-		if ctx != nil {
-			if err := ctx.Err(); err != nil {
-				return summary, err
-			}
-		}
-		summary.ScannedTempDirs++
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		if now.Sub(info.ModTime()) < r.maxAge {
-			continue
-		}
-		path := filepath.Join(r.tempRoot, entry.Name())
-		meta, metaErr := agent.ReadExecutionCleanupMetadata(path)
-		if metaErr == nil {
-			meta.WorktreePath = firstNonEmpty(meta.WorktreePath, path)
-		} else {
-			meta = agent.ExecutionCleanupMetadata{WorktreePath: path}
-		}
-		if worktreeStillLive(meta, runStates, now) {
-			continue
-		}
-		if _, ok := registered[filepath.Clean(path)]; ok {
-			_ = (&agent.RealGitOps{}).WorktreeRemove(r.projectRoot, path)
-			summary.RemovedRegisteredWorktrees++
-			continue
-		}
-		if err := os.RemoveAll(path); err == nil {
-			summary.RemovedUnregisteredTempDirs++
-		}
-	}
-	return summary, nil
 }
 
 func worktreeStillLive(meta agent.ExecutionCleanupMetadata, runStates []agent.RunState, now time.Time) bool {

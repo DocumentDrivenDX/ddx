@@ -115,6 +115,10 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 
+	if _, err := newStartupHousekeepingRunner(projectRoot).Cleanup(cmd.Context()); err != nil {
+		return err
+	}
+
 	// Preflight: warn once per process for degraded project-local skill layout.
 	// Runs before claim/worktree setup so the operator sees the warning before
 	// any bead state changes.

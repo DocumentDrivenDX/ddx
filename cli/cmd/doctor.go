@@ -38,6 +38,7 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	verbose, _ := cmd.Flags().GetBool("verbose")
+	applyHousekeeping, _ := cmd.Flags().GetBool("apply")
 	fix, _ := cmd.Flags().GetBool("fix")
 
 	fmt.Println("🩺 DDx Installation Diagnostics")
@@ -302,6 +303,59 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check 12: package.json locations — detect missing/stale node_modules.
+	fmt.Print("✓ Checking Execution Housekeeping... ")
+	projectRoot := resolveProjectRoot("", f.WorkingDir)
+	if projectRoot == "" {
+		projectRoot = f.WorkingDir
+	}
+	housekeepingRunner := newStartupHousekeepingRunner(projectRoot)
+	housekeepingReport, housekeepingErr := housekeepingRunner.scan(cmd.Context(), applyHousekeeping)
+	if housekeepingErr != nil {
+		fmt.Println("⚠️  Execution housekeeping scan failed")
+		issue := DiagnosticIssue{
+			Type:        "execution_housekeeping",
+			Description: housekeepingErr.Error(),
+			Remediation: []string{
+				"Inspect .ddx/workers, .ddx/executions, and the execution worktree root manually",
+				"Run 'ddx doctor --apply' again after fixing the underlying filesystem issue",
+			},
+		}
+		issues = append(issues, issue)
+		fmt.Printf("   ⚠️  %s\n", issue.Description)
+	} else {
+		if applyHousekeeping {
+			fmt.Printf("✅ stale worktrees=%d, stale worker dirs=%d, stale execution dirs=%d (applied)\n",
+				housekeepingReport.StaleWorktrees,
+				housekeepingReport.StaleWorkerDirs,
+				housekeepingReport.StaleExecutionDirs,
+			)
+		} else if housekeepingReport.StaleWorktrees > 0 || housekeepingReport.StaleWorkerDirs > 0 || housekeepingReport.StaleExecutionDirs > 0 {
+			fmt.Printf("⚠️  stale worktrees=%d, stale worker dirs=%d, stale execution dirs=%d\n",
+				housekeepingReport.StaleWorktrees,
+				housekeepingReport.StaleWorkerDirs,
+				housekeepingReport.StaleExecutionDirs,
+			)
+			issues = append(issues, DiagnosticIssue{
+				Type: "execution_housekeeping",
+				Description: fmt.Sprintf("Stale execution state detected (%d worktrees, %d worker dirs, %d execution dirs)",
+					housekeepingReport.StaleWorktrees,
+					housekeepingReport.StaleWorkerDirs,
+					housekeepingReport.StaleExecutionDirs,
+				),
+				Remediation: []string{
+					"Run 'ddx doctor --apply' to reap stale worktrees, worker dirs, and execution evidence",
+					"Adjust DDX_WORKTREE_REAP_MAX_AGE or DDX_EXECUTION_RETAIN_DAYS if the retention window is too aggressive",
+				},
+			})
+		} else {
+			fmt.Println("✅ No stale worktrees, worker dirs, or execution dirs")
+		}
+		for _, warning := range housekeepingReport.Warnings {
+			fmt.Printf("   ⚠️  %s (%s): %s\n", warning.Path, warning.Class, warning.Message)
+		}
+	}
+
+	// Check 13: package.json locations — detect missing/stale node_modules.
 	fmt.Print("✓ Checking package.json locations... ")
 	pkgIssues := checkPackageJSONLocations(f.WorkingDir)
 	if len(pkgIssues) == 0 {
@@ -317,7 +371,7 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		issues = append(issues, pkgIssues...)
 	}
 
-	// Check 13: Legacy symlinks under project skill directories (FEAT-015).
+	// Check 14: Legacy symlinks under project skill directories (FEAT-015).
 	// In the project-local model all skills are real files. Symlinks indicate
 	// a pre-migration install; ddx update --force replaces them.
 	if legacyDirs := legacySkillSymlinkDirs(f.WorkingDir); len(legacyDirs) > 0 {

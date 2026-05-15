@@ -93,6 +93,7 @@ The doctor helps identify and resolve:
 
 	cmd.Flags().BoolP("verbose", "v", false, "Show detailed diagnostic output")
 	cmd.Flags().Bool("plugins", false, "Audit installed plugins for manifest and skill issues")
+	cmd.Flags().Bool("apply", false, "Apply stale worktree/worker/execution housekeeping while running diagnostics")
 	cmd.Flags().Bool("fix", false, "Automatically remediate detected git-repo corruption (core.bare/core.worktree/core.hooksPath)")
 	cmd.Flags().String("paths", "", "Space-separated staged file paths; when set, only runs checks relevant to those paths (used by the ddx-validate pre-commit hook)")
 
