@@ -1,0 +1,242 @@
+{
+  "attempt_id": "20260515T191052-dd6eded7",
+  "bead_id": "ddx-843b11b1",
+  "base_rev": "2a33c9f8afdf0f0f7aa131e172ac9e821b8b6c26",
+  "created_at": "2026-05-15T19:10:56.200276408Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-843b11b1",
+    "title": "prompts: TD for prompt_version + DDX_PROMPT_VARIANT selector + offline-comparison roadmap",
+    "description": "TD for prompt versioning + variant selection (DDX_PROMPT_VARIANT) + offline A/B comparison roadmap. v1 ships prompt_sha only; full A/B infra deferred.",
+    "acceptance": "1. TD authored. 2. References Story 12 v1 work + roadmap to A/B.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "area:specs",
+      "kind:design",
+      "phase:2",
+      "story:12",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T00:39:56.264558118Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel\",\"resolved_model\":\"qwen3.5-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-15T00:42:30.934252892Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel model=qwen3.5-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen3.5-27b\",\"actual_power\":5,\"actual_provider\":\"grendel\",\"attempt_id\":\"20260515T004138-b7178a02\",\"bead_id\":\"ddx-843b11b1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T00:42:31.247413537Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen3.5-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"qwen3.5-27b\",\"provider\":\"grendel\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-15T00:42:31.330766881Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=grendel model=qwen3.5-27b"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:1234/v1/chat/completions\\\": dial tcp 100.97.179.68:1234: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:1234/v1/chat/completions\\\": dial tcp 100.97.179.68:1234: i/o timeout\",\"harness\":\"fiz\",\"model\":\"qwen3.5-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel\"}",
+          "created_at": "2026-05-15T00:42:31.402839568Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel model=qwen3.5-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:1234/v1/chat/completions\": dial tcp 100.97.179.68:1234: i/o timeout\npowerClass=cheap\nresult_rev=38eba04a6d1f9f5e74b00cf420c086d0f8ca542a\nbase_rev=38eba04a6d1f9f5e74b00cf420c086d0f8ca542a\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-15T00:42:31.454156732Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T01:39:44.263883478Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-843b11b1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T01:40:09.283330178Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T01:40:34.27589575Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T01:40:34.307089815Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T01:40:53.012340298Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-843b11b1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T01:41:17.852655042Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T01:41:42.914771407Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T01:41:42.946953472Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T03:30:31.633697849Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-843b11b1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:30:57.857828916Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:31:13.812068797Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:31:13.853481588Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T03:31:24.674274733Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-843b11b1\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-15T03:31:51.453295708Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\\u003cid\\u003e] substantive commit before rerunning\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-15T03:32:07.602455552Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: checkpoint refused to absorb implementation changes outside DDx bookkeeping: cli/cmd/agent_execute_loop_escalation.go, cli/cmd/try.go, cli/cmd/try_test.go, cli/internal/agent/execute_bead_intake_test.go, cli/internal/agent/execute_bead_loop.go, cli/internal/agent/execute_bead_review_triage.go, cli/internal/agent/passthrough_envelope_test.go, cli/internal/agent/preclaim_intake.go, cli/internal/agent/preclaim_intake_hook.go, cli/internal/agent/preclaim_intake_hook_test.go, cli/internal/agent/profile_select.go, cli/internal/agent/readiness_classification_test.go, cli/internal/agent/service_run.go, cli/internal/agent/zero_config_escalation_integration_test.go, cli/internal/escalation/execution_hint.go, cli/internal/escalation/infrastructure.go, cli/internal/escalation/powerinfer.go, cli/internal/escalation/powerinfer_test.go, docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md, docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md, docs/helix/06-iterate/bead-authoring-template.md; commit those files in the bead's [ddx-\u003cid\u003e] substantive commit before rerunning",
+          "created_at": "2026-05-15T03:32:07.644594676Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD authored. 2. References Story 12 v1 work + roadmap to A/B.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-15T19:10:51.015871812Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/1"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-843b11b1)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T19:10:51.956739789Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "triage.power_hint": 6,
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-15T00:42:31Z",
+          "count": 1,
+          "model": "qwen3.5-27b",
+          "provider": "grendel",
+          "reason": "provider_connectivity"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T191052-dd6eded7",
+    "prompt": ".ddx/executions/20260515T191052-dd6eded7/prompt.md",
+    "manifest": ".ddx/executions/20260515T191052-dd6eded7/manifest.json",
+    "result": ".ddx/executions/20260515T191052-dd6eded7/result.json",
+    "checks": ".ddx/executions/20260515T191052-dd6eded7/checks.json",
+    "usage": ".ddx/executions/20260515T191052-dd6eded7/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-843b11b1-20260515T191052-dd6eded7"
+  },
+  "prompt_sha": "5f69621916987454f73a881fec518b5c35b0b60be003d94006f712bd515f3d0c"
+}
