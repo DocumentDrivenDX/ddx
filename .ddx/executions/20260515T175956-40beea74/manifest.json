@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260515T175956-40beea74",
+  "bead_id": "ddx-ecfa4889",
+  "base_rev": "0d2cdffd9a46927e395a2c2634fdb368b1bcc10a",
+  "created_at": "2026-05-15T18:00:01.203131013Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ecfa4889",
+    "title": "work status: enrich active bead fields from liveness sidecars",
+    "description": "PROBLEM\n`ddx work status --all-projects` currently reports live watcher processes but prints `bead=- worktree=-` while those same watchers have active execute-bead children. During the live 2026-05-15 monitor loop, process inspection showed `/home/erik/.local/bin/ddx work --watch ... --project /Users/erik/Projects/ddx` with child `codex exec -C /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b6fea19a-20260515T120840-2c0aa694`, but `ddx work status --all-projects` only printed the parent with empty bead/worktree fields.\n\nROOT CAUSE WITH FILE:LINE\n`cli/cmd/work_status.go:79-89` builds the report solely from `workerstatus.Scanner`. `cli/cmd/work_status.go:149-158` prints `-` whenever the scanner row has no inferred bead/worktree. `cli/internal/workerstatus/workerstatus.go:52-88` can infer a bead only from the scanned process argv/cwd, so a long-lived parent `ddx work --watch` has no active bead signal even though its child process and liveness sidecar do. The existing sidecar already records the missing fields: `cli/internal/agent/work/liveness.go:52-67` records current bead/attempt/child PID, `cli/internal/agent/work/liveness.go:87-96` writes `.ddx/workers/\u003cworker-id\u003e/status.json`, and `cli/internal/agent/worker_liveness_sidecar_test.go:150-204` verifies those operator-facing fields are persisted.\n\nPROPOSED FIX\nEnrich `ddx work status` rows from fresh worker liveness sidecars, using process scan rows for PID/command/project scope and sidecar records for current bead, attempt, child PID, phase, and last activity when the scan cannot infer an execution worktree. Preserve helper-subcommand filtering and project scoping. For all-projects output, include active bead/worktree/attempt where available for each project instead of requiring operators to run `pgrep` manually.\n\nNON-SCOPE\nDo not change worker scheduling, route selection, readiness, or execute-bead landing. Do not make stale sidecar files count as live workers without a matching live process or TTL-safe liveness check. Do not hand-edit `.ddx` tracker files.",
+    "acceptance": "1. `TestWorkStatusUsesFreshLivenessSidecarForActiveAttempt` or equivalent proves a scanned `ddx work --watch` parent with a fresh sidecar reports the active bead ID and attempt instead of `bead=-`.\n2. `TestWorkStatusAllProjectsEnrichesActiveBeads` or equivalent proves `ddx work status --all-projects --json` includes active bead metadata for multiple project roots when sidecars are fresh.\n3. `TestLooksLikeDDxWorkerExcludesWorkHelperSubcommands` still passes, proving helper commands are not misclassified as workers.\n4. `cd cli \u0026\u0026 go test ./internal/workerstatus/... ./cmd/... -run \"TestWorkStatus|TestLooksLikeDDxWorker\" -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:cli",
+      "area:workerstatus",
+      "kind:bug",
+      "operator-ux",
+      "monitoring"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-ecfa4889)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T17:59:51.491217211Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T175956-40beea74",
+    "prompt": ".ddx/executions/20260515T175956-40beea74/prompt.md",
+    "manifest": ".ddx/executions/20260515T175956-40beea74/manifest.json",
+    "result": ".ddx/executions/20260515T175956-40beea74/result.json",
+    "checks": ".ddx/executions/20260515T175956-40beea74/checks.json",
+    "usage": ".ddx/executions/20260515T175956-40beea74/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ecfa4889-20260515T175956-40beea74"
+  },
+  "prompt_sha": "eac3327959eafc19f3ee0bdf60294117087222ae34f12bf6595c69f210f89032"
+}
