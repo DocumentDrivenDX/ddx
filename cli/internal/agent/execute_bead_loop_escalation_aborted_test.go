@@ -58,10 +58,10 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedEmitsEvent(t *te
 	assert.Equal(t, float64(20), body["actual_power"])
 }
 
-// TestApplyProviderConnectivityRouteExclusion_LadderExhaustedSetsSentinelHint asserts
-// that TriagePowerHintKey is set to a value >= actualPower+1 even when the ladder
-// is exhausted, so downstream routing has an explicit "not the failed tier" signal.
-func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedSetsSentinelHint(t *testing.T) {
+// TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericPowerHint
+// asserts that ladder exhaustion still emits evidence without persisting a
+// numeric retry floor on the bead.
+func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericPowerHint(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -82,13 +82,7 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedSetsSentinelHint
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 
-	raw, ok := got.Extra[TriagePowerHintKey]
-	require.True(t, ok, "TriagePowerHintKey must be set when ladder is exhausted")
-
-	// After JSON round-trip, numeric values in Extra come back as float64.
-	hint, ok := raw.(float64)
-	require.True(t, ok, "TriagePowerHintKey must be numeric; got %T %v", raw, raw)
-	assert.GreaterOrEqual(t, int(hint), actualPower+1, "sentinel hint must be >= actualPower+1")
+	assert.NotContains(t, got.Extra, TriagePowerHintKey)
 }
 
 // TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired asserts that
@@ -107,7 +101,7 @@ func TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired(t *testi
 		Model:       "mistral-7b",
 		ActualPower: 15,
 	}
-	// nextFloorFn succeeds on first call so the bead stays open and the hint is set.
+	// nextFloorFn succeeds on first call so the bead stays open and the route is recorded.
 	nextFloorFn := func(int) (int, error) { return 50, nil }
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 

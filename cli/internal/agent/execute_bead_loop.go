@@ -3956,8 +3956,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	// When a ladder is available, advance by one step. If the ladder is
 	// exhausted (already at top powerClass), the work requires human input.
 	if nextFloorFn != nil {
-		nextFloor, err := nextFloorFn(actualPower)
-		if err != nil {
+		if _, err := nextFloorFn(actualPower); err != nil {
 			emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, time.Now().UTC())
 			return applyNoChangesOperatorRequired(store, beadID, actor, noChanges, time.Now().UTC())
 		}
@@ -3970,7 +3969,6 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 			clearNoChangesLifecycleLabels(b)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
 			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
-			b.Extra[TriagePowerHintKey] = nextFloor
 			b.Extra[executeLoopSmartRetryKey] = true
 			b.Extra[executeLoopSmartRetryReasonKey] = reason
 			b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
@@ -3987,7 +3985,6 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 		clearNoChangesLifecycleLabels(b)
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
 		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
-		b.Extra[TriagePowerHintKey] = string(escalation.PowerSmart)
 		b.Extra[executeLoopSmartRetryKey] = true
 		b.Extra[executeLoopSmartRetryReasonKey] = reason
 		b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
@@ -3995,22 +3992,17 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	})
 }
 
-// applyRepairCycleExhaustedEscalation bumps the implementer MinPower to the
-// next powerClass when repair cycles are exhausted. If the ladder is already at the
-// top powerClass, the bead is parked to proposed for operator review.
+// applyRepairCycleExhaustedEscalation keeps the bead open when a stronger retry
+// remains available. If the ladder is already at the top powerClass, the bead
+// is parked to proposed for operator review.
 func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, actor string, actualPower int, at time.Time, nextFloorFn func(int) (int, error)) error {
 	if nextFloorFn != nil {
-		nextFloor, err := nextFloorFn(actualPower)
-		if err == nil {
+		if _, err := nextFloorFn(actualPower); err == nil {
 			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 				Reason: "repair cycle exhausted: escalating implementer to higher powerClass",
 				Actor:  actor,
 				Source: "ddx work",
-			}, func(b *bead.Bead) error {
-				ensureBeadExtra(b)
-				b.Extra[TriagePowerHintKey] = nextFloor
-				return nil
-			})
+			}, nil)
 		}
 		emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, at)
 	}
@@ -4484,8 +4476,8 @@ func buildExcludedRoutes(failedRoutes []FailedRouteEntry, now time.Time, window 
 
 // CheckAndApplyRouteExclusions builds ExcludedRoutes from the bead's
 // failed-routes list, calls resolveRoute to verify a viable candidate
-// remains, and when none does escalates TriagePowerHintKey to the next
-// ladder floor (composing with the ddx-8a7a6843 ladder-exhaustion path).
+// remains, and when none does returns a no-viable-provider report so the
+// current execution path can escalate without mutating bead metadata.
 //
 // Returns (report, true) when dispatch should be skipped (all routes
 // excluded or resolveRoute returned an error); (zero, false) when the
@@ -4493,8 +4485,8 @@ func buildExcludedRoutes(failedRoutes []FailedRouteEntry, now time.Time, window 
 // A nil resolveRoute is treated as a no-op and returns false.
 func CheckAndApplyRouteExclusions(
 	ctx context.Context,
-	store ExecuteBeadLoopStore,
-	beadID, actor string,
+	_ ExecuteBeadLoopStore,
+	beadID, _ string,
 	extra map[string]any,
 	now time.Time,
 	minPower int,
@@ -4516,20 +4508,17 @@ func CheckAndApplyRouteExclusions(
 	if _, routeErr := resolveRoute(ctx, req); routeErr == nil {
 		return ExecuteBeadReport{}, false
 	}
-	// No viable candidate at minPower with the current exclusions: escalate
-	// TriagePowerHintKey so the next attempt routes to a stronger tier.
+	// No viable candidate at minPower with the current exclusions: let the
+	// current execution path escalate in-memory rather than persisting a bead
+	// retry floor.
 	nextFloor := minPower + 1
 	if nextFloorFn != nil {
 		if floor, err := nextFloorFn(minPower); err == nil {
 			nextFloor = floor
 		}
 	}
-	_ = store.Update(beadID, func(b *bead.Bead) {
-		ensureBeadExtra(b)
-		b.Extra[TriagePowerHintKey] = nextFloor
-	})
 	detail := fmt.Sprintf(
-		"ResolveRoute: no viable routing candidate: all routes at power %d excluded by recent failures; escalating TriagePowerHintKey to %d",
+		"ResolveRoute: no viable routing candidate: all routes at power %d excluded by recent failures; escalating current retry floor to %d",
 		minPower, nextFloor,
 	)
 	return ExecuteBeadReport{
@@ -4551,14 +4540,11 @@ func isOperatorRoutingPinned(pt config.AgentPassthrough) bool {
 }
 
 // applyProviderConnectivityRouteExclusion appends the failed (provider, model)
-// to the bead's failed-route list and (when no operator pin is in force and a
-// ladder step is available) advances TriagePowerHintKey above the failed
-// route's actualPower so the next attempt's RouteRequest naturally picks a
-// different candidate. The lifecycle status is unchanged (bead stays open).
+// to the bead's failed-route list. The lifecycle status is unchanged (bead
+// stays open). Retry power escalation is derived from route-failure evidence
+// in the current execution path rather than a persisted bead floor.
 //
-// When the ladder is exhausted, it emits an execution-escalation-aborted event
-// and sets TriagePowerHintKey to actualPower+1 as a sentinel so downstream
-// routing knows to avoid the failed tier.
+// When the ladder is exhausted, it emits an execution-escalation-aborted event.
 //
 // When the same (provider, model) appears in the failed-routes list for the
 // second time, the bead is promoted to operator_required.
@@ -4593,13 +4579,9 @@ func applyProviderConnectivityRouteExclusion(
 		if operatorPinned || nextFloorFn == nil {
 			return
 		}
-		nextFloor, err := nextFloorFn(report.ActualPower)
-		if err != nil {
+		if _, err := nextFloorFn(report.ActualPower); err != nil {
 			ladderExhausted = true
-			b.Extra[TriagePowerHintKey] = report.ActualPower + 1
-			return
 		}
-		b.Extra[TriagePowerHintKey] = nextFloor
 	}); err != nil {
 		return err
 	}

@@ -472,6 +472,48 @@ func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
 	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
 }
 
+func TestTryIgnoresNumericBeadPowerHint(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "ddx-zero-config-ignore-numeric-hint",
+		Title: "Try ignores numeric bead retry hint",
+		Extra: map[string]any{
+			agent.TriagePowerHintKey: 90,
+		},
+	}))
+
+	factory := NewCommandFactory(dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"try",
+		"ddx-zero-config-ignore-numeric-hint",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	stub.mu.Lock()
+	executeCalled := stub.executeCalled
+	lastReq := stub.lastReq
+	stub.mu.Unlock()
+	require.True(t, executeCalled, "ddx try must invoke implementation dispatch; output=%q err=%v", out, err)
+	assert.Equal(t, "default", lastReq.Policy, "numeric retry metadata must not override default zero-config policy selection")
+	assert.Equal(t, 0, lastReq.MinPower, "numeric retry metadata must not become the requested MinPower")
+}
+
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling
 // `ddx try <id>` during an in-flight attempt releases the claim and leaves the
 // bead open so it can be reclaimed.

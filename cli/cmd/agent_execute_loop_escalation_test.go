@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 )
@@ -67,4 +68,20 @@ func TestRecentProviderConnectivityMinPowerFromEventsIgnoresExpiredEvidence(t *t
 
 	assert.False(t, ok)
 	assert.Equal(t, 0, floor)
+}
+
+func TestInvestigationRetryIgnoresNumericBeadPowerHint(t *testing.T) {
+	b := &bead.Bead{
+		ID:    "ddx-ignore-numeric-hint",
+		Title: "Ignore numeric retry floor",
+		Extra: map[string]any{
+			agent.TriagePowerHintKey: 90,
+		},
+	}
+
+	floor, report, unavailable := investigationRetryInitialMinPower(b, 7, 8, nil)
+
+	assert.False(t, unavailable)
+	assert.Equal(t, 7, floor)
+	assert.Equal(t, agent.ExecuteBeadReport{}, report)
 }

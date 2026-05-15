@@ -14,14 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExecuteBeadWorker_ProviderTimeoutRetriesWithRouteExclusion exercises
+// TestProviderConnectivityRouteExclusionDoesNotWriteNumericPowerHint exercises
 // the route-exclusion path: a service attempt fails with a TCP-level
 // provider-connectivity timeout against a routed provider, and the loop
-// records structured route-failure evidence plus a power-hint bump so a
-// subsequent attempt's routing query naturally excludes the failed
-// (provider, model) tuple. The retry preserves operator intent: no
+// records structured route-failure evidence without persisting a numeric
+// retry floor on the bead. The retry preserves operator intent: no
 // hardcoded provider/policy pins are written.
-func TestExecuteBeadWorker_ProviderTimeoutRetriesWithRouteExclusion(t *testing.T) {
+func TestProviderConnectivityRouteExclusionDoesNotWriteNumericPowerHint(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 14, 8, 8, 30, 0, time.UTC)
 	var floorCalls []int
@@ -76,9 +75,7 @@ func TestExecuteBeadWorker_ProviderTimeoutRetriesWithRouteExclusion(t *testing.T
 	assert.Equal(t, 50, failed[0].ActualPower)
 	assert.Equal(t, FailureModeProviderConnectivity, failed[0].Reason)
 
-	hint, ok := got.Extra[TriagePowerHintKey]
-	require.True(t, ok, "power hint must be set so next attempt routes off the failed tier")
-	assert.Equal(t, float64(70), hint, "hint must equal actualPower+ladder-step from EscalationNextFloor")
+	assert.NotContains(t, got.Extra, TriagePowerHintKey)
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
@@ -192,11 +189,11 @@ func TestRouteRequest_ExpiredFailedRoutesDropped(t *testing.T) {
 	assert.Len(t, failed, 2, "buildExcludedRoutes must not modify the input slice")
 }
 
-// TestRouteRequest_AllRoutesExcludedTriggersEscalation asserts that when
+// TestFailedRoutesDoNotWriteNumericPowerHint asserts that when
 // every candidate at the requested power class is excluded (resolveRoute
-// returns a no-viable-candidate error), CheckAndApplyRouteExclusions escalates
-// TriagePowerHintKey via the ddx-8a7a6843 ladder-exhaustion path.
-func TestRouteRequest_AllRoutesExcludedTriggersEscalation(t *testing.T) {
+// returns a no-viable-candidate error), CheckAndApplyRouteExclusions reports
+// the skipped dispatch without persisting a numeric retry floor on the bead.
+func TestFailedRoutesDoNotWriteNumericPowerHint(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
@@ -230,8 +227,8 @@ func TestRouteRequest_AllRoutesExcludedTriggersEscalation(t *testing.T) {
 
 	updated, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, float64(70), updated.Extra[TriagePowerHintKey],
-		"TriagePowerHintKey must escalate to actualPower+ladder-step (50+20=70)")
+	assert.NotContains(t, updated.Extra, TriagePowerHintKey)
+	assert.Contains(t, report.Detail, "escalating current retry floor to 70")
 }
 
 // TestFailedRoutes_DeduplicatesOnSameProviderModel asserts that two consecutive

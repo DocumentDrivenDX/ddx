@@ -1955,7 +1955,7 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 	assert.True(t, sawUnverified, "no_changes_unverified event must be emitted")
 }
 
-func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
+func TestNoChangesRetryDoesNotWriteTriagePowerHintKey(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -1990,7 +1990,7 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	require.True(t, hasRetry, "smart-runnable no_changes must set a short retry-after so watch workers drain other beads")
 	assert.Equal(t, r.Results[0].RetryAfter, retryAfter)
 	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
-	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
+	assert.NotContains(t, got.Extra, TriagePowerHintKey)
 	assert.Equal(t, NoChangesEventAutonomousRetry, got.Extra[bead.ExtraLastStatus])
 	assert.Contains(t, got.Extra[bead.ExtraLastDetail], "stronger code search")
 
@@ -2005,74 +2005,6 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 		}
 	}
 	assert.True(t, sawAutonomous, "no_changes_autonomous_retry event must be emitted")
-}
-
-// TestNoChangesSmartRetry_StepwiseClimb asserts that each no_changes failure
-// with a wired EscalationNextFloor advances the powerClass hint by exactly one ladder
-// step, not by jumping directly to the top of the ladder.
-func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
-	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
-
-	b := &bead.Bead{ID: "ddx-stepclimb", Title: "Stepwise climb bead"}
-	require.NoError(t, store.Create(b))
-
-	// Three-rung ladder: 50 → 70 → 90.
-	nextFloor := func(actualPower int) (int, error) {
-		switch {
-		case actualPower < 50:
-			return 50, nil
-		case actualPower < 70:
-			return 70, nil
-		case actualPower < 90:
-			return 90, nil
-		default:
-			return 0, fmt.Errorf("ladder exhausted")
-		}
-	}
-
-	var callCount int
-	worker := &ExecuteBeadWorker{
-		Store:               store,
-		EscalationNextFloor: nextFloor,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			callCount++
-			power := 50
-			if callCount > 1 {
-				power = 70
-			}
-			return ExecuteBeadReport{
-				BeadID:             beadID,
-				Status:             ExecuteBeadStatusNoChanges,
-				ActualPower:        power,
-				BaseRev:            "base",
-				ResultRev:          "base",
-				NoChangesRationale: "status: open\nreason: needs stronger model",
-			}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	// First run: no_changes at actualPower=50 → hint must advance by one step to 70.
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	got, err := store.Get(b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	// After JSON round-trip, int values in Extra come back as float64.
-	assert.Equal(t, float64(70), got.Extra[TriagePowerHintKey], "first no_changes at power 50 must set hint to next step (70), not top of ladder (90)")
-	_, err = store.ClearCooldowns(nil)
-	require.NoError(t, err)
-
-	// Second run: no_changes at actualPower=70 → hint must advance by one more step to 90.
-	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	got, err = store.Get(b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Equal(t, float64(90), got.Extra[TriagePowerHintKey], "second no_changes at power 70 must set hint to next step (90)")
 }
 
 // TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed asserts that when

@@ -65,15 +65,6 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 }
 
 func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder, inferZeroConfig bool) (int, agent.ExecuteBeadReport, bool) {
-	if floor, ok := numericPowerFloorHint(b); ok {
-		if baseMinPower > floor {
-			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
-		}
-		if maxPower > 0 && floor >= maxPower {
-			return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
-		}
-		return floor, agent.ExecuteBeadReport{}, false
-	}
 	if inferZeroConfig {
 		return zeroConfigInferredMinPower(b, baseMinPower, maxPower, ladder)
 	}
@@ -271,26 +262,6 @@ func zeroConfigInferredMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder
 		return powerFloor, agent.ExecuteBeadReport{}, false
 	}
 	return baseMinPower, agent.ExecuteBeadReport{}, false
-}
-
-func numericPowerFloorHint(b *bead.Bead) (int, bool) {
-	if b == nil || b.Extra == nil {
-		return 0, false
-	}
-	raw, ok := b.Extra[agent.TriagePowerHintKey]
-	if !ok {
-		return 0, false
-	}
-	switch v := raw.(type) {
-	case int:
-		return v, v > 0
-	case int64:
-		return int(v), int(v) > 0
-	case float64:
-		return int(v), int(v) > 0
-	default:
-		return 0, false
-	}
 }
 
 func smartRouteUnavailableReport(b *bead.Bead, minPower, maxPower int, cause error) agent.ExecuteBeadReport {

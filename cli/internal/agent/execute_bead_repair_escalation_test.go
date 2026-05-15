@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReviewBlock_EscalatesImplementerOnRepairExhaustion asserts that when
+// TestReviewBlock_EscalatesImplementerWithoutBeadPowerHint asserts that when
 // repair-cycle-exhausted is returned and the escalation ladder has a higher
-// powerClass available, the bead remains open with TriagePowerHintKey bumped to the
-// next floor.
-func TestReviewBlock_EscalatesImplementerOnRepairExhaustion(t *testing.T) {
+// powerClass available, the bead remains open without persisting a bead retry
+// floor.
+func TestReviewBlock_EscalatesImplementerWithoutBeadPowerHint(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -49,8 +49,7 @@ func TestReviewBlock_EscalatesImplementerOnRepairExhaustion(t *testing.T) {
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after escalation")
-	// After JSON round-trip, int values in Extra come back as float64.
-	assert.Equal(t, float64(70), got.Extra[TriagePowerHintKey], "powerClass hint must advance to next floor")
+	assert.NotContains(t, got.Extra, TriagePowerHintKey)
 }
 
 // TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed asserts that when

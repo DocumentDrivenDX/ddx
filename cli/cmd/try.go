@@ -295,9 +295,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				} else {
 					inferredPolicy = escalation.PowerStandard
 				}
-				if floor, ok := numericPowerFloorHint(targetBead); ok && floor > requestMinPower {
-					requestMinPower = floor
-				}
 				var unavailableReport agent.ExecuteBeadReport
 				var unavailable bool
 				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestMinPower); selectErr == nil && selection.Name != "" {
