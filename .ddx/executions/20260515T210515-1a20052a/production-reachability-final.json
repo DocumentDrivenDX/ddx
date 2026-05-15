@@ -1,0 +1,2412 @@
+[
+	{
+		"Name": "cmd",
+		"Path": "github.com/DocumentDrivenDX/ddx/cmd",
+		"Funcs": [
+			{
+				"Name": "investigationRetryInitialMinPower",
+				"Position": {
+					"File": "cmd/agent_execute_loop_escalation.go",
+					"Line": 63,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "copyDirTree",
+				"Position": {
+					"File": "cmd/install.go",
+					"Line": 726,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "shouldSkipLocalInstallPath",
+				"Position": {
+					"File": "cmd/install.go",
+					"Line": 881,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.Execute",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 25,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ResolveRoute",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 35,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.TailSessionLog",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 39,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ListHarnesses",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 45,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ListProviders",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 49,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ListModels",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 53,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.HealthCheck",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 57,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ListPolicies",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 61,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.RecordRouteAttempt",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 65,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.RouteStatus",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 69,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ListSessionLogs",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 73,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.WriteSessionLog",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 77,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.ReplaySession",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 81,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "stubAgentService.UsageReport",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 85,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.Execute",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 99,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ResolveRoute",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 114,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.TailSessionLog",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 118,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ListHarnesses",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 124,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ListProviders",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 128,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ListModels",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 132,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ListPolicies",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 136,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.HealthCheck",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 140,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.RecordRouteAttempt",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 144,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.RouteStatus",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 148,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ListSessionLogs",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 152,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.WriteSessionLog",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 156,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.ReplaySession",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 160,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeCapturingStub.UsageReport",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 164,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "installExecuteCapturingStub",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 168,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "canonicalFizeauPolicyFixture",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 178,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "capturedImplementationRequests",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 191,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "minimalProjectDir",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 203,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "appendTestRoutingEvidence",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 234,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "setupWorkIntakeFixture",
+				"Position": {
+					"File": "cmd/run_test_helpers.go",
+					"Line": 264,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resolveWorktree",
+				"Position": {
+					"File": "cmd/shared_helpers.go",
+					"Line": 111,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "fixedScanner.Scan",
+				"Position": {
+					"File": "cmd/work_status.go",
+					"Line": 177,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "agent",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/agent",
+		"Funcs": [
+			{
+				"Name": "drainServiceEvents",
+				"Position": {
+					"File": "internal/agent/agent_runner_service.go",
+					"Line": 237,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "drainServiceEventsWithWriter",
+				"Position": {
+					"File": "internal/agent/agent_runner_service.go",
+					"Line": 241,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "candidateIterationRef",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 104,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "GitCandidateRefStore.PinCandidateRef",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 113,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "GitCandidateRefStore.UnpinCandidateRef",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 122,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ShouldRetainCandidateRef",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 182,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.Run",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 228,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.recordCandidateCycleState",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 421,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "candidateChecksFailedDetail",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 428,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "appendUniqueString",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 436,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.pinCandidateRef",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 449,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.appendCandidateChecksFailedEvent",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 483,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.maxRepairCycles",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 503,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.classifyCandidateReview",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 510,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "repairPromptInput",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 522,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "normalizeRepairedCandidate",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 535,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.appendCandidateReviewClassifiedEvent",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 566,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AttemptCycleCoordinator.appendRepairCycleStartedEvent",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 587,
+					"Col": 35
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "appendExecutionCycleTrace",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 605,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executionCycleTraceFor",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 609,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WriteWorktreeCandidateCycleState",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 641,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "MarkWorktreeActiveCycle",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 674,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClearWorktreeActiveCycle",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 683,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "applyCandidateCycleStateToMetadata",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 698,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "applyCandidateCycleStateToRunState",
+				"Position": {
+					"File": "internal/agent/candidate_cycle.go",
+					"Line": 708,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunCompareWithConfigViaService",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 56,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunCompareWith",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 127,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "defaultResolvePromptForCompare",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 198,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runCompareArmWith",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 213,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "createCompareWorktree",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 266,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resolveGitRoot",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 279,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "captureGitDiff",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 288,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runPostCommand",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 320,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "cleanupCompareWorktrees",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 330,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "genCompareID",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 350,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunQuorumWithConfigViaService",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 375,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunQuorumWith",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 388,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "QuorumMet",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 424,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "effectiveThreshold",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 436,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CondenseOutput",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 454,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "condenseIsDiffHeader",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 546,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "condenseIsAlphaNumUnderscore",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 554,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "condenseTrimBlankLines",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 558,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "LoadBenchmarkSuite",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 573,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunBenchmarkWith",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 588,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunBenchmarkWithConfigViaService",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 631,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "benchSummarize",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 637,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "formatEventBodySummary",
+				"Position": {
+					"File": "internal/agent/evidence_telemetry.go",
+					"Line": 38,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AppendEventSummary",
+				"Position": {
+					"File": "internal/agent/evidence_telemetry.go",
+					"Line": 55,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "appendRateLimitRetryEvent",
+				"Position": {
+					"File": "internal/agent/execute_bead.go",
+					"Line": 1267,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CommitTracker",
+				"Position": {
+					"File": "internal/agent/execute_bead.go",
+					"Line": 1960,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ValidateACCheckFail",
+				"Position": {
+					"File": "internal/agent/execute_bead.go",
+					"Line": 2778,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "hasACWaiveTrailer",
+				"Position": {
+					"File": "internal/agent/execute_bead.go",
+					"Line": 2788,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ShouldAttemptConflictRecovery",
+				"Position": {
+					"File": "internal/agent/execute_bead_conflict_recovery.go",
+					"Line": 90,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunConflictRecovery",
+				"Position": {
+					"File": "internal/agent/execute_bead_conflict_recovery.go",
+					"Line": 120,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "landConflictRescueCommand",
+				"Position": {
+					"File": "internal/agent/execute_bead_conflict_recovery.go",
+					"Line": 272,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "landConflictRescueDetail",
+				"Position": {
+					"File": "internal/agent/execute_bead_conflict_recovery.go",
+					"Line": 279,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "newProgressEvent",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 717,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClassifyReviewError",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 4927,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CountPriorReviewErrors",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 4973,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CountPriorReviewErrorsForSlot",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 5001,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewErrorEventBody",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 5033,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewErrorEventBodyForSlot",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 5045,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewCostDeferredEventBody",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 5061,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ParseNoChangesRationale",
+				"Position": {
+					"File": "internal/agent/execute_bead_no_changes_verify.go",
+					"Line": 38,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DefaultVerificationCommandRunner",
+				"Position": {
+					"File": "internal/agent/execute_bead_no_changes_verify.go",
+					"Line": 46,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "LandBeadResult",
+				"Position": {
+					"File": "internal/agent/execute_bead_orchestrator.go",
+					"Line": 176,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ApplyLandingToResult",
+				"Position": {
+					"File": "internal/agent/execute_bead_orchestrator.go",
+					"Line": 331,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunPostMergeReview",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 86,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runPreCloseReviewGroup",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 433,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "reviewErrorReviewerIndex",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 457,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "applyReviewTriageDecision",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 554,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "latestBlockPairedDegraded",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 597,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "applyTriageAction",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 619,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "clearReviewTriageClaimMetadata",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 665,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "nextEscalatedPowerClass",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 678,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "SelectReviewerPolicy",
+				"Position": {
+					"File": "internal/agent/execute_bead_review.go",
+					"Line": 267,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "HasBeadLabelPrefix",
+				"Position": {
+					"File": "internal/agent/execute_bead_review.go",
+					"Line": 282,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DefaultBeadReviewer.reviewerProfileForDispatch",
+				"Position": {
+					"File": "internal/agent/execute_bead_review.go",
+					"Line": 876,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "reviewFixableGapEventBody",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_fixable_gap.go",
+					"Line": 42,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "hasReviewFixableGapRepairScheduled",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_fixable_gap.go",
+					"Line": 55,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "scheduleReviewFixableGapRepair",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_fixable_gap.go",
+					"Line": 73,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "classifyTerminalReviewBlock",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_terminal.go",
+					"Line": 27,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "reviewTerminalBlockEventBody",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_terminal.go",
+					"Line": 49,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "applyTerminalReviewBlock",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_terminal.go",
+					"Line": 57,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "applyReviewOperatorRequiredParking",
+				"Position": {
+					"File": "internal/agent/execute_bead_review_terminal.go",
+					"Line": 77,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "measureTree",
+				"Position": {
+					"File": "internal/agent/execution_cleanup.go",
+					"Line": 1080,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReadMirrorIndex",
+				"Position": {
+					"File": "internal/agent/executions_mirror.go",
+					"Line": 363,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "LookupMirrorEntry",
+				"Position": {
+					"File": "internal/agent/executions_mirror.go",
+					"Line": 389,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "isGitIndexLockError",
+				"Position": {
+					"File": "internal/agent/git_index_lock.go",
+					"Line": 22,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReadAllJSONL",
+				"Position": {
+					"File": "internal/agent/jsonl.go",
+					"Line": 27,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "hasBeadLifecycleSkill",
+				"Position": {
+					"File": "internal/agent/lint_hook.go",
+					"Line": 334,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BenchmarkArm.ResolveArm",
+				"Position": {
+					"File": "internal/agent/models.go",
+					"Line": 17,
+					"Col": 24
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BenchmarkArmsToCompare",
+				"Position": {
+					"File": "internal/agent/models.go",
+					"Line": 23,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeBeadArtifactPath",
+				"Position": {
+					"File": "internal/agent/path_helpers.go",
+					"Line": 36,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "agentLogRoot",
+				"Position": {
+					"File": "internal/agent/path_helpers.go",
+					"Line": 45,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewPreClaimIntakeHook",
+				"Position": {
+					"File": "internal/agent/preclaim_intake_hook.go",
+					"Line": 368,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "decodePreClaimIntakePayloadResult",
+				"Position": {
+					"File": "internal/agent/preclaim_intake_hook.go",
+					"Line": 643,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resolveReadinessEstimatedDifficulty",
+				"Position": {
+					"File": "internal/agent/preclaim_intake_hook.go",
+					"Line": 862,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WarmProfileSnapshotForProject",
+				"Position": {
+					"File": "internal/agent/profile_select.go",
+					"Line": 72,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "SelectCheapestProfile",
+				"Position": {
+					"File": "internal/agent/profile_select.go",
+					"Line": 255,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "EvaluateRateLimitWait",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 73,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IsRateLimitResult",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 129,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "hasIsolated429",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 160,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ParseRetryAfter",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 190,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ExtractRetryAfterFromStderr",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 227,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RateLimitRetryConfig.resolved",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 284,
+					"Col": 33
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ctxSleep",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 301,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunWithRateLimitRetry",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 324,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BuildRateLimitRouteAttempt",
+				"Position": {
+					"File": "internal/agent/ratelimit_retry.go",
+					"Line": 385,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewDecomposePostLadderExhaustionHook",
+				"Position": {
+					"File": "internal/agent/recovery_decompose.go",
+					"Line": 107,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewReframePostLadderExhaustionHook",
+				"Position": {
+					"File": "internal/agent/recovery_reframe.go",
+					"Line": 40,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BuildRepairPrompt",
+				"Position": {
+					"File": "internal/agent/repair_prompt.go",
+					"Line": 24,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "PersistReviewerStream",
+				"Position": {
+					"File": "internal/agent/reviewer_stream_artifact.go",
+					"Line": 30,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewEventBody",
+				"Position": {
+					"File": "internal/agent/reviewer_stream_artifact.go",
+					"Line": 78,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.burnFile",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 29,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.ReadOutcomes",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 39,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.ReadBurnSummaries",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 44,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AgentRunDispatchCLIFlagCategories",
+				"Position": {
+					"File": "internal/agent/run_dispatch_spec.go",
+					"Line": 70,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReadRunState",
+				"Position": {
+					"File": "internal/agent/run_state.go",
+					"Line": 174,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestProviderConnectivityViaService",
+				"Position": {
+					"File": "internal/agent/service_run.go",
+					"Line": 581,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ValidateEffortForRunViaService",
+				"Position": {
+					"File": "internal/agent/service_run.go",
+					"Line": 668,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "serviceConfigFromDDxEndpoints",
+				"Position": {
+					"File": "internal/agent/serviceconfig.go",
+					"Line": 117,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReindexLegacySessions",
+				"Position": {
+					"File": "internal/agent/session_index.go",
+					"Line": 443,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "existingSessionIndexIDs",
+				"Position": {
+					"File": "internal/agent/session_index.go",
+					"Line": 624,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "FormatSessionLogLines",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 63,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "formatPayloadHints",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 84,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "formatSizeSuffix",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 95,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "encodedPayloadSize",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 115,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "compactOutputExcerpt",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 450,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "outputSummaryFromRaw",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 474,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "compactToolDisplay",
+				"Position": {
+					"File": "internal/agent/session_log_format.go",
+					"Line": 499,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IsGitUpdateRefCompareAndSwapFailure",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 25,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NormalizeSignalSourceKind",
+				"Position": {
+					"File": "internal/agent/types.go",
+					"Line": 303,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RecordEntry",
+				"Position": {
+					"File": "internal/agent/virtual.go",
+					"Line": 95,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WorkLogRenderer.WithWorkPhase",
+				"Position": {
+					"File": "internal/agent/work_log_renderer.go",
+					"Line": 50,
+					"Col": 26
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "artifacttypes",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/artifacttypes",
+		"Funcs": [
+			{
+				"Name": "Index.ByPlugin",
+				"Position": {
+					"File": "internal/artifacttypes/types.go",
+					"Line": 56,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Index.Lookup",
+				"Position": {
+					"File": "internal/artifacttypes/types.go",
+					"Line": 72,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Index.LookupPrefix",
+				"Position": {
+					"File": "internal/artifacttypes/types.go",
+					"Line": 84,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "bead",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/bead",
+		"Funcs": [
+			{
+				"Name": "DefaultArchivePolicy",
+				"Position": {
+					"File": "internal/bead/archive.go",
+					"Line": 37,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithAxonGraphQLTransport",
+				"Position": {
+					"File": "internal/bead/axon_backend.go",
+					"Line": 112,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithAxonGraphQLClient",
+				"Position": {
+					"File": "internal/bead/axon_backend.go",
+					"Line": 120,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AxonExperimentalEnabled",
+				"Position": {
+					"File": "internal/bead/axon_backend.go",
+					"Line": 134,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithIdentity",
+				"Position": {
+					"File": "internal/bead/context.go",
+					"Line": 18,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IdentityFromContext",
+				"Position": {
+					"File": "internal/bead/context.go",
+					"Line": 26,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithTrace",
+				"Position": {
+					"File": "internal/bead/context.go",
+					"Line": 35,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TraceFromContext",
+				"Position": {
+					"File": "internal/bead/context.go",
+					"Line": 43,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "SequentialIDGenerator.GenID",
+				"Position": {
+					"File": "internal/bead/id.go",
+					"Line": 77,
+					"Col": 33
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewIDGenerator",
+				"Position": {
+					"File": "internal/bead/id.go",
+					"Line": 102,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CanLifecycleTransition",
+				"Position": {
+					"File": "internal/bead/lifecycle.go",
+					"Line": 133,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "MutateFunc.Apply",
+				"Position": {
+					"File": "internal/bead/operation.go",
+					"Line": 12,
+					"Col": 21
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "isNoViableProviderEvent",
+				"Position": {
+					"File": "internal/bead/reconcile.go",
+					"Line": 307,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "hasRetryAfter",
+				"Position": {
+					"File": "internal/bead/reconcile.go",
+					"Line": 346,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "axon",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/bead/axon",
+		"Funcs": [
+			{
+				"Name": "ChangeEventFromLifecycle",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 33,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ChangeEvent.ToLifecycleEvent",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 47,
+					"Col": 22
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DualTransport.Query",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 73,
+					"Col": 24
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DualTransport.Subscribe",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 81,
+					"Col": 24
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewWebSocketSubscriptionTransport",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 98,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WebSocketSubscriptionTransport.Query",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 103,
+					"Col": 42
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WebSocketSubscriptionTransport.Subscribe",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 109,
+					"Col": 42
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "normalizeWebSocketURL",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 232,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "cloneHeader",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 243,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "cloneDialer",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 254,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "mustJSON",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 263,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Client.SubscribeChangeEvents",
+				"Position": {
+					"File": "internal/bead/axon/subscription.go",
+					"Line": 275,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "ddxroot",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/ddxroot",
+		"Funcs": [
+			{
+				"Name": "ProjectPath",
+				"Position": {
+					"File": "internal/ddxroot/ddxroot.go",
+					"Line": 38,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "docprose",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/docprose",
+		"Funcs": [
+			{
+				"Name": "countWords",
+				"Position": {
+					"File": "internal/docprose/checker.go",
+					"Line": 360,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TempValeConfig.StylesPath",
+				"Position": {
+					"File": "internal/docprose/valeconfig.go",
+					"Line": 22,
+					"Col": 26
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "registry",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/registry",
+		"Funcs": [
+			{
+				"Name": "InstallPackageFromDir",
+				"Position": {
+					"File": "internal/registry/installer.go",
+					"Line": 65,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "server",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/server",
+		"Funcs": [
+			{
+				"Name": "filterProviderOutcomes",
+				"Position": {
+					"File": "internal/server/providers.go",
+					"Line": 423,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "computeProviderPerformance",
+				"Position": {
+					"File": "internal/server/providers.go",
+					"Line": 436,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewDispatcher.DispatchReviewTurn",
+				"Position": {
+					"File": "internal/server/review_dispatcher.go",
+					"Line": 37,
+					"Col": 28
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "MarshalRefusalJSON",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 35,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewCostCapExceededError.Error",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 58,
+					"Col": 38
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewCostCapExceededError.RefusalBody",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 66,
+					"Col": 38
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewerUnavailableError.Error",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 82,
+					"Col": 36
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewerUnavailableError.RefusalBody",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 90,
+					"Col": 36
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewReviewSessionStore",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 161,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewSessionStore.Create",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 167,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewSessionStore.AppendTurn",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 196,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewSessionStore.Load",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 259,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewSessionStore.sessionRoot",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 318,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "reviewSessionManifestFrom",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 334,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "writeJSONFile",
+				"Position": {
+					"File": "internal/server/review_session.go",
+					"Line": 349,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "PromptBudgetExceededError.Error",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 45,
+					"Col": 37
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RenderReviewPrompt",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 56,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "renderPinnedReviewPrompt",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 96,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "renderRollingReviewPrompt",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 160,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "renderUnresolvedFindingsPrompt",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 206,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "firstUserTurnContent",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 227,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "explicitUserDecisions",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 236,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "defaultSessionMemorySummary",
+				"Position": {
+					"File": "internal/server/review_session_prompt.go",
+					"Line": 255,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeLoopIdleInterval",
+				"Position": {
+					"File": "internal/server/workers.go",
+					"Line": 303,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "testutils",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/testutils",
+		"Funcs": [
+			{
+				"Name": "NewFixtureRepo",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 14,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "fixtureRepoScriptPath",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 39,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "buildDDXBinary",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 50,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	}
+]
