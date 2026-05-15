@@ -710,6 +710,29 @@ func TestWorkDefaultOutput_PrintsCompactTerminalSummary(t *testing.T) {
 	assert.NotContains(t, got, "completed:")
 }
 
+func TestWorkDirtyTreeCheckpointReturnsOperatorAttention(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		StopCondition: "OperatorAttention",
+		ExitReason:    "operator_attention",
+		OperatorAttention: &agent.OperatorAttentionStop{
+			Reason:      "checkpoint_dirty",
+			BeadID:      "ddx-0001",
+			ProjectRoot: "/tmp/project",
+			DirtyPaths:  []string{"cli/cmd/work.go", "cli/internal/agent/execute_bead_loop.go"},
+			Message:     "commit or clean the listed implementation files before restarting ddx work: cli/cmd/work.go, cli/internal/agent/execute_bead_loop.go",
+		},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	assert.Contains(t, got, "worker exited: operator attention required")
+	assert.Contains(t, got, "released bead: ddx-0001")
+	assert.Contains(t, got, "commit or clean the listed implementation files before restarting ddx work")
+	assert.Contains(t, got, "project root: /tmp/project")
+	assert.Contains(t, got, "dirty paths: cli/cmd/work.go, cli/internal/agent/execute_bead_loop.go")
+}
+
 func TestWorkDefaultOutput_PrintsQueueStateAndHumanBlockers(t *testing.T) {
 	var out bytes.Buffer
 	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{

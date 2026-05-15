@@ -168,6 +168,7 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 
 	fmt.Fprintf(w, "\nproject: %s\n", projectRoot)
 	writeWorkTerminalSummary(w, result)
+	writeOperatorAttentionSummary(w, result.OperatorAttention)
 	if result.Failures > 0 {
 		fmt.Fprintf(w, "\nfailed:\n")
 		for _, attempt := range result.Results {
@@ -193,6 +194,26 @@ func writeWorkTerminalSummary(w io.Writer, result *agent.ExecuteBeadLoopResult) 
 	fmt.Fprintf(w, "worker exited: %s\n", workExitSummary(result))
 	fmt.Fprintf(w, "attempts: %d  |  closed: %d  |  changed: %d  |  already-satisfied: %d  |  failures: %d\n",
 		result.Attempts, closed, changed, alreadySatisfied, result.Failures)
+}
+
+func writeOperatorAttentionSummary(w io.Writer, stop *agent.OperatorAttentionStop) {
+	if stop == nil {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "operator attention:")
+	if stop.BeadID != "" {
+		fmt.Fprintf(w, "  released bead: %s\n", stop.BeadID)
+	}
+	if stop.Message != "" {
+		fmt.Fprintf(w, "  %s\n", stop.Message)
+	}
+	if stop.ProjectRoot != "" {
+		fmt.Fprintf(w, "  project root: %s\n", stop.ProjectRoot)
+	}
+	if len(stop.DirtyPaths) > 0 {
+		fmt.Fprintf(w, "  dirty paths: %s\n", strings.Join(stop.DirtyPaths, ", "))
+	}
 }
 
 func countWorkTerminalOutcomes(result *agent.ExecuteBeadLoopResult) (closed, changed, alreadySatisfied int) {
@@ -224,6 +245,8 @@ func workExitSummary(result *agent.ExecuteBeadLoopResult) string {
 		return "no-progress policy stopped work"
 	case "blocked":
 		return "blocked waiting for external action"
+	case "operator_attention":
+		return "operator attention required"
 	case "sigint", "sigterm", "context_cancelled":
 		return "stopped by signal"
 	case "fatal_config":
