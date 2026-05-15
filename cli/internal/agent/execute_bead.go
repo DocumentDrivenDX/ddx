@@ -277,6 +277,46 @@ type AgentRunner interface {
 	Run(opts RunArgs) (*Result, error)
 }
 
+type staticCandidateResultPass struct {
+	candidate CandidateResult
+}
+
+func (p staticCandidateResultPass) Execute(context.Context, string) (CandidateResult, error) {
+	return p.candidate, nil
+}
+
+func applyWorkerCandidateCycle(ctx context.Context, projectRoot, wtPath string, runtime ExecuteBeadRuntime, res *ExecuteBeadResult) error {
+	if res == nil || wtPath == "" || res.Status != ExecuteBeadStatusSuccess {
+		return nil
+	}
+
+	_ = MarkWorktreeActiveCycle(wtPath)
+	defer func() {
+		_ = ClearWorktreeActiveCycle(wtPath)
+	}()
+
+	coord := &AttemptCycleCoordinator{
+		Pass: staticCandidateResultPass{
+			candidate: CandidateResult{
+				Report:       ReportFromExecuteBeadResult(res, ""),
+				WorktreePath: wtPath,
+				CycleIndex:   res.CycleIndex,
+			},
+		},
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+		BeadEvents:  runtime.BeadEvents,
+	}
+	cycleResult, err := coord.Run(ctx, res.BeadID)
+	if err != nil {
+		return err
+	}
+	res.CandidateRef = cycleResult.Report.CandidateRef
+	res.CycleIndex = cycleResult.Report.CycleIndex
+	res.CycleTrace = append([]ExecutionCycleTrace(nil), cycleResult.Report.CycleTrace...)
+	return nil
+}
+
 // Artifact paths for an execute-bead attempt.
 type executeBeadArtifacts struct {
 	DirAbs      string
@@ -1890,6 +1930,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	})
 
 	populateWorkerStatus(res)
+	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, runtime, res); err != nil {
+		return nil, fmt.Errorf("recording candidate cycle state: %w", err)
+	}
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
 	}

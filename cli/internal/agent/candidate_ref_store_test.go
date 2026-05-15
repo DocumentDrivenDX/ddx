@@ -188,6 +188,35 @@ func TestCandidateRefStore_EventRecorded(t *testing.T) {
 	assert.Equal(t, rev, body.ResultRev)
 }
 
+func TestAttemptCycleCoordinator_NoLanderRetainsCandidateRef(t *testing.T) {
+	projectRoot, rev := initTestGitRepo(t)
+
+	coord := &AttemptCycleCoordinator{
+		Pass: staticCandidateResultPass{
+			candidate: CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    "ddx-no-lander",
+					AttemptID: "attempt-no-lander-001",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   "base-no-lander",
+					ResultRev: rev,
+				},
+			},
+		},
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-no-lander")
+	require.NoError(t, err)
+	assert.False(t, result.Landed, "worker-side candidate finalization must not report a landed branch")
+	require.NotEmpty(t, result.Report.CandidateRef)
+
+	got, err := gitRevParse(t, projectRoot, result.Report.CandidateRef)
+	require.NoError(t, err)
+	assert.Equal(t, rev, got, "candidate ref must be retained when the coordinator finalizes without a lander")
+}
+
 // TestCandidateRefStore_RetentionPolicy verifies:
 //   - Approved-landed (success) candidates: temporary ref is cleaned up.
 //   - Preserved/conflicted/parked candidates: ref is retained for operator use.

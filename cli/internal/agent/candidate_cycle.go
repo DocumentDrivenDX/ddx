@@ -196,8 +196,9 @@ type AttemptCycleResult struct {
 // optional repair → land. It ensures terminal disposition is reached before
 // the coordinator exits, regardless of which phase terminates the cycle.
 //
-// Pass and Lander are required. Nil optional fields (Checks, Reviewer, Repair,
-// RefStore) skip their respective phases.
+// Pass is required. Lander is optional: nil finalizes the worker-side
+// candidate cycle without advancing the target branch. Nil optional fields
+// (Checks, Reviewer, Repair, RefStore) skip their respective phases.
 //
 // Repair loops are reserved for future implementation. When Reviewer is non-nil
 // the coordinator runs one pre-land candidate review before landing.
@@ -215,16 +216,17 @@ type AttemptCycleCoordinator struct {
 	RepairMaxCycles int
 }
 
-// Run executes one attempt cycle: implementation → checks → land. Non-success
-// statuses (no_changes, execution_failed, etc.) return without calling the
-// lander.
+// Run executes one attempt cycle: implementation → checks → optional review →
+// optional repair → optional land. Non-success statuses (no_changes,
+// execution_failed, etc.) return without calling the lander.
 // The caller is responsible for worktree cleanup after Run returns.
 //
 // When RefStore and ProjectRoot are set, Run pins a candidate ref under
 // refs/ddx/iterations/<attempt-id>/<cycle-index> before checks and review.
 // After a successful land the temporary ref is cleaned up; for preserved,
 // conflicted, parked, or otherwise non-landed outcomes the ref is retained so
-// operators can inspect and recover the candidate.
+// operators can inspect and recover the candidate. When Lander is nil the
+// coordinator finalizes the worker-side candidate state and retains the ref.
 func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (AttemptCycleResult, error) {
 	candidate, err := c.Pass.Execute(ctx, beadID)
 	if err != nil {
@@ -387,6 +389,11 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			return AttemptCycleResult{Report: report}, nil
 		}
 		break
+	}
+
+	if c.Lander == nil {
+		recordCycle(&candidate.Report, cycleReview, candidate.Report.Status)
+		return AttemptCycleResult{Report: candidate.Report}, nil
 	}
 
 	landed, err := c.Lander.Land(ctx, candidate)
