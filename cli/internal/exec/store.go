@@ -52,13 +52,13 @@ func (s *Store) buildGraph() (*docgraph.Graph, error) {
 }
 
 func NewStore(workingDir string) *Store {
-	base := ddxroot.JoinProject(workingDir, "exec")
+	base := execRootPath(workingDir)
 	beadRoot := ddxroot.JoinProject(workingDir)
 	return &Store{
 		WorkingDir:           workingDir,
 		ExecDir:              base,
-		DefinitionsDir:       filepath.Join(base, "definitions"),
-		RunsDir:              filepath.Join(base, "runs"),
+		DefinitionsDir:       execDefinitionsPath(workingDir),
+		RunsDir:              execRunsPath(workingDir),
 		DefinitionCollection: bead.NewStoreWithCollection(beadRoot, execDefinitionCollection),
 		RunCollection:        bead.NewStoreWithCollection(beadRoot, execRunCollection),
 	}

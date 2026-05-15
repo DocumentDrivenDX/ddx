@@ -19,6 +19,14 @@ const (
 	bundlesSubdir  = ".ddx/executions"
 )
 
+func runStoreDir(workingDir string) string {
+	return ddxroot.JoinProject(workingDir, "exec", "runs")
+}
+
+func bundlesDir(workingDir string) string {
+	return ddxroot.JoinProject(workingDir, "executions")
+}
+
 // LoadAttempts scans the FEAT-010 run-store first, then .ddx/executions
 // bundles, and returns one Attempt per execute-bead try. When the same
 // AttemptID appears in both sources the run-store record wins. Attempts
@@ -97,7 +105,7 @@ type runRecord struct {
 }
 
 func loadFromRunStore(workingDir string) ([]Attempt, error) {
-	dir := filepath.Join(workingDir, runStoreSubdir)
+	dir := runStoreDir(workingDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -166,7 +174,7 @@ type bundleResult struct {
 }
 
 func loadFromBundles(workingDir string) ([]Attempt, error) {
-	dir := filepath.Join(workingDir, bundlesSubdir)
+	dir := bundlesDir(workingDir)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {

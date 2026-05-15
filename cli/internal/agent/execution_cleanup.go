@@ -974,7 +974,7 @@ func (m *ExecutionCleanupManager) cleanupDurableLandedCandidateRefs(summary *Exe
 	if m == nil || m.GitOps == nil || m.ProjectRoot == "" {
 		return
 	}
-	resultRoot := filepath.Join(m.ProjectRoot, filepath.FromSlash(ExecuteBeadArtifactDir))
+	resultRoot := executeBeadArtifactRoot(m.ProjectRoot)
 	entries, err := os.ReadDir(resultRoot)
 	if err != nil {
 		return
@@ -1133,7 +1133,7 @@ func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary
 		}
 	}
 
-	root := filepath.Join(m.ProjectRoot, filepath.FromSlash(ExecuteBeadArtifactDir))
+	root := executeBeadArtifactRoot(m.ProjectRoot)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
@@ -1420,7 +1420,7 @@ func (m *ExecutionCleanupManager) pruneWorkerDirs(ctx context.Context, summary *
 }
 
 func scanCompleteEvidenceDirs(projectRoot, rootRel string, primaryFile, secondaryFile string, summary *ExecutionCleanupSummary) int {
-	root := filepath.Join(projectRoot, filepath.FromSlash(rootRel))
+	root := projectStatePath(projectRoot, rootRel)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return 0

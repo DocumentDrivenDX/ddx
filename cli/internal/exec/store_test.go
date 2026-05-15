@@ -24,6 +24,45 @@ func newExecTestWorkingDir(t *testing.T) string {
 	return t.TempDir()
 }
 
+func TestExecStoreUsesDDxRoot(t *testing.T) {
+	wd := newExecTestWorkingDir(t)
+	root := ddxroot.Path(context.Background(), wd)
+	legacyRoot := filepath.Join(wd, ddxroot.DirName)
+	require.NotEqual(t, legacyRoot, root)
+
+	store := NewStore(wd)
+	require.Equal(t, filepath.Join(root, "exec"), store.ExecDir)
+	require.Equal(t, filepath.Join(root, "exec", "definitions"), store.DefinitionsDir)
+	require.Equal(t, filepath.Join(root, "exec", "runs"), store.RunsDir)
+	require.Equal(t, filepath.Join(root, execRunAttachmentDir, "run-root"), store.runBundleDir("run-root"))
+
+	ref := runAttachmentRef(wd, "run-root", "stdout.log")
+	require.Equal(t, filepath.Join(execRunAttachmentDir, "run-root", "stdout.log"), ref)
+	require.Equal(t, filepath.Join(root, execRunAttachmentDir, "run-root", "stdout.log"), attachmentPath(wd, ref))
+
+	rec := RunRecord{
+		RunManifest: RunManifest{
+			RunID:        "run-root",
+			DefinitionID: "exec-definition",
+		},
+		Result: RunResult{
+			Stdout: "hello",
+		},
+	}
+	require.NoError(t, store.saveRunRecord(rec))
+	for _, path := range []string{
+		filepath.Join(root, execRunAttachmentDir, "run-root", "manifest.json"),
+		filepath.Join(root, execRunAttachmentDir, "run-root", "result.json"),
+		filepath.Join(root, execRunAttachmentDir, "run-root", "stdout.log"),
+		filepath.Join(root, execRunAttachmentDir, "run-root", "stderr.log"),
+	} {
+		_, err := os.Stat(path)
+		require.NoError(t, err)
+	}
+	_, err := os.Stat(filepath.Join(legacyRoot, execRunAttachmentDir, "run-root", "manifest.json"))
+	require.True(t, os.IsNotExist(err), "legacy in-tree exec attachment should not exist")
+}
+
 type mockAgentRunner struct {
 	result *agent.Result
 	err    error

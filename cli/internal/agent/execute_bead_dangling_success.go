@@ -53,7 +53,7 @@ type DanglingSuccessFinding struct {
 // The scan is intentionally cheap (directory listing + JSON decode per dir);
 // it only runs when a stale in_progress claim is detected, which is rare.
 func latestTaskSucceededResult(projectRoot, beadID string) *ExecuteBeadResult {
-	execDir := filepath.Join(projectRoot, ExecuteBeadArtifactDir)
+	execDir := executeBeadArtifactRoot(projectRoot)
 	entries, err := os.ReadDir(execDir)
 	if err != nil {
 		return nil
@@ -111,7 +111,7 @@ func isRevReachableFromHead(projectRoot, rev string) bool {
 //   - check whether result_rev is reachable from HEAD
 //   - report a DanglingSuccessFinding with Reachable=true/false
 func DetectDanglingSuccessBeads(projectRoot string) ([]DanglingSuccessFinding, error) {
-	execDir := filepath.Join(projectRoot, ExecuteBeadArtifactDir)
+	execDir := executeBeadArtifactRoot(projectRoot)
 
 	entries, err := os.ReadDir(execDir)
 	if err != nil {

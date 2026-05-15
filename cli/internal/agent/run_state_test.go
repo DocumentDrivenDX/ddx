@@ -18,6 +18,48 @@ func newRunStateProjectRoot(t *testing.T) string {
 	return t.TempDir()
 }
 
+func TestRunStatePathUsesDDxRoot(t *testing.T) {
+	projectRoot := newRunStateProjectRoot(t)
+	runGitInteg(t, projectRoot, "init", "-b", "main")
+	runGitInteg(t, projectRoot, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, projectRoot, "config", "user.name", "DDx Test")
+
+	root := ddxroot.Path(context.Background(), projectRoot)
+	legacyRoot := filepath.Join(projectRoot, ddxroot.DirName)
+	if root == legacyRoot {
+		t.Fatalf("expected convention DDx root, got legacy in-tree path %q", root)
+	}
+
+	if got := runStatePath(projectRoot); got != filepath.Join(root, RunStateFileName) {
+		t.Fatalf("runStatePath() = %q, want %q", got, filepath.Join(root, RunStateFileName))
+	}
+	if got := runStateDirPath(projectRoot); got != filepath.Join(root, RunStateDirName) {
+		t.Fatalf("runStateDirPath() = %q, want %q", got, filepath.Join(root, RunStateDirName))
+	}
+	if got := executeBeadArtifactPath(projectRoot, "attempt-path", "manifest.json"); got != filepath.Join(root, "executions", "attempt-path", "manifest.json") {
+		t.Fatalf("executeBeadArtifactPath() = %q, want %q", got, filepath.Join(root, "executions", "attempt-path", "manifest.json"))
+	}
+
+	state := RunState{
+		BeadID:       "ddx-path",
+		AttemptID:    "attempt-path",
+		StartedAt:    time.Date(2026, 5, 15, 12, 0, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt"),
+	}
+	if err := WriteRunState(projectRoot, state); err != nil {
+		t.Fatalf("WriteRunState: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, RunStateFileName)); err != nil {
+		t.Fatalf("expected convention run-state file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, RunStateDirName, "attempt-path.json")); err != nil {
+		t.Fatalf("expected convention run-state attempt file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(legacyRoot, RunStateFileName)); !os.IsNotExist(err) {
+		t.Fatalf("legacy in-tree run-state file should not exist: %v", err)
+	}
+}
+
 func TestRunState_WriteReadCleanupCycle(t *testing.T) {
 	projectRoot := newRunStateProjectRoot(t)
 
