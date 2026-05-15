@@ -502,10 +502,10 @@ func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 			wantDetail:  "ambiguous_scope: unclear scope",
 		},
 		{
-			name:        "legacy ambiguous is rejected",
+			name:        "legacy ambiguous maps to operator_required",
 			payload:     `{"classification":"ambiguous","reasoning":"unclear scope"}`,
-			wantOutcome: "",
-			wantDetail:  "",
+			wantOutcome: PreClaimIntakeOperatorRequired,
+			wantDetail:  "ambiguous_scope: unclear scope",
 		},
 		{
 			name:        "rewritten",
@@ -517,12 +517,6 @@ func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := decodePreClaimIntakePayloadResult(tt.payload)
-			if tt.wantOutcome == "" {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "legacy classification")
-				assert.Contains(t, err.Error(), string(PreClaimIntakeOperatorRequired))
-				return
-			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantOutcome, got.Outcome)
 			assert.Equal(t, tt.wantDetail, got.Detail)

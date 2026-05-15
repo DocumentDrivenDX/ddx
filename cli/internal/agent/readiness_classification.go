@@ -127,11 +127,11 @@ func normalizeReadinessClassification(classification string) string {
 	switch strings.ToLower(strings.TrimSpace(classification)) {
 	case "", "ready", "actionable_atomic", "atomic", "ok", "actionable", "pass":
 		return ReadinessClassificationReady
-	case "needs_refine", "actionable_but_rewritten", "rewritten":
+	case "needs_refine", "actionable_but_rewritten", "rewritten", "safely_refinable":
 		return ReadinessClassificationNeedsRefine
-	case "needs_split", "too_large", "too_large_decomposed", "decomposable":
+	case "needs_split", "too_large", "too_large_decomposed", "decomposable", "split":
 		return ReadinessClassificationNeedsSplit
-	case "operator_required", "human_review_required":
+	case "operator_required", "human_review_required", "ambiguous":
 		return ReadinessClassificationOperatorRequired
 	case "system_unready", "readiness_error", "intake_error":
 		return ReadinessClassificationSystemUnready

@@ -125,14 +125,22 @@ Return JSON only:
 }
 ```
 
+`score` is metadata only for the readiness rubric summary. It is not a routing,
+power-selection, or ordering input, and callers may ignore its numeric form.
+
+`waivers_applied` SHOULD be emitted as a JSON array of waiver objects. DDx
+tolerates legacy flat string arrays or a scalar string for backward
+compatibility, but new output must still use the array form above.
+
 Use the exact readiness classifications: `ready`, `needs_refine`,
 `needs_split`, `operator_required`, and `system_unready`.
 
 Legacy migration aliases only: older plans, beads, or session transcripts may
-mention `safely_refinable`, `rewritten`, or `needs_human`. Treat
-`safely_refinable` and `rewritten` as historical signals for `needs_refine`;
-treat `needs_human` as a historical signal for `operator_required`. Never emit
-those aliases in new readiness output.
+mention `ambiguous`, `safely_refinable`, `split`, `rewritten`, or
+`needs_human`. Treat `ambiguous` and `needs_human` as historical signals for
+`operator_required`; treat `safely_refinable` and `rewritten` as historical
+signals for `needs_refine`; treat `split` as a historical signal for
+`needs_split`. Never emit those aliases in new readiness output.
 
 `suggested_fixes` are advisory diagnostics for the author or operator. They
 describe what should improve, but DDx must not treat them as a machine-applied
@@ -165,10 +173,10 @@ choices that prevent an implementation attempt.
 be an object with `reason`, `verdict`, `evidence`, and
 `checkable_before_attempt`. It must not be an object or string.
 
-Legacy migration input aliases only: older records or prompts may mention `needs_human`.
-Treat that as a one-way migration signal for
-`operator_required` / `status=proposed`; never emit it as a current lifecycle
-classification.
+Legacy migration input aliases only: older records or prompts may mention the
+aliases above. Treat them as one-way migration signals to the canonical
+readiness classifications; never emit them as current lifecycle
+classifications.
 
 ## LINT MODE
 

@@ -233,8 +233,20 @@ func (p *preClaimReadinessWaiversPayload) UnmarshalJSON(data []byte) error {
 	if trimmed == "" || trimmed == "null" {
 		return nil
 	}
+	if trimmed[0] == '"' {
+		var reason string
+		if err := json.Unmarshal(data, &reason); err != nil {
+			return err
+		}
+		reason = strings.TrimSpace(reason)
+		if reason == "" {
+			return nil
+		}
+		*p = []preClaimReadinessWaiver{{Reason: reason}}
+		return nil
+	}
 	if trimmed[0] != '[' {
-		return fmt.Errorf("waivers_applied must be a JSON array")
+		return fmt.Errorf("waivers_applied must be a JSON array or string")
 	}
 	var raw []json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -640,7 +652,10 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 		"intake_error",
 		ReadinessClassificationNeedsRefine,
 		ReadinessClassificationNeedsSplit,
-		ReadinessClassificationOperatorRequired:
+		ReadinessClassificationOperatorRequired,
+		"ambiguous",
+		"safely_refinable",
+		"split":
 		return true
 	case "ready":
 		return readinessChecksPresent ||

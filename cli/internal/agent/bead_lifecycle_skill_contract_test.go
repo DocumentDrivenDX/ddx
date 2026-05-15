@@ -28,6 +28,8 @@ func readSkillCopies(t *testing.T) map[string]string {
 		"library":  filepath.Join(root, "library", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
 		"cli":      filepath.Join(root, "cli", "internal", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
 		"embedded": filepath.Join(root, "cli", "internal", "registry", "defaultplugin", "library", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		"agents":   filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		"claude":   filepath.Join(root, ".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
 	}
 	out := make(map[string]string, len(paths))
 	for name, path := range paths {
@@ -55,7 +57,7 @@ func TestBeadLifecycleSkillReadinessDocumentsRewriteContract(t *testing.T) {
 			for _, want := range []string{"`ready`", "`needs_refine`", "`needs_split`", "`operator_required`", "`system_unready`"} {
 				assert.Contains(t, body, want)
 			}
-			for _, want := range []string{"`safely_refinable`", "`rewritten`", "`needs_human`"} {
+			for _, want := range []string{"`ambiguous`", "`safely_refinable`", "`split`", "`rewritten`", "`needs_human`"} {
 				assert.Contains(t, body, want)
 			}
 			assert.Contains(t, body, "`suggested_fixes` are")
@@ -65,6 +67,10 @@ func TestBeadLifecycleSkillReadinessDocumentsRewriteContract(t *testing.T) {
 			assert.Contains(t, body, "`rewrite.changed_fields` is required")
 			assert.Contains(t, body, "`rewrite.description` / `rewrite.acceptance` must be strings, not arrays")
 			assert.Contains(t, body, "`readiness_checks` MUST be a JSON array")
+			assert.Contains(t, body, "`waivers_applied` SHOULD be emitted as a JSON array")
+			assert.Contains(t, body, "legacy flat string arrays or a scalar string")
+			assert.Contains(t, body, "`score` is metadata only for the readiness rubric summary")
+			assert.Contains(t, body, "power-selection, or ordering input")
 			assert.Contains(t, body, "every entry MUST")
 			assert.Contains(t, readiness, `"classification": "ready|needs_refine|needs_split|operator_required|system_unready"`)
 			assert.Contains(t, readiness, `"tractability": "tractable|too_large|ambiguous|blocked|unknown"`)
@@ -105,7 +111,7 @@ func TestPreClaimReadiness_DecodesDocumentedNeedsRefineRewrite(t *testing.T) {
 }
 
 func TestPreClaimReadiness_RejectsUnsupportedClassification(t *testing.T) {
-	_, err := decodePreClaimIntakePayloadResult(`{"classification":"safely_refinable","rationale":"needs rewrite","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`)
+	_, err := decodePreClaimIntakePayloadResult(`{"classification":"totally_new","rationale":"needs rewrite","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown classification")
 	for _, want := range []string{
@@ -151,6 +157,10 @@ func TestBeadLifecycleSkillFilesStayInSyncOnContractTerms(t *testing.T) {
 	library := strings.TrimSpace(skills["library"])
 	cli := strings.TrimSpace(skills["cli"])
 	embedded := strings.TrimSpace(skills["embedded"])
+	agents := strings.TrimSpace(skills["agents"])
+	claude := strings.TrimSpace(skills["claude"])
 	assert.Equal(t, library, cli, "skill copies should stay in sync for the documented lifecycle contract")
 	assert.Equal(t, library, embedded, "embedded default-plugin skill copy should stay in sync with the source skill")
+	assert.Equal(t, library, agents, ".agents skill copy should stay in sync with the source skill")
+	assert.Equal(t, library, claude, ".claude skill copy should stay in sync with the source skill")
 }

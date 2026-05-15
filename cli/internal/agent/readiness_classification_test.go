@@ -129,6 +129,36 @@ func TestReadinessClassification_BeadDefectsUseReadinessReasons(t *testing.T) {
 	}
 }
 
+func TestReadinessClassification_NormalizesAmbiguousLegacyToOperatorRequired(t *testing.T) {
+	got := ClassifyReadinessWithMode("ambiguous", nil, "scope is unclear", config.BeadQualityModeWarnOnly)
+	assert.Equal(t, ReadinessClassificationOperatorRequired, got.Classification)
+	assert.Equal(t, ReadinessReasonAmbiguousScope, got.Reason)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, got.IntakeOutcome)
+	assert.Empty(t, got.SystemReason)
+}
+
+func TestReadinessClassification_NormalizesSafelyRefinableLegacyToNeedsRefine(t *testing.T) {
+	warnOnly := ClassifyReadinessWithMode("safely_refinable", nil, "tighten acceptance", config.BeadQualityModeWarnOnly)
+	assert.Equal(t, ReadinessClassificationNeedsRefine, warnOnly.Classification)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.IntakeOutcome)
+	assert.Empty(t, warnOnly.SystemReason)
+
+	blocking := ClassifyReadinessWithMode("safely_refinable", nil, "tighten acceptance", config.BeadQualityModeBlock)
+	assert.Equal(t, ReadinessClassificationNeedsRefine, blocking.Classification)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.IntakeOutcome)
+	assert.Empty(t, blocking.SystemReason)
+}
+
+func TestReadinessClassification_NormalizesSplitLegacyToNeedsSplit(t *testing.T) {
+	for _, qualityMode := range []string{config.BeadQualityModeWarnOnly, config.BeadQualityModeBlock} {
+		got := ClassifyReadinessWithMode("split", nil, "multiple independent slices", qualityMode)
+		assert.Equal(t, ReadinessClassificationNeedsSplit, got.Classification)
+		assert.Equal(t, ReadinessReasonTooLarge, got.Reason)
+		assert.Equal(t, PreClaimIntakeTooLargeDecomposed, got.IntakeOutcome)
+		assert.Empty(t, got.SystemReason)
+	}
+}
+
 func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 	system, err := decodePreClaimIntakePayloadResult(`{"classification":"system_unready","rationale":"ResolveRoute: no viable routing candidate"}`)
 	require.NoError(t, err)
@@ -183,13 +213,72 @@ func TestPreClaimReadiness_AcceptsStringSuggestedFixes(t *testing.T) {
 	assert.Contains(t, got.Detail, "prompt polish only")
 }
 
-func TestPreClaimReadiness_DecodesWaiversAppliedStringList(t *testing.T) {
-	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"waivers_applied":["none"]}`
+func TestPreClaimReadiness_DecodesAmbiguousClassificationAsOperatorRequired(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"ambiguous","rationale":"scope is unclear","readiness_checks":[]}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, got.Outcome)
+	assert.Equal(t, ReadinessReasonAmbiguousScope, got.Reason)
+	assert.Empty(t, got.SystemReason)
+	assert.Contains(t, got.Detail, "scope is unclear")
+	assert.Contains(t, got.Detail, ReadinessReasonAmbiguousScope)
+}
+
+func TestPreClaimReadiness_DecodesSafelyRefinableClassificationAsNeedsRefine(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"safely_refinable","rationale":"tighten acceptance","readiness_checks":[]}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Empty(t, got.SystemReason)
+	assert.Contains(t, got.Detail, "tighten acceptance")
+}
+
+func TestPreClaimReadiness_DecodesSplitClassificationAsNeedsSplit(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"split","rationale":"multiple independent slices","readiness_checks":[]}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeTooLargeDecomposed, got.Outcome)
+	assert.Equal(t, ReadinessReasonTooLarge, got.Reason)
+	assert.Empty(t, got.SystemReason)
+	assert.Contains(t, got.Detail, "multiple independent slices")
+	assert.Contains(t, got.Detail, ReadinessReasonTooLarge)
+}
+
+func TestPreClaimReadiness_DecodesDecimalScoreAsMetadataOnly(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	assert.True(t, out.Score.Present)
+
+	got, err := decodePreClaimIntakePayloadResult(payload)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
+	assert.Empty(t, got.SystemReason)
+}
+
+func TestPreClaimReadiness_DecodesScalarWaiversAppliedAsMetadataOnly(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"waivers_applied":"none"}`
 
 	var out preClaimReadinessClassificationPromptResult
 	require.NoError(t, json.Unmarshal([]byte(payload), &out))
 	require.Len(t, out.WaiversApplied, 1)
 	assert.Equal(t, "none", out.WaiversApplied[0].Reason)
+	assert.Empty(t, out.WaiversApplied[0].Criteria)
+	assert.Empty(t, out.WaiversApplied[0].Evidence)
+
+	got, err := decodePreClaimIntakePayloadResult(payload)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
+	assert.Empty(t, got.SystemReason)
+}
+
+func TestPreClaimReadiness_DecodesFlatStringWaiversApplied(t *testing.T) {
+	payload := `{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[],"waivers_applied":["docs-only waiver"]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	require.Len(t, out.WaiversApplied, 1)
+	assert.Equal(t, "docs-only waiver", out.WaiversApplied[0].Reason)
 	assert.Empty(t, out.WaiversApplied[0].Criteria)
 	assert.Empty(t, out.WaiversApplied[0].Evidence)
 
