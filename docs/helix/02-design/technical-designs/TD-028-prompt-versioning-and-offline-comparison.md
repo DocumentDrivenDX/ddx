@@ -11,20 +11,22 @@ ddx:
 ## Status
 
 Design only. **Implementation is deferred.** This TD captures the
-measurement roadmap that grew out of Story 12 (optimize the static
-prompts that drive `ddx try`). Story 12 lands the
-mechanical pieces — guardrail dedup (B1/B2) and `prompt_sha` on the
-attempt manifest (B3). Everything below — the human-readable
-`prompt_version` field, the `DDX_PROMPT_VARIANT` environment selector
-for offline A/B, and the offline-comparison roadmap that consumes
-them — is intentionally NOT implemented in Story 12. A follow-up
-story will pick this up once we have enough post-Story-12 attempts
-in `.ddx/executions/` to know which slices actually move the cheap-
-route metrics.
+measurement roadmap that grew out of Story 12 v1 (optimize the static
+prompts that drive `ddx try`). Story 12 v1 is the shipped baseline: it
+lands guardrail dedup (B1/B2), `manifest.prompt_sha` (B3), the
+`TestExecuteBeadArtifacts_ManifestPromptSHA` regression guard, and the
+prompt-size CI fixture (`TestPromptSizeReport` plus the
+`prompt-size-report` artifact upload in `.github/workflows/ci.yml`).
+Everything below — the human-readable `prompt_version` field, the
+`DDX_PROMPT_VARIANT` environment selector for offline A/B, and the
+offline-comparison roadmap that consumes them — is intentionally NOT
+implemented in Story 12 v1. A follow-up story will pick this up once
+we have enough post-Story-12 attempts in `.ddx/executions/` to know
+which slices actually move the cheap-route metrics.
 
 ## Motivation
 
-The Story 12 rewrite tightens two ~1,000-word static prompts
+The Story 12 v1 rewrite tightens two ~1,000-word static prompts
 (`executeBeadInstructionsClaudeText`, `executeBeadInstructionsAgentText`
 in `cli/internal/agent/execute_bead.go`) by ~30% and adds a
 load-bearing-guardrail comment contract (FEAT-022 amendment). Two
@@ -58,8 +60,8 @@ runtime surface area.
 ### 1. `prompt_version` field on the attempt manifest
 
 `AttemptManifest` already carries `prompt_sha` (see
-`cli/internal/agent/execute_bead.go` field `PromptSHA` at line 177
-and `promptSHA(...)` at line 1478). Add an adjacent string field
+`AttemptManifest.PromptSHA` and `promptSHA(...)` in
+`cli/internal/agent/execute_bead.go`). Add an adjacent string field
 `prompt_version` populated from a per-(harness, variant) constant
 defined alongside the prompt body:
 
@@ -107,10 +109,10 @@ Add an opt-in environment variable read at prompt-render time:
 
 Constraints:
 
-- The selector ONLY swaps the static body. The harness selector
-  (`agent`/`fiz`/`embedded` → Agent variant, everything else →
-  Claude variant; see `execute_bead.go:1343`) is unchanged. An
-  experimental bundle must supply BOTH variants.
+- The selector ONLY swaps the static body. The existing harness
+  selector (`agent`/`fiz`/`embedded` → Agent variant, everything else
+  → Claude variant) is unchanged. An experimental bundle must supply
+  BOTH variants.
 - Unknown variant name is a hard error at render time, not a
   silent fallback. Operators running an A/B want loud failure if
   they typo the variant name.
@@ -195,14 +197,14 @@ Out of scope for this TD:
 
 ### Interactions with existing code
 
-- `buildPrompt` (`execute_bead.go:1392`): the natural insertion
-  point for variant lookup. It already owns prompt assembly; it
-  would gain a `selectVariant(harness, os.Getenv(...))` call
-  before reading the static constants.
+- `buildPrompt` in `cli/internal/agent/execute_bead.go`: the natural
+  insertion point for variant lookup. It already owns prompt
+  assembly; it would gain a `selectVariant(harness, os.Getenv(...))`
+  call before reading the static constants.
 - `manifest.json` writer
-  (`AttemptManifest` struct + the `PromptSHA:` write at
-  `execute_bead.go:1127`): gains two adjacent string fields. Same
-  serialization path.
+  (`AttemptManifest` plus the `prompt_sha` write path in
+  `cli/internal/agent/execute_bead.go`): gains two adjacent string
+  fields. Same serialization path.
 - `executions_mirror.go`: already mirrors manifests into
   `.ddx/executions/` for the resolver to read. No change.
 - `BuildReviewPromptBounded` and `beadReviewInstructions`: not
@@ -216,8 +218,7 @@ Out of scope for this TD:
 - This TD does not propose runtime variant rotation. One drain
   uses one variant.
 - This TD does not propose changing the harness selector. The
-  Claude/Agent split (`execute_bead.go:1343`) is preserved per
-  Story 12 AC10.
+  Claude/Agent split is preserved per Story 12 AC10.
 - This TD does not propose statistical-test infrastructure.
 
 ## Migration / rollout
@@ -250,19 +251,26 @@ When a follow-up story implements this:
 
 ## References
 
-- Story 12 plan: `/tmp/story-12-final.md` (working doc, see
-  "New TD" section).
+- Story 12 v1 shipped baseline:
+  `cli/internal/agent/execute_bead.go`
+  (`AttemptManifest.PromptSHA`, `promptSHA`, live prompt constants),
+  `cli/internal/agent/execute_bead_artifacts_test.go`
+  (`TestExecuteBeadArtifacts_ManifestPromptSHA`),
+  `cli/internal/agent/execute_bead_promptsize_test.go`
+  (`TestPromptSizeReport`, `TestPromptSHA_DeterministicAcrossRenders`),
+  and `.github/workflows/ci.yml`
+  (`prompt-size-report` artifact upload).
 - FEAT-022: `docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md`
   (minimum-prompt rule amendment from B4a).
 - Live prompt constants:
   `cli/internal/agent/execute_bead.go`
-  (`executeBeadInstructionsClaudeText` ~line 1208,
-  `executeBeadInstructionsAgentText` ~line 1274,
-  harness selector ~line 1343, `buildPrompt` ~line 1392).
+  (`executeBeadInstructionsClaudeText`,
+  `executeBeadInstructionsAgentText`,
+  harness selector, `buildPrompt`).
 - Manifest field landed in B3:
-  `AttemptManifest.PromptSHA` (~line 177),
-  populated at the manifest write site (~line 1127),
-  computed by `promptSHA` (~line 1478).
+  `AttemptManifest.PromptSHA`,
+  populated at the manifest write site,
+  computed by `promptSHA`.
 - Telemetry consumed by the offline-comparison roadmap:
   `cli/internal/agent/session_index.go`,
   `cli/internal/server/graphql/resolver_feat008.go`
