@@ -141,6 +141,16 @@ operator-prompt submissions.
   an operator-prompt execution gets an `origin_operator_prompt_id` event
   so provenance survives later edits, rebases, and history rewrites.
 
+### Project Identity (ddx-d30bc1a0)
+
+Per `ddx-d30bc1a0`, the web write path is project-scoped before it is
+prompt-scoped. The receiving node resolves the selected project's DDx root via
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, then
+persists the operator-prompt bead under `ddxroot.Path()/beads.jsonl`,
+attachments under `ddxroot.Path()/attachments/<bead-id>/`, and execution
+evidence under `ddxroot.Path()/executions/<attempt-id>/`. This keeps
+operator-prompt storage aligned across in-tree and convention-mode projects.
+
 ## Multi-node delegation policy
 
 Per ADR-007 (federation topology), prompts run on the client node that owns

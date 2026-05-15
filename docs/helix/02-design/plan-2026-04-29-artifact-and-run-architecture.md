@@ -12,9 +12,18 @@ Status: Approved (refined through 3 review rounds with codex + fresh-eyes)
 Two threads converge in this plan:
 
 1. **Generalize artifacts beyond markdown documents.** Diagrams, wireframes, hero images, prompts — text and binary — become first-class artifacts via media-type plurality and sidecar `.ddx.yaml` files. Generated artifacts are checked into git; regeneration is source-hash-driven.
-2. **Three-layer run architecture.** DDx owns three explicit layered primitives: `ddx run` (single agent invocation), `ddx try <bead>` (bead attempt in isolated worktree), `ddx work` (queue drain). The current two-class storage split (`.ddx/exec-runs/` vs `.ddx/executions/<attempt-id>/`) collapses into one substrate.
+2. **Three-layer run architecture.** DDx owns three explicit layered primitives: `ddx run` (single agent invocation), `ddx try <bead>` (bead attempt in isolated worktree), `ddx work` (queue drain). The current two-class storage split (`ddxroot.Path()/exec-runs/` vs `ddxroot.Path()/executions/<attempt-id>/`) collapses into one substrate.
 
 These threads converge: **generating an artifact is a layer-1 agent run** with `produces_artifact` metadata.
+
+## Project Identity (ddx-d30bc1a0)
+
+All project-scoped run and evidence paths in this plan are rooted at
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`, per
+`ddx-d30bc1a0`. In-tree projects still resolve to `<projectRoot>/.ddx`;
+convention-mode projects resolve to the per-project XDG directory derived from
+project identity. Any remaining literal legacy root-prefixed examples in older
+plan text should be read as `ddxroot.Path()/...`.
 
 ## Decisions (resolved through review)
 
@@ -23,7 +32,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 - **Server posture:** 100% read coverage on HTTP/MCP for all DDx state, sequenced by impact. Writes case-by-case as workflows demand. Only `artifactRegenerate` write surface added in this plan.
 - **Generated artifacts:** committed to git unconditionally. Size guard (50MB warn / 100MB hard error) with actionable git-lfs guidance; no auto-init / auto-`.gitattributes`.
 - **CONTRACT-003:** amendments allowed if FEAT-006 work surfaces gaps. The mountable Cobra root export (below) is a load-bearing audit item.
-- **Run substrate:** single on-disk shape; layer-2 and layer-3 add metadata. `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/` collapse.
+- **Run substrate:** single on-disk shape; layer-2 and layer-3 add metadata. `ddxroot.Path()/exec-runs/` and `ddxroot.Path()/executions/<attempt-id>/` collapse.
 - **No run-type catalog beyond the three layers.** Comparison, replay, benchmark, etc. are skill compositions, never enshrined in Go core or specs.
 - **Loop ownership sharpened:** DDx owns mechanical queue drain (`ddx work`); content-aware supervisory decisions (e.g., "comparison failed → enqueue reconciliation beads") remain plugin/HELIX territory.
 - **CLI verbs:** `ddx run` / `ddx try` / `ddx work` promoted to top-level. Hard-deprecate `legacy agent run`, `legacy agent execute-bead`, `legacy agent work` (exit non-zero with bare redirect message — no aliases, no grace period).
@@ -83,7 +92,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 ### FEAT-010-task-execution.md (substantial refactor)
 - Three-layer architecture explicit and load-bearing.
 - Substrate unification: one record shape; layer metadata.
-- Migrate `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/` to one layout.
+- Migrate `ddxroot.Path()/exec-runs/` and `ddxroot.Path()/executions/<attempt-id>/` to one layout.
 - Specify `ddx work` no-progress / stop conditions.
 - Narrow read-only amendment for `artifactRegenerate` only.
 - No run-type catalog beyond the three layers.
@@ -140,7 +149,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 
 ## Skill library (DDx-shipped workflows)
 
-Per FEAT-011's path model: source at `skills/ddx/`, embedded at `cli/internal/skills/ddx/`, init-time copies to `.claude/skills/ddx/`, `.agents/skills/ddx/`, `.ddx/skills/ddx/`.
+Per FEAT-011's path model: source at `skills/ddx/`, embedded at `cli/internal/skills/ddx/`, init-time copies to `.claude/skills/ddx/`, `.agents/skills/ddx/`, `ddxroot.Path()/skills/ddx/`.
 
 - `compare-prompts` — N-arm dispatch + aggregation (replaces `--quorum` flag and `agent benchmark`)
 - `replay-bead` — re-run with altered conditions, baseline diff (replaces `agent replay`)

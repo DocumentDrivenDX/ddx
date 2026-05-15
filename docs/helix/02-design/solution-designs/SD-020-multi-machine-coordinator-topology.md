@@ -79,10 +79,24 @@ Each machine needs:
 No additional configuration is required. Machines do not need to reach each
 other; they only need write access to the shared `origin`.
 
+## Project Identity (ddx-d30bc1a0)
+
+Per `ddx-d30bc1a0`, each machine resolves project-scoped DDx state through
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`. For
+multi-machine coordination, participating clones SHOULD share the same remote
+identity so convention-mode resolution converges on the same
+`<host>/<owner>/<repo>` project key. The no-remote local fallback is
+intentionally machine-local and is not a cross-machine identity contract.
+
+That means each machine's coordinator reads and writes its own local
+`ddxroot.Path()/beads.jsonl`, `ddxroot.Path()/executions/<attempt-id>/`, and
+`ddxroot.Path()/worktrees.json`; the shared git remote coordinates landing, not
+the project-state directory itself.
+
 ## Happy Path
 
 1. Worker on machine A claims a bead (bead is marked claimed in local
-   `beads.jsonl`; not yet visible on machine B).
+   `ddxroot.Path()/beads.jsonl`; not yet visible on machine B).
 2. Worker executes the bead in an isolated worktree.
 3. Land coordinator on machine A: `git fetch origin`, compare local target
    tip to the worker's BaseRev. When equal, fast-forward the local branch
@@ -166,9 +180,10 @@ git fetch origin && git reset --hard origin/<branch>
 
 ## Bead Visibility Across Machines
 
-Each machine's bead store (`beads.jsonl`) is local. A bead claimed on machine A
-is not visible as claimed on machine B unless both machines share or replicate
-`beads.jsonl` through external means. This design does **not** address that
+Each machine's bead store (`ddxroot.Path()/beads.jsonl`) is local. A bead
+claimed on machine A is not visible as claimed on machine B unless both
+machines share or replicate `ddxroot.Path()/beads.jsonl` through external
+means. This design does **not** address that
 synchronization. In practice:
 
 - For single-operator workflows, one machine drives the bead queue and the

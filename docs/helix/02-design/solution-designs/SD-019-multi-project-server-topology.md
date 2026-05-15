@@ -63,9 +63,19 @@ Runtime state is host+user scoped:
 ```
 
 State that describes the server instance never lives inside one project's
-`.ddx/` directory. The addr file and state file both belong to the operator
+`ddxroot.Path()` directory. The addr file and state file both belong to the operator
 (the user running the server), not to any project. One server per machine:
 the addr file is a single-entry file; a new server start overwrites it.
+
+### Project Identity (ddx-d30bc1a0)
+
+Per `ddx-d30bc1a0`, every project-scoped DDx path in this topology is rooted at
+`ddxroot.Path()`, shorthand here for `ddxroot.Path(ctx, projectRoot)`. In-tree
+projects still resolve to `<projectRoot>/.ddx`; convention-mode projects
+resolve to the per-project XDG directory derived from git remote identity (or
+the documented local fallback). The host+user registry stores checkout paths and
+resolved project IDs, but beads, workers, execution bundles, attachments, and
+other project state remain under that project's own `ddxroot.Path()`.
 
 ### Registry Population
 
@@ -197,7 +207,8 @@ Transient server caches are namespaced per project:
 - in-memory caches use the project id or derived project key
 - on-disk caches live under a per-project subdirectory in the configured cache
   root
-- project-local `.ddx/` data remains authoritative for that project only
+- project-local `ddxroot.Path()` data remains authoritative for that project
+  only
 
 No cache entry may assume that one project's document, bead, or agent-session
 state is valid for another project.
@@ -228,8 +239,9 @@ reaches into project B. Epic execution introduces a second worker type: an
 epic-scoped worker that owns one persistent epic branch and worktree for that
 project.
 
-Worker records live under the project's own `.ddx/workers/` directory, and
-execute-bead attempt artifacts live under `.ddx/executions/<attempt-id>/` in
+Worker records live under the project's own `ddxroot.Path()/workers/`
+directory, and execute-bead attempt artifacts live under
+`ddxroot.Path()/executions/<attempt-id>/` in
 the same project (FEAT-006). Host+user server state never absorbs those
 files; the user-level state file only tracks node identity and the project
 registry, not the replay-backed artifacts produced by a worker.
@@ -345,8 +357,9 @@ with parallel lifecycle semantics:
 
 - **Linux (systemd user unit)**
   - unit path: `~/.config/systemd/user/ddx-server.service`
-  - logs: `<workdir>/.ddx/logs/ddx-server.log` via `StandardOutput=append:`
-  - env file: `<workdir>/.ddx/server.env`
+  - logs: `ddxroot.Path()/logs/ddx-server.log` for the configured service
+    workdir via `StandardOutput=append:`
+  - env file: `~/.config/ddx/server.env`
   - restart: `Restart=on-failure`, `RestartSec=5`
   - install: `systemctl --user enable --now ddx-server.service`
 
@@ -390,7 +403,7 @@ This design should be covered by tests that verify:
   `/nodes/:nodeId/projects/:projectId/...`
 - work workers supervised by `WorkerManager` start, stream logs, and
   stop cleanly, producing attempt artifacts under the owning project's
-  `.ddx/executions/<attempt-id>/` directory
+  `ddxroot.Path()/executions/<attempt-id>/` directory
 - a worker running against one project cannot reach into another project's
   bead store, worktree, or execution artifacts
 
