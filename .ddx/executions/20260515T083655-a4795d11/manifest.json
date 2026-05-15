@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260515T083655-a4795d11",
+  "bead_id": "ddx-08b452ee",
+  "base_rev": "6e19bce477fe8f980c98824a13bfdbd040d157b2",
+  "created_at": "2026-05-15T08:37:00.300628932Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-08b452ee",
+    "title": "work: fail fast on stale DDx source checkout binary",
+    "description": "PROBLEM\nOperators can run `ddx work` from the DDx source checkout with an installed binary built from an older commit. That produced live workers still using old readiness/routing behavior even after the local source tree had been fixed. `ddx version` can warn, but `ddx work` and `ddx try` still proceed to claim beads and perform actual builds with stale code.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/cmd/command_factory.go:603` implements `warnIfInstalledBinaryBehindSource`, but it is only called from the `version` command path at `cli/cmd/command_factory.go:511`.\n- `cli/cmd/command_factory.go:169` runs the global pre-run version gate, but it checks `.ddx/versions.yaml` semver only and does not block a stale installed binary inside the DDx source repository.\n- `cli/cmd/work.go:130` and `cli/cmd/try.go:116` resolve the project root for execution, but neither refuses to build from an older DDx binary when the project root is the DDx source repo.\n\nPROPOSED FIX\nAdd an execution preflight for `ddx work` and `ddx try`: when running inside the DDx source repository, and the binary reports a concrete build commit that is an ancestor of the source checkout `HEAD` with one or more commits ahead, fail before queue scan, claim, readiness, or dispatch. The error must name the binary commit, source `HEAD`, project root, and the exact recovery command (`make install` from the source checkout). Keep `ddx version`, `ddx doctor`, `ddx init`, `ddx upgrade`, `help`, and `completion` usable for recovery. Do not make this a warning for worker commands.\n\nIN-SCOPE FILES\n- `cli/cmd/command_factory.go`\n- `cli/cmd/work.go`\n- `cli/cmd/try.go`\n- `cli/cmd/version_gate_test.go`\n- `cli/cmd/work_test.go`\n- `cli/cmd/try_test.go`\n\nNON-SCOPE\n- Do not change release semver gating against `.ddx/versions.yaml`.\n- Do not auto-run `make install` or mutate the operator's PATH.\n- Do not block dev binaries with `Version=dev` or binaries without a known commit.\n- Do not inspect workers from other projects; this preflight is scoped to the resolved project root.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./cmd -run 'TestWork_BlocksStaleSourceBinaryBeforeQueueScan|TestTry_BlocksStaleSourceBinaryBeforeClaim|TestVersionWarnsStaleSourceBinary|TestCheckVersionGate' -count=1` passes.\n2. `TestWork_BlocksStaleSourceBinaryBeforeQueueScan` proves no bead is claimed and no readiness/run service call occurs when the DDx source tree is ahead of the binary commit.\n3. `TestTry_BlocksStaleSourceBinaryBeforeClaim` proves `ddx try \u003cid\u003e` fails before claim/attempt evidence when the same stale-source condition is present.\n4. `ddx work` and `ddx try` error text includes the project root, binary commit, source HEAD, and `make install` recovery instruction.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:cli",
+      "area:execution",
+      "kind:bug",
+      "operator-ux",
+      "stale-binary"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-15T08:33:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1283521",
+      "spec-id": "FEAT-010",
+      "work-heartbeat-at": "2026-05-15T08:33:11.191178921Z"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260515T083655-a4795d11",
+    "prompt": ".ddx/executions/20260515T083655-a4795d11/prompt.md",
+    "manifest": ".ddx/executions/20260515T083655-a4795d11/manifest.json",
+    "result": ".ddx/executions/20260515T083655-a4795d11/result.json",
+    "checks": ".ddx/executions/20260515T083655-a4795d11/checks.json",
+    "usage": ".ddx/executions/20260515T083655-a4795d11/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-08b452ee-20260515T083655-a4795d11"
+  },
+  "prompt_sha": "6fdf2f2730ab05c49e03cbe7c715aba6bc2fd8af4d8ba81adea48bc835df0a53"
+}
