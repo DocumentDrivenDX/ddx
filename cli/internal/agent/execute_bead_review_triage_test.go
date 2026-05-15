@@ -1,11 +1,13 @@
 package agent
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/triage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -44,6 +46,14 @@ func findEvent(t *testing.T, store *bead.Store, beadID, kind string) *bead.BeadE
 	return nil
 }
 
+func triageDecisionBody(t *testing.T, ev *bead.BeadEvent) map[string]any {
+	t.Helper()
+	require.NotNil(t, ev)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+	return body
+}
+
 func newTriageTestStore(t *testing.T) (*bead.Store, *bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(t.TempDir())
@@ -54,8 +64,9 @@ func newTriageTestStore(t *testing.T) (*bead.Store, *bead.Bead) {
 }
 
 // TestApplyReviewTriageDecision_FirstBlockReAttempts verifies that the first
-// BLOCK on a bead chooses re_attempt_with_context: no powerClass hint is set, the
-// bead remains worker-runnable, and a triage-decision event records the action.
+// BLOCK on a bead chooses re_attempt_with_context: bead metadata is left
+// alone, the bead remains worker-runnable, and a triage-decision event records
+// the action.
 func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
@@ -75,9 +86,27 @@ func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	assert.Contains(t, ev.Summary, "re_attempt_with_context")
 }
 
+func TestApplyTriageActionDoesNotWriteTriagePowerHintKey(t *testing.T) {
+	store, b := newTriageTestStore(t)
+	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+
+	require.NoError(t, applyTriageAction(store, b.ID, "ddx", now, triage.ActionEscalatePower, string(escalation.PowerStandard), false))
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	if got.Extra != nil {
+		_, hasHint := got.Extra[TriagePowerHintKey]
+		assert.False(t, hasHint, "review triage must not persist retry-floor metadata")
+	}
+	ev := findEvent(t, store, b.ID, "triage-decision")
+	body := triageDecisionBody(t, ev)
+	assert.Equal(t, string(triage.ActionEscalatePower), body["action"])
+	assert.Equal(t, string(escalation.PowerSmart), body["next_power_class"])
+}
+
 // TestApplyReviewTriageDecision_SecondBlockEscalates verifies that the second
-// BLOCK chooses escalate_power: a powerClass-pin hint is written into bead.Extra
-// and a triage-decision event records the chosen action.
+// BLOCK chooses escalate_power and records the next power class as
+// triage-decision evidence without persisting bead metadata.
 func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
@@ -88,12 +117,16 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
-	require.NotNil(t, got.Extra)
-	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
+	if got.Extra != nil {
+		_, hasHint := got.Extra[TriagePowerHintKey]
+		assert.False(t, hasHint, "review triage must not persist retry-floor metadata")
+	}
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
 	assert.Contains(t, ev.Summary, "escalate_power")
-	assert.Contains(t, ev.Body, "smart")
+	body := triageDecisionBody(t, ev)
+	assert.Equal(t, string(triage.ActionEscalatePower), body["action"])
+	assert.Equal(t, string(escalation.PowerSmart), body["next_power_class"])
 }
 
 // TestApplyReviewTriageDecision_ThirdBlockOperatorRequired verifies that the
@@ -103,6 +136,12 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, store.Update(b.ID, func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[TriagePowerHintKey] = string(escalation.PowerSmart)
+	}))
 	require.NoError(t, store.Claim(b.ID, "worker"))
 	seedBlocks(t, store, b.ID, now, 3)
 
@@ -115,6 +154,7 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
 	assert.NotContains(t, got.Extra, "claimed-at")
+	assert.NotContains(t, got.Extra, TriagePowerHintKey, "operator_required should only clear stale legacy retry-floor metadata")
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Contains(t, meta.Reason, "operator-required")
 	assert.Equal(t, "ddx work", meta.Source)

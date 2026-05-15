@@ -541,8 +541,9 @@ func reviewResultHasACEvidence(res *ReviewResult) bool {
 // REQUEST_CHANGES review verdict has been recorded for `beadID`. It reads
 // prior review events to compute the BLOCK count, biases the result toward
 // re-attempt when the latest BLOCK was paired with a degraded reviewer
-// (kind:review-pairing-degraded), then applies the chosen action by writing
-// metadata, labels, and a kind:triage-decision event.
+// (kind:review-pairing-degraded), then applies the chosen action by recording
+// triage-decision evidence and, for operator-required, parking with legacy
+// cleanup.
 //
 // Errors from the underlying store are best-effort: callers continue
 // regardless so a triage-side failure cannot strand a bead in an
@@ -610,9 +611,11 @@ func latestBlockPairedDegraded(blocks, pairing []time.Time) bool {
 	return false
 }
 
-// applyTriageAction performs the side effects for a chosen Action: writes a
-// powerClass-pin hint into bead.Extra (escalate_power), moves the bead to proposed
-// for operator-required outcomes, and always records a triage-decision event.
+// applyTriageAction performs the side effects for a chosen Action. Review-block
+// escalation is attempt-scoped evidence only, recorded on the triage-decision
+// event body. Operator-required outcomes may park the bead to proposed while
+// clearing stale legacy retry-hint metadata, and every path records a
+// triage-decision event.
 func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, action triage.Action, currentPowerClass string, pairedDegraded bool) error {
 	body := map[string]any{
 		"action": string(action),
@@ -626,20 +629,14 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 	case triage.ActionEscalatePower:
 		nextPowerClass := nextEscalatedPowerClass(currentPowerClass)
 		body["next_power_class"] = string(nextPowerClass)
-		_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
-			if b.Extra == nil {
-				b.Extra = make(map[string]any)
-			}
-			b.Extra[TriagePowerHintKey] = string(nextPowerClass)
-		})
 	case triage.ActionOperatorRequired:
 		if err := store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
 			delete(b.Extra, TriagePowerHintKey)
-			// Migration-only cleanup: defensive removal for legacy rows that escaped
-			// the lifecycle migration or arrived via external import.
+			// Legacy cleanup only: defensive removal for stale retry-floor metadata
+			// left behind by older loop paths or external imports.
 			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 			clearReviewTriageClaimMetadata(b)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
