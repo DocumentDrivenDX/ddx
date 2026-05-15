@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -258,11 +259,22 @@ func executeBeadResultToReport(res *ExecuteBeadResult) ExecuteBeadReport {
 // additional git rev-list args like "--not", "SHA").
 func gitCommitCount(t *testing.T, projectRoot string, refAndArgs ...string) int {
 	t.Helper()
-	args := append([]string{"rev-list", "--count"}, refAndArgs...)
-	out := runGitInteg(t, projectRoot, args...)
-	n, err := strconv.Atoi(out)
+	n, err := gitCommitCountOutput(projectRoot, refAndArgs...)
 	require.NoError(t, err, "git rev-list --count %v", refAndArgs)
 	return n
+}
+
+func gitCommitCountOutput(projectRoot string, refAndArgs ...string) (int, error) {
+	args := append([]string{"rev-list", "--count"}, refAndArgs...)
+	out, err := runGitIntegOutput(projectRoot, args...)
+	if err != nil {
+		return 0, fmt.Errorf("git %v in %s: %w (%s)", args, projectRoot, err, out)
+	}
+	n, err := strconv.Atoi(out)
+	if err != nil {
+		return 0, fmt.Errorf("parse git rev-list count %q: %w", out, err)
+	}
+	return n, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -298,4 +310,267 @@ func countClosedBeads(t *testing.T, ddxDir string) int {
 // escapeForShell escapes a string for embedding in a single-quoted shell argument.
 func escapeForShell(s string) string {
 	return strings.ReplaceAll(s, "'", `'\''`)
+}
+
+func requireConcurrentScriptHarnessLandingInvariant(
+	t *testing.T,
+	projectRoot, ddxDir, initialSHA string,
+	results []*ExecuteBeadLoopResult,
+	errs []error,
+	beadCount int,
+) {
+	t.Helper()
+
+	failures := make([]string, 0)
+	totalAttempts := 0
+	totalSuccesses := 0
+	executedByBead := make(map[string]int, beadCount)
+
+	if len(results) != beadCount {
+		failures = append(failures, fmt.Sprintf("worker result count=%d, want %d", len(results), beadCount))
+	}
+	if len(errs) != beadCount {
+		failures = append(failures, fmt.Sprintf("worker error count=%d, want %d", len(errs), beadCount))
+	}
+
+	for i, err := range errs {
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("worker %d returned error: %v", i, err))
+		}
+	}
+
+	for i, result := range results {
+		if result == nil {
+			failures = append(failures, fmt.Sprintf("worker %d returned nil loop result", i))
+			continue
+		}
+		totalAttempts += result.Attempts
+		totalSuccesses += result.Successes
+		for _, report := range result.Results {
+			executedByBead[report.BeadID]++
+			if report.Status != ExecuteBeadStatusSuccess {
+				failures = append(failures,
+					fmt.Sprintf("worker %d reported bead %s status=%s detail=%q", i, report.BeadID, report.Status, report.Detail))
+			}
+		}
+	}
+
+	if totalAttempts != beadCount {
+		failures = append(failures, fmt.Sprintf("total attempts=%d, want %d", totalAttempts, beadCount))
+	}
+	if totalSuccesses != beadCount {
+		failures = append(failures, fmt.Sprintf("total successes=%d, want %d", totalSuccesses, beadCount))
+	}
+
+	for i := 1; i <= beadCount; i++ {
+		beadID := fmt.Sprintf("ddx-int-%04d", i)
+		if got := executedByBead[beadID]; got != 1 {
+			failures = append(failures, fmt.Sprintf("bead %s executed %d times, want exactly once", beadID, got))
+		}
+	}
+
+	store := bead.NewStore(ddxDir)
+	all, err := store.List("", "", nil)
+	if err != nil {
+		failures = append(failures, fmt.Sprintf("list beads: %v", err))
+	} else {
+		byID := make(map[string]bead.Bead, len(all))
+		closedCount := 0
+		for _, item := range all {
+			byID[item.ID] = item
+			if item.Status == bead.StatusClosed {
+				closedCount++
+			}
+		}
+		if len(all) != beadCount {
+			failures = append(failures, fmt.Sprintf("bead count=%d, want %d", len(all), beadCount))
+		}
+		if closedCount != beadCount {
+			failures = append(failures, fmt.Sprintf("closed bead count=%d, want %d", closedCount, beadCount))
+		}
+		for i := 1; i <= beadCount; i++ {
+			beadID := fmt.Sprintf("ddx-int-%04d", i)
+			item, ok := byID[beadID]
+			if !ok {
+				failures = append(failures, fmt.Sprintf("missing bead row for %s", beadID))
+				continue
+			}
+			if item.Status != bead.StatusClosed {
+				failures = append(failures, fmt.Sprintf("bead %s status=%s, want closed", beadID, item.Status))
+			}
+			if closingSHA := extraString(item.Extra, "closing_commit_sha"); closingSHA == "" {
+				failures = append(failures, fmt.Sprintf("bead %s missing closing_commit_sha", beadID))
+			}
+		}
+	}
+
+	commitsOnMain, err := gitCommitCountOutput(projectRoot, "HEAD", "--not", initialSHA)
+	if err != nil {
+		failures = append(failures, fmt.Sprintf("count commits on main: %v", err))
+	} else if commitsOnMain < beadCount {
+		failures = append(failures,
+			fmt.Sprintf("commits on main since seed=%d, want at least %d", commitsOnMain, beadCount))
+	}
+
+	for i := 1; i <= beadCount; i++ {
+		fileName := fmt.Sprintf("bead-%04d.txt", i)
+		out, err := runGitIntegOutput(projectRoot, "show", "HEAD:"+fileName)
+		if err != nil {
+			failures = append(failures,
+				fmt.Sprintf("HEAD:%s not reachable: %v (%s)", fileName, err, strings.TrimSpace(out)))
+		}
+	}
+
+	if len(failures) == 0 {
+		return
+	}
+
+	t.Fatalf("concurrent script-harness landing invariant failed:\n- %s\n\nDiagnostics:\n%s",
+		strings.Join(failures, "\n- "),
+		formatConcurrentLandingDiagnostics(projectRoot, ddxDir, results, errs),
+	)
+}
+
+func formatConcurrentLandingDiagnostics(projectRoot, ddxDir string, results []*ExecuteBeadLoopResult, errs []error) string {
+	var b strings.Builder
+
+	b.WriteString("workers:\n")
+	for i := 0; i < maxLandingDiagInt(len(results), len(errs)); i++ {
+		var (
+			result *ExecuteBeadLoopResult
+			err    error
+		)
+		if i < len(results) {
+			result = results[i]
+		}
+		if i < len(errs) {
+			err = errs[i]
+		}
+		b.WriteString(fmt.Sprintf("  worker-%d err=%v", i, err))
+		if result == nil {
+			b.WriteString(" result=<nil>\n")
+			continue
+		}
+		b.WriteString(fmt.Sprintf(
+			" attempts=%d successes=%d failures=%d stop=%q exit=%q no_ready=%t no_ready_detail=%+v\n",
+			result.Attempts,
+			result.Successes,
+			result.Failures,
+			result.StopCondition,
+			result.ExitReason,
+			result.NoReadyWork,
+			result.NoReadyWorkDetail,
+		))
+		for _, report := range result.Results {
+			b.WriteString(fmt.Sprintf(
+				"    bead=%s status=%s detail=%q attempt=%s result_rev=%s landed_rev=%s preserve_ref=%s\n",
+				report.BeadID,
+				report.Status,
+				report.Detail,
+				report.AttemptID,
+				report.ResultRev,
+				report.LandedRev,
+				report.PreserveRef,
+			))
+		}
+	}
+
+	store := bead.NewStore(ddxDir)
+	all, err := store.List("", "", nil)
+	if err != nil {
+		b.WriteString(fmt.Sprintf("beads: list error: %v\n", err))
+	} else {
+		sort.Slice(all, func(i, j int) bool { return all[i].ID < all[j].ID })
+		closedCount := 0
+		b.WriteString("bead lifecycle summary:\n")
+		for _, item := range all {
+			if item.Status == bead.StatusClosed {
+				closedCount++
+			}
+			events, eventsErr := store.Events(item.ID)
+			lastKinds := ""
+			if eventsErr != nil {
+				lastKinds = "events-error:" + eventsErr.Error()
+			} else {
+				lastKinds = tailEventKinds(events, 3)
+			}
+			b.WriteString(fmt.Sprintf(
+				"  %s status=%s owner=%s closing_commit_sha=%s work_last_status=%s events=%d last_events=%s\n",
+				item.ID,
+				item.Status,
+				item.Owner,
+				extraString(item.Extra, "closing_commit_sha"),
+				extraString(item.Extra, "work-last-status"),
+				len(events),
+				lastKinds,
+			))
+		}
+		b.WriteString(fmt.Sprintf("  closed_count=%d total=%d\n", closedCount, len(all)))
+		if breakdown, breakdownErr := store.ReadyExecutionBreakdown(); breakdownErr != nil {
+			b.WriteString(fmt.Sprintf("queue breakdown error: %v\n", breakdownErr))
+		} else {
+			b.WriteString(fmt.Sprintf(
+				"queue breakdown: ready=%v dependency_waiting=%v proposed=%v retry_cooldown=%v external_blocked=%v not_eligible=%v superseded=%v epics=%v epic_closure_candidates=%v next_retry_after=%s human_review_blocked_total=%d\n",
+				breakdown.ExecutionReady,
+				breakdown.DependencyWaiting,
+				breakdown.ProposedOperatorAttention,
+				breakdown.RetryCooldown,
+				breakdown.ExternalBlocked,
+				breakdown.NotEligible,
+				breakdown.Superseded,
+				breakdown.Epics,
+				breakdown.EpicClosureCandidates,
+				breakdown.NextRetryAfter,
+				breakdown.HumanReviewBlockedTotal,
+			))
+		}
+	}
+
+	b.WriteString("git refs:\n")
+	head, headErr := runGitIntegOutput(projectRoot, "rev-parse", "HEAD")
+	b.WriteString(fmt.Sprintf("  HEAD=%s err=%v\n", strings.TrimSpace(head), headErr))
+	refs, refsErr := runGitIntegOutput(projectRoot, "for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/ddx/iterations")
+	if refsErr != nil {
+		b.WriteString(fmt.Sprintf("  for-each-ref error: %v\n", refsErr))
+	} else if strings.TrimSpace(refs) == "" {
+		b.WriteString("  (no refs)\n")
+	} else {
+		for _, line := range strings.Split(strings.TrimSpace(refs), "\n") {
+			b.WriteString("  " + line + "\n")
+		}
+	}
+
+	return b.String()
+}
+
+func extraString(extra map[string]any, key string) string {
+	if extra == nil {
+		return ""
+	}
+	raw, ok := extra[key]
+	if !ok || raw == nil {
+		return ""
+	}
+	return strings.TrimSpace(fmt.Sprint(raw))
+}
+
+func tailEventKinds(events []bead.BeadEvent, n int) string {
+	if len(events) == 0 {
+		return "(none)"
+	}
+	if n > len(events) {
+		n = len(events)
+	}
+	kinds := make([]string, 0, n)
+	for _, event := range events[len(events)-n:] {
+		kinds = append(kinds, event.Kind)
+	}
+	return strings.Join(kinds, ",")
+}
+
+func maxLandingDiagInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

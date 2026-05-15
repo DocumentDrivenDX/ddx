@@ -409,7 +409,10 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 
 	// Run n workers concurrently. Each worker loops until no more ready beads.
 	// The store's atomic Claim ensures each bead is executed exactly once.
+	// A start barrier makes the concurrency pressure deterministic across runs.
 	var wg sync.WaitGroup
+	ready := make(chan struct{}, n)
+	start := make(chan struct{})
 	results := make([]*ExecuteBeadLoopResult, n)
 	errs := make([]error, n)
 	for i := 0; i < n; i++ {
@@ -417,6 +420,8 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			ready <- struct{}{}
+			<-start
 			worker := &ExecuteBeadWorker{Store: store, Executor: dispatchExec}
 			cfgOpts := config.TestLoopConfigOpts{Assignee: fmt.Sprintf("worker-%d", i)}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
@@ -425,33 +430,13 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 			})
 		}()
 	}
+	for i := 0; i < n; i++ {
+		<-ready
+	}
+	close(start)
 	wg.Wait()
 
-	for i, e := range errs {
-		require.NoError(t, e, "worker %d returned error", i)
-	}
-
-	// All 5 beads must be closed.
-	closedCount := countClosedBeads(t, ddxDir)
-	assert.Equal(t, n, closedCount, "all 5 beads must be closed")
-
-	// At least n iteration commits must have landed on main beyond the
-	// initial seed. Merge vs. fast-forward is not asserted here — this
-	// test's executor holds a per-projectRoot mutex across ExecuteBead+Land
-	// so everything effectively serializes and every land fast-forwards.
-	// Merge-path coverage lives in TestLand_MergeRequired and
-	// TestLandCoordinatorIntegration.
-	commitsOnMain := gitCommitCount(t, projectRoot, "HEAD", "--not", initialSHA)
-	assert.GreaterOrEqual(t, commitsOnMain, n,
-		"at least %d iteration commits must be on main", n)
-
-	// All 5 bead-specific files must be reachable via HEAD (Land() only advances
-	// the ref; working tree checkout is not updated).
-	for i := 1; i <= n; i++ {
-		fileName := fmt.Sprintf("bead-%04d.txt", i)
-		out, err := runGitIntegOutput(projectRoot, "show", "HEAD:"+fileName)
-		assert.NoError(t, err, "HEAD:%s must be reachable on main: %s", fileName, out)
-	}
+	requireConcurrentScriptHarnessLandingInvariant(t, projectRoot, ddxDir, initialSHA, results, errs, n)
 }
 
 // ---------------------------------------------------------------------------
