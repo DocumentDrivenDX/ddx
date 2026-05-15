@@ -105,6 +105,10 @@ library:
 
 	out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
 	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "config", "user.name", "Test").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "config", "user.email", "test@test.com").CombinedOutput()
+	require.NoError(t, err, string(out))
 	out, err = exec.Command("git", "-C", projectRoot, "add", "-A").CombinedOutput()
 	require.NoError(t, err, string(out))
 	out, err = exec.Command("git", "-C", projectRoot, "-c", "user.name=Test", "-c", "user.email=test@test.com", "commit", "-m", "init").CombinedOutput()
@@ -183,6 +187,10 @@ library:
 `), 0o644))
 
 	out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "config", "user.name", "Test").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "config", "user.email", "test@test.com").CombinedOutput()
 	require.NoError(t, err, string(out))
 	out, err = exec.Command("git", "-C", projectRoot, "add", "-A").CombinedOutput()
 	require.NoError(t, err, string(out))
