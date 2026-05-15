@@ -1,0 +1,17 @@
+ddx-d1fce33d	checks: residual production-reachability — cmd runtime helpers (5 unreached)
+ddx-b6859802	checks: residual production-reachability — cmd test helpers
+ddx-bb8e7d07	checks: residual production-reachability — internal/agent candidate cycle
+ddx-5baa6a15	checks: residual production-reachability — internal/agent compare and benchmark
+ddx-2f964bac	checks: residual production-reachability — internal/agent execute-bead flow
+ddx-496a9346	checks: residual production-reachability — internal/agent support utilities
+ddx-97375097	checks: residual production-reachability — internal/agent runtime support
+ddx-01cce920	checks: residual production-reachability — internal/artifacttypes
+ddx-bd927304	checks: residual production-reachability — internal/bead core
+ddx-8bc79046	checks: residual production-reachability — internal/bead axon subscription
+ddx-a7a11433	checks: residual production-reachability — internal/ddxroot
+ddx-dea7f96b	checks: residual production-reachability — internal/docprose
+ddx-c6b07648	checks: residual production-reachability — internal/registry installer
+ddx-f89eb4ec	checks: residual production-reachability — internal/server review session
+ddx-83d662a9	checks: residual production-reachability — internal/server review prompt
+ddx-b273b31f	checks: residual production-reachability — internal/server providers and workers
+ddx-17c54930	checks: residual production-reachability — internal/testutils fixture repo
