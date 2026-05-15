@@ -1,7 +1,9 @@
 package try
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -114,26 +116,66 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 
 type VerificationCommandRunner func(ctx context.Context, projectRoot, command string) (exitCode int, output string, err error)
 
-const DefaultVerificationCommandTimeout = 60 * time.Second
+const DefaultVerificationCommandTimeout = 30 * time.Minute
 
 func DefaultVerificationCommandRunner(ctx context.Context, projectRoot, command string) (int, string, error) {
-	cctx, cancel := context.WithTimeout(ctx, DefaultVerificationCommandTimeout)
+	return DefaultVerificationCommandRunnerWithTimeout(DefaultVerificationCommandTimeout)(ctx, projectRoot, command)
+}
+
+func DefaultVerificationCommandRunnerWithTimeout(timeout time.Duration) VerificationCommandRunner {
+	if timeout <= 0 {
+		timeout = DefaultVerificationCommandTimeout
+	}
+	return func(ctx context.Context, projectRoot, command string) (int, string, error) {
+		return runVerificationCommand(ctx, projectRoot, command, timeout)
+	}
+}
+
+func runVerificationCommand(ctx context.Context, projectRoot, command string, timeout time.Duration) (int, string, error) {
+	cctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(cctx, "/bin/sh", "-c", command)
+	cmd := exec.Command("/bin/sh", "-c", command)
+	setVerificationCommandProcessGroup(cmd)
 	if projectRoot != "" {
 		cmd.Dir = projectRoot
 	}
-	out, err := cmd.CombinedOutput()
-	if cctx.Err() == context.DeadlineExceeded {
-		return -1, truncateVerifyOutput(string(out)), fmt.Errorf("verification_command timed out after %s", DefaultVerificationCommandTimeout)
+	output, err := runVerificationCommandAndWait(cctx, cmd)
+	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
+		return -1, truncateVerifyOutput(output), fmt.Errorf("verification_command timed out after %s", timeout)
+	}
+	if errors.Is(cctx.Err(), context.Canceled) {
+		return -1, truncateVerifyOutput(output), cctx.Err()
 	}
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		return exitErr.ExitCode(), truncateVerifyOutput(string(out)), nil
+		return exitErr.ExitCode(), truncateVerifyOutput(output), nil
 	}
 	if err != nil {
-		return -1, truncateVerifyOutput(string(out)), err
+		return -1, truncateVerifyOutput(output), err
 	}
-	return 0, truncateVerifyOutput(string(out)), nil
+	return 0, truncateVerifyOutput(output), nil
+}
+
+func runVerificationCommandAndWait(ctx context.Context, cmd *exec.Cmd) (string, error) {
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Start(); err != nil {
+		return out.String(), err
+	}
+
+	waitCh := make(chan error, 1)
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
+
+	select {
+	case err := <-waitCh:
+		return out.String(), err
+	case <-ctx.Done():
+		killVerificationCommandProcessGroup(cmd)
+		<-waitCh
+		return out.String(), ctx.Err()
+	}
 }
 
 func truncateVerifyOutput(s string) string {

@@ -233,6 +233,10 @@ type WorkersConfig struct {
 	// via time.ParseDuration (e.g. "6h"). Empty string uses the built-in
 	// default (6h). See SD-024 §Config extensions §WorkersConfig.
 	NoProgressCooldown string `yaml:"no_progress_cooldown,omitempty" json:"no_progress_cooldown,omitempty"`
+	// NoChangesVerificationTimeout bounds a synchronous verification_command
+	// emitted via no_changes_rationale.txt. Parsed via time.ParseDuration
+	// (e.g. "30m"). Empty string uses the built-in default (30m).
+	NoChangesVerificationTimeout string `yaml:"no_changes_verification_timeout,omitempty" json:"no_changes_verification_timeout,omitempty"`
 	// MaxNoChangesBeforeClose caps the number of consecutive no_changes
 	// attempts the work tolerates before closing the bead as
 	// no-progress. Zero or unset uses the built-in default (3). Negative
@@ -250,6 +254,7 @@ type WorkersConfig struct {
 // resolvers into the loop.
 const (
 	defaultNoProgressCooldown      = 6 * time.Hour
+	defaultNoChangesVerifyTimeout  = 30 * time.Minute
 	defaultMaxNoChangesBeforeClose = 3
 	defaultHeartbeatInterval       = 30 * time.Second
 )
@@ -263,6 +268,19 @@ func (w *WorkersConfig) ResolveNoProgressCooldown() time.Duration {
 	d, err := time.ParseDuration(w.NoProgressCooldown)
 	if err != nil || d <= 0 {
 		return defaultNoProgressCooldown
+	}
+	return d
+}
+
+// ResolveNoChangesVerificationTimeout returns the effective synchronous
+// verification_command timeout. Defaults to 30m when unset or unparseable.
+func (w *WorkersConfig) ResolveNoChangesVerificationTimeout() time.Duration {
+	if w == nil || w.NoChangesVerificationTimeout == "" {
+		return defaultNoChangesVerifyTimeout
+	}
+	d, err := time.ParseDuration(w.NoChangesVerificationTimeout)
+	if err != nil || d <= 0 {
+		return defaultNoChangesVerifyTimeout
 	}
 	return d
 }

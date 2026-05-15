@@ -113,6 +113,7 @@ func TestValidateResolve(t *testing.T) {
 
 		assert.Equal(t, 3, rcfg.ReviewMaxRetries(), "default review retries")
 		assert.Equal(t, 6*time.Hour, rcfg.NoProgressCooldown(), "default no-progress cooldown")
+		assert.Equal(t, 30*time.Minute, rcfg.NoChangesVerificationTimeout(), "default no_changes verification timeout")
 		assert.Equal(t, 3, rcfg.MaxNoChangesBeforeClose(), "default max no_changes")
 		assert.Equal(t, 30*time.Second, rcfg.HeartbeatInterval(), "default heartbeat")
 		assert.Empty(t, rcfg.Harness())
@@ -184,14 +185,16 @@ func TestValidateResolve(t *testing.T) {
 		cfg := &NewConfig{
 			Version: "1.0",
 			Workers: &WorkersConfig{
-				NoProgressCooldown:      "2h",
-				MaxNoChangesBeforeClose: &maxNoChanges,
-				HeartbeatInterval:       "15s",
+				NoProgressCooldown:           "2h",
+				NoChangesVerificationTimeout: "75s",
+				MaxNoChangesBeforeClose:      &maxNoChanges,
+				HeartbeatInterval:            "15s",
 			},
 		}
 		rcfg := cfg.Resolve(CLIOverrides{})
 
 		assert.Equal(t, 2*time.Hour, rcfg.NoProgressCooldown())
+		assert.Equal(t, 75*time.Second, rcfg.NoChangesVerificationTimeout())
 		assert.Equal(t, 7, rcfg.MaxNoChangesBeforeClose())
 		assert.Equal(t, 15*time.Second, rcfg.HeartbeatInterval())
 	})

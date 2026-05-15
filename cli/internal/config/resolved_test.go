@@ -17,28 +17,29 @@ import (
 // directly via the unexported sentinel.
 func sealedFixture() ResolvedConfig {
 	return ResolvedConfig{
-		sealed:                  true,
-		assignee:                "bot",
-		reviewMaxRetries:        7,
-		noProgressCooldown:      11 * time.Second,
-		maxNoChangesBeforeClose: 4,
-		heartbeatInterval:       2 * time.Minute,
-		harness:                 "claude",
-		model:                   "claude-opus-4-7",
-		provider:                "anthropic",
-		profile:                 "default",
-		minPowerHint:            "cheap",
-		maxPowerHint:            "smart",
-		effort:                  "high",
-		permissions:             "elevated",
-		timeout:                 30 * time.Second,
-		wallClock:               6 * time.Hour,
-		contextBudget:           "200k",
-		evidenceCaps:            evidence.DefaultCaps(),
-		sessionLogDir:           "/tmp/sessions",
-		mirrorConfig:            &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
-		reasoningLevels:         map[string][]string{"smart": {"high"}},
-		beadQualityMode:         BeadQualityModeBlock,
+		sealed:                       true,
+		assignee:                     "bot",
+		reviewMaxRetries:             7,
+		noProgressCooldown:           11 * time.Second,
+		noChangesVerificationTimeout: 13 * time.Second,
+		maxNoChangesBeforeClose:      4,
+		heartbeatInterval:            2 * time.Minute,
+		harness:                      "claude",
+		model:                        "claude-opus-4-7",
+		provider:                     "anthropic",
+		profile:                      "default",
+		minPowerHint:                 "cheap",
+		maxPowerHint:                 "smart",
+		effort:                       "high",
+		permissions:                  "elevated",
+		timeout:                      30 * time.Second,
+		wallClock:                    6 * time.Hour,
+		contextBudget:                "200k",
+		evidenceCaps:                 evidence.DefaultCaps(),
+		sessionLogDir:                "/tmp/sessions",
+		mirrorConfig:                 &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
+		reasoningLevels:              map[string][]string{"smart": {"high"}},
+		beadQualityMode:              BeadQualityModeBlock,
 	}
 }
 
@@ -75,6 +76,7 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"Assignee":                           func(r ResolvedConfig) { _ = r.Assignee() },
 		"ReviewMaxRetries":                   func(r ResolvedConfig) { _ = r.ReviewMaxRetries() },
 		"NoProgressCooldown":                 func(r ResolvedConfig) { _ = r.NoProgressCooldown() },
+		"NoChangesVerificationTimeout":       func(r ResolvedConfig) { _ = r.NoChangesVerificationTimeout() },
 		"MaxNoChangesBeforeClose":            func(r ResolvedConfig) { _ = r.MaxNoChangesBeforeClose() },
 		"HeartbeatInterval":                  func(r ResolvedConfig) { _ = r.HeartbeatInterval() },
 		"Harness":                            func(r ResolvedConfig) { _ = r.Harness() },
@@ -127,6 +129,15 @@ func TestResolvedConfigNoProgressCooldownAccessor(t *testing.T) {
 	}
 	if got := (ResolvedConfig{sealed: true}).NoProgressCooldown(); got != 0 {
 		t.Fatalf("zero-after-seal NoProgressCooldown = %v, want 0", got)
+	}
+}
+
+func TestResolvedConfigNoChangesVerificationTimeoutAccessor(t *testing.T) {
+	if got := sealedFixture().NoChangesVerificationTimeout(); got != 13*time.Second {
+		t.Fatalf("NoChangesVerificationTimeout = %v, want 13s", got)
+	}
+	if got := (ResolvedConfig{sealed: true}).NoChangesVerificationTimeout(); got != 0 {
+		t.Fatalf("zero-after-seal NoChangesVerificationTimeout = %v, want 0", got)
 	}
 }
 

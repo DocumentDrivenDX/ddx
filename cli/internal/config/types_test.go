@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// TestWorkersConfigResolvers covers SD-024 Stage 1: the three new
-// WorkersConfig fields (NoProgressCooldown, MaxNoChangesBeforeClose,
+// TestWorkersConfigResolvers covers SD-024 Stage 1: the worker-facing
+// WorkersConfig fields (NoProgressCooldown,
+// NoChangesVerificationTimeout, MaxNoChangesBeforeClose,
 // HeartbeatInterval) resolve to the documented defaults when unset and
 // to overrides when populated. The work is not yet wired to
 // these resolvers — that lands in beads 6/7.
@@ -39,6 +40,37 @@ func TestWorkersConfigResolvers(t *testing.T) {
 		w := &WorkersConfig{NoProgressCooldown: "2h30m"}
 		if got := w.ResolveNoProgressCooldown(); got != 2*time.Hour+30*time.Minute {
 			t.Errorf("override = %s, want 2h30m", got)
+		}
+	})
+
+	t.Run("NoChangesVerificationTimeout_default_when_nil_receiver", func(t *testing.T) {
+		var w *WorkersConfig
+		if got := w.ResolveNoChangesVerificationTimeout(); got != 30*time.Minute {
+			t.Errorf("nil receiver = %s, want 30m", got)
+		}
+	})
+	t.Run("NoChangesVerificationTimeout_default_when_empty", func(t *testing.T) {
+		w := &WorkersConfig{}
+		if got := w.ResolveNoChangesVerificationTimeout(); got != 30*time.Minute {
+			t.Errorf("empty = %s, want 30m", got)
+		}
+	})
+	t.Run("NoChangesVerificationTimeout_default_when_unparseable", func(t *testing.T) {
+		w := &WorkersConfig{NoChangesVerificationTimeout: "not-a-duration"}
+		if got := w.ResolveNoChangesVerificationTimeout(); got != 30*time.Minute {
+			t.Errorf("unparseable = %s, want 30m", got)
+		}
+	})
+	t.Run("NoChangesVerificationTimeout_default_when_non_positive", func(t *testing.T) {
+		w := &WorkersConfig{NoChangesVerificationTimeout: "0s"}
+		if got := w.ResolveNoChangesVerificationTimeout(); got != 30*time.Minute {
+			t.Errorf("non-positive = %s, want 30m", got)
+		}
+	})
+	t.Run("NoChangesVerificationTimeout_override", func(t *testing.T) {
+		w := &WorkersConfig{NoChangesVerificationTimeout: "45s"}
+		if got := w.ResolveNoChangesVerificationTimeout(); got != 45*time.Second {
+			t.Errorf("override = %s, want 45s", got)
 		}
 	})
 

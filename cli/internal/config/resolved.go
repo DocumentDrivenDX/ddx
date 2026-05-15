@@ -64,6 +64,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	}
 
 	r.noProgressCooldown = workers.ResolveNoProgressCooldown()
+	r.noChangesVerificationTimeout = workers.ResolveNoChangesVerificationTimeout()
 	r.maxNoChangesBeforeClose = workers.ResolveMaxNoChangesBeforeClose()
 	r.heartbeatInterval = workers.ResolveHeartbeatInterval()
 
@@ -170,6 +171,7 @@ type ResolvedConfig struct {
 	assignee                           string
 	reviewMaxRetries                   int
 	noProgressCooldown                 time.Duration
+	noChangesVerificationTimeout       time.Duration
 	maxNoChangesBeforeClose            int
 	heartbeatInterval                  time.Duration
 	harness                            string
@@ -225,6 +227,11 @@ func (r ResolvedConfig) ReviewMaxRetries() int {
 func (r ResolvedConfig) NoProgressCooldown() time.Duration {
 	r.requireSealed()
 	return r.noProgressCooldown
+}
+
+func (r ResolvedConfig) NoChangesVerificationTimeout() time.Duration {
+	r.requireSealed()
+	return r.noChangesVerificationTimeout
 }
 
 func (r ResolvedConfig) MaxNoChangesBeforeClose() int {

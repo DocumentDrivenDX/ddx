@@ -11,6 +11,7 @@ type TestLoopConfigOpts struct {
 	Assignee                           string
 	ReviewMaxRetries                   int
 	NoProgressCooldown                 time.Duration
+	NoChangesVerificationTimeout       time.Duration
 	MaxNoChangesBeforeClose            int
 	HeartbeatInterval                  time.Duration
 	Harness                            string
@@ -59,9 +60,10 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 		},
 		Agent: agentCfg,
 		Workers: &WorkersConfig{
-			NoProgressCooldown:      opts.NoProgressCooldown.String(),
-			MaxNoChangesBeforeClose: &maxNoChanges,
-			HeartbeatInterval:       opts.HeartbeatInterval.String(),
+			NoProgressCooldown:           opts.NoProgressCooldown.String(),
+			NoChangesVerificationTimeout: opts.NoChangesVerificationTimeout.String(),
+			MaxNoChangesBeforeClose:      &maxNoChanges,
+			HeartbeatInterval:            opts.HeartbeatInterval.String(),
 		},
 		ReviewMaxRetries: &reviewMaxRetries,
 		EvidenceCaps:     &caps,

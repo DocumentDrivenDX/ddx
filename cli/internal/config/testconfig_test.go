@@ -9,17 +9,18 @@ func intPtrLoop(v int) *int { return &v }
 
 func TestNewTestConfigForLoop(t *testing.T) {
 	opts := TestLoopConfigOpts{
-		Assignee:                "alice@example.com",
-		ReviewMaxRetries:        7,
-		NoProgressCooldown:      9 * time.Hour,
-		MaxNoChangesBeforeClose: 5,
-		HeartbeatInterval:       17 * time.Second,
-		Harness:                 "claude",
-		Model:                   "claude-opus-4-7",
-		Profile:                 "smart",
-		MinPowerHint:            "smart",
-		MaxPowerHint:            "smart",
-		BeadQualityMode:         BeadQualityModeBlock,
+		Assignee:                     "alice@example.com",
+		ReviewMaxRetries:             7,
+		NoProgressCooldown:           9 * time.Hour,
+		NoChangesVerificationTimeout: 45 * time.Second,
+		MaxNoChangesBeforeClose:      5,
+		HeartbeatInterval:            17 * time.Second,
+		Harness:                      "claude",
+		Model:                        "claude-opus-4-7",
+		Profile:                      "smart",
+		MinPowerHint:                 "smart",
+		MaxPowerHint:                 "smart",
+		BeadQualityMode:              BeadQualityModeBlock,
 		EvidenceCaps: EvidenceCapsConfig{
 			MaxPromptBytes:       intPtrLoop(123456),
 			MaxInlinedFileBytes:  intPtrLoop(2048),
@@ -43,6 +44,9 @@ func TestNewTestConfigForLoop(t *testing.T) {
 	}
 	if got := rcfg.NoProgressCooldown(); got != opts.NoProgressCooldown {
 		t.Errorf("NoProgressCooldown: got %v, want %v", got, opts.NoProgressCooldown)
+	}
+	if got := rcfg.NoChangesVerificationTimeout(); got != opts.NoChangesVerificationTimeout {
+		t.Errorf("NoChangesVerificationTimeout: got %v, want %v", got, opts.NoChangesVerificationTimeout)
 	}
 	if got := rcfg.MaxNoChangesBeforeClose(); got != opts.MaxNoChangesBeforeClose {
 		t.Errorf("MaxNoChangesBeforeClose: got %d, want %d", got, opts.MaxNoChangesBeforeClose)

@@ -2,9 +2,18 @@ package agent
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseNoChangesRationale(t *testing.T) {
@@ -78,4 +87,68 @@ func TestDefaultVerificationCommandRunner(t *testing.T) {
 		assert.NoError(t, err)
 		assert.NotEqual(t, 0, code)
 	})
+}
+
+func TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-group assertions are unix-specific")
+	}
+
+	projectRoot := t.TempDir()
+	shellPIDFile := filepath.Join(projectRoot, "inner-shell.pid")
+	childPIDFile := filepath.Join(projectRoot, "sleep.pid")
+	command := nestedPIDCaptureCommand(shellPIDFile, childPIDFile, "sleep 30")
+
+	code, _, err := DefaultVerificationCommandRunnerWithTimeout(100*time.Millisecond)(context.Background(), projectRoot, command)
+	require.Error(t, err)
+	assert.Equal(t, -1, code)
+	assert.Contains(t, err.Error(), "timed out after")
+
+	shellPID := readPIDFile(t, shellPIDFile)
+	childPID := readPIDFile(t, childPIDFile)
+	require.Eventually(t, func() bool {
+		return !processExists(shellPID) && !processExists(childPID)
+	}, time.Second, 20*time.Millisecond)
+}
+
+func TestDefaultVerificationCommandRunnerAllowsConfiguredLongGate(t *testing.T) {
+	command := "sh -lc 'sleep 0.12'"
+
+	shortRunner := DefaultVerificationCommandRunnerWithTimeout(50 * time.Millisecond)
+	shortCode, _, shortErr := shortRunner(context.Background(), "", command)
+	require.Error(t, shortErr)
+	assert.Equal(t, -1, shortCode)
+	assert.Contains(t, shortErr.Error(), "timed out after")
+
+	longRunner := DefaultVerificationCommandRunnerWithTimeout(250 * time.Millisecond)
+	longCode, _, longErr := longRunner(context.Background(), "", command)
+	require.NoError(t, longErr)
+	assert.Equal(t, 0, longCode)
+}
+
+func nestedPIDCaptureCommand(shellPIDFile, childPIDFile, longRunningCommand string) string {
+	return fmt.Sprintf(
+		"sh -lc \"echo \\$\\$ > %s; %s & echo \\$! > %s; wait\"",
+		shSingleQuote(shellPIDFile),
+		longRunningCommand,
+		shSingleQuote(childPIDFile),
+	)
+}
+
+func shSingleQuote(path string) string {
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+}
+
+func readPIDFile(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	require.NoError(t, err)
+	return pid
+}
+
+func processExists(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || err == syscall.EPERM
 }

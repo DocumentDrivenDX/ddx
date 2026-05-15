@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"time"
 
 	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 type NoChangesRationaleKind = agenttry.NoChangesRationaleKind
@@ -43,4 +45,16 @@ const DefaultVerificationCommandTimeout = agenttry.DefaultVerificationCommandTim
 
 func DefaultVerificationCommandRunner(ctx context.Context, projectRoot, command string) (int, string, error) {
 	return agenttry.DefaultVerificationCommandRunner(ctx, projectRoot, command)
+}
+
+func DefaultVerificationCommandRunnerWithTimeout(timeout time.Duration) VerificationCommandRunner {
+	return agenttry.DefaultVerificationCommandRunnerWithTimeout(timeout)
+}
+
+func defaultVerificationCommandRunnerForConfig(rcfg config.ResolvedConfig) VerificationCommandRunner {
+	timeout := rcfg.NoChangesVerificationTimeout()
+	if timeout <= 0 {
+		timeout = DefaultVerificationCommandTimeout
+	}
+	return DefaultVerificationCommandRunnerWithTimeout(timeout)
 }

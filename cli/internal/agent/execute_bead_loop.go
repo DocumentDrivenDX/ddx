@@ -1843,6 +1843,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			liveness.OnTick(now())
 		}
 		attemptStarted = true
+		verificationRunner := w.VerificationRunner
+		if verificationRunner == nil {
+			verificationRunner = defaultVerificationCommandRunnerForConfig(rcfg)
+		}
 		attemptOut, err := work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 				Bead:                candidate,
@@ -1850,7 +1854,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Store:               w.Store,
 				ProjectRoot:         runtime.ProjectRoot,
 				SatisfactionChecker: w.SatisfactionChecker,
-				VerificationRunner:  w.VerificationRunner,
+				VerificationRunner:  verificationRunner,
 				AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
 				ConflictResolver:    w.ConflictResolver,
 				Assignee:            assignee,
