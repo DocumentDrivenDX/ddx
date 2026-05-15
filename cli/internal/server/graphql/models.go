@@ -245,6 +245,8 @@ type Artifact struct {
 	Title string `json:"title"`
 	// MIME type (e.g. text/markdown, image/png)
 	MediaType string `json:"mediaType"`
+	// Current artifact content SHA-256, when the backing file is readable
+	Sha256 *string `json:"sha256,omitempty"`
 	// Provenance information when the artifact was produced by a DDx run
 	GeneratedBy *ArtifactGeneratedBy `json:"generatedBy,omitempty"`
 	// Staleness: fresh, stale, or missing

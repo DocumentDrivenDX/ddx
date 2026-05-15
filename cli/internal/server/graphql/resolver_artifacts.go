@@ -725,6 +725,9 @@ func (r *queryResolver) Artifact(ctx context.Context, projectID string, id strin
 	}
 	for _, a := range artifacts {
 		if a.ID == id {
+			if hash, hashErr := fileSHA256(filepath.Join(root, filepath.FromSlash(a.Path))); hashErr == nil {
+				a.Sha256 = &hash
+			}
 			if isTextMediaType(a.MediaType) {
 				a.Content = loadArtifactContent(root, a.Path)
 			}

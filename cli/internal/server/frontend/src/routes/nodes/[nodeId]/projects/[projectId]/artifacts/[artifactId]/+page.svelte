@@ -1,20 +1,14 @@
 <script lang="ts">
 	import type { PageData } from './$types';
 	import { goto, invalidateAll } from '$app/navigation';
-	import {
-		ArrowLeft,
-		Download,
-		ExternalLink,
-		Network,
-		FileClock,
-		RefreshCw
-	} from 'lucide-svelte';
+	import { ArrowLeft, Download, ExternalLink, Network, FileClock, RefreshCw } from 'lucide-svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
 	import { onMount } from 'svelte';
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
 	import ArtifactTypePanel from '$lib/ArtifactTypePanel.svelte';
+	import ReviewPanel from '$lib/components/ReviewPanel.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -280,6 +274,12 @@
 			/>
 		{/if}
 
+		<ReviewPanel
+			artifactId={data.artifact.id}
+			artifactTitle={data.artifact.title}
+			artifactSha={data.artifact.sha256}
+		/>
+
 		<!-- Renderer -->
 		<div class="border-border-line dark:border-dark-border-line border">
 			{#if rtype === 'markdown'}
@@ -461,7 +461,7 @@
 					class="border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface flex items-center justify-between border-b px-4 py-2"
 				>
 					<h2
-						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted tracking-wide uppercase inline-flex items-center gap-2"
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted inline-flex items-center gap-2 tracking-wide uppercase"
 					>
 						<FileClock class="h-4 w-4" />
 						Provenance
@@ -526,7 +526,7 @@
 							data-testid="regenerate-button"
 							onclick={handleRegenerate}
 							disabled={regenLoading}
-							class="bg-accent-lever text-fg-on-accent dark:bg-dark-accent-lever inline-flex items-center gap-2 rounded px-3 py-1.5 text-body-sm hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+							class="bg-accent-lever text-fg-on-accent dark:bg-dark-accent-lever text-body-sm inline-flex items-center gap-2 rounded px-3 py-1.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
 						>
 							<RefreshCw
 								class="h-4 w-4 {regenLoading ? 'animate-spin' : ''}"
@@ -556,10 +556,7 @@
 						{/if}
 					</div>
 					{#if regenError}
-						<p
-							data-testid="regenerate-error"
-							class="text-body-sm text-red-700 dark:text-red-400"
-						>
+						<p data-testid="regenerate-error" class="text-body-sm text-red-700 dark:text-red-400">
 							{regenError}
 						</p>
 					{/if}

@@ -10,6 +10,7 @@ const ARTIFACT_GENERATED = {
 	path: 'docs/generated/report.md',
 	title: 'Generated Report',
 	mediaType: 'text/markdown',
+	sha256: 'sha-generated-001',
 	staleness: 'fresh',
 	description: 'Synthesized report',
 	updatedAt: '2026-04-30T12:00:00Z',
@@ -28,6 +29,7 @@ const ARTIFACT_PLAIN = {
 	path: 'docs/manual.md',
 	title: 'Manual Doc',
 	mediaType: 'text/markdown',
+	sha256: 'sha-manual-001',
 	staleness: 'fresh',
 	description: null,
 	updatedAt: '2026-04-30T12:00:00Z',
@@ -76,6 +78,7 @@ interface MockArtifactDetail {
 	path: string;
 	title: string;
 	mediaType: string;
+	sha256: string | null;
 	staleness: string;
 	description: string | null;
 	updatedAt: string | null;
@@ -127,6 +130,7 @@ const ARTIFACT_TYPE_SINGLE: MockArtifactDetail = {
 	path: 'docs/helix/01-frame/single.md',
 	title: 'Artifact Type Single',
 	mediaType: 'text/markdown',
+	sha256: 'sha-type-single-001',
 	staleness: 'fresh',
 	description: 'Artifact detail fixture with one matching type definition',
 	updatedAt: '2026-05-01T12:00:00Z',
@@ -156,6 +160,7 @@ const ARTIFACT_TYPE_COLLISION: MockArtifactDetail = {
 	path: 'docs/helix/01-frame/collision.md',
 	title: 'Artifact Type Collision',
 	mediaType: 'text/markdown',
+	sha256: 'sha-type-collision-001',
 	staleness: 'fresh',
 	description: 'Artifact detail fixture with two matching type definitions',
 	updatedAt: '2026-05-01T12:00:00Z',
@@ -205,6 +210,7 @@ const ARTIFACT_TYPE_TRUNCATED: MockArtifactDetail = {
 	path: 'docs/helix/01-frame/large.md',
 	title: 'Artifact Type Truncated',
 	mediaType: 'text/markdown',
+	sha256: 'sha-type-truncated-001',
 	staleness: 'fresh',
 	description: 'Artifact detail fixture with a truncated template payload',
 	updatedAt: '2026-05-01T12:00:00Z',
@@ -387,9 +393,7 @@ async function mockRoutes(page: import('@playwright/test').Page, state: MockStat
 	});
 }
 
-test('artifact type panel: single match renders without a collision selector', async ({
-	page
-}) => {
+test('artifact type panel: single match renders without a collision selector', async ({ page }) => {
 	await mockArtifactTypeRoutes(page, [ARTIFACT_TYPE_SINGLE]);
 
 	await page.goto(artifactDetailHref(ARTIFACT_TYPE_SINGLE.id), { waitUntil: 'networkidle' });
@@ -525,7 +529,7 @@ test.fixme('Regenerate button is not shown when generatedBy is absent', async ({
 test('artifacts: sort + staleness chips + search compose into URL state and refetch', async ({
 	page
 }) => {
-	const calls: { variables: Record<string, unknown> | undefined; after: unknown }[] = []
+	const calls: { variables: Record<string, unknown> | undefined; after: unknown }[] = [];
 	const listArtifacts = [
 		{
 			id: 'a-1',
@@ -548,20 +552,20 @@ test('artifacts: sort + staleness chips + search compose into URL state and refe
 			mediaType: 'text/markdown',
 			staleness: 'missing'
 		}
-	]
+	];
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
-			query: string
-			variables?: Record<string, unknown>
-		}
-		const q = body.query
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+		const q = body.query;
 		if (q.includes('NodeInfo')) {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
-			})
-			return
+			});
+			return;
 		}
 		if (q.includes('Projects') && !q.includes('projectID')) {
 			await route.fulfill({
@@ -570,22 +574,22 @@ test('artifacts: sort + staleness chips + search compose into URL state and refe
 				body: JSON.stringify({
 					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
 				})
-			})
-			return
+			});
+			return;
 		}
 		if (q.includes('query Artifacts(')) {
-			calls.push({ variables: body.variables, after: body.variables?.after ?? null })
-			const v = body.variables ?? {}
-			let filtered = listArtifacts
-			if (v.staleness) filtered = filtered.filter((a) => a.staleness === v.staleness)
+			calls.push({ variables: body.variables, after: body.variables?.after ?? null });
+			const v = body.variables ?? {};
+			let filtered = listArtifacts;
+			if (v.staleness) filtered = filtered.filter((a) => a.staleness === v.staleness);
 			if (v.search) {
-				const s = String(v.search).toLowerCase()
+				const s = String(v.search).toLowerCase();
 				filtered = filtered.filter(
 					(a) => a.title.toLowerCase().includes(s) || a.path.toLowerCase().includes(s)
-				)
+				);
 			}
 			if (v.sort === 'TITLE') {
-				filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title))
+				filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title));
 			}
 			await route.fulfill({
 				status: 200,
@@ -602,60 +606,63 @@ test('artifacts: sort + staleness chips + search compose into URL state and refe
 						}
 					}
 				})
-			})
-			return
+			});
+			return;
 		}
-		await route.continue()
-	})
+		await route.continue();
+	});
 
 	// 1. Initial load — sort dropdown + staleness chips visible.
-	await page.goto(BASE_URL)
-	await expect(page.getByTestId('sort-select')).toBeVisible()
-	await expect(page.getByTestId('staleness-chip-fresh')).toBeVisible()
-	await expect(page.getByTestId('staleness-chip-stale')).toBeVisible()
-	await expect(page.getByTestId('staleness-chip-missing')).toBeVisible()
-	await expect(page.getByRole('cell', { name: 'Alpha', exact: true })).toBeVisible()
+	await page.goto(BASE_URL);
+	await expect(page.getByTestId('sort-select')).toBeVisible();
+	await expect(page.getByTestId('staleness-chip-fresh')).toBeVisible();
+	await expect(page.getByTestId('staleness-chip-stale')).toBeVisible();
+	await expect(page.getByTestId('staleness-chip-missing')).toBeVisible();
+	await expect(page.getByRole('cell', { name: 'Alpha', exact: true })).toBeVisible();
 
 	// 2. Change sort → URL gains ?sort=TITLE and a refetch is issued.
-	const callsBefore = calls.length
-	await page.getByTestId('sort-select').selectOption('TITLE')
-	await expect(page).toHaveURL(/[?&]sort=TITLE\b/)
-	await expect.poll(() => calls.length).toBeGreaterThan(callsBefore)
-	expect(calls[calls.length - 1].variables?.sort).toBe('TITLE')
-	expect(calls[calls.length - 1].after).toBeNull()
+	const callsBefore = calls.length;
+	await page.getByTestId('sort-select').selectOption('TITLE');
+	await expect(page).toHaveURL(/[?&]sort=TITLE\b/);
+	await expect.poll(() => calls.length).toBeGreaterThan(callsBefore);
+	expect(calls[calls.length - 1].variables?.sort).toBe('TITLE');
+	expect(calls[calls.length - 1].after).toBeNull();
 
 	// 3. Toggle staleness=stale chip → URL gains ?staleness=stale and refetches
 	//    (cursor reset: `after` is null on the new request).
-	const beforeStale = calls.length
-	await page.getByTestId('staleness-chip-stale').click()
-	await expect(page).toHaveURL(/[?&]staleness=stale\b/)
-	await expect.poll(() => calls.length).toBeGreaterThan(beforeStale)
-	expect(calls[calls.length - 1].variables?.staleness).toBe('stale')
-	expect(calls[calls.length - 1].variables?.sort).toBe('TITLE')
-	expect(calls[calls.length - 1].after).toBeNull()
-	await expect(page.getByRole('cell', { name: 'Beta', exact: true })).toBeVisible()
-	await expect(page.getByRole('cell', { name: 'Alpha', exact: true })).toHaveCount(0)
+	const beforeStale = calls.length;
+	await page.getByTestId('staleness-chip-stale').click();
+	await expect(page).toHaveURL(/[?&]staleness=stale\b/);
+	await expect.poll(() => calls.length).toBeGreaterThan(beforeStale);
+	expect(calls[calls.length - 1].variables?.staleness).toBe('stale');
+	expect(calls[calls.length - 1].variables?.sort).toBe('TITLE');
+	expect(calls[calls.length - 1].after).toBeNull();
+	await expect(page.getByRole('cell', { name: 'Beta', exact: true })).toBeVisible();
+	await expect(page.getByRole('cell', { name: 'Alpha', exact: true })).toHaveCount(0);
 
 	// 4. Add search → params compose; URL contains all three; refetch issued.
-	const beforeSearch = calls.length
-	await page.getByPlaceholder(/Search/i).first().fill('beta')
-	await expect.poll(() => calls.length).toBeGreaterThan(beforeSearch)
-	await expect(page).toHaveURL(/[?&]q=beta\b/)
-	await expect(page).toHaveURL(/[?&]sort=TITLE\b/)
-	await expect(page).toHaveURL(/[?&]staleness=stale\b/)
-	const last = calls[calls.length - 1]
-	expect(last.variables?.search).toBe('beta')
-	expect(last.variables?.sort).toBe('TITLE')
-	expect(last.variables?.staleness).toBe('stale')
-	expect(last.after).toBeNull()
+	const beforeSearch = calls.length;
+	await page
+		.getByPlaceholder(/Search/i)
+		.first()
+		.fill('beta');
+	await expect.poll(() => calls.length).toBeGreaterThan(beforeSearch);
+	await expect(page).toHaveURL(/[?&]q=beta\b/);
+	await expect(page).toHaveURL(/[?&]sort=TITLE\b/);
+	await expect(page).toHaveURL(/[?&]staleness=stale\b/);
+	const last = calls[calls.length - 1];
+	expect(last.variables?.search).toBe('beta');
+	expect(last.variables?.sort).toBe('TITLE');
+	expect(last.variables?.staleness).toBe('stale');
+	expect(last.after).toBeNull();
 
 	// 5. Toggle staleness chip off → param removed; refetch reflects null.
-	const beforeClear = calls.length
-	await page.getByTestId('staleness-chip-stale').click()
-	await expect.poll(() => calls.length).toBeGreaterThan(beforeClear)
-	await expect(page).not.toHaveURL(/[?&]staleness=/)
-	expect(calls[calls.length - 1].variables?.staleness).toBeUndefined()
-})
+	const beforeClear = calls.length;
+	await page.getByTestId('staleness-chip-stale').click();
+	await expect.poll(() => calls.length).toBeGreaterThan(beforeClear);
+	await expect(page).not.toHaveURL(/[?&]staleness=/);
+	expect(calls[calls.length - 1].variables?.staleness).toBeUndefined();
+});
 
 // Full-text body match path (Story 6 B4c): server returns a snippet wrapped
 // in markdown emphasis markers; the list renders it with the matched span
@@ -669,6 +676,7 @@ test('artifacts: body-match snippet renders with highlight and back-nav preserve
 		path: 'docs/notes.md',
 		title: 'Architecture Notes',
 		mediaType: 'text/markdown',
+		sha256: 'sha-artifact-body-001',
 		staleness: 'fresh',
 		description: null,
 		updatedAt: '2026-04-30T12:00:00Z',
@@ -765,7 +773,10 @@ test('artifacts: body-match snippet renders with highlight and back-nav preserve
 	await expect(page.getByTestId(`artifact-snippet-${ARTIFACT_BODY.id}`)).toHaveCount(0);
 
 	// 2. Search "fox" — body-match returns snippet with **fox** marker.
-	await page.getByPlaceholder(/Search/i).first().fill('fox');
+	await page
+		.getByPlaceholder(/Search/i)
+		.first()
+		.fill('fox');
 	await expect(page).toHaveURL(/[?&]q=fox\b/);
 	const snippetRow = page.getByTestId(`artifact-snippet-${ARTIFACT_BODY.id}`);
 	await expect(snippetRow).toBeVisible();
@@ -857,8 +868,7 @@ test('artifacts: grouping axes render and compose with search filtering', async 
 			const search = String(body.variables?.search ?? '').toLowerCase();
 			const filtered = search
 				? GROUPED_ARTIFACTS.filter(
-						(a) =>
-							a.title.toLowerCase().includes(search) || a.path.toLowerCase().includes(search)
+						(a) => a.title.toLowerCase().includes(search) || a.path.toLowerCase().includes(search)
 					)
 				: GROUPED_ARTIFACTS;
 			await route.fulfill({
@@ -916,7 +926,10 @@ test('artifacts: grouping axes render and compose with search filtering', async 
 	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: frame' })).toBeVisible();
 	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: Unstaged' })).toBeVisible();
 
-	await page.getByPlaceholder(/Search/i).first().fill('docs');
+	await page
+		.getByPlaceholder(/Search/i)
+		.first()
+		.fill('docs');
 	await expect(page).toHaveURL(/[?&]q=docs\b/);
 	await expect(page).toHaveURL(/[?&]groupBy=workflowStage\b/);
 	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: design' })).toBeVisible();

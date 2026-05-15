@@ -162,6 +162,7 @@ type ComplexityRoot struct {
 		ID              func(childComplexity int) int
 		MediaType       func(childComplexity int) int
 		Path            func(childComplexity int) int
+		Sha256          func(childComplexity int) int
 		Staleness       func(childComplexity int) int
 		Title           func(childComplexity int) int
 		TypeDefinitions func(childComplexity int) int
@@ -2183,6 +2184,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Artifact.Path(childComplexity), true
+	case "Artifact.sha256":
+		if e.ComplexityRoot.Artifact.Sha256 == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Sha256(childComplexity), true
 	case "Artifact.staleness":
 		if e.ComplexityRoot.Artifact.Staleness == nil {
 			break
@@ -12927,6 +12934,35 @@ func (ec *executionContext) fieldContext_Artifact_mediaType(_ context.Context, f
 	return fc, nil
 }
 
+func (ec *executionContext) _Artifact_sha256(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_sha256,
+		func(ctx context.Context) (any, error) {
+			return obj.Sha256, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_sha256(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Artifact_generatedBy(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -13299,6 +13335,8 @@ func (ec *executionContext) fieldContext_ArtifactEdge_node(_ context.Context, fi
 				return ec.fieldContext_Artifact_title(ctx, field)
 			case "mediaType":
 				return ec.fieldContext_Artifact_mediaType(ctx, field)
+			case "sha256":
+				return ec.fieldContext_Artifact_sha256(ctx, field)
 			case "generatedBy":
 				return ec.fieldContext_Artifact_generatedBy(ctx, field)
 			case "staleness":
@@ -33000,6 +33038,8 @@ func (ec *executionContext) fieldContext_Query_artifact(ctx context.Context, fie
 				return ec.fieldContext_Artifact_title(ctx, field)
 			case "mediaType":
 				return ec.fieldContext_Artifact_mediaType(ctx, field)
+			case "sha256":
+				return ec.fieldContext_Artifact_sha256(ctx, field)
 			case "generatedBy":
 				return ec.fieldContext_Artifact_generatedBy(ctx, field)
 			case "staleness":
@@ -46630,6 +46670,8 @@ func (ec *executionContext) _Artifact(ctx context.Context, sel ast.SelectionSet,
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "sha256":
+			out.Values[i] = ec._Artifact_sha256(ctx, field, obj)
 		case "generatedBy":
 			out.Values[i] = ec._Artifact_generatedBy(ctx, field, obj)
 		case "staleness":

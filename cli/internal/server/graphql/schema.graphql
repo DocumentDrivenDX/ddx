@@ -2144,6 +2144,8 @@ type Artifact implements Node {
   title: String!
   """MIME type (e.g. text/markdown, image/png)"""
   mediaType: String!
+  """Current artifact content SHA-256, when the backing file is readable"""
+  sha256: String
   """Provenance information when the artifact was produced by a DDx run"""
   generatedBy: ArtifactGeneratedBy
   """Staleness: fresh, stale, or missing"""

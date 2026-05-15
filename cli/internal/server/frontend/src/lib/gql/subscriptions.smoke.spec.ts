@@ -6,8 +6,8 @@
  * Uses a mock WebSocket server via the graphql-ws `makeServer` utility so the
  * test exercises the real client code without requiring a running ddx-server.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { disposeSubscriptionClient } from './subscriptions'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { disposeSubscriptionClient } from './subscriptions';
 
 // ---------------------------------------------------------------------------
 // Mock graphql-ws so tests run in Node without a real WebSocket.
@@ -16,76 +16,76 @@ import { disposeSubscriptionClient } from './subscriptions'
 // ---------------------------------------------------------------------------
 
 let capturedSubscribeCalls: Array<{
-	payload: { query: string; variables: Record<string, unknown> }
+	payload: { query: string; variables: Record<string, unknown> };
 	sink: {
-		next: (data: { data: unknown }) => void
-		error: (err: unknown) => void
-		complete: () => void
-	}
-}> = []
+		next: (data: { data: unknown }) => void;
+		error: (err: unknown) => void;
+		complete: () => void;
+	};
+}> = [];
 
 vi.mock('graphql-ws', () => {
 	return {
-		createClient: vi.fn((_opts: unknown) => ({
+		createClient: vi.fn(() => ({
 			subscribe(
 				payload: { query: string; variables: Record<string, unknown> },
 				sink: {
-					next: (data: { data: unknown }) => void
-					error: (err: unknown) => void
-					complete: () => void
+					next: (data: { data: unknown }) => void;
+					error: (err: unknown) => void;
+					complete: () => void;
 				}
 			) {
-				capturedSubscribeCalls.push({ payload, sink })
+				capturedSubscribeCalls.push({ payload, sink });
 				// Return a dispose function
-				return () => {}
+				return () => {};
 			},
 			on: vi.fn(() => () => {}),
 			dispose: vi.fn()
 		}))
-	}
-})
+	};
+});
 
 beforeEach(() => {
-	capturedSubscribeCalls = []
+	capturedSubscribeCalls = [];
 	// Reset the singleton so each test gets a fresh client
-	disposeSubscriptionClient()
-})
+	disposeSubscriptionClient();
+});
 
 afterEach(() => {
-	disposeSubscriptionClient()
-})
+	disposeSubscriptionClient();
+});
 
 describe('subscribeWorkerProgress', () => {
 	it('subscribes with the correct GQL document and workerID variable', async () => {
 		// Re-import after mocks are in place
-		const { subscribeWorkerProgress } = await import('./subscriptions')
+		const { subscribeWorkerProgress } = await import('./subscriptions');
 
-		const received: unknown[] = []
-		const dispose = subscribeWorkerProgress('worker-42', (evt) => received.push(evt))
+		const received: unknown[] = [];
+		const dispose = subscribeWorkerProgress('worker-42', (evt) => received.push(evt));
 
-		expect(capturedSubscribeCalls).toHaveLength(1)
-		const call = capturedSubscribeCalls[0]
+		expect(capturedSubscribeCalls).toHaveLength(1);
+		const call = capturedSubscribeCalls[0];
 
 		// Verify the subscription document names the right operation
-		expect(call.payload.query).toContain('subscription WorkerProgress')
-		expect(call.payload.query).toContain('workerProgress(workerID: $workerID)')
-		expect(call.payload.query).toContain('eventID')
-		expect(call.payload.query).toContain('phase')
+		expect(call.payload.query).toContain('subscription WorkerProgress');
+		expect(call.payload.query).toContain('workerProgress(workerID: $workerID)');
+		expect(call.payload.query).toContain('eventID');
+		expect(call.payload.query).toContain('phase');
 
 		// Verify the variable is forwarded
-		expect(call.payload.variables).toEqual({ workerID: 'worker-42' })
+		expect(call.payload.variables).toEqual({ workerID: 'worker-42' });
 
-		dispose()
-	})
+		dispose();
+	});
 
 	it('delivers a WorkerEvent to the callback when the server pushes data', async () => {
-		const { subscribeWorkerProgress } = await import('./subscriptions')
+		const { subscribeWorkerProgress } = await import('./subscriptions');
 
-		const received: Array<{ eventID: string; phase: string; logLine?: string | null }> = []
-		subscribeWorkerProgress('worker-99', (evt) => received.push(evt))
+		const received: Array<{ eventID: string; phase: string; logLine?: string | null }> = [];
+		subscribeWorkerProgress('worker-99', (evt) => received.push(evt));
 
-		expect(capturedSubscribeCalls).toHaveLength(1)
-		const { sink } = capturedSubscribeCalls[0]
+		expect(capturedSubscribeCalls).toHaveLength(1);
+		const { sink } = capturedSubscribeCalls[0];
 
 		// Simulate the server pushing a progress event
 		sink.next({
@@ -99,23 +99,23 @@ describe('subscribeWorkerProgress', () => {
 					beadID: 'ddx-abc123'
 				}
 			}
-		})
+		});
 
-		expect(received).toHaveLength(1)
+		expect(received).toHaveLength(1);
 		expect(received[0]).toMatchObject({
 			eventID: 'evt-001',
 			phase: 'running',
 			logLine: 'Claiming bead ddx-abc123'
-		})
-	})
+		});
+	});
 
 	it('delivers multiple sequential events in order', async () => {
-		const { subscribeWorkerProgress } = await import('./subscriptions')
+		const { subscribeWorkerProgress } = await import('./subscriptions');
 
-		const phases: string[] = []
-		subscribeWorkerProgress('worker-1', (evt) => phases.push(evt.phase))
+		const phases: string[] = [];
+		subscribeWorkerProgress('worker-1', (evt) => phases.push(evt.phase));
 
-		const { sink } = capturedSubscribeCalls[0]
+		const { sink } = capturedSubscribeCalls[0];
 		const push = (phase: string, id: string) =>
 			sink.next({
 				data: {
@@ -126,39 +126,97 @@ describe('subscribeWorkerProgress', () => {
 						timestamp: '2026-04-15T08:37:12Z'
 					}
 				}
-			})
+			});
 
-		push('pending', 'evt-1')
-		push('running', 'evt-2')
-		push('done', 'evt-3')
+		push('pending', 'evt-1');
+		push('running', 'evt-2');
+		push('done', 'evt-3');
 
-		expect(phases).toEqual(['pending', 'running', 'done'])
-	})
+		expect(phases).toEqual(['pending', 'running', 'done']);
+	});
 
 	it('calls the error handler when the server signals an error', async () => {
-		const { subscribeWorkerProgress } = await import('./subscriptions')
+		const { subscribeWorkerProgress } = await import('./subscriptions');
 
-		const errors: unknown[] = []
-		subscribeWorkerProgress('worker-err', () => {}, (err) => errors.push(err))
+		const errors: unknown[] = [];
+		subscribeWorkerProgress(
+			'worker-err',
+			() => {},
+			(err) => errors.push(err)
+		);
 
-		const { sink } = capturedSubscribeCalls[0]
-		sink.error(new Error('subscription closed by server'))
+		const { sink } = capturedSubscribeCalls[0];
+		sink.error(new Error('subscription closed by server'));
 
-		expect(errors).toHaveLength(1)
-		expect((errors[0] as Error).message).toBe('subscription closed by server')
-	})
+		expect(errors).toHaveLength(1);
+		expect((errors[0] as Error).message).toBe('subscription closed by server');
+	});
 
 	it('calls the complete handler when the subscription finishes', async () => {
-		const { subscribeWorkerProgress } = await import('./subscriptions')
+		const { subscribeWorkerProgress } = await import('./subscriptions');
 
-		let completed = false
-		subscribeWorkerProgress('worker-done', () => {}, undefined, () => {
-			completed = true
-		})
+		let completed = false;
+		subscribeWorkerProgress(
+			'worker-done',
+			() => {},
+			undefined,
+			() => {
+				completed = true;
+			}
+		);
 
-		const { sink } = capturedSubscribeCalls[0]
-		sink.complete()
+		const { sink } = capturedSubscribeCalls[0];
+		sink.complete();
 
-		expect(completed).toBe(true)
-	})
-})
+		expect(completed).toBe(true);
+	});
+});
+
+describe('subscribeReviewSessionEvents', () => {
+	it('subscribes with the correct GQL document and session id variable', async () => {
+		const { subscribeReviewSessionEvents } = await import('./subscriptions');
+
+		subscribeReviewSessionEvents('rev-42', () => {});
+
+		expect(capturedSubscribeCalls).toHaveLength(1);
+		const call = capturedSubscribeCalls[0];
+		expect(call.payload.query).toContain('subscription ReviewSessionEvents');
+		expect(call.payload.query).toContain('reviewSessionEvents(sessionId: $sessionId)');
+		expect(call.payload.variables).toEqual({ sessionId: 'rev-42' });
+	});
+
+	it('delivers streaming delta and final review events in order', async () => {
+		const { subscribeReviewSessionEvents } = await import('./subscriptions');
+
+		const received: Array<{ kind: string; content: string }> = [];
+		subscribeReviewSessionEvents('rev-99', (evt) => received.push(evt));
+
+		const { sink } = capturedSubscribeCalls[0];
+		sink.next({
+			data: {
+				reviewSessionEvents: {
+					sessionId: 'rev-99',
+					kind: 'delta',
+					content: 'Inspecting ',
+					costUSD: 0,
+					timestamp: '2026-05-15T18:00:00Z'
+				}
+			}
+		});
+		sink.next({
+			data: {
+				reviewSessionEvents: {
+					sessionId: 'rev-99',
+					kind: 'final',
+					content: 'Inspecting complete.',
+					costUSD: 0.011,
+					timestamp: '2026-05-15T18:00:01Z'
+				}
+			}
+		});
+
+		expect(received).toHaveLength(2);
+		expect(received[0]).toMatchObject({ kind: 'delta', content: 'Inspecting ' });
+		expect(received[1]).toMatchObject({ kind: 'final', content: 'Inspecting complete.' });
+	});
+});

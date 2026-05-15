@@ -657,7 +657,7 @@ func TestArtifact_DetailWithContent(t *testing.T) {
 	artifactID := edges[0].(map[string]interface{})["node"].(map[string]interface{})["id"].(string)
 
 	// Now fetch detail via artifact(projectID, id).
-	detailBody := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"` + artifactID + `\") { id path mediaType content ddxFrontmatter } }"}`)
+	detailBody := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"` + artifactID + `\") { id path mediaType sha256 content ddxFrontmatter } }"}`)
 	detailResp, err := http.Post(srv.URL+"/graphql", "application/json", detailBody)
 	if err != nil {
 		t.Fatal(err)
@@ -679,6 +679,9 @@ func TestArtifact_DetailWithContent(t *testing.T) {
 	content, hasContent := detail["content"]
 	if !hasContent || content == nil {
 		t.Error("expected content field to be populated for text/markdown artifact")
+	}
+	if sha, ok := detail["sha256"].(string); !ok || sha == "" {
+		t.Error("expected sha256 field to be populated for readable artifact")
 	}
 	if ddxFM, ok := detail["ddxFrontmatter"]; !ok || ddxFM == nil {
 		t.Error("expected ddxFrontmatter field to be populated")
@@ -716,7 +719,7 @@ func TestArtifact_DetailBinaryNoContent(t *testing.T) {
 	}
 	artifactID := edges[0].(map[string]interface{})["node"].(map[string]interface{})["id"].(string)
 
-	detailBody := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"` + artifactID + `\") { id mediaType content } }"}`)
+	detailBody := bytes.NewBufferString(`{"query":"{ artifact(projectID: \"` + projID + `\", id: \"` + artifactID + `\") { id mediaType sha256 content } }"}`)
 	detailResp, err := http.Post(srv.URL+"/graphql", "application/json", detailBody)
 	if err != nil {
 		t.Fatal(err)
@@ -734,6 +737,9 @@ func TestArtifact_DetailBinaryNoContent(t *testing.T) {
 	detail := detailResult["data"].(map[string]interface{})["artifact"].(map[string]interface{})
 	if content := detail["content"]; content != nil {
 		t.Errorf("expected content to be null for binary artifact, got %v", content)
+	}
+	if sha, ok := detail["sha256"].(string); !ok || sha == "" {
+		t.Error("expected sha256 field to be populated for binary artifact")
 	}
 }
 

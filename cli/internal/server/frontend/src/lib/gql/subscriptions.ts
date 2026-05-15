@@ -1,20 +1,20 @@
-import { createClient, type Client } from 'graphql-ws'
-import { wsConnection } from '$lib/stores/connection.svelte'
+import { createClient, type Client } from 'graphql-ws';
+import { wsConnection } from '$lib/stores/connection.svelte';
 
 // ---------------------------------------------------------------------------
 // Subscription client singleton
 // ---------------------------------------------------------------------------
 
-let _subClient: Client | null = null
+let _subClient: Client | null = null;
 
 function resolveWsUrl(): string {
 	if (typeof window === 'undefined') {
 		// Node / SSR — subscriptions are client-only, so this path is never
 		// reached in practice, but we provide a sensible default for testing.
-		return 'ws://localhost:7743/graphql'
+		return 'ws://localhost:7743/graphql';
 	}
-	const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-	return `${proto}://${window.location.host}/graphql`
+	const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+	return `${proto}://${window.location.host}/graphql`;
 }
 
 /**
@@ -23,21 +23,21 @@ function resolveWsUrl(): string {
  */
 export function getSubscriptionClient(urlOverride?: string): Client {
 	if (!_subClient) {
-		_subClient = createClient({ url: urlOverride ?? resolveWsUrl() })
-		_subClient.on('connecting', () => wsConnection._onConnecting())
-		_subClient.on('connected', () => wsConnection._onConnected())
-		_subClient.on('closed', () => wsConnection._onClosed())
+		_subClient = createClient({ url: urlOverride ?? resolveWsUrl() });
+		_subClient.on('connecting', () => wsConnection._onConnecting());
+		_subClient.on('connected', () => wsConnection._onConnected());
+		_subClient.on('closed', () => wsConnection._onClosed());
 	}
-	return _subClient
+	return _subClient;
 }
 
 /** Tear down the singleton — call between tests or on hot-reload. */
 export function disposeSubscriptionClient(): void {
 	if (_subClient) {
-		_subClient.dispose()
-		_subClient = null
+		_subClient.dispose();
+		_subClient = null;
 	}
-	wsConnection._reset()
+	wsConnection._reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -45,26 +45,35 @@ export function disposeSubscriptionClient(): void {
 // ---------------------------------------------------------------------------
 
 export interface BeadEvent {
-	eventID: string
-	beadID: string
+	eventID: string;
+	beadID: string;
 	/** Event kind: "created" | "status_changed" | "updated" */
-	kind: string
-	summary?: string | null
-	body?: string | null
-	actor?: string | null
+	kind: string;
+	summary?: string | null;
+	body?: string | null;
+	actor?: string | null;
 	/** ISO-8601 timestamp */
-	timestamp: string
+	timestamp: string;
 }
 
 export interface WorkerEvent {
-	eventID: string
-	workerID: string
+	eventID: string;
+	workerID: string;
 	/** Execution phase: "pending" | "running" | "done" | "error" */
-	phase: string
+	phase: string;
 	/** ISO-8601 timestamp */
-	timestamp: string
-	logLine?: string | null
-	beadID?: string | null
+	timestamp: string;
+	logLine?: string | null;
+	beadID?: string | null;
+}
+
+export interface ReviewSessionEvent {
+	sessionId: string;
+	/** Event kind: "delta" | "final" */
+	kind: string;
+	content: string;
+	costUSD: number;
+	timestamp: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -81,7 +90,7 @@ subscription BeadLifecycle($projectID: ID!) {
     timestamp
   }
 }
-`
+`;
 
 /**
  * Subscribe to live lifecycle events for all beads in a project.
@@ -101,27 +110,28 @@ export function subscribeBeadLifecycle(
 	onError?: (err: unknown) => void,
 	onComplete?: () => void
 ): () => void {
-	const client = getSubscriptionClient()
+	const client = getSubscriptionClient();
 	return client.subscribe(
 		{ query: BEAD_LIFECYCLE_SUBSCRIPTION, variables: { projectID } },
 		{
 			next(data) {
-				const evt = (data.data as Record<string, unknown> | null | undefined)
-					?.beadLifecycle as BeadEvent | undefined
-				if (evt) onEvent(evt)
+				const evt = (data.data as Record<string, unknown> | null | undefined)?.beadLifecycle as
+					| BeadEvent
+					| undefined;
+				if (evt) onEvent(evt);
 			},
 			error(err) {
 				if (onError) {
-					onError(err)
+					onError(err);
 				} else {
-					console.error('[ddx] beadLifecycle subscription error:', err)
+					console.error('[ddx] beadLifecycle subscription error:', err);
 				}
 			},
 			complete() {
-				onComplete?.()
+				onComplete?.();
 			}
 		}
-	)
+	);
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +149,7 @@ subscription WorkerProgress($workerID: ID!) {
     beadID
   }
 }
-`
+`;
 
 /**
  * Subscribe to live progress events for a given worker.
@@ -158,25 +168,67 @@ export function subscribeWorkerProgress(
 	onError?: (err: unknown) => void,
 	onComplete?: () => void
 ): () => void {
-	const client = getSubscriptionClient()
+	const client = getSubscriptionClient();
 	return client.subscribe(
 		{ query: WORKER_PROGRESS_SUBSCRIPTION, variables: { workerID } },
 		{
 			next(data) {
-				const evt = (data.data as Record<string, unknown> | null | undefined)
-					?.workerProgress as WorkerEvent | undefined
-				if (evt) onEvent(evt)
+				const evt = (data.data as Record<string, unknown> | null | undefined)?.workerProgress as
+					| WorkerEvent
+					| undefined;
+				if (evt) onEvent(evt);
 			},
 			error(err) {
 				if (onError) {
-					onError(err)
+					onError(err);
 				} else {
-					console.error('[ddx] workerProgress subscription error:', err)
+					console.error('[ddx] workerProgress subscription error:', err);
 				}
 			},
 			complete() {
-				onComplete?.()
+				onComplete?.();
 			}
 		}
-	)
+	);
+}
+
+const REVIEW_SESSION_EVENTS_SUBSCRIPTION = `
+subscription ReviewSessionEvents($sessionId: ID!) {
+  reviewSessionEvents(sessionId: $sessionId) {
+    sessionId
+    kind
+    content
+    costUSD
+    timestamp
+  }
+}
+`;
+
+export function subscribeReviewSessionEvents(
+	sessionId: string,
+	onEvent: (event: ReviewSessionEvent) => void,
+	onError?: (err: unknown) => void,
+	onComplete?: () => void
+): () => void {
+	const client = getSubscriptionClient();
+	return client.subscribe(
+		{ query: REVIEW_SESSION_EVENTS_SUBSCRIPTION, variables: { sessionId } },
+		{
+			next(data) {
+				const evt = (data.data as Record<string, unknown> | null | undefined)
+					?.reviewSessionEvents as ReviewSessionEvent | undefined;
+				if (evt) onEvent(evt);
+			},
+			error(err) {
+				if (onError) {
+					onError(err);
+				} else {
+					console.error('[ddx] reviewSessionEvents subscription error:', err);
+				}
+			},
+			complete() {
+				onComplete?.();
+			}
+		}
+	);
 }
