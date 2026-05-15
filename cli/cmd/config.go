@@ -116,7 +116,7 @@ func (f *CommandFactory) runConfig(cmd *cobra.Command, args []string) error {
 			configPath = ddxroot.JoinHome(homeDir, "config.yaml")
 		} else {
 			// Use local config path
-			configPath = ddxroot.JoinProject(f.WorkingDir, "config.yaml")
+			configPath = commandStatePath(f.WorkingDir, "config.yaml")
 		}
 
 		content, err := os.ReadFile(configPath)
@@ -244,7 +244,7 @@ func configListFiles(workingDir string) []ConfigFileInfo {
 	// Current directory config
 	localConfig := ".ddx/config.yaml"
 	if workingDir != "" {
-		localConfig = ddxroot.JoinProject(workingDir, "config.yaml")
+		localConfig = commandStatePath(workingDir, "config.yaml")
 	}
 	if _, err := os.Stat(localConfig); err == nil {
 		files = append(files, ConfigFileInfo{Path: localConfig, Type: "project", Exists: true})
@@ -284,7 +284,7 @@ func configGetPath(workingDir string, global bool) string {
 		return ddxroot.JoinHome(home, "config.yaml")
 	}
 	if workingDir != "" {
-		return ddxroot.JoinProject(workingDir, "config.yaml")
+		return commandStatePath(workingDir, "config.yaml")
 	}
 	return ".ddx/config.yaml"
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 )
@@ -25,6 +26,20 @@ func resolveProjectRoot(projectFlag, workingDir string) string {
 		return env
 	}
 	return gitpkg.FindProjectRoot(workingDir)
+}
+
+func resolveDDxProjectRoot(workingDir string) string {
+	if workingDir == "" {
+		return ""
+	}
+	if workspaceRoot := gitpkg.FindNearestDDxWorkspace(workingDir); workspaceRoot != "" {
+		return workspaceRoot
+	}
+	return workingDir
+}
+
+func commandStatePath(workingDir string, elems ...string) string {
+	return ddxroot.JoinProject(resolveDDxProjectRoot(workingDir), elems...)
 }
 
 type preClaimGitOps interface {
