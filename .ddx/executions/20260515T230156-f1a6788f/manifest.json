@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260515T230156-f1a6788f",
+  "bead_id": "ddx-213d7e95",
+  "base_rev": "8bb354603968dac1baced746b995ad7d11edf90f",
+  "created_at": "2026-05-15T23:02:01.700591033Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-213d7e95",
+    "title": "execute-bead: serialize worker git commands and staged hook gates",
+    "description": "PROBLEM\nDuring the current monitor on 2026-05-15, two Codex execute-bead workers recovered from avoidable tool-sequencing errors. For ddx-b6859802, the worker staged ordinary files and ignored evidence with parallel git add calls; one failed with: fatal: Unable to create ... index.lock: File exists. For ddx-bb8e7d07, the worker ran lefthook run pre-commit before staging and got a no-staged-files skip, then had to rerun after staging; it also attempted to interrupt a completed test-poll session. These recoveries waste worker time and can look like DDx dirty-tree failures even when the implementation is otherwise fine.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/execute_bead.go:2337-2341 and cli/internal/agent/execute_bead.go:2369-2373 tell rich-prompt and embedded-agent workers to run tests, stage specific paths, and commit once. They do not explicitly prohibit parallel git/index operations, do not say that lefthook run pre-commit must be run after staging when hooks are staged-file-sensitive, and do not warn that a no-staged-files hook run is insufficient acceptance evidence.\n\nPROPOSED FIX\n- Update both executeBeadInstructionsClaudeText and executeBeadInstructionsAgentText to require git/staging/commit commands to run sequentially, not through parallel tool calls.\n- Require workers to rerun lefthook run pre-commit after staging the exact commit set when pre-commit depends on staged files; an earlier no-staged-files hook run is not sufficient AC evidence.\n- Add or extend prompt guardrail/snapshot tests in cli/internal/agent/execute_bead_guardrails_test.go or cli/internal/agent/execute_bead_prompt_snapshot_test.go so the rule cannot regress.\n\nNON-SCOPE\n- Do not change core gitlock recovery.\n- Do not change execute-bead lifecycle, result schema, or merge policy.\n- Do not hand-edit .ddx/beads.jsonl.\n\nDEPS\nNone.",
+    "acceptance": "1. TestExecuteBeadInstructions_SerializesGitOperations asserts both instruction variants contain a direct prohibition on parallel git/staging/commit operations and require sequential git add/git commit handling.\n2. TestExecuteBeadInstructions_RequiresStagedPreCommitGate asserts both instruction variants say lefthook run pre-commit must be rerun after staging when staged files drive hooks and that no-staged-files runs are insufficient evidence.\n3. Prompt snapshot or guardrail coverage is updated so future prompt edits preserve both rules.\n4. cd cli \u0026\u0026 go test ./internal/agent -run 'TestExecuteBeadInstructions_(SerializesGitOperations|RequiresStagedPreCommitGate)|TestExecuteBeadInstructionsText' -count=1 passes.\n5. cd cli \u0026\u0026 go test ./internal/agent/... passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:execution",
+      "kind:bug",
+      "operator-ux",
+      "dirty-tree",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-213d7e95)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T23:01:51.773738266Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "triage.estimated_difficulty": "medium"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T230156-f1a6788f",
+    "prompt": ".ddx/executions/20260515T230156-f1a6788f/prompt.md",
+    "manifest": ".ddx/executions/20260515T230156-f1a6788f/manifest.json",
+    "result": ".ddx/executions/20260515T230156-f1a6788f/result.json",
+    "checks": ".ddx/executions/20260515T230156-f1a6788f/checks.json",
+    "usage": ".ddx/executions/20260515T230156-f1a6788f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-213d7e95-20260515T230156-f1a6788f"
+  },
+  "prompt_sha": "37a68d6d7086f0bebade4cc4d7f1ff1ad102ecb8dd5e7afa0f5b64f5547bbefb"
+}
