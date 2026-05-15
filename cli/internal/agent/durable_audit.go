@@ -131,7 +131,6 @@ func dirtyDurableAuditPaths(statusOutput string) []string {
 	seen := make(map[string]struct{}, len(lines))
 	paths := make([]string, 0, len(lines))
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
 		if len(line) < 4 {
 			continue
 		}

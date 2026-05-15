@@ -14,6 +14,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestDirtyDurableAuditPathsPreservesLeadingDotForTrackedFiles(t *testing.T) {
+	status := " M .ddx/beads.jsonl\n" +
+		"M  .ddx/metrics/attempts.jsonl\n" +
+		"A  .ddx/beads-archive.jsonl\n" +
+		"?? .ddx/attachments/ddx-example/events.jsonl\n"
+
+	assert.Equal(t, []string{
+		".ddx/beads.jsonl",
+		".ddx/metrics/attempts.jsonl",
+		".ddx/beads-archive.jsonl",
+		".ddx/attachments/ddx-example/events.jsonl",
+	}, dirtyDurableAuditPaths(status))
+}
+
+func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte("initial\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("initial\n"), 0o644))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed durable audit files")
+
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte("updated\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("updated\n"), 0o644))
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260515T111500-pathspec"))
+
+	status := runGitInteg(t, projectRoot, "status", "--short", "--", ".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl")
+	assert.Empty(t, status)
+
+	subject := runGitInteg(t, projectRoot, "log", "-1", "--pretty=%s")
+	assert.Equal(t, "chore: update tracker (execute-bead 20260515T111500-pathspec)", subject)
+	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+	assert.Contains(t, show, ".ddx/beads.jsonl")
+	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
+}
+
 func TestCommitOutcomeDurableMutationUsesAuditCommit(t *testing.T) {
 	projectRoot := newDurableAuditProject(t)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
