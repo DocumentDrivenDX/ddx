@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -92,7 +91,7 @@ func NewExecutionResourceChecker(projectRoot string, gitOps GitOps) *ExecutionRe
 		ProjectRoot: projectRoot,
 		TempRoot:    executionCleanupTempRoot(projectRoot),
 		EvidenceRoots: []string{
-			filepath.Join(projectRoot, ExecuteBeadArtifactDir), ddxroot.JoinProject(projectRoot, "runs"),
+			executeBeadArtifactRoot(projectRoot), ddxroot.JoinProject(projectRoot, "runs"),
 		},
 		GitOps:        gitOps,
 		CleanupRunner: NewExecutionCleanupManager(projectRoot, gitOps),

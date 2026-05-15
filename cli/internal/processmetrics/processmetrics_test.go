@@ -1,6 +1,7 @@
 package processmetrics
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ import (
 
 func writeSessionIndexFixture(t *testing.T, projectRoot string, lines []string) {
 	t.Helper()
-	logDir := filepath.Join(projectRoot, agent.DefaultLogDir)
+	logDir := agent.ResolveLogDir(projectRoot, agent.DefaultLogDir)
 	require.NoError(t, os.MkdirAll(logDir, 0o755))
 	for _, line := range lines {
 		var entry agent.SessionEntry
@@ -26,6 +27,25 @@ func writeSessionIndexFixture(t *testing.T, projectRoot string, lines []string) 
 		_, idx.CostPresent = raw["cost_usd"]
 		require.NoError(t, agent.AppendSessionIndex(logDir, idx, entry.Timestamp))
 	}
+}
+
+func TestServiceLoadInputsUsesDDxRootSessionLog(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	root := ddxroot.Path(context.Background(), dir)
+	require.NoError(t, os.WriteFile(filepath.Join(root, "beads.jsonl"), []byte(`{"id":"bx-root","title":"Root bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-05-15T00:00:00Z","updated_at":"2026-05-15T00:00:00Z"}`+"\n"), 0o644))
+	writeSessionIndexFixture(t, dir, []string{
+		`{"id":"as-root","timestamp":"2026-05-15T00:00:00Z","harness":"codex","input_tokens":1,"output_tokens":2,"total_tokens":3,"duration_ms":1,"exit_code":0}`,
+	})
+
+	svc := New(dir)
+	beads, sessions, _, _, err := svc.loadInputs()
+	require.NoError(t, err)
+	require.Len(t, beads, 1)
+	require.Len(t, sessions, 1)
+	require.Equal(t, "as-root", sessions[0].ID)
+	_, err = os.Stat(filepath.Join(dir, ddxroot.DirName, "agent-logs", "sessions.jsonl"))
+	require.True(t, os.IsNotExist(err), "legacy in-tree session index should not exist")
 }
 
 func writeMetricsFixture(t *testing.T) string {

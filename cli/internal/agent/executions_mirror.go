@@ -190,7 +190,7 @@ func mirrorIncludeWorkers(v *bool) bool {
 func copyAgentLogToMirror(req MirrorRequest, destRoot string) error {
 	logDir := req.AgentLogDir
 	if logDir == "" {
-		logDir = filepath.Join(req.ProjectRoot, DefaultLogDir)
+		logDir = ResolveLogDir(req.ProjectRoot, DefaultLogDir)
 	}
 	src := filepath.Join(logDir, "agent-"+req.SessionID+".jsonl")
 	if _, err := os.Stat(src); err != nil {

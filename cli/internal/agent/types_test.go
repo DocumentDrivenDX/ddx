@@ -1,8 +1,12 @@
 package agent
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 func TestResolveLogDir(t *testing.T) {
@@ -14,50 +18,72 @@ func TestResolveLogDir(t *testing.T) {
 		return out
 	}
 
-	tests := []struct {
-		name        string
-		projectRoot string
-		configured  string
-		want        string
-	}{
-		{
-			name:        "empty configured uses DefaultLogDir anchored at projectRoot",
-			projectRoot: "/tmp/proj",
-			configured:  "",
-			want:        filepath.Join("/tmp/proj", DefaultLogDir),
-		},
-		{
-			name:        "relative configured is anchored at projectRoot",
-			projectRoot: "/tmp/proj",
-			configured:  ".ddx/agent-logs",
-			want:        filepath.Join("/tmp/proj", ".ddx/agent-logs"),
-		},
-		{
-			name:        "relative configured with subdir is anchored at projectRoot",
-			projectRoot: "/tmp/proj",
-			configured:  "var/logs",
-			want:        filepath.Join("/tmp/proj", "var/logs"),
-		},
-		{
-			name:        "absolute configured is returned unchanged",
-			projectRoot: "/tmp/proj",
-			configured:  abs("/var/log/ddx"),
-			want:        abs("/var/log/ddx"),
-		},
-		{
-			name:        "empty projectRoot with relative configured returns configured unchanged",
-			projectRoot: "",
-			configured:  ".ddx/agent-logs",
-			want:        ".ddx/agent-logs",
-		},
-	}
+	t.Run("empty configured uses convention DDx root when project has no in-tree state", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		projectRoot := t.TempDir()
+		want := ddxroot.JoinProject(projectRoot, "agent-logs")
+		got := ResolveLogDir(projectRoot, "")
+		if got != want {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, "", got, want)
+		}
+	})
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := ResolveLogDir(tc.projectRoot, tc.configured)
-			if got != tc.want {
-				t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", tc.projectRoot, tc.configured, got, tc.want)
-			}
-		})
-	}
+	t.Run("relative ddx path uses convention DDx root when project has no in-tree state", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		projectRoot := t.TempDir()
+		want := ddxroot.JoinProject(projectRoot, "agent-logs")
+		got := ResolveLogDir(projectRoot, ".ddx/agent-logs")
+		if got != want {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, ".ddx/agent-logs", got, want)
+		}
+	})
+
+	t.Run("in-tree ddx state stays anchored at project root", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		requireDDX := ddxroot.InTree(projectRoot)
+		if err := os.MkdirAll(requireDDX, 0o755); err != nil {
+			t.Fatalf("mkdir .ddx: %v", err)
+		}
+		want := filepath.Join(projectRoot, ddxroot.DirName, "agent-logs")
+		if got := ResolveLogDir(projectRoot, ""); got != want {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, "", got, want)
+		}
+		if got := ResolveLogDir(projectRoot, ".ddx/agent-logs"); got != want {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, ".ddx/agent-logs", got, want)
+		}
+	})
+
+	t.Run("relative configured outside ddx stays anchored at project root", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		want := filepath.Join(projectRoot, "var/logs")
+		got := ResolveLogDir(projectRoot, "var/logs")
+		if got != want {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, "var/logs", got, want)
+		}
+	})
+
+	t.Run("absolute configured is returned unchanged", func(t *testing.T) {
+		projectRoot := t.TempDir()
+		configured := abs("/var/log/ddx")
+		got := ResolveLogDir(projectRoot, configured)
+		if got != configured {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, configured, got, configured)
+		}
+	})
+
+	t.Run("empty projectRoot with relative configured returns configured unchanged", func(t *testing.T) {
+		got := ResolveLogDir("", ".ddx/agent-logs")
+		if got != ".ddx/agent-logs" {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", "", ".ddx/agent-logs", got, ".ddx/agent-logs")
+		}
+	})
+
+	t.Run("session log helper follows convention DDx root", func(t *testing.T) {
+		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		projectRoot := t.TempDir()
+		want := filepath.Join(ddxroot.Path(context.Background(), projectRoot), "agent-logs")
+		if got := ResolveLogDir(projectRoot, DefaultLogDir); got != want {
+			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, DefaultLogDir, got, want)
+		}
+	})
 }

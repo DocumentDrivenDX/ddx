@@ -670,12 +670,16 @@ func (s *Service) beadStore() *bead.Store {
 	return s.store
 }
 
+func (s *Service) sessionIndexPath() string {
+	return filepath.Join(agent.ResolveLogDir(s.WorkingDir, agent.DefaultLogDir), "sessions.jsonl")
+}
+
 func (s *Service) loadInputs() ([]bead.Bead, []agent.SessionEntry, map[string]agent.SessionEntry, map[string]bool, error) {
 	beads, err := s.beadStore().ReadAll(context.Background())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	sessions, sessionCostPresent, err := readSessions(filepath.Join(s.WorkingDir, agent.DefaultLogDir, "sessions.jsonl"))
+	sessions, sessionCostPresent, err := readSessions(s.sessionIndexPath())
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

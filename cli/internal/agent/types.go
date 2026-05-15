@@ -4,7 +4,10 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // Config holds agent service configuration.
@@ -440,6 +443,11 @@ func ResolveLogDir(projectRoot, configured string) string {
 	}
 	if projectRoot == "" {
 		return configured
+	}
+	clean := filepath.Clean(filepath.FromSlash(configured))
+	prefix := ddxroot.DirName + string(filepath.Separator)
+	if clean == DefaultLogDir || clean == ddxroot.DirName || clean == "."+string(filepath.Separator)+ddxroot.DirName || clean == ".ddx" || clean == filepath.Clean(DefaultLogDir) || strings.HasPrefix(clean, prefix) {
+		return projectStatePath(projectRoot, configured)
 	}
 	return filepath.Join(projectRoot, configured)
 }

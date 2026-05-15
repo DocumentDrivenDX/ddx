@@ -1,10 +1,13 @@
 package agentmetrics
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // writeFile materialises a path under workingDir, creating directories as
@@ -236,6 +239,31 @@ func TestLoadAttempts_ExplicitHarnessNotOverwritten(t *testing.T) {
 	if a.Harness != "codex" || a.Provider != "openai" || a.Model != "gpt5" {
 		t.Fatalf("explicit attempt fields must not be overwritten by routing event; got h=%q p=%q m=%q",
 			a.Harness, a.Provider, a.Model)
+	}
+}
+
+func TestLoadAttemptsUsesDDxRoot(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	wd := t.TempDir()
+	root := ddxroot.Path(context.Background(), wd)
+	writeFile(t, root, "exec/runs/run-root.json", `{
+		"id":"20260515T000000-root","layer":"try","status":"success",
+		"bead_id":"ddx-root","harness":"codex","model":"gpt-5.4",
+		"started_at":"2026-05-15T00:00:00Z"
+	}`)
+
+	got, err := LoadAttempts(wd)
+	if err != nil {
+		t.Fatalf("LoadAttempts: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 attempt, got %d", len(got))
+	}
+	if got[0].AttemptID != "20260515T000000-root" {
+		t.Fatalf("attempt id = %q, want convention-root record", got[0].AttemptID)
+	}
+	if _, err := os.Stat(filepath.Join(wd, ddxroot.DirName, "exec", "runs", "run-root.json")); !os.IsNotExist(err) {
+		t.Fatalf("legacy in-tree run-store file should not exist: %v", err)
 	}
 }
 
