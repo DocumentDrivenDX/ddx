@@ -55,12 +55,13 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 		}).Resolve(config.CLIOverrides{})
 	}
 
-	// Seed allowed DDx bookkeeping dirt in the parent so the checkpoint
+	// Seed durable DDx bookkeeping dirt in the parent so the checkpoint
 	// path has real work to do — exercises the `git add` / `git commit`
 	// race window inside the locked critical section without tripping the
 	// implementation-file rejection path.
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"),
-		[]byte(`{"workers":"concurrent"}`+"\n"), 0o644))
+	metricsPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"workers":"concurrent","outcome":"success"}`+"\n"), 0o644))
 
 	// Run n ExecuteBeadWithConfig calls concurrently against the SAME
 	// projectRoot, with NO outer mutex serialising them. Without the

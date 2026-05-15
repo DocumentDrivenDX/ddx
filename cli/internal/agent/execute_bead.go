@@ -787,10 +787,6 @@ func preDispatchCheckpointAllowedPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/runs/"):
 		return true
-	case strings.HasPrefix(path, ".ddx/run-state/"):
-		return true
-	case path == ".ddx/run-state.json":
-		return true
 	case path == ExecutionCleanupMetadataFileName:
 		return true
 	default:
@@ -810,6 +806,14 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 		return true
 	case strings.HasPrefix(path, ".ddx/attachments/"):
 		return true
+	case path == ".ddx/run-state.json":
+		return true
+	case path == ".ddx/run-state":
+		return true
+	case strings.HasPrefix(path, ".ddx/run-state/"):
+		return true
+	case preDispatchCheckpointIgnoredExecutionEmbeddedPath(path):
+		return true
 	case strings.HasPrefix(path, ".ddx/beads.jsonl.tmp-"):
 		return true
 	case path == ".ddx/workers":
@@ -819,6 +823,19 @@ func preDispatchCheckpointIgnoredPath(path string) bool {
 	default:
 		return false
 	}
+}
+
+func preDispatchCheckpointIgnoredExecutionEmbeddedPath(path string) bool {
+	const prefix = ".ddx/executions/"
+	if !strings.HasPrefix(path, prefix) {
+		return false
+	}
+	rest := strings.TrimPrefix(path, prefix)
+	attemptID, remainder, ok := strings.Cut(rest, "/")
+	if !ok || attemptID == "" {
+		return false
+	}
+	return remainder == "embedded" || strings.HasPrefix(remainder, "embedded/")
 }
 
 func synthesizeCommitExcludePathspecs(dir string) []string {

@@ -37,15 +37,42 @@ func runNoopExecuteBeadForCheckpoint(t *testing.T, projectRoot, beadID string) *
 	return res
 }
 
+func writeCheckpointTestFile(t *testing.T, projectRoot, rel, content string) string {
+	t.Helper()
+	path := filepath.Join(projectRoot, rel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	return filepath.ToSlash(rel)
+}
+
+func requireHeadMissingPath(t *testing.T, projectRoot, rel string) {
+	t.Helper()
+	_, err := runGitIntegOutput(projectRoot, "cat-file", "-e", "HEAD:"+filepath.ToSlash(rel))
+	require.Error(t, err, "%s must not be tracked in HEAD", rel)
+}
+
+func requireUntrackedOrIgnoredStatusEntries(t *testing.T, projectRoot string, rels ...string) {
+	t.Helper()
+	args := []string{"status", "--porcelain=v1", "--ignored=matching", "--untracked-files=all", "--"}
+	args = append(args, rels...)
+	status := runGitInteg(t, projectRoot, args...)
+	for _, rel := range rels {
+		path := filepath.ToSlash(rel)
+		assert.True(t,
+			strings.Contains(status, "!! "+path) || strings.Contains(status, "?? "+path),
+			"expected %s to remain untracked or ignored in git status, got:\n%s", path, status,
+		)
+	}
+}
+
 // TestExecuteBead_DirtyParentTree_CheckpointCommitted seeds a repo with
 // allowed DDx bookkeeping dirt, runs ExecuteBead, and asserts that the
 // checkpoint lands as a real commit on the current branch.
 func TestExecuteBead_DirtyParentTree_CheckpointCommitted(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"),
-		[]byte(`{"attempt_id":"checkpoint-test"}`+"\n"), 0o644))
+	metricsRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl"),
+		`{"attempt_id":"checkpoint-test","outcome":"success"}`+"\n")
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	commitsBefore := gitCommitCount(t, projectRoot, "HEAD")
@@ -61,8 +88,8 @@ func TestExecuteBead_DirtyParentTree_CheckpointCommitted(t *testing.T) {
 		"at least one commit (the checkpoint) must land on the parent branch")
 
 	// The allowed bookkeeping file must be reachable in HEAD.
-	runStateAtHead := runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json")
-	assert.Contains(t, runStateAtHead, "checkpoint-test",
+	metricsAtHead := runGitInteg(t, projectRoot, "show", "HEAD:"+metricsRel)
+	assert.Contains(t, metricsAtHead, "checkpoint-test",
 		"allowed bookkeeping content must be present in HEAD after checkpoint")
 
 	// BaseRev recorded on the result must be the post-checkpoint HEAD.
@@ -111,8 +138,8 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"hook-test"}`+"\n"), 0o644))
+	metricsRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl"),
+		`{"attempt_id":"hook-test","outcome":"success"}`+"\n")
 
 	markerPath := filepath.Join(projectRoot, "hook-invoked.txt")
 	hookPath := filepath.Join(projectRoot, ".git", "hooks", "pre-commit")
@@ -126,22 +153,86 @@ func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
 
 	_, statErr := os.Stat(markerPath)
 	require.True(t, os.IsNotExist(statErr), "pre-dispatch checkpoint must not invoke parent pre-commit hook")
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json"), "hook-test")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+metricsRel), "hook-test")
+}
+
+func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260515T000001-runstate"
+	runStateRootRel := filepath.Join(ddxroot.DirName, "run-state.json")
+	runStateAttemptRel := filepath.Join(ddxroot.DirName, "run-state", attemptID+".json")
+	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
+
+	writeCheckpointTestFile(t, projectRoot, runStateRootRel, `{"attempt_id":"`+attemptID+`","kind":"legacy"}`+"\n")
+	writeCheckpointTestFile(t, projectRoot, runStateAttemptRel, `{"attempt_id":"`+attemptID+`","kind":"attempt"}`+"\n")
+	writeCheckpointTestFile(t, projectRoot, metricsRel, `{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n")
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.NotContains(t, paths, filepath.ToSlash(runStateRootRel))
+	assert.NotContains(t, paths, filepath.ToSlash(runStateAttemptRel))
+	assert.Contains(t, paths, filepath.ToSlash(metricsRel))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.True(t, committed, "durable metrics dirt should still checkpoint")
+	assert.NotEqual(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(metricsRel)), attemptID)
+	requireHeadMissingPath(t, projectRoot, runStateRootRel)
+	requireHeadMissingPath(t, projectRoot, runStateAttemptRel)
+	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, runStateRootRel, runStateAttemptRel)
+}
+
+func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260515T000002-embedded"
+	manifestRel := filepath.Join(ddxroot.DirName, "executions", attemptID, "manifest.json")
+	embeddedRel := filepath.Join(ddxroot.DirName, "executions", attemptID, "embedded", "git-bin", "git")
+
+	writeCheckpointTestFile(t, projectRoot, manifestRel, `{"attempt_id":"`+attemptID+`"}`+"\n")
+	writeCheckpointTestFile(t, projectRoot, embeddedRel, "private git runtime\n")
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, paths, filepath.ToSlash(manifestRel))
+	assert.NotContains(t, paths, filepath.ToSlash(embeddedRel))
+
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.True(t, committed, "durable execution evidence should still checkpoint")
+
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(manifestRel)), attemptID)
+	requireHeadMissingPath(t, projectRoot, embeddedRel)
+	_, statErr := os.Stat(filepath.Join(projectRoot, embeddedRel))
+	require.NoError(t, statErr, "embedded private file should remain on disk but stay untracked")
 }
 
 func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260513T000001-allow000"
+	beadsRel := filepath.Join(ddxroot.DirName, "beads.jsonl")
+	beadsPath := filepath.Join(projectRoot, beadsRel)
+	beadsBefore, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(beadsPath, append(beadsBefore, '\n'), 0o644))
+	manifestRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "executions", attemptID, "manifest.json"),
+		`{"attempt_id":"`+attemptID+`","artifact":"manifest"}`+"\n")
+	promptRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "executions", attemptID, "prompt.md"),
+		"# Prompt\n\nattempt "+attemptID+"\n")
+	usageRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "executions", attemptID, "usage.json"),
+		`{"attempt_id":"`+attemptID+`","tokens":42}`+"\n")
+	resultRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "executions", attemptID, "result.json"),
+		`{"attempt_id":"`+attemptID+`","status":"success"}`+"\n")
+	metricsRel := writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl"),
+		`{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n")
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"allow"}`+"\n"), 0o644))
-	evidenceRel := filepath.Join(ddxroot.DirName, "executions", attemptID, "manifest.json")
-	evidencePath := filepath.Join(projectRoot, evidenceRel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
-	require.NoError(t, os.WriteFile(evidencePath, []byte(`{"attempt_id":"`+attemptID+`"}`+"\n"), 0o644))
-	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
-	metricsPath := filepath.Join(projectRoot, metricsRel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
-	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n"), 0o644))
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	for _, rel := range []string{beadsRel, manifestRel, promptRel, usageRel, resultRel, metricsRel} {
+		assert.Contains(t, paths, filepath.ToSlash(rel))
+	}
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
@@ -151,8 +242,14 @@ func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 
 	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	assert.NotEqual(t, headBefore, headAfter, "HEAD must advance for checkpointed bookkeeping")
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json"), "allow")
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+evidenceRel), attemptID)
+	committedPaths := runGitInteg(t, projectRoot, "show", "--pretty=format:", "--name-only", "HEAD")
+	for _, rel := range []string{beadsRel, manifestRel, promptRel, usageRel, resultRel, metricsRel} {
+		assert.Contains(t, committedPaths, filepath.ToSlash(rel))
+	}
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+manifestRel), attemptID)
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+promptRel), attemptID)
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+usageRel), attemptID)
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+resultRel), attemptID)
 	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+metricsRel), attemptID)
 }
 
@@ -224,7 +321,8 @@ func TestCheckpointPreDispatchDirtPreservesSkipWorktreeLocalOverlay(t *testing.T
 	require.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", pluginFileRel),
 		"skip-worktree local overlay changes must start hidden")
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ddxroot.DirName, "run-state.json"), []byte(`{"attempt_id":"overlay"}`+"\n"), 0o644))
+	writeCheckpointTestFile(t, projectRoot, filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl"),
+		`{"attempt_id":"overlay","outcome":"success"}`+"\n")
 	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
 	require.NoError(t, err)
 	require.True(t, committed, "allowed DDx bookkeeping should still checkpoint")
