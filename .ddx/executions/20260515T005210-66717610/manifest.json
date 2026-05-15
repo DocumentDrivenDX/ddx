@@ -1,0 +1,219 @@
+{
+  "attempt_id": "20260515T005210-66717610",
+  "bead_id": "ddx-387a0178",
+  "base_rev": "a833353e7e9eb79ab19fdc3bd0563b75ef6d7c44",
+  "created_at": "2026-05-15T00:52:25.783992481Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-387a0178",
+    "title": "C13: file/identifier rename per refactor proposal §3 + ADD ddx try CLI command + handle dc157075 path migration",
+    "description": "PROBLEM\n  The execute-bead subsystem files use execute_bead_* naming that conflates the orchestrator, the attempt, the review, and the loop under one prefix, making package boundaries and import graphs ambiguous. The refactor proposal was stored at /tmp/ and is unreadable post-session.\n\nROOT CAUSE\n  cli/internal/agent/execute_bead_loop.go (drain loop), cli/internal/agent/execute_bead.go (attempt), cli/internal/agent/execute_bead_orchestrator.go (land coordinator), cli/internal/agent/execute_bead_land.go (landing), cli/internal/agent/execute_bead_review.go (review), cli/internal/agent/execute_bead_review_triage.go (review triage), cli/internal/agent/execute_bead_status.go (disposition), and cli/internal/agent/executions_mirror.go (mirror) all share a flat package with unrelated concerns. The ddx try CLI command named in FEAT-010 does not exist (cli/cmd/try.go absent).\n\nPROPOSED FIX\n  Rename per the following table (no behavior change):\n    cli/internal/agent/execute_bead.go             -\u003e cli/internal/agent/try/attempt.go (already exists; merge or verify)\n    cli/internal/agent/execute_bead_orchestrator.go -\u003e cli/internal/agent/try/land.go\n    cli/internal/agent/execute_bead_land.go         -\u003e cli/internal/agent/try/coordinator.go\n    cli/internal/agent/execute_bead_review.go       -\u003e cli/internal/agent/try/review.go\n    cli/internal/agent/execute_bead_review_triage.go -\u003e cli/internal/agent/try/review_triage.go\n    cli/internal/agent/execute_bead_status.go       -\u003e cli/internal/agent/try/disposition.go\n    cli/internal/agent/execute_bead_loop.go         -\u003e cli/internal/agent/work/drain.go\n    cli/internal/agent/executions_mirror.go         -\u003e cli/internal/agent/try/mirror.go\n\n  Rename identifiers: ExecuteBeadWorker -\u003e work.Worker, ExecuteBeadWorker.Run -\u003e work.Worker.Drain, ExecuteBead -\u003e try.Attempt (FEAT-006 + FEAT-010).\n\n  Add cli/cmd/try.go with cobra command \"ddx try \u003cbead-id\u003e\" invoking try.Attempt directly (FEAT-010 surface).\n\n  Update FEAT-006 and FEAT-010 spec docs to reflect new package paths. Keep ExecuteBead* shims as typedefs; deletion is C14.\n\nNON-SCOPE\n  - Behavior changes to the drain loop or attempt logic.\n  - Deletion of ExecuteBead* typedefs (C14).\n  - ddx-dc157075 file-path reference migration if that bead has not yet landed.\n\nINTERSECTIONS\n- P2: file and identifier names should reflect the subsystem boundary and keep responsibilities separated.\n- P5: ddx try as a first-class CLI surface makes the worker/attempt state easier for operators to see.\n- P7: the refactor aligns names and prompt surface with the bead-as-prompt contract.",
+    "acceptance": "1. All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\n2. cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\n3. cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\n4. All identifier renames complete: ExecuteBeadWorker -\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\n5. cli/cmd/try.go exists; \"ddx try --help\" prints usage and names the bead-id argument.\n6. ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\n7. ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\n8. FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\n9. cd cli \u0026\u0026 go build ./... green; cd cli \u0026\u0026 go test ./... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "ac-quality:needs-refinement",
+      "kind:refactor",
+      "phase:2",
+      "refactor"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-15T00:51:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2239551",
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All identifier renames complete: ExecuteBeadWorker -\\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cli/cmd/try.go exists; \\\"ddx try --help\\\" prints usage and names the bead-id argument.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":7,\"text\":\"ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":9,\"text\":\"cd cli \\u0026\\u0026 go build ./... green; cd cli \\u0026\\u0026 go test ./... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":10,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-13T20:55:08.278840465Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=4/10"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-387a0178)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T20:55:38.668412577Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All identifier renames complete: ExecuteBeadWorker -\\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cli/cmd/try.go exists; \\\"ddx try --help\\\" prints usage and names the bead-id argument.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":7,\"text\":\"ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":9,\"text\":\"cd cli \\u0026\\u0026 go build ./... green; cd cli \\u0026\\u0026 go test ./... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":10,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-14T03:56:53.585635833Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=4/10"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-387a0178)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T03:57:23.496076111Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All identifier renames complete: ExecuteBeadWorker -\\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cli/cmd/try.go exists; \\\"ddx try --help\\\" prints usage and names the bead-id argument.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":7,\"text\":\"ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":9,\"text\":\"cd cli \\u0026\\u0026 go build ./... green; cd cli \\u0026\\u0026 go test ./... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":10,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-14T04:02:32.272417085Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=4/10"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-387a0178)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-14T04:03:02.184732884Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:11:42.557222264Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:12:00.467150774Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:24:06.528717671Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T05:24:40.701897576Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All identifier renames complete: ExecuteBeadWorker -\\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cli/cmd/try.go exists; \\\"ddx try --help\\\" prints usage and names the bead-id argument.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":7,\"text\":\"ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":9,\"text\":\"cd cli \\u0026\\u0026 go build ./... green; cd cli \\u0026\\u0026 go test ./... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":10,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-14T15:42:43.964603071Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=4/10"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:43:57.396575716Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-387a0178\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:43:57.456684349Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:43:57.570497342Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All identifier renames complete: ExecuteBeadWorker -\\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cli/cmd/try.go exists; \\\"ddx try --help\\\" prints usage and names the bead-id argument.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":7,\"text\":\"ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":9,\"text\":\"cd cli \\u0026\\u0026 go build ./... green; cd cli \\u0026\\u0026 go test ./... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":10,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-14T17:36:23.257564345Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=4/10"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-omlx\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T17:40:45.389701265Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"Qwen3.6-27B-MLX-8bit\",\"actual_power\":5,\"actual_provider\":\"grendel-omlx\",\"attempt_id\":\"20260514T173731-f88ad2a6\",\"bead_id\":\"ddx-387a0178\",\"inferred_power_class\":\"standard\",\"rejected_route_pins\":null,\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T17:40:45.618773976Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=standard model=Qwen3.6-27B-MLX-8bit harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"harness\":\"fiz\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel-omlx\"}",
+          "created_at": "2026-05-14T17:40:45.816642092Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout\npowerClass=standard\nresult_rev=4eb12b4e386de014bbbcdc13d2fc75dc0b4004b3\nbase_rev=4eb12b4e386de014bbbcdc13d2fc75dc0b4004b3\nretry_after=2026-05-14T17:55:45Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T17:40:45.961946694Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"All file renames in the table above complete; old filenames absent from cli/internal/agent/ (except execute_bead_conflict_recovery.go which is not renamed in this bead).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"cli/internal/agent/try/ contains: attempt.go, land.go, coordinator.go, review.go, review_triage.go, disposition.go, mirror.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"cli/internal/agent/work/ contains: drain.go (renamed from execute_bead_loop.go).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All identifier renames complete: ExecuteBeadWorker -\\u003e work.Worker; work.Worker.Drain replaces Run; ExecuteBead callers updated to try.Attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cli/cmd/try.go exists; \\\"ddx try --help\\\" prints usage and names the bead-id argument.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"ExecuteBead* typedefs remain (no deletion); existing callers compile without changes.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":7,\"text\":\"ddx agent work and ddx agent execute-bead remain as deprecated CLI aliases.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"FEAT-006 and FEAT-010 spec docs updated to reflect new package paths.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":9,\"text\":\"cd cli \\u0026\\u0026 go build ./... green; cd cli \\u0026\\u0026 go test ./... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":10,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-15T00:51:16.974586728Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=4/10"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T17:40:45Z",
+          "model": "Qwen3.6-27B-MLX-8bit",
+          "provider": "grendel-omlx",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "work-heartbeat-at": "2026-05-15T00:51:16.895888379Z",
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl",
+      "work-last-status": "preclaim-hook-failed"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T005210-66717610",
+    "prompt": ".ddx/executions/20260515T005210-66717610/prompt.md",
+    "manifest": ".ddx/executions/20260515T005210-66717610/manifest.json",
+    "result": ".ddx/executions/20260515T005210-66717610/result.json",
+    "checks": ".ddx/executions/20260515T005210-66717610/checks.json",
+    "usage": ".ddx/executions/20260515T005210-66717610/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-387a0178-20260515T005210-66717610"
+  },
+  "prompt_sha": "32aa43b3523243b5bac3d67967832c303afa3e2b6398a6abec693c0225cd471b"
+}
