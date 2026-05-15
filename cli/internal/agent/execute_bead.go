@@ -2033,7 +2033,7 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // TestPromptGuardrails_AllPresent enforce this list; add a guardrail here
 // AND to both tests when you introduce one.
 //
-// 19 guardrails (FEAT-022 cross-reference):
+// 20 guardrails (FEAT-022 cross-reference):
 //  1. AC checkbox: every AC satisfied by a specific code/test/file (anti-handwave)
 //  2. Read named files / referenced specs first, before editing
 //  3. Missing-governing fallback note (non-minimal renders only — see
@@ -2051,9 +2051,11 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // 14. Reports go under {{.AttemptDir}}/, never /tmp, committed alongside code
 // 15. Write no_changes_rationale.txt before exiting empty
 // 16. Step 0 size-check + decomposition (ddx bead create / dep add / update)
-// 17. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
-// 18. Stop after the commit (Agent post-commit runaway guard)
-// 19. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
+// 17. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
+//     parent-note updates may touch current-bead tracker state
+// 18. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
+// 19. Stop after the commit (Agent post-commit runaway guard)
+// 20. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
 // Both variants emit it verbatim; per-variant preamble runs before it.
@@ -2100,7 +2102,7 @@ const instrInvestigationReports = `
 
 ## Reports
 
-Freestanding artifacts (investigation reports, findings docs) go under ` + "`{{.AttemptDir}}/`" + ` (the per-attempt evidence directory under ` + "`.ddx/executions/`" + `). **Never write reports to ` + "`/tmp`" + ` or any path outside the repository** — out-of-repo paths are invisible to the post-merge reviewer and cause BLOCK on missing evidence. If the bead names a specific in-repo path, use it; else default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside code.`
+Freestanding artifacts (investigation reports, findings docs) go under ` + "`{{.AttemptDir}}/`" + ` under ` + "`.ddx/executions/`" + `. **Never write reports to ` + "`/tmp`" + ` or outside the repository** — post-merge review cannot see them. If the bead names a specific in-repo path, use it; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside code.`
 
 // instrReviewGate is the shared review-as-gate rule.
 const instrReviewGate = `
@@ -2144,6 +2146,7 @@ const executeBeadInstructionsClaudeText = `You are executing one bead inside an 
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + ` (the worktree may have unrelated WIP).
 - Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Stop after the commit.
 - Do not modify files outside the bead's scope.
+- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + ` on the current bead. Step 0 still allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + `, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` (what is done, what blocks, what a follow-up needs) before exiting. No commit and no rationale ⇒ DDx records ` + "`no_evidence_produced`" + `. A well-justified no_changes beats a bad commit.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
@@ -2161,21 +2164,22 @@ After the commit succeeds and every AC is verified, stop. Return control to the 
 // embedded). It composes an agent-specific preamble + tool-aware process
 // body with the shared instr* blocks. The Agent variant carries the
 // stop-after-commit runaway guard (codex catch).
-const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. Tools: read, write, edit, bash, ls, grep, find. Use them — do not shell out to ` + "`bash: cat`" + `, ` + "`bash: rg`" + `, or ` + "`bash: ls`" + `.
+const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. Tools: read, write, edit, bash, ls, grep, find. Use them — not ` + "`bash: cat`" + `, ` + "`bash: rg`" + `, or ` + "`bash: ls`" + `.
 
-The bead's <description> and <acceptance> are the completion contract. Every AC must be satisfied by code you write in this pass.` +
+The bead's <description> and <acceptance> are the completion contract. Every AC must be satisfied by code in this pass.` +
 	instrStep0SizeCheck +
 	`
 
 ## Process
 
 - Read first. Read the files the bead names before editing — do not guess.
-- Use ` + "`edit`" + ` for changes to existing files; ` + "`write`" + ` for new files; ` + "`read`" + ` / ` + "`grep`" + ` / ` + "`ls`" + ` for inspection (never the bash equivalents).
-- Run the project's test and lint commands before committing. **Do not commit red code** — diagnose and fix.
+- Use ` + "`edit`" + ` for existing files, ` + "`write`" + ` for new files, and ` + "`read`" + ` / ` + "`grep`" + ` / ` + "`ls`" + ` for inspection (never the bash equivalents).
+- Run the project's test and lint commands before committing. **Do not commit red code**.
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + `.
 - Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Implementation and tests in the same commit.
-- Stop immediately after the commit succeeds. Do not keep reading, testing, or following up — that risks runaway loops.
+- Stop immediately after the commit succeeds. Do not keep reading, testing, or following up.
 - Do not modify files outside the bead's scope.
+- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + ` on the current bead. Step 0 still allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + `, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` (done / blocking / follow-up) before exiting. No commit and no rationale ⇒ ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +

@@ -171,6 +171,14 @@ If all three pass: close the bead.
 DDx try/work outcomes form a specific taxonomy. Each outcome
 maps to a concrete follow-up action:
 
+During a live `ddx work` / `ddx try` attempt, the current bead's lifecycle is
+orchestrator-owned. The worker executing that bead must not run
+`ddx bead update <bead-id> --claim`, `ddx bead update <bead-id> --status <status>`,
+`ddx bead update <bead-id> --unclaim`, or `ddx bead close <bead-id>` for the
+current bead. The Step 0 split-first path still allows child-bead
+`ddx bead create`, `ddx bead dep add`, and the parent-note update
+`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
+
 | Outcome | Meaning | Action |
 |---|---|---|
 | `success` | Tests pass, AC met, commit landed | `ddx bead close <id>` |

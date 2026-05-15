@@ -82,6 +82,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "decompose_bead_create", any: []string{"ddx bead create"}},
 		{name: "decompose_bead_dep_add", any: []string{"ddx bead dep add"}},
 		{name: "decompose_bead_update", any: []string{"ddx bead update"}},
+		{name: "current_bead_lifecycle_orchestrator_owned", any: []string{"Current-bead lifecycle is orchestrator-owned"}},
 		{name: "review_is_a_gate", any: []string{"review is a gate", "review is a gate, not an escape hatch"}},
 		{name: "blocking_review_findings", any: []string{"BLOCKING `<review-findings>`", "BLOCKING <review-findings>"}},
 		{name: "no_no_changes_with_blocking", any: []string{"do not declare `no_changes` with blocking findings open"}},
@@ -167,6 +168,41 @@ func TestExecuteBeadInstructionsContainsBeadExecutionMode(t *testing.T) {
 			} {
 				if !strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt missing execution-mode substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	forbidden := []string{
+		"Current-bead lifecycle is orchestrator-owned",
+		"ddx bead update <bead-id> --claim",
+		"ddx bead update <bead-id> --status <status>",
+		"ddx bead update <bead-id> --unclaim",
+		"ddx bead close <bead-id>",
+	}
+	allowed := []string{
+		"ddx bead create",
+		"ddx bead dep add",
+		"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range forbidden {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing lifecycle guardrail substring %q", c.variant, sub)
+				}
+			}
+			for _, sub := range allowed {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing decomposition allowance substring %q", c.variant, sub)
 				}
 			}
 		})
@@ -264,12 +300,12 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 }
 
 // TestPromptGuardrails_AllPresent is AC2 for ddx-fcdbc731: enumerates the
-// 19 load-bearing guardrails from the FEAT-022 comment block above the
+// 20 load-bearing guardrails from the FEAT-022 comment block above the
 // instr* constants and asserts each is present in the rendered full prompt
 // for both variants. Adding or removing a guardrail must update both the
 // comment block and this test.
 func TestPromptGuardrails_AllPresent(t *testing.T) {
-	// 18 instruction-level guardrails. Probes are XML-safe (no angle brackets)
+	// 19 instruction-level guardrails. Probes are XML-safe (no angle brackets)
 	// so they can be checked against the full XML-wrapped rendered prompt.
 	instrGuardrails := []struct{ name, probe string }{
 		{"ac_checkbox_anti_handwave", "AC must be"},
@@ -288,6 +324,7 @@ func TestPromptGuardrails_AllPresent(t *testing.T) {
 		{"no_changes_rationale", "no_changes_rationale.txt"},
 		{"step0_size_check", "Step 0: size check"},
 		{"decompose_recipe", "ddx bead create"},
+		{"current_bead_lifecycle_orchestrator_owned", "Current-bead lifecycle is orchestrator-owned"},
 		{"review_is_a_gate", "review is a gate"},
 		{"no_no_changes_with_blocking", "blocking findings open"},
 	}
