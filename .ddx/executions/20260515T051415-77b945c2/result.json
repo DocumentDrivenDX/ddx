@@ -1,0 +1,15 @@
+{
+  "bead_id": "ddx-77eb084e",
+  "attempt_id": "20260515T051415-77b945c2",
+  "base_rev": "faa79d38c4f605ecb9359c848942915990383202",
+  "result_rev": "faa79d38c4f605ecb9359c848942915990383202",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "loading bead ddx-77eb084e from worktree snapshot: bead: not found: ddx-77eb084e",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "loading bead ddx-77eb084e from worktree snapshot: bead: not found: ddx-77eb084e",
+  "failure_mode": "unknown",
+  "started_at": "0001-01-01T00:00:00Z",
+  "finished_at": "0001-01-01T00:00:00Z"
+}
