@@ -2151,6 +2151,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if unclaimErr := w.Store.Unclaim(candidate.ID); unclaimErr != nil && runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt cleanup error (Unclaim %s): %v\n", candidate.ID, unclaimErr)
 			}
+			if finalizeDurableAuditOrStop(candidate.ID, report) {
+				return result, ctxErr
+			}
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt released %s without recording terminal outcome: %v\n", candidate.ID, ctxErr)
 			}
