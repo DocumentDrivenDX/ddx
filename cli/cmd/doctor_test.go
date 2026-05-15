@@ -137,19 +137,18 @@ func runDoctorForProseCheckerTest(t *testing.T, valeVersion string) (string, err
 	return executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor")
 }
 
-// TestDoctor_FlagsLegacySymlinks verifies that ddx doctor exits non-zero and
-// writes the expected diagnostic strings to stderr when project-local skill
-// directories contain symlinks (pre-FEAT-015 install remnants).
-func TestDoctor_FlagsLegacySymlinks(t *testing.T) {
+// TestDoctor_FlagsLegacyDDxSkillSymlinks verifies that ddx doctor exits
+// non-zero and writes the expected diagnostic strings to stderr when the
+// DDx-managed project-local skill entry is still a symlink.
+func TestDoctor_FlagsLegacyDDxSkillSymlinks(t *testing.T) {
 	workDir := t.TempDir()
 
-	// Create a symlink under .agents/skills/ to simulate a pre-migration install.
+	// Create a ddx symlink under .agents/skills/ to simulate a pre-migration install.
 	agentSkillsDir := filepath.Join(workDir, ".agents", "skills")
 	if err := os.MkdirAll(agentSkillsDir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	// The symlink target need not exist; we only care that a symlink is present.
-	if err := os.Symlink("/nonexistent/old-global-path/helix-align", filepath.Join(agentSkillsDir, "helix-align")); err != nil {
+	if err := os.Symlink("/nonexistent/old-global-path/ddx", filepath.Join(agentSkillsDir, "ddx")); err != nil {
 		t.Fatalf("symlink: %v", err)
 	}
 
@@ -168,8 +167,8 @@ func TestDoctor_FlagsLegacySymlinks(t *testing.T) {
 
 	// Stderr must contain the symlink warning and the remediation hint.
 	stderr := stderrBuf.String()
-	if !strings.Contains(stderr, "symlink detected under .agents/skills") {
-		t.Errorf("stderr missing 'symlink detected under .agents/skills'; got:\n%s", stderr)
+	if !strings.Contains(stderr, "DDx skill symlink detected under .agents/skills") {
+		t.Errorf("stderr missing DDx skill symlink diagnostic; got:\n%s", stderr)
 	}
 	if !strings.Contains(stderr, "run: ddx update --force") {
 		t.Errorf("stderr missing 'run: ddx update --force'; got:\n%s", stderr)
@@ -331,12 +330,65 @@ func TestCheckPackageJSONLocations_UpToDate(t *testing.T) {
 	}
 }
 
+// TestDoctorLegacySkillSymlinkDirsIgnoresNonDDxProjectSkillSymlink verifies
+// that project-owned skill symlinks are ignored when the DDx-managed ddx
+// entries are real directories.
+func TestDoctorLegacySkillSymlinkDirsIgnoresNonDDxProjectSkillSymlink(t *testing.T) {
+	workDir := t.TempDir()
+
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "ddx"),
+		filepath.Join(".claude", "skills", "ddx"),
+	} {
+		if err := os.MkdirAll(filepath.Join(workDir, rel), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+	}
+	if err := os.Symlink("../../skills/helix", filepath.Join(workDir, ".agents", "skills", "helix")); err != nil {
+		t.Fatalf("symlink .agents helix: %v", err)
+	}
+	if err := os.Symlink("../../skills/helix", filepath.Join(workDir, ".claude", "skills", "helix")); err != nil {
+		t.Fatalf("symlink .claude helix: %v", err)
+	}
+
+	got := legacySkillSymlinkDirs(workDir)
+	if len(got) != 0 {
+		t.Errorf("expected non-DDx skill symlinks to be ignored, got %v", got)
+	}
+}
+
+// TestDoctorLegacySkillSymlinkDirsFlagsDDxSymlink verifies that a DDx-managed
+// ddx symlink under either supported skill root is still treated as legacy.
+func TestDoctorLegacySkillSymlinkDirsFlagsDDxSymlink(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		rel  string
+	}{
+		{name: "agents", rel: filepath.Join(".agents", "skills")},
+		{name: "claude", rel: filepath.Join(".claude", "skills")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			if err := os.MkdirAll(filepath.Join(workDir, tc.rel), 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			if err := os.Symlink("/nonexistent/target/ddx", filepath.Join(workDir, tc.rel, "ddx")); err != nil {
+				t.Fatalf("symlink: %v", err)
+			}
+
+			got := legacySkillSymlinkDirs(workDir)
+			if len(got) != 1 || got[0] != tc.rel {
+				t.Fatalf("legacySkillSymlinkDirs() = %v, want [%s]", got, tc.rel)
+			}
+		})
+	}
+}
+
 // TestLegacySkillSymlinkDirs_NoSymlinks verifies that legacySkillSymlinkDirs
-// returns nil when skill dirs contain only real files.
+// returns nil when the DDx-managed skill dirs contain only real files.
 func TestLegacySkillSymlinkDirs_NoSymlinks(t *testing.T) {
 	workDir := t.TempDir()
 
-	// Create a real directory (not a symlink) under .agents/skills/.
 	if err := os.MkdirAll(filepath.Join(workDir, ".agents", "skills", "ddx"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
@@ -344,33 +396,5 @@ func TestLegacySkillSymlinkDirs_NoSymlinks(t *testing.T) {
 	got := legacySkillSymlinkDirs(workDir)
 	if len(got) != 0 {
 		t.Errorf("expected no legacy dirs, got %v", got)
-	}
-}
-
-// TestLegacySkillSymlinkDirs_DetectsClaudeSkills verifies detection in
-// .claude/skills/ as well as .agents/skills/.
-func TestLegacySkillSymlinkDirs_DetectsClaudeSkills(t *testing.T) {
-	workDir := t.TempDir()
-
-	claudeSkillsDir := filepath.Join(workDir, ".claude", "skills")
-	if err := os.MkdirAll(claudeSkillsDir, 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.Symlink("/nonexistent/target", filepath.Join(claudeSkillsDir, "helix-run")); err != nil {
-		t.Fatalf("symlink: %v", err)
-	}
-
-	got := legacySkillSymlinkDirs(workDir)
-	if len(got) == 0 {
-		t.Fatal("expected legacy dir detected, got none")
-	}
-	found := false
-	for _, d := range got {
-		if strings.Contains(d, ".claude/skills") {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("expected .claude/skills in detected dirs, got %v", got)
 	}
 }

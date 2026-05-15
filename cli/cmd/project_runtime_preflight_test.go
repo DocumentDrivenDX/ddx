@@ -150,19 +150,48 @@ func TestServerPreflight_MissingLifecycleSkillStartsDegraded(t *testing.T) {
 	assert.Contains(t, out, "ddx update --force", "degraded diagnostics must include primary remediation")
 }
 
-// TestProjectRuntimePreflight_LegacySkillSymlinkSuggestsUpdateForce verifies
-// that legacy project-local skill symlinks reuse the FEAT-015 remediation path:
-// ddx update --force first, then ddx doctor.
-func TestProjectRuntimePreflight_LegacySkillSymlinkSuggestsUpdateForce(t *testing.T) {
+// TestProjectRuntimePreflight_IgnoresNonDDxProjectSkillSymlink verifies that
+// project-owned skill symlinks do not degrade runtime preflight when the DDx
+// skill layout itself is healthy.
+func TestProjectRuntimePreflight_IgnoresNonDDxProjectSkillSymlink(t *testing.T) {
 	projectRoot := t.TempDir()
-	// Create a symlink under .agents/skills/ to simulate a pre-FEAT-015 install.
-	agentSkillsDir := filepath.Join(projectRoot, ".agents", "skills")
-	require.NoError(t, os.MkdirAll(agentSkillsDir, 0o755))
-	require.NoError(t, os.Symlink("/nonexistent/old-global-skill", filepath.Join(agentSkillsDir, "helix-align")))
+
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "ddx", "bead-lifecycle"),
+		filepath.Join(".claude", "skills", "ddx", "bead-lifecycle"),
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, rel), 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(projectRoot, rel, "SKILL.md"), []byte("# bead lifecycle"), 0o644))
+	}
+	require.NoError(t, os.Symlink("../../skills/helix", filepath.Join(projectRoot, ".agents", "skills", "helix")))
+	require.NoError(t, os.Symlink("../../skills/helix", filepath.Join(projectRoot, ".claude", "skills", "helix")))
 
 	result := checkProjectRuntimePreflight(projectRoot)
 
-	assert.NotEmpty(t, result.LegacySymlinkDirs, "legacy symlink must be detected")
+	assert.False(t, result.MissingBeadLifecycle, "bead-lifecycle must be found")
+	assert.Empty(t, result.LegacySymlinkDirs, "non-DDx project skill symlinks must be ignored")
+
+	var buf bytes.Buffer
+	emitPreflightWarning(&buf, result)
+	assert.Empty(t, buf.String(), "healthy DDx layout must not emit a preflight warning")
+}
+
+// TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsUpdateForce verifies
+// that legacy DDx skill symlinks reuse the FEAT-015 remediation path:
+// ddx update --force first, then ddx doctor.
+func TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsUpdateForce(t *testing.T) {
+	projectRoot := t.TempDir()
+	legacyDDxTarget := filepath.Join(projectRoot, "legacy-skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(legacyDDxTarget, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(legacyDDxTarget, "SKILL.md"), []byte("# bead lifecycle"), 0o644))
+
+	agentSkillsDir := filepath.Join(projectRoot, ".agents", "skills")
+	require.NoError(t, os.MkdirAll(agentSkillsDir, 0o755))
+	require.NoError(t, os.Symlink("../../legacy-skills/ddx", filepath.Join(agentSkillsDir, "ddx")))
+
+	result := checkProjectRuntimePreflight(projectRoot)
+
+	assert.NotEmpty(t, result.LegacySymlinkDirs, "legacy DDx skill symlink must be detected")
 
 	var buf bytes.Buffer
 	emitPreflightWarning(&buf, result)

@@ -372,16 +372,17 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		issues = append(issues, pkgIssues...)
 	}
 
-	// Check 14: Legacy symlinks under project skill directories (FEAT-015).
-	// In the project-local model all skills are real files. Symlinks indicate
-	// a pre-migration install; ddx update --force replaces them.
+	// Check 14: Legacy DDx skill symlinks under project skill directories
+	// (FEAT-015). In the project-local model the DDx-managed ddx skill is a
+	// real directory. A symlink indicates a pre-migration DDx install;
+	// project-owned non-DDx skill symlinks are allowed.
 	if legacyDirs := legacySkillSymlinkDirs(f.WorkingDir); len(legacyDirs) > 0 {
 		errOut := cmd.ErrOrStderr()
 		for _, dir := range legacyDirs {
-			fmt.Fprintf(errOut, "symlink detected under %s; pre-migration install detected\n", dir)
+			fmt.Fprintf(errOut, "DDx skill symlink detected under %s; pre-migration DDx skill install detected\n", dir)
 		}
 		fmt.Fprintln(errOut, "run: ddx update --force")
-		return fmt.Errorf("legacy skill symlinks detected")
+		return fmt.Errorf("legacy DDx skill symlinks detected")
 	}
 
 	fmt.Println()
@@ -403,29 +404,23 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// legacySkillSymlinkDirs returns the relative names of skill directories
-// (e.g. ".agents/skills", ".claude/skills") under workingDir that contain
-// at least one symlink. A symlink indicates a pre-FEAT-015 install.
+// legacySkillSymlinkDirs returns the relative names of project-local skill
+// directories (e.g. ".agents/skills", ".claude/skills") whose DDx-managed
+// ddx entry is still a symlink. That symlink indicates a pre-FEAT-015 DDx
+// install; unrelated project-owned skill symlinks are ignored.
 func legacySkillSymlinkDirs(workingDir string) []string {
 	if workingDir == "" {
 		return nil
 	}
 	var found []string
 	for _, rel := range []string{".agents/skills", ".claude/skills"} {
-		dir := filepath.Join(workingDir, rel)
-		entries, err := os.ReadDir(dir)
+		ddxSkillDir := filepath.Join(workingDir, rel, "ddx")
+		info, err := os.Lstat(ddxSkillDir)
 		if err != nil {
 			continue
 		}
-		for _, e := range entries {
-			info, err := e.Info()
-			if err != nil {
-				continue
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				found = append(found, rel)
-				break
-			}
+		if info.Mode()&os.ModeSymlink != 0 {
+			found = append(found, rel)
 		}
 	}
 	return found

@@ -8,14 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// makeWorkDirWithLegacySymlink creates a temp workdir containing a legacy symlink
-// under .agents/skills/, which causes full-scope doctor to exit non-zero.
+// makeWorkDirWithLegacySymlink creates a temp workdir containing a legacy DDx
+// skill symlink under .agents/skills/, which causes full-scope doctor to exit
+// non-zero.
 func makeWorkDirWithLegacySymlink(t *testing.T) string {
 	t.Helper()
 	workDir := t.TempDir()
 	agentSkillsDir := filepath.Join(workDir, ".agents", "skills")
 	require.NoError(t, os.MkdirAll(agentSkillsDir, 0o755))
-	require.NoError(t, os.Symlink("/nonexistent/old-global-path/helix-align", filepath.Join(agentSkillsDir, "helix-align")))
+	require.NoError(t, os.Symlink("/nonexistent/old-global-path/ddx", filepath.Join(agentSkillsDir, "ddx")))
 	return workDir
 }
 

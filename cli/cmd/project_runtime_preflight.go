@@ -13,7 +13,7 @@ type projectRuntimePreflightResult struct {
 	ProjectRoot          string
 	MissingBeadLifecycle bool
 	CheckedPaths         []string // both candidate paths that were checked
-	LegacySymlinkDirs    []string // non-empty when legacy symlinks detected (FEAT-015)
+	LegacySymlinkDirs    []string // non-empty when legacy DDx skill symlinks are detected (FEAT-015)
 }
 
 // checkProjectRuntimePreflight performs a lightweight check of the project-local
@@ -54,7 +54,7 @@ func emitPreflightWarning(w io.Writer, result projectRuntimePreflightResult) {
 		}
 	}
 	for _, dir := range result.LegacySymlinkDirs {
-		fmt.Fprintf(w, "  legacy skill symlinks under %s\n", dir)
+		fmt.Fprintf(w, "  legacy DDx skill symlink under %s\n", dir)
 	}
 	fmt.Fprintf(w, "  run: ddx update --force\n")
 	fmt.Fprintf(w, "  run: ddx doctor\n")
@@ -76,7 +76,7 @@ func emitServerPreflightDiagnostics(w io.Writer, result projectRuntimePreflightR
 		}
 	}
 	for _, dir := range result.LegacySymlinkDirs {
-		fmt.Fprintf(w, "  legacy skill symlinks under %s\n", dir)
+		fmt.Fprintf(w, "  legacy DDx skill symlink under %s\n", dir)
 	}
 	fmt.Fprintf(w, "  run: ddx update --force\n")
 	fmt.Fprintf(w, "  run: ddx doctor\n")
