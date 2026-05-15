@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260515T185832-6e32d565",
+  "bead_id": "ddx-d3328738",
+  "base_rev": "476149bae4af87dde7c84564fa6105b4843fe2ac",
+  "created_at": "2026-05-15T18:58:36.276112855Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d3328738",
+    "title": "metrics: record routing intent by estimated difficulty",
+    "description": "PROBLEM\nRouting-intent evidence, metrics, docs, and shipped DDx skill references still describe route-shaped hints (`power:*`, `triage.power_hint`, `TriagePowerHintKey`, or SMART JUSTIFICATION). TD-037 now requires evidence and docs to use estimated difficulty and the mapped abstract power class.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_loop.go:2738` records `inferred_power_class` without estimated difficulty.\n- `cli/internal/agentmetrics/loader.go` and related tests project power-class fields but not estimated difficulty.\n- `.agents/skills/ddx/reference/work.md` and shipped skill copies still mention `TriagePowerHint` in worker diagnostics.\n\nPROPOSED FIX\nRecord routing intent as `estimated_difficulty` plus mapped `requested_power_class`. Update metrics projection fields and tests to report attempts/cost/success by estimated difficulty. Remove new-use SMART JUSTIFICATION fields from current evidence. Update active and shipped DDx skill references so they teach only `triage.estimated_difficulty` and do not describe `TriagePowerHintKey` or `power:*` as durable hints.\n\nIN-SCOPE FILES\n- `cli/internal/agent/execute_bead_loop.go`\n- `cli/internal/agent/execute_bead_routing_evidence_test.go`\n- `cli/internal/agentmetrics/loader.go`\n- `cli/internal/agentmetrics/types.go`\n- `cli/internal/agentmetrics/loader_test.go`\n- `.agents/skills/ddx/reference/work.md`\n- `cli/internal/registry/defaultplugin/library/skills/ddx/reference/work.md`\n- docs touched by TD-037 if needed for consistency only\n\nNON-SCOPE\n- Do not change the Fizeau execution contract.\n- Do not backfill old attempt records.\n- Do not retain `SMART JUSTIFICATION` as a required current-run evidence field.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent ./internal/agentmetrics -run 'TestExecutionRoutingIntentRecordsEstimatedDifficulty|TestTryRecordsEstimatedDifficultyRoutingIntent|TestAgentMetricsLoadsEstimatedDifficulty|TestAgentMetricsRollupCountsEstimatedDifficulty' -count=1` passes.\n2. `rg -n 'TriagePowerHintKey|triage\\.power_hint|power:smart|power:hint|SMART JUSTIFICATION' .agents/skills/ddx cli/internal/registry/defaultplugin/library/skills/ddx docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md docs/helix/06-iterate/bead-authoring-template.md` returns only explicit “do not use / historical” wording, not instructions to author new hints.\n3. `ddx skills check .agents/skills/ddx cli/internal/registry/defaultplugin/library/skills/ddx` passes.\n4. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:metrics",
+      "area:skills",
+      "kind:task",
+      "td:037",
+      "plan:estimated-difficulty"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-d3328738)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T18:58:32.076904804Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "spec-id": "TD-037"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-037",
+      "path": "docs/helix/02-design/technical-designs/TD-037-bead-execution-hints.md",
+      "title": "Technical Design: Bead Estimated Difficulty"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260515T185832-6e32d565",
+    "prompt": ".ddx/executions/20260515T185832-6e32d565/prompt.md",
+    "manifest": ".ddx/executions/20260515T185832-6e32d565/manifest.json",
+    "result": ".ddx/executions/20260515T185832-6e32d565/result.json",
+    "checks": ".ddx/executions/20260515T185832-6e32d565/checks.json",
+    "usage": ".ddx/executions/20260515T185832-6e32d565/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-d3328738-20260515T185832-6e32d565"
+  },
+  "prompt_sha": "67abc09ea5a5b71b78bc7cef47e55db1e71878154accde2cd5ec7603c390d322"
+}
