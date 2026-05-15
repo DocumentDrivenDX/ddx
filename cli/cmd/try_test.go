@@ -774,3 +774,39 @@ func TestTry_ExitCodeContract_0_1_2(t *testing.T) {
 		})
 	}
 }
+
+func TestTryResult_PrintsLandingCoordinates(t *testing.T) {
+	var buf bytes.Buffer
+	writeTryResult(&buf, agent.ExecuteBeadReport{
+		BeadID:            "ddx-landing-001",
+		Status:            agent.ExecuteBeadStatusSuccess,
+		Detail:            "merged",
+		ResultRev:         "0d70176c11112222333344445555666677778888",
+		ImplementationRev: "6f6f6f6f11112222333344445555666677778888",
+		LandedRev:         "0d70176c11112222333344445555666677778888",
+		TargetBranch:      "ddx/a54e0299-burndown-232516",
+		ProjectRoot:       "/tmp/fizeau-a54e0299-rescue.235101",
+	})
+
+	out := buf.String()
+	assert.Contains(t, out, "implementation_rev: 6f6f6f6f11112222333344445555666677778888")
+	assert.Contains(t, out, "landed_rev: 0d70176c11112222333344445555666677778888")
+	assert.Contains(t, out, "landed_branch: ddx/a54e0299-burndown-232516")
+	assert.Contains(t, out, "project_root: /tmp/fizeau-a54e0299-rescue.235101")
+}
+
+func TestTrySideWorktreeLanding_PrintsNoRewriteRescueCommand(t *testing.T) {
+	var buf bytes.Buffer
+	writeTryResult(&buf, agent.ExecuteBeadReport{
+		BeadID:       "ddx-landing-002",
+		Status:       agent.ExecuteBeadStatusSuccess,
+		ResultRev:    "0d70176c11112222333344445555666677778888",
+		TargetBranch: "ddx/a54e0299-burndown-232516",
+		ProjectRoot:  "/tmp/fizeau-a54e0299-rescue.235101",
+	})
+
+	out := buf.String()
+	assert.Contains(t, out, "landing_scope: branch-local")
+	assert.Contains(t, out, "rescue_command: git merge --no-ff ddx/a54e0299-burndown-232516")
+	assert.Contains(t, out, "dirty_worktree_rescue: git worktree add ../ddx-rescue-ddx-a54e0299-burndown-232516 <target-branch> && cd ../ddx-rescue-ddx-a54e0299-burndown-232516 && git merge --no-ff ddx/a54e0299-burndown-232516")
+}

@@ -125,6 +125,11 @@ type LandResult struct {
 	// tip and ResultRev). Empty when preserved or no-changes.
 	NewTip string
 
+	// TargetBranch is the resolved branch name that Land() advanced or attempted
+	// to advance. It is set on landed and preserved results so callers can make
+	// branch-local recovery explicit in terminal output and evidence.
+	TargetBranch string
+
 	// Merged is true when the land took the merge-commit path (current tip
 	// had advanced beyond BaseRev, so Land() created a merge commit to
 	// combine the worker's result with the new target tip). False on the
@@ -1062,6 +1067,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		}
 		targetBranch = br
 	}
+	req.TargetBranch = targetBranch
 	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
 		return nil, err
 	}
@@ -1096,6 +1102,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		result := &LandResult{
 			Status:            "landed",
 			NewTip:            req.ResultRev,
+			TargetBranch:      targetBranch,
 			Merged:            false,
 			MergedCommitCount: contribCount,
 		}
@@ -1152,6 +1159,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 			Status:            "preserved",
 			PreserveRef:       preserveRef,
 			Reason:            "merge conflict",
+			TargetBranch:      targetBranch,
 			MergedCommitCount: contribCount,
 		}, nil
 	}
@@ -1168,6 +1176,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 	result := &LandResult{
 		Status:            "landed",
 		NewTip:            mergeSHA,
+		TargetBranch:      targetBranch,
 		Merged:            true,
 		MergedCommitCount: contribCount,
 	}
@@ -1221,6 +1230,7 @@ func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOp
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
 		Reason:            reason,
+		TargetBranch:      req.TargetBranch,
 		MergedCommitCount: contribCount,
 	}
 	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)
@@ -1241,6 +1251,7 @@ func preserveAfterEvidenceFailure(wd string, req LandRequest, gitOps LandingGitO
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
 		Reason:            "evidence commit failed: " + evidenceErr.Error(),
+		TargetBranch:      req.TargetBranch,
 		MergedCommitCount: contribCount,
 	}
 	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)
@@ -1297,6 +1308,7 @@ func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, c
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
 		Reason:            fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold),
+		TargetBranch:      req.TargetBranch,
 		MergedCommitCount: contribCount,
 	}, nil
 }
@@ -1373,6 +1385,7 @@ func preserveIfSyntaxSanityFails(wd string, req LandRequest, gitOps LandingGitOp
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
 		Reason:            fmt.Sprintf("syntax sanity gate: %s: %s", finding.Path, finding.Reason),
+		TargetBranch:      req.TargetBranch,
 		MergedCommitCount: contribCount,
 	}, nil
 }
@@ -1522,6 +1535,9 @@ func shortAttempt(attemptID string) string {
 func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult) {
 	if land == nil || res == nil {
 		return
+	}
+	if land.TargetBranch != "" {
+		res.TargetBranch = land.TargetBranch
 	}
 	switch land.Status {
 	case "landed":

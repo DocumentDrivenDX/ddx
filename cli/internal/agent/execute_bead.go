@@ -47,6 +47,9 @@ type ExecuteBeadResult struct {
 	// LandedRev is the target branch tip after the coordinator fast-forwards or
 	// merges the implementation commit. Populated by ApplyLandResultToExecuteBeadResult.
 	LandedRev string `json:"landed_rev,omitempty"`
+	// TargetBranch is the resolved branch that received the landing. It uses the
+	// landed_branch JSON name because callers care about the post-land location.
+	TargetBranch string `json:"landed_branch,omitempty"`
 	// EvidenceRev is the SHA of the trailing evidence commit when it differs from
 	// ImplementationRev. Populated by the evidence committer; empty otherwise.
 	EvidenceRev string `json:"evidence_rev,omitempty"`
@@ -114,6 +117,7 @@ type ExecuteBeadResult struct {
 	CostUSD                     float64 `json:"cost_usd,omitempty"`
 	ExitCode                    int     `json:"exit_code"`
 	Error                       string  `json:"error,omitempty"`
+	ProjectRoot                 string  `json:"project_root,omitempty"`
 
 	// FailureMode classifies why an execution did not land cleanly. Empty
 	// when the bead was merged (task_succeeded landing outcome). Populated
@@ -1202,6 +1206,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Reason:            resourceErr.Error(),
 				Outcome:           ExecuteBeadOutcomeTaskFailed,
 				Status:            ExecuteBeadStatusResourceExhausted,
+				ProjectRoot:       projectRoot,
 				ResourceExhausted: &resourceErr.Result,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
@@ -1313,14 +1318,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	artifacts, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
 	if err != nil {
 		res := &ExecuteBeadResult{
-			BeadID:    beadID,
-			AttemptID: attemptID,
-			WorkerID:  runtime.WorkerID,
-			BaseRev:   baseRev,
-			ResultRev: baseRev, // no commits; ResultRev == BaseRev signals no output
-			ExitCode:  1,
-			Error:     err.Error(),
-			Outcome:   ExecuteBeadOutcomeTaskFailed,
+			BeadID:      beadID,
+			AttemptID:   attemptID,
+			WorkerID:    runtime.WorkerID,
+			BaseRev:     baseRev,
+			ResultRev:   baseRev, // no commits; ResultRev == BaseRev signals no output
+			ExitCode:    1,
+			Error:       err.Error(),
+			Outcome:     ExecuteBeadOutcomeTaskFailed,
+			ProjectRoot: projectRoot,
 		}
 		// Bundle lives in the attempt worktree after the fix; check there.
 		wtBundleDir := filepath.Join(wtPath, ExecuteBeadArtifactDir, attemptID)
@@ -1475,6 +1481,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			Stderr:                      agentStderr,
 			RateLimitBudget:             runtime.RateLimitMaxWait,
 			Reason:                      headRevErr, // HeadRev failure; orchestrator prefers this over Error for Reason
+			ProjectRoot:                 projectRoot,
 			ExecutionDir:                artifacts.DirRel,
 			PromptFile:                  artifacts.PromptRel,
 			ManifestFile:                artifacts.ManifestRel,
@@ -1562,6 +1569,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				PredictedCostUSDPer1kTokens: predictedCostUSDPer1kTokens,
 				PredictedCostSource:         predictedCostSource,
 				SessionID:                   sessionID,
+				ProjectRoot:                 projectRoot,
 				DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
 				Tokens:                      tokens,
 				CostUSD:                     costUSD,
@@ -1617,6 +1625,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Error:                       agentErrMsg,
 		Stderr:                      agentStderr,
 		RateLimitBudget:             runtime.RateLimitMaxWait,
+		ProjectRoot:                 projectRoot,
 		ExecutionDir:                artifacts.DirRel,
 		PromptFile:                  artifacts.PromptRel,
 		ManifestFile:                artifacts.ManifestRel,

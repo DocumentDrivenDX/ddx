@@ -43,7 +43,9 @@ type Report struct {
 	ResultRev                   string
 	ImplementationRev           string
 	LandedRev                   string
+	TargetBranch                string
 	EvidenceRev                 string
+	ProjectRoot                 string
 	PreserveRef                 string
 	RetryAfter                  string
 	NoChangesRationale          string

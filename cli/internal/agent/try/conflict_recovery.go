@@ -138,8 +138,9 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		"result_rev":       report.ResultRev,
 		"session_id":       report.SessionID,
 		"auto_merge_error": autoErrMsg,
+		"rescue_command":   landConflictRescueCommand(report.PreserveRef),
 	})
-	bodyStr := report.PreserveRef
+	bodyStr := fmt.Sprintf("preserve_ref=%s\nrescue_command=%s", report.PreserveRef, landConflictRescueCommand(report.PreserveRef))
 	if mErr == nil {
 		bodyStr = string(body)
 	}
@@ -155,7 +156,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		Source:    "legacy agent try",
 		CreatedAt: now().UTC(),
 	})
-	report.Detail = report.Status + ": preserve_ref=" + report.PreserveRef
+	report.Detail = landConflictRescueDetail(report.Status, report.PreserveRef)
 
 	if report.Status == StatusLandConflictOperatorRequired {
 		if err := in.Store.Unclaim(in.Bead.ID); err != nil {
@@ -211,6 +212,20 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 	out.Report = report
 	out.Disposition = ConflictRecoveryPark
 	return out
+}
+
+func landConflictRescueCommand(preserveRef string) string {
+	if preserveRef == "" {
+		return ""
+	}
+	return "git merge --no-ff " + preserveRef
+}
+
+func landConflictRescueDetail(status, preserveRef string) string {
+	if preserveRef == "" {
+		return status
+	}
+	return fmt.Sprintf("%s: preserve_ref=%s rescue_command=%s", status, preserveRef, landConflictRescueCommand(preserveRef))
 }
 
 func removeConflictRecoveryLabels(labels []string, remove ...string) []string {

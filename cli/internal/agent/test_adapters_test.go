@@ -168,11 +168,13 @@ func runQuorumWithConfig(run RunFunc, _rcfg config.ResolvedConfig, runtime Quoru
 
 func TestExecutionTrace_AdapterPreservesCycleFields(t *testing.T) {
 	original := ExecuteBeadReport{
-		BeadID:    "ddx-trace",
-		AttemptID: "attempt-trace-002",
-		WorkerID:  "worker-1",
-		BaseRev:   "base-rev",
-		ResultRev: "result-rev",
+		BeadID:       "ddx-trace",
+		AttemptID:    "attempt-trace-002",
+		WorkerID:     "worker-1",
+		BaseRev:      "base-rev",
+		ResultRev:    "result-rev",
+		TargetBranch: "ddx/a54e0299-burndown-232516",
+		ProjectRoot:  "/tmp/fizeau-a54e0299-rescue.235101",
 		CycleTrace: []ExecutionCycleTrace{
 			{
 				CycleIndex: 0,

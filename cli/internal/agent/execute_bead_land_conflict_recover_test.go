@@ -152,6 +152,39 @@ func TestExecuteBeadLoopLandConflict_AutoRecoverFails_EscalatesResolver(t *testi
 	assert.True(t, sawUnresolvable, "must emit kind:land-conflict-unresolvable event")
 }
 
+func TestLandConflictUnresolvableEventIncludesRescueCommand(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	out := RunConflictRecovery(context.Background(), ConflictRecoveryInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:      first.ID,
+			Status:      ExecuteBeadStatusLandConflict,
+			PreserveRef: "refs/ddx/iterations/ddx-0001/20260429T000000-aabbccddeeff",
+			BaseRev:     "badc0de",
+			ResultRev:   "feedface",
+			SessionID:   "sess-conflict",
+		},
+		ProjectRoot: t.TempDir(),
+		AutoRecover: func(wd, preserveRef string, gitOps LandingGitOps) (string, error) {
+			return "", fmt.Errorf("cannot auto-merge")
+		},
+		Store:    store,
+		Assignee: "worker",
+		Now:      func() time.Time { return time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC) },
+		Cooldown: 15 * time.Minute,
+	})
+
+	assert.Equal(t, ConflictRecoveryPark, out.Disposition)
+	assert.Contains(t, out.Report.Detail, "git merge --no-ff refs/ddx/iterations/ddx-0001/20260429T000000-aabbccddeeff")
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Contains(t, events[0].Body, "preserve_ref")
+	assert.Contains(t, events[0].Body, "rescue_command")
+	assert.Contains(t, events[0].Body, "git merge --no-ff refs/ddx/iterations/ddx-0001/20260429T000000-aabbccddeeff")
+}
+
 // TestExecuteBeadLoopLandConflict_BlockingResolver_Proposed verifies that
 // when ConflictResolver signals isBlocking=true, the bead moves to
 // status=proposed with land_conflict_operator_required evidence.

@@ -424,9 +424,14 @@ type ExecuteBeadReport struct {
 	// LandedRev is the target branch tip after the coordinator landing.
 	// Distinct from ImplementationRev on the merge-commit path.
 	LandedRev string `json:"landed_rev,omitempty"`
+	// TargetBranch is the resolved landing branch. The JSON field is named
+	// landed_branch because it denotes the branch that now carries the result.
+	TargetBranch string `json:"landed_branch,omitempty"`
 	// EvidenceRev is the trailing evidence commit SHA when distinct from
 	// ImplementationRev. Empty when not separately committed.
 	EvidenceRev string `json:"evidence_rev,omitempty"`
+	// ProjectRoot is the worktree root ddx try/work operated on for this report.
+	ProjectRoot string `json:"project_root,omitempty"`
 	PreserveRef string `json:"preserve_ref,omitempty"`
 	// CandidateRef is the project-root git ref pinned before checks and review.
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.

@@ -1466,6 +1466,59 @@ func TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev_MergeCommit(
 	}
 }
 
+func TestLandResult_CarriesResolvedTargetBranch(t *testing.T) {
+	r := newLandTestRepo(t)
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "hello\n", "feat: worker change")
+
+	land, err := Land(r.dir, LandRequest{
+		BaseRev:   r.baseSHA,
+		ResultRev: workerSHA,
+		BeadID:    "ddx-test",
+		AttemptID: "20260515T091251-13788c66",
+	}, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land() error: %v", err)
+	}
+	if land.TargetBranch != "main" {
+		t.Fatalf("TargetBranch: want %q, got %q", "main", land.TargetBranch)
+	}
+}
+
+func TestApplyLandResult_PropagatesTargetBranchToReport(t *testing.T) {
+	const workerSHA = "aaaa1111bbbb2222cccc3333dddd4444eeee5555"
+	const landedSHA = "ffff6666aaaa7777bbbb8888cccc9999dddd0000"
+	const landedBranch = "ddx/a54e0299-burndown-232516"
+	const projectRoot = "/tmp/fizeau-a54e0299-rescue.235101"
+
+	res := &ExecuteBeadResult{
+		BeadID:      "ddx-test",
+		BaseRev:     "0000000000000000000000000000000000000000",
+		ResultRev:   workerSHA,
+		ProjectRoot: projectRoot,
+	}
+	land := &LandResult{
+		Status:       "landed",
+		NewTip:       landedSHA,
+		TargetBranch: landedBranch,
+	}
+
+	ApplyLandResultToExecuteBeadResult(res, land)
+	report := ReportFromExecuteBeadResult(res, "standard")
+	if report.TargetBranch != landedBranch {
+		t.Fatalf("ExecuteBeadReport.TargetBranch: want %q, got %q", landedBranch, report.TargetBranch)
+	}
+	if report.ProjectRoot != projectRoot {
+		t.Fatalf("ExecuteBeadReport.ProjectRoot: want %q, got %q", projectRoot, report.ProjectRoot)
+	}
+	legacy := toTryReport(report)
+	if legacy.TargetBranch != landedBranch {
+		t.Fatalf("try.Report.TargetBranch: want %q, got %q", landedBranch, legacy.TargetBranch)
+	}
+	if legacy.ProjectRoot != projectRoot {
+		t.Fatalf("try.Report.ProjectRoot: want %q, got %q", projectRoot, legacy.ProjectRoot)
+	}
+}
+
 // TestBuildLandRequest_UsesImplementationRevNotEvidenceRev proves that
 // BuildLandRequestFromResult uses the pre-landing implementation revision even
 // when EvidenceRev and LandedRev are also set (e.g. after a first land

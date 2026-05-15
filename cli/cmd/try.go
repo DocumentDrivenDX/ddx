@@ -516,9 +516,51 @@ func writeTryResult(w io.Writer, report agent.ExecuteBeadReport) {
 	if report.ResultRev != "" {
 		fmt.Fprintf(w, "result_rev: %s\n", report.ResultRev)
 	}
+	if report.ImplementationRev != "" && report.ImplementationRev != report.LandedRev {
+		fmt.Fprintf(w, "implementation_rev: %s\n", report.ImplementationRev)
+	}
+	if report.LandedRev != "" && report.LandedRev != report.ImplementationRev {
+		fmt.Fprintf(w, "landed_rev: %s\n", report.LandedRev)
+	}
+	if isSuccessfulTryResult(report) && report.TargetBranch != "" {
+		fmt.Fprintf(w, "landed_branch: %s\n", report.TargetBranch)
+	}
+	if isSuccessfulTryResult(report) && report.ProjectRoot != "" {
+		fmt.Fprintf(w, "project_root: %s\n", report.ProjectRoot)
+	}
 	if report.PreserveRef != "" {
 		fmt.Fprintf(w, "preserve_ref: %s\n", report.PreserveRef)
 	}
+	if needsNoRewriteLandingRescue(report) {
+		fmt.Fprintf(w, "landing_scope: branch-local\n")
+		fmt.Fprintf(w, "rescue_command: %s\n", noRewriteLandingRescueCommand(report.TargetBranch))
+		fmt.Fprintf(w, "dirty_worktree_rescue: %s\n", dirtyWorktreeRescueCommand(report.TargetBranch))
+	}
+}
+
+func isSuccessfulTryResult(report agent.ExecuteBeadReport) bool {
+	return report.Status == agent.ExecuteBeadStatusSuccess || report.Status == agent.ExecuteBeadStatusAlreadySatisfied
+}
+
+func needsNoRewriteLandingRescue(report agent.ExecuteBeadReport) bool {
+	if !isSuccessfulTryResult(report) || report.TargetBranch == "" {
+		return false
+	}
+	switch report.TargetBranch {
+	case "main", "master", "trunk":
+		return false
+	default:
+		return true
+	}
+}
+
+func noRewriteLandingRescueCommand(branch string) string {
+	return "git merge --no-ff " + branch
+}
+
+func dirtyWorktreeRescueCommand(branch string) string {
+	safeBranch := strings.NewReplacer("/", "-", "\\", "-", " ", "-").Replace(branch)
+	return fmt.Sprintf("git worktree add ../ddx-rescue-%s <target-branch> && cd ../ddx-rescue-%s && git merge --no-ff %s", safeBranch, safeBranch, branch)
 }
 
 // tryExitCodeForStatus maps a bead execution status string to the ddx try exit code contract.

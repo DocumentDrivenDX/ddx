@@ -262,11 +262,14 @@ func TestAttempt_ConflictUnresolvable_ReturnsPark(t *testing.T) {
 
 	assert.Equal(t, OutcomePark, out.Disposition)
 	assert.Equal(t, StatusLandConflictUnresolvable, out.Report.Status)
+	assert.Contains(t, out.Report.Detail, "git merge --no-ff refs/ddx/iterations/ddx-test/attempt")
 	assert.True(t, store.unclaimed)
 	assert.Equal(t, StatusLandConflictUnresolvable, store.cooldownStatus)
 	assert.NotEmpty(t, out.Report.RetryAfter)
 	require.Len(t, store.events, 1)
 	assert.Equal(t, "land-conflict-unresolvable", store.events[0].Kind)
+	assert.Contains(t, store.events[0].Body, "rescue_command")
+	assert.Contains(t, store.events[0].Body, "git merge --no-ff refs/ddx/iterations/ddx-test/attempt")
 }
 
 func TestAttempt_ConflictOperatorRequired_MovesToProposed(t *testing.T) {
@@ -302,11 +305,14 @@ func TestAttempt_ConflictOperatorRequired_MovesToProposed(t *testing.T) {
 
 	assert.Equal(t, OutcomePark, out.Disposition)
 	assert.Equal(t, StatusLandConflictOperatorRequired, out.Report.Status)
+	assert.Contains(t, out.Report.Detail, "git merge --no-ff refs/ddx/iterations/ddx-test/attempt")
 	assert.True(t, store.unclaimed)
 	assert.Equal(t, bead.StatusProposed, store.lifecycleStatus)
 	assert.Empty(t, store.cooldownStatus, "operator-required conflicts must not rely on cooldown parking")
 	require.Len(t, store.events, 1)
 	assert.Equal(t, "land-conflict-operator-required", store.events[0].Kind)
+	assert.Contains(t, store.events[0].Body, "rescue_command")
+	assert.Contains(t, store.events[0].Body, "git merge --no-ff refs/ddx/iterations/ddx-test/attempt")
 }
 
 func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.T) {
