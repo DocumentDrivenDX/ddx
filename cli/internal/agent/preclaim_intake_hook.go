@@ -163,7 +163,7 @@ func normalizeReadinessStringList(items []string) []string {
 	return out
 }
 
-func decodeReadinessAcceptanceList(data []byte, fieldName string) ([]string, error) {
+func decodeReadinessStringListField(data []byte, fieldName string, splitLines bool) ([]string, error) {
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" || trimmed == "null" {
 		return nil, nil
@@ -180,10 +180,17 @@ func decodeReadinessAcceptanceList(data []byte, fieldName string) ([]string, err
 		if err := json.Unmarshal(data, &item); err != nil {
 			return nil, err
 		}
-		return normalizeReadinessStringList(strings.Split(item, "\n")), nil
+		if splitLines {
+			return normalizeReadinessStringList(strings.Split(item, "\n")), nil
+		}
+		return normalizeReadinessStringList([]string{item}), nil
 	default:
 		return nil, fmt.Errorf("%s must be a string or string array", fieldName)
 	}
+}
+
+func decodeReadinessAcceptanceList(data []byte, fieldName string) ([]string, error) {
+	return decodeReadinessStringListField(data, fieldName, true)
 }
 
 type preClaimReadinessSuggestedChild struct {
@@ -224,6 +231,25 @@ type preClaimReadinessWaiver struct {
 	Reason   string   `json:"reason,omitempty"`
 	Criteria []string `json:"criteria,omitempty"`
 	Evidence string   `json:"evidence,omitempty"`
+}
+
+func (w *preClaimReadinessWaiver) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Reason   string          `json:"reason,omitempty"`
+		Criteria json.RawMessage `json:"criteria,omitempty"`
+		Evidence string          `json:"evidence,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	criteria, err := decodeReadinessStringListField(raw.Criteria, "waivers_applied[].criteria", false)
+	if err != nil {
+		return err
+	}
+	w.Reason = strings.TrimSpace(raw.Reason)
+	w.Criteria = criteria
+	w.Evidence = strings.TrimSpace(raw.Evidence)
+	return nil
 }
 
 type preClaimReadinessWaiversPayload []preClaimReadinessWaiver
