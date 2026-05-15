@@ -241,6 +241,11 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	if err := ensureProjectGitignoreRules(workingDir, initGitignoreRules); err != nil {
 		return nil, NewExitError(1, fmt.Sprintf("Failed to update .gitignore: %v", err))
 	}
+	if !opts.NoGit {
+		if err := untrackLegacyRunStateFiles(context.Background(), workingDir); err != nil {
+			return nil, NewExitError(1, fmt.Sprintf("Failed to migrate legacy run-state tracking: %v", err))
+		}
+	}
 
 	// Create library directory structure (offline-safe — plugin install may fail).
 	libraryPath := filepath.Join(workingDir, localConfig.Library.Path)
@@ -460,6 +465,32 @@ func ensureProjectGitignoreRules(workingDir string, rules []string) error {
 		updated += rule + "\n"
 	}
 	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+func untrackLegacyRunStateFiles(ctx context.Context, workingDir string) error {
+	if workingDir == "" {
+		return nil
+	}
+	if out, err := gitpkg.Command(ctx, workingDir, "rev-parse", "--is-inside-work-tree").Output(); err != nil || strings.TrimSpace(string(out)) != "true" {
+		return nil
+	}
+	lsCmd := gitpkg.Command(ctx, workingDir, "ls-files", "-z", "--", ".ddx/run-state.json", ".ddx/run-state")
+	lsOut, err := lsCmd.Output()
+	if err != nil {
+		return err
+	}
+	if len(lsOut) == 0 {
+		return nil
+	}
+	rmCmd := gitpkg.Command(ctx, workingDir, "rm", "--cached", "-r", "-f", "-q", "--ignore-unmatch", "--", ".ddx/run-state.json", ".ddx/run-state")
+	if out, err := rmCmd.CombinedOutput(); err != nil {
+		msg := strings.TrimSpace(string(out))
+		if msg == "" {
+			return err
+		}
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return nil
 }
 
 func containsExactLine(content, target string) bool {

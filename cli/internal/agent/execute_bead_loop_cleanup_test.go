@@ -146,6 +146,22 @@ func (s *cleanupAdvanceClaimStore) Claim(id, assignee string) error {
 	return s.ExecuteBeadLoopStore.Claim(id, assignee)
 }
 
+func (s *cleanupAdvanceClaimStore) ClaimWithOptions(id, assignee, session, worktree string) error {
+	claim := atomic.AddInt32(s.claimCalls, 1)
+	if claim == 1 {
+		atomic.StoreInt32(&s.firstClaimCleanupCount, atomic.LoadInt32(s.cleanupCalls))
+	}
+	if claim == 2 && atomic.LoadInt32(s.cleanupCalls) <= atomic.LoadInt32(&s.firstClaimCleanupCount) {
+		s.t.Fatalf("cleanup must run again before the next claim after finalization failure")
+	}
+	if claimer, ok := s.ExecuteBeadLoopStore.(interface {
+		ClaimWithOptions(id, assignee, session, worktree string) error
+	}); ok {
+		return claimer.ClaimWithOptions(id, assignee, session, worktree)
+	}
+	return s.ExecuteBeadLoopStore.Claim(id, assignee)
+}
+
 func TestWorkCleanup_RunsAtStartup(t *testing.T) {
 	projectRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
@@ -470,7 +486,6 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	ctx, cancel := context.WithCancel(context.Background())
-	claimed := make(chan struct{})
 	done := make(chan struct {
 		result *ExecuteBeadLoopResult
 		err    error
@@ -494,19 +509,8 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 	}()
 
 	require.Eventually(t, func() bool {
-		got, err := inner.Get(first.ID)
-		if err != nil {
-			return false
-		}
-		if got.Owner != "" {
-			select {
-			case <-claimed:
-			default:
-				close(claimed)
-			}
-			return true
-		}
-		return false
+		lease, found, err := inner.ClaimLease(first.ID)
+		return err == nil && found && lease.Owner != ""
 	}, 2*time.Second, 10*time.Millisecond)
 
 	beforeCancel := atomic.LoadInt32(&cleanupCalls)

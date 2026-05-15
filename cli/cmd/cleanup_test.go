@@ -118,6 +118,46 @@ func TestCleanupCommand_ApplyRemovesStaleDDxResources(t *testing.T) {
 	assert.FileExists(t, filepath.Join(evidenceDir, "result.json"))
 }
 
+func TestCleanupRunStateDoesNotDirtyTrackedRepo(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	runCleanupCommandGit(t, projectRoot, "init", "-b", "main")
+	runCleanupCommandGit(t, projectRoot, "config", "user.email", "test@ddx.test")
+	runCleanupCommandGit(t, projectRoot, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "seed.txt"), []byte("seed\n"), 0o644))
+	runCleanupCommandGit(t, projectRoot, "add", "seed.txt")
+	runCleanupCommandGit(t, projectRoot, "commit", "-m", "chore: seed cleanup repo")
+
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "run-state"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "run-state.json"), []byte(`{"attempt_id":"tracked-root"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "run-state", "tracked-attempt.json"), []byte(`{"attempt_id":"tracked-attempt"}`+"\n"), 0o644))
+	runCleanupCommandGit(t, projectRoot, "add", ".ddx/run-state.json", ".ddx/run-state/tracked-attempt.json")
+	runCleanupCommandGit(t, projectRoot, "commit", "-m", "test: track legacy run-state")
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	_, err := executeCommand(root, "init")
+	require.NoError(t, err)
+	assert.Empty(t, runCleanupCommandGit(t, projectRoot, "ls-files", "--", ".ddx/run-state.json", ".ddx/run-state"))
+
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-cleanup",
+		AttemptID:    "20260506T154739-live-cafebabe",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+	attemptPath := filepath.Join(projectRoot, ddxroot.DirName, agent.RunStateDirName, "20260506T154739-live-cafebabe.json")
+	require.FileExists(t, attemptPath)
+
+	out, err := executeCommand(root, "cleanup", "--apply")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "cleanup: removed 0 stale temp dir(s), 0 registered worktree(s), 2 run-state file(s), 0 scratch dir(s)")
+	assert.NoFileExists(t, filepath.Join(projectRoot, ddxroot.DirName, agent.RunStateFileName))
+	assert.NoFileExists(t, attemptPath)
+	assert.Empty(t, runCleanupCommandGit(t, projectRoot, "status", "--short", "--", ".ddx/run-state.json", ".ddx/run-state"),
+		"cleanup must not leave tracked run-state deletions behind after migration")
+}
+
 func TestCleanupCommand_JSONShape(t *testing.T) {
 	projectRoot, tempRoot := setupCleanupCommandProject(t)
 	writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-json-20260506T154739-12345678", projectRoot, "20260506T154739-12345678")

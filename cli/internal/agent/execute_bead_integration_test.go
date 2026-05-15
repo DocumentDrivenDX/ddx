@@ -182,10 +182,12 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 		}{result: result, err: err}
 	}()
 
+	leaseStore, ok := store.(*bead.Store)
+	require.True(t, ok, "integration store must expose claim leases")
 	require.Eventually(t, func() bool {
-		got, err := store.Get(context.Background(), beadID)
-		return err == nil && got.Status == bead.StatusInProgress && got.Owner == "integration-worker"
-	}, 5*time.Second, 10*time.Millisecond, "worker did not claim bead")
+		lease, found, err := leaseStore.ClaimLease(beadID)
+		return err == nil && found && lease.Owner == "integration-worker"
+	}, 5*time.Second, 10*time.Millisecond, "worker did not acquire the claim lease")
 
 	cancel()
 
@@ -337,12 +339,12 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 		"--format=%(refname)", "refs/ddx/iterations/"+beadID)
 	assert.NotEmpty(t, out, "preserve ref under refs/ddx/iterations/%s must exist", beadID)
 
-	// Main branch must not have advanced with the failed commit.
-	// (Tracker commits are allowed — they happen before the worktree is created.)
+	// Main branch must not have advanced with the failed commit. With live
+	// worker claim state moved out of tracked files, a failed preserved attempt
+	// should leave main unchanged.
 	mainAfter := runGitInteg(t, projectRoot, "rev-parse", "refs/heads/main")
-	// The failed commit must NOT be on main. The preserve ref has it, not main.
-	assert.NotEqual(t, mainBefore, mainAfter,
-		"main may advance by a tracker commit but not by the failed iteration") // tracker commit is fine
+	assert.Equal(t, mainBefore, mainAfter,
+		"main must not advance when the failed iteration is only preserved off-main")
 	// Verify failed.txt is NOT reachable from HEAD on main.
 	_, showErr := runGitIntegOutput(projectRoot, "show", "HEAD:failed.txt")
 	assert.Error(t, showErr, "failed.txt must NOT be present on main after preservation")

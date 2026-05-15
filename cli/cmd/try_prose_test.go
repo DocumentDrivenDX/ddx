@@ -161,7 +161,7 @@ func TestTryProseFindings_AdvisoryByDefault(t *testing.T) {
 // TestTryProseFindings_FedBackBeforeFinalization: the prose hook runs before
 // the bead is closed so findings land in the editable attempt's evidence
 // history. We verify this by capturing the bead status when the hook fires —
-// it must still be in_progress, not closed.
+// under the sidecar-lease claim policy it must still be open, not closed.
 func TestTryProseFindings_FedBackBeforeFinalization(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := newTryProseTestBead(t, env, "timing-bead-001")
@@ -192,8 +192,8 @@ func TestTryProseFindings_FedBackBeforeFinalization(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	require.True(t, hookFired, "prose hook must run for a successful docs-changing attempt")
-	assert.Equal(t, bead.StatusInProgress, statusAtHook,
-		"prose hook must run before CloseWithEvidence; bead status at hook time must still be in_progress, not closed")
+	assert.Equal(t, bead.StatusOpen, statusAtHook,
+		"prose hook must run before CloseWithEvidence while the live worker claim still lives only in the sidecar lease")
 
 	// Sanity: after the loop completes the bead must be closed.
 	b, err := store.Get("timing-bead-001")

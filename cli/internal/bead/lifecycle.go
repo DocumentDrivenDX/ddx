@@ -203,6 +203,10 @@ func EvaluateLifecycleQueue(f LifecycleQueueFacts) LifecycleQueueDecision {
 			})
 		}
 	case StatusOpen:
+		if f.ClaimFresh {
+			decision.Bucket = LifecycleBucketClaimed
+			return decision
+		}
 		decision = evaluateOpenLifecycleQueue(f, decision)
 	}
 	return decision
@@ -284,9 +288,10 @@ func hasNoChangesTriageLabelValue(label string) bool {
 	return false
 }
 
-// ClaimMetadataExtraKeys is the canonical list of claim-metadata keys stored in
-// Bead.Extra. Unclaim and Reopen both iterate this list to avoid drift when new
-// claim keys are added.
+// ClaimMetadataExtraKeys is the canonical list of legacy tracked claim-metadata
+// keys in Bead.Extra. New live worker claim data now lives in the external
+// claim-lease sidecar; these keys remain only for compatibility cleanup of
+// imported or pre-migration rows.
 var ClaimMetadataExtraKeys = []string{
 	"claimed-at",
 	"claimed-pid",

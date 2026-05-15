@@ -859,13 +859,79 @@ var HeartbeatTTL = 90 * time.Second
 // fresh claim lease. A bead whose external lease is older than HeartbeatTTL
 // is considered stalled and will be reclaimed atomically.
 func (s *Store) Claim(id, assignee string) error {
-	return s.ClaimWithOptions(id, assignee, "", "")
+	machine, _ := os.Hostname()
+	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
+		machine = envID
+	}
+	return s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			switch beads[i].Status {
+			case StatusOpen:
+				if !claimLeaseIsStale(s, beads[i].Extra, id) {
+					return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+				}
+				// normal claim path
+			case StatusInProgress:
+				if !claimLeaseIsStale(s, beads[i].Extra, id) {
+					return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+				}
+				// stalled claim — reclaim atomically below
+			default:
+				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+			}
+			if err := transitionLifecycleInPlace(&beads[i], StatusInProgress, LifecycleTransitionOptions{
+				Reason: "claim",
+				Actor:  assignee,
+				Source: "Store.Claim",
+			}); err != nil {
+				return err
+			}
+			now := time.Now().UTC()
+			beads[i].Owner = assignee
+			beads[i].UpdatedAt = now
+			if beads[i].Extra == nil {
+				beads[i].Extra = make(map[string]any)
+			}
+			// Compatibility cleanup only: worker/live claim metadata now lives in
+			// the external lease sidecar rather than the tracked row.
+			for _, key := range ClaimMetadataExtraKeys {
+				delete(beads[i].Extra, key)
+			}
+			delete(beads[i].Extra, ClaimHeartbeatExtraKey)
+			if err := s.validateBead(&beads[i]); err != nil {
+				return err
+			}
+			if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
+				return err
+			}
+			if err := s.WriteAll(beads); err != nil {
+				return err
+			}
+			return s.writeClaimHeartbeat(ClaimLeaseRecord{
+				BeadID:    id,
+				Owner:     assignee,
+				Machine:   machine,
+				StartedAt: now,
+				UpdatedAt: now,
+				PID:       os.Getpid(),
+			})
+		}
+		return fmt.Errorf("bead: not found: %s", id)
+	})
 }
 
-// ClaimWithOptions sets a bead to in_progress with extended claim metadata.
-// session and worktree are optional; machine is derived from os.Hostname().
-// A stalled in_progress bead (external lease older than HeartbeatTTL) is
-// reclaimed atomically under the store's lock.
+// ClaimWithOptions acquires or refreshes the external worker-claim lease
+// without mutating the tracked bead row. session and worktree are optional;
+// machine is derived from os.Hostname(). A stalled open/in_progress bead
+// (external lease older than HeartbeatTTL) is reclaimed atomically under the
+// store's lock.
 func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 	machine, _ := os.Hostname()
 	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
@@ -882,7 +948,10 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 			}
 			switch beads[i].Status {
 			case StatusOpen:
-				// normal claim path
+				if !claimLeaseIsStale(s, beads[i].Extra, id) {
+					return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
+				}
+				// worker lease path
 			case StatusInProgress:
 				if !claimLeaseIsStale(s, beads[i].Extra, id) {
 					return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
@@ -891,38 +960,17 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 			default:
 				return fmt.Errorf("bead: cannot claim %s from status %s", id, beads[i].Status)
 			}
-			if err := transitionLifecycleInPlace(&beads[i], StatusInProgress, LifecycleTransitionOptions{
-				Reason: "claim",
-				Actor:  assignee,
-				Source: "Store.ClaimWithOptions",
-			}); err != nil {
-				return err
-			}
 			now := time.Now().UTC()
-			beads[i].Owner = assignee
-			beads[i].UpdatedAt = now
-			beads[i].Extra["claimed-at"] = now.Format(time.RFC3339)
-			beads[i].Extra["claimed-pid"] = fmt.Sprintf("%d", os.Getpid())
-			beads[i].Extra["work-heartbeat-at"] = now.Format(time.RFC3339Nano)
-			if machine != "" {
-				beads[i].Extra["claimed-machine"] = machine
-			}
-			if session != "" {
-				beads[i].Extra["claimed-session"] = session
-			}
-			if worktree != "" {
-				beads[i].Extra["claimed-worktree"] = worktree
-			}
-			if err := s.validateBead(&beads[i]); err != nil {
-				return err
-			}
-			if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
-				return err
-			}
-			if err := s.WriteAll(beads); err != nil {
-				return err
-			}
-			return s.TouchClaimHeartbeat(id)
+			return s.writeClaimHeartbeat(ClaimLeaseRecord{
+				BeadID:    id,
+				Owner:     assignee,
+				Session:   session,
+				Worktree:  worktree,
+				Machine:   machine,
+				StartedAt: now,
+				UpdatedAt: now,
+				PID:       os.Getpid(),
+			})
 		}
 		return fmt.Errorf("bead: not found: %s", id)
 	})
@@ -957,7 +1005,7 @@ func (s *Store) Heartbeat(id string) error {
 
 // claimLeaseIsStale returns true if the external claim lease is absent or
 // older than HeartbeatTTL. When no lease file exists, it falls back to the
-// legacy work-heartbeat-at tracker field for compatibility.
+// legacy tracker heartbeat field for compatibility with imported/stale rows.
 func claimLeaseIsStale(s *Store, extra map[string]any, id string) bool {
 	if s != nil {
 		if fresh, found, err := s.ClaimHeartbeatFresh(id); err == nil {
@@ -971,8 +1019,8 @@ func claimLeaseIsStale(s *Store, extra map[string]any, id string) bool {
 	return heartbeatIsStale(extra)
 }
 
-// heartbeatIsStale returns true if the given bead's Extra map has no
-// work-heartbeat-at or one older than HeartbeatTTL.
+// heartbeatIsStale returns true if the given bead's legacy Extra map has no
+// heartbeat field or one older than HeartbeatTTL.
 func heartbeatIsStale(extra map[string]any) bool {
 	if extra == nil {
 		return true
@@ -1793,6 +1841,7 @@ func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQ
 		retryAfter, retryActive := activeRetryCooldown(b, now, originHead)
 		executionEligible, executionEligibleKnown := lifecycleExecutionEligible(b)
 		supersededBy := lifecycleSupersededBy(b)
+		claimFresh := (b.Status == StatusOpen || b.Status == StatusInProgress) && !claimLeaseIsStale(s, b.Extra, b.ID)
 		entry := lifecycleQueueEntry{
 			Bead:                 b,
 			UnclosedDepIDs:       unclosed,
@@ -1806,7 +1855,7 @@ func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQ
 		entry.Decision = EvaluateLifecycleQueue(LifecycleQueueFacts{
 			Status:                 b.Status,
 			Dependencies:           lifecycleDependencyStates(b, statusMap),
-			ClaimFresh:             b.Status == StatusInProgress && !claimLeaseIsStale(s, b.Extra, b.ID),
+			ClaimFresh:             claimFresh,
 			RetryCooldownActive:    retryActive,
 			ExecutionEligible:      executionEligible,
 			ExecutionEligibleKnown: executionEligibleKnown,

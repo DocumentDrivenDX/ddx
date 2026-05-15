@@ -155,7 +155,6 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		assertBeadMutationInvariants(t, *afterApply, *afterClaim, afterApplyEvents, afterClaimEvents)
 		assert.Equal(t, StatusInProgress, afterClaim.Status)
 		assert.NotEmpty(t, afterClaim.Owner)
-		assert.NotEmpty(t, afterClaim.Extra[ClaimHeartbeatExtraKey])
 		var cancelRequested bool
 		cancelRequested, err = s.IsCancelRequested(target.ID)
 		require.NoError(t, err)
@@ -303,12 +302,18 @@ func assertClaimInvariant(t *testing.T, b Bead) {
 	}
 
 	assert.Equal(t, StatusInProgress, b.Status, "claimed beads must be in_progress")
-	assert.NotEmpty(t, b.Extra["claimed-at"], "claimed-at must be recorded when a bead is claimed")
-	assert.NotEmpty(t, b.Extra["claimed-pid"], "claimed-pid must be recorded when a bead is claimed")
-	if _, ok := b.Extra["claimed-machine"]; ok {
-		assert.NotEmpty(t, b.Extra["claimed-machine"], "claimed-machine must be recorded when present")
+	if _, ok := b.Extra["claimed-at"]; ok {
+		assert.NotEmpty(t, b.Extra["claimed-at"], "legacy claimed-at must stay non-empty when present")
 	}
-	assert.NotEmpty(t, b.Extra[ClaimHeartbeatExtraKey], "heartbeat must exist while claimed")
+	if _, ok := b.Extra["claimed-pid"]; ok {
+		assert.NotEmpty(t, b.Extra["claimed-pid"], "legacy claimed-pid must stay non-empty when present")
+	}
+	if _, ok := b.Extra["claimed-machine"]; ok {
+		assert.NotEmpty(t, b.Extra["claimed-machine"], "legacy claimed-machine must stay non-empty when present")
+	}
+	if _, ok := b.Extra[ClaimHeartbeatExtraKey]; ok {
+		assert.NotEmpty(t, b.Extra[ClaimHeartbeatExtraKey], "legacy heartbeat must stay non-empty when present")
+	}
 }
 
 func assertCancelInvariant(t *testing.T, b Bead) {

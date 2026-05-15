@@ -20,14 +20,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam guards the
-// ddx-1be8df2b contract: a long-running inline ExecuteBeadWorker.Run with a
+// TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome guards the
+// ddx-092c4343 contract: a long-running inline ExecuteBeadWorker.Run with a
 // short heartbeat interval must refresh .ddx/workers/<worker-id>/status.json
 // last_activity_at on every tick, while leaving the .ddx/beads.jsonl byte
-// content untouched between the claim write and the terminal outcome write.
-// The tracker stays the durable claim marker; the sidecar carries the
-// high-frequency liveness signal.
-func TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam(t *testing.T) {
+// content untouched from before claim acquisition through the terminal outcome
+// write. Live worker claim state belongs in sidecars, not in tracked rows.
+func TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome(t *testing.T) {
 	projectRoot := t.TempDir()
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -38,6 +37,8 @@ func TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam(t *testing.
 	require.NoError(t, store.Create(target))
 
 	beadsPath := filepath.Join(ddxDir, "beads.jsonl")
+	beforeClaimSnapshot, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
 	sessionID := "sess-liveness-test"
 
 	var (
@@ -123,6 +124,8 @@ func TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam(t *testing.
 
 	require.NotEmpty(t, claimSnapshot, "claim-time beads.jsonl snapshot must be captured")
 	require.NotEmpty(t, preOutcomeSnapshot, "pre-outcome beads.jsonl snapshot must be captured")
+	assert.True(t, bytes.Equal(beforeClaimSnapshot, claimSnapshot),
+		"beads.jsonl byte content must stay unchanged across worker claim acquisition")
 	assert.True(t, bytes.Equal(claimSnapshot, preOutcomeSnapshot),
 		"beads.jsonl byte content must not change between the claim write and the terminal outcome write; heartbeat ticks must not rewrite the tracker")
 
@@ -138,6 +141,10 @@ func TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam(t *testing.
 	finalRec, err := workerstatus.ReadLiveness(projectRoot, sessionID)
 	require.NoError(t, err)
 	assert.Equal(t, sessionID, finalRec.WorkerID)
+}
+
+func TestWorkLoop_MirrorsPeriodicLivenessWithoutTrackerHeartbeatSpam(t *testing.T) {
+	TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome(t)
 }
 
 // TestWorkerStatusSidecar_RecordsCurrentBeadAttemptAndLastActivity guards the

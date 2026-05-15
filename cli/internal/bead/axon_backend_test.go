@@ -269,8 +269,6 @@ func TestAxonBackend_ClaimAndUnclaim(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
 	assert.Equal(t, "alice", got.Owner)
-	require.NotNil(t, got.Extra)
-	assert.NotEmpty(t, got.Extra["claimed-at"])
 
 	// A second claim against an active claim must fail.
 	err = s.Claim(b.ID, "bob")

@@ -541,6 +541,10 @@ type readyDiagnoser interface {
 	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
 }
 
+type claimWithOptionsStore interface {
+	ClaimWithOptions(id, assignee, session, worktree string) error
+}
+
 // NoReadyWorkBreakdown explains why the execution-ready queue is empty.
 // Populated on an ExecuteBeadLoopResult when NoReadyWork fires and the store
 // exposes ReadyExecutionBreakdown.
@@ -1146,18 +1150,25 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// concurrent workers from issuing duplicate model calls or appending
 		// duplicate lint events for the same bead. Terminal non-actionable
 		// outcomes unclaim and park the bead rather than proceeding to execution.
-		if err := w.Store.Claim(candidate.ID, assignee); err != nil {
+		var claimErr error
+		if claimer, ok := w.Store.(claimWithOptionsStore); ok {
+			claimErr = claimer.ClaimWithOptions(candidate.ID, assignee, runtime.SessionID, "")
+		} else {
+			claimErr = w.Store.Claim(candidate.ID, assignee)
+		}
+		if claimErr != nil {
 			// Another worker won the race for this bead. Emit a structured
 			// claim_race event so concurrent-worker losses are observable
 			// (ddx-9d55601f AC #4). The bead remains in `attempted` for this
 			// run; on the next iteration it will be filtered out of
-			// ReadyExecution naturally because Claim() flipped it to
-			// in_progress, so the loser keeps moving down priority order.
+			// ReadyExecution naturally because the winner now holds the fresh
+			// claim lease sidecar, so the loser keeps moving down priority
+			// order.
 			emit("picker.claim_race", map[string]any{
 				"bead_id":    candidate.ID,
 				"priority":   candidate.Priority,
 				"queue_rank": queueRankValue(candidate.Extra["queue-rank"]),
-				"reason":     err.Error(),
+				"reason":     claimErr.Error(),
 			})
 			continue
 		}
