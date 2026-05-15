@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260515T154605-7c45a217",
+  "bead_id": "ddx-8a0aea8e",
+  "base_rev": "80aa24a3e352a255aeb7fb4a62d9f6a21617dae0",
+  "created_at": "2026-05-15T15:46:10.131457065Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8a0aea8e",
+    "title": "work: reap and correctly budget no_changes verification commands",
+    "description": "PROBLEM\nA `no_changes_rationale.txt` with `verification_command:` can time out, leave its child process tree running, and let `ddx work --watch` move on to another bead while the old verification is still consuming the project. Live reproduction on 2026-05-15 in `/Users/erik/Projects/fizeau`: `fizeau-bc9586d7` returned `verification_command: sh -lc \"go test ... \u0026\u0026 lefthook run pre-commit\"`; the watcher logged `• fizeau-bc9586d7 → no_changes` and started `fizeau-7af3f548` at 13:07:21Z, while `ps` still showed orphaned PID 3510889 (`sh -lc go test ...`) and child PID 3512539 (`go test ./... -count=1`) under PPID 1.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/try/no_changes.go:117-128` hard-codes `DefaultVerificationCommandTimeout = 60 * time.Second` and runs the command with `exec.CommandContext(cctx, \"/bin/sh\", \"-c\", command)`. `exec.CommandContext` kills only the direct shell on timeout; because workers commonly emit nested shell commands such as `sh -lc \"go test ...\"`, the actual test process survives as an orphan. The 60s timeout is also shorter than normal bead acceptance gates like `go test ./...` plus `lefthook run pre-commit`, so legitimate already-satisfied checks are classified as unverified/no-progress instead of closing the bead.\n\nPROPOSED FIX\nRun no_changes verification commands with the same process-tree discipline used by agent executors: start the shell in its own process group on Unix, terminate the group on timeout/cancel, and wait/reap before returning. Replace the hard-coded 60s ceiling with a worker/config-derived timeout that is long enough for normal acceptance gates, or make it configurable with a conservative default. Preserve the contract: exit 0 closes as `already_satisfied`; non-zero/timeout keeps the bead open with clear `no_changes_unverified` evidence.\n\nNON-SCOPE\nDo not weaken no_changes verification semantics. Do not let verification run asynchronously. Do not close a bead without a passing command. Do not change readiness classification or route selection.",
+    "acceptance": "1. `TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup` proves a timed-out nested shell command (`sh -lc 'sleep ...'` or equivalent fixture) leaves no child/grandchild process alive after the runner returns.\n2. `TestDefaultVerificationCommandRunnerAllowsConfiguredLongGate` or equivalent proves the verification timeout is configurable/worker-derived and can run a command longer than 60s without forcing `no_changes_unverified`.\n3. `TestExecuteBeadWorkerNoChangesVerifiedLongCommandCloses` proves a `verification_command` that runs longer than the old 60s limit but exits 0 closes the bead as `already_satisfied` and emits `no_changes_verified`.\n4. `TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps` proves timeout keeps the bead open with `triage:no-changes-unverified`, records timeout evidence, and leaves no verification process tree behind.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'Test(DefaultVerificationCommandRunner|ExecuteBeadWorkerNoChanges.*Verification)' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "operator-ux",
+      "downstream:fizeau",
+      "dirty-tree"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-8a0aea8e)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-15T15:46:04.946250225Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260515T154605-7c45a217",
+    "prompt": ".ddx/executions/20260515T154605-7c45a217/prompt.md",
+    "manifest": ".ddx/executions/20260515T154605-7c45a217/manifest.json",
+    "result": ".ddx/executions/20260515T154605-7c45a217/result.json",
+    "checks": ".ddx/executions/20260515T154605-7c45a217/checks.json",
+    "usage": ".ddx/executions/20260515T154605-7c45a217/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-8a0aea8e-20260515T154605-7c45a217"
+  },
+  "prompt_sha": "2bfb661f6cde83dcd5f5a65b96300039767cc27f255586f5123c2e5f5767bc47"
+}
