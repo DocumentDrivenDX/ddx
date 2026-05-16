@@ -2,12 +2,10 @@ package agent
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -169,43 +167,6 @@ func TestReviewer_StrictnessMode_KindDoc_FilePresenceSuffices(t *testing.T) {
 	built := BuildReviewPromptBounded(b, 1, "rev", "diff", t.TempDir(), nil, BuildReviewPromptOptions{})
 	assert.Contains(t, built.Prompt, `mode="mechanical"`)
 	assert.Contains(t, built.Prompt, "file presence")
-}
-
-// ---------------------------------------------------------------------------
-// Implementer flow: ac-check validation
-// ---------------------------------------------------------------------------
-
-func TestImplementerFlow_ACCheckFail_AbortsWithoutWaive(t *testing.T) {
-	acOut := &accheck.Output{
-		Summary: accheck.Summary{Pass: 1, Fail: 2},
-		Items: []accheck.Entry{
-			{AC: 1, Kind: accheck.KindTestName, Name: "TestFoo", Result: accheck.ResultPass, Evidence: "found"},
-			{AC: 2, Kind: accheck.KindTestName, Name: "TestBar", Result: accheck.ResultFail, Evidence: "not found"},
-			{AC: 3, Kind: accheck.KindBuildGate, Result: accheck.ResultFail, Evidence: "exit code 1"},
-		},
-	}
-	commitMsg := "fix: implement the thing\n\nsome body text"
-	err := ValidateACCheckFail(acOut, commitMsg)
-	require.Error(t, err, "ac-check with fail items and no waive trailer must abort")
-	assert.Contains(t, strings.ToLower(err.Error()), "ac-check")
-}
-
-func TestImplementerFlow_ACWaiveTrailer_PassesAttempt(t *testing.T) {
-	acOut := &accheck.Output{
-		Summary: accheck.Summary{Pass: 0, Fail: 1},
-		Items: []accheck.Entry{
-			{AC: 1, Kind: accheck.KindProse, Result: accheck.ResultFail, Evidence: "prose cannot be auto-verified"},
-		},
-	}
-	commitMsg := strings.Join([]string{
-		"fix: implement the thing",
-		"",
-		"Implementation notes.",
-		"",
-		"AC-Waive: prose AC#1 requires operator review; waived for this iteration",
-	}, "\n")
-	err := ValidateACCheckFail(acOut, commitMsg)
-	assert.NoError(t, err, "AC-Waive trailer must suppress abort on failed ac-check items")
 }
 
 // ---------------------------------------------------------------------------

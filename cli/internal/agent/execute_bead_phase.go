@@ -48,22 +48,22 @@ func (e *loopPhaseEmitter) EmitProgress(_ context.Context, beadID string, phase 
 	if phase == work.PhaseTerminal {
 		progressPhase = terminalProgressPhase(outcome)
 	}
-	emitProgress(e.progressCh, ProgressEvent{
-		EventID:   "evt-" + randomProgressID(),
-		AttemptID: outcome.AttemptID,
-		WorkerID:  e.workerID,
-		ProjectID: e.projectID,
-		BeadID:    beadID,
-		Harness:   e.harness,
-		Model:     e.model,
-		Profile:   e.profile,
-		Phase:     progressPhase,
-		PhaseSeq:  phaseSeq,
-		Heartbeat: false,
-		TS:        e.now().UTC(),
-		ElapsedMS: e.now().Sub(e.runStart).Milliseconds(),
-		Message:   outcome.Detail,
-	})
+	evt := newProgressEvent(
+		e.workerID,
+		e.projectID,
+		beadID,
+		outcome.AttemptID,
+		e.harness,
+		e.model,
+		e.profile,
+		progressPhase,
+		phaseSeq,
+		false,
+		e.now().Sub(e.runStart).Milliseconds(),
+	)
+	evt.TS = e.now().UTC()
+	evt.Message = outcome.Detail
+	emitProgress(e.progressCh, evt)
 	return nil
 }
 

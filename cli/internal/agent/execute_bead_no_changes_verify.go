@@ -54,7 +54,7 @@ func DefaultVerificationCommandRunnerWithTimeout(timeout time.Duration) Verifica
 func defaultVerificationCommandRunnerForConfig(rcfg config.ResolvedConfig) VerificationCommandRunner {
 	timeout := rcfg.NoChangesVerificationTimeout()
 	if timeout <= 0 {
-		timeout = DefaultVerificationCommandTimeout
+		return DefaultVerificationCommandRunner
 	}
 	return DefaultVerificationCommandRunnerWithTimeout(timeout)
 }

@@ -84,11 +84,15 @@ type ExecuteBeadLoopRuntime struct {
 	// Mode and IdleInterval are the runtime loop intent. Once and
 	// PollInterval remain for older tests/callers but production entry points
 	// should set Mode and IdleInterval directly.
-	Mode                   executeloop.Mode
-	IdleInterval           time.Duration
-	Once                   bool
-	PollInterval           time.Duration
-	NoReview               bool
+	Mode         executeloop.Mode
+	IdleInterval time.Duration
+	Once         bool
+	PollInterval time.Duration
+	NoReview     bool
+	// PostMergeReview enables the legacy post-land/pre-close review state
+	// machine for callers that explicitly opt into that manual flow. The
+	// default production close path remains owned by candidate-cycle review.
+	PostMergeReview        bool
 	LabelFilter            string
 	IgnoreCooldown         bool
 	CooldownOverrideReason string
@@ -254,8 +258,17 @@ func SubmitWithPreMergeChecks(
 	if eventStore != nil && len(outcome.Bypassed) > 0 {
 		_ = AppendPreMergeChecksEvents(eventStore, res.BeadID, outcome, actor, source, now().UTC())
 	}
-	land, sErr := submit(BuildLandRequestFromResult(projectRoot, res))
-	return land, outcome, sErr
+	var submitted *LandResult
+	_, landErr := LandBeadResult(projectRoot, res, &RealOrchestratorGitOps{}, BeadLandingOptions{
+		LandingAdvancer: func(res *ExecuteBeadResult) (*LandResult, error) {
+			land, err := submit(BuildLandRequestFromResult(projectRoot, res))
+			if err == nil {
+				submitted = land
+			}
+			return land, err
+		},
+	})
+	return submitted, outcome, landErr
 }
 
 // handlePostAttemptDecomposition runs the orchestrator-level splitter when a
@@ -1999,6 +2012,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Assignee:            assignee,
 				Now:                 now,
 				Cooldown:            LandConflictCooldown,
+				RateLimitOnRetry: func(_ context.Context, info agenttry.RateLimitRetryInfo) {
+					appendRateLimitRetryEvent(w.Store, candidate.ID, fromTryRateLimitRetryInfo(info))
+				},
 			})
 		})
 		if liveness != nil {
@@ -2435,20 +2451,51 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			// Automated close eligibility is now owned by the pre-land
 			// candidate-cycle reviewer. The old post-land/pre-close reviewer
-			// remains available as a reusable/manual helper, but work
-			// must not run it after a candidate has already landed.
-			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("CloseWithEvidence", assignee, result, err)
+			// remains available only through an explicit runtime opt-in.
+			if runtime.PostMergeReview {
+				reviewOut := RunPostMergeReview(ctx, PostMergeReviewInput{
+					Bead:          candidate,
+					Report:        report,
+					Reviewer:      w.Reviewer,
+					Store:         w.Store,
+					ProjectRoot:   runtime.ProjectRoot,
+					Rcfg:          rcfg,
+					NoReview:      runtime.NoReview,
+					Log:           runtime.Log,
+					Assignee:      assignee,
+					Now:           now,
+					ReviewCostCap: runtime.ReviewCostCap,
 				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
+				report = reviewOut.Report
+				if reviewOut.StoreErr != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError(reviewOut.StoreErrOp, assignee, result, reviewOut.StoreErr)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
 				}
-				continue
+				if reviewOut.Approved {
+					result.Successes++
+					result.LastSuccessAt = now().UTC()
+				} else {
+					result.Failures++
+					result.LastFailureStatus = report.Status
+				}
+			} else {
+				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("CloseWithEvidence", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				result.Successes++
+				result.LastSuccessAt = now().UTC()
 			}
-
-			result.Successes++
-			result.LastSuccessAt = now().UTC()
 		} else if attemptOut.Disposition == agenttry.OutcomePark {
 			result.Failures++
 			result.LastFailureStatus = report.Status
@@ -2470,7 +2517,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			// invoke the queue-level splitter. The orchestrator checks the
 			// queue-level max_decomposition_depth, not the implementation cap.
 			if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
-				parsed := agenttry.ParseNoChangesRationale(report.NoChangesRationale)
+				parsed := ParseNoChangesRationale(report.NoChangesRationale)
 				if parsed.OrchestratorAction == "decompose" {
 					w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
 					result.Failures++

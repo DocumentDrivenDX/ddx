@@ -31,16 +31,6 @@ func (r *reviewRunnerStub) Run(opts RunArgs) (*Result, error) {
 	return r.result, r.err
 }
 
-// ---------------------------------------------------------------------------
-// SelectReviewerPolicy
-// ---------------------------------------------------------------------------
-
-func TestSelectReviewerPolicy_AlwaysSmart(t *testing.T) {
-	assert.Equal(t, escalation.PowerSmart, SelectReviewerPolicy(escalation.PowerCheap))
-	assert.Equal(t, escalation.PowerSmart, SelectReviewerPolicy(escalation.PowerStandard))
-	assert.Equal(t, escalation.PowerSmart, SelectReviewerPolicy(escalation.PowerSmart))
-}
-
 func TestPreLandReview_UsesAttemptWorktree(t *testing.T) {
 	projectRoot, baseRev, store := newReviewArtifactsFixture(t)
 	resultRev := commitReviewFixtureFile(t, projectRoot, "candidate.txt", "candidate change\n")

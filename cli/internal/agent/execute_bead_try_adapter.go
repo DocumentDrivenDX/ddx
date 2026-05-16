@@ -106,6 +106,25 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 	}
 }
 
+func fromTryRateLimitRetryInfo(info agenttry.RateLimitRetryInfo) RateLimitRetryInfo {
+	var result *Result
+	if info.Report != nil {
+		result = &Result{
+			Harness:  info.Report.Harness,
+			Provider: info.Report.Provider,
+			Model:    info.Report.Model,
+		}
+	}
+	return RateLimitRetryInfo{
+		Attempt:    info.Attempt,
+		Wait:       info.Wait,
+		Source:     info.Source,
+		Result:     result,
+		Elapsed:    info.Elapsed,
+		OverBudget: info.OverBudget,
+	}
+}
+
 func toTryCycleTrace(entry ExecutionCycleTrace) agenttry.ExecutionCycleTrace {
 	return agenttry.ExecutionCycleTrace{
 		CycleIndex: entry.CycleIndex,
@@ -222,7 +241,7 @@ func fromTryFindings(items []agenttry.Finding) []Finding {
 	return out
 }
 
-func tryAutoRecover(fn ConflictAutoRecoverFn) agenttry.ConflictAutoRecoverFn {
+func tryAutoRecover(fn func(wd, preserveRef string, gitOps LandingGitOps) (string, error)) agenttry.ConflictAutoRecoverFn {
 	return func(wd, preserveRef string) (string, error) {
 		if fn == nil {
 			fn = LandConflictAutoRecover

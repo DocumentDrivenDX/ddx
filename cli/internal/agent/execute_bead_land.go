@@ -1611,23 +1611,23 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		// Fast-forward or merge commit — either way the target branch now
 		// contains the worker's result. ResultRev's own parent is still
 		// BaseRev so replay fidelity is preserved.
-		res.Outcome = "merged"
-		res.Reason = ""
+		reason := ""
 		res.PreserveRef = ""
 		if land.Merged {
-			res.Reason = "merged onto current tip"
+			reason = "merged onto current tip"
 		}
 		if land.CheckoutSyncDeferred {
 			detail := "checkout_sync_deferred"
 			if len(land.CheckoutSyncDeferredPaths) > 0 {
 				detail += ": " + strings.Join(land.CheckoutSyncDeferredPaths, ", ")
 			}
-			if res.Reason == "" {
-				res.Reason = detail
+			if reason == "" {
+				reason = detail
 			} else {
-				res.Reason += "; " + detail
+				reason += "; " + detail
 			}
 		}
+		ApplyLandingToResult(res, &BeadLandingResult{Outcome: "merged", Reason: reason})
 		landedTip := land.NewTip
 		if land.LandedTip != "" {
 			landedTip = land.LandedTip
@@ -1653,9 +1653,8 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		// Only overwrite when the worker itself did not already report
 		// a richer no-changes rationale.
 		if res.Outcome == "" || res.Outcome == ExecuteBeadOutcomeTaskSucceeded {
-			res.Outcome = "no-changes"
-		}
-		if res.Reason == "" {
+			ApplyLandingToResult(res, &BeadLandingResult{Outcome: "no-changes", Reason: land.Reason})
+		} else if res.Reason == "" {
 			res.Reason = land.Reason
 		}
 	}

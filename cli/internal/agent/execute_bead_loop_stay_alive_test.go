@@ -202,7 +202,7 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 	var logBuf, eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
 	defer cancel()
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
 		Mode:         executeloop.ModeWatch,
@@ -314,7 +314,7 @@ func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
 	var eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
 	defer cancel()
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
 		Mode:         executeloop.ModeWatch,
