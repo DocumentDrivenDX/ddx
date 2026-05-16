@@ -1,0 +1,45 @@
+{
+  "bead_id": "ddx-8bc79046",
+  "attempt_id": "20260516T060933-666df52d",
+  "base_rev": "ecddf4e39da27bfa01313718c4a954f6936e8c19",
+  "result_rev": "2a9a3db8f3f7bc340c463d6c5c9295025c0b9d0e",
+  "implementation_rev": "2a9a3db8f3f7bc340c463d6c5c9295025c0b9d0e",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "large-deletion gate: cli/internal/bead/axon/subscription_smoke_test.go deleted 370 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "land_conflict",
+  "reason": "large-deletion gate: cli/internal/bead/axon/subscription_smoke_test.go deleted 370 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-8bc79046/20260516T060933-666df52d-ecddf4e39da2",
+  "candidate_ref": "refs/ddx/iterations/20260516T060933-666df52d/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260516T060933-666df52d",
+      "result_rev": "2a9a3db8f3f7bc340c463d6c5c9295025c0b9d0e",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "opus"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "eb-9a609293",
+  "duration_ms": 332292,
+  "tokens": 13023,
+  "cost_usd": 1.9968455,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260516T060933-666df52d",
+  "prompt_file": ".ddx/executions/20260516T060933-666df52d/prompt.md",
+  "manifest_file": ".ddx/executions/20260516T060933-666df52d/manifest.json",
+  "result_file": ".ddx/executions/20260516T060933-666df52d/result.json",
+  "usage_file": ".ddx/executions/20260516T060933-666df52d/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-16T06:09:40.705577718Z",
+  "finished_at": "2026-05-16T06:15:12.998230956Z"
+}
