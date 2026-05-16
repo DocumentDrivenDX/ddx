@@ -69,6 +69,69 @@ func TestClassify_Mechanical_Rename(t *testing.T) {
 	}
 }
 
+// AC #1: quoted command followed by an outcome verb is classified as
+// KindCommand (verifiable), not KindProse.
+func TestClassify_CommandAC_QuotedReturns(t *testing.T) {
+	cases := []string{
+		"'ls scripts/benchmark/bench-sets/*.yaml | wc -l' returns 7.",
+		`'python -c "import yaml; yaml.safe_load(open(\"x.yaml\"))"' exits 0.`,
+		"`./scripts/check.sh` passes.",
+		"\"jq '.foo' bar.json\" outputs the expected list.",
+	}
+	for _, text := range cases {
+		k, _ := classify(text)
+		if k != KindCommand {
+			t.Errorf("classify(%q): want %s, got %s", text, KindCommand, k)
+		}
+	}
+}
+
+// AC #2: unquoted command-shaped AC followed by an outcome verb is also
+// classified as KindCommand.
+func TestClassify_CommandAC_UnquotedReturns(t *testing.T) {
+	cases := []string{
+		"ls foo | wc -l returns 7",
+		"python -c 'import yaml' exits 0",
+		"jq .foo bar.json outputs the right value",
+	}
+	for _, text := range cases {
+		k, _ := classify(text)
+		if k != KindCommand {
+			t.Errorf("classify(%q): want %s, got %s", text, KindCommand, k)
+		}
+	}
+}
+
+// AC #3: prose-only ACs (no command at start, no outcome verb) still
+// classify as KindProse.
+func TestClassify_CommandAC_DoesNotMatchProse(t *testing.T) {
+	cases := []string{
+		"Each bench-set's task list is a subset of the current sweep entries.",
+		"Improve logging clarity",
+		"more readable code",
+	}
+	for _, text := range cases {
+		k, _ := classify(text)
+		if k != KindProse {
+			t.Errorf("classify(%q): want %s, got %s", text, KindProse, k)
+		}
+	}
+}
+
+// Evaluator must report needs_judgment for a command AC: ac-check itself
+// does not execute commands; the orchestrator/operator runs them and the
+// reviewer ratifies.
+func TestACCheck_CommandAC_NeedsJudgment(t *testing.T) {
+	item := Item{AC: 1, Text: "'ls foo | wc -l' returns 7", Kind: KindCommand}
+	e := evaluateOne(item, Context{})
+	if e.Kind != KindCommand {
+		t.Errorf("entry kind: want %s, got %s", KindCommand, e.Kind)
+	}
+	if e.Result != ResultNeedsJudgment {
+		t.Fatalf("command AC must yield needs_judgment; got %s (%s)", e.Result, e.Evidence)
+	}
+}
+
 func TestClassify_Prose_Default(t *testing.T) {
 	k, _ := classify("improve readability of the error message")
 	if k != KindProse {

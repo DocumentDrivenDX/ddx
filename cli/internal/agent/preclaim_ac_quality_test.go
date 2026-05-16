@@ -57,6 +57,24 @@ func TestPreClaimACQuality_MixedACs_ScoreBelowThreshold_Routes(t *testing.T) {
 	assert.InDelta(t, 0.25, result.Score, 0.01)
 }
 
+// Regression: replays the fizeau-e08d8228 acceptance text. Three of the four
+// ACs are quoted shell commands followed by an outcome verb; the fourth is
+// prose. Pre-fix this scored verifiable=0/4 (all classified as prose). The
+// score must now be >= 0.50 so command-in-prose ACs no longer get
+// needs-refinement labels at intake time.
+func TestPreClaimACQuality_CommandInProseACs_ScoreAboveThreshold(t *testing.T) {
+	acceptance := "1. 'ls scripts/benchmark/bench-sets/*.yaml | wc -l' returns 7.\n" +
+		"2. 'python -c \"import yaml; [yaml.safe_load(open(f)) for f in __import__(\\\"glob\\\").glob(\\\"scripts/benchmark/bench-sets/*.yaml\\\")]\"' exits 0.\n" +
+		"3. 'python -c \"import yaml; yaml.safe_load(open(\\\"scripts/benchmark/concurrency-groups.yaml\\\"))\"' exits 0.\n" +
+		"4. Each bench-set's task list is a subset of the current terminalbench-2-1-sweep.yaml subsets entries.\n"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 4, result.Total)
+	assert.GreaterOrEqual(t, result.Score, 0.50, "score below 0.50 means command-in-prose ACs were misclassified as prose")
+	assert.True(t, result.PassesThreshold)
+	assert.Equal(t, 3, result.VerifiableCount, "ACs 1-3 are runnable commands")
+	assert.Equal(t, 1, result.ProseCount, "AC 4 is prose")
+}
+
 func TestPreClaimACQuality_LowQualityEmitsACQualityEvent(t *testing.T) {
 	b := &bead.Bead{
 		ID:         "ddx-test0001",
