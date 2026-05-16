@@ -1,0 +1,45 @@
+{
+  "bead_id": "ddx-250b204c",
+  "attempt_id": "20260516T053138-afab769e",
+  "base_rev": "94fb8119e77df4c00cf8061b88bd056f330fd889",
+  "result_rev": "6bebaabbc22e8ea3267108806d2bf2a3f81152c7",
+  "implementation_rev": "6bebaabbc22e8ea3267108806d2bf2a3f81152c7",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "large-deletion gate: cli/internal/server/frontend/e2e/sessions.spec.ts deleted 354 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "land_conflict",
+  "reason": "large-deletion gate: cli/internal/server/frontend/e2e/sessions.spec.ts deleted 354 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-250b204c/20260516T053138-afab769e-94fb8119e77d",
+  "candidate_ref": "refs/ddx/iterations/20260516T053138-afab769e/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260516T053138-afab769e",
+      "result_rev": "6bebaabbc22e8ea3267108806d2bf2a3f81152c7",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "opus"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "eb-5fb8ea6b",
+  "duration_ms": 826043,
+  "tokens": 36558,
+  "cost_usd": 6.3832220000000035,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260516T053138-afab769e",
+  "prompt_file": ".ddx/executions/20260516T053138-afab769e/prompt.md",
+  "manifest_file": ".ddx/executions/20260516T053138-afab769e/manifest.json",
+  "result_file": ".ddx/executions/20260516T053138-afab769e/result.json",
+  "usage_file": ".ddx/executions/20260516T053138-afab769e/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-16T05:31:43.308874614Z",
+  "finished_at": "2026-05-16T05:45:29.352730538Z"
+}
