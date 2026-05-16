@@ -1850,7 +1850,7 @@ func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQ
 			LastDetail:           extraStringVal(b.Extra, ExtraLastDetail),
 			ExecutionSkipReason:  extraStringVal(b.Extra, ExtraExecutionReason),
 			SupersededBy:         supersededBy,
-			EpicClosureCandidate: isEpicClosureCandidate(b, childCount[b.ID], openChildCount[b.ID]),
+			EpicClosureCandidate: isEpicClosureCandidate(b, openChildCount[b.ID], childCount[b.ID]),
 		}
 		entry.Decision = EvaluateLifecycleQueue(LifecycleQueueFacts{
 			Status:                 b.Status,
@@ -1860,7 +1860,7 @@ func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQ
 			ExecutionEligible:      executionEligible,
 			ExecutionEligibleKnown: executionEligibleKnown,
 			SupersededBy:           supersededBy,
-			EpicContainer:          isOrdinaryEpicContainer(b, childCount[b.ID]),
+			EpicContainer:          isOrdinaryEpicContainer(b, openChildCount[b.ID], childCount[b.ID]),
 			ExternalBlockerReason:  extraStringVal(b.Extra, ExtraLifecycleExternalBlockerReason),
 			LegacyLabels:           b.Labels,
 		})
@@ -2305,17 +2305,32 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 	return entries, nil
 }
 
-func isOrdinaryEpicContainer(b Bead, childCount int) bool {
+// isOrdinaryEpicContainer reports whether bead b should be classified as an
+// epic container (LifecycleBucketEpicContainer). It takes openChildCount and
+// totalChildCount as separate signals so callers can distinguish three cases:
+//
+//   - openChildCount > 0: live container gating execution (caller routes to
+//     LifecycleBucketEpicContainer).
+//   - openChildCount == 0 && totalChildCount > 0: closure candidate (still a
+//     container; isEpicClosureCandidate returns true).
+//   - totalChildCount == 0: genuinely-undecomposed epic that must not enter
+//     the container bucket so the work-loop layer can diagnose it separately.
+func isOrdinaryEpicContainer(b Bead, openChildCount, totalChildCount int) bool {
 	issueType := strings.ToLower(strings.TrimSpace(b.IssueType))
 	title := strings.ToLower(strings.TrimSpace(b.Title))
-	return issueType == "epic" || strings.HasPrefix(title, "epic:") || (childCount > 0 && strings.HasPrefix(title, "epic "))
-}
-
-func isEpicClosureCandidate(b Bead, childCount, openChildCount int) bool {
-	if childCount == 0 {
+	explicitEpic := issueType == "epic" || strings.HasPrefix(title, "epic:")
+	looseEpic := strings.HasPrefix(title, "epic ") && totalChildCount > 0
+	if !explicitEpic && !looseEpic {
 		return false
 	}
-	return isOrdinaryEpicContainer(b, childCount) && openChildCount == 0
+	return totalChildCount > 0
+}
+
+func isEpicClosureCandidate(b Bead, openChildCount, totalChildCount int) bool {
+	if totalChildCount == 0 {
+		return false
+	}
+	return isOrdinaryEpicContainer(b, openChildCount, totalChildCount) && openChildCount == 0
 }
 
 func sortBeadsForQueue(beads []Bead) {

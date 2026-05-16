@@ -213,3 +213,63 @@ func TestLifecycleLegacyLabelsDoNotControlLifecycle(t *testing.T) {
 	require.NotEmpty(t, migrating.Issues)
 	assert.Equal(t, LifecycleIssueLegacyMigrationCompatibility, migrating.Issues[0].Code)
 }
+
+// TestIsOrdinaryEpicContainer_ZeroOpenChildrenRoutesToClosureCandidate locks in
+// the routing rule introduced for ddx-e9f3adaf: epics with no children at all
+// must leave the container bucket (so the work-loop layer can diagnose them as
+// genuinely-undecomposed), while epics with only-closed children remain
+// containers and surface as closure candidates. Epics with at least one open
+// child stay as ordinary containers, and non-epic beads are never containers.
+func TestIsOrdinaryEpicContainer_ZeroOpenChildrenRoutesToClosureCandidate(t *testing.T) {
+	tests := []struct {
+		name                 string
+		bead                 Bead
+		openChildCount       int
+		totalChildCount      int
+		wantContainer        bool
+		wantClosureCandidate bool
+	}{
+		{
+			name:                 "epic with only closed children is a closure candidate",
+			bead:                 Bead{ID: "ddx-epic-closed", IssueType: "epic", Title: "Closed-child epic"},
+			openChildCount:       0,
+			totalChildCount:      3,
+			wantContainer:        true,
+			wantClosureCandidate: true,
+		},
+		{
+			name:                 "epic with zero children is not a container",
+			bead:                 Bead{ID: "ddx-epic-empty", IssueType: "epic", Title: "Empty epic"},
+			openChildCount:       0,
+			totalChildCount:      0,
+			wantContainer:        false,
+			wantClosureCandidate: false,
+		},
+		{
+			name:                 "epic with open children stays an ordinary container",
+			bead:                 Bead{ID: "ddx-epic-open", IssueType: "epic", Title: "Active epic"},
+			openChildCount:       2,
+			totalChildCount:      4,
+			wantContainer:        true,
+			wantClosureCandidate: false,
+		},
+		{
+			name:                 "non-epic bead with children is not an epic container",
+			bead:                 Bead{ID: "ddx-task", IssueType: "task", Title: "Plain task"},
+			openChildCount:       1,
+			totalChildCount:      2,
+			wantContainer:        false,
+			wantClosureCandidate: false,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			gotContainer := isOrdinaryEpicContainer(tc.bead, tc.openChildCount, tc.totalChildCount)
+			assert.Equal(t, tc.wantContainer, gotContainer, "isOrdinaryEpicContainer")
+			gotClosure := isEpicClosureCandidate(tc.bead, tc.openChildCount, tc.totalChildCount)
+			assert.Equal(t, tc.wantClosureCandidate, gotClosure, "isEpicClosureCandidate")
+		})
+	}
+}
