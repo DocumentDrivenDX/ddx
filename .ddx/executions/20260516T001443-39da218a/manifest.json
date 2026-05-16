@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260516T001443-39da218a",
+  "bead_id": "ddx-f1e7dfdf",
+  "base_rev": "6b12539dae9a4627f7c2a12b08379edabeee0948",
+  "created_at": "2026-05-16T00:14:47.799418829Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f1e7dfdf",
+    "title": "work: land successful detached-head attempts before retrying",
+    "description": "PROBLEM\nDuring live monitoring on 2026-05-15, `ddx work --watch` ran bead `ddx-5baa6a15` successfully twice but did not land or close either successful attempt. Attempt `20260515T222727-7b672c7c` produced worker commit `dabf77e68`; attempt `20260515T223843-6eb42169` produced worker commit `2776da59a`. Both had successful cost records / exit_code=0 evidence. Instead of treating that success as terminal, the supervisor made additional checkpoint/tracker commits (`66f879766`, `259577d7c`, `0c5bea300`, `b0f986426`) and dispatched a third attempt `20260515T224956-e89ea1e0` for the same bead. The operator had to terminate the watcher, manually merge `2776da59a` via merge commit `a14abb332`, verify, close the bead, and commit `.ddx/attachments/ddx-5baa6a15/events.jsonl`.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead_loop.go:1355-1363` only invokes dangling-success recovery when the reclaimed candidate status is `in_progress`. If the successful attempt left the bead open/unclaimed, the next loop iteration can re-execute without first reconciling the prior `task_succeeded` result. `cli/internal/agent/execute_bead_dangling_success.go:200-207` documents recovery for prior successes, but `cli/internal/agent/execute_bead_dangling_success.go:230-243` treats an unreachable/unmerged successful `result_rev` as a diagnostic-only condition and returns `(false, nil)`, allowing a fresh attempt. `cli/internal/agent/execute_bead_orchestrator.go:165-176` says successful non-base results are a landing obligation (`LandBeadResult` should merge or preserve), but the work loop does not enforce that terminal obligation before retrying the same bead.\n\nPROPOSED FIX\n- Extend the success reconciliation path so any prior `task_succeeded` result with `ResultRev != BaseRev` for the same bead is handled before the worker dispatches another attempt, regardless of whether the bead is currently `open` or stale `in_progress`.\n- For an unreachable/unmerged successful `result_rev`, either land and close it, preserve it under a durable `refs/ddx/iterations/...` ref with an explicit non-retry outcome, or stop with an operator-visible failure. It must not silently checkpoint and run the bead again.\n- Emit an operator-visible event/log for every successful commit that cannot be landed, including bead id, attempt id, result rev, preserve ref or failure reason.\n- Keep the existing reachable-result idempotent close behavior, but add coverage for the observed `ddx-5baa6a15` shape: success evidence exists while the bead remains worker-ready.\n\nNON-SCOPE\n- Do not change worker prompt/staging behavior; `ddx-213d7e95` covers serialized worker git commands and staged hook gates.\n- Do not change false dirty-preservation handling; `ddx-b5039a2c` covers pre-dispatch dirty preservation after land.\n- Do not change tracker auto-commit locking; `ddx-3f9a89a6` covers tracker git write serialization.\n- Do not rewrite existing execute-bead history or manually edit `.ddx/beads.jsonl`.\n\nDEPS\nNo deps. This is a supervisor correctness bug exposed by the `ddx-5baa6a15` incident.",
+    "acceptance": "1. Add `TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry` (or the closest existing execute-loop test name if the file's naming convention requires it) that simulates a successful attempt with `ExitCode=0`, `Outcome=task_succeeded`, and `ResultRev != BaseRev` while the bead remains worker-ready, then asserts the work loop does not dispatch a second agent attempt for that bead.\n2. Add or extend `TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable` so the unreachable successful `result_rev` path no longer returns a silent retry decision; it must land/close, preserve with explicit ref, or stop with a terminal operator-visible result.\n3. Add regression coverage named `TestDanglingSuccess_DDX5baa6a15SuccessfulOpenBeadRecoveredBeforeRetry` (or equivalent) using the incident identifiers `20260515T222727-7b672c7c`, `20260515T223843-6eb42169`, commits `dabf77e68` and `2776da59a`, and manual merge `a14abb332` in fixture comments or test data.\n4. Operator-visible evidence includes bead id, attempt id, result rev, and either preserve ref or land failure reason whenever a successful commit cannot be landed immediately.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry|TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable|TestDanglingSuccess_DDX5baa6a15SuccessfulOpenBeadRecoveredBeforeRetry' -count=1` passes.\n6. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-c191e91a",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:execution",
+      "kind:bug",
+      "execution",
+      "work",
+      "supervisor",
+      "prevention",
+      "incident:ddx-5baa6a15"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 1s (ddx-f1e7dfdf)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-16T00:14:43.299122492Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "triage.estimated_difficulty": "hard"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T001443-39da218a",
+    "prompt": ".ddx/executions/20260516T001443-39da218a/prompt.md",
+    "manifest": ".ddx/executions/20260516T001443-39da218a/manifest.json",
+    "result": ".ddx/executions/20260516T001443-39da218a/result.json",
+    "checks": ".ddx/executions/20260516T001443-39da218a/checks.json",
+    "usage": ".ddx/executions/20260516T001443-39da218a/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f1e7dfdf-20260516T001443-39da218a"
+  },
+  "prompt_sha": "c6bfadf71e374055d1f3b54274b91ea5fbe8b31886b69fbb1ebf941cbcd9924c"
+}
