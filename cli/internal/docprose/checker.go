@@ -357,10 +357,6 @@ func countMatches(s string, needles []string) int {
 	return count
 }
 
-func countWords(s string) int {
-	return len(strings.Fields(s))
-}
-
 func markdownHeading(line string) (level int, heading string, ok bool) {
 	if !strings.HasPrefix(line, "#") {
 		return 0, "", false

@@ -18,11 +18,6 @@ func (t *TempValeConfig) INIPath() string {
 	return t.iniPath
 }
 
-// StylesPath returns the absolute styles directory written into the generated .vale.ini.
-func (t *TempValeConfig) StylesPath() string {
-	return filepath.Join(t.dir, "styles")
-}
-
 // Cleanup removes all temporary files created for this config.
 func (t *TempValeConfig) Cleanup() {
 	os.RemoveAll(t.dir)

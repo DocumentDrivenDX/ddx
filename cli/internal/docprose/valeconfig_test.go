@@ -50,8 +50,9 @@ func TestDocProseValeConfig_StylesPathUsesPackagedRules(t *testing.T) {
 	}
 	defer cfg.Cleanup()
 
-	// DDx style directory must be accessible via the generated StylesPath.
-	ddxStyleDir := filepath.Join(cfg.StylesPath(), "DDx")
+	// DDx style directory must be accessible via the temp dir's styles subdirectory.
+	stylesDir := filepath.Join(filepath.Dir(cfg.INIPath()), "styles")
+	ddxStyleDir := filepath.Join(stylesDir, "DDx")
 	info, err := os.Stat(ddxStyleDir)
 	if err != nil {
 		t.Fatalf("DDx style dir not accessible at %s: %v", ddxStyleDir, err)
@@ -65,8 +66,8 @@ func TestDocProseValeConfig_StylesPathUsesPackagedRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), cfg.StylesPath()) {
-		t.Errorf("generated .vale.ini does not reference expected StylesPath %s\ncontent:\n%s", cfg.StylesPath(), string(data))
+	if !strings.Contains(string(data), stylesDir) {
+		t.Errorf("generated .vale.ini does not reference expected styles dir %s\ncontent:\n%s", stylesDir, string(data))
 	}
 }
 
@@ -85,7 +86,8 @@ func TestDocProseValeConfig_ProjectVocabularyRendered(t *testing.T) {
 	defer cfg.Cleanup()
 
 	// accept.txt must contain each accept term.
-	acceptPath := filepath.Join(cfg.StylesPath(), "Vocab", "Project", "accept.txt")
+	stylesDir := filepath.Join(filepath.Dir(cfg.INIPath()), "styles")
+	acceptPath := filepath.Join(stylesDir, "Vocab", "Project", "accept.txt")
 	data, err := os.ReadFile(acceptPath)
 	if err != nil {
 		t.Fatalf("read accept.txt: %v", err)
@@ -98,7 +100,7 @@ func TestDocProseValeConfig_ProjectVocabularyRendered(t *testing.T) {
 	}
 
 	// reject.txt must contain each reject term.
-	rejectPath := filepath.Join(cfg.StylesPath(), "Vocab", "Project", "reject.txt")
+	rejectPath := filepath.Join(stylesDir, "Vocab", "Project", "reject.txt")
 	data, err = os.ReadFile(rejectPath)
 	if err != nil {
 		t.Fatalf("read reject.txt: %v", err)
