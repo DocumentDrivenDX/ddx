@@ -15,6 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func commitTrackerForTest(projectRoot string) error {
+	return withTrackerLock(projectRoot, func() error {
+		return commitTrackerLocked(projectRoot)
+	})
+}
+
 // initTrackerRepo creates a temp git repo with an initial commit and a
 // .ddx/beads.jsonl file already committed. Returns the project root.
 func initTrackerRepo(t *testing.T) string {
@@ -101,7 +107,7 @@ func TestTrackerCommit_ConcurrentSafety(t *testing.T) {
 				_ = f.Close()
 				mu.Unlock()
 
-				if err := CommitTracker(root); err != nil {
+				if err := commitTrackerForTest(root); err != nil {
 					errs <- err
 					return
 				}
@@ -139,7 +145,7 @@ func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {
 	}
 
 	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-only-tracker"}`+"\n"), 0o644))
-	require.NoError(t, CommitTracker(root))
+	require.NoError(t, commitTrackerForTest(root))
 
 	show := exec.Command("git", "show", "--name-only", "--format=", "HEAD")
 	show.Dir = root
@@ -166,7 +172,7 @@ func TestCommitTrackerConventionModeCommitsXDGTracker(t *testing.T) {
 	tracker := filepath.Join(stateRoot, "beads.jsonl")
 
 	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-convention-tracker"}`+"\n"), 0o644))
-	require.NoError(t, CommitTracker(projectRoot))
+	require.NoError(t, commitTrackerForTest(projectRoot))
 
 	show := runGitInteg(t, stateRoot, "show", "--name-only", "--format=", "HEAD")
 	require.Equal(t, "beads.jsonl", strings.TrimSpace(show))
@@ -193,7 +199,7 @@ func TestTrackerCommit_MalformedRegularFileLockRecovery(t *testing.T) {
 
 	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-malformed-regular"}`+"\n"), 0o644))
 
-	if err := CommitTracker(root); err != nil {
+	if err := commitTrackerForTest(root); err != nil {
 		t.Fatalf("CommitTracker failed to recover from malformed stale regular file: %v", err)
 	}
 
@@ -353,7 +359,7 @@ func TestTrackerCommit_StaleLockRecovery(t *testing.T) {
 	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-stale-test"}`+"\n"), 0o644))
 
 	// CommitTracker must break the stale lock and succeed.
-	if err := CommitTracker(root); err != nil {
+	if err := commitTrackerForTest(root); err != nil {
 		t.Fatalf("CommitTracker failed to recover from stale lock: %v", err)
 	}
 
@@ -477,7 +483,7 @@ func TestTrackerCommit_RetryBackoffPolicy(t *testing.T) {
 		}()
 
 		// Default policy should easily ride out a 50ms hold.
-		if err := CommitTracker(root); err != nil {
+		if err := commitTrackerForTest(root); err != nil {
 			t.Fatalf("CommitTracker did not retry through transient contention: %v", err)
 		}
 	})

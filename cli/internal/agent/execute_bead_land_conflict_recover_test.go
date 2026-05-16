@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
@@ -154,18 +155,18 @@ func TestExecuteBeadLoopLandConflict_AutoRecoverFails_EscalatesResolver(t *testi
 
 func TestLandConflictUnresolvableEventIncludesRescueCommand(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
-	out := RunConflictRecovery(context.Background(), ConflictRecoveryInput{
+	out := agenttry.RunConflictRecovery(context.Background(), agenttry.ConflictRecoveryInput{
 		Bead: *first,
-		Report: ExecuteBeadReport{
+		Report: toTryReport(ExecuteBeadReport{
 			BeadID:      first.ID,
 			Status:      ExecuteBeadStatusLandConflict,
 			PreserveRef: "refs/ddx/iterations/ddx-0001/20260429T000000-aabbccddeeff",
 			BaseRev:     "badc0de",
 			ResultRev:   "feedface",
 			SessionID:   "sess-conflict",
-		},
+		}),
 		ProjectRoot: t.TempDir(),
-		AutoRecover: func(wd, preserveRef string, gitOps LandingGitOps) (string, error) {
+		AutoRecover: func(wd, preserveRef string) (string, error) {
 			return "", fmt.Errorf("cannot auto-merge")
 		},
 		Store:    store,
@@ -174,7 +175,7 @@ func TestLandConflictUnresolvableEventIncludesRescueCommand(t *testing.T) {
 		Cooldown: 15 * time.Minute,
 	})
 
-	assert.Equal(t, ConflictRecoveryPark, out.Disposition)
+	assert.Equal(t, agenttry.ConflictRecoveryPark, out.Disposition)
 	assert.Contains(t, out.Report.Detail, "git merge --no-ff refs/ddx/iterations/ddx-0001/20260429T000000-aabbccddeeff")
 
 	events, err := store.Events(first.ID)

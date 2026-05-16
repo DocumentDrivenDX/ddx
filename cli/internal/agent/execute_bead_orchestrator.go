@@ -296,9 +296,6 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 			if land.Merged {
 				landing.Reason = "merged onto current tip"
 			}
-			if land.NewTip != "" {
-				res.ResultRev = land.NewTip
-			}
 		case "preserved":
 			landing.Outcome = "preserved"
 			landing.PreserveRef = land.PreserveRef

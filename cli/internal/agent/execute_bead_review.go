@@ -15,7 +15,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docprose"
-	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
@@ -259,13 +258,6 @@ type reviewArtifactResult struct {
 	Findings         []Finding                  `json:"findings,omitempty"`
 	Error            string                     `json:"error,omitempty"`
 	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
-}
-
-// SelectReviewerPolicy returns the power class to use for the review agent.
-// Rule: max(implementation power + one step, smart). Since smart is the ceiling,
-// the reviewer always runs at smart power regardless of the implementation power.
-func SelectReviewerPolicy(_ escalation.PowerClass) escalation.PowerClass {
-	return escalation.PowerSmart
 }
 
 // HasBeadLabel reports whether label is present in labels.
@@ -871,10 +863,6 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 		ClearProfile:        true,
 		ClearMaxPower:       true,
 	}
-}
-
-func (r *DefaultBeadReviewer) reviewerProfileForDispatch(ctx context.Context, impl ImplementerRouting) string {
-	return r.reviewerDispatchProfile(ctx, impl, 0).Name
 }
 
 // reviewerDispatchProfile returns the fizeau profile name and MinPower to use

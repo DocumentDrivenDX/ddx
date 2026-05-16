@@ -2025,22 +2025,11 @@ func populateWorkerStatus(res *ExecuteBeadResult) {
 	res.Detail = ExecuteBeadStatusDetail(res.Status, "", res.Error)
 }
 
-// CommitTracker commits beads.jsonl if it has uncommitted changes. Acquires
-// withTrackerLock so concurrent callers serialize on the parent .git index.
-// Callers already holding the lock must use commitTrackerLocked instead —
-// the lock is not re-entrant.
-func CommitTracker(projectRoot string) error {
-	return withTrackerLock(projectRoot, func() error {
-		return commitTrackerLocked(projectRoot)
-	})
-}
-
-// commitTrackerLocked is the body of CommitTracker without the lock
-// acquisition. Callers must hold withTrackerLock(projectRoot) before calling.
-// Used by Run() to fold tracker commit, checkpoint synthesis, and worktree
-// creation into a single critical section so concurrent workers do not race
-// on the parent's HEAD ref (regression: niflheim concurrent `ddx work` hit
-// "cannot lock ref 'HEAD'" between unlocked CommitTracker and SynthesizeCommit).
+// commitTrackerLocked commits beads.jsonl if it has uncommitted changes.
+// Callers must hold withTrackerLock(projectRoot) before calling. Used by Run()
+// to fold tracker commit, checkpoint synthesis, and worktree creation into a
+// single critical section so concurrent workers do not race on the parent's
+// HEAD ref.
 func commitTrackerLocked(projectRoot string) error {
 	trackerFile := ddxroot.JoinProject(projectRoot, "beads.jsonl")
 	info, err := os.Stat(trackerFile)
@@ -2848,27 +2837,4 @@ func WriteExecuteBeadResultArtifact(projectRoot string, res *ExecuteBeadResult) 
 		path = filepath.Join(projectRoot, path)
 	}
 	return writeArtifactJSON(path, res)
-}
-
-// ValidateACCheckFail returns an error when acOut has one or more failed AC
-// items and commitMsg does not carry an AC-Waive: trailer. When acOut is nil
-// or has no failures it returns nil unconditionally. The check is syntactic:
-// any line whose trimmed prefix is "AC-Waive:" satisfies the waive condition.
-func ValidateACCheckFail(acOut *accheck.Output, commitMsg string) error {
-	if acOut == nil || acOut.Summary.Fail == 0 {
-		return nil
-	}
-	if hasACWaiveTrailer(commitMsg) {
-		return nil
-	}
-	return fmt.Errorf("ac-check: %d AC item(s) failed; add AC-Waive: trailer to bypass", acOut.Summary.Fail)
-}
-
-func hasACWaiveTrailer(msg string) bool {
-	for _, line := range strings.Split(msg, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), "AC-Waive:") {
-			return true
-		}
-	}
-	return false
 }
