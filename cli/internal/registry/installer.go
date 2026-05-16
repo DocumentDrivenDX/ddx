@@ -59,25 +59,6 @@ func InstallPackageFromRemote(pkg *Package, projectRoot string) (InstalledEntry,
 	return installFromExtractedDir(pkg, extractedDir, projectRoot, entry)
 }
 
-// InstallPackageFromDir installs the package from an already-extracted source
-// directory (e.g. a local checkout) via the shared core install implementation.
-// Network is not used.
-func InstallPackageFromDir(pkg *Package, sourceDir, projectRoot string) (InstalledEntry, error) {
-	entry := InstalledEntry{
-		Name:        pkg.Name,
-		Version:     pkg.Version,
-		Type:        pkg.Type,
-		Source:      pkg.Source,
-		InstalledAt: time.Now(),
-	}
-
-	if pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
-		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
-	}
-
-	return installFromExtractedDir(pkg, sourceDir, projectRoot, entry)
-}
-
 // InstallPackageFromFS installs the package from an in-memory or embedded
 // filesystem (e.g. //go:embed) rooted at the package directory. The FS is
 // materialized into a temporary directory and passed through the shared core
