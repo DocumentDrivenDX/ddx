@@ -126,17 +126,46 @@ queue-drain contract as ordinary executable task/bug/chore beads.
 
 - A normal execution-ready queue is **single-ticket-first**. Ready non-epic
   beads are ordered ahead of ready epic beads at the same priority.
-- Open epics are not launched by the ordinary `ddx work` single-ticket worker
-  by default. They are consumed by an epic-scoped worker mode that owns an epic
-  branch and worktree.
+- Open epics are not launched by the ordinary `ddx work` single-ticket worker.
+  Their disposition is decided by the **idle-path auto-remediator** (see FEAT-010
+  Layer 3 — Idle-Path Diagnosis and Auto-Remediation), which classifies each
+  ready epic by its open/closed child counts, parent/dep state, and operator
+  override labels, then fires exactly one of these auto-actions per loop pass:
+  - **Closure cascade** when all children are closed (`openChildCount == 0 &&
+    totalChildCount > 0`): the epic is treated as a closure candidate and the
+    existing closure-evaluation path auto-closes it.
+  - **Supersession cascade** when an open child carries `superseded-by:<Y>`
+    and Y is closed, with no other reason for the child to stay open: the
+    child auto-closes via a one-hop cascade inside `Close()`.
+  - **Auto-decomposition** when the epic has `totalChildCount == 0`, has a
+    valid decomposition source (description with PROBLEM/PROPOSED FIX/AC
+    sections, `spec:*` or `area:*` label), and has not exhausted its
+    per-bead attempt cap or `--max-recovery-cost` budget: the in-loop
+    pre-claim decomposer is dispatched against the epic.
+  - **Operator surface** when none of the above applies (real dependency
+    block on open work, parent/child state conflict, exhausted attempts,
+    operator-set `manual-hold` / `no-auto-decompose` / `container` label,
+    or unknown state): the epic is listed in `ddx work focus` Section A
+    (operator-required). Beads with an auto-action queued for the next loop
+    pass are surfaced in `ddx work focus` Section B (count with `--verbose`
+    detail) rather than silently hidden.
 - Child beads of an epic remain individually executable units and may be
-  closed one-by-one as they land on the epic branch.
-- Epic queue entries remain visible in the tracker and UI, but their
-  execution semantics are governed by the epic worker contract rather than the
-  single-ticket loop contract.
+  closed one-by-one.
+- Epic queue entries remain visible in the tracker and UI. The diagnostic
+  surface `ddx work plan --explain` prints the per-epic reason code so
+  operators can see what the loop will do on its next iteration.
 
-This split preserves the simple `W2 = bead(W1)` contract for ordinary beads
-while allowing a separate sequential execution mode for epic branches.
+The "skip and exit" disposition (`No execution-eligible beads in the queue`
+with only ready epics present) is forbidden by the FEAT-010 reliability
+contract; every ready epic must classify into one of the four auto-actions
+above. Concurrency, cycle guards, idempotency, and audit-event requirements
+are owned by FEAT-010 Layer 3 and are common to every auto-remediation in the
+idle path.
+
+**Deferred** (out of scope for this contract): an epic-scoped worker mode
+with a dedicated epic branch/worktree that sequentially executes child beads
+on a shared branch. That capability is a separate, larger initiative and is
+not required for the queue-drain contract to hold.
 
 ### Queue Ordering Overrides
 

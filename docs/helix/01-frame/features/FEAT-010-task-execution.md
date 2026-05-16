@@ -311,6 +311,96 @@ evidence, record the interruption/disruption, release the claim, and leave the
 bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
 Shutdown is not itself a reason to park a bead on `work-retry-after`.
 
+#### Idle-Path Diagnosis and Auto-Remediation
+
+When the picker returns no executable bead, Layer 3 does not exit. It diagnoses
+each non-ready bead in the breakdown (`Epics`, `EpicClosureCandidates`,
+`DepWaiting`, `OperatorAttention`) with a per-bead reason code, fires the
+matching auto-remediation in the same loop iteration, then re-scans. The drain
+exits only when every blocker class has been resolved or has been routed to an
+operator surface with an exhausted-auto-remediation marker.
+
+**Reason taxonomy** (closed enum; new codes require this spec to be updated):
+
+- `superseded_pending_close` — bead has `superseded-by:<Y>`, Y is closed.
+  Drives a one-hop cascade close inside `Close(Y)`.
+- `closure_candidate_misclassified` — epic with `openChildCount == 0 &&
+  totalChildCount > 0` mistakenly in the epic-container bucket. Drives a
+  classifier-correction reroute into the existing closure-evaluation path.
+- `dead_intermediate_all_children_closed` — `execution-eligible == false`,
+  all children closed. Drives the same closure path.
+- `dead_intermediate_open_children_pending` — `execution-eligible == false`
+  with open children that have their own auto-remediation. Skip; recursion
+  via the children resolves the parent.
+- `epic_of_epic` — only open children are themselves epics. Skip; the inner
+  epic's auto-remediation resolves the chain.
+- `dep_blocked_by:<id>(status=<s>)` — bead has open deps. No direct action;
+  the cascade of supersession/closure remediations is expected to unblock
+  most. Remaining real blocks surface in `ddx work focus` Section A with the
+  blocker ID and status cited.
+- `genuinely_needs_decomposition` — `IssueType == epic`,
+  `totalChildCount == 0`, not closure-pending, no `manual-hold` /
+  `no-auto-decompose` / `container` operator override, valid decomposition
+  source (PROBLEM/PROPOSED FIX/AC sections per the bead-authoring template,
+  plus a `spec:*` or `area:*` label). Drives one dispatch of the pre-claim
+  decomposer (`runPreClaimDecomposer`) per loop iteration.
+- `parent_child_state_conflict` — parent/child state mismatch the classifier
+  does not expect. Surface for operator.
+- `claimed_in_progress` — bead currently claimed by an active worker. No
+  action; honored by claim semantics.
+- `provider_route_unavailable` — last dispatch failed with `ResolveRoute: no
+  live provider...`. Surface for operator with provider hint.
+- `gated_by_budget_or_cooldown` — auto-remediation matched but
+  `--max-recovery-cost` exhausted, cooldown active, or `--no-*` override set.
+  Surface with the gate name.
+- `malformed_parent_or_dep_ref` — parent/dep ID does not resolve. Surface
+  for operator (tracker integrity issue).
+- `dependency_cycle` — cycle detected in dep DAG. Surface for operator.
+- `closed_or_missing_parent` — parent resolves to closed or non-existent
+  bead. Surface for operator.
+- `stale_graph_index` — child/dep index disagrees with raw JSONL scan.
+  Trigger index rebuild; re-diagnose next loop.
+- `auto_remediation_exhausted` — attempts cap hit or cooldown active for the
+  same reason. Surface for operator.
+- `no_diagnosis` — none of the above matched. Log + surface as bug.
+
+**Safety contract (applies to every auto-remediation):**
+
+- Per-bead attempt cap of 3 per reason code, tracked via event count.
+  Beyond the cap the diagnosis becomes `auto_remediation_exhausted` and the
+  bead surfaces in `ddx work focus` Section A.
+- Cost budget: `--max-recovery-cost` (default $2). Auto-decompose counts
+  against it; cheap pure-Go remediations (RC-1 reroute, RC-2 cascade, RC-3
+  cleanup) do not.
+- Cooldown: failed auto-decompose calls `SetExecutionCooldown` for 15m to
+  prevent the same epic from being repicked next scan.
+- Cycle guard: per-loop-iteration visited set for any recursive operation
+  (RC-2 cascade, RC-3 walk-up, RC-4 epic-of-epic recursion).
+- Operator overrides: per-handler kill switches `--no-auto-supersede-close`,
+  `--no-auto-epic-decompose`, `--no-auto-closure-reclassify`; per-project
+  defaults under config key `work.autoRemediations`.
+- Audit: every auto-action emits an event with the reason code, the bead
+  ID, actor `auto-remediator`, and (for cascade ops) the trigger ID.
+- Re-scan policy: if any auto-remediation succeeded in the pass, the loop
+  re-runs `nextCandidate()` without sleeping. Otherwise it falls through to
+  the existing `sleepOrWake` idle path.
+- Throughput: at most one auto-decompose dispatch per loop iteration to bound
+  cost; cheap remediations batch in a single pass.
+- Read-only paths (`ddx work plan --explain`, `ddx work focus`) never mutate;
+  only the live `ddx work` loop fires auto-actions.
+
+**Operator surface (`ddx work focus`)** is two sections:
+
+- **Section A — Operator-required:** beads with diagnoses that have no
+  automated remediation or have exhausted attempts.
+- **Section B — Auto-remediating next loop:** one-line count of beads with an
+  auto-action queued, with `--verbose` opening the per-bead detail. Silent
+  hiding of auto-remediable beads is forbidden — operators must always be able
+  to see what the loop is about to do.
+
+The epic-specific behavior under this contract is documented in FEAT-004
+"Queue Semantics For Epics" and inherits all safety guards above.
+
 ## Agent Power and Retry
 
 DDx owns retry policy between bead attempts. If an attempt produces classified

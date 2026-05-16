@@ -1,6 +1,6 @@
 # Reliability Principles
 
-See this document for the 7 reliability principles applied to ddx try / ddx work execution.
+See this document for the reliability principles (P1–P10) applied to ddx try / ddx work execution.
 
 These principles describe how the execution machinery should behave when a layer rejects a candidate, encounters transient failure, or needs to surface degraded state to operators.
 
@@ -85,3 +85,34 @@ requirement 16) and §"Network isolation" (non-functional). Implementation
 target: `cli/internal/agent/execute_bead_land.go` `Land()` and
 `cli/internal/agent/execute_bead_loop.go` drain loop — neither must call
 `git fetch` or `git push`.
+
+## P10: No Skip-And-Exit On Idle Scan
+
+When the picker returns no executable bead, the work loop does not exit. It
+diagnoses every non-ready bead in the breakdown with a per-bead reason code,
+fires the matching auto-remediation in the same loop iteration, then re-scans.
+Every blocker class that the diagnoser surfaces must have either:
+
+- A defined auto-remediation that the loop runs without operator intervention,
+  subject to per-bead attempt cap (3), cost budget (`--max-recovery-cost`),
+  cooldown, cycle guard, and operator override flag; or
+- A defined operator-surface path (`ddx work focus` Section A) that triggers
+  ONLY after auto-remediation has provably failed (attempts exhausted, gates
+  hit) or where automated remediation is not safe (real dep blocks on open
+  work, tracker integrity issues, unknown state).
+
+"Skip and exit" — printing `No execution-eligible beads in the queue` and
+returning while non-ready beads still have known root causes the system could
+act on — is forbidden. The factory rule: `ddx work` must self-unstick;
+operator attention is the exception, not the default.
+
+Beads queued for auto-remediation are surfaced in `ddx work focus` Section B
+(count by default, `--verbose` for per-bead detail). Silent hiding of
+auto-remediable beads is also forbidden — operators must always be able to
+see what the loop is about to do on its next iteration.
+
+Governing requirement: FEAT-010 §"Idle-Path Diagnosis and Auto-Remediation"
+and FEAT-004 §"Queue Semantics For Epics" define the closed reason taxonomy,
+the safety contract, and the per-class remediation paths. New blocker classes
+or new reason codes require those specs to be updated before the diagnoser
+ships the code.
