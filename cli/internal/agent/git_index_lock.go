@@ -17,8 +17,3 @@ func recoverGitIndexLock(projectRoot string) (gitlock.IndexLockRecoveryResult, e
 func runGitWithIndexLockRecovery(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	return gitlock.RunGitWithIndexLockRecovery(ctx, dir, args...)
 }
-
-// isGitIndexLockError is a package-private alias for gitlock.IsIndexLockError.
-func isGitIndexLockError(output string) bool {
-	return gitlock.IsIndexLockError(output)
-}

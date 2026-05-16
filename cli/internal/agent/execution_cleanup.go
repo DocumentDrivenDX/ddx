@@ -1077,10 +1077,6 @@ func ReadExecutionCleanupMetadata(dir string) (ExecutionCleanupMetadata, error) 
 	return meta, nil
 }
 
-func measureTree(path string) (bytes int64, inodes int64, err error) {
-	return measureTreeWithContext(context.Background(), path)
-}
-
 func measureTreeWithContext(ctx context.Context, path string) (bytes int64, inodes int64, err error) {
 	if ctx != nil {
 		if err := ctx.Err(); err != nil {

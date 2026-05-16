@@ -298,17 +298,6 @@ type SignalSourceMetadata struct {
 	Notes      string    `json:"notes,omitempty"`
 }
 
-// NormalizeSignalSourceKind collapses non-live or DDx-local cache labels into
-// the small vocabulary exposed by the current routing/status surfaces.
-func NormalizeSignalSourceKind(kind string) string {
-	switch kind {
-	case "native-session-jsonl":
-		return kind
-	default:
-		return ""
-	}
-}
-
 // QuotaSignal captures current quota/headroom for a harness.
 type QuotaSignal struct {
 	Source        SignalSourceMetadata `json:"source"`

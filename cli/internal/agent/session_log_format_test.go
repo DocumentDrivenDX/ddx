@@ -23,7 +23,11 @@ func readProgressCorpusFile(t *testing.T, name string) string {
 func readProgressCorpusEntries(t *testing.T, name string) []agentlib.ServiceProgressData {
 	t.Helper()
 	path := filepath.Join("testdata", "progress_corpus", name)
-	entries, err := ReadAllJSONL[agentlib.ServiceProgressData](path)
+	var entries []agentlib.ServiceProgressData
+	err := ForEachJSONL[agentlib.ServiceProgressData](path, func(entry agentlib.ServiceProgressData) error {
+		entries = append(entries, entry)
+		return nil
+	})
 	require.NoError(t, err)
 	return entries
 }

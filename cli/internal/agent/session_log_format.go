@@ -76,29 +76,6 @@ func truncateStr(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
-type payloadHint struct {
-	label string
-	bytes int
-}
-
-func formatPayloadHints(hints []payloadHint) string {
-	parts := make([]string, 0, len(hints))
-	for _, hint := range hints {
-		if hint.bytes <= 0 {
-			continue
-		}
-		parts = append(parts, hint.label+"="+formatByteSize(hint.bytes))
-	}
-	return strings.Join(parts, " ")
-}
-
-func formatSizeSuffix(label string, bytes int) string {
-	if bytes <= 0 {
-		return ""
-	}
-	return ", " + label + "=" + formatByteSize(bytes)
-}
-
 func formatByteSize(bytes int) string {
 	switch {
 	case bytes <= 0:
@@ -109,26 +86,6 @@ func formatByteSize(bytes int) string {
 		return fmt.Sprintf("%.1fKB", float64(bytes)/1024)
 	default:
 		return fmt.Sprintf("%.1fMB", float64(bytes)/(1024*1024))
-	}
-}
-
-func encodedPayloadSize(v any) int {
-	if v == nil {
-		return 0
-	}
-	switch x := v.(type) {
-	case string:
-		return len([]byte(x))
-	case json.RawMessage:
-		return len(x)
-	case []byte:
-		return len(x)
-	default:
-		raw, err := json.Marshal(v)
-		if err != nil {
-			return 0
-		}
-		return len(raw)
 	}
 }
 
@@ -447,21 +404,6 @@ func compactPathTokens(tokens []string, limit int) []string {
 	return out
 }
 
-func compactOutputExcerpt(data map[string]any) string {
-	if data == nil {
-		return ""
-	}
-	for _, key := range []string{"output_excerpt", "output_summary"} {
-		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
-			return compactOutputSummary(value)
-		}
-	}
-	if output, ok := data["output"].(string); ok {
-		return outputSummaryFromRaw(output)
-	}
-	return ""
-}
-
 func compactOutputSummary(summary string) string {
 	return compactOutputSummaryLimit(summary, 80)
 }
@@ -469,35 +411,6 @@ func compactOutputSummary(summary string) string {
 func compactOutputSummaryLimit(summary string, limit int) string {
 	summary = strings.Join(strings.Fields(strings.TrimSpace(summary)), " ")
 	return truncateStr(summary, limit)
-}
-
-func outputSummaryFromRaw(output string) string {
-	output = strings.TrimSpace(output)
-	if output == "" {
-		return ""
-	}
-	byteCount := len([]byte(output))
-	lineCount := strings.Count(output, "\n") + 1
-	parts := []string{}
-	if lineCount == 1 {
-		parts = append(parts, "1 line")
-	} else {
-		parts = append(parts, fmt.Sprintf("%d lines", lineCount))
-	}
-	if byteCount > 40 {
-		for _, line := range strings.Split(output, "\n") {
-			line = strings.TrimSpace(line)
-			if line != "" {
-				parts = append(parts, strconv.Quote(truncateStr(line, 48)))
-				break
-			}
-		}
-	}
-	return compactOutputSummary(strings.Join(parts, " "))
-}
-
-func compactToolDisplay(toolName, command string) string {
-	return compactToolDisplayLimit(toolName, command, 96)
 }
 
 func compactToolDisplayLimit(toolName, command string, limit int) string {

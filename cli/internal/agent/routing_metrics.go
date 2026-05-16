@@ -37,12 +37,22 @@ func (s *RoutingMetricsStore) AppendOutcome(outcome RoutingOutcome) error {
 
 // ReadOutcomes loads all recorded routing outcomes.
 func (s *RoutingMetricsStore) ReadOutcomes() ([]RoutingOutcome, error) {
-	return ReadAllJSONL[RoutingOutcome](s.outcomeFile())
+	var out []RoutingOutcome
+	err := ForEachJSONL[RoutingOutcome](s.outcomeFile(), func(rec RoutingOutcome) error {
+		out = append(out, rec)
+		return nil
+	})
+	return out, err
 }
 
 // ReadBurnSummaries loads stored burn summaries.
 func (s *RoutingMetricsStore) ReadBurnSummaries() ([]BurnSummary, error) {
-	return ReadAllJSONL[BurnSummary](s.burnFile())
+	var out []BurnSummary
+	err := ForEachJSONL[BurnSummary](s.burnFile(), func(rec BurnSummary) error {
+		out = append(out, rec)
+		return nil
+	})
+	return out, err
 }
 
 func appendJSONLRecord(path string, v any) error {
