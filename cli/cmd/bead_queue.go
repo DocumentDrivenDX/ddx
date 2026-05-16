@@ -33,11 +33,13 @@ func (f *CommandFactory) newBeadQueueTopCommand() *cobra.Command {
 		Short: "Move a bead to the front of its priority bucket",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := f.beadStore().QueueTop(args[0]); err != nil {
+			return f.withBeadTrackerWriteLock(func() error {
+				if err := f.beadStore().QueueTop(args[0]); err != nil {
+					return err
+				}
+				_, err := f.beadAutoCommit("queue top " + args[0])
 				return err
-			}
-			_, err := f.beadAutoCommit("queue top " + args[0])
-			return err
+			})
 		},
 	}
 }
@@ -56,17 +58,19 @@ func (f *CommandFactory) newBeadQueueMoveCommand() *cobra.Command {
 			if before != "" && after != "" {
 				return fmt.Errorf("cannot specify both --before and --after")
 			}
-			if before != "" {
-				if err := f.beadStore().QueueMove(args[0], before, true); err != nil {
-					return err
+			return f.withBeadTrackerWriteLock(func() error {
+				if before != "" {
+					if err := f.beadStore().QueueMove(args[0], before, true); err != nil {
+						return err
+					}
+				} else {
+					if err := f.beadStore().QueueMove(args[0], after, false); err != nil {
+						return err
+					}
 				}
-			} else {
-				if err := f.beadStore().QueueMove(args[0], after, false); err != nil {
-					return err
-				}
-			}
-			_, err := f.beadAutoCommit("queue move " + args[0])
-			return err
+				_, err := f.beadAutoCommit("queue move " + args[0])
+				return err
+			})
 		},
 	}
 	cmd.Flags().String("before", "", "Place the bead before another bead in the same priority bucket")
@@ -80,11 +84,13 @@ func (f *CommandFactory) newBeadQueueClearCommand() *cobra.Command {
 		Short: "Remove the explicit queue rank from a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := f.beadStore().QueueClear(args[0]); err != nil {
+			return f.withBeadTrackerWriteLock(func() error {
+				if err := f.beadStore().QueueClear(args[0]); err != nil {
+					return err
+				}
+				_, err := f.beadAutoCommit("queue clear " + args[0])
 				return err
-			}
-			_, err := f.beadAutoCommit("queue clear " + args[0])
-			return err
+			})
 		},
 	}
 }

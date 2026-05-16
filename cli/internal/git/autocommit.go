@@ -26,6 +26,19 @@ type AutoCommitConfig struct {
 	RunGit func(ctx context.Context, dir string, args ...string) ([]byte, error)
 }
 
+// AutoCommitAfterAddHook is invoked after git add succeeds and before git
+// commit starts. Tests may swap this to widen the stage/commit race window when
+// asserting that callers serialize the whole auto-commit critical section.
+var AutoCommitAfterAddHook func(AutoCommitHookContext)
+
+// AutoCommitHookContext describes one auto-commit invocation for test hooks.
+type AutoCommitHookContext struct {
+	RepoDir       string
+	Message       string
+	FilePaths     []string
+	IncludeStaged bool
+}
+
 // AutoCommit stages and commits a file with a structured message.
 // Returns the landed commit SHA when a commit is created.
 // Returns an empty SHA and nil if auto_commit is "never" (or unset) or if
@@ -98,6 +111,14 @@ func AutoCommitFiles(filePaths []string, artifactID string, operation string, cf
 	}
 	if out, err := runGit(ctx, repoDir, addArgs...); err != nil {
 		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
+	}
+	if hook := AutoCommitAfterAddHook; hook != nil {
+		hook(AutoCommitHookContext{
+			RepoDir:       repoDir,
+			Message:       message,
+			FilePaths:     append([]string(nil), filePaths...),
+			IncludeStaged: cfg.IncludeStaged,
+		})
 	}
 
 	// Commit with --no-verify because these are mechanical commits.

@@ -74,24 +74,32 @@ the migration via 'ddx bead export | diff'.`,
 			}
 
 			if lifecycle {
-				var st bead.LifecycleMigrationStats
-				var err error
+				var (
+					st  bead.LifecycleMigrationStats
+					err error
+				)
 				if applyLifecycle {
-					st, err = s.MigrateLifecycle()
+					err = f.withBeadTrackerWriteLock(func() error {
+						st, err = s.MigrateLifecycle()
+						if err != nil {
+							return err
+						}
+						if st.Changed() {
+							paths := []string{s.File}
+							if st.MarkerWritten {
+								paths = append(paths, s.LifecycleSchemaMarkerPath())
+							}
+							if _, err := f.beadAutoCommitPaths("migrate lifecycle", paths); err != nil {
+								return err
+							}
+						}
+						return nil
+					})
 				} else {
 					st, err = s.MigrateLifecycleDryRun()
 				}
 				if err != nil {
 					return err
-				}
-				if applyLifecycle && st.Changed() {
-					paths := []string{s.File}
-					if st.MarkerWritten {
-						paths = append(paths, s.LifecycleSchemaMarkerPath())
-					}
-					if _, err := f.beadAutoCommitPaths("migrate lifecycle", paths); err != nil {
-						return err
-					}
 				}
 				if asJSON {
 					enc := json.NewEncoder(cmd.OutOrStdout())
@@ -133,15 +141,20 @@ the migration via 'ddx bead export | diff'.`,
 				}
 				ext, arch = st.EventsExternalized, st.Archived
 			} else {
-				st, err := s.Migrate()
-				if err != nil {
-					return err
-				}
-				ext, arch = st.EventsExternalized, st.Archived
-				if st.Changed() {
-					if _, err := f.beadExternalizeArchiveAutoCommit(st); err != nil {
+				if err := f.withBeadTrackerWriteLock(func() error {
+					st, err := s.Migrate()
+					if err != nil {
 						return err
 					}
+					ext, arch = st.EventsExternalized, st.Archived
+					if st.Changed() {
+						if _, err := f.beadExternalizeArchiveAutoCommit(st); err != nil {
+							return err
+						}
+					}
+					return nil
+				}); err != nil {
+					return err
 				}
 			}
 			stats := migrateStatsView{EventsExternalized: ext, Archived: arch, DryRun: dryRun}

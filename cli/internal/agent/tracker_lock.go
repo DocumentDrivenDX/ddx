@@ -111,6 +111,13 @@ func withMainGitLock(projectRoot string, fn func() error) error {
 	return withTrackerLockPolicy(projectRoot, trackerLockPolicy, fn)
 }
 
+// WithMainGitLock exposes the process-shared main-git lock to sibling
+// packages that need the same serialized add/commit boundary as execute-bead
+// landing and pre-dispatch checkpointing.
+func WithMainGitLock(projectRoot string, fn func() error) error {
+	return withMainGitLock(projectRoot, fn)
+}
+
 // withTrackerLock is retained for existing tracker/pre-dispatch call sites. It
 // uses the same process-shared lock as landing so separate ddx work processes
 // cannot interleave commits, ref updates, and checkout sync in the main tree.

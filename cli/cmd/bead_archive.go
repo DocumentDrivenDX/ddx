@@ -77,20 +77,26 @@ duplicate that an interrupted run could leave behind.`,
 				policy.BatchSize = n
 			}
 
-			stats, err := s.ArchiveWithEvents(policy)
-			if err != nil {
+			var stats bead.MigrateStats
+			if err := f.withBeadTrackerWriteLock(func() error {
+				var err error
+				stats, err = s.ArchiveWithEvents(policy)
+				if err != nil {
+					return err
+				}
+				if stats.Changed() {
+					if _, err := f.beadExternalizeArchiveAutoCommit(stats); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
 				return err
 			}
 
 			afterSize := int64(0)
 			if info, err := os.Stat(s.File); err == nil {
 				afterSize = info.Size()
-			}
-
-			if stats.Changed() {
-				if _, err := f.beadExternalizeArchiveAutoCommit(stats); err != nil {
-					return err
-				}
 			}
 
 			if asJSON {

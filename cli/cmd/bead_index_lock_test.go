@@ -34,10 +34,10 @@ func plantStaleLock(t *testing.T, repoDir string) {
 	require.NoError(t, os.Chtimes(lockPath, old, old))
 }
 
-// TestBeadCreate_StaleIndexLockSelfHeals asserts that ddx bead create against
+// TestBeadCreateAutoCommitRecoversStaleIndexLock asserts that ddx bead create against
 // a worktree with a stale .git/index.lock (mtime > gitlock.StaleAge, no owner)
 // succeeds without operator intervention.
-func TestBeadCreate_StaleIndexLockSelfHeals(t *testing.T) {
+func TestBeadCreateAutoCommitRecoversStaleIndexLock(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(autoCommitConfig)
 	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
@@ -54,9 +54,9 @@ func TestBeadCreate_StaleIndexLockSelfHeals(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "stale lock should have been removed")
 }
 
-// TestBeadUpdate_StaleIndexLockSelfHeals asserts that ddx bead update against
+// TestBeadUpdateAutoCommitRecoversStaleIndexLock asserts that ddx bead update against
 // a worktree with a stale .git/index.lock succeeds without operator intervention.
-func TestBeadUpdate_StaleIndexLockSelfHeals(t *testing.T) {
+func TestBeadUpdateAutoCommitRecoversStaleIndexLock(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(autoCommitConfig)
 	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")
@@ -76,9 +76,9 @@ func TestBeadUpdate_StaleIndexLockSelfHeals(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "stale lock should have been removed")
 }
 
-// TestBeadClose_StaleIndexLockSelfHeals asserts that ddx bead close against
+// TestBeadCloseAutoCommitRecoversStaleIndexLock asserts that ddx bead close against
 // a worktree with a stale .git/index.lock succeeds without operator intervention.
-func TestBeadClose_StaleIndexLockSelfHeals(t *testing.T) {
+func TestBeadCloseAutoCommitRecoversStaleIndexLock(t *testing.T) {
 	env := NewTestEnvironment(t)
 	env.CreateConfig(autoCommitConfig)
 	gitAddAndCommit(t, env.Dir, "track ddx config", ".ddx/config.yaml")

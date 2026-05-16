@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	agentpkg "github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -154,6 +155,14 @@ func (f *CommandFactory) beadAutoCommitPathsWithMode(operation string, paths []s
 		return "", fmt.Errorf("auto-commit beads tracker after %s: %w", operation, err)
 	}
 	return sha, nil
+}
+
+func (f *CommandFactory) withBeadTrackerWriteLock(fn func() error) error {
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		workspaceRoot = f.WorkingDir
+	}
+	return agentpkg.WithMainGitLock(workspaceRoot, fn)
 }
 
 func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
@@ -363,15 +372,20 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 				}
 			}
 
-			if err := s.Create(context.Background(), b); err != nil {
-				return err
-			}
-			if markerPresent, _ := s.HasLifecycleSchemaMarker(); !markerPresent && !beadHasLegacyLifecycleInputs(*b) {
-				if err := s.WriteLifecycleSchemaMarker(time.Now().UTC()); err != nil {
+			if err := f.withBeadTrackerWriteLock(func() error {
+				if err := s.Create(context.Background(), b); err != nil {
 					return err
 				}
-			}
-			if _, err := f.beadAutoCommitPaths("create "+b.ID, []string{s.File, s.LifecycleSchemaMarkerPath()}); err != nil {
+				if markerPresent, _ := s.HasLifecycleSchemaMarker(); !markerPresent && !beadHasLegacyLifecycleInputs(*b) {
+					if err := s.WriteLifecycleSchemaMarker(time.Now().UTC()); err != nil {
+						return err
+					}
+				}
+				if _, err := f.beadAutoCommitPaths("create "+b.ID, []string{s.File, s.LifecycleSchemaMarkerPath()}); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", b.ID)
@@ -551,19 +565,29 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if assignee == "" {
 					assignee = resolveClaimAssignee()
 				}
-				if err := s.Claim(args[0], assignee); err != nil {
-					return err
-				}
-				if _, err := f.beadAutoCommit("claim " + args[0]); err != nil {
+				if err := f.withBeadTrackerWriteLock(func() error {
+					if err := s.Claim(args[0], assignee); err != nil {
+						return err
+					}
+					if _, err := f.beadAutoCommit("claim " + args[0]); err != nil {
+						return err
+					}
+					return nil
+				}); err != nil {
 					return err
 				}
 				return nil
 			}
 			if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
-				if err := s.Unclaim(args[0]); err != nil {
-					return err
-				}
-				if _, err := f.beadAutoCommit("unclaim " + args[0]); err != nil {
+				if err := f.withBeadTrackerWriteLock(func() error {
+					if err := s.Unclaim(args[0]); err != nil {
+						return err
+					}
+					if _, err := f.beadAutoCommit("unclaim " + args[0]); err != nil {
+						return err
+					}
+					return nil
+				}); err != nil {
 					return err
 				}
 				return nil
@@ -673,18 +697,23 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				return nil
 			}
 
-			var err error
-			if statusChanged {
-				err = s.UpdateWithLifecycleStatus(args[0], statusValue, statusOpts, applyUpdateFields)
-			} else {
-				err = s.Update(context.Background(), args[0], func(b *bead.Bead) {
-					_ = applyUpdateFields(b)
-				})
-			}
-			if err != nil {
-				return err
-			}
-			if _, err := f.beadAutoCommit("update " + args[0]); err != nil {
+			if err := f.withBeadTrackerWriteLock(func() error {
+				var err error
+				if statusChanged {
+					err = s.UpdateWithLifecycleStatus(args[0], statusValue, statusOpts, applyUpdateFields)
+				} else {
+					err = s.Update(context.Background(), args[0], func(b *bead.Bead) {
+						_ = applyUpdateFields(b)
+					})
+				}
+				if err != nil {
+					return err
+				}
+				if _, err := f.beadAutoCommit("update " + args[0]); err != nil {
+					return err
+				}
+				return nil
+			}); err != nil {
 				return err
 			}
 			return nil
@@ -876,39 +905,61 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 				commitSHA = normalizedCommitSHA
 			}
 
-			target, err := s.Get(context.Background(), args[0])
-			if err != nil {
-				return err
-			}
-			// CloseWithEvidence runs the closure gate (ddx-e30e60a9); manual
-			// operator closes without evidence are intentionally a separate
-			// path. When --session and --commit are both unset, we are in
-			// manual-administration territory — use the ungated Store.Close
-			// so the gate doesn't reject legitimate tracker admin.
-			if sessionID == "" && commitSHA == "" {
-				if err := s.Close(context.Background(), args[0]); err != nil {
+			return f.withBeadTrackerWriteLock(func() error {
+				target, err := s.Get(context.Background(), args[0])
+				if err != nil {
 					return err
 				}
-			} else if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
-				return err
-			}
+				// CloseWithEvidence runs the closure gate (ddx-e30e60a9); manual
+				// operator closes without evidence are intentionally a separate
+				// path. When --session and --commit are both unset, we are in
+				// manual-administration territory — use the ungated Store.Close
+				// so the gate doesn't reject legitimate tracker admin.
+				if sessionID == "" && commitSHA == "" {
+					if err := s.Close(context.Background(), args[0]); err != nil {
+						return err
+					}
+				} else if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
+					return err
+				}
 
-			landedSHA, err := f.beadAutoCommitIncludingStaged("close " + args[0])
-			if err != nil {
-				return err
-			}
-			if commitSHA == "" && landedSHA != "" {
-				if f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
-					if isReviewCloseBead(target) {
-						// Tracker-only review-finding closes must not retain any prior
-						// replay boundary. The close commit itself is the metadata-only
-						// backfill, so clear stale closing provenance instead of
-						// preserving an unrelated implementation SHA.
+				landedSHA, err := f.beadAutoCommitIncludingStaged("close " + args[0])
+				if err != nil {
+					return err
+				}
+				if commitSHA == "" && landedSHA != "" {
+					if f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
+						if isReviewCloseBead(target) {
+							// Tracker-only review-finding closes must not retain any prior
+							// replay boundary. The close commit itself is the metadata-only
+							// backfill, so clear stale closing provenance instead of
+							// preserving an unrelated implementation SHA.
+							if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
+								if b.Extra == nil {
+									return
+								}
+								delete(b.Extra, "closing_commit_sha")
+							}); err != nil {
+								return err
+							}
+							followupSHA, err := f.beadAutoCommit("close " + args[0])
+							if err != nil {
+								return err
+							}
+							if followupSHA == "" {
+								return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
+							}
+						}
+					} else {
+						// Only stamp closing provenance when the close commit includes
+						// real implementation work. Pure tracker backfills should not
+						// advertise a replay boundary that points at metadata-only
+						// provenance.
 						if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
 							if b.Extra == nil {
-								return
+								b.Extra = make(map[string]any)
 							}
-							delete(b.Extra, "closing_commit_sha")
+							b.Extra["closing_commit_sha"] = landedSHA
 						}); err != nil {
 							return err
 						}
@@ -920,29 +971,9 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 							return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
 						}
 					}
-				} else {
-					// Only stamp closing provenance when the close commit includes
-					// real implementation work. Pure tracker backfills should not
-					// advertise a replay boundary that points at metadata-only
-					// provenance.
-					if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
-						if b.Extra == nil {
-							b.Extra = make(map[string]any)
-						}
-						b.Extra["closing_commit_sha"] = landedSHA
-					}); err != nil {
-						return err
-					}
-					followupSHA, err := f.beadAutoCommit("close " + args[0])
-					if err != nil {
-						return err
-					}
-					if followupSHA == "" {
-						return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
-					}
 				}
-			}
-			return nil
+				return nil
+			})
 		},
 	}
 	cmd.Flags().String("session", "", "Agent session ID that completed this bead")
@@ -966,13 +997,15 @@ Atomically sets status to open, clears claim fields, optionally appends
 			s := f.beadStore()
 			reason, _ := cmd.Flags().GetString("reason")
 			appendNotes, _ := cmd.Flags().GetString("append-notes")
-			if err := s.Reopen(args[0], reason, appendNotes); err != nil {
-				return err
-			}
-			if _, err := f.beadAutoCommit("reopen " + args[0]); err != nil {
-				return err
-			}
-			return nil
+			return f.withBeadTrackerWriteLock(func() error {
+				if err := s.Reopen(args[0], reason, appendNotes); err != nil {
+					return err
+				}
+				if _, err := f.beadAutoCommit("reopen " + args[0]); err != nil {
+					return err
+				}
+				return nil
+			})
 		},
 	}
 	cmd.Flags().String("reason", "", "Reason for reopening (recorded as event summary)")
@@ -1193,71 +1226,73 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 		return fmt.Errorf("--note is required")
 	}
 	s := f.beadStore()
-	switch action {
-	case "retry":
-		if err := s.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
-			Reason: "human resolve retry",
-			Actor:  resolveClaimAssignee(),
-			Source: "ddx bead human resolve",
-		}, func(b *bead.Bead) error {
-			// Migration-only cleanup: removes LabelNeedsHuman from legacy rows;
-			// new rows carry status=proposed rather than this label.
-			removeBeadLabel(b, bead.LabelNeedsHuman)
-			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
-			return nil
-		}); err != nil {
-			return err
-		}
-		if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
-			return err
-		}
-	case "split":
-		children = normalizeChildIDs(children)
-		if len(children) == 0 {
-			return fmt.Errorf("--children is required when --action split")
-		}
-		if err := validateSplitChildren(s, id, children); err != nil {
-			return err
-		}
-		for _, childID := range children {
-			if err := s.DepAdd(id, childID); err != nil {
+	return f.withBeadTrackerWriteLock(func() error {
+		switch action {
+		case "retry":
+			if err := s.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+				Reason: "human resolve retry",
+				Actor:  resolveClaimAssignee(),
+				Source: "ddx bead human resolve",
+			}, func(b *bead.Bead) error {
+				// Migration-only cleanup: removes LabelNeedsHuman from legacy rows;
+				// new rows carry status=proposed rather than this label.
+				removeBeadLabel(b, bead.LabelNeedsHuman)
+				bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+				return nil
+			}); err != nil {
 				return err
 			}
+			if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
+				return err
+			}
+		case "split":
+			children = normalizeChildIDs(children)
+			if len(children) == 0 {
+				return fmt.Errorf("--children is required when --action split")
+			}
+			if err := validateSplitChildren(s, id, children); err != nil {
+				return err
+			}
+			for _, childID := range children {
+				if err := s.DepAdd(id, childID); err != nil {
+					return err
+				}
+			}
+			if err := s.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+				Reason: "human resolve split",
+				Actor:  resolveClaimAssignee(),
+				Source: "ddx bead human resolve",
+			}, func(b *bead.Bead) error {
+				// Migration-only cleanup: removes LabelNeedsHuman from legacy rows;
+				// new rows carry status=proposed rather than this label.
+				removeBeadLabel(b, bead.LabelNeedsHuman)
+				bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+				return nil
+			}); err != nil {
+				return err
+			}
+			if err := appendNeedsHumanResolutionEvent(s, id, action, note, children); err != nil {
+				return err
+			}
+		case "obsolete":
+			if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
+				return err
+			}
+			if err := s.Close(id); err != nil {
+				return err
+			}
+		case "defer":
+			if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown --action %q (valid: retry, split, obsolete, defer)", action)
 		}
-		if err := s.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
-			Reason: "human resolve split",
-			Actor:  resolveClaimAssignee(),
-			Source: "ddx bead human resolve",
-		}, func(b *bead.Bead) error {
-			// Migration-only cleanup: removes LabelNeedsHuman from legacy rows;
-			// new rows carry status=proposed rather than this label.
-			removeBeadLabel(b, bead.LabelNeedsHuman)
-			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
-			return nil
-		}); err != nil {
+		if _, err := f.beadAutoCommit("human resolve " + id); err != nil {
 			return err
 		}
-		if err := appendNeedsHumanResolutionEvent(s, id, action, note, children); err != nil {
-			return err
-		}
-	case "obsolete":
-		if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
-			return err
-		}
-		if err := s.Close(id); err != nil {
-			return err
-		}
-	case "defer":
-		if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("unknown --action %q (valid: retry, split, obsolete, defer)", action)
-	}
-	if _, err := f.beadAutoCommit("human resolve " + id); err != nil {
-		return err
-	}
-	return nil
+		return nil
+	})
 }
 
 func needsHumanRow(b bead.Bead) beadNeedsHumanRow {
@@ -1411,7 +1446,27 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 			_, _ = cmd.Flags().GetBool("dry-run")
 			asJSON, _ := cmd.Flags().GetBool("json")
 			s := f.beadStore()
-			plans, err := s.ReconcileLifecycleMetadata(bead.ReconcileOptions{Apply: apply, IDs: args})
+			var (
+				plans []bead.ReconcilePlan
+				err   error
+			)
+			runReconcile := func() error {
+				plans, err = s.ReconcileLifecycleMetadata(bead.ReconcileOptions{Apply: apply, IDs: args})
+				if err != nil {
+					return err
+				}
+				if apply {
+					if _, err := f.beadAutoCommit("reconcile lifecycle metadata"); err != nil {
+						return err
+					}
+				}
+				return nil
+			}
+			if apply {
+				err = f.withBeadTrackerWriteLock(runReconcile)
+			} else {
+				err = runReconcile()
+			}
 			if err != nil {
 				return err
 			}
@@ -1441,11 +1496,6 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 				}
 				if len(p.AddLabels) > 0 {
 					fmt.Fprintf(cmd.OutOrStdout(), "  add-labels: %s\n", strings.Join(p.AddLabels, ", "))
-				}
-			}
-			if apply {
-				if _, err := f.beadAutoCommit("reconcile lifecycle metadata"); err != nil {
-					return err
 				}
 			}
 			return nil
@@ -1510,13 +1560,15 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 		Short: "Add a dependency (id depends on dep-id)",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := f.beadStore().DepAdd(args[0], args[1]); err != nil {
-				return err
-			}
-			if _, err := f.beadAutoCommit("dep-add " + args[0]); err != nil {
-				return err
-			}
-			return nil
+			return f.withBeadTrackerWriteLock(func() error {
+				if err := f.beadStore().DepAdd(args[0], args[1]); err != nil {
+					return err
+				}
+				if _, err := f.beadAutoCommit("dep-add " + args[0]); err != nil {
+					return err
+				}
+				return nil
+			})
 		},
 	})
 
@@ -1525,13 +1577,15 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 		Short: "Remove a dependency",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := f.beadStore().DepRemove(args[0], args[1]); err != nil {
-				return err
-			}
-			if _, err := f.beadAutoCommit("dep-remove " + args[0]); err != nil {
-				return err
-			}
-			return nil
+			return f.withBeadTrackerWriteLock(func() error {
+				if err := f.beadStore().DepRemove(args[0], args[1]); err != nil {
+					return err
+				}
+				if _, err := f.beadAutoCommit("dep-remove " + args[0]); err != nil {
+					return err
+				}
+				return nil
+			})
 		},
 	})
 
@@ -1569,14 +1623,21 @@ func (f *CommandFactory) newBeadImportCommand() *cobra.Command {
 				file = args[0]
 			}
 
-			n, err := s.Import(from, file)
-			if err != nil {
-				return err
-			}
-			if n > 0 {
-				if _, err := f.beadAutoCommit(fmt.Sprintf("import %d beads", n)); err != nil {
+			n := 0
+			if err := f.withBeadTrackerWriteLock(func() error {
+				var err error
+				n, err = s.Import(from, file)
+				if err != nil {
 					return err
 				}
+				if n > 0 {
+					if _, err := f.beadAutoCommit(fmt.Sprintf("import %d beads", n)); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Imported %d beads\n", n)
 			return nil
@@ -1762,24 +1823,29 @@ Use this command instead of editing the magic Extra key directly:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			cleared := false
-			if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
-				if b.Extra == nil {
-					return
-				}
-				for _, key := range []string{
-					"work-retry-after",
-					"work-last-status",
-					"work-last-detail",
-				} {
-					if _, ok := b.Extra[key]; ok {
-						delete(b.Extra, key)
-						cleared = true
+			if err := f.withBeadTrackerWriteLock(func() error {
+				if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
+					if b.Extra == nil {
+						return
 					}
+					for _, key := range []string{
+						"work-retry-after",
+						"work-last-status",
+						"work-last-detail",
+					} {
+						if _, ok := b.Extra[key]; ok {
+							delete(b.Extra, key)
+							cleared = true
+						}
+					}
+				}); err != nil {
+					return err
 				}
+				if _, err := f.beadAutoCommit("cooldown clear " + args[0]); err != nil {
+					return err
+				}
+				return nil
 			}); err != nil {
-				return err
-			}
-			if _, err := f.beadAutoCommit("cooldown clear " + args[0]); err != nil {
 				return err
 			}
 			if cleared {
