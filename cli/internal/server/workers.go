@@ -300,10 +300,6 @@ func executeLoopPollInterval(spec ExecuteLoopWorkerSpec) time.Duration {
 	return spec.IdleInterval.Duration
 }
 
-func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
-	return executeloop.Duration{Duration: duration}
-}
-
 func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
 	if spec.MaxCostUSD == 0 {
 		return policyescalation.DefaultMaxCostUSD

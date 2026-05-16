@@ -25,6 +25,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
+	return executeloop.Duration{Duration: duration}
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
