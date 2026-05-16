@@ -1,0 +1,71 @@
+{
+  "attempt_id": "20260516T011227-58be78b5",
+  "bead_id": "ddx-2f964bac",
+  "base_rev": "d72ece38c2ef8b662406695ff09e3b3b062fae8f",
+  "created_at": "2026-05-16T01:12:32.367311716Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-2f964bac",
+    "title": "checks: residual production-reachability — internal/agent execute-bead flow",
+    "description": "PROBLEM\nCurrent deadcode RTA on 2026-05-15 still reports a large execute-bead residual cluster as unreachable from the production graph, so `ddx-83440482` cannot close from current-tree evidence.\n\nROOT CAUSE WITH FILE:LINE\n`.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` reports residual dead symbols across the execute-bead lifecycle files, including `cli/internal/agent/execute_bead.go:1267` (`appendRateLimitRetryEvent`), `execute_bead_conflict_recovery.go:90` (`ShouldAttemptConflictRecovery`), `execute_bead_loop.go:717` (`newProgressEvent`), `execute_bead_no_changes_verify.go:38` (`ParseNoChangesRationale`), `execute_bead_orchestrator.go:176` (`LandBeadResult`), `execute_bead_post_review.go:86` (`RunPostMergeReview`), `execute_bead_review.go:267` (`SelectReviewerPolicy`), `execute_bead_review_fixable_gap.go:42` (`reviewFixableGapEventBody`), and `execute_bead_review_terminal.go:27` (`classifyTerminalReviewBlock`).\n\nPROPOSED FIX\nResolve every symbol currently listed for the `execute_bead*.go` files in the committed artifact. WIRE APIs that are supposed to drive the real execution/review path; DELETE speculative or stranded helpers that never became part of the runtime flow. If any symbol still needs deferred investigation after ~15 minutes, annotate it with `// wiring:pending \u003cfollow-up-bead-id\u003e` and file the narrower follow-up before closing this bead.\n\nNON-SCOPE\n- Do not touch compare/candidate-cycle/support residuals; those clusters are tracked separately.\n- Do not change the production-reachability protocol or checker implementation.",
+    "acceptance": "1. Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\n2. `cd cli \u0026\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/agent/execute_bead'` returns no hits.\n3. Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\n4. Decisions log written to `.ddx/executions/\u003crun-id\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\n5. `cd cli \u0026\u0026 go test ./...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-83440482",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:backfill",
+      "prevention",
+      "epic-closure",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"`cd cli \\u0026\\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/agent/execute_bead'` returns no hits.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Decisions log written to `.ddx/executions/\\u003crun-id\\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"`cd cli \\u0026\\u0026 go test ./...` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"`lefthook run pre-commit` passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-16T00:33:17.389445432Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.5\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-16T01:12:26.840776197Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.5"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260516T003410-dfd10989\",\"harness\":\"codex\",\"model\":\"gpt-5.5\",\"input_tokens\":39638138,\"output_tokens\":52344,\"total_tokens\":39690482,\"cost_usd\":0,\"duration_ms\":2291676,\"exit_code\":0}",
+          "created_at": "2026-05-16T01:12:26.876458269Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=39690482 model=gpt-5.5"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260516T003410-dfd10989/0\",\"cycle_index\":0,\"attempt_id\":\"20260516T003410-dfd10989\",\"base_rev\":\"ece57e5344114e52c00723f97c56d60fb5b1ff46\",\"result_rev\":\"64d482a94c48ff20201ed63f35ac5fd1a21aae88\"}",
+          "created_at": "2026-05-16T01:12:26.910016927Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T011227-58be78b5",
+    "prompt": ".ddx/executions/20260516T011227-58be78b5/prompt.md",
+    "manifest": ".ddx/executions/20260516T011227-58be78b5/manifest.json",
+    "result": ".ddx/executions/20260516T011227-58be78b5/result.json",
+    "checks": ".ddx/executions/20260516T011227-58be78b5/checks.json",
+    "usage": ".ddx/executions/20260516T011227-58be78b5/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-2f964bac-20260516T011227-58be78b5"
+  },
+  "prompt_sha": "345a50a2fe763f2d002daf2c57be7edb01506140758449a72e206f1a49d5d100"
+}
