@@ -10,7 +10,7 @@
 	let { active = false, onclick, label, testid, ariaPressed, clear = false }: Props = $props();
 
 	const activeCls =
-		'bg-accent-lever text-white dark:bg-dark-accent-lever';
+		'bg-accent-lever text-white dark:bg-dark-accent-lever dark:text-fg-ink';
 	const inactiveCls =
 		'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink';
 	const clearCls =
