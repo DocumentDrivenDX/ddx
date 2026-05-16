@@ -1,0 +1,46 @@
+{
+  "bead_id": "ddx-97375097",
+  "attempt_id": "20260516T012352-9e4167e7",
+  "base_rev": "52b7f328c0f3e8d18daa397ae95d1c27931f878d",
+  "result_rev": "20502cbd2a49e1c7a84bca0a82a67d126381ff72",
+  "implementation_rev": "20502cbd2a49e1c7a84bca0a82a67d126381ff72",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "large-deletion gate: cli/internal/agent/ratelimit_retry_test.go deleted 431 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "land_conflict",
+  "reason": "large-deletion gate: cli/internal/agent/ratelimit_retry_test.go deleted 431 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-97375097/20260516T012352-9e4167e7-20c347186923",
+  "candidate_ref": "refs/ddx/iterations/20260516T012352-9e4167e7/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260516T012352-9e4167e7",
+      "result_rev": "20502cbd2a49e1c7a84bca0a82a67d126381ff72",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.5"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.5",
+  "predicted_power": 10,
+  "predicted_cost_usd_per_1k_tokens": 0.0375,
+  "predicted_cost_source": "subscription",
+  "session_id": "eb-b023e818",
+  "duration_ms": 1545321,
+  "tokens": 20158931,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260516T012352-9e4167e7",
+  "prompt_file": ".ddx/executions/20260516T012352-9e4167e7/prompt.md",
+  "manifest_file": ".ddx/executions/20260516T012352-9e4167e7/manifest.json",
+  "result_file": ".ddx/executions/20260516T012352-9e4167e7/result.json",
+  "usage_file": ".ddx/executions/20260516T012352-9e4167e7/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-16T01:23:56.592098463Z",
+  "finished_at": "2026-05-16T01:49:41.913586657Z"
+}
