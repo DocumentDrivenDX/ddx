@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260516T172152-6114a5fe",
+  "bead_id": "ddx-79e66725",
+  "base_rev": "00972da34511f0b7dc823d2252ec777a2e43433e",
+  "created_at": "2026-05-16T17:21:59.487491708Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-79e66725",
+    "title": "diagnose: per-bead idle-scan reason classifier",
+    "description": "PROBLEM\nddx work's idle path (cli/internal/agent/execute_bead_loop.go:1263-1315) reads ReadyExecutionBreakdown into result.NoReadyWorkDetail and then sleeps or exits. There is no per-bead diagnosis of WHY each non-ready bead is non-ready, so the loop cannot fire targeted auto-remediations. FEAT-010 §Idle-Path Diagnosis and Auto-Remediation now requires a closed reason taxonomy with one code per non-ready bead.\n\nROOT CAUSE\nNo diagnoser exists. ReadyExecutionBreakdown returns bucket lists (Epics, EpicClosureCandidates, DepWaiting, OperatorAttention) but does not annotate each entry with why-it-is-blocked detail at a granularity the work loop can switch on.\n\nPROPOSED FIX\nAdd cli/internal/bead/diagnose.go with a pure function Diagnose(b Bead, childIndex map[string][]Bead, openChildIndex map[string][]Bead, depIndex map[string][]Dependency) BlockReason. BlockReason is a typed struct: { Code BlockReasonCode; Detail string; CitedIDs []string }. BlockReasonCode is a typed-string enum with exactly the codes listed in FEAT-010 §Idle-Path Diagnosis and Auto-Remediation (superseded_pending_close, closure_candidate_misclassified, dead_intermediate_all_children_closed, dead_intermediate_open_children_pending, epic_of_epic, dep_blocked_by, genuinely_needs_decomposition, parent_child_state_conflict, claimed_in_progress, provider_route_unavailable, gated_by_budget_or_cooldown, malformed_parent_or_dep_ref, dependency_cycle, closed_or_missing_parent, stale_graph_index, auto_remediation_exhausted, no_diagnosis). The function is pure — no I/O — and takes pre-built indexes so it can be called from both the loop and the CLI.\n\nDetection rules per code are specified in the FEAT-010 table. For superseded_pending_close, read the bead's superseded-by field OR a superseded-by:\u003cY\u003e label, then verify Y is closed in the index. For closure_candidate_misclassified, check IssueType==epic AND len(openChildIndex[b.ID])==0 AND len(childIndex[b.ID])\u003e0. For genuinely_needs_decomposition, check IssueType==epic AND len(childIndex[b.ID])==0 AND no manual-hold/no-auto-decompose/container label. For dep_blocked_by, cite every open dep's ID and status. Match codes in the order they appear in the FEAT-010 table; first match wins.\n\nNON-SCOPE\n- Wiring Diagnose into the work loop (separate bead).\n- Inventing new reason codes beyond the FEAT-010 taxonomy.\n- Mutations of any kind.\n\nPARENT AND DEPS\nParent: ddx-2a1ece2b. No deps.",
+    "acceptance": "1. cli/internal/bead/diagnose.go exports Diagnose(b, childIndex, openChildIndex, depIndex) BlockReason and BlockReasonCode constants for every code in FEAT-010 §Idle-Path Diagnosis and Auto-Remediation.\n2. cli/internal/bead/diagnose_test.go has table-driven TestDiagnose with one case per BlockReasonCode, including the no_diagnosis fallback and the parent_child_state_conflict case.\n3. TestDiagnose covers the priority-match behavior: a bead matching both superseded_pending_close and dep_blocked_by reports superseded_pending_close (first match in FEAT-010 order).\n4. The function is pure: no calls to store.Get, no file I/O, no global state mutation. Verified by code reading.\n5. cd cli \u0026\u0026 go test ./internal/bead/... -run TestDiagnose -count=1 green.\n6. cd cli \u0026\u0026 go test ./... green (no regressions in other packages).\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-2a1ece2b",
+    "labels": [
+      "kind:feat",
+      "area:bead-lifecycle",
+      "phase:2",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nD\t.agents/skills/ddx/SKILL.md\nD\t.agents/skills/ddx/bead-lifecycle/SKILL.md\nD\t.agents/skills/ddx/reference/work.md\nD\t.claude/skills/ddx/SKILL.md\nD\t.claude/skills/ddx/bead-lifecycle/SKILL.md\nD\t.claude/skills/ddx/reference/work.md",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-05-16T17:01:10Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T172152-6114a5fe",
+    "prompt": ".ddx/executions/20260516T172152-6114a5fe/prompt.md",
+    "manifest": ".ddx/executions/20260516T172152-6114a5fe/manifest.json",
+    "result": ".ddx/executions/20260516T172152-6114a5fe/result.json",
+    "checks": ".ddx/executions/20260516T172152-6114a5fe/checks.json",
+    "usage": ".ddx/executions/20260516T172152-6114a5fe/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-79e66725-20260516T172152-6114a5fe"
+  },
+  "prompt_sha": "ddd60ab205fb574b6ed492bd6864dc5193507270eba18ee1ea013986cd8ca832"
+}
