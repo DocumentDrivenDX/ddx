@@ -14,7 +14,11 @@ import (
 )
 
 const (
-	PermissionsReadOnlyLifecycle = PermissionsReadOnlyReviewer
+	// Lifecycle classifiers run in an isolated scratch workdir and are guarded by
+	// a project-root dirtiness check. Use Fizeau's supported safe permission band
+	// so unpinned auto-routing can choose a route; the reviewer path keeps the
+	// stricter internal readonly marker.
+	PermissionsReadOnlyLifecycle = "safe"
 	lifecycleScratchDirPrefix    = "ddx-lifecycle-"
 )
 

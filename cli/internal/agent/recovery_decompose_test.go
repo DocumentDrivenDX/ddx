@@ -177,7 +177,8 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.False(t, parentEligSetBefore, "parent execution-eligible flag must not be updated before validated output is returned")
 	assert.NotEqual(t, projectRoot, gotWorkDir)
 	assert.False(t, isPathWithin(gotWorkDir, projectRoot))
-	assert.Equal(t, PermissionsReadOnlyLifecycle, gotPermissions)
+	assert.Equal(t, "safe", gotPermissions)
+	assert.NotEqual(t, PermissionsReadOnlyReviewer, gotPermissions)
 	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 
 	parent, err := store.Get(b.ID)
@@ -339,7 +340,8 @@ func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.Len(t, decomp.ACMap, 2)
 	assert.NotEqual(t, projectRoot, gotWorkDir)
 	assert.False(t, isPathWithin(gotWorkDir, projectRoot))
-	assert.Equal(t, PermissionsReadOnlyLifecycle, gotPermissions)
+	assert.Equal(t, "safe", gotPermissions)
+	assert.NotEqual(t, PermissionsReadOnlyReviewer, gotPermissions)
 	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 }
 

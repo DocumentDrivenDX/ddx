@@ -209,7 +209,8 @@ func TestPreClaimIntakeHookDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.NotEqual(t, root, svc.lastReq.WorkDir)
 	assert.False(t, isPathWithin(svc.lastReq.WorkDir, root))
-	assert.Equal(t, PermissionsReadOnlyLifecycle, svc.lastReq.Permissions)
+	assert.Equal(t, "safe", svc.lastReq.Permissions)
+	assert.NotEqual(t, PermissionsReadOnlyReviewer, svc.lastReq.Permissions)
 	assert.True(t, strings.HasPrefix(filepath.Base(svc.lastReq.WorkDir), lifecycleScratchDirPrefix))
 }
 
