@@ -158,11 +158,10 @@ function projectBase(ids: { nodeId: string; projectId: string }): string {
 // ---------------------------------------------------------------------------
 // TC-002: Documents Page (fixture-backed)
 // The Documents GraphQL query lists documents that participate in the doc
-// graph (markdown files with a `doc:` YAML frontmatter id). The fixture's
-// docs/sample.md is intentionally a plain markdown file with no frontmatter,
-// so it does not register in the graph — these tests therefore assert the
-// project-scoped Documents page renders the empty state for the fixture
-// project, including the table chrome the page always exposes.
+// graph (markdown files with a `ddx:` YAML frontmatter id). The fixture's
+// `.ddx/graphs/scale.yml` registers the 2k synthetic scale corpus under
+// scale/docs/ as docgraph roots, so the project-scoped Documents page
+// renders that corpus along with the table chrome.
 // ---------------------------------------------------------------------------
 test.describe('TC-002: Documents', () => {
   let ids: { nodeId: string; projectId: string; nodeName: string }
@@ -175,9 +174,9 @@ test.describe('TC-002: Documents', () => {
 
   test('TC-002.1 — documents page loads against the fixture project', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Documents')
-    // Fixture seeds no docgraph-registered docs — the total-count badge
-    // therefore reads "0 total" and the table renders its empty state.
-    await expect(page.getByText('0 total')).toBeVisible()
+    // Fixture seeds the 2k scale corpus as the only docgraph-registered
+    // documents, so the total-count badge reads "2000 total".
+    await expect(page.getByText('2000 total')).toBeVisible()
   })
 
   test('TC-002.2 — table chrome renders Title and Path columns', async ({ page }) => {
@@ -186,8 +185,11 @@ test.describe('TC-002: Documents', () => {
     await expect(headerRow.locator('th', { hasText: 'Path' })).toBeVisible()
   })
 
-  test('TC-002.3 — empty fixture surfaces the No documents found state', async ({ page }) => {
-    await expect(page.getByText('No documents found.')).toBeVisible()
+  test('TC-002.3 — fixture documents render as table rows', async ({ page }) => {
+    // First scale corpus entry must appear; the page paginates first=50 so
+    // the earliest synthetic artifacts are always in the initial slice.
+    const firstRow = page.locator('tbody tr', { hasText: 'scale/docs/artifact-0001.md' })
+    await expect(firstRow).toBeVisible()
   })
 
   test('TC-002.4 — sidebar Documents entry highlights when active', async ({ page }) => {
