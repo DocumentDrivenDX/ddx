@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260516T064457-edcefc59",
+  "bead_id": "ddx-a37cd378",
+  "base_rev": "632c7aadeb1712f4cdc8fb10d61ac52e61202af8",
+  "created_at": "2026-05-16T06:45:03.291480124Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a37cd378",
+    "title": "work: mid-execution provider_connectivity failure doesn't retry on alternate route",
+    "description": "When a bead's readiness check passes on a route, then the route's provider goes down mid-execution, ddx work logs 'ladder exhausted at power 5' and unclaims the bead. It does NOT retry on an alternate provider at the same power class even when one is available.\n\nRepro from fizeau bead fizeau-e08d8228 (around 2026-05-16T05:56:28Z):\n\n  readiness: route fiz/bragi-club-3090/qwen3.6-27b-autoround\n    -\u003e passed (bragi was reachable for the readiness probe)\n  do: route fiz/bragi-club-3090/qwen3.6-27b-autoround power=5\n    -\u003e agent: provider error: openai: Post \"http://bragi:8020/v1/chat/completions\": dial tcp 100.127.38.115:8020: i/o timeout\n  kind:execution-escalation-aborted source:ddx work\n    summary: 'escalation aborted: ladder exhausted at power 5 provider=bragi-club-3090 model=qwen3.6-27b-autoround'\n\nThe bead was marked execution_failed with outcome_reason=provider_connectivity and unclaimed. claude/opus was available the entire time — the very next bead (PR 1c) in the queue ran successfully on claude/opus when its readiness check failed on bragi.\n\nExpected: when a route fails with outcome_reason=provider_connectivity (transient, not a capability issue), retry the bead on the next route in the readiness fallback chain (e.g. claude/opus) before declaring escalation exhausted.\n\nLikely fix: distinguish escalation-exhausted (no stronger route at higher power) from same-power-alternates-exhausted (no alternate provider at same power class). connectivity-class failures should consume the alternates list, not the power ladder.\n\nImpact: flaky local endpoints cause beads to be marked failed even when a healthy fallback is reachable. Forces operator to manually re-queue. With watch=true and a queue of ~9 beads, this added ~5 minutes of wasted re-attempts.",
+    "acceptance": "1. A bead whose primary route fails mid-execution with provider_connectivity retries on the next route in the readiness fallback chain at the same power class.\n2. If all same-power alternates fail with provider_connectivity, escalate power class.\n3. If all power classes exhaust with the same connectivity failure pattern, mark the bead failed.\n4. Reproduce: simulate bragi/sindri local-endpoint connection drop during do-phase and observe automatic fallback to claude/opus without operator intervention.",
+    "labels": [
+      "area:work",
+      "kind:bug",
+      "kind:routing",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"A bead whose primary route fails mid-execution with provider_connectivity retries on the next route in the readiness fallback chain at the same power class.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"If all same-power alternates fail with provider_connectivity, escalate power class.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"If all power classes exhaust with the same connectivity failure pattern, mark the bead failed.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Reproduce: simulate bragi/sindri local-endpoint connection drop during do-phase and observe automatic fallback to claude/opus without operator intervention.\",\"kind\":\"negative\",\"verifiable\":true}]",
+          "created_at": "2026-05-16T06:44:36.870473323Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.25 threshold=0.50 verifiable=1/4"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T064457-edcefc59",
+    "prompt": ".ddx/executions/20260516T064457-edcefc59/prompt.md",
+    "manifest": ".ddx/executions/20260516T064457-edcefc59/manifest.json",
+    "result": ".ddx/executions/20260516T064457-edcefc59/result.json",
+    "checks": ".ddx/executions/20260516T064457-edcefc59/checks.json",
+    "usage": ".ddx/executions/20260516T064457-edcefc59/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-a37cd378-20260516T064457-edcefc59"
+  },
+  "prompt_sha": "aa7dca367af2e19cb5c795f299edd23e74a4b259b730215d806666198ddfed3f"
+}
