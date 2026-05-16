@@ -23,16 +23,6 @@ func ForEachJSONL[T any](path string, fn func(T) error) error {
 	return scanJSONLReader[T](f, fn)
 }
 
-// ReadAllJSONL loads all records from a JSONL file into a slice.
-func ReadAllJSONL[T any](path string) ([]T, error) {
-	var records []T
-	err := ForEachJSONL[T](path, func(rec T) error {
-		records = append(records, rec)
-		return nil
-	})
-	return records, err
-}
-
 // scanJSONLReader reads newline-delimited JSON records from r, calling fn for each valid record.
 // It uses bufio.Reader.ReadBytes so there is no line-length limit.
 func scanJSONLReader[T any](r io.Reader, fn func(T) error) error {

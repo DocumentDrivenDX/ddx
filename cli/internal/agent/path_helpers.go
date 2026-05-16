@@ -32,16 +32,3 @@ func projectStatePath(projectRoot, rel string) string {
 func executeBeadArtifactRoot(projectRoot string) string {
 	return ddxroot.JoinProject(projectRoot, "executions")
 }
-
-func executeBeadArtifactPath(projectRoot, attemptID string, elems ...string) string {
-	parts := []string{"executions"}
-	if attemptID != "" {
-		parts = append(parts, attemptID)
-	}
-	parts = append(parts, elems...)
-	return ddxroot.JoinProject(projectRoot, parts...)
-}
-
-func agentLogRoot(projectRoot string) string {
-	return ddxroot.JoinProject(projectRoot, "agent-logs")
-}

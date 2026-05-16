@@ -36,8 +36,8 @@ func TestRunStatePathUsesDDxRoot(t *testing.T) {
 	if got := runStateDirPath(projectRoot); got != filepath.Join(root, RunStateDirName) {
 		t.Fatalf("runStateDirPath() = %q, want %q", got, filepath.Join(root, RunStateDirName))
 	}
-	if got := executeBeadArtifactPath(projectRoot, "attempt-path", "manifest.json"); got != filepath.Join(root, "executions", "attempt-path", "manifest.json") {
-		t.Fatalf("executeBeadArtifactPath() = %q, want %q", got, filepath.Join(root, "executions", "attempt-path", "manifest.json"))
+	if got := executeBeadArtifactRoot(projectRoot); got != filepath.Join(root, "executions") {
+		t.Fatalf("executeBeadArtifactRoot() = %q, want %q", got, filepath.Join(root, "executions"))
 	}
 
 	state := RunState{

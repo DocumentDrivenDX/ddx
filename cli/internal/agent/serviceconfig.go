@@ -114,17 +114,6 @@ type endpointServiceConfig struct {
 	workDir     string
 }
 
-func serviceConfigFromDDxEndpoints(workDir string) (agentlib.ServiceConfig, error) {
-	cfg, err := ddxconfig.LoadWithWorkingDir(workDir)
-	if err != nil {
-		return nil, err
-	}
-	if cfg.Agent == nil || len(cfg.Agent.Endpoints) == 0 {
-		return nil, nil
-	}
-	return newEndpointServiceConfigWithoutLiveFilter(cfg.Agent.Endpoints, workDir)
-}
-
 func serviceConfigFromDDxEndpointsNoFilter(workDir string) (agentlib.ServiceConfig, error) {
 	cfg, err := ddxconfig.LoadWithWorkingDir(workDir)
 	if err != nil {

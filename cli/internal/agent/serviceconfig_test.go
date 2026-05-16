@@ -48,7 +48,7 @@ agent:
       base_url: %s/v1
 `, dead.URL, live.URL)), 0o644))
 
-	sc, err := serviceConfigFromDDxEndpoints(workDir)
+	sc, err := serviceConfigFromDDxEndpointsNoFilter(workDir)
 	require.NoError(t, err)
 	require.NotNil(t, sc)
 

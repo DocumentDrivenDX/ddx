@@ -142,8 +142,8 @@ func TestIsGitIndexLockError(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := isGitIndexLockError(tc.s); got != tc.want {
-				t.Fatalf("isGitIndexLockError(%q) = %v, want %v", tc.s, got, tc.want)
+			if got := gitlock.IsIndexLockError(tc.s); got != tc.want {
+				t.Fatalf("gitlock.IsIndexLockError(%q) = %v, want %v", tc.s, got, tc.want)
 			}
 		})
 	}

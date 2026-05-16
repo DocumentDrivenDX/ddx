@@ -231,17 +231,6 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	return result, nil
 }
 
-// drainServiceEvents reads service events and returns the final-event payload,
-// the routing decision (when present in the routing_decision start event), and
-// any canonical progress payloads emitted by the service.
-func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
-	return drainServiceEventsWithWriter(events, nil)
-}
-
-func drainServiceEventsWithWriter(events <-chan agentlib.ServiceEvent, w io.Writer) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
-	return drainServiceEventsWithRenderer(events, w, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil)
-}
-
 // drainServiceEventsWithRenderer drains the event stream and returns the
 // aggregated final/routing/progress data. When wd is non-nil it activates
 // three wedge-prevention mechanisms:

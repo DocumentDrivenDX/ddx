@@ -331,11 +331,6 @@ func beadLifecycleSkillDiagnostics(projectRoot string) BeadLifecycleSkillDiagnos
 	}
 }
 
-func hasBeadLifecycleSkill(projectRoot string) bool {
-	ok, _ := HasBeadLifecycleSkillDiagnostics(projectRoot)
-	return ok
-}
-
 func beadLifecycleSkillMissingError(diag BeadLifecycleSkillDiagnostics, cause error) error {
 	parts := []string{"skill missing: bead-lifecycle"}
 	if diag.ProjectRoot != "" {
