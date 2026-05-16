@@ -5140,6 +5140,7 @@ func (s *Server) graphqlHandler() http.Handler {
 		resolver.ExecuteLoopWaker = s.workers
 		resolver.Federation = fedProvider
 		resolver.ReportedWorkers = s.reportedWorkers
+		resolver.ReviewSessions = newReviewPromptDecorator(ddxgraphql.NewInMemoryReviewSessionService())
 		gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 			Resolvers:  resolver,
 			Directives: ddxgraphql.DirectiveRoot{},
