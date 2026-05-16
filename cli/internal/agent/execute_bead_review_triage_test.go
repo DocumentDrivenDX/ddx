@@ -78,15 +78,15 @@ func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriagePowerHintKey]
-		assert.False(t, hasHint, "first BLOCK must not set powerClass hint")
+		_, hasHint := got.Extra[legacyRetryFloorKey]
+		assert.False(t, hasHint, "first BLOCK must not set legacy retry-floor metadata")
 	}
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
 	assert.Contains(t, ev.Summary, "re_attempt_with_context")
 }
 
-func TestApplyTriageActionDoesNotWriteTriagePowerHintKey(t *testing.T) {
+func TestApplyTriageActionDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 
@@ -95,7 +95,7 @@ func TestApplyTriageActionDoesNotWriteTriagePowerHintKey(t *testing.T) {
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriagePowerHintKey]
+		_, hasHint := got.Extra[legacyRetryFloorKey]
 		assert.False(t, hasHint, "review triage must not persist retry-floor metadata")
 	}
 	ev := findEvent(t, store, b.ID, "triage-decision")
@@ -118,7 +118,7 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriagePowerHintKey]
+		_, hasHint := got.Extra[legacyRetryFloorKey]
 		assert.False(t, hasHint, "review triage must not persist retry-floor metadata")
 	}
 	ev := findEvent(t, store, b.ID, "triage-decision")
@@ -136,12 +136,6 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
-	require.NoError(t, store.Update(b.ID, func(b *bead.Bead) {
-		if b.Extra == nil {
-			b.Extra = make(map[string]any)
-		}
-		b.Extra[TriagePowerHintKey] = string(escalation.PowerSmart)
-	}))
 	require.NoError(t, store.Claim(b.ID, "worker"))
 	seedBlocks(t, store, b.ID, now, 3)
 
@@ -154,7 +148,6 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
 	assert.NotContains(t, got.Extra, "claimed-at")
-	assert.NotContains(t, got.Extra, TriagePowerHintKey, "operator_required should only clear stale legacy retry-floor metadata")
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Contains(t, meta.Reason, "operator-required")
 	assert.Equal(t, "ddx work", meta.Source)
@@ -196,8 +189,8 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriagePowerHintKey]
-		assert.False(t, hasHint, "pairing-degraded must override escalate_power; no powerClass hint expected")
+		_, hasHint := got.Extra[legacyRetryFloorKey]
+		assert.False(t, hasHint, "pairing-degraded must override escalate_power; no legacy retry-floor metadata expected")
 	}
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	ev := findEvent(t, store, b.ID, "triage-decision")

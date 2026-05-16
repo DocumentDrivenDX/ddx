@@ -58,8 +58,6 @@ var forbiddenRuntimeFields = map[string]bool{
 	"Timeout":                 true,
 	"WallClock":               true,
 	"ContextBudget":           true,
-	"MinPowerHint":            true,
-	"MaxPowerHint":            true,
 	"Assignee":                true,
 	"ReviewMaxRetries":        true,
 	"NoProgressCooldown":      true,

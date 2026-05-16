@@ -12,19 +12,26 @@ type ExecutionIntentSource string
 
 const (
 	ExecutionIntentSourceDefault     ExecutionIntentSource = "default"
-	ExecutionIntentSourceHeuristic   ExecutionIntentSource = "heuristic"
 	ExecutionIntentSourceBeadHint    ExecutionIntentSource = "bead_hint"
+	ExecutionIntentSourceReadiness   ExecutionIntentSource = "readiness"
+	ExecutionIntentSourceProject     ExecutionIntentSource = "project_config"
 	ExecutionIntentSourceCLIPassthru ExecutionIntentSource = "cli"
 )
 
-// ExecutionHint captures the durable bead-level execution intent that DDx
-// can infer from bead metadata without binding to a concrete harness/provider
-// pin.
+// ExecutionHint captures the request-level routing intent DDx can explain
+// without binding to a concrete harness/provider/model route.
 type ExecutionHint struct {
 	Source              ExecutionIntentSource
 	EstimatedDifficulty EstimatedDifficulty
 	InferredPowerClass  PowerClass
 	RejectedRoutePins   []string
+}
+
+type ExecutionHintInput struct {
+	Bead                         *bead.Bead
+	ReadinessEstimatedDifficulty string
+	ExplicitRouting              bool
+	ProjectRouting               bool
 }
 
 // ExecutionHintFinding is a single lint finding emitted when bead metadata
@@ -40,17 +47,33 @@ type ExecutionHintFinding struct {
 // bead-level difficulty hint; labels such as kind, priority, or power do not
 // affect routing intent.
 func ParseExecutionHint(b *bead.Bead) ExecutionHint {
-	if b == nil {
-		return ExecutionHint{Source: ExecutionIntentSourceDefault}
-	}
+	return ResolveExecutionHint(ExecutionHintInput{Bead: b})
+}
 
+// ResolveExecutionHint applies the TD-037 precedence for execution intent:
+// explicit CLI routing first, project routing second, durable bead difficulty
+// third, transient readiness difficulty fourth, and the ordinary standard route
+// otherwise. Concrete route pins are lint-only diagnostics and never influence
+// the inferred power class.
+func ResolveExecutionHint(input ExecutionHintInput) ExecutionHint {
 	hint := ExecutionHint{
 		Source:             ExecutionIntentSourceDefault,
-		InferredPowerClass: InferPowerClass(b),
+		InferredPowerClass: PowerStandard,
 	}
-	if difficulty, ok := BeadEstimatedDifficulty(b); ok {
-		hint.Source = ExecutionIntentSourceBeadHint
-		hint.EstimatedDifficulty = difficulty
+	b := input.Bead
+	switch {
+	case input.ExplicitRouting:
+		hint.Source = ExecutionIntentSourceCLIPassthru
+		hint.InferredPowerClass = ""
+	case input.ProjectRouting:
+		hint.Source = ExecutionIntentSourceProject
+		hint.InferredPowerClass = ""
+	default:
+		hint = resolveDifficultyExecutionHint(b, input.ReadinessEstimatedDifficulty)
+	}
+
+	if b == nil {
+		return hint
 	}
 
 	for _, raw := range b.Labels {
@@ -66,6 +89,23 @@ func ParseExecutionHint(b *bead.Bead) ExecutionHint {
 		}
 	}
 
+	return hint
+}
+
+func resolveDifficultyExecutionHint(b *bead.Bead, readinessEstimatedDifficulty string) ExecutionHint {
+	hint := ExecutionHint{
+		Source:             ExecutionIntentSourceDefault,
+		InferredPowerClass: PowerStandard,
+	}
+	if difficulty, ok := BeadEstimatedDifficulty(b); ok {
+		hint.Source = ExecutionIntentSourceBeadHint
+		hint.EstimatedDifficulty = difficulty
+		hint.InferredPowerClass = PowerClassForEstimatedDifficulty(difficulty)
+	} else if difficulty, ok := parseEstimatedDifficulty(readinessEstimatedDifficulty); ok {
+		hint.Source = ExecutionIntentSourceReadiness
+		hint.EstimatedDifficulty = difficulty
+		hint.InferredPowerClass = PowerClassForEstimatedDifficulty(difficulty)
+	}
 	return hint
 }
 
@@ -109,7 +149,8 @@ func parseDurableRoutePinField(key string, value any) (string, bool) {
 	switch lower {
 	case "harness", "agent-harness", "execution-harness", "try-harness",
 		"provider", "agent-provider", "execution-provider", "try-provider",
-		"model", "agent-model", "execution-model", "try-model":
+		"model", "agent-model", "execution-model", "try-model",
+		"model-ref", "agent-model-ref", "execution-model-ref", "try-model-ref":
 		return renderDurableRoutePin(lower, value), true
 	default:
 		return "", false

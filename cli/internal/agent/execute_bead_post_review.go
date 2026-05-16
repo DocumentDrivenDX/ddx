@@ -634,9 +634,6 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
-			delete(b.Extra, TriagePowerHintKey)
-			// Legacy cleanup only: defensive removal for stale retry-floor metadata
-			// left behind by older loop paths or external imports.
 			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 			clearReviewTriageClaimMetadata(b)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{

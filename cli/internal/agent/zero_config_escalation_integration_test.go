@@ -20,7 +20,7 @@ import (
 // BuildEscalationSummary). It does not require a running
 // agent service or harness binary.
 func TestZeroConfigRetryEscalationPolicy(t *testing.T) {
-	// 1. Unflagged bead: no explicit power hint.
+	// 1. Unflagged bead: no explicit estimated-difficulty hint.
 	// InferPowerClass must default to standard; cheap and smart require the
 	// single explicit bead metadata hint or later retry escalation.
 	b := &bead.Bead{

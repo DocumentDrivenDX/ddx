@@ -58,10 +58,10 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedEmitsEvent(t *te
 	assert.Equal(t, float64(20), body["actual_power"])
 }
 
-// TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericPowerHint
+// TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericRetryFloor
 // asserts that ladder exhaustion still emits evidence without persisting a
 // numeric retry floor on the bead.
-func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericPowerHint(t *testing.T) {
+func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericRetryFloor(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -82,7 +82,7 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNume
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 
-	assert.NotContains(t, got.Extra, TriagePowerHintKey)
+	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
 }
 
 // TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired asserts that

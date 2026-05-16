@@ -61,13 +61,6 @@ func highestViableEscalationFloor(l escalationFloorFinder) (int, error) {
 }
 
 func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
-	return investigationRetryInitialMinPowerWithInference(b, baseMinPower, maxPower, ladder, false)
-}
-
-func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder, inferZeroConfig bool) (int, agent.ExecuteBeadReport, bool) {
-	if inferZeroConfig {
-		return zeroConfigInferredMinPower(b, baseMinPower, maxPower, ladder)
-	}
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
@@ -87,7 +80,7 @@ func recentProviderConnectivityMinPower(store *bead.Store, now time.Time, baseMi
 		}
 		if next, ok := recentProviderConnectivityMinPowerFromEvents(events, now, floor, maxPower, ladder); ok {
 			if next >= maxPower && maxPower > 0 {
-				return baseMinPower, smartRouteUnavailableReport(&b, next, maxPower, nil), true
+				return baseMinPower, routeUnavailableReport(&b, next, maxPower, nil), true
 			}
 			if next > floor {
 				floor = next
@@ -246,30 +239,29 @@ func resolvePowerFloor(powerClass policyescalation.PowerClass, ladder escalation
 	}
 }
 
-func zeroConfigInferredMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
-	powerClass := policyescalation.InferPowerClass(b)
+func zeroConfigInitialMinPower(b *bead.Bead, powerClass policyescalation.PowerClass, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
 	if powerClass == "" {
 		return baseMinPower, agent.ExecuteBeadReport{}, false
 	}
 	powerFloor, hasPowerFloor := resolvePowerFloor(powerClass, ladder)
 	if !hasPowerFloor && powerClass != policyescalation.PowerCheap {
-		return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, fmt.Errorf("no viable routing floor for inferred powerClass %s", powerClass)), true
+		return baseMinPower, routeUnavailableReport(b, baseMinPower, maxPower, fmt.Errorf("no viable routing floor for inferred powerClass %s", powerClass)), true
 	}
 	if powerFloor > baseMinPower {
 		if maxPower > 0 && powerFloor >= maxPower {
-			return baseMinPower, smartRouteUnavailableReport(b, powerFloor, maxPower, nil), true
+			return baseMinPower, routeUnavailableReport(b, powerFloor, maxPower, nil), true
 		}
 		return powerFloor, agent.ExecuteBeadReport{}, false
 	}
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
-func smartRouteUnavailableReport(b *bead.Bead, minPower, maxPower int, cause error) agent.ExecuteBeadReport {
+func routeUnavailableReport(b *bead.Bead, minPower, maxPower int, cause error) agent.ExecuteBeadReport {
 	beadID := ""
 	if b != nil {
 		beadID = b.ID
 	}
-	detail := fmt.Sprintf("smart retry route unavailable: no viable routing candidate satisfies requested MinPower %d", minPower)
+	detail := fmt.Sprintf("route unavailable: no viable routing candidate satisfies requested MinPower %d", minPower)
 	if maxPower > 0 {
 		detail += fmt.Sprintf(" and MaxPower %d", maxPower)
 	}

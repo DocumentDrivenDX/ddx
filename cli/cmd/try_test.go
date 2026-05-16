@@ -509,7 +509,7 @@ func TestForceClaim_PreservesCooldownFieldOnFailure(t *testing.T) {
 
 // TestTryRecordsExecutionRoutingIntent verifies that ddx try records the
 // bead-hint routing intent evidence and prints the concise routing-intent
-// line when the durable power hint metadata is present.
+// line when durable estimated difficulty metadata affects dispatch.
 func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	env := NewTestEnvironment(t)
 	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
@@ -528,19 +528,22 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 		return agent.ExecuteBeadReport{
-			BeadID:      beadID,
-			Status:      agent.ExecuteBeadStatusSuccess,
-			SessionID:   "sess-hint",
-			ResultRev:   "deadbeef01234567",
-			Harness:     "claude",
-			Provider:    "anthropic",
-			Model:       "claude-sonnet-4-6",
-			ActualPower: 91,
+			BeadID:              beadID,
+			Status:              agent.ExecuteBeadStatusSuccess,
+			SessionID:           "sess-hint",
+			ResultRev:           "deadbeef01234567",
+			Harness:             "claude",
+			Provider:            "anthropic",
+			Model:               "claude-sonnet-4-6",
+			ActualPower:         91,
+			RoutingIntentSource: string(policyescalation.ExecutionIntentSourceBeadHint),
+			EstimatedDifficulty: string(policyescalation.DifficultyHard),
+			InferredPowerClass:  string(policyescalation.PowerSmart),
 		}, nil
 	})
 	root := factory.NewRootCommand()
 
-	out, err := executeCommand(root, "try", "hint-bead-001", "--harness=claude", "--no-review", "--no-review-i-know-what-im-doing")
+	out, err := executeCommand(root, "try", "hint-bead-001", "--no-review", "--no-review-i-know-what-im-doing")
 	require.NoError(t, err, "ddx try with a hard bead hint must succeed: %s", out)
 	assert.Contains(t, out, "routing intent: difficulty=hard powerClass=smart source=bead_hint")
 
@@ -650,7 +653,7 @@ func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
 	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
 }
 
-func TestTryIgnoresNumericBeadPowerHint(t *testing.T) {
+func TestTryIgnoresNumericLegacyRetryFloor(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -668,7 +671,7 @@ func TestTryIgnoresNumericBeadPowerHint(t *testing.T) {
 		ID:    "ddx-zero-config-ignore-numeric-hint",
 		Title: "Try ignores numeric bead retry hint",
 		Extra: map[string]any{
-			agent.TriagePowerHintKey: 90,
+			"work-next-min-power": 90,
 		},
 	}))
 

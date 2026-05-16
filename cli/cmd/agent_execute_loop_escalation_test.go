@@ -70,12 +70,12 @@ func TestRecentProviderConnectivityMinPowerFromEventsIgnoresExpiredEvidence(t *t
 	assert.Equal(t, 0, floor)
 }
 
-func TestInvestigationRetryIgnoresNumericBeadPowerHint(t *testing.T) {
+func TestInvestigationRetryIgnoresNumericLegacyRetryFloor(t *testing.T) {
 	b := &bead.Bead{
 		ID:    "ddx-ignore-numeric-hint",
 		Title: "Ignore numeric retry floor",
 		Extra: map[string]any{
-			agent.TriagePowerHintKey: 90,
+			"work-next-min-power": 90,
 		},
 	}
 

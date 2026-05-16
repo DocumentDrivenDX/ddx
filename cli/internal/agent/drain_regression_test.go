@@ -60,8 +60,6 @@ agent:
 	assert.Empty(t, rcfg.Harness(), "default path must not synthesise a harness")
 	assert.Empty(t, rcfg.Model(), "default path must not synthesise a model from model_overrides")
 	assert.Empty(t, rcfg.Profile(), "default path must not synthesise a profile")
-	assert.Empty(t, rcfg.MinPowerHint(), "default path must not synthesise MinPowerHint")
-	assert.Empty(t, rcfg.MaxPowerHint(), "default path must not synthesise MaxPowerHint")
 
 	// 3. Single ready bead in a fresh store. We use one bead so that
 	//    Once:true draining ends after exactly one queue pass.

@@ -28,8 +28,6 @@ func sealedFixture() ResolvedConfig {
 		model:                        "claude-opus-4-7",
 		provider:                     "anthropic",
 		profile:                      "default",
-		minPowerHint:                 "cheap",
-		maxPowerHint:                 "smart",
 		effort:                       "high",
 		permissions:                  "elevated",
 		timeout:                      30 * time.Second,
@@ -83,8 +81,6 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"Model":                              func(r ResolvedConfig) { _ = r.Model() },
 		"Provider":                           func(r ResolvedConfig) { _ = r.Provider() },
 		"Profile":                            func(r ResolvedConfig) { _ = r.Profile() },
-		"MinPowerHint":                       func(r ResolvedConfig) { _ = r.MinPowerHint() },
-		"MaxPowerHint":                       func(r ResolvedConfig) { _ = r.MaxPowerHint() },
 		"Effort":                             func(r ResolvedConfig) { _ = r.Effort() },
 		"Permissions":                        func(r ResolvedConfig) { _ = r.Permissions() },
 		"Timeout":                            func(r ResolvedConfig) { _ = r.Timeout() },
@@ -192,24 +188,6 @@ func TestResolvedConfigProfileAccessor(t *testing.T) {
 	}
 	if got := (ResolvedConfig{sealed: true}).Profile(); got != "" {
 		t.Fatalf("zero-after-seal Profile = %q, want empty", got)
-	}
-}
-
-func TestResolvedConfigMinPowerHintAccessor(t *testing.T) {
-	if got := sealedFixture().MinPowerHint(); got != "cheap" {
-		t.Fatalf("MinPowerHint = %q", got)
-	}
-	if got := (ResolvedConfig{sealed: true}).MinPowerHint(); got != "" {
-		t.Fatalf("zero-after-seal MinPowerHint = %q, want empty", got)
-	}
-}
-
-func TestResolvedConfigMaxPowerHintAccessor(t *testing.T) {
-	if got := sealedFixture().MaxPowerHint(); got != "smart" {
-		t.Fatalf("MaxPowerHint = %q", got)
-	}
-	if got := (ResolvedConfig{sealed: true}).MaxPowerHint(); got != "" {
-		t.Fatalf("zero-after-seal MaxPowerHint = %q, want empty", got)
 	}
 }
 

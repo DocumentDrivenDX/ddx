@@ -822,10 +822,10 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
-// TestExecuteBeadWorkerReviewBoundedByMaxPowerHint verifies the retired post-land
+// TestExecuteBeadWorkerReviewBypassesRetiredPostLandPath verifies the retired post-land
 // reviewer is unreachable from work success. Candidate-cycle review
 // owns repair/retry now, so a success closes directly within one worker.Run.
-func TestExecuteBeadWorkerReviewBoundedByMaxPowerHint(t *testing.T) {
+func TestExecuteBeadWorkerReviewBypassesRetiredPostLandPath(t *testing.T) {
 	// Use a single-bead store so we can assert "exactly one attempt".
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

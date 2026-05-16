@@ -41,6 +41,71 @@ func TestExecutionHintParse_IgnoresLegacyPowerLabels(t *testing.T) {
 	}
 }
 
+func TestResolveExecutionHint_UsesReadinessDifficultyWhenBeadHintAbsent(t *testing.T) {
+	hint := ResolveExecutionHint(ExecutionHintInput{
+		Bead:                         &bead.Bead{},
+		ReadinessEstimatedDifficulty: string(DifficultyHard),
+	})
+
+	if hint.Source != ExecutionIntentSourceReadiness {
+		t.Fatalf("source: want readiness, got %q", hint.Source)
+	}
+	if hint.EstimatedDifficulty != DifficultyHard {
+		t.Fatalf("estimated difficulty: want %q, got %q", DifficultyHard, hint.EstimatedDifficulty)
+	}
+	if hint.InferredPowerClass != PowerSmart {
+		t.Fatalf("mapped power class: want %q, got %q", PowerSmart, hint.InferredPowerClass)
+	}
+}
+
+func TestResolveExecutionHint_BeadHintWinsOverReadinessDifficulty(t *testing.T) {
+	hint := ResolveExecutionHint(ExecutionHintInput{
+		Bead: &bead.Bead{Extra: map[string]any{
+			BeadEstimatedDifficultyKey: string(DifficultyEasy),
+		}},
+		ReadinessEstimatedDifficulty: string(DifficultyHard),
+	})
+
+	if hint.Source != ExecutionIntentSourceBeadHint {
+		t.Fatalf("source: want bead_hint, got %q", hint.Source)
+	}
+	if hint.EstimatedDifficulty != DifficultyEasy {
+		t.Fatalf("estimated difficulty: want %q, got %q", DifficultyEasy, hint.EstimatedDifficulty)
+	}
+	if hint.InferredPowerClass != PowerCheap {
+		t.Fatalf("mapped power class: want %q, got %q", PowerCheap, hint.InferredPowerClass)
+	}
+}
+
+func TestResolveExecutionHint_CLIPassthroughAndProjectConfigTakePrecedence(t *testing.T) {
+	b := &bead.Bead{Extra: map[string]any{
+		BeadEstimatedDifficultyKey: string(DifficultyHard),
+	}}
+
+	cliHint := ResolveExecutionHint(ExecutionHintInput{
+		Bead:            b,
+		ExplicitRouting: true,
+		ProjectRouting:  true,
+	})
+	if cliHint.Source != ExecutionIntentSourceCLIPassthru {
+		t.Fatalf("explicit routing source: want cli, got %q", cliHint.Source)
+	}
+	if cliHint.EstimatedDifficulty != "" || cliHint.InferredPowerClass != "" {
+		t.Fatalf("explicit routing must not infer bead difficulty/power: %+v", cliHint)
+	}
+
+	projectHint := ResolveExecutionHint(ExecutionHintInput{
+		Bead:           b,
+		ProjectRouting: true,
+	})
+	if projectHint.Source != ExecutionIntentSourceProject {
+		t.Fatalf("project routing source: want project_config, got %q", projectHint.Source)
+	}
+	if projectHint.EstimatedDifficulty != "" || projectHint.InferredPowerClass != "" {
+		t.Fatalf("project routing must not infer bead difficulty/power: %+v", projectHint)
+	}
+}
+
 func TestExecutionHintLint_DoesNotRequireSmartJustification(t *testing.T) {
 	b := &bead.Bead{
 		Extra: map[string]any{
@@ -57,22 +122,24 @@ func TestExecutionHintLint_RejectsDurableRoutePins(t *testing.T) {
 		Labels: []string{"harness:claude", "provider:openai"},
 		Extra: map[string]any{
 			"execution-model": "gpt-5.5",
+			"model-ref":       "claude-opus",
 		},
 	}
 
 	findings := LintExecutionHints(b)
-	if len(findings) != 3 {
-		t.Fatalf("expected 3 findings, got %d: %+v", len(findings), findings)
+	if len(findings) != 4 {
+		t.Fatalf("expected 4 findings, got %d: %+v", len(findings), findings)
 	}
 
 	want := map[string]bool{
 		"harness":         false,
 		"provider":        false,
 		"execution-model": false,
+		"model-ref":       false,
 	}
 	for _, finding := range findings {
 		switch finding.Field {
-		case "harness", "provider", "execution-model":
+		case "harness", "provider", "execution-model", "model-ref":
 			want[finding.Field] = true
 		default:
 			t.Fatalf("unexpected finding field: %q", finding.Field)

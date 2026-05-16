@@ -185,8 +185,8 @@ const ProviderUnavailableCooldown = 15 * time.Minute
 
 // SmartRetryCooldown is the queue-fairness pause after a real no_changes
 // implementation attempt asks for status=open/smart retry. The bead remains
-// open with its powerClass hint, but a watch worker moves on instead of repeating the
-// same empty-diff attempt every idle cycle.
+// open with transient smart-retry metadata, but a watch worker moves on instead
+// of repeating the same empty-diff attempt every idle cycle.
 const SmartRetryCooldown = 5 * time.Minute
 
 // PausedInfraInterval is the polling interval the worker waits in paused-infra
@@ -478,12 +478,14 @@ type ExecuteBeadReport struct {
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	// Profile routing telemetry. Populated when work uses a profile
 	// ladder rather than an explicit harness/model pin.
-	RequestedProfile   string `json:"requested_profile,omitempty"`
-	InferredPowerClass string `json:"inferred_power_class,omitempty"`
-	RoutingIntentNote  string `json:"routing_intent_note,omitempty"`
-	ResolvedPowerClass string `json:"resolved_power_class,omitempty"`
-	EscalationCount    int    `json:"escalation_count,omitempty"`
-	FinalPowerClass    string `json:"final_power_class,omitempty"`
+	RequestedProfile    string `json:"requested_profile,omitempty"`
+	RoutingIntentSource string `json:"routing_intent_source,omitempty"`
+	EstimatedDifficulty string `json:"estimated_difficulty,omitempty"`
+	InferredPowerClass  string `json:"inferred_power_class,omitempty"`
+	RoutingIntentNote   string `json:"routing_intent_note,omitempty"`
+	ResolvedPowerClass  string `json:"resolved_power_class,omitempty"`
+	EscalationCount     int    `json:"escalation_count,omitempty"`
+	FinalPowerClass     string `json:"final_power_class,omitempty"`
 	// DecompositionRecommendation carries the structured list of recommended
 	// sub-bead titles when Status == declined_needs_decomposition. The loop
 	// records these on the bead as a `decomposition-recommendation` event so
@@ -1442,6 +1444,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		skipPreClaimIntake := false
+		readinessEstimatedDifficulty := ""
 
 		// Queue-level decomposition depth cap: when the bead has already been split
 		// to the configured limit, block it for operator review without invoking
@@ -1524,6 +1527,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Message:   "readiness check",
 			})
 			intakeResult, intakeErr := runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
+			if intakeErr == nil {
+				readinessEstimatedDifficulty = normalizeReadinessEstimatedDifficulty(intakeResult.EstimatedDifficulty)
+			}
 			intakeOutcome := intakeResult.normalizedOutcome()
 			if intakeResult.SystemReason == ReadinessSystemReasonTimeout {
 				timeoutDetail := strings.TrimSpace(intakeResult.Detail)
@@ -1986,7 +1992,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
-		attemptCtx := ctx
+		attemptCtx := ContextWithReadinessEstimatedDifficulty(ctx, readinessEstimatedDifficulty)
 		if liveness != nil {
 			liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), profile, harness, model, profile, 0)
 			// Tick once now so the sidecar shows the new attempt before the
@@ -3336,16 +3342,13 @@ func appendLoopRoutingEvidence(store BeadEventAppender, target bead.Bead, report
 			"reason":       e.Reason,
 		})
 	}
-	intent := escalation.ParseExecutionHint(&target)
-	requestedPowerClass := string(intent.InferredPowerClass)
-	if report.InferredPowerClass != "" {
-		requestedPowerClass = report.InferredPowerClass
-	}
+	intentSource, estimatedDifficulty, requestedPowerClass, _ := executionRoutingIntentFacts(target, report)
 	body, err := json.Marshal(map[string]any{
 		"resolved_provider":     provider,
 		"resolved_model":        report.Model,
 		"fallback_chain":        chain,
-		"estimated_difficulty":  string(intent.EstimatedDifficulty),
+		"routing_intent_source": intentSource,
+		"estimated_difficulty":  estimatedDifficulty,
 		"requested_profile":     report.RequestedProfile,
 		"requested_power_class": requestedPowerClass,
 		"routing_intent_note":   report.RoutingIntentNote,
@@ -3374,16 +3377,12 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if store == nil || target.ID == "" {
 		return
 	}
-	intent := escalation.ParseExecutionHint(&target)
-	requestedPowerClass := string(intent.InferredPowerClass)
-	if report.InferredPowerClass != "" {
-		requestedPowerClass = report.InferredPowerClass
-	}
+	intentSource, estimatedDifficulty, requestedPowerClass, rejectedRoutePins := executionRoutingIntentFacts(target, report)
 	body := map[string]any{
 		"bead_id":                 target.ID,
 		"attempt_id":              report.AttemptID,
-		"routing_intent_source":   string(intent.Source),
-		"estimated_difficulty":    string(intent.EstimatedDifficulty),
+		"routing_intent_source":   intentSource,
+		"estimated_difficulty":    estimatedDifficulty,
 		"requested_power_class":   requestedPowerClass,
 		"requested_profile":       report.RequestedProfile,
 		"actual_harness":          report.Harness,
@@ -3392,7 +3391,7 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		"actual_power":            report.ActualPower,
 		"routing_intent_degraded": false,
 		"routing_intent_note":     "",
-		"rejected_route_pins":     intent.RejectedRoutePins,
+		"rejected_route_pins":     rejectedRoutePins,
 	}
 	degraded := false
 	note := ""
@@ -3414,11 +3413,13 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if err != nil {
 		return
 	}
-	summary := fmt.Sprintf("source=%s", intent.Source)
-	if intent.EstimatedDifficulty != "" {
-		summary += fmt.Sprintf(" difficulty=%s", intent.EstimatedDifficulty)
+	summary := fmt.Sprintf("source=%s", intentSource)
+	if estimatedDifficulty != "" {
+		summary += fmt.Sprintf(" difficulty=%s", estimatedDifficulty)
 	}
-	summary += fmt.Sprintf(" powerClass=%s", requestedPowerClass)
+	if requestedPowerClass != "" {
+		summary += fmt.Sprintf(" powerClass=%s", requestedPowerClass)
+	}
 	if report.Model != "" {
 		summary += " model=" + report.Model
 	}
@@ -3436,6 +3437,46 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		Source:    "ddx work",
 		CreatedAt: createdAt,
 	})
+}
+
+func executionRoutingIntentFacts(target bead.Bead, report ExecuteBeadReport) (source, estimatedDifficulty, requestedPowerClass string, rejectedRoutePins []string) {
+	intent := escalation.ParseExecutionHint(&target)
+	source = string(intent.Source)
+	estimatedDifficulty = string(intent.EstimatedDifficulty)
+	rejectedRoutePins = intent.RejectedRoutePins
+
+	if report.RoutingIntentSource != "" {
+		source = report.RoutingIntentSource
+		switch escalation.ExecutionIntentSource(report.RoutingIntentSource) {
+		case escalation.ExecutionIntentSourceCLIPassthru, escalation.ExecutionIntentSourceProject:
+			estimatedDifficulty = ""
+			requestedPowerClass = ""
+		case escalation.ExecutionIntentSourceDefault:
+			estimatedDifficulty = ""
+			requestedPowerClass = string(escalation.PowerStandard)
+		case escalation.ExecutionIntentSourceReadiness:
+			estimatedDifficulty = ""
+			if strings.TrimSpace(report.EstimatedDifficulty) != "" {
+				readinessIntent := escalation.ResolveExecutionHint(escalation.ExecutionHintInput{
+					ReadinessEstimatedDifficulty: report.EstimatedDifficulty,
+				})
+				requestedPowerClass = string(readinessIntent.InferredPowerClass)
+			}
+		}
+	}
+	if report.EstimatedDifficulty != "" {
+		estimatedDifficulty = report.EstimatedDifficulty
+	}
+
+	if requestedPowerClass == "" &&
+		source != string(escalation.ExecutionIntentSourceCLIPassthru) &&
+		source != string(escalation.ExecutionIntentSourceProject) {
+		requestedPowerClass = string(intent.InferredPowerClass)
+	}
+	if report.InferredPowerClass != "" {
+		requestedPowerClass = report.InferredPowerClass
+	}
+	return source, estimatedDifficulty, requestedPowerClass, rejectedRoutePins
 }
 
 func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result LintResult, lintErr error, threshold int, actor string, createdAt time.Time) {
@@ -4319,7 +4360,6 @@ func clearSmartRetryMetadata(b *bead.Bead) {
 	if b.Extra == nil {
 		return
 	}
-	delete(b.Extra, TriagePowerHintKey)
 	delete(b.Extra, executeLoopSmartRetryKey)
 	delete(b.Extra, executeLoopSmartRetryReasonKey)
 	delete(b.Extra, executeLoopSmartRetrySuggestedActionKey)

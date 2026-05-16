@@ -38,7 +38,7 @@ func (s *implementationProfileSelector) Select(ctx context.Context, powerClass e
 		return agent.ImplementationProfileSelection{}, s.err
 	}
 	if powerClass == "" {
-		powerClass = escalation.PowerCheap
+		powerClass = escalation.PowerStandard
 	}
 	if floor > 0 {
 		return agent.SelectImplementationProfileForMinPower(s.snap, powerClass, floor), nil

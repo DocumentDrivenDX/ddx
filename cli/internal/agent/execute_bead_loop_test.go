@@ -1128,9 +1128,6 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 		ID:       "ddx-smart-retry",
 		Title:    "Smart retry",
 		Priority: 0,
-		Extra: map[string]any{
-			TriagePowerHintKey: string(escalation.PowerSmart),
-		},
 	}
 	require.NoError(t, store.Create(target))
 
@@ -1140,7 +1137,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:        beadID,
 				Status:        ExecuteBeadStatusExecutionFailed,
-				Detail:        "smart retry route unavailable: no viable routing candidate satisfies requested MinPower 90",
+				Detail:        "route unavailable: no viable routing candidate satisfies requested MinPower 90",
 				OutcomeReason: FailureModeNoViableProvider,
 				BaseRev:       "aaaa1111",
 				ResultRev:     "aaaa1111",
@@ -1164,9 +1161,10 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 	assert.Empty(t, got.Owner)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
-	require.NotNil(t, got.Extra)
-	assert.Equal(t, string(escalation.PowerSmart), got.Extra[TriagePowerHintKey])
-	assert.NotContains(t, got.Extra, "work-retry-after")
+	if got.Extra != nil {
+		assert.NotContains(t, got.Extra, legacyRetryFloorKey)
+		assert.NotContains(t, got.Extra, "work-retry-after")
+	}
 }
 
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
@@ -2011,7 +2009,7 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 	assert.True(t, sawUnverified, "no_changes_unverified event must be emitted")
 }
 
-func TestNoChangesRetryDoesNotWriteTriagePowerHintKey(t *testing.T) {
+func TestNoChangesRetryDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -2046,7 +2044,7 @@ func TestNoChangesRetryDoesNotWriteTriagePowerHintKey(t *testing.T) {
 	require.True(t, hasRetry, "smart-runnable no_changes must set a short retry-after so watch workers drain other beads")
 	assert.Equal(t, r.Results[0].RetryAfter, retryAfter)
 	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
-	assert.NotContains(t, got.Extra, TriagePowerHintKey)
+	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
 	assert.Equal(t, NoChangesEventAutonomousRetry, got.Extra[bead.ExtraLastStatus])
 	assert.Contains(t, got.Extra[bead.ExtraLastDetail], "stronger code search")
 
@@ -2099,7 +2097,7 @@ func TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "no_changes at top powerClass must park bead to proposed (genuine spec gap)")
 	assert.Empty(t, got.Owner, "proposed bead must not be owned")
-	assert.NotContains(t, got.Extra, TriagePowerHintKey, "powerClass hint must be cleared when parked to proposed")
+	assert.NotContains(t, got.Extra, legacyRetryFloorKey, "legacy retry-floor metadata must not be written when parked to proposed")
 }
 
 func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {

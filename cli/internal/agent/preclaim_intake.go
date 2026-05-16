@@ -83,6 +83,24 @@ type PreClaimIntakeRewrite struct {
 // fail-opens when the hook returns an infrastructure error.
 type PreClaimIntakeHook func(ctx context.Context, beadID string) (PreClaimIntakeResult, error)
 
+type readinessEstimatedDifficultyContextKey struct{}
+
+func ContextWithReadinessEstimatedDifficulty(ctx context.Context, difficulty string) context.Context {
+	difficulty = strings.TrimSpace(difficulty)
+	if difficulty == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, readinessEstimatedDifficultyContextKey{}, difficulty)
+}
+
+func ReadinessEstimatedDifficultyFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	value, _ := ctx.Value(readinessEstimatedDifficultyContextKey{}).(string)
+	return strings.TrimSpace(value)
+}
+
 func (r PreClaimIntakeResult) normalizedOutcome() PreClaimIntakeOutcome {
 	switch r.Outcome {
 	case "", PreClaimIntakeActionableAtomic:

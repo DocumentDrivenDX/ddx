@@ -14,13 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestProviderConnectivityRouteExclusionDoesNotWriteNumericPowerHint exercises
+// TestProviderConnectivityRouteExclusionDoesNotWriteNumericRetryFloor exercises
 // the route-exclusion path: a service attempt fails with a TCP-level
 // provider-connectivity timeout against a routed provider, and the loop
 // records structured route-failure evidence without persisting a numeric
 // retry floor on the bead. The retry preserves operator intent: no
 // hardcoded provider/policy pins are written.
-func TestProviderConnectivityRouteExclusionDoesNotWriteNumericPowerHint(t *testing.T) {
+func TestProviderConnectivityRouteExclusionDoesNotWriteNumericRetryFloor(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 14, 8, 8, 30, 0, time.UTC)
 	var floorCalls []int
@@ -75,7 +75,7 @@ func TestProviderConnectivityRouteExclusionDoesNotWriteNumericPowerHint(t *testi
 	assert.Equal(t, 50, failed[0].ActualPower)
 	assert.Equal(t, FailureModeProviderConnectivity, failed[0].Reason)
 
-	assert.NotContains(t, got.Extra, TriagePowerHintKey)
+	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
@@ -94,7 +94,7 @@ func TestProviderConnectivityRouteExclusionDoesNotWriteNumericPowerHint(t *testi
 
 // TestExecuteBeadWorker_ProviderTimeoutPreservesOperatorPin verifies that when
 // an operator pinned the route (harness/model/provider in the passthrough
-// envelope), the loop records the failure but does NOT bump the power hint.
+// envelope), the loop records the failure but does NOT write legacy retry-floor metadata.
 // Pinned routes are honored exactly as the operator requested; silently
 // re-routing them would violate operator intent.
 func TestExecuteBeadWorker_ProviderTimeoutPreservesOperatorPin(t *testing.T) {
@@ -145,7 +145,7 @@ func TestExecuteBeadWorker_ProviderTimeoutPreservesOperatorPin(t *testing.T) {
 	require.Len(t, failed, 1, "failed-route record must still be persisted for visibility")
 	assert.Equal(t, "bragi", failed[0].Provider)
 
-	_, hasHint := got.Extra[TriagePowerHintKey]
+	_, hasHint := got.Extra[legacyRetryFloorKey]
 	assert.False(t, hasHint, "pinned routing must NOT be silently rerouted via power-hint bump")
 }
 
@@ -189,11 +189,11 @@ func TestRouteRequest_ExpiredFailedRoutesDropped(t *testing.T) {
 	assert.Len(t, failed, 2, "buildExcludedRoutes must not modify the input slice")
 }
 
-// TestFailedRoutesDoNotWriteNumericPowerHint asserts that when
+// TestFailedRoutesDoNotWriteNumericRetryFloor asserts that when
 // every candidate at the requested power class is excluded (resolveRoute
 // returns a no-viable-candidate error), CheckAndApplyRouteExclusions reports
 // the skipped dispatch without persisting a numeric retry floor on the bead.
-func TestFailedRoutesDoNotWriteNumericPowerHint(t *testing.T) {
+func TestFailedRoutesDoNotWriteNumericRetryFloor(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
@@ -227,7 +227,7 @@ func TestFailedRoutesDoNotWriteNumericPowerHint(t *testing.T) {
 
 	updated, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.NotContains(t, updated.Extra, TriagePowerHintKey)
+	assert.NotContains(t, updated.Extra, legacyRetryFloorKey)
 	assert.Contains(t, report.Detail, "escalating current retry floor to 70")
 }
 

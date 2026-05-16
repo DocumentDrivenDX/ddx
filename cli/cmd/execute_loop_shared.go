@@ -154,7 +154,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		!cmd.Flags().Changed("model") && !cmd.Flags().Changed("provider") &&
 		!cmd.Flags().Changed("profile") &&
 		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
-	autoInferPowerClass := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
+	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
+	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
 
 	if !spec.OpaquePassthrough {
 		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider); err != nil {
@@ -317,17 +318,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}, true
 	}
 
-	singlePolicyAttempt := func(ctx context.Context, beadID string, requestedMinPower int, requestedProfile string, inferredPolicy escalation.PowerClass, routingNote string, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
+	singlePolicyAttempt := func(ctx context.Context, beadID string, requestedMinPower int, requestedProfile string, routingIntent escalation.ExecutionHint, routingNote string, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
 		attemptProvider := spec.Provider
 		if resolvedProvider != "" {
 			attemptProvider = resolvedProvider
 		}
 		reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-			report := agent.ReportFromExecuteBeadResult(res, string(inferredPolicy))
-			report.InferredPowerClass = string(inferredPolicy)
-			report.RequestedProfile = requestedProfile
-			report.RoutingIntentNote = routingNote
+			report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+			applyExecutionRoutingIntentReport(&report, routingIntent, requestedProfile, routingNote)
 			return report
 		}
 		loopOverrides := config.CLIOverrides{
@@ -424,18 +423,18 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			inferredPolicy := escalation.PowerClass("")
-			if autoInferPowerClass {
-				inferredPolicy = escalation.InferPowerClass(targetBead)
-			}
+			routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
+			inferredPolicy := routingIntent.InferredPowerClass
 			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPower(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder())
 			if unavailable {
+				applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 				return unavailableReport, nil
 			}
 			if spec.Provider == "" && spec.Model == "" {
 				if learnedMinPower, learnedUnavailableReport, learned := recentProviderConnectivityMinPower(store, time.Now().UTC(), initialMinPower, spec.MaxPower, loadLadder()); learned {
 					if learnedUnavailableReport.Status != "" {
 						learnedUnavailableReport.BeadID = beadID
+						applyExecutionRoutingIntentReport(&learnedUnavailableReport, routingIntent, "", "")
 						return learnedUnavailableReport, nil
 					}
 					if learnedMinPower > initialMinPower {
@@ -443,9 +442,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 					}
 				}
 				// Pre-dispatch route-exclusion check: if every known route at
-				// the requested power class is in the bead's failed-routes list
-				// and still within the exclusion window, skip the dispatch and
-				// escalate TriagePowerHintKey so the next attempt routes higher.
+				// the requested floor is still inside the exclusion window,
+				// skip this dispatch and let the retry policy raise MinPower
+				// in memory for the next attempt.
 				if svcForExcl, svcExclErr := agent.ResolveServiceFromWorkDir(projectRoot); svcExclErr == nil {
 					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
 						ctx, store, beadID, resolveClaimAssignee(),
@@ -453,6 +452,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 						svcForExcl.ResolveRoute,
 						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
 					); skip {
+						applyExecutionRoutingIntentReport(&exclusionReport, routingIntent, "", "")
 						return exclusionReport, nil
 					}
 				}
@@ -464,16 +464,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 					initialProfile = selection.Name
 					initialRoutingNote = selection.Note
 					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
-						unavailableReport := smartRouteUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
-						unavailableReport.InferredPowerClass = string(inferredPolicy)
-						unavailableReport.RequestedProfile = initialProfile
-						unavailableReport.RoutingIntentNote = initialRoutingNote
+						unavailableReport := routeUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
+						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, initialProfile, initialRoutingNote)
 						return unavailableReport, nil
 					}
 				} else {
-					initialMinPower, unavailableReport, unavailable = zeroConfigInferredMinPower(targetBead, initialMinPower, spec.MaxPower, loadLadder())
+					initialMinPower, unavailableReport, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, initialMinPower, spec.MaxPower, loadLadder())
 					if unavailable {
-						unavailableReport.InferredPowerClass = string(inferredPolicy)
+						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 						return unavailableReport, nil
 					}
 				}
@@ -503,7 +501,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 							}
 						}
 					}
-					return singlePolicyAttempt(ctx, beadID, requestedMinPower, requestProfile, inferredPolicy, routingNote, spec.Harness, spec.Provider, spec.Model)
+					return singlePolicyAttempt(ctx, beadID, requestedMinPower, requestProfile, routingIntent, routingNote, spec.Harness, spec.Provider, spec.Model)
 				},
 				nil,
 				perBeadTracker,
@@ -684,4 +682,24 @@ func projectHasRoutingConfig(projectRoot string) bool {
 	}
 	a := cfg.Agent
 	return strings.TrimSpace(a.Model) != ""
+}
+
+func resolveCommandExecutionHint(ctx context.Context, b *bead.Bead, noRoutingFlags, hasProjectRoutingConfig bool) escalation.ExecutionHint {
+	return escalation.ResolveExecutionHint(escalation.ExecutionHintInput{
+		Bead:                         b,
+		ReadinessEstimatedDifficulty: agent.ReadinessEstimatedDifficultyFromContext(ctx),
+		ExplicitRouting:              !noRoutingFlags,
+		ProjectRouting:               hasProjectRoutingConfig,
+	})
+}
+
+func applyExecutionRoutingIntentReport(report *agent.ExecuteBeadReport, intent escalation.ExecutionHint, requestedProfile, routingNote string) {
+	if report == nil {
+		return
+	}
+	report.RoutingIntentSource = string(intent.Source)
+	report.EstimatedDifficulty = string(intent.EstimatedDifficulty)
+	report.InferredPowerClass = string(intent.InferredPowerClass)
+	report.RequestedProfile = requestedProfile
+	report.RoutingIntentNote = routingNote
 }

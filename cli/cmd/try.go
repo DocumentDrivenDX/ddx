@@ -262,7 +262,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	noRoutingFlags := harness == "" && model == "" && provider == "" &&
 		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
 		!cmd.Flags().Changed("max-power")
-	autoInferPowerClass := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
+	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
+	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
 	var ladderOnce sync.Once
 	var ladder escalationFloorFinder
 	loadLadder := func() escalationFloorFinder {
@@ -297,41 +298,35 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		executor = f.tryExecutorOverride
 	} else {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, execBeadID string) (agent.ExecuteBeadReport, error) {
-			var inferredPolicy escalation.PowerClass
 			requestMinPower := minPower
 			requestProfile := profile
 			var routingNote string
+			targetBead := target
+			if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
+				targetBead = b
+			}
+			routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
+			inferredPolicy := routingIntent.InferredPowerClass
 			reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-				report := agent.ReportFromExecuteBeadResult(res, string(inferredPolicy))
-				report.InferredPowerClass = string(inferredPolicy)
-				report.RequestedProfile = requestProfile
-				report.RoutingIntentNote = routingNote
+				report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+				applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 				return report
 			}
 			if autoInferPowerClass {
-				var targetBead *bead.Bead
-				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
-					targetBead = b
-					inferredPolicy = escalation.InferPowerClass(targetBead)
-				} else {
-					inferredPolicy = escalation.PowerStandard
-				}
 				var unavailableReport agent.ExecuteBeadReport
 				var unavailable bool
 				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestMinPower); selectErr == nil && selection.Name != "" {
 					requestProfile = selection.Name
 					routingNote = selection.Note
 					if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
-						unavailableReport := smartRouteUnavailableReport(targetBead, requestMinPower, maxPower, nil)
-						unavailableReport.InferredPowerClass = string(inferredPolicy)
-						unavailableReport.RequestedProfile = requestProfile
-						unavailableReport.RoutingIntentNote = routingNote
+						unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
+						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
 						return unavailableReport, nil
 					}
 				} else {
-					requestMinPower, unavailableReport, unavailable = investigationRetryInitialMinPowerWithInference(targetBead, requestMinPower, maxPower, loadLadder(), true)
+					requestMinPower, unavailableReport, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, requestMinPower, maxPower, loadLadder())
 					if unavailable {
-						unavailableReport.InferredPowerClass = string(inferredPolicy)
+						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 						return unavailableReport, nil
 					}
 				}
@@ -393,14 +388,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 							res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 						}
 						_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-						policyStr := ""
-						if inferredPolicy != "" {
-							policyStr = string(inferredPolicy)
-						}
-						report := agent.ReportFromExecuteBeadResult(res, policyStr)
-						report.InferredPowerClass = string(inferredPolicy)
-						report.RequestedProfile = requestProfile
-						report.RoutingIntentNote = routingNote
+						report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+						applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 						return report, nil
 					}
 				}
@@ -431,14 +420,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				res.Outcome = "no-changes"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
-			policyStr := ""
-			if inferredPolicy != "" {
-				policyStr = string(inferredPolicy)
-			}
-			report := agent.ReportFromExecuteBeadResult(res, policyStr)
-			report.InferredPowerClass = string(inferredPolicy)
-			report.RequestedProfile = requestProfile
-			report.RoutingIntentNote = routingNote
+			report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+			applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 			return report, nil
 		})
 	}
@@ -522,8 +505,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	report := result.Results[0]
 	writeTryResult(cmd.OutOrStdout(), report)
-	if intent := escalation.ParseExecutionHint(target); intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.InferredPowerClass != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: difficulty=%s powerClass=%s source=%s\n", intent.EstimatedDifficulty, intent.InferredPowerClass, intent.Source)
+	if report.EstimatedDifficulty != "" && report.InferredPowerClass != "" {
+		source := report.RoutingIntentSource
+		if source == "" {
+			source = string(escalation.ExecutionIntentSourceDefault)
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: difficulty=%s powerClass=%s source=%s\n", report.EstimatedDifficulty, report.InferredPowerClass, source)
 	}
 
 	return tryExitCodeForStatus(report.Status)

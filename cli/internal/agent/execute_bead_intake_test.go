@@ -261,6 +261,8 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			difficulty := ReadinessEstimatedDifficultyFromContext(ctx)
+			assert.Equal(t, "hard", difficulty)
 			got, err := inner.Get(beadID)
 			require.NoError(t, err)
 			if got.Extra != nil {
@@ -269,10 +271,13 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 				require.NotContains(t, got.Extra, legacyPowerKey)
 			}
 			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-readiness-power",
-				ResultRev: "readiness-power",
+				BeadID:              beadID,
+				Status:              ExecuteBeadStatusSuccess,
+				SessionID:           "sess-readiness-power",
+				ResultRev:           "readiness-power",
+				RoutingIntentSource: "readiness",
+				EstimatedDifficulty: difficulty,
+				InferredPowerClass:  "smart",
 			}, nil
 		}),
 	}
@@ -301,6 +306,20 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 		assert.NotContains(t, got.Extra, "triage.estimated_difficulty")
 		assert.NotContains(t, got.Extra, legacyPowerKey)
 	}
+	events, err := inner.Events(beadRef.ID)
+	require.NoError(t, err)
+	var intentBody map[string]any
+	for _, event := range events {
+		if event.Kind != "execution-routing-intent" {
+			continue
+		}
+		require.NoError(t, json.Unmarshal([]byte(event.Body), &intentBody))
+		break
+	}
+	require.NotNil(t, intentBody, "readiness routing intent evidence must be recorded")
+	assert.Equal(t, "readiness", intentBody["routing_intent_source"])
+	assert.Equal(t, "hard", intentBody["estimated_difficulty"])
+	assert.Equal(t, "smart", intentBody["requested_power_class"])
 }
 
 func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {

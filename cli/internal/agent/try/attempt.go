@@ -57,6 +57,8 @@ type Report struct {
 	CostUSD                     float64
 	DurationMS                  int64
 	RequestedProfile            string
+	RoutingIntentSource         string
+	EstimatedDifficulty         string
 	InferredPowerClass          string
 	ResolvedPowerClass          string
 	EscalationCount             int

@@ -177,6 +177,31 @@ func TestExecutionRoutingIntentRecordsEstimatedDifficulty(t *testing.T) {
 	assert.Contains(t, app.events[0].Event.Summary, "powerClass=smart")
 }
 
+func TestExecutionRoutingIntentCLISourceSuppressesBeadDifficulty(t *testing.T) {
+	app := &stubBeadEventAppender{}
+	target := bead.Bead{
+		ID: "ddx-0001",
+		Extra: map[string]any{
+			escalation.BeadEstimatedDifficultyKey: string(escalation.DifficultyHard),
+		},
+	}
+	appendExecutionRoutingIntentEvidence(app, target, ExecuteBeadReport{
+		AttemptID:           "20260515T185832-test",
+		RoutingIntentSource: string(escalation.ExecutionIntentSourceCLIPassthru),
+		Harness:             "claude",
+		Model:               "claude-sonnet-4-6",
+	}, time.Date(2026, 4, 21, 16, 0, 0, 0, time.UTC))
+
+	require.Len(t, app.events, 1)
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(app.events[0].Event.Body), &body))
+	assert.Equal(t, "cli", body["routing_intent_source"])
+	assert.Empty(t, body["estimated_difficulty"])
+	assert.Empty(t, body["requested_power_class"])
+	assert.NotContains(t, app.events[0].Event.Summary, "difficulty=")
+	assert.NotContains(t, app.events[0].Event.Summary, "powerClass=")
+}
+
 func TestAppendLoopRoutingEvidenceRecordsProfileTelemetry(t *testing.T) {
 	app := &stubBeadEventAppender{}
 	target := bead.Bead{

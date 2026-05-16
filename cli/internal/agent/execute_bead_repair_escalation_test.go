@@ -12,11 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestReviewBlock_EscalatesImplementerWithoutBeadPowerHint asserts that when
+// TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata asserts that when
 // repair-cycle-exhausted is returned and the escalation ladder has a higher
 // powerClass available, the bead remains open without persisting a bead retry
 // floor.
-func TestReviewBlock_EscalatesImplementerWithoutBeadPowerHint(t *testing.T) {
+func TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -49,7 +49,7 @@ func TestReviewBlock_EscalatesImplementerWithoutBeadPowerHint(t *testing.T) {
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after escalation")
-	assert.NotContains(t, got.Extra, TriagePowerHintKey)
+	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
 }
 
 // TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed asserts that when
