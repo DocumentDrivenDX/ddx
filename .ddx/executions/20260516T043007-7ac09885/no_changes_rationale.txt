@@ -1,0 +1,94 @@
+status: proposed
+reason: bead AC1+AC3 contradict the explicit non-scope; needs operator re-scoping
+
+Findings (worktree base-rev 86de1c4af, .ddx/executions/20260516T043007-7ac09885):
+
+1. Current state of the foundational Store methods (cli/internal/bead/store.go):
+     Init(args ...any) error                                  // line 149
+     GenID(args ...any) (string, error)                       // line 167
+     ReadAll(args ...any) ([]Bead, error)                     // line 182
+     ReadAllFiltered(args ...any) ([]Bead, error)             // line 224
+     Create(args ...any) error                                // line 518
+     Get(args ...any) (*Bead, error)                          // line 598
+     Update(args ...any) error                                // line 627
+     Close(args ...any) error                                 // line 1426
+   And in archive.go:
+     GetWithArchive(id string) (*Bead, error)                 // line 172
+   Each variadic method extracts ctx via storeCallContext(args) and accepts
+   either `s.Init()` or `s.Init(context.Background())` today.
+
+2. AC1 requires these methods to take `ctx context.Context` as a typed first
+   parameter (matching the BeadEventReader / BeadQueries shape already in
+   cli/internal/bead/backend.go:91-114). Any concrete signature satisfying
+   AC1 — `Init(ctx context.Context) error`, `Init(ctx context.Context, args ...any) error`,
+   etc. — rejects the current zero-arg `s.Init()` callsites that exist in
+   external packages.
+
+3. The bead's PROPOSED FIX and NON-SCOPE explicitly forbid touching external
+   callers ("Do not touch the external caller sweep in this bead";
+   "NON-SCOPE: Caller migration in cli/cmd, cli/internal/agent,
+   cli/internal/server, cli/internal/escalation, and metrics packages.")
+   and AC4 requires "no caller-package changes in this bead."
+
+4. AC3 requires `lefthook run pre-commit` to pass, which runs
+   `go build -buildvcs=false -v ./...` from cli/ (lefthook.yml:122-129).
+   That build covers every package in the module, including all the
+   external caller packages NON-SCOPE forbids touching.
+
+5. Concrete external breakage if AC1 is implemented today
+   (`grep -rE '\b(store|s)\.(Init|Create|Update|Get|Close|ReadAll|GenID|GetWithArchive|ReadAllFiltered)\(' cli/ --include='*.go'`):
+     - 174 Go files reference these Store methods.
+     - 73 distinct files outside cli/internal/bead/ use the zero-arg
+       `store.Init()` form (e.g. cli/cmd/ac_test.go:37,
+       cli/cmd/bead_human_test.go:20, cli/internal/agent/...,
+       cli/internal/server/...).
+     - Production-code stragglers without ctx exist too:
+         cli/cmd/bead.go:414  s.GetWithArchive(args[0])
+         cli/cmd/bead.go:1281 s.Close(id)
+         cli/internal/agent/execute_bead_loop.go:4485 store.Get(id)
+         cli/internal/agent/execute_bead_loop.go:4811 store.Update(beadID, ...)
+   `go build ./...` and the lefthook go-build hook will fail at every one
+   of those callsites the instant Init/Get/Update/Close/ReadAll/GenID/
+   GetWithArchive/ReadAllFiltered become non-variadic ctx-first. There is
+   no signature shape that satisfies AC1 while preserving all current
+   call patterns (Go does not allow same-name method overloads on a
+   single receiver type).
+
+6. Step 0 size envelope is also exceeded for the only resolution that
+   preserves AC1+AC3: the necessary mechanical caller sweep crosses ~170
+   files in five packages (cmd, internal/agent, internal/server,
+   internal/attemptmetrics, internal/agentmetrics) — well past the
+   "~500 lines across ~5+ files in unrelated packages" guardrail. That
+   is exactly the sweep that NON-SCOPE excludes, and the parent split
+   (TD-027 / ddx-464feba2) was rejected for the same reason.
+
+Operator action requested:
+
+  Re-scope this bead to one of:
+
+  (a) Add the caller-package migration to scope (delete the NON-SCOPE
+      block and AC4's "no caller-package changes"). This becomes the
+      original TD-027 sweep that previously failed as too large; if
+      pursued, expect a multi-file diff across cli/cmd,
+      cli/internal/agent, cli/internal/server,
+      cli/internal/attemptmetrics, cli/internal/agentmetrics.
+
+  (b) Replace AC3 with a narrower verification (e.g. "go test
+      ./internal/bead/... and go vet ./internal/bead/... pass"), and
+      explicitly accept that `go build ./...` and lefthook pre-commit
+      will be red until follow-up caller-migration beads land. The
+      follow-up beads would then re-establish AC3 once the sweep is
+      complete.
+
+  (c) Replace AC1 with an additive shape that does not rename or
+      retype the existing variadic methods — e.g. "add new ctx-first
+      Store methods with distinct names (InitCtx / GetCtx / …) so the
+      legacy variadic surface stays in place during the migration",
+      then a follow-up bead deletes the variadic methods after the
+      caller sweep finishes. This satisfies the spirit of TD-027
+      (introducing the typed ctx-first surface in the bead package
+      first) without breaking the build outside the package.
+
+No code changes were made on this attempt. Request was triaged
+strictly against the bead body — no /tmp scratch files, no work
+outside the worktree.
