@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260516T180246-db98a449",
+  "bead_id": "ddx-04e89823",
+  "base_rev": "b2e76d4985bd7d93be4722eb75ddb13a245d34cc",
+  "created_at": "2026-05-16T18:02:54.272526984Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-04e89823",
+    "title": "store: cascade-close superseded children inside Close()",
+    "description": "PROBLEM\nBeads marked superseded-by:\u003cY\u003e never close automatically when Y closes. ddx-847df529 (parent ddx-09d7d787) carries superseded-by:ddx-c2a66f45-wt-6bee7238 and a note \"Do not dispatch this bead independently\"; the superseder closed weeks ago but the leftover stays open and blocks its parent epic. This is a primary contributor to the stuck-queue state on the current project (RC-2 in the FEAT-010 reason taxonomy).\n\nROOT CAUSE\ncli/internal/bead/store.go Close(Y) closes only Y. It does not look for open beads X with superseded-by==Y and cascade-close them. FEAT-010 §Idle-Path Diagnosis and Auto-Remediation now requires this cascade with a strict scope guard.\n\nPROPOSED FIX\nExtend cli/internal/bead/store.go Close(Y) with a post-close cascade step. After Y closes, scan for open beads X where supersession-by-Y is the sole remaining reason to stay open. Strict scope contract (each must hold; if any fails, surface in ddx work focus Section A, do NOT cascade):\n- X is open AND (X.superseded-by == Y OR X carries label superseded-by:Y) AND Y is now closed.\n- X has no other open dependents (no open bead Z with Z.dependencies referencing X).\n- X has no open dependencies of its own beyond the supersession marker.\n- X has attempt_count == 0.\n- X has no operator notes added after the supersession marker timestamp.\n- X is not currently claimed or in-progress (no live claim_id).\n- X carries no manual-hold / no-auto-close / container override label.\n\nRe-read X's current tracker state inside the same Close(Y) invocation before mutating — a concurrent worker may have changed X since the scan started.\n\nIdempotent: re-running Close(Y) is a no-op for already-closed X.\nCycle-guarded: track visited IDs within one Close(Y) call; cascade is one hop deep. If X is a superseder for an open Z, Z's cascade is DEFERRED to a separate operator action (do not transitively cascade).\nAudit: emit a superseded_close event on X with body {closed_by_cascade_of: Y, reason: \"closed_as_superseded_via:Y\"}. Operators can grep events to reverse.\n\nAdd operator override flag at the work command surface in a separate bead (--no-auto-supersede-close); the Close() code path always runs the cascade unless the flag has been threaded through. For this bead, accept the cascade always firing; the flag wiring is the work-loop bead's responsibility.\n\nNON-SCOPE\n- Cascading transitively beyond one hop (deferred to a future bead if ever needed).\n- The work-loop wiring of --no-auto-supersede-close flag (separate bead).\n- RC-3 dead-intermediate cleanup walk-up (separate bead, depends on this one).\n\nPARENT AND DEPS\nParent: ddx-2a1ece2b. No deps.",
+    "acceptance": "1. cli/internal/bead/store.go Close() performs a one-hop supersession cascade post-close, gated by every scope check listed in the description.\n2. TestClose_SupersededCascade_Eligible in cli/internal/bead/store_test.go: creates Y (open), X (open, superseded-by:Y, attempt_count==0, no other state), closes Y, asserts X is closed with a superseded_close event whose body cites closed_by_cascade_of: Y.\n3. TestClose_SupersededCascade_OperatorNotedNotCascaded: creates Y, X (open, superseded-by:Y, has operator notes added after the supersession marker timestamp), closes Y, asserts X remains open and no superseded_close event was emitted.\n4. TestClose_SupersededCascade_OneHopCycleGuard: creates Y, X (open, superseded-by:Y), Z (open, superseded-by:X). Closes Y. Asserts X closes, Z remains open (cascade deferred), no infinite loop.\n5. TestClose_SupersededCascade_Idempotent: closing an already-closed Y a second time produces no new events and no mutations.\n6. TestClose_SupersededCascade_ClaimedOrInProgress_NotCascaded: X has a live claim_id; closing Y does not cascade X.\n7. cd cli \u0026\u0026 go test ./internal/bead/... -count=1 green.\n8. cd cli \u0026\u0026 go test ./... green (no regressions in other packages).\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-2a1ece2b",
+    "labels": [
+      "kind:feat",
+      "area:bead-lifecycle",
+      "phase:2",
+      "spec:FEAT-010",
+      "spec:reliability-principles"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"opus\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-16T18:02:45.503745809Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=opus"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260516T180016-6b66ca90\",\"harness\":\"claude\",\"model\":\"opus\",\"input_tokens\":27,\"output_tokens\":4951,\"total_tokens\":4978,\"cost_usd\":0.9963715000000003,\"duration_ms\":142437,\"exit_code\":1}",
+          "created_at": "2026-05-16T18:02:45.565001055Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4978 cost_usd=0.9964 model=opus"
+        }
+      ],
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nD\t.agents/skills/ddx/SKILL.md\nD\t.agents/skills/ddx/bead-lifecycle/SKILL.md\nD\t.agents/skills/ddx/reference/work.md\nD\t.claude/skills/ddx/SKILL.md\nD\t.claude/skills/ddx/bead-lifecycle/SKILL.md\nD\t.claude/skills/ddx/reference/work.md",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-05-16T17:01:14Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T180246-db98a449",
+    "prompt": ".ddx/executions/20260516T180246-db98a449/prompt.md",
+    "manifest": ".ddx/executions/20260516T180246-db98a449/manifest.json",
+    "result": ".ddx/executions/20260516T180246-db98a449/result.json",
+    "checks": ".ddx/executions/20260516T180246-db98a449/checks.json",
+    "usage": ".ddx/executions/20260516T180246-db98a449/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-04e89823-20260516T180246-db98a449"
+  },
+  "prompt_sha": "3993ecd3e1c445109feeb395846457df6635e46f2945a33363e91650583df4ae"
+}
