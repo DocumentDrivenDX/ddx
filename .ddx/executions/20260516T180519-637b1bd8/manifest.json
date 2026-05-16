@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260516T180519-637b1bd8",
+  "bead_id": "ddx-06b8f24a",
+  "base_rev": "76e3ba61339e2ec2d160add06297642fa41e87e1",
+  "created_at": "2026-05-16T18:05:24.255754328Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-06b8f24a",
+    "title": "work plan: --explain and --json flags",
+    "description": "PROBLEM\nddx work plan today shows one-line aggregate skip messages (\"skipped 10 ready epic(s) with open children...\"). Operators cannot see which specific reason code the diagnoser assigned to each bead, and there is no machine-readable output for chaining.\n\nROOT CAUSE\ncli/cmd/work_plan.go (runWorkPlan or equivalent) does not call cli/internal/bead/diagnose.go and does not expose --explain/--json.\n\nPROPOSED FIX\nExtend cli/cmd/work_plan.go:\n- Add --explain flag. When set, for every entry in breakdown.Epics, breakdown.DepWaiting, breakdown.OperatorAttention, print a per-bead line under the existing aggregate header: \"  \u003cbead-id\u003e  \u003creason-code\u003e  \u003cdetail\u003e  \u003ccited-ids if any\u003e\". Keep existing one-line aggregate (or replace it with a count) for backward compatibility.\n- Add --json flag. Emit a structured object: { ready: [...], blocked_by_reason: { \u003creason_code\u003e: [{id, title, detail, cited_ids}] }, summary: { total_open, ready, ... } }. Suitable for piping into jq.\n\nBoth flags are read-only. They share the diagnoser path with ddx work focus and ddx work (the actual loop); rendering differs.\n\nNON-SCOPE\n- Changing the default output format (the existing aggregate stays unless --explain is set).\n- Auto-action / mutation (this is read-only).\n\nPARENT AND DEPS\nParent: ddx-2a1ece2b. Depends on ddx-79e66725 (diagnose function).",
+    "acceptance": "1. ddx work plan --explain prints per-bead reason codes from the FEAT-010 taxonomy under each non-ready entry, including cited blocker IDs for dep_blocked_by.\n2. ddx work plan --json emits the documented schema, parseable by jq.\n3. TestWorkPlan_ExplainPrintsPerBeadReason: fixture seeds beads matching each reason code; output contains every code at least once.\n4. TestWorkPlan_JSONStructure: --json output validates against the documented schema; ready, blocked_by_reason, and summary fields all populated.\n5. TestWorkPlan_BackwardCompatDefault: without flags, output matches today's behavior (existing test should not need changes beyond accepting an optional trailing summary line if added).\n6. cd cli \u0026\u0026 go test ./cmd/... -run TestWorkPlan -count=1 green.\n7. cd cli \u0026\u0026 go test ./... green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-2a1ece2b",
+    "labels": [
+      "kind:feat",
+      "area:cli",
+      "operator-ux",
+      "phase:2",
+      "spec:FEAT-010"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T180519-637b1bd8",
+    "prompt": ".ddx/executions/20260516T180519-637b1bd8/prompt.md",
+    "manifest": ".ddx/executions/20260516T180519-637b1bd8/manifest.json",
+    "result": ".ddx/executions/20260516T180519-637b1bd8/result.json",
+    "checks": ".ddx/executions/20260516T180519-637b1bd8/checks.json",
+    "usage": ".ddx/executions/20260516T180519-637b1bd8/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-06b8f24a-20260516T180519-637b1bd8"
+  },
+  "prompt_sha": "e8917fe3a7ee134a02960741451dad0b19777944c07508a9c8493f1e15f1709f"
+}
