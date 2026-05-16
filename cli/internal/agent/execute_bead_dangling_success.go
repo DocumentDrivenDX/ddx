@@ -1,7 +1,7 @@
 package agent
 
-// execute_bead_dangling_success.go — detection and idempotent recovery for
-// dangling-success beads (ddx-2b2d114e).
+// execute_bead_dangling_success.go — detection and recovery for
+// dangling-success beads (ddx-2b2d114e, ddx-f1e7dfdf).
 //
 // A "dangling success" is an in_progress bead whose most recent execution
 // produced outcome=task_succeeded and a non-empty result_rev, but the
@@ -11,9 +11,10 @@ package agent
 // Two sub-cases:
 //   A. result_rev IS reachable from HEAD (merge succeeded, close didn't).
 //      Recovery: call CloseWithEvidence directly; no re-execution needed.
-//   B. result_rev is NOT reachable from HEAD (crash during Land / dangling commit).
-//      Recovery: surface the state via DetectDanglingSuccessBeads so
-//      operators can manually resolve or retry.
+//   B. result_rev is NOT reachable from HEAD (crash during Land / dangling
+//      commit). Recovery: preserve the successful commit under
+//      refs/ddx/iterations/... when the object still exists locally, or park
+//      the bead for operator attention when DDx cannot recover the commit.
 
 import (
 	"context"
@@ -46,12 +47,33 @@ type DanglingSuccessFinding struct {
 	ResultFile string `json:"result_file"`
 }
 
+type danglingSuccessOutcome string
+
+const (
+	danglingSuccessOutcomeClosed           danglingSuccessOutcome = "closed"
+	danglingSuccessOutcomePreserved        danglingSuccessOutcome = "preserved"
+	danglingSuccessOutcomeOperatorRequired danglingSuccessOutcome = "operator_required"
+)
+
+// DanglingSuccessRecovery is the terminal decision for a previously successful
+// attempt. Any non-nil result means the caller must skip a fresh execution.
+type DanglingSuccessRecovery struct {
+	Outcome       danglingSuccessOutcome
+	AttemptID     string
+	BaseRev       string
+	ResultRev     string
+	PreserveRef   string
+	FailureReason string
+	SessionID     string
+}
+
 // latestTaskSucceededResult scans .ddx/executions/ for the most recent
 // result.json that belongs to beadID and has outcome=task_succeeded with a
 // non-empty result_rev. Returns nil when no such entry is found.
 //
 // The scan is intentionally cheap (directory listing + JSON decode per dir);
-// it only runs when a stale in_progress claim is detected, which is rare.
+// it only runs when the work loop has already claimed a bead and is checking
+// whether a prior successful attempt must be reconciled before retry.
 func latestTaskSucceededResult(projectRoot, beadID string) *ExecuteBeadResult {
 	execDir := executeBeadArtifactRoot(projectRoot)
 	entries, err := os.ReadDir(execDir)
@@ -99,6 +121,14 @@ func isRevReachableFromHead(projectRoot, rev string) bool {
 		return false
 	}
 	err := internalgit.Command(context.Background(), projectRoot, "merge-base", "--is-ancestor", rev, "HEAD").Run()
+	return err == nil
+}
+
+func isCommitObjectPresent(projectRoot, rev string) bool {
+	if rev == "" || projectRoot == "" {
+		return false
+	}
+	err := internalgit.Command(context.Background(), projectRoot, "cat-file", "-e", rev+"^{commit}").Run()
 	return err == nil
 }
 
@@ -197,77 +227,157 @@ func DetectDanglingSuccessBeads(projectRoot string) ([]DanglingSuccessFinding, e
 	return findings, nil
 }
 
-// recoverDanglingSuccess checks whether the just-claimed bead (identified by
-// candidateWasInProgress=true) has a prior task_succeeded result whose
-// result_rev is already reachable from HEAD. If so, it closes the bead
-// idempotently and returns (true, nil) — the caller must skip execution.
-//
-// If result_rev is NOT reachable (dangling commit, Instance A), returns
-// (false, nil) and emits a diagnostic event so the operator can investigate
-// via `ddx bead doctor --dangling`.
-//
-// The function is a no-op (returns false, nil) when candidateWasInProgress is
-// false or when no prior success is found.
+func appendDanglingSuccessEvent(store ExecuteBeadLoopStore, beadID string, event bead.BeadEvent) {
+	if store == nil || beadID == "" {
+		return
+	}
+	_ = store.AppendEvent(beadID, event)
+}
+
+func parkDanglingSuccessForOperator(store ExecuteBeadLoopStore, beadID, reason, suggestedAction, summary string, at time.Time) error {
+	return store.ParkToProposed(beadID, bead.ParkAutoRecoveryFailed, func(b *bead.Bead) {
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          reason,
+			Since:           at.UTC().Format(time.RFC3339),
+			Source:          "ddx work",
+			SuggestedAction: suggestedAction,
+			Summary:         summary,
+		})
+	})
+}
+
+// recoverDanglingSuccess reconciles the latest task_succeeded result for a
+// just-claimed bead before the loop dispatches another agent attempt.
 func recoverDanglingSuccess(
 	store ExecuteBeadLoopStore,
 	projectRoot string,
 	beadID string,
-	candidateWasInProgress bool,
 	assignee string,
 	nowFn func() time.Time,
 	emit func(string, map[string]any),
-) (recovered bool, err error) {
-	if !candidateWasInProgress || projectRoot == "" {
-		return false, nil
+) (*DanglingSuccessRecovery, error) {
+	if projectRoot == "" {
+		return nil, nil
 	}
 
 	prior := latestTaskSucceededResult(projectRoot, beadID)
 	if prior == nil {
-		return false, nil
+		return nil, nil
 	}
 
-	reachable := isRevReachableFromHead(projectRoot, prior.ResultRev)
-	if !reachable {
-		// Instance A: dangling commit — the merge was never applied.
-		// Surface a diagnostic event but don't block execution (the caller
-		// will proceed with a fresh attempt, which is the safe fallback).
-		if emit != nil {
-			emit("bead.dangling_success_unmerged", map[string]any{
-				"bead_id":    beadID,
-				"attempt_id": prior.AttemptID,
-				"result_rev": prior.ResultRev,
-				"reachable":  false,
-				"action":     "run_ddx_bead_doctor_dangling_to_recover",
-			})
-		}
-		return false, nil
-	}
-
-	// Instance B: merge succeeded, close didn't — recover idempotently.
-	if emit != nil {
-		emit("bead.dangling_success_recovery", map[string]any{
-			"bead_id":    beadID,
-			"attempt_id": prior.AttemptID,
-			"result_rev": prior.ResultRev,
-		})
-	}
-
-	// Append a recovery event so the audit trail shows what happened.
 	t := time.Now().UTC()
 	if nowFn != nil {
 		t = nowFn().UTC()
 	}
-	_ = store.AppendEvent(beadID, bead.BeadEvent{
-		Kind:      "dangling-success-recovery",
-		Summary:   "recovered dangling success: closing bead after merged result_rev detected",
-		Body:      fmt.Sprintf("result_rev=%s\nattempt_id=%s\naction=idempotent_close", prior.ResultRev, prior.AttemptID),
+
+	reachable := isRevReachableFromHead(projectRoot, prior.ResultRev)
+	if reachable {
+		if emit != nil {
+			emit("bead.dangling_success_recovery", map[string]any{
+				"bead_id":    beadID,
+				"attempt_id": prior.AttemptID,
+				"result_rev": prior.ResultRev,
+				"reachable":  true,
+			})
+		}
+
+		appendDanglingSuccessEvent(store, beadID, bead.BeadEvent{
+			Kind:      "dangling-success-recovery",
+			Summary:   "recovered dangling success: closing bead after merged result_rev detected",
+			Body:      fmt.Sprintf("attempt_id=%s\nresult_rev=%s\naction=idempotent_close", prior.AttemptID, prior.ResultRev),
+			Actor:     assignee,
+			Source:    "ddx work",
+			CreatedAt: t,
+		})
+
+		if cerr := store.CloseWithEvidence(beadID, prior.SessionID, prior.ResultRev); cerr != nil {
+			return nil, fmt.Errorf("dangling-success recovery: CloseWithEvidence(%s): %w", beadID, cerr)
+		}
+		return &DanglingSuccessRecovery{
+			Outcome:   danglingSuccessOutcomeClosed,
+			AttemptID: prior.AttemptID,
+			BaseRev:   prior.BaseRev,
+			ResultRev: prior.ResultRev,
+			SessionID: prior.SessionID,
+		}, nil
+	}
+
+	payload := map[string]any{
+		"bead_id":    beadID,
+		"attempt_id": prior.AttemptID,
+		"result_rev": prior.ResultRev,
+		"reachable":  false,
+	}
+
+	if isCommitObjectPresent(projectRoot, prior.ResultRev) {
+		ref := PreserveRef(beadID, prior.BaseRev)
+		if err := (&RealOrchestratorGitOps{}).UpdateRef(projectRoot, ref, prior.ResultRev); err == nil {
+			payload["preserve_ref"] = ref
+			payload["action"] = "preserve_and_park"
+			if emit != nil {
+				emit("bead.dangling_success_preserved", payload)
+			}
+			appendDanglingSuccessEvent(store, beadID, bead.BeadEvent{
+				Kind:      "dangling-success-preserved",
+				Summary:   "successful detached result preserved for operator landing",
+				Body:      fmt.Sprintf("attempt_id=%s\nresult_rev=%s\npreserve_ref=%s", prior.AttemptID, prior.ResultRev, ref),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: t,
+			})
+			if err := parkDanglingSuccessForOperator(
+				store,
+				beadID,
+				"successful result commit was preserved for manual landing",
+				fmt.Sprintf("inspect %s and land or close the bead manually", ref),
+				"successful detached result preserved for operator landing",
+				t,
+			); err != nil {
+				return nil, fmt.Errorf("dangling-success recovery: ParkToProposed(%s): %w", beadID, err)
+			}
+			return &DanglingSuccessRecovery{
+				Outcome:     danglingSuccessOutcomePreserved,
+				AttemptID:   prior.AttemptID,
+				BaseRev:     prior.BaseRev,
+				ResultRev:   prior.ResultRev,
+				PreserveRef: ref,
+				SessionID:   prior.SessionID,
+			}, nil
+		} else {
+			payload["failure_reason"] = fmt.Sprintf("failed to preserve successful result_rev under durable ref: %v", err)
+		}
+	} else {
+		payload["failure_reason"] = "successful result_rev is not present in the local git object database"
+	}
+
+	failureReason, _ := payload["failure_reason"].(string)
+	if emit != nil {
+		emit("bead.dangling_success_operator_required", payload)
+	}
+	appendDanglingSuccessEvent(store, beadID, bead.BeadEvent{
+		Kind:      "dangling-success-operator-required",
+		Summary:   "successful detached result could not be landed automatically",
+		Body:      fmt.Sprintf("attempt_id=%s\nresult_rev=%s\nfailure_reason=%s", prior.AttemptID, prior.ResultRev, failureReason),
 		Actor:     assignee,
 		Source:    "ddx work",
 		CreatedAt: t,
 	})
-
-	if cerr := store.CloseWithEvidence(beadID, prior.SessionID, prior.ResultRev); cerr != nil {
-		return false, fmt.Errorf("dangling-success recovery: CloseWithEvidence(%s): %w", beadID, cerr)
+	if err := parkDanglingSuccessForOperator(
+		store,
+		beadID,
+		"successful result commit could not be recovered automatically",
+		fmt.Sprintf("recover or reconstruct result_rev %s from execution evidence before rerunning the bead", prior.ResultRev),
+		"successful detached result requires operator recovery",
+		t,
+	); err != nil {
+		return nil, fmt.Errorf("dangling-success recovery: ParkToProposed(%s): %w", beadID, err)
 	}
-	return true, nil
+	return &DanglingSuccessRecovery{
+		Outcome:       danglingSuccessOutcomeOperatorRequired,
+		AttemptID:     prior.AttemptID,
+		BaseRev:       prior.BaseRev,
+		ResultRev:     prior.ResultRev,
+		FailureReason: failureReason,
+		SessionID:     prior.SessionID,
+	}, nil
 }

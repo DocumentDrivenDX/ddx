@@ -54,6 +54,17 @@ func gitCommitFile(t *testing.T, dir, filename, content, message string) string 
 	return mustGitRevParse(t, dir, "HEAD")
 }
 
+// gitDetachedBranchCommit creates a commit on a side branch and checks out
+// main again so the commit remains present but unreachable from HEAD.
+func gitDetachedBranchCommit(t *testing.T, dir, branch, filename, content, message string) (baseSHA, resultSHA string) {
+	t.Helper()
+	baseSHA = mustGitRevParse(t, dir, "HEAD")
+	runGitInteg(t, dir, "checkout", "-b", branch)
+	resultSHA = gitCommitFile(t, dir, filename, content, message)
+	runGitInteg(t, dir, "checkout", "main")
+	return baseSHA, resultSHA
+}
+
 // ---------------------------------------------------------------------------
 // Unit tests for latestTaskSucceededResult
 // ---------------------------------------------------------------------------
@@ -144,21 +155,8 @@ func TestLatestTaskSucceededResult_ReturnsMostRecent(t *testing.T) {
 // Unit tests for recoverDanglingSuccess
 // ---------------------------------------------------------------------------
 
-// TestRecoverDanglingSuccess_NopWhenNotInProgress verifies that beads that were
-// not stale in_progress are never touched.
-func TestRecoverDanglingSuccess_NopWhenNotInProgress(t *testing.T) {
-	root := t.TempDir()
-	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
-	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-test", Title: "test bead", IssueType: "task"}))
-
-	recovered, err := recoverDanglingSuccess(store, root, "ddx-test", false, "worker", nil, nil)
-	require.NoError(t, err)
-	assert.False(t, recovered)
-}
-
-// TestRecoverDanglingSuccess_NopWhenNoPriorSuccess verifies that a stale
-// in_progress bead with no prior task_succeeded result is not recovered.
+// TestRecoverDanglingSuccess_NopWhenNoPriorSuccess verifies that a claimed
+// bead with no prior task_succeeded result is not recovered.
 func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
@@ -167,9 +165,9 @@ func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 	require.NoError(t, store.Claim("ddx-test", "worker"))
 
 	// No result.json at all.
-	recovered, err := recoverDanglingSuccess(store, root, "ddx-test", true, "worker", nil, nil)
+	recovery, err := recoverDanglingSuccess(store, root, "ddx-test", "worker", nil, nil)
 	require.NoError(t, err)
-	assert.False(t, recovered)
+	assert.Nil(t, recovery)
 
 	// Bead should still be in_progress.
 	b, _ := store.Get("ddx-test")
@@ -177,8 +175,8 @@ func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 }
 
 // TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable verifies that
-// Instance A (dangling commit not reachable from HEAD) emits a diagnostic
-// event and does NOT close the bead.
+// a missing successful result_rev becomes an operator-visible terminal state
+// instead of a silent retry.
 func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
@@ -189,24 +187,35 @@ func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T)
 	// Write a result.json whose result_rev is a fake SHA (not in this repo).
 	writeResultJSON(t, projectRoot, "20260508T100000-fake", ExecuteBeadResult{
 		BeadID:    beadID,
+		AttemptID: "20260508T100000-fake",
 		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
 		ResultRev: "deadbeefdeadbeefdeadbeef",
 		BaseRev:   "base000",
 		SessionID: "sess-fake",
 	})
 
-	var emittedEvents []string
-	emit := func(kind string, _ map[string]any) { emittedEvents = append(emittedEvents, kind) }
+	var eventKind string
+	var payload map[string]any
+	emit := func(kind string, data map[string]any) {
+		eventKind = kind
+		payload = data
+	}
 
-	recovered, err := recoverDanglingSuccess(store, projectRoot, beadID, true, "worker", nil, emit)
+	recovery, err := recoverDanglingSuccess(store, projectRoot, beadID, "worker", nil, emit)
 	require.NoError(t, err)
-	assert.False(t, recovered, "should not recover when result_rev is not reachable")
-	assert.Contains(t, emittedEvents, "bead.dangling_success_unmerged",
-		"must emit diagnostic event for dangling commit")
+	require.NotNil(t, recovery)
+	assert.Equal(t, danglingSuccessOutcomeOperatorRequired, recovery.Outcome)
+	assert.Equal(t, "bead.dangling_success_operator_required", eventKind)
+	assert.Equal(t, beadID, payload["bead_id"])
+	assert.Equal(t, "20260508T100000-fake", payload["attempt_id"])
+	assert.Equal(t, "deadbeefdeadbeefdeadbeef", payload["result_rev"])
+	assert.Contains(t, payload["failure_reason"], "not present in the local git object database")
 
-	// Bead must remain in_progress.
 	b, _ := store.Get(beadID)
-	assert.Equal(t, bead.StatusInProgress, b.Status)
+	assert.Equal(t, bead.StatusProposed, b.Status, "missing successful commit must park the bead instead of retrying")
+	meta := bead.GetNeedsHumanMeta(*b)
+	assert.Equal(t, "successful result commit could not be recovered automatically", meta.Reason)
+	assert.Contains(t, meta.SuggestedAction, "recover or reconstruct result_rev")
 }
 
 // ---------------------------------------------------------------------------
@@ -299,6 +308,91 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 	// AC2: loop must record a success.
 	assert.Equal(t, 1, result.Successes, "dangling-success recovery counts as a success")
 	assert.Equal(t, 0, result.Failures)
+}
+
+func TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	baseSHA, resultSHA := gitDetachedBranchCommit(
+		t,
+		projectRoot,
+		"worker-result",
+		"worker-output.txt",
+		"detached result\n",
+		"chore: detached worker result for "+beadID,
+	)
+
+	const attemptID = "20260515T223000-unmerged"
+	writeResultJSON(t, projectRoot, attemptID, ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: attemptID,
+		SessionID: "sess-unmerged",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: resultSHA,
+		BaseRev:   baseSHA,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+
+	frozen := time.Date(2026, 5, 15, 23, 59, 0, 0, time.UTC)
+	prevNow := NowFunc
+	NowFunc = func() time.Time { return frozen }
+	t.Cleanup(func() { NowFunc = prevNow })
+
+	store := bead.NewStore(ddxDir)
+	var execCalled atomic.Int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, id string) (ExecuteBeadReport, error) {
+			execCalled.Add(1)
+			return ExecuteBeadReport{
+				BeadID: id,
+				Status: ExecuteBeadStatusSuccess,
+				Detail: "executor should not have been called",
+			}, nil
+		}),
+	}
+
+	opts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:        true,
+		ProjectRoot: projectRoot,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(0), execCalled.Load(), "prior successful result must be reconciled before any retry")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, result.LastFailureStatus)
+
+	got, err := store.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+
+	preserveRef := PreserveRef(beadID, baseSHA)
+	assert.Equal(t, resultSHA, mustGitRevParse(t, projectRoot, preserveRef))
+
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Equal(t, "successful result commit was preserved for manual landing", meta.Reason)
+	assert.Contains(t, meta.SuggestedAction, preserveRef)
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	var preservedEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "dangling-success-preserved" {
+			preservedEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, preservedEvent, "preserved dangling success event must be recorded")
+	assert.Contains(t, preservedEvent.Body, "attempt_id="+attemptID)
+	assert.Contains(t, preservedEvent.Body, "result_rev="+resultSHA)
+	assert.Contains(t, preservedEvent.Body, "preserve_ref="+preserveRef)
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +540,100 @@ func TestDetectDanglingSuccessBeads_IgnoresClosedBeads(t *testing.T) {
 	assert.Empty(t, findings, "closed beads must not appear in dangling-success findings")
 }
 
+func TestDanglingSuccess_DDX5baa6a15SuccessfulOpenBeadRecoveredBeforeRetry(t *testing.T) {
+	// Incident model:
+	//   - attempt 20260515T222727-7b672c7c produced worker commit dabf77e68
+	//   - attempt 20260515T223843-6eb42169 produced worker commit 2776da59a
+	//   - the operator later landed the second success with manual merge a14abb332
+	//
+	// This regression keeps the bead open/worker-ready and verifies the loop
+	// closes it from the latest success evidence before any third dispatch.
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	olderBase, olderResult := gitDetachedBranchCommit(
+		t,
+		projectRoot,
+		"incident-attempt-1",
+		"attempt-1.txt",
+		"first successful detached result\n",
+		"chore: model detached worker result for dabf77e68",
+	)
+	mergedSHA := gitCommitFile(
+		t,
+		projectRoot,
+		"attempt-2.txt",
+		"second successful result merged to main\n",
+		"chore: stand-in for manual merge a14abb332 of worker result 2776da59a",
+	)
+
+	writeResultJSON(t, projectRoot, "20260515T222727-7b672c7c", ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: "20260515T222727-7b672c7c",
+		SessionID: "sess-ddx-5baa6a15-a1",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: olderResult,
+		BaseRev:   olderBase,
+		Status:    ExecuteBeadStatusSuccess,
+	})
+	writeResultJSON(t, projectRoot, "20260515T223843-6eb42169", ExecuteBeadResult{
+		BeadID:    beadID,
+		AttemptID: "20260515T223843-6eb42169",
+		SessionID: "sess-ddx-5baa6a15-a2",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+		ResultRev: mergedSHA,
+		BaseRev:   mustGitRevParse(t, projectRoot, mergedSHA+"^"),
+		Status:    ExecuteBeadStatusSuccess,
+	})
+
+	store := bead.NewStore(ddxDir)
+	var execCalled atomic.Int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, id string) (ExecuteBeadReport, error) {
+			execCalled.Add(1)
+			return ExecuteBeadReport{
+				BeadID: id,
+				Status: ExecuteBeadStatusSuccess,
+				Detail: "executor should not have been called",
+			}, nil
+		}),
+	}
+
+	opts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:        true,
+		ProjectRoot: projectRoot,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(0), execCalled.Load(), "latest successful open-bead result must be reconciled before any retry")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+
+	got, err := store.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+
+	events, err := store.Events(beadID)
+	require.NoError(t, err)
+	var recoveryEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "dangling-success-recovery" {
+			recoveryEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, recoveryEvent, "merged latest success must emit dangling-success recovery evidence")
+	assert.Contains(t, recoveryEvent.Body, "attempt_id=20260515T223843-6eb42169")
+	assert.Contains(t, recoveryEvent.Body, "result_rev="+mergedSHA)
+}
+
 // ---------------------------------------------------------------------------
 // Helper: newExecuteLoopProjectRoot creates a minimal git repo + bead store
 // for pure loop tests that don't need the script harness.
@@ -478,7 +666,7 @@ func newExecuteLoopProjectRoot(t *testing.T) (projectRoot string, beadID string)
 // for the recoverDanglingSuccess path against a real git repo. It verifies that:
 // - when result_rev is reachable from HEAD
 // - and the bead is claimed as in_progress
-// → recoverDanglingSuccess closes the bead and returns recovered=true.
+// → recoverDanglingSuccess closes the bead and returns a terminal recovery.
 func TestDanglingSuccess_RecoverFromResultRevAlreadyMerged(t *testing.T) {
 	projectRoot, beadID := newExecuteLoopProjectRoot(t)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
@@ -507,9 +695,10 @@ func TestDanglingSuccess_RecoverFromResultRevAlreadyMerged(t *testing.T) {
 	var events []string
 	emit := func(kind string, _ map[string]any) { events = append(events, kind) }
 
-	recovered, err := recoverDanglingSuccess(store, projectRoot, beadID, true, "worker", nil, emit)
+	recovery, err := recoverDanglingSuccess(store, projectRoot, beadID, "worker", nil, emit)
 	require.NoError(t, err)
-	assert.True(t, recovered, "result_rev is reachable — must be recovered")
+	require.NotNil(t, recovery)
+	assert.Equal(t, danglingSuccessOutcomeClosed, recovery.Outcome, "result_rev is reachable — must be recovered")
 
 	afterB, err := store.Get(beadID)
 	require.NoError(t, err)

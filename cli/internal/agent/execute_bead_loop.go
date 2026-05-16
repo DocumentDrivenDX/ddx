@@ -806,6 +806,43 @@ func appendForceClaimEvent(store BeadEventAppender, beadID, assignee, source, re
 	})
 }
 
+func danglingSuccessRecoveryReport(beadID string, recovery *DanglingSuccessRecovery) ExecuteBeadReport {
+	report := ExecuteBeadReport{BeadID: beadID}
+	if recovery == nil {
+		report.Status = ExecuteBeadStatusExecutionFailed
+		report.Detail = "dangling-success recovery returned no terminal outcome"
+		report.OutcomeReason = "operator_required"
+		return report
+	}
+	report.AttemptID = recovery.AttemptID
+	report.SessionID = recovery.SessionID
+	report.BaseRev = recovery.BaseRev
+	report.ResultRev = recovery.ResultRev
+	report.PreserveRef = recovery.PreserveRef
+
+	switch recovery.Outcome {
+	case danglingSuccessOutcomeClosed:
+		report.Status = ExecuteBeadStatusSuccess
+		report.Detail = "dangling-success recovery: bead closed idempotently (result_rev already merged)"
+	case danglingSuccessOutcomePreserved:
+		report.Status = ExecuteBeadStatusPreservedNeedsReview
+		report.Detail = "dangling-success: preserved successful result for operator landing"
+	case danglingSuccessOutcomeOperatorRequired:
+		report.Status = ExecuteBeadStatusExecutionFailed
+		report.OutcomeReason = "operator_required"
+		if recovery.FailureReason != "" {
+			report.Detail = "dangling-success: successful result could not be landed automatically: " + recovery.FailureReason
+		} else {
+			report.Detail = "dangling-success: successful result could not be landed automatically"
+		}
+	default:
+		report.Status = ExecuteBeadStatusExecutionFailed
+		report.OutcomeReason = "operator_required"
+		report.Detail = "dangling-success: unrecognized recovery outcome"
+	}
+	return report
+}
+
 const preExecuteCheckpointDirtyMarker = "pre-execute-bead checkpoint: " + preDispatchCheckpointDirtyRefusalPrefix
 
 func preExecuteCheckpointDirtyStop(report ExecuteBeadReport, err error, projectRoot, beadID string) (*OperatorAttentionStop, bool) {
@@ -1352,41 +1389,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			_, _ = fmt.Fprint(runtime.Log, workLog.FormatHeader(candidate.ID, candidate.Title))
 		}
 
-		// Dangling-success recovery (ddx-2b2d114e): when we just reclaimed a
-		// stale in_progress bead, check whether a prior task_succeeded result
-		// exists with a result_rev already merged into HEAD. If so, close the
-		// bead idempotently and skip re-execution — the work is already done.
-		if candidate.Status == bead.StatusInProgress {
-			recovered, recErr := recoverDanglingSuccess(
-				w.Store, runtime.ProjectRoot, candidate.ID,
-				true, assignee, now, emit,
-			)
-			if recErr != nil {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "dangling-success recovery error (%s): %v\n", candidate.ID, recErr)
-				}
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("recoverDanglingSuccess", assignee, result, recErr)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				continue
+		recovery, recErr := recoverDanglingSuccess(
+			w.Store, runtime.ProjectRoot, candidate.ID,
+			assignee, now, emit,
+		)
+		if recErr != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "dangling-success recovery error (%s): %v\n", candidate.ID, recErr)
 			}
-			if recovered {
-				result.Attempts++
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("recoverDanglingSuccess", assignee, result, recErr)
+			})
+			if ctx.Err() != nil {
+				return result, ctx.Err()
+			}
+			continue
+		}
+		if recovery != nil {
+			report := danglingSuccessRecoveryReport(candidate.ID, recovery)
+			result.Attempts++
+			if recovery.Outcome == danglingSuccessOutcomeClosed {
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
-				result.Results = append(result.Results, ExecuteBeadReport{
-					BeadID: candidate.ID,
-					Status: ExecuteBeadStatusSuccess,
-					Detail: "dangling-success recovery: bead closed idempotently (result_rev already merged)",
-				})
-				if applyStop(work.StopInput{Once: loopMode == executeloop.ModeOnce}) {
-					return result, nil
-				}
-				continue
+			} else {
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			}
+			result.Results = append(result.Results, report)
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+			}
+			if finalizeDurableAuditOrStop(candidate.ID, report) {
+				return result, nil
+			}
+			if applyStop(work.StopInput{Once: loopMode == executeloop.ModeOnce}) {
+				return result, nil
+			}
+			continue
 		}
 
 		skipPreClaimIntake := false
