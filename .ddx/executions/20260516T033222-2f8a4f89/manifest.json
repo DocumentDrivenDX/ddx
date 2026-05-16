@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260516T033222-2f8a4f89",
+  "bead_id": "ddx-c6b07648",
+  "base_rev": "38dba7bbaf1a6330291ab77a2760a9bf39e38595",
+  "created_at": "2026-05-16T03:32:27.96929751Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c6b07648",
+    "title": "checks: residual production-reachability — internal/registry installer",
+    "description": "PROBLEM\nCurrent deadcode RTA on 2026-05-15 still reports `internal/registry.InstallPackageFromDir` as unreachable from the production graph, so `ddx-83440482` cannot close from current-tree evidence.\n\nROOT CAUSE WITH FILE:LINE\n`.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` reports `cli/internal/registry/installer.go:65` — `InstallPackageFromDir`.\n\nPROPOSED FIX\nResolve the symbol currently listed for `cli/internal/registry/installer.go` in the committed artifact. WIRE it if a production caller should still exist; DELETE it if the installer surface has moved on to different entry points. If deferred investigation is still needed after ~15 minutes, annotate it with `// wiring:pending \u003cfollow-up-bead-id\u003e` and file the narrower follow-up before closing this bead.\n\nNON-SCOPE\n- Do not touch artifact-type residuals tracked separately.\n- Do not change the production-reachability protocol or checker implementation.",
+    "acceptance": "1. Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\n2. `cd cli \u0026\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/registry/installer\\.go'` returns no hits.\n3. Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\n4. Decisions log written to `.ddx/executions/\u003crun-id\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\n5. `cd cli \u0026\u0026 go test ./...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-83440482",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:backfill",
+      "prevention",
+      "epic-closure",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"`cd cli \\u0026\\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/registry/installer\\\\.go'` returns no hits.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Decisions log written to `.ddx/executions/\\u003crun-id\\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"`cd cli \\u0026\\u0026 go test ./...` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"`lefthook run pre-commit` passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-16T03:31:58.418684428Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T033222-2f8a4f89",
+    "prompt": ".ddx/executions/20260516T033222-2f8a4f89/prompt.md",
+    "manifest": ".ddx/executions/20260516T033222-2f8a4f89/manifest.json",
+    "result": ".ddx/executions/20260516T033222-2f8a4f89/result.json",
+    "checks": ".ddx/executions/20260516T033222-2f8a4f89/checks.json",
+    "usage": ".ddx/executions/20260516T033222-2f8a4f89/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c6b07648-20260516T033222-2f8a4f89"
+  },
+  "prompt_sha": "aa066586ecaf88fc0ccc189295e436a53c275d329c289a5cd4efff3416985cda"
+}

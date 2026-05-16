@@ -1,0 +1,11 @@
+{
+  "attempt_id": "20260516T033222-2f8a4f89",
+  "harness": "claude",
+  "model": "opus",
+  "tokens": 5579,
+  "input_tokens": 26,
+  "cached_tokens": 1092942,
+  "cache_hit_rate": 0.999976211563376,
+  "output_tokens": 5553,
+  "cost_usd": 0.95084875
+}
