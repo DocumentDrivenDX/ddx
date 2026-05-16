@@ -33,16 +33,6 @@ type ArchivePolicy struct {
 	BatchSize int
 }
 
-// DefaultArchivePolicy returns the shipping defaults from TD-027 §(b).
-func DefaultArchivePolicy() ArchivePolicy {
-	return ArchivePolicy{
-		Statuses:       []string{StatusClosed},
-		MinAge:         30 * 24 * time.Hour,
-		MinActiveCount: 2000,
-		BatchSize:      500,
-	}
-}
-
 // archivePartner returns a Store for the beads-archive collection rooted at
 // the same .ddx directory as s. The partner reuses the shipping registry
 // spec for "beads-archive" so file/lock paths are uniform.

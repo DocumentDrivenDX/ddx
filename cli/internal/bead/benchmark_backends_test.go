@@ -13,7 +13,7 @@ type benchStoreMaker func(*testing.B, []Bead) *Store
 func prepareBenchStore(b *testing.B, makeStore benchStoreMaker, beads []Bead) *Store {
 	b.Helper()
 	s := makeStore(b, beads)
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	policy.MinAge = 30 * 24 * time.Hour
 	_, err := s.Archive(policy)

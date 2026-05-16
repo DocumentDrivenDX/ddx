@@ -128,12 +128,6 @@ func ValidateLifecycleTransition(from, to string, opts LifecycleTransitionOption
 	return lifecycleTransitionError(LifecycleIssueTransitionUnsupported, from, to)
 }
 
-// CanLifecycleTransition is a convenience predicate around
-// ValidateLifecycleTransition.
-func CanLifecycleTransition(from, to string, opts LifecycleTransitionOptions) bool {
-	return ValidateLifecycleTransition(from, to, opts) == nil
-}
-
 // LifecycleStatusSatisfiesDependency reports whether a persisted status
 // satisfies dependent beads. Only closed satisfies dependents.
 func LifecycleStatusSatisfiesDependency(status string) bool {

@@ -13,6 +13,18 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// defaultArchivePolicy mirrors the TD-027 §(b) shipping defaults that the
+// archive tests want to exercise. Kept as a test-local helper so the
+// production package does not carry a function with no live caller.
+func defaultArchivePolicy() ArchivePolicy {
+	return ArchivePolicy{
+		Statuses:       []string{StatusClosed},
+		MinAge:         30 * 24 * time.Hour,
+		MinActiveCount: 2000,
+		BatchSize:      500,
+	}
+}
+
 // archiveTestStore returns a fresh active store rooted at a temp .ddx dir.
 func archiveTestStore(t *testing.T) (*Store, string) {
 	t.Helper()
@@ -63,7 +75,7 @@ func TestArchiveMovesEligibleClosedBeads(t *testing.T) {
 	}
 	require.NoError(t, s.WriteAll(beads))
 
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	moved, err := s.Archive(policy)
 	require.NoError(t, err)
@@ -104,7 +116,7 @@ func TestArchiveRespectsMinActiveCount(t *testing.T) {
 		closedBeadAt("ddx-old2", "old2", old),
 	}))
 
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 100
 	moved, err := s.Archive(policy)
 	require.NoError(t, err)
@@ -139,7 +151,7 @@ func TestArchivePreservesReferencedClosedBeads(t *testing.T) {
 	}
 	require.NoError(t, s.WriteAll(beads))
 
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	moved, err := s.Archive(policy)
 	require.NoError(t, err)
@@ -166,7 +178,7 @@ func TestArchiveGetWithArchiveFallsBack(t *testing.T) {
 		},
 	}))
 
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	moved, err := s.Archive(policy)
 	require.NoError(t, err)
@@ -200,7 +212,7 @@ func TestArchiveReadyAndBlockedQueryActiveOnly(t *testing.T) {
 			UpdatedAt: old,
 		},
 	}))
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	_, err := s.Archive(policy)
 	require.NoError(t, err)
@@ -223,7 +235,7 @@ func TestArchiveListWithArchiveIncludesBoth(t *testing.T) {
 		closedBeadAt("ddx-archived", "archived", old),
 		closedBeadAt("ddx-recent", "recently closed", time.Now().UTC()),
 	}))
-	policy := DefaultArchivePolicy()
+	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	_, err := s.Archive(policy)
 	require.NoError(t, err)

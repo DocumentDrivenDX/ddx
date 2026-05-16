@@ -47,10 +47,10 @@ func TestLifecycleTransitionMatrix(t *testing.T) {
 			err := ValidateLifecycleTransition(tt.from, tt.to, tt.opts)
 			if tt.want {
 				require.NoError(t, err)
-				assert.True(t, CanLifecycleTransition(tt.from, tt.to, tt.opts))
+				assert.True(t, ValidateLifecycleTransition(tt.from, tt.to, tt.opts) == nil)
 			} else {
 				require.Error(t, err)
-				assert.False(t, CanLifecycleTransition(tt.from, tt.to, tt.opts))
+				assert.False(t, ValidateLifecycleTransition(tt.from, tt.to, tt.opts) == nil)
 			}
 		})
 	}

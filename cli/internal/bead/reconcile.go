@@ -304,15 +304,6 @@ func isSuccessEvent(e BeadEvent) bool {
 	return summary == "success" || summary == "already_satisfied"
 }
 
-func isNoViableProviderEvent(e BeadEvent) bool {
-	if e.Kind != "execute-bead" || strings.TrimSpace(e.Summary) != "execution_failed" {
-		return false
-	}
-	body := strings.ToLower(e.Body)
-	return strings.Contains(body, "no viable provider") ||
-		strings.Contains(body, "all powerClasses exhausted")
-}
-
 func hasNoChangesResidue(b Bead) bool {
 	return len(noChangesFieldsPresent(b)) > 0 || len(noChangesLabelsPresent(b)) > 0
 }
@@ -341,10 +332,6 @@ func noChangesLabelsPresent(b Bead) []string {
 		}
 	}
 	return labels
-}
-
-func hasRetryAfter(b Bead) bool {
-	return hasAnyExtra(b, ExtraRetryAfter)
 }
 
 func hasAnyExtra(b Bead, keys ...string) bool {

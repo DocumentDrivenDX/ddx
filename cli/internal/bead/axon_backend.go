@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -18,20 +17,14 @@ import (
 // ddx_beads collection, plus one entity per event in the
 // ddx_bead_events collection linked back to its bead via event_of.
 //
-// When a GraphQL transport is configured, AxonBackend speaks that wire
-// shape directly. The fallback path keeps the existing in-process JSONL
-// emulation for callers that have not wired a transport yet.
+// When a GraphQL transport is configured (test code wires one in via the
+// AxonBackend.GraphQLTransport field), AxonBackend speaks that wire shape
+// directly. The fallback path keeps the existing in-process JSONL emulation
+// for callers that have not wired a transport yet.
 //
 // NewStore routes to AxonBackend when bead.backend is set to axon in the
-// config or via DDX_BEAD_BACKEND. The backend implementation still exposes
-// the legacy DDX_AXON_EXPERIMENTAL helper for compatibility with older tests
-// and tooling, but store selection does not consult it.
+// config or via DDX_BEAD_BACKEND.
 const BackendAxon = "axon"
-
-// AxonExperimentalEnv is retained for compatibility with older tests and
-// tooling that still probe the legacy helper, but it no longer gates store
-// selection.
-const AxonExperimentalEnv = "DDX_AXON_EXPERIMENTAL"
 
 // axonSchemaVersion is written into every persisted entity. Schema upgrades
 // are handled lazy-on-read until axon FEAT-017 ships native schema
@@ -81,62 +74,21 @@ type AxonGraphQLTransport interface {
 	Query(ctx context.Context, query string, variables map[string]any, response any) error
 }
 
-// AxonBackendOption configures an AxonBackend during construction.
-type AxonBackendOption func(*AxonBackend)
-
 // Compile-time check: AxonBackend satisfies RawBackend.
 var _ RawBackend = (*AxonBackend)(nil)
 
 // NewAxonBackend constructs an axon-backed RawBackend rooted at dir. dir is
 // the .ddx directory for the project; collection files and the lock live
 // under <dir>/axon/.
-func NewAxonBackend(dir string, lockWait time.Duration, opts ...AxonBackendOption) *AxonBackend {
+func NewAxonBackend(dir string, lockWait time.Duration) *AxonBackend {
 	root := filepath.Join(dir, AxonDirName)
-	ax := &AxonBackend{
+	return &AxonBackend{
 		Dir:        root,
 		BeadsFile:  filepath.Join(root, AxonBeadsCollection+".jsonl"),
 		EventsFile: filepath.Join(root, AxonEventsCollection+".jsonl"),
 		LockDir:    filepath.Join(root, ".lock"),
 		LockWait:   lockWait,
 	}
-	for _, opt := range opts {
-		if opt != nil {
-			opt(ax)
-		}
-	}
-	return ax
-}
-
-// WithAxonGraphQLTransport injects the GraphQL transport boundary used by the
-// axon backend.
-func WithAxonGraphQLTransport(transport AxonGraphQLTransport) AxonBackendOption {
-	return func(ax *AxonBackend) {
-		ax.GraphQLTransport = transport
-	}
-}
-
-// WithAxonGraphQLClient injects a pre-built GraphQL client object for future
-// mutation and query wiring.
-func WithAxonGraphQLClient(client any) AxonBackendOption {
-	return func(ax *AxonBackend) {
-		ax.GraphQLClient = client
-		if ax.GraphQLTransport == nil {
-			if transport, ok := client.(AxonGraphQLTransport); ok {
-				ax.GraphQLTransport = transport
-			}
-		}
-	}
-}
-
-// AxonExperimentalEnabled reports whether the operator has opted in to the
-// legacy axon helper via DDX_AXON_EXPERIMENTAL=1. It remains available for
-// tests and compatibility checks, but store selection does not depend on it.
-func AxonExperimentalEnabled() bool {
-	switch strings.ToLower(strings.TrimSpace(os.Getenv(AxonExperimentalEnv))) {
-	case "1", "true", "yes", "on":
-		return true
-	}
-	return false
 }
 
 func (a *AxonBackend) Init() error {
