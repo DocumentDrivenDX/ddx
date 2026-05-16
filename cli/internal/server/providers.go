@@ -419,47 +419,6 @@ func liveRouteStatusReport(ctx context.Context, workDir string) *agentlib.RouteS
 	return report
 }
 
-// filterProviderOutcomes returns outcomes for a given harness within the last windowDays days.
-func filterProviderOutcomes(outcomes []agent.RoutingOutcome, harnessName string, now time.Time, windowDays int) []agent.RoutingOutcome {
-	cutoff := now.Add(-time.Duration(windowDays) * 24 * time.Hour)
-	result := make([]agent.RoutingOutcome, 0)
-	for _, o := range outcomes {
-		if o.Harness == harnessName && o.ObservedAt.After(cutoff) {
-			result = append(result, o)
-		}
-	}
-	return result
-}
-
-// computeProviderPerformance computes latency percentiles and success rate from outcomes.
-// Returns -1 sentinels when sample_count < 3 per FEAT-014.
-func computeProviderPerformance(outcomes []agent.RoutingOutcome) ProviderPerformance {
-	perf := ProviderPerformance{
-		P50LatencyMS: -1,
-		P95LatencyMS: -1,
-		SuccessRate:  -1,
-		SampleCount:  len(outcomes),
-		Window:       "7d",
-	}
-	if len(outcomes) < 3 {
-		return perf
-	}
-	var successCount int
-	latencies := make([]int, 0, len(outcomes))
-	for _, o := range outcomes {
-		if o.Success {
-			successCount++
-		}
-		latencies = append(latencies, o.LatencyMS)
-	}
-	perf.SuccessRate = float64(successCount) / float64(len(outcomes))
-	sort.Ints(latencies)
-	perf.P50LatencyMS = latencies[len(latencies)/2]
-	p95Idx := int(float64(len(latencies)-1) * 0.95)
-	perf.P95LatencyMS = latencies[p95Idx]
-	return perf
-}
-
 // providerPerformanceFromRouteStatus derives recent provider performance from
 // the live Fizeau route-status report, which replaces the old DDx metrics-store
 // read model for current routing semantics.
