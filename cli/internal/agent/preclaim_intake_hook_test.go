@@ -200,7 +200,15 @@ func TestPreClaimIntakeHookDispatchesOutsideProjectRoot(t *testing.T) {
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
-		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+		executeFunc: func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+			out, err := runGitIntegOutput(req.WorkDir, "rev-parse", "--is-inside-work-tree")
+			require.NoError(t, err)
+			assert.Equal(t, "true", out)
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"single-slice\"}"}`)}
+			close(ch)
+			return ch, nil
+		},
 	}
 
 	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)

@@ -61,7 +61,15 @@ func newLifecycleScratchDir(projectRoot string) (string, error) {
 	if err := os.MkdirAll(base, 0o755); err != nil {
 		return "", err
 	}
-	return os.MkdirTemp(base, lifecycleScratchDirPrefix)
+	dir, err := os.MkdirTemp(base, lifecycleScratchDirPrefix)
+	if err != nil {
+		return "", err
+	}
+	if out, err := internalgit.Command(context.Background(), dir, "init", "-q").CombinedOutput(); err != nil {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("initialize lifecycle scratch git repo: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return dir, nil
 }
 
 func captureLifecycleProjectStatus(projectRoot string) (lifecycleProjectStatusSnapshot, error) {
