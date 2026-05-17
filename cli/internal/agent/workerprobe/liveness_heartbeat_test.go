@@ -30,6 +30,10 @@ func TestWorkerProbe_PeriodicHeartbeatRefreshesServerLastEventAt(t *testing.T) {
 
 	projectRoot := t.TempDir()
 
+	// Isolate server state before constructing the server. New() registers
+	// the project immediately.
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
 	srv := serverpkg.New(":0", projectRoot)
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
