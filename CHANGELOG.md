@@ -4,6 +4,21 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: autonomous provider-connectivity recovery
+
+`ddx work` now treats repeated provider-connectivity failures as retryable
+route-health evidence instead of parking the bead for operator attention. Broad
+queue workers also reopen legacy provider-connectivity operator-attention beads
+automatically, so dependent trees are not blocked just because one route stayed
+unreachable across attempts.
+
+### Changed: release platforms for Fizeau v0.14.32
+
+The release and CI cross-compile matrices now publish Linux and macOS binaries
+while DDx is pinned to Fizeau v0.14.32. That Fizeau release currently does not
+cross-compile for Windows because its discovery-cache lock code references
+`syscall.Kill`.
+
 ### Added: Fizeau v0.14.32 point release
 
 DDx now consumes `github.com/easel/fizeau v0.14.32`.

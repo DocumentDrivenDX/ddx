@@ -559,6 +559,10 @@ type readyDiagnoser interface {
 	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
 }
 
+type proposedOperatorAttentionStore interface {
+	ProposedOperatorAttention() ([]bead.Bead, error)
+}
+
 type claimWithOptionsStore interface {
 	ClaimWithOptions(id, assignee, session, worktree string) error
 }
@@ -1170,6 +1174,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				setExit("BinaryRefresh", "binary_refresh")
 				emit("loop.binary_refresh", map[string]any{"reason": "installed_binary_changed"})
 				return result, nil
+			}
+		}
+
+		if runtime.TargetBeadID == "" {
+			if reopened, reopenErr := autoReopenRetryableProviderConnectivityProposals(ctx, w.Store, assignee, now().UTC(), emit); reopenErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "provider-connectivity auto-reopen failed: %v; continuing\n", reopenErr)
+				}
+				emit("provider_connectivity.auto_reopen_error", map[string]any{
+					"error": reopenErr.Error(),
+				})
+			} else if reopened > 0 && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "provider-connectivity auto-reopened %d operator-attention bead(s)\n", reopened)
 			}
 		}
 
@@ -4792,9 +4809,10 @@ func isOperatorRoutingPinned(pt config.AgentPassthrough) bool {
 // in the current execution path rather than a persisted bead floor.
 //
 // When the ladder is exhausted, it emits an execution-escalation-aborted event.
-//
-// When the same (provider, model) appears in the failed-routes list for the
-// second time, the bead is promoted to operator_required.
+// Repeated provider connectivity failures remain retryable route-health
+// evidence: the bead stays open and Fizeau receives recent failed routes so it
+// can pick another viable route without blocking the dependency tree behind an
+// operator-attention state.
 func applyProviderConnectivityRouteExclusion(
 	store ExecuteBeadLoopStore,
 	beadID string,
@@ -4807,12 +4825,14 @@ func applyProviderConnectivityRouteExclusion(
 	var (
 		ladderExhausted bool
 		repeatFailure   bool
+		repeatCount     int
 	)
 	if err := store.Update(beadID, func(b *bead.Bead) {
 		existing := readFailedRoutes(b.Extra)
 		for _, e := range existing {
 			if e.Provider == report.Provider && e.Model == report.Model {
 				repeatFailure = true
+				repeatCount = e.Count + 1
 				break
 			}
 		}
@@ -4836,19 +4856,102 @@ func applyProviderConnectivityRouteExclusion(
 		emitEscalationAbortedEvent(store, beadID, actor, report.Provider, report.Model, report.ActualPower, at)
 	}
 	if repeatFailure {
-		msg := fmt.Sprintf("provider %s / model %s unreachable on 2+ attempts; check ddx config or provider health", report.Provider, report.Model)
-		return store.ParkToProposed(beadID, bead.ParkProviderConnectivityRepeated, func(b *bead.Bead) {
-			ensureBeadExtra(b)
-			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-				Reason:          msg,
-				Since:           at.UTC().Format(time.RFC3339),
-				Source:          "ddx work",
-				SuggestedAction: "check provider health or reconfigure endpoints in .ddx/config.yaml",
-				Summary:         "provider unreachable on repeated attempts",
-			})
+		body, _ := json.Marshal(map[string]any{
+			"provider":     report.Provider,
+			"model":        report.Model,
+			"actual_power": report.ActualPower,
+			"count":        repeatCount,
+			"reason":       FailureModeProviderConnectivity,
+			"action":       "keep_open_for_autonomous_retry",
+		})
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "provider_connectivity.auto_retry",
+			Summary:   "repeated provider connectivity failure kept open for autonomous retry",
+			Body:      string(body),
+			Actor:     actor,
+			Source:    "ddx work",
+			CreatedAt: at,
 		})
 	}
 	return nil
+}
+
+func autoReopenRetryableProviderConnectivityProposals(
+	ctx context.Context,
+	store ExecuteBeadLoopStore,
+	actor string,
+	at time.Time,
+	emit func(string, map[string]any),
+) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	proposedStore, ok := store.(proposedOperatorAttentionStore)
+	if !ok {
+		return 0, nil
+	}
+	proposed, err := proposedStore.ProposedOperatorAttention()
+	if err != nil {
+		return 0, err
+	}
+	var reopened int
+	for _, b := range proposed {
+		if !isRetryableProviderConnectivityProposal(b) {
+			continue
+		}
+		if err := store.UpdateWithLifecycleStatus(b.ID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: "provider connectivity failure is retryable route evidence; reopening for autonomous fallback",
+			Source: "ddx work",
+			Actor:  actor,
+		}, func(b *bead.Bead) error {
+			ensureBeadExtra(b)
+			b.Labels = removeBeadLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+			return nil
+		}); err != nil {
+			return reopened, err
+		}
+		body, _ := json.Marshal(map[string]any{
+			"reason": "provider_connectivity",
+			"action": "reopen_for_autonomous_retry",
+		})
+		_ = store.AppendEvent(b.ID, bead.BeadEvent{
+			Kind:      "provider_connectivity.auto_reopen",
+			Summary:   "reopened provider-connectivity operator-attention bead for autonomous retry",
+			Body:      string(body),
+			Actor:     actor,
+			Source:    "ddx work",
+			CreatedAt: at,
+		})
+		if emit != nil {
+			emit("provider_connectivity.auto_reopen", map[string]any{
+				"bead_id": b.ID,
+				"reason":  "provider_connectivity",
+			})
+		}
+		reopened++
+	}
+	return reopened, nil
+}
+
+func isRetryableProviderConnectivityProposal(b bead.Bead) bool {
+	if b.Status != bead.StatusProposed {
+		return false
+	}
+	meta := bead.GetNeedsHumanMeta(b)
+	text := strings.ToLower(strings.Join([]string{
+		meta.Reason,
+		meta.Summary,
+		meta.SuggestedAction,
+		meta.Source,
+	}, "\n"))
+	if !strings.Contains(text, "provider") {
+		return false
+	}
+	return strings.Contains(text, "provider_connectivity") ||
+		strings.Contains(text, "provider unreachable") ||
+		strings.Contains(text, "unreachable on 2+ attempts") ||
+		strings.Contains(text, "connectivity")
 }
 
 // emitEscalationAbortedEvent records a kind=execution-escalation-aborted event

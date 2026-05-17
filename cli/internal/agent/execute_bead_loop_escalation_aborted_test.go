@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -85,11 +86,11 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNume
 	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
 }
 
-// TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired asserts that
-// after 2 consecutive provider_connectivity failures against the same
-// (provider, model), the bead is promoted to proposed (operator_required) with a
-// message naming the unreachable provider.
-func TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired(t *testing.T) {
+// TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry asserts
+// that repeated provider_connectivity failures against the same (provider,
+// model) stay retryable route-health evidence instead of parking the bead for
+// operator attention.
+func TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -113,16 +114,107 @@ func TestProviderConnectivityRepeatedFailure_PromotesToOperatorRequired(t *testi
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, first.Status, "bead must remain open after first failure")
 
-	// Second failure: same (provider, model) — must escalate to proposed.
+	// Second failure: same (provider, model) stays open and records auto-retry evidence.
 	err = applyProviderConnectivityRouteExclusion(store, b.ID, "test-actor", report, false, nextFloorFn, at)
 	require.NoError(t, err)
 
 	second, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, second.Status, "bead must be proposed (operator_required) after 2nd failure")
+	assert.Equal(t, bead.StatusOpen, second.Status, "bead must remain open after repeated provider connectivity failures")
+	assert.Empty(t, bead.GetNeedsHumanMeta(*second).Reason)
 
-	meta := bead.GetNeedsHumanMeta(*second)
-	assert.Contains(t, meta.Reason, "grendel", "operator_required reason must name the unreachable provider")
+	entries := readFailedRoutes(second.Extra)
+	require.Len(t, entries, 1)
+	assert.Equal(t, 2, entries[0].Count)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var retry *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "provider_connectivity.auto_retry" {
+			retry = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, retry, "auto-retry event must be appended after repeated route failure")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(retry.Body), &body))
+	assert.Equal(t, "grendel", body["provider"])
+	assert.Equal(t, "mistral-7b", body["model"])
+	assert.Equal(t, float64(2), body["count"])
+}
+
+func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	retryable := &bead.Bead{
+		ID:     "ddx-eabc-retry",
+		Title:  "retry provider connectivity proposal",
+		Status: bead.StatusProposed,
+		Labels: []string{bead.LabelNeedsHuman, "area:agent"},
+	}
+	require.NoError(t, store.Create(retryable))
+	require.NoError(t, store.Update(retryable.ID, func(b *bead.Bead) {
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          "provider grendel / model qwen3.5-27b unreachable on 2+ attempts; check ddx config or provider health",
+			Source:          "ddx work",
+			SuggestedAction: "check provider health or reconfigure endpoints in .ddx/config.yaml",
+			Summary:         "provider unreachable on repeated attempts",
+		})
+	}))
+
+	manual := &bead.Bead{
+		ID:     "ddx-eabc-manual",
+		Title:  "manual operator proposal",
+		Status: bead.StatusProposed,
+		Labels: []string{bead.LabelNeedsHuman},
+	}
+	require.NoError(t, store.Create(manual))
+	require.NoError(t, store.Update(manual.ID, func(b *bead.Bead) {
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          "scope is ambiguous and requires product judgment",
+			Source:          "ddx work",
+			SuggestedAction: "clarify acceptance criteria",
+			Summary:         "manual operator review required",
+		})
+	}))
+
+	at := time.Date(2026, 5, 17, 14, 0, 0, 0, time.UTC)
+	emitted := make([]string, 0, 1)
+	reopened, err := autoReopenRetryableProviderConnectivityProposals(
+		context.Background(),
+		store,
+		"test-actor",
+		at,
+		func(kind string, _ map[string]any) { emitted = append(emitted, kind) },
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, reopened)
+	assert.Equal(t, []string{"provider_connectivity.auto_reopen"}, emitted)
+
+	gotRetryable, err := store.Get(retryable.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotRetryable.Status)
+	assert.NotContains(t, gotRetryable.Labels, bead.LabelNeedsHuman)
+	assert.Empty(t, bead.GetNeedsHumanMeta(*gotRetryable).Reason)
+
+	events, err := store.Events(retryable.ID)
+	require.NoError(t, err)
+	assert.Condition(t, func() bool {
+		for _, ev := range events {
+			if ev.Kind == "provider_connectivity.auto_reopen" {
+				return true
+			}
+		}
+		return false
+	}, "auto-reopen event must be recorded")
+
+	gotManual, err := store.Get(manual.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, gotManual.Status)
+	assert.Contains(t, gotManual.Labels, bead.LabelNeedsHuman)
 }
 
 // TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent asserts that when the
