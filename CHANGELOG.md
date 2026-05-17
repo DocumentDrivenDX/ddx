@@ -4,6 +4,13 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: release and security workflow follow-through
+
+Release checksums now tolerate archive sets without Windows zip artifacts, and
+the optional security scans no longer make the workflow invalid when their
+secrets are unset. The frontend dependency graph also overrides `devalue` to a
+patched version so the high-severity Bun audit finding is cleared.
+
 ### Fixed: autonomous provider-connectivity recovery
 
 `ddx work` now treats repeated provider-connectivity failures as retryable

@@ -55,5 +55,8 @@
 		"lucide-svelte": "^1.0.1",
 		"marked": "^15.0.0",
 		"mode-watcher": "^1.1.0"
+	},
+	"overrides": {
+		"devalue": "^5.8.1"
 	}
 }
