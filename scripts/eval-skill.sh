@@ -14,20 +14,20 @@
 #   2 — invocation error (missing files, no ddx binary, etc.)
 #
 # Validation (always runs):
-#   - SKILL.md exists at skills/ddx/SKILL.md
+#   - SKILL.md exists at library/skills/ddx/SKILL.md
 #   - Frontmatter contains only `name` + `description` (portable agentskills.io minimum)
 #   - Body is under 500 lines
 #   - All reference/*.md files linked from SKILL.md exist
 #
 # Routing eval (skipped in --validate mode):
-#   - For each row in skills/ddx/evals/routing.jsonl, invoke
+#   - For each row in library/skills/ddx/evals/routing.jsonl, invoke
 #     `ddx agent run --harness <h> --text <phrase>` and check that the
 #     response mentions the expected reference file OR the expected CLI command.
 
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SKILL_DIR="$REPO_ROOT/skills/ddx"
+SKILL_DIR="$REPO_ROOT/library/skills/ddx"
 SKILL_MD="$SKILL_DIR/SKILL.md"
 EVAL_FILE="$SKILL_DIR/evals/routing.jsonl"
 
