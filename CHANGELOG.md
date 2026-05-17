@@ -13,7 +13,9 @@ patched version so the high-severity Bun audit finding is cleared. Command test
 fixtures now suppress background update checks so CI temp-directory cleanup is
 not racing asynchronous network/cache work. Workerprobe integration tests also
 isolate server state before constructing test servers, preventing CI's
-state-pollution guard from seeing worker fixture projects.
+state-pollution guard from seeing worker fixture projects. The D3 graph now
+uses the dedicated solid graph-edge tokens for document edges and arrowheads, so
+the frontend contrast guard passes without relying on stroke opacity.
 
 ### Fixed: autonomous provider-connectivity recovery
 
