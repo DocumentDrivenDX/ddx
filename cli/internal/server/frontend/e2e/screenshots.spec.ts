@@ -85,7 +85,7 @@ const PAGES: readonly PageSpec[] = [
 		tolerance: 0.06
 	},
 	{
-		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`,
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/runs?layer=run`,
 		name: 'agent',
 		ready: 'h1',
 		tolerance: 0.04
@@ -214,7 +214,7 @@ const FEATURE_AREAS: readonly FeatureArea[] = [
 		id: 'agent-dispatch',
 		file: 'feature-agent-dispatch.png',
 		ready: 'h1',
-		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/runs?layer=run`
 	}
 ] as const;
 
