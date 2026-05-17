@@ -4,6 +4,15 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: Fizeau v0.14.32 point release
+
+DDx now consumes `github.com/easel/fizeau v0.14.32`.
+
+This refresh picks up Fizeau's latest routing health and benchmark harness
+cleanup work, including the Harbor timeout subprocess cleanup path that prevents
+stranded `fiz` harness descendants from accumulating after cancelled benchmark
+runs.
+
 ### Added: startup housekeeping reapers and execution retention controls
 
 `ddx work`, `ddx try`, and `ddx doctor --apply` now reap stale DDx runtime
