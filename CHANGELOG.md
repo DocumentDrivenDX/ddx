@@ -11,7 +11,9 @@ the optional security scans no longer make the workflow invalid when their
 secrets are unset. The frontend dependency graph also overrides `devalue` to a
 patched version so the high-severity Bun audit finding is cleared. Command test
 fixtures now suppress background update checks so CI temp-directory cleanup is
-not racing asynchronous network/cache work.
+not racing asynchronous network/cache work. The workerprobe integration test
+also isolates server state before constructing its test server, preventing CI's
+state-pollution guard from seeing worker fixture projects.
 
 ### Fixed: autonomous provider-connectivity recovery
 

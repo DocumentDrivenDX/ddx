@@ -51,6 +51,12 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	proj := buildFixtureRepo(t, binPath, "standard")
 	bin := binPath
 
+	// Isolate server state before constructing the server. New() registers
+	// the project immediately, so setting XDG_DATA_HOME later still pollutes
+	// the process-wide state used by CI's server-state guard.
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
 	// Real server — same constructor, same Handler, same requireTrusted gate.
 	srv := serverpkg.New(":0", proj)
 	ts := httptest.NewServer(srv.Handler())
@@ -59,7 +65,6 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	// Production discovery path: write server.addr under XDG_DATA_HOME so
 	// the worker subprocess (running with the same XDG_DATA_HOME) finds it
 	// via serverpkg.ReadServerAddr.
-	xdg := t.TempDir()
 	addrDir := filepath.Join(xdg, "ddx")
 	if err := os.MkdirAll(addrDir, 0o700); err != nil {
 		t.Fatalf("mkdir addr dir: %v", err)
