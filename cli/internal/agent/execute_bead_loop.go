@@ -4823,9 +4823,8 @@ func applyProviderConnectivityRouteExclusion(
 	at time.Time,
 ) error {
 	var (
-		ladderExhausted bool
-		repeatFailure   bool
-		repeatCount     int
+		repeatFailure bool
+		repeatCount   int
 	)
 	if err := store.Update(beadID, func(b *bead.Bead) {
 		existing := readFailedRoutes(b.Extra)
@@ -4843,17 +4842,8 @@ func applyProviderConnectivityRouteExclusion(
 			Reason:      FailureModeProviderConnectivity,
 			At:          at.UTC().Format(time.RFC3339),
 		})
-		if operatorPinned || nextFloorFn == nil {
-			return
-		}
-		if _, err := nextFloorFn(report.ActualPower); err != nil {
-			ladderExhausted = true
-		}
 	}); err != nil {
 		return err
-	}
-	if ladderExhausted {
-		emitEscalationAbortedEvent(store, beadID, actor, report.Provider, report.Model, report.ActualPower, at)
 	}
 	if repeatFailure {
 		body, _ := json.Marshal(map[string]any{

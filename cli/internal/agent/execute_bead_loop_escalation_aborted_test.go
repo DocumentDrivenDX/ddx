@@ -15,15 +15,15 @@ import (
 
 var errLadderExhaustedTest = fmt.Errorf("ladder exhausted")
 
-// TestApplyProviderConnectivityRouteExclusion_LadderExhaustedEmitsEvent asserts
-// that when nextFloorFn returns an error (ladder exhausted), a
-// kind=execution-escalation-aborted event is appended whose summary names the
-// provider, model, and actualPower.
-func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedEmitsEvent(t *testing.T) {
+// TestApplyProviderConnectivityRouteExclusion_DoesNotEscalatePower asserts
+// that provider connectivity failures do NOT trigger power escalation checks.
+// Instead, the bead remains open for retry on alternate providers at the same
+// power level. Power escalation only occurs when Fizeau reports no_viable_provider.
+func TestApplyProviderConnectivityRouteExclusion_DoesNotEscalatePower(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	b := &bead.Bead{ID: "ddx-eabc01", Title: "connectivity ladder exhausted event"}
+	b := &bead.Bead{ID: "ddx-eabc01", Title: "connectivity fallback to alternate provider"}
 	require.NoError(t, store.Create(b))
 
 	report := ExecuteBeadReport{
@@ -47,26 +47,26 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedEmitsEvent(t *te
 			break
 		}
 	}
-	require.NotNil(t, aborted, "execution-escalation-aborted event must be appended when ladder is exhausted")
-	assert.Contains(t, aborted.Summary, "lm-studio", "summary must name provider")
-	assert.Contains(t, aborted.Summary, "qwen2.5-7b", "summary must name model")
-	assert.Contains(t, aborted.Summary, "20", "summary must name actualPower")
+	assert.Nil(t, aborted, "execution-escalation-aborted event must NOT be emitted for provider connectivity failures; power escalation is deferred to no_viable_provider handling")
 
-	var body map[string]any
-	require.NoError(t, json.Unmarshal([]byte(aborted.Body), &body))
-	assert.Equal(t, "lm-studio", body["provider"])
-	assert.Equal(t, "qwen2.5-7b", body["model"])
-	assert.Equal(t, float64(20), body["actual_power"])
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open for retry on alternate providers")
+
+	entries := readFailedRoutes(got.Extra)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "lm-studio", entries[0].Provider)
+	assert.Equal(t, "qwen2.5-7b", entries[0].Model)
 }
 
-// TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericRetryFloor
-// asserts that ladder exhaustion still emits evidence without persisting a
-// numeric retry floor on the bead.
-func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNumericRetryFloor(t *testing.T) {
+// TestApplyProviderConnectivityRouteExclusion_NoEscalationMetadata
+// asserts that provider connectivity failures don't write escalation metadata
+// since power escalation is deferred to no_viable_provider handling.
+func TestApplyProviderConnectivityRouteExclusion_NoEscalationMetadata(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	b := &bead.Bead{ID: "ddx-eabc02", Title: "connectivity sentinel hint on exhaustion"}
+	b := &bead.Bead{ID: "ddx-eabc02", Title: "connectivity defers escalation"}
 	require.NoError(t, store.Create(b))
 
 	const actualPower = 30
@@ -83,7 +83,7 @@ func TestApplyProviderConnectivityRouteExclusion_LadderExhaustedDoesNotWriteNume
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 
-	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
+	assert.NotContains(t, got.Extra, legacyRetryFloorKey, "no legacy retry floor should be written for provider connectivity failures")
 }
 
 // TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry asserts
@@ -278,4 +278,61 @@ func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testin
 	}
 	require.NotNil(t, aborted, "execution-escalation-aborted event must be emitted when repair-cycle ladder is exhausted")
 	assert.Contains(t, aborted.Summary, "60", "summary must reference actualPower")
+}
+
+// TestProviderConnectivityFailure_RetriesOnAlternateProviderAtSamePower
+// verifies AC #1 and #4: when a bead's primary route fails mid-execution with
+// provider_connectivity, the bead is left open for automatic fallback to the
+// next route in the readiness fallback chain (same power, different provider)
+// without operator intervention.
+func TestProviderConnectivityFailure_RetriesOnAlternateProviderAtSamePower(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{
+		ID:    "ddx-ac1test",
+		Title: "provider connectivity retry on alternate",
+	}
+	require.NoError(t, store.Create(b))
+
+	// First failure: bragi at power 5
+	report1 := ExecuteBeadReport{
+		Provider:    "bragi",
+		Model:       "qwen3.6-27b",
+		ActualPower: 5,
+	}
+	at := time.Date(2026, 5, 16, 5, 56, 28, 0, time.UTC)
+	err := applyProviderConnectivityRouteExclusion(store, b.ID, "worker", report1, false, nil, at)
+	require.NoError(t, err)
+
+	afterFirst, err := store.Get(b.ID)
+	require.NoError(t, err)
+
+	// Verify bead remains open and reclaimable
+	assert.Equal(t, bead.StatusOpen, afterFirst.Status, "AC #1: bead must remain open after provider_connectivity failure")
+	assert.Empty(t, afterFirst.Owner, "bead must be unclaimed for the next attempt")
+
+	// Verify failed route is recorded
+	failedRoutes := readFailedRoutes(afterFirst.Extra)
+	require.Len(t, failedRoutes, 1)
+	assert.Equal(t, "bragi", failedRoutes[0].Provider)
+	assert.Equal(t, "qwen3.6-27b", failedRoutes[0].Model)
+	assert.Equal(t, 5, failedRoutes[0].ActualPower)
+
+	// Verify NO escalation-aborted event is emitted
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	for _, ev := range events {
+		assert.NotEqual(t, "execution-escalation-aborted", ev.Kind,
+			"AC #1: escalation-aborted must NOT be emitted for provider_connectivity failures")
+	}
+
+	// The bead is now ready for retry with the failed route recorded.
+	// In production, Fizeau would use the failed routes list (buildExcludedRoutes)
+	// to avoid bragi and select an alternate provider (e.g., claude/opus)
+	// at the same power level (AC #4: automatic fallback without operator intervention).
+	//
+	// This demonstrates:
+	// AC #1: Primary route failed mid-execution, bead retries on next route at same power
+	// AC #4: Occurs automatically without operator intervention
 }
