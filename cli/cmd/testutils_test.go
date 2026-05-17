@@ -212,6 +212,10 @@ func WithCustomLibraryURL(url string) TestEnvOption {
 func NewTestEnvironment(t *testing.T, opts ...TestEnvOption) *TestEnvironment {
 	t.Helper()
 
+	// Command fixtures should be hermetic. The update checker runs in a
+	// background goroutine and can outlive a test's temp HOME/config dirs.
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
 	tempDir := t.TempDir()
 	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
 	configPath := filepath.Join(ddxDir, "config.yaml")

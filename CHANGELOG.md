@@ -9,7 +9,9 @@ All notable changes to DDx are documented in this file.
 Release checksums now tolerate archive sets without Windows zip artifacts, and
 the optional security scans no longer make the workflow invalid when their
 secrets are unset. The frontend dependency graph also overrides `devalue` to a
-patched version so the high-severity Bun audit finding is cleared.
+patched version so the high-severity Bun audit finding is cleared. Command test
+fixtures now suppress background update checks so CI temp-directory cleanup is
+not racing asynchronous network/cache work.
 
 ### Fixed: autonomous provider-connectivity recovery
 
