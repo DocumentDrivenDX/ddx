@@ -13,7 +13,8 @@ registry entries are pruned during normal UI/MCP inspection instead of leaving
 blank stale rows that can confuse queue monitors. The frontend CI path now runs
 unit and functional Playwright suites separately so visual/video capture specs
 do not dirty release checks, and the affected E2E helpers serialize DDx binary
-builds to avoid Go build-cache races under high host load.
+builds to avoid Go build-cache races under high host load. Federation E2E now
+allows enough time for the full offline/restart cycle on slower CI runners.
 
 ### Fixed: release and security workflow follow-through
 

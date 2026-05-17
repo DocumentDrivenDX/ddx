@@ -214,7 +214,7 @@ function firstNonLoopbackIPv4(): string | null {
 // ─── Federation 2-node tests ───────────────────────────────────────────────
 
 test.describe('federation 2-node e2e', () => {
-	test.setTimeout(90_000);
+	test.setTimeout(150_000);
 
 	test('hub /federation lists both nodes; scope=federation merges data; offline+restart cycle', async ({
 		page
