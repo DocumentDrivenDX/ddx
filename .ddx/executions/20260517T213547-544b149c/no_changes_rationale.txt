@@ -1,0 +1,20 @@
+status: open
+orchestrator_action: decompose
+reason: epic decomposed into 6 child beads for execution in dependency order
+
+Child beads (dependency chain):
+1. ddx-7942c612 (B1): amend TD-031 to declare reconcile-close vs evidence-close semantics [doc-only]
+2. ddx-eee5ad68 (B2): align reconcile.go close with amended TD-031 and add Create-default comment [depends on B1]
+3. ddx-d79228c1 (B3): drop redundant Status==Open filter in readyFiltered [depends on B2]
+4. ddx-7a78633d (B4): extend backend_conformance_test with TD-031 transition matrix coverage [depends on B3]
+5. ddx-2af07fa2 (B5): extract Store.ParkToProposed helper for 6 agent duplicates [depends on B4]
+6. ddx-ff9f446c (B6): consolidate claim-Extra key list for Reopen and Unclaim [depends on B5]
+
+Each child bead has been created with:
+- Clear, bounded scope within ~100 lines per file
+- Numbered acceptance criteria verifiable against concrete code/test
+- Cross-references to TD-031 and relevant code locations (line numbers)
+- Explicit non-scope sections
+- Dependency chain ensures B1 (spec amendment) completes before B2-B6 (implementation)
+
+All child beads are ready for autonomous execution.
