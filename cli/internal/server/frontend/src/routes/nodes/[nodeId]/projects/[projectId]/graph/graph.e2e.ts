@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 // ddx-7e7b12f0 — regression check that the doc-graph edges and arrow marker
-// resolve to the fg-muted token in both themes (light #4B5563 / dark #B8AF9C),
+// resolve to the graph-edge token in both themes (light #766F65 / dark #9C9486),
 // not the prior border-line token whose contrast against bg-canvas failed
 // WCAG AA for non-text graphics.
 
@@ -10,8 +10,8 @@ const PROJECT = { id: 'proj-1', name: 'Project Alpha', path: '/repos/alpha' };
 
 const GRAPH_URL = `/nodes/${NODE_INFO.id}/projects/${PROJECT.id}/graph`;
 
-const LIGHT_FG_MUTED = 'rgb(75, 85, 99)'; // #4B5563
-const DARK_FG_MUTED = 'rgb(184, 175, 156)'; // #B8AF9C
+const LIGHT_GRAPH_EDGE = 'rgb(118, 111, 101)'; // #766F65
+const DARK_GRAPH_EDGE = 'rgb(156, 148, 134)'; // #9C9486
 
 const DOC_GRAPH_FIXTURE = {
 	rootDir: '/repos/alpha',
@@ -81,7 +81,7 @@ async function installGraphqlMocks(page: Page) {
 	});
 }
 
-test('doc graph edges resolve to fg-muted token in light and dark themes', async ({ page }) => {
+test('doc graph edges resolve to graph-edge token in light and dark themes', async ({ page }) => {
 	// Pre-load: clear any persisted dark theme so the light-theme assertion is
 	// deterministic regardless of the harness's previous browser state.
 	await page.addInitScript(() => {
@@ -105,22 +105,22 @@ test('doc graph edges resolve to fg-muted token in light and dark themes', async
 	await expect(arrowPath).toBeAttached();
 
 	// AC3: light-theme — both edge stroke and arrow marker fill resolve to
-	// rgb(75, 85, 99) (#4B5563 fg-muted).
+	// rgb(118, 111, 101) (#766F65 graph-edge).
 	await expect
 		.poll(async () => edges.first().evaluate((el) => getComputedStyle(el).stroke))
-		.toBe(LIGHT_FG_MUTED);
+		.toBe(LIGHT_GRAPH_EDGE);
 	await expect
 		.poll(async () => arrowPath.evaluate((el) => getComputedStyle(el).fill))
-		.toBe(LIGHT_FG_MUTED);
+		.toBe(LIGHT_GRAPH_EDGE);
 
-	// AC4: toggle <html>.dark and re-assert against rgb(184, 175, 156)
-	// (#B8AF9C dark-fg-muted).
+	// AC4: toggle <html>.dark and re-assert against rgb(156, 148, 134)
+	// (#9C9486 dark graph-edge).
 	await page.evaluate(() => document.documentElement.classList.add('dark'));
 
 	await expect
 		.poll(async () => edges.first().evaluate((el) => getComputedStyle(el).stroke))
-		.toBe(DARK_FG_MUTED);
+		.toBe(DARK_GRAPH_EDGE);
 	await expect
 		.poll(async () => arrowPath.evaluate((el) => getComputedStyle(el).fill))
-		.toBe(DARK_FG_MUTED);
+		.toBe(DARK_GRAPH_EDGE);
 });

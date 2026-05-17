@@ -1076,6 +1076,9 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 		if err != nil {
 			continue
 		}
+		if !isWorkerRegistryRecord(rec) {
+			continue
+		}
 		out = append(out, rec)
 	}
 
@@ -1103,6 +1106,10 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 	}
 
 	return out, nil
+}
+
+func isWorkerRegistryRecord(rec WorkerRecord) bool {
+	return rec.ID != "" || rec.Kind != "" || rec.State != ""
 }
 
 func (m *WorkerManager) Show(id string) (WorkerRecord, error) {

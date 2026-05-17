@@ -275,19 +275,18 @@ test.describe('TC-003: Beads', () => {
 })
 
 // ---------------------------------------------------------------------------
-// TC-005: Agent Sessions (fixture-backed)
-// The old top-level /agent run UI was replaced by the project-scoped
-// /sessions page, which is a read-only history of agent invocations. The
-// fixture has no recorded sessions, so the page must render its empty state
-// (Sessions: 0) without errors.
+// TC-005: Agent Runs (fixture-backed)
+// The project-scoped /sessions compatibility route now redirects to the run
+// layer. The fixture has no recorded runs, so the Runs page must render its
+// empty state without errors.
 // ---------------------------------------------------------------------------
 test.describe('TC-005: Agent', () => {
-  test('TC-005.1 — sessions page loads against the fixture', async ({ page, request }) => {
+  test('TC-005.1 — sessions compatibility route opens the run layer', async ({ page, request }) => {
     const ids = await getFixtureIds(request)
     await page.goto(`${projectBase(ids)}/sessions`)
-    await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
-    // Empty fixture — the totalCount label still renders ("0 sessions").
-    await expect(page.getByText(/\d+ sessions/)).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`${projectBase(ids)}/runs\\?layer=run`))
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'run', exact: true })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
@@ -337,7 +336,7 @@ test.describe('TC-006: Personas', () => {
 // TC-007: Navigation (fixture-backed)
 // Sidebar links activate once a project is selected. Navigate to the fixture
 // project and verify the project-scoped nav routes (Beads/Documents/Graph/
-// Sessions/Personas) are reachable via SPA clicks.
+// Runs/Personas) are reachable via SPA clicks.
 // ---------------------------------------------------------------------------
 test.describe('TC-007: Navigation', () => {
   let ids: { nodeId: string; projectId: string; nodeName: string }
@@ -351,7 +350,7 @@ test.describe('TC-007: Navigation', () => {
   test('TC-007.1 — all project-scoped nav links visible', async ({ page }) => {
     const base = projectBase(ids)
     const nav = page.locator('nav')
-    for (const slug of ['beads', 'documents', 'graph', 'sessions', 'personas']) {
+    for (const slug of ['beads', 'documents', 'graph', 'runs', 'personas']) {
       await expect(nav.locator(`a[href="${base}/${slug}"]`)).toBeVisible()
     }
     // Brand link returns to project home.
@@ -375,8 +374,8 @@ test.describe('TC-007: Navigation', () => {
     await nav.locator(`a[href="${base}/graph"]`).click()
     await expect(page).toHaveURL(new RegExp(`${base}/graph`))
 
-    await nav.locator(`a[href="${base}/sessions"]`).click()
-    await expect(page).toHaveURL(new RegExp(`${base}/sessions`))
+    await nav.locator(`a[href="${base}/runs"]`).click()
+    await expect(page).toHaveURL(new RegExp(`${base}/runs`))
 
     await nav.locator(`a[href="${base}/personas"]`).click()
     await expect(page).toHaveURL(new RegExp(`${base}/personas`))

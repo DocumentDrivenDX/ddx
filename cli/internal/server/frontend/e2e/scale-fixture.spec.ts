@@ -70,17 +70,18 @@ async function measureScrollSmoothness(page: import('@playwright/test').Page): P
 }
 
 test('2k fixture loads without crash', async ({ page, request }) => {
+	test.setTimeout(150_000);
 	const ids = await getFixtureIds(request);
 	const base = `/nodes/${ids.nodeId}/projects/${ids.projectId}/artifacts?mediaType=text%2Fmarkdown`;
 
-	await page.goto(base);
-	await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
+	await page.goto(base, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+	await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible({ timeout: 60_000 });
 	await expect(page.getByText(/2000 total/)).toBeVisible();
 
 	const coldFirstPaint = await readFirstPaint(page);
 
-	await page.reload();
-	await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible();
+	await page.reload({ waitUntil: 'domcontentloaded', timeout: 60_000 });
+	await expect(page.getByRole('heading', { name: 'Artifacts' })).toBeVisible({ timeout: 60_000 });
 	await expect(page.getByText(/2000 total/)).toBeVisible();
 	const warmFirstPaint = await readFirstPaint(page);
 

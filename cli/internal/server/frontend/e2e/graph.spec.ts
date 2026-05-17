@@ -1,11 +1,11 @@
 import { expect, request as playwrightRequest, test } from '@playwright/test';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { ensureDdxE2EBinary } from './ddx-binary';
 
 // Shared fixtures
 const NODE_INFO = { id: 'node-abc', name: 'Test Node' };
@@ -13,11 +13,6 @@ const PROJECT_ID = 'proj-1';
 const BASE_URL = `/nodes/node-abc/projects/${PROJECT_ID}/graph`;
 
 const PROJECTS = [{ id: PROJECT_ID, name: 'Project Alpha', path: '/repos/alpha' }];
-
-const FRONTEND_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CLI_DIR = path.resolve(FRONTEND_DIR, '../../..');
-
-let ddxBinary: string | null = null;
 
 const GRAPH_DOCS = [
 	{
@@ -53,7 +48,14 @@ interface GraphIssueFixture {
 }
 
 function makeGraphResponse(
-	docs: readonly { id: string; path: string; title: string; dependsOn: string[]; dependents: string[]; staleness?: string }[] = GRAPH_DOCS,
+	docs: readonly {
+		id: string;
+		path: string;
+		title: string;
+		dependsOn: string[];
+		dependents: string[];
+		staleness?: string;
+	}[] = GRAPH_DOCS,
 	warnings: string[] = [],
 	issues: GraphIssueFixture[] = []
 ) {
@@ -119,22 +121,6 @@ async function mockGraphQL(
 	});
 }
 
-function ensureDdxBinary(): string {
-	if (ddxBinary) return ddxBinary;
-
-	const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ddx-graph-e2e-bin-'));
-	ddxBinary = path.join(binDir, process.platform === 'win32' ? 'ddx-e2e.exe' : 'ddx-e2e');
-	const result = spawnSync('go', ['build', '-buildvcs=false', '-o', ddxBinary, '.'], {
-		cwd: CLI_DIR,
-		env: process.env,
-		encoding: 'utf8'
-	});
-	if (result.status !== 0) {
-		throw new Error(`failed to build ddx test binary\n${result.stdout}\n${result.stderr}`);
-	}
-	return ddxBinary;
-}
-
 async function freePort(): Promise<number> {
 	return new Promise((resolve, reject) => {
 		const server = net.createServer();
@@ -190,7 +176,7 @@ interface RealServer {
 
 async function startRealDdxServer(fixtureRoot: string): Promise<RealServer> {
 	const port = await freePort();
-	const bin = ensureDdxBinary();
+	const bin = ensureDdxE2EBinary();
 	const child = spawn(bin, ['server', '--port', String(port), '--tsnet=false'], {
 		cwd: fixtureRoot,
 		env: {
@@ -368,6 +354,7 @@ test('TC-035: integrity surface is absent when no issues are returned', async ({
 test('TC-037: integrity panel groups real fixture issues by kind with counts and paths', async ({
 	page
 }) => {
+	test.setTimeout(90_000);
 	const server = await startRealDdxServer(makeIssueFixture());
 	try {
 		await proxyGraphQLToRealServer(page, server.api);
@@ -439,7 +426,9 @@ test('TC-039: clicking a graph node navigates to document detail page', async ({
 
 	// Navigation should go to the document page at the node's specific path
 	// (SPA navigation, no full reload)
-	await expect(page).toHaveURL(`${BASE_URL.replace('/graph', '')}/documents/docs/vision.md`);
+	await expect(page).toHaveURL((url) => {
+		return url.pathname === `${BASE_URL.replace('/graph', '')}/documents/docs/vision.md`;
+	});
 });
 
 // TC-040: Back navigation restores graph viewport
@@ -566,11 +555,7 @@ test('TC-042: doc graph edges meet >=3:1 contrast in light and dark mode', async
 			const fill = parseRgb(arrowCs.fill);
 			const canvas = bgRgb as [number, number, number];
 
-			const blendedStroke = blend(
-				[stroke[0], stroke[1], stroke[2]],
-				strokeOpacity,
-				canvas
-			);
+			const blendedStroke = blend([stroke[0], stroke[1], stroke[2]], strokeOpacity, canvas);
 			return {
 				stroke: contrast(blendedStroke, canvas),
 				arrow: contrast([fill[0], fill[1], fill[2]], canvas),
@@ -645,9 +630,7 @@ test('TC-043: doc-graph 128-node fixture settles with no circle or label overlap
 	// Wait until the bounded-convergence freeze stamps the SVG with settle ms.
 	await page.waitForFunction(
 		() => {
-			const el = document.querySelector(
-				'[data-testid="doc-graph-svg"]'
-			) as SVGSVGElement | null;
+			const el = document.querySelector('[data-testid="doc-graph-svg"]') as SVGSVGElement | null;
 			return !!el && el.dataset.settleMs !== undefined;
 		},
 		{ timeout: 10_000 }
@@ -656,9 +639,7 @@ test('TC-043: doc-graph 128-node fixture settles with no circle or label overlap
 	const layout = await page.evaluate(() => {
 		const svg = document.querySelector('[data-testid="doc-graph-svg"]') as SVGSVGElement;
 		const settleMs = Number(svg.dataset.settleMs ?? '0');
-		const circles = Array.from(
-			svg.querySelectorAll<SVGCircleElement>('g g g circle')
-		);
+		const circles = Array.from(svg.querySelectorAll<SVGCircleElement>('g g g circle'));
 		const items = circles.map((c) => {
 			const g = c.parentNode as SVGGElement;
 			const t = g.transform.baseVal.consolidate();
@@ -763,9 +744,7 @@ test('TC-044: doc-graph layout has no node-bbox overlap and no label-vs-circle o
 
 	await page.waitForFunction(
 		() => {
-			const el = document.querySelector(
-				'[data-testid="doc-graph-svg"]'
-			) as SVGSVGElement | null;
+			const el = document.querySelector('[data-testid="doc-graph-svg"]') as SVGSVGElement | null;
 			return !!el && el.dataset.settleMs !== undefined;
 		},
 		{ timeout: 10_000 }

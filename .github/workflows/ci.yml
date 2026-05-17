@@ -236,11 +236,11 @@ jobs:
 
     - name: Run frontend unit tests
       working-directory: cli/internal/server/frontend
-      run: bun run test
+      run: bun run test:unit -- --run
 
     - name: Run frontend Playwright E2E tests
       working-directory: cli/internal/server/frontend
-      run: bun run test:e2e
+      run: bun run test:e2e:functional
 
   # Test timing — runs the full suite with -json output and uploads durable timing artifacts.
   # Non-gating: timing data is captured regardless of ci job outcome.

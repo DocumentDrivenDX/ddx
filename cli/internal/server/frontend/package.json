@@ -15,6 +15,8 @@
 		"test:unit": "vitest",
 		"test": "bun run test:unit -- --run && bun run test:e2e",
 		"test:e2e": "playwright test",
+		"test:e2e:functional": "playwright test --grep-invert \"DDx Server UI Screenshots|DDx feature-area marketing screenshots\"",
+		"test:e2e:visual": "playwright test e2e/screenshots.spec.ts",
 		"test:a11y": "playwright test e2e/a11y.spec.ts"
 	},
 	"devDependencies": {

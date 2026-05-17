@@ -4,6 +4,17 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: stale worker sidecars no longer poison worker listings
+
+Server worker listings now ignore `.ddx/workers/agent-loop-*/status.json`
+liveness sidecars that are not server `WorkerRecord` registry rows. Worker list
+endpoints also reconcile stale server workers before returning results, so dead
+registry entries are pruned during normal UI/MCP inspection instead of leaving
+blank stale rows that can confuse queue monitors. The frontend CI path now runs
+unit and functional Playwright suites separately so visual/video capture specs
+do not dirty release checks, and the affected E2E helpers serialize DDx binary
+builds to avoid Go build-cache races under high host load.
+
 ### Fixed: release and security workflow follow-through
 
 Release checksums now tolerate archive sets without Windows zip artifacts, and
