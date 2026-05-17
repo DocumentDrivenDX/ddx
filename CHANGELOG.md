@@ -29,7 +29,9 @@ not racing asynchronous network/cache work. Workerprobe integration tests also
 isolate server state before constructing test servers, preventing CI's
 state-pollution guard from seeing worker fixture projects. The D3 graph now
 uses the dedicated solid graph-edge tokens for document edges and arrowheads, so
-the frontend contrast guard passes without relying on stroke opacity.
+the frontend contrast guard passes without relying on stroke opacity. Persona
+contract tests now use retrying temp-directory cleanup for the release-blocking
+CI cleanup race observed in the `persona show` not-found case.
 
 ### Fixed: autonomous provider-connectivity recovery
 
