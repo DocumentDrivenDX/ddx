@@ -258,7 +258,10 @@ jobs:
     - name: Create checksums file
       run: |
         cd artifacts
-        sha256sum *.tar.gz *.zip > checksums.sha256
+        find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+          | sort -z \
+          | xargs -0 sha256sum > checksums.sha256
+        test -s checksums.sha256
         echo "📝 Generated checksums for all artifacts"
     
     - name: Create Release
@@ -267,10 +270,7 @@ jobs:
         name: DDx ${{ github.ref_name }}
         body_path: CHANGELOG.md
         files: |
-          artifacts/*.tar.gz
-          artifacts/*.zip
-          artifacts/*.sha256
-          artifacts/checksums.sha256
+          artifacts/*
         draft: false
         prerelease: ${{ contains(github.ref_name, '-') }}
         generate_release_notes: true

@@ -348,8 +348,11 @@ operator surface with an exhausted-auto-remediation marker.
   does not expect. Surface for operator.
 - `claimed_in_progress` — bead currently claimed by an active worker. No
   action; honored by claim semantics.
-- `provider_route_unavailable` — last dispatch failed with `ResolveRoute: no
-  live provider...`. Surface for operator with provider hint.
+- `provider_route_unavailable` — last dispatch failed because the selected
+  provider route is unavailable. In broad `ddx work` drains this remains
+  retryable: record the failed route, keep the bead open, and let the next
+  attempt choose a different live route. Targeted runs still surface the
+  provider hint.
 - `gated_by_budget_or_cooldown` — auto-remediation matched but
   `--max-recovery-cost` exhausted, cooldown active, or `--no-*` override set.
   Surface with the gate name.
