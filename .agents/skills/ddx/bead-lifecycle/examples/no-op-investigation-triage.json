@@ -1,0 +1,20 @@
+{
+  "mode": "triage",
+  "bead_type": "no-op investigation",
+  "source": "Curated from investigation-first beads that allow close-as-already-resolved when the hypothesized gap does not exist.",
+  "input_summary": {
+    "outcome_event": "no_changes with committed investigation report",
+    "session_log_excerpt": "Read target source and found the requested behavior already implemented; verification command exits 0.",
+    "bead_traits": [
+      "AC explicitly allows Outcome B: close as already-resolved with evidence",
+      "report contains file:line citations"
+    ]
+  },
+  "expected_output": {
+    "classification": "already_satisfied",
+    "recommended_action": "close_as_already_done",
+    "rationale": "The bead's own investigation branch allows no-op closure, and the evidence report verifies the behavior already exists.",
+    "suggested_amendments": [],
+    "suggested_followup_beads": []
+  }
+}

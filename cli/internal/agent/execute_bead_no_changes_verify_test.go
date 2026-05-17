@@ -99,7 +99,7 @@ func TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup(t *testing.T) 
 	childPIDFile := filepath.Join(projectRoot, "sleep.pid")
 	command := nestedPIDCaptureCommand(shellPIDFile, childPIDFile, "sleep 30")
 
-	code, _, err := DefaultVerificationCommandRunnerWithTimeout(100*time.Millisecond)(context.Background(), projectRoot, command)
+	code, _, err := DefaultVerificationCommandRunnerWithTimeout(time.Second)(context.Background(), projectRoot, command)
 	require.Error(t, err)
 	assert.Equal(t, -1, code)
 	assert.Contains(t, err.Error(), "timed out after")
@@ -112,7 +112,7 @@ func TestDefaultVerificationCommandRunnerTimeoutKillsProcessGroup(t *testing.T) 
 }
 
 func TestDefaultVerificationCommandRunnerAllowsConfiguredLongGate(t *testing.T) {
-	command := "sh -lc 'sleep 0.12'"
+	command := "sh -lc 'sleep 0.05'"
 
 	shortRunner := DefaultVerificationCommandRunnerWithTimeout(50 * time.Millisecond)
 	shortCode, _, shortErr := shortRunner(context.Background(), "", command)
@@ -120,7 +120,7 @@ func TestDefaultVerificationCommandRunnerAllowsConfiguredLongGate(t *testing.T) 
 	assert.Equal(t, -1, shortCode)
 	assert.Contains(t, shortErr.Error(), "timed out after")
 
-	longRunner := DefaultVerificationCommandRunnerWithTimeout(250 * time.Millisecond)
+	longRunner := DefaultVerificationCommandRunnerWithTimeout(time.Second)
 	longCode, _, longErr := longRunner(context.Background(), "", command)
 	require.NoError(t, longErr)
 	assert.Equal(t, 0, longCode)

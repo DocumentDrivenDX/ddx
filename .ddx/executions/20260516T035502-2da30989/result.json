@@ -1,0 +1,45 @@
+{
+  "bead_id": "ddx-83d662a9",
+  "attempt_id": "20260516T035502-2da30989",
+  "base_rev": "0c32039c395faa0ba5d12c8154bf55f9aa4a2de6",
+  "result_rev": "54cf99965cb2901d8f46d48b734874cd2b1c2621",
+  "implementation_rev": "54cf99965cb2901d8f46d48b734874cd2b1c2621",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "large-deletion gate: cli/internal/server/review_session_prompt.go deleted 265 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "land_conflict",
+  "reason": "large-deletion gate: cli/internal/server/review_session_prompt.go deleted 265 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-83d662a9/20260516T035502-2da30989-0c32039c395f",
+  "candidate_ref": "refs/ddx/iterations/20260516T035502-2da30989/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260516T035502-2da30989",
+      "result_rev": "54cf99965cb2901d8f46d48b734874cd2b1c2621",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "opus"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "eb-1dbb0a8b",
+  "duration_ms": 1108532,
+  "tokens": 20281,
+  "cost_usd": 2.53618175,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260516T035502-2da30989",
+  "prompt_file": ".ddx/executions/20260516T035502-2da30989/prompt.md",
+  "manifest_file": ".ddx/executions/20260516T035502-2da30989/manifest.json",
+  "result_file": ".ddx/executions/20260516T035502-2da30989/result.json",
+  "usage_file": ".ddx/executions/20260516T035502-2da30989/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-16T03:55:08.16803348Z",
+  "finished_at": "2026-05-16T04:13:36.700995164Z"
+}

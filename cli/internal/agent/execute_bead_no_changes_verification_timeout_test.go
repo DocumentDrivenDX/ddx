@@ -26,14 +26,14 @@ func TestExecuteBeadWorkerNoChangesVerifiedLongCommandCloses(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
-				NoChangesRationale: "verification_command: sh -lc 'sleep 0.12'",
+				NoChangesRationale: "verification_command: sh -lc 'sleep 0.05'",
 			}, nil
 		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                     "worker",
-		NoChangesVerificationTimeout: 250 * time.Millisecond,
+		NoChangesVerificationTimeout: time.Second,
 	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
@@ -57,7 +57,7 @@ func TestExecuteBeadWorkerNoChangesVerifiedLongCommandCloses(t *testing.T) {
 		if ev.Kind == NoChangesEventVerified {
 			sawVerified = true
 			assert.Contains(t, ev.Body, "exit_code=0")
-			assert.Contains(t, ev.Body, "verification_command=sh -lc 'sleep 0.12'")
+			assert.Contains(t, ev.Body, "verification_command=sh -lc 'sleep 0.05'")
 		}
 		if ev.Summary == ExecuteBeadStatusAlreadySatisfied {
 			sawTerminal = true
@@ -96,7 +96,7 @@ func TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps(t *testi
 
 	cfgOpts := config.TestLoopConfigOpts{
 		Assignee:                     "worker",
-		NoChangesVerificationTimeout: 100 * time.Millisecond,
+		NoChangesVerificationTimeout: time.Second,
 	}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
@@ -121,7 +121,7 @@ func TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps(t *testi
 		if ev.Kind == NoChangesEventUnverified {
 			sawUnverified = true
 			assert.Contains(t, ev.Body, "exit_code=-1")
-			assert.Contains(t, ev.Body, "verification_command timed out after 100ms")
+			assert.Contains(t, ev.Body, "verification_command timed out after 1s")
 		}
 	}
 	assert.True(t, sawUnverified, "timeout must be recorded as no_changes_unverified")

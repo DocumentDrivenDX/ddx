@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260516T043007-7ac09885",
+  "bead_id": "ddx-3fd19af1",
+  "base_rev": "86de1c4af53756b734ad140cde3d260de5d1c922",
+  "created_at": "2026-05-16T04:30:13.169934228Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3fd19af1",
+    "title": "migrate bead store core APIs to ctx-first signatures",
+    "description": "PROBLEM\nThe foundation bead for TD-027 split the bead storage migration into caller-facing and package-local slices, but the current `ddx-464feba2` child still bundles the Store API migration together with a repo-wide caller sweep. The local `cli/internal/bead` package work is still a valid, self-contained slice: `cli/internal/bead/backend.go` already declares ctx-first interfaces, while `cli/internal/bead/store.go` still exposes the legacy zero-arg methods (`Init`, `ReadAll`, `Get`, `Create`, `Update`, `Close`, `GenID`).\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/bead/backend.go:74-100` declares the ctx-first foundation interfaces.\n- `cli/internal/bead/store.go:140-1181` still exposes the legacy no-ctx Store methods.\n- `ddx-464feba2` was blocked because the broader caller migration exceeds that child slice.\n\nPROPOSED FIX\nUpdate only the core bead package surface so the Store methods in `cli/internal/bead/store.go` accept `ctx context.Context` as first parameter for the foundational non-event methods, and keep the verification local to `cli/internal/bead/...`. Do not touch the external caller sweep in this bead. Update or add the store/package tests needed to prove the local API still behaves correctly after the signature change.\n\nNON-SCOPE\n- Caller migration in `cli/cmd`, `cli/internal/agent`, `cli/internal/server`, `cli/internal/escalation`, and metrics packages.\n- Event method ctx threading (`AppendEvent`, `Events`, `EventsByKind`).\n- Removing workflow helper methods beyond the foundational signatures this bead changes.\n\nACCEPTANCE\n1. The foundational Store methods in `cli/internal/bead/store.go` take `ctx context.Context` first: `Init`, `ReadAll`, `ReadAllFiltered`, `Get`, `GetWithArchive`, `Create`, `Update`, `Close`, and `GenID`.\n2. `cd cli \u0026\u0026 go test ./internal/bead/...` passes.\n3. `lefthook run pre-commit` passes.\n4. Any tests added or updated in `cli/internal/bead/` are named and deterministic, with no caller-package changes in this bead.",
+    "labels": [
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T043007-7ac09885",
+    "prompt": ".ddx/executions/20260516T043007-7ac09885/prompt.md",
+    "manifest": ".ddx/executions/20260516T043007-7ac09885/manifest.json",
+    "result": ".ddx/executions/20260516T043007-7ac09885/result.json",
+    "checks": ".ddx/executions/20260516T043007-7ac09885/checks.json",
+    "usage": ".ddx/executions/20260516T043007-7ac09885/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-3fd19af1-20260516T043007-7ac09885"
+  },
+  "prompt_sha": "a34266413269499c9d047b5c0cd015d1174ecfc43eec44e6681f5b70539476af"
+}

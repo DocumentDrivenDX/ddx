@@ -10,6 +10,12 @@ docs/dev/routing-lint.md	`profile_ladders` and `model_overrides` keys out of an 
 docs/dev/routing-lint.md	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides"}	lint annotation example for hard-error rejection path
 docs/migrations/routing-config.md	`profile_ladders`, `model_overrides`, `default_harness`, and the old	migration note for hard-rejected retired config keys
 website/content/docs/cli/commands/ddx_work.md	--profile string	generated current flag list; passthrough constraint, not DDx routing policy
+website/content/docs/cli/commands/ddx_run.md	--min-power, --max-power, --profile)	generated current passthrough synopsis; not DDx routing policy
+website/content/docs/cli/commands/ddx_run.md	ddx run --profile smart	generated current passthrough example; not DDx routing policy
+website/content/docs/cli/commands/ddx_run.md	--profile string	generated current flag list; passthrough constraint, not DDx routing policy
+website/content/docs/cli/commands/ddx_try.md	--profile, --effort are forwarded	generated current passthrough synopsis; not DDx routing policy
+website/content/docs/cli/commands/ddx_try.md	--profile string	generated current flag list; passthrough constraint, not DDx routing policy
+website/content/docs/cli/commands/ddx_bead_replay.md	--profile string	generated current replay override flag; not DDx routing policy
 docs/helix/01-frame/features/FEAT-001-cli.md	~~`--quorum=majority --harnesses=a,b`~~ — **removed**	explicit removal requirement; compare-prompts replaces quorum flags
 docs/helix/01-frame/features/FEAT-001-cli.md	**Hard-deprecation handlers** for `legacy agent run`, `legacy agent execute-bead`, `legacy agent work`	explicit hard-deprecation requirement for removed command leaves
 docs/helix/01-frame/features/FEAT-006-agent-service.md	`legacy agent run`, `legacy agent execute-bead`, and `legacy agent work` are not	explicit hard-deprecation boundary

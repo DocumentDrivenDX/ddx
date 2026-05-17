@@ -7,9 +7,54 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestWorkerManagerListSkipsLivenessSidecar(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	workerID := "agent-loop-1778952058931799586"
+	require.NoError(t, workerstatus.WriteLiveness(root, workerID, workerstatus.LivenessRecord{
+		WorkerID:       workerID,
+		ProjectRoot:    root,
+		PID:            9999994,
+		StartedAt:      now.Add(-2 * time.Hour),
+		LastActivityAt: now.Add(-1 * time.Hour),
+	}))
+
+	recs, err := m.List()
+	require.NoError(t, err)
+	assert.Empty(t, recs, "List must not surface worker-side liveness sidecars as server workers")
+}
+
+func TestWorkerManagerListKeepsServerWorkerRecord(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000000-list"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, m.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-1 * time.Hour),
+	}))
+
+	recs, err := m.List()
+	require.NoError(t, err)
+	require.Len(t, recs, 1)
+	assert.Equal(t, workerID, recs[0].ID)
+	assert.Equal(t, "work", recs[0].Kind)
+}
 
 // TestWorkerManagerPruneReapsDeadPID verifies that Prune reaps a registry
 // entry whose recorded PID is no longer alive and updates state to "reaped".

@@ -158,11 +158,10 @@ function projectBase(ids: { nodeId: string; projectId: string }): string {
 // ---------------------------------------------------------------------------
 // TC-002: Documents Page (fixture-backed)
 // The Documents GraphQL query lists documents that participate in the doc
-// graph (markdown files with a `doc:` YAML frontmatter id). The fixture's
-// docs/sample.md is intentionally a plain markdown file with no frontmatter,
-// so it does not register in the graph — these tests therefore assert the
-// project-scoped Documents page renders the empty state for the fixture
-// project, including the table chrome the page always exposes.
+// graph (markdown files with a `ddx:` YAML frontmatter id). The fixture's
+// `.ddx/graphs/scale.yml` registers the 2k synthetic scale corpus under
+// scale/docs/ as docgraph roots, so the project-scoped Documents page
+// renders that corpus along with the table chrome.
 // ---------------------------------------------------------------------------
 test.describe('TC-002: Documents', () => {
   let ids: { nodeId: string; projectId: string; nodeName: string }
@@ -175,9 +174,9 @@ test.describe('TC-002: Documents', () => {
 
   test('TC-002.1 — documents page loads against the fixture project', async ({ page }) => {
     await expect(page.locator('h1')).toContainText('Documents')
-    // Fixture seeds no docgraph-registered docs — the total-count badge
-    // therefore reads "0 total" and the table renders its empty state.
-    await expect(page.getByText('0 total')).toBeVisible()
+    // Fixture seeds the 2k scale corpus as the only docgraph-registered
+    // documents, so the total-count badge reads "2000 total".
+    await expect(page.getByText('2000 total')).toBeVisible()
   })
 
   test('TC-002.2 — table chrome renders Title and Path columns', async ({ page }) => {
@@ -186,8 +185,11 @@ test.describe('TC-002: Documents', () => {
     await expect(headerRow.locator('th', { hasText: 'Path' })).toBeVisible()
   })
 
-  test('TC-002.3 — empty fixture surfaces the No documents found state', async ({ page }) => {
-    await expect(page.getByText('No documents found.')).toBeVisible()
+  test('TC-002.3 — fixture documents render as table rows', async ({ page }) => {
+    // First scale corpus entry must appear; the page paginates first=50 so
+    // the earliest synthetic artifacts are always in the initial slice.
+    const firstRow = page.locator('tbody tr', { hasText: 'scale/docs/artifact-0001.md' })
+    await expect(firstRow).toBeVisible()
   })
 
   test('TC-002.4 — sidebar Documents entry highlights when active', async ({ page }) => {
@@ -273,19 +275,18 @@ test.describe('TC-003: Beads', () => {
 })
 
 // ---------------------------------------------------------------------------
-// TC-005: Agent Sessions (fixture-backed)
-// The old top-level /agent run UI was replaced by the project-scoped
-// /sessions page, which is a read-only history of agent invocations. The
-// fixture has no recorded sessions, so the page must render its empty state
-// (Sessions: 0) without errors.
+// TC-005: Agent Runs (fixture-backed)
+// The project-scoped /sessions compatibility route now redirects to the run
+// layer. The fixture has no recorded runs, so the Runs page must render its
+// empty state without errors.
 // ---------------------------------------------------------------------------
 test.describe('TC-005: Agent', () => {
-  test('TC-005.1 — sessions page loads against the fixture', async ({ page, request }) => {
+  test('TC-005.1 — sessions compatibility route opens the run layer', async ({ page, request }) => {
     const ids = await getFixtureIds(request)
     await page.goto(`${projectBase(ids)}/sessions`)
-    await expect(page.getByRole('heading', { name: 'Sessions' })).toBeVisible()
-    // Empty fixture — the totalCount label still renders ("0 sessions").
-    await expect(page.getByText(/\d+ sessions/)).toBeVisible()
+    await expect(page).toHaveURL(new RegExp(`${projectBase(ids)}/runs\\?layer=run`))
+    await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'run', exact: true })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 
@@ -335,7 +336,7 @@ test.describe('TC-006: Personas', () => {
 // TC-007: Navigation (fixture-backed)
 // Sidebar links activate once a project is selected. Navigate to the fixture
 // project and verify the project-scoped nav routes (Beads/Documents/Graph/
-// Sessions/Personas) are reachable via SPA clicks.
+// Runs/Personas) are reachable via SPA clicks.
 // ---------------------------------------------------------------------------
 test.describe('TC-007: Navigation', () => {
   let ids: { nodeId: string; projectId: string; nodeName: string }
@@ -349,7 +350,7 @@ test.describe('TC-007: Navigation', () => {
   test('TC-007.1 — all project-scoped nav links visible', async ({ page }) => {
     const base = projectBase(ids)
     const nav = page.locator('nav')
-    for (const slug of ['beads', 'documents', 'graph', 'sessions', 'personas']) {
+    for (const slug of ['beads', 'documents', 'graph', 'runs', 'personas']) {
       await expect(nav.locator(`a[href="${base}/${slug}"]`)).toBeVisible()
     }
     // Brand link returns to project home.
@@ -373,8 +374,8 @@ test.describe('TC-007: Navigation', () => {
     await nav.locator(`a[href="${base}/graph"]`).click()
     await expect(page).toHaveURL(new RegExp(`${base}/graph`))
 
-    await nav.locator(`a[href="${base}/sessions"]`).click()
-    await expect(page).toHaveURL(new RegExp(`${base}/sessions`))
+    await nav.locator(`a[href="${base}/runs"]`).click()
+    await expect(page).toHaveURL(new RegExp(`${base}/runs`))
 
     await nav.locator(`a[href="${base}/personas"]`).click()
     await expect(page).toHaveURL(new RegExp(`${base}/personas`))

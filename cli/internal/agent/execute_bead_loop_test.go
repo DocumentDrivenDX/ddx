@@ -1196,6 +1196,8 @@ func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 
 	epic := &bead.Bead{ID: "ddx-epic-001", Title: "Epic container", IssueType: "epic", Priority: 1}
 	require.NoError(t, store.Create(epic))
+	epicChild := &bead.Bead{ID: "ddx-epic-001-child", Title: "Child of epic", Parent: epic.ID, Status: bead.StatusBlocked, Priority: 2}
+	require.NoError(t, store.Create(epicChild))
 
 	cooldownTask := &bead.Bead{ID: "ddx-task-002", Title: "Cooldown task", IssueType: "task", Priority: 1,
 		Extra: map[string]any{
@@ -1497,8 +1499,10 @@ func TestReadyExecutionExcludesEpics(t *testing.T) {
 
 	task := &bead.Bead{ID: "ddx-task01", Title: "Task work", IssueType: "task", Priority: 1}
 	epic := &bead.Bead{ID: "ddx-epic01", Title: "Epic container", IssueType: "epic", Priority: 0}
+	epicChild := &bead.Bead{ID: "ddx-epic01-child", Title: "Epic child task", Parent: epic.ID, Status: bead.StatusBlocked, Priority: 2}
 	require.NoError(t, store.Create(task))
 	require.NoError(t, store.Create(epic))
+	require.NoError(t, store.Create(epicChild))
 
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)

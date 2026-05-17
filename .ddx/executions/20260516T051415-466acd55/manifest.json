@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260516T051415-466acd55",
+  "bead_id": "ddx-8f93492d",
+  "base_rev": "8ab8abb6543fed9c478882f44ba75d2a995d4914",
+  "created_at": "2026-05-16T05:14:20.714209135Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8f93492d",
+    "title": "restore dashboard and agent contrast to WCAG AA",
+    "description": "PROBLEM\nThe frontend accessibility suite is failing on the dashboard and agent views because the primary accent buttons use contrast combinations that do not meet WCAG AA. `cli/internal/server/frontend/e2e/a11y.spec.ts` reports `color-contrast` violations for `.bg-accent-fulcrum` on light mode and `.bg-accent-fulcrum` plus `.dark\\:bg-dark-accent-lever` on dark mode. The visible button styles on the project dashboard and worker detail pages are the source of the failures.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/+page.svelte:50-72` defines the project dashboard action buttons, including the `bg-accent-lever` and `bg-accent-fulcrum` variants.\n- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/[workerId]/+page.svelte:440-490` renders the live response controls that reuse the same low-contrast accent colors in dark and light modes.\n- `cli/internal/server/frontend/e2e/a11y.spec.ts:55-70` is the failing coverage that catches the contrast regression.\n\nPROPOSED FIX\nAdjust the button color tokens or local component classes so the dashboard and worker pages meet WCAG AA contrast in both themes without changing the interaction model. Keep the fix localized to the shared accent button styles or the two affected page components.\n\nNON-SCOPE\n- Copy or layout changes unrelated to contrast.\n- Other page families that are not currently failing axe.\n- Backend data or routing changes.\n\nACCEPTANCE\n1. `cli/internal/server/frontend/e2e/a11y.spec.ts` passes for the dashboard and agent pages in both light and dark modes.\n2. `cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e e2e/a11y.spec.ts --grep \"dashboard|agent\"` passes.\n3. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:frontend",
+      "kind:bug",
+      "phase:iterate",
+      "spec:FEAT-008"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T051415-466acd55",
+    "prompt": ".ddx/executions/20260516T051415-466acd55/prompt.md",
+    "manifest": ".ddx/executions/20260516T051415-466acd55/manifest.json",
+    "result": ".ddx/executions/20260516T051415-466acd55/result.json",
+    "checks": ".ddx/executions/20260516T051415-466acd55/checks.json",
+    "usage": ".ddx/executions/20260516T051415-466acd55/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-8f93492d-20260516T051415-466acd55"
+  },
+  "prompt_sha": "9c64e3d5ffd8f81087af2be4856aef370ac3076a32de75fcf58d87ac68e8cd72"
+}

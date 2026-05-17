@@ -5,10 +5,44 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+// SequentialIDGenerator is a test-only id generator that emits monotonically
+// increasing identifiers. The bead package does not ship a sequential
+// generator in production code; this lives in the test file so the
+// deterministic-ordering tests below can exercise the contract without
+// inflating the production-reachability surface.
+type SequentialIDGenerator struct {
+	Prefix  string
+	counter atomic.Uint64
+}
+
+func (g *SequentialIDGenerator) GenID(ctx context.Context) (string, error) {
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return "", ctx.Err()
+		default:
+		}
+	}
+	if g == nil {
+		return "", fmt.Errorf("bead: sequential id generator is nil")
+	}
+	prefix := g.Prefix
+	if prefix == "" {
+		prefix = DefaultIDPrefix
+	}
+	n := g.counter.Add(1)
+	id := fmt.Sprintf("%s%08x", prefix, n)
+	if err := ValidateID(id); err != nil {
+		return "", err
+	}
+	return id, nil
+}
 
 func TestValidateID_AcceptsValidIDs(t *testing.T) {
 	t.Parallel()

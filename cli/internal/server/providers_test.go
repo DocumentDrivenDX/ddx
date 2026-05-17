@@ -440,59 +440,6 @@ func TestProviderSummaryDisplayName(t *testing.T) {
 	}
 }
 
-// TestProviderPerformanceWithData verifies performance metrics with sample data.
-func TestProviderPerformanceWithData(t *testing.T) {
-	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
-
-	// Generate 5 outcomes within the 7d window.
-	outcomes := []agent.RoutingOutcome{
-		{Harness: "claude", ObservedAt: now.Add(-1 * time.Hour), Success: true, LatencyMS: 1000},
-		{Harness: "claude", ObservedAt: now.Add(-2 * time.Hour), Success: true, LatencyMS: 2000},
-		{Harness: "claude", ObservedAt: now.Add(-3 * time.Hour), Success: false, LatencyMS: 3000},
-		{Harness: "claude", ObservedAt: now.Add(-4 * time.Hour), Success: true, LatencyMS: 4000},
-		{Harness: "claude", ObservedAt: now.Add(-5 * time.Hour), Success: true, LatencyMS: 5000},
-	}
-
-	filtered := filterProviderOutcomes(outcomes, "claude", now, 7)
-	if len(filtered) != 5 {
-		t.Fatalf("expected 5 outcomes, got %d", len(filtered))
-	}
-
-	perf := computeProviderPerformance(filtered)
-	if perf.SampleCount != 5 {
-		t.Errorf("sample_count = %d, want 5", perf.SampleCount)
-	}
-	// 4/5 = 0.8 success rate
-	if perf.SuccessRate != 0.8 {
-		t.Errorf("success_rate = %v, want 0.8", perf.SuccessRate)
-	}
-	// Sorted latencies: [1000, 2000, 3000, 4000, 5000] — p50 = index 2 = 3000
-	if perf.P50LatencyMS != 3000 {
-		t.Errorf("p50_latency_ms = %d, want 3000", perf.P50LatencyMS)
-	}
-	// p95 index = int(4 * 0.95) = int(3.8) = 3 → latency[3] = 4000
-	if perf.P95LatencyMS != 4000 {
-		t.Errorf("p95_latency_ms = %d, want 4000", perf.P95LatencyMS)
-	}
-}
-
-// TestProviderPerformanceTooFewSamples verifies -1 sentinels when sample_count < 3.
-func TestProviderPerformanceTooFewSamples(t *testing.T) {
-	now := time.Date(2026, 4, 14, 12, 0, 0, 0, time.UTC)
-	outcomes := []agent.RoutingOutcome{
-		{Harness: "claude", ObservedAt: now.Add(-1 * time.Hour), Success: true, LatencyMS: 1000},
-		{Harness: "claude", ObservedAt: now.Add(-2 * time.Hour), Success: true, LatencyMS: 2000},
-	}
-
-	perf := computeProviderPerformance(filterProviderOutcomes(outcomes, "claude", now, 7))
-	if perf.SuccessRate != -1 {
-		t.Errorf("success_rate should be -1 for <3 samples, got %v", perf.SuccessRate)
-	}
-	if perf.P50LatencyMS != -1 {
-		t.Errorf("p50 should be -1 for <3 samples, got %v", perf.P50LatencyMS)
-	}
-}
-
 // TestMCPProviderList verifies the ddx_provider_list MCP tool.
 func TestMCPProviderList(t *testing.T) {
 	dir := setupTestDir(t)

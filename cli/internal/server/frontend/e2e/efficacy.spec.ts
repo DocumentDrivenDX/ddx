@@ -229,16 +229,16 @@ test('US-096.b: filtering by power class / label / spec-id updates table and enc
 	await mockEfficacy(page);
 	await page.goto(BASE_URL);
 
-	await page.getByRole('combobox', { name: /powerClass/i }).selectOption('cheap');
+	await page.getByRole('combobox', { name: /power class/i }).selectOption('cheap');
 	await expect(page).toHaveURL(/[?&]powerClass=cheap/);
 
-	await page.getByRole('textbox', { name: /spec[- ]id/i }).fill('FEAT-008');
+	await page.getByRole('textbox', { name: /spec id/i }).fill('FEAT-008');
 	await expect(page).toHaveURL(/[?&]spec-id=FEAT-008/);
 
 	// Reload preserves filter state from URL.
 	await page.reload();
-	await expect(page.getByRole('combobox', { name: /powerClass/i })).toHaveValue('cheap');
-	await expect(page.getByRole('textbox', { name: /spec[- ]id/i })).toHaveValue('FEAT-008');
+	await expect(page.getByRole('combobox', { name: /power class/i })).toHaveValue('cheap');
+	await expect(page.getByRole('textbox', { name: /spec id/i })).toHaveValue('FEAT-008');
 });
 
 test('US-096.c: selection-driven Compare dispatches pre-seeded arms and records appear under Comparisons', async ({

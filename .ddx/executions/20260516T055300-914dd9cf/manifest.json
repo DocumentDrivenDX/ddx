@@ -1,0 +1,120 @@
+{
+  "attempt_id": "20260516T055300-914dd9cf",
+  "bead_id": "ddx-bd927304",
+  "base_rev": "3bdb728c0cdbadb6be2e867e8e81cbbd9921b061",
+  "created_at": "2026-05-16T05:53:05.130515933Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bd927304",
+    "title": "checks: residual production-reachability — internal/bead core",
+    "description": "PROBLEM\nCurrent deadcode RTA on 2026-05-15 still reports residual core bead helpers as unreachable from the production graph, so `ddx-83440482` cannot close from current-tree evidence.\n\nROOT CAUSE WITH FILE:LINE\n`.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` reports residual dead symbols across `cli/internal/bead/archive.go:37`, `axon_backend.go:112`, `context.go:18`, `id.go:77`, `lifecycle.go:133`, `operation.go:12`, and `reconcile.go:307`.\n\nPROPOSED FIX\nResolve every symbol currently listed for these files in the committed artifact. WIRE APIs that should be exercised by the real bead store/runtime path; DELETE speculative or test-only helpers with no production caller. If any symbol still needs deferred investigation after ~15 minutes, annotate it with `// wiring:pending \u003cfollow-up-bead-id\u003e` and file the narrower follow-up before closing this bead.\n\nNON-SCOPE\n- Do not touch `internal/bead/axon/subscription.go`; that residual work is tracked separately.\n- Do not change the production-reachability protocol or checker implementation.",
+    "acceptance": "1. Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\n2. `cd cli \u0026\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/bead/(archive|axon_backend|context|id|lifecycle|operation|reconcile)\\.go'` returns no hits.\n3. Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\n4. Decisions log written to `.ddx/executions/\u003crun-id\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\n5. `cd cli \u0026\u0026 go test ./...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-83440482",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:backfill",
+      "prevention",
+      "epic-closure",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"`cd cli \\u0026\\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/bead/(archive|axon_backend|context|id|lifecycle|operation|reconcile)\\\\.go'` returns no hits.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Decisions log written to `.ddx/executions/\\u003crun-id\\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"`cd cli \\u0026\\u0026 go test ./...` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"`lefthook run pre-commit` passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-16T01:51:06.306423148Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-rapid-mlx\",\"resolved_model\":\"mlx-community/Qwen3.6-27B-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-16T01:51:38.873509265Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-rapid-mlx model=mlx-community/Qwen3.6-27B-8bit"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"`cd cli \\u0026\\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/bead/(archive|axon_backend|context|id|lifecycle|operation|reconcile)\\\\.go'` returns no hits.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Decisions log written to `.ddx/executions/\\u003crun-id\\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"`cd cli \\u0026\\u0026 go test ./...` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"`lefthook run pre-commit` passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-16T03:09:07.990676346Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-rapid-mlx\",\"resolved_model\":\"mlx-community/Qwen3.6-27B-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-16T03:09:44.094903386Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-rapid-mlx model=mlx-community/Qwen3.6-27B-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"mlx-community/Qwen3.6-27B-8bit\",\"actual_power\":5,\"actual_provider\":\"grendel-rapid-mlx\",\"attempt_id\":\"20260516T030926-34fd9164\",\"bead_id\":\"ddx-bd927304\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-16T03:09:44.369653905Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=mlx-community/Qwen3.6-27B-8bit harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"mlx-community/Qwen3.6-27B-8bit\",\"provider\":\"grendel-rapid-mlx\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-16T03:09:44.462725744Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=grendel-rapid-mlx model=mlx-community/Qwen3.6-27B-8bit"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:8000/v1/chat/completions\\\": dial tcp 100.97.179.68:8000: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:8000/v1/chat/completions\\\": dial tcp 100.97.179.68:8000: i/o timeout\",\"harness\":\"fiz\",\"model\":\"mlx-community/Qwen3.6-27B-8bit\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel-rapid-mlx\"}",
+          "created_at": "2026-05-16T03:09:44.537751931Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel-rapid-mlx model=mlx-community/Qwen3.6-27B-8bit connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:8000/v1/chat/completions\": dial tcp 100.97.179.68:8000: i/o timeout\npowerClass=standard\nresult_rev=1c971326d8b49ad840719379e34253c03f4d1558\nbase_rev=1c971326d8b49ad840719379e34253c03f4d1558\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-16T03:09:44.577867022Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Every symbol currently listed for this cluster in `.ddx/executions/20260515T210515-1a20052a/production-reachability-final.json` is either wired into the production graph or deleted.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"`cd cli \\u0026\\u0026 go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... | rg 'internal/bead/(archive|axon_backend|context|id|lifecycle|operation|reconcile)\\\\.go'` returns no hits.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Any remaining `// wiring:pending` annotation created while resolving this cluster cites an open follow-up bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Decisions log written to `.ddx/executions/\\u003crun-id\\u003e/decisions.md` records WIRE|DELETE|PENDING for each listed symbol.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"`cd cli \\u0026\\u0026 go test ./...` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"`lefthook run pre-commit` passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-16T05:52:28.181884924Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-16T03:09:44Z",
+          "count": 1,
+          "model": "mlx-community/Qwen3.6-27B-8bit",
+          "provider": "grendel-rapid-mlx",
+          "reason": "provider_connectivity"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T055300-914dd9cf",
+    "prompt": ".ddx/executions/20260516T055300-914dd9cf/prompt.md",
+    "manifest": ".ddx/executions/20260516T055300-914dd9cf/manifest.json",
+    "result": ".ddx/executions/20260516T055300-914dd9cf/result.json",
+    "checks": ".ddx/executions/20260516T055300-914dd9cf/checks.json",
+    "usage": ".ddx/executions/20260516T055300-914dd9cf/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-bd927304-20260516T055300-914dd9cf"
+  },
+  "prompt_sha": "54239247a47ff7995a38520cb4b8ccda228f0ad45f366e5c7925f2565e9e1d6f"
+}

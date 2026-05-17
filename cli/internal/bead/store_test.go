@@ -101,11 +101,10 @@ func TestNewStore_DefaultsToJSONL(t *testing.T) {
 func TestNewStore_SelectsAxonFromConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	writeStoreConfig(t, tempDir, BackendAxon)
-	t.Setenv(AxonExperimentalEnv, "0")
 
 	s := NewStore(filepath.Join(tempDir, ddxroot.DirName))
 	_, ok := s.backend.(*AxonBackend)
-	assert.True(t, ok, "bead.backend: axon must select AxonBackend without requiring DDX_AXON_EXPERIMENTAL")
+	assert.True(t, ok, "bead.backend: axon must select AxonBackend from config alone")
 }
 
 func TestWithCollectionNormalizesJSONLExtension(t *testing.T) {

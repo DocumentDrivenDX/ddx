@@ -125,11 +125,10 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [linux, darwin, windows]
+        # Fizeau v0.14.32 does not currently cross-compile for Windows
+        # (github.com/easel/fizeau/internal/discoverycache uses syscall.Kill).
+        os: [linux, darwin]
         arch: [amd64, arm64]
-        exclude:
-          - os: windows
-            arch: arm64
     defaults:
       run:
         working-directory: cli
@@ -237,11 +236,11 @@ jobs:
 
     - name: Run frontend unit tests
       working-directory: cli/internal/server/frontend
-      run: bun run test
+      run: bun run test:unit -- --run
 
     - name: Run frontend Playwright E2E tests
       working-directory: cli/internal/server/frontend
-      run: bun run test:e2e
+      run: bun run test:e2e:functional
 
   # Test timing — runs the full suite with -json output and uploads durable timing artifacts.
   # Non-gating: timing data is captured regardless of ci job outcome.

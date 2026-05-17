@@ -1,0 +1,84 @@
+{
+  "attempt_id": "20260516T054638-aa6ba0b6",
+  "bead_id": "ddx-25d551f5",
+  "base_rev": "444113a1f0dedb0ef836a42160d119cc7cff60bd",
+  "created_at": "2026-05-16T05:46:46.382040731Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-25d551f5",
+    "title": "fix drain-queue golden selectors for the workers page",
+    "description": "PROBLEM\nThe drain-queue golden tests are failing because the workers page now exposes more than one heading named `Workers`, and the Playwright spec is using a non-unique role query. `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts:306-410` calls `getByRole('heading', { name: 'Workers' })`, but the page also renders `Reported workers`, which makes the selector ambiguous in strict mode.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts:306-410` uses a heading locator that collides with the page’s section heading.\n- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:1-120` and its rendered output define the page structure that exposes both the main page heading and the workers subsection heading.\n\nPROPOSED FIX\nMake the drain-queue test target the unique page heading or otherwise disambiguate the query so the golden flow can verify the worker dispatch and terminal-state assertions. Keep the fix confined to the drain e2e spec and any minimal accessibility label adjustment required to make the heading unique.\n\nNON-SCOPE\n- Worker dispatch semantics.\n- GraphQL or backend worker state transitions.\n- Other e2e specs.\n\nACCEPTANCE\n1. Both drain-queue golden tests in `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts` pass.\n2. `cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts` passes.\n3. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:frontend",
+      "kind:test",
+      "phase:iterate",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-omlx\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-16T05:22:00.036792233Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"Qwen3.6-27B-MLX-8bit\",\"actual_power\":5,\"actual_provider\":\"grendel-omlx\",\"attempt_id\":\"20260516T052142-c5e33aad\",\"bead_id\":\"ddx-25d551f5\",\"estimated_difficulty\":\"easy\",\"rejected_route_pins\":null,\"requested_power_class\":\"cheap\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-16T05:22:00.339522917Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=easy powerClass=cheap model=Qwen3.6-27B-MLX-8bit harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"Qwen3.6-27B-MLX-8bit\",\"provider\":\"grendel-omlx\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-16T05:22:00.414235263Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"harness\":\"fiz\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel-omlx\"}",
+          "created_at": "2026-05-16T05:22:00.485443971Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout\npowerClass=cheap\nresult_rev=55684e0978a6c0e17ecdfd07b9d12c9ecb4195d3\nbase_rev=55684e0978a6c0e17ecdfd07b9d12c9ecb4195d3\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-16T05:22:00.519385692Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-16T05:22:00Z",
+          "count": 1,
+          "model": "Qwen3.6-27B-MLX-8bit",
+          "provider": "grendel-omlx",
+          "reason": "provider_connectivity"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T054638-aa6ba0b6",
+    "prompt": ".ddx/executions/20260516T054638-aa6ba0b6/prompt.md",
+    "manifest": ".ddx/executions/20260516T054638-aa6ba0b6/manifest.json",
+    "result": ".ddx/executions/20260516T054638-aa6ba0b6/result.json",
+    "checks": ".ddx/executions/20260516T054638-aa6ba0b6/checks.json",
+    "usage": ".ddx/executions/20260516T054638-aa6ba0b6/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-25d551f5-20260516T054638-aa6ba0b6"
+  },
+  "prompt_sha": "2da074ac732a917fa09fc5a186f54211935abaf92a76c7a296ff6b4db58ad2ac"
+}

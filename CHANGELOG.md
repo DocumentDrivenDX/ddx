@@ -4,6 +4,59 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Fixed: stale worker sidecars no longer poison worker listings
+
+Server worker listings now ignore `.ddx/workers/agent-loop-*/status.json`
+liveness sidecars that are not server `WorkerRecord` registry rows. Worker list
+endpoints also reconcile stale server workers before returning results, so dead
+registry entries are pruned during normal UI/MCP inspection instead of leaving
+blank stale rows that can confuse queue monitors. The frontend CI path now runs
+unit and functional Playwright suites separately so visual/video capture specs
+do not dirty release checks, and the affected E2E helpers serialize DDx binary
+builds to avoid Go build-cache races under high host load. Federation E2E now
+allows enough time for the full offline/restart cycle on slower CI runners. The
+fixture-backed graph-integrity E2E now also uses a longer per-test timeout so it
+can finish on slower CI runners.
+
+### Fixed: release and security workflow follow-through
+
+Release checksums now tolerate archive sets without Windows zip artifacts, and
+the optional security scans no longer make the workflow invalid when their
+secrets are unset. The frontend dependency graph also overrides `devalue` to a
+patched version so the high-severity Bun audit finding is cleared. Command test
+fixtures now suppress background update checks so CI temp-directory cleanup is
+not racing asynchronous network/cache work. Workerprobe integration tests also
+isolate server state before constructing test servers, preventing CI's
+state-pollution guard from seeing worker fixture projects. The D3 graph now
+uses the dedicated solid graph-edge tokens for document edges and arrowheads, so
+the frontend contrast guard passes without relying on stroke opacity. Persona
+contract tests now use retrying temp-directory cleanup for the release-blocking
+CI cleanup race observed in the `persona show` not-found case.
+
+### Fixed: autonomous provider-connectivity recovery
+
+`ddx work` now treats repeated provider-connectivity failures as retryable
+route-health evidence instead of parking the bead for operator attention. Broad
+queue workers also reopen legacy provider-connectivity operator-attention beads
+automatically, so dependent trees are not blocked just because one route stayed
+unreachable across attempts.
+
+### Changed: release platforms for Fizeau v0.14.32
+
+The release and CI cross-compile matrices now publish Linux and macOS binaries
+while DDx is pinned to Fizeau v0.14.32. That Fizeau release currently does not
+cross-compile for Windows because its discovery-cache lock code references
+`syscall.Kill`.
+
+### Added: Fizeau v0.14.32 point release
+
+DDx now consumes `github.com/easel/fizeau v0.14.32`.
+
+This refresh picks up Fizeau's latest routing health and benchmark harness
+cleanup work, including the Harbor timeout subprocess cleanup path that prevents
+stranded `fiz` harness descendants from accumulating after cancelled benchmark
+runs.
+
 ### Added: startup housekeeping reapers and execution retention controls
 
 `ddx work`, `ddx try`, and `ddx doctor --apply` now reap stale DDx runtime

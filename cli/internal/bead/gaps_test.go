@@ -279,13 +279,16 @@ func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
 
 	epic := &Bead{ID: "ddx-epic", Title: "Epic container", IssueType: "epic", Priority: 0}
 	task := &Bead{ID: "ddx-task", Title: "Task work", IssueType: "task", Priority: 1}
+	openChild := &Bead{ID: "ddx-epic-child", Title: "Child task", Parent: epic.ID, Priority: 2}
 	require.NoError(t, s.Create(testCtx(), epic))
 	require.NoError(t, s.Create(testCtx(), task))
+	require.NoError(t, s.Create(testCtx(), openChild))
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
-	require.Len(t, ready, 1)
+	require.Len(t, ready, 2)
 	assert.Equal(t, task.ID, ready[0].ID)
+	assert.Equal(t, openChild.ID, ready[1].ID)
 
 	breakdown, err := s.ReadyExecutionBreakdown()
 	require.NoError(t, err)

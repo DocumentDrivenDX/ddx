@@ -31,6 +31,7 @@ const (
 	KindNegative   Kind = "negative"
 	KindSymbol     Kind = "symbol"
 	KindMechanical Kind = "mechanical"
+	KindCommand    Kind = "command"
 	KindProse      Kind = "prose"
 )
 
@@ -162,7 +163,15 @@ func classify(text string) (Kind, string) {
 		return KindMechanical, ""
 	}
 
-	// 6. Default: prose.
+	// 6. Command AC: a quoted or unquoted shell-like command followed by an
+	// outcome verb (returns/exits/passes/fails/outputs). These are mechanically
+	// verifiable — the orchestrator/operator runs the command and ratifies the
+	// outcome — and must not be misclassified as prose.
+	if commandRE.MatchString(text) {
+		return KindCommand, ""
+	}
+
+	// 7. Default: prose.
 	return KindProse, ""
 }
 
@@ -173,6 +182,18 @@ var (
 	negativeCueRE    = regexp.MustCompile(`(?i)\b(no longer|does not|do not|never|removed?|cannot|must not|no calls? to|absence of|without|excluded from|stop tracking|untrack)\b`)
 	mechanicalRE     = regexp.MustCompile(`(?i)\b(rename|relocate(d|s)?|moved? to|file (exists?|present)|comment|docs?(\s+only)?|documentation|gitignore)\b`)
 	negSymbolWordRE  = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_.]{3,}`)
+	// commandRE detects ACs that wrap a runnable shell-like command with an
+	// outcome verb. Two shapes:
+	//   - Quoted command: '<cmd>' / "<cmd>" / `<cmd>` followed by a verb.
+	//   - Unquoted command: line starts with a lowercase command-like token,
+	//     has at least one argument, then a verb + result expression.
+	commandRE = regexp.MustCompile(
+		`^\s*(?:` +
+			"(?:'[^']+'|\"[^\"]+\"|`[^`]+`)\\s+(?i:returns|exits|passes|fails|outputs)\\b" +
+			`|` +
+			`[a-z][\w./-]*(?:\s+\S+)+\s+(?i:returns|exits|passes|fails|outputs)\s+\S` +
+			`)`,
+	)
 )
 
 func hasNegativeCue(s string) bool { return negativeCueRE.MatchString(s) }
@@ -223,6 +244,8 @@ func evaluateOne(item Item, ctx Context) Entry {
 		return evalSymbol(item, target, ctx)
 	case KindMechanical:
 		return evalMechanical(item, ctx)
+	case KindCommand:
+		return evalCommand(item, ctx)
 	default:
 		return Entry{
 			AC:       item.AC,
@@ -342,6 +365,17 @@ func evalSymbol(item Item, target string, ctx Context) Entry {
 	e.Result = ResultPass
 	e.Evidence = fmt.Sprintf("symbol %q present with %d hits; diff touches %d (%s)", target, hits, diffHits, strings.TrimSpace(sample))
 	return e
+}
+
+func evalCommand(item Item, ctx Context) Entry {
+	// Command ACs are run by the orchestrator/operator; the reviewer ratifies
+	// the recorded exit code or output. ac-check does not execute them itself.
+	return Entry{
+		AC:       item.AC,
+		Kind:     KindCommand,
+		Result:   ResultNeedsJudgment,
+		Evidence: "command AC; operator/orchestrator runs the command, reviewer ratifies outcome",
+	}
 }
 
 func evalMechanical(item Item, ctx Context) Entry {

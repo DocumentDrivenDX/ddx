@@ -52,14 +52,11 @@ function readVar(scope: 'light' | 'dark', name: string): string {
 }
 
 describe('D3Graph edge ink', () => {
-	it('uses fg-muted tokens for edge stroke and arrowhead fill (not border-line)', () => {
-		// Tailwind v4 only generates text-* utilities for these custom tokens, so
-		// the edge/arrow drive their stroke and fill from currentColor instead of
-		// stroke-*/fill-* utilities. The text-fg-muted class still anchors the
-		// canonical color choice.
-		expect(graphSource).toContain("'text-fg-muted dark:text-dark-fg-muted'");
-		expect(graphSource).toMatch(/\.attr\(\s*'stroke'\s*,\s*'currentColor'\s*\)/);
-		expect(graphSource).toMatch(/\.attr\(\s*'fill'\s*,\s*'currentColor'\s*\)/);
+	it('uses graph-edge tokens for edge stroke and arrowhead fill (not border-line)', () => {
+		expect(graphSource).toMatch(/\.attr\(\s*'class'\s*,\s*'graph-edge'\s*\)/);
+		expect(graphSource).toMatch(/\.attr\(\s*'class'\s*,\s*'graph-edge-arrow'\s*\)/);
+		expect(cssSource).toMatch(/\.graph-edge\s*\{[\s\S]*stroke:\s*var\(--graph-edge\)/);
+		expect(cssSource).toMatch(/\.graph-edge-arrow\s*\{[\s\S]*fill:\s*var\(--graph-edge-arrow\)/);
 		expect(graphSource).not.toMatch(/stroke-border-line|fill-border-line/);
 		// Subtlety must be carried by color, not alpha — no stroke-opacity attr.
 		expect(graphSource).not.toMatch(/stroke-opacity/);

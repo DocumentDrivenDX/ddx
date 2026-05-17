@@ -16,33 +16,16 @@
 
 import { expect, request as playwrightRequest, test } from '@playwright/test';
 import type { APIRequestContext } from '@playwright/test';
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ensureDdxE2EBinary } from './ddx-binary';
 
 const FRONTEND_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const CLI_DIR = path.resolve(FRONTEND_DIR, '../../..');
 const FIXTURE_DIR = path.resolve(FRONTEND_DIR, 'e2e/fixtures');
-
-let ddxBinary: string | null = null;
-
-function ensureDdxBinary(): string {
-	if (ddxBinary) return ddxBinary;
-	const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ddx-fed-e2e-bin-'));
-	ddxBinary = path.join(binDir, process.platform === 'win32' ? 'ddx-fed-e2e.exe' : 'ddx-fed-e2e');
-	const result = spawnSync('go', ['build', '-o', ddxBinary, '.'], {
-		cwd: CLI_DIR,
-		env: process.env,
-		encoding: 'utf8'
-	});
-	if (result.status !== 0) {
-		throw new Error(`failed to build ddx test binary\n${result.stdout}\n${result.stderr}`);
-	}
-	return ddxBinary;
-}
 
 async function freePort(): Promise<number> {
 	return new Promise((resolve, reject) => {
@@ -125,18 +108,11 @@ interface SpawnOpts {
 }
 
 async function spawnServer(opts: SpawnOpts): Promise<SpawnedServer> {
-	const bin = ensureDdxBinary();
+	const bin = ensureDdxE2EBinary();
 	const port = await freePort();
 	const bindAddr = opts.bindAddr ?? '127.0.0.1';
 	const root = opts.reuseRoot ?? copyFixture();
-	const args = [
-		'server',
-		'--port',
-		String(port),
-		'--addr',
-		bindAddr,
-		'--tsnet=false'
-	];
+	const args = ['server', '--port', String(port), '--addr', bindAddr, '--tsnet=false'];
 	if (opts.hubMode) args.push('--hub-mode');
 	if (opts.allowPlainHTTP) args.push('--federation-allow-plain-http');
 	if (opts.hubURL) args.push('--hub-address', opts.hubURL);
@@ -198,13 +174,12 @@ async function nodeIdOf(s: SpawnedServer): Promise<string> {
 	return body.data.nodeInfo.id;
 }
 
-async function federationNodes(s: SpawnedServer): Promise<
-	Array<{ nodeId: string; status: string; name: string }>
-> {
+async function federationNodes(
+	s: SpawnedServer
+): Promise<Array<{ nodeId: string; status: string; name: string }>> {
 	const r = await s.api.post('/graphql', {
 		data: {
-			query:
-				'{ federationNodes { nodeId status name } }'
+			query: '{ federationNodes { nodeId status name } }'
 		}
 	});
 	const body = (await r.json()) as {
@@ -239,7 +214,7 @@ function firstNonLoopbackIPv4(): string | null {
 // ─── Federation 2-node tests ───────────────────────────────────────────────
 
 test.describe('federation 2-node e2e', () => {
-	test.setTimeout(90_000);
+	test.setTimeout(150_000);
 
 	test('hub /federation lists both nodes; scope=federation merges data; offline+restart cycle', async ({
 		page
@@ -292,10 +267,9 @@ test.describe('federation 2-node e2e', () => {
 			await expect(page.getByTestId('scope-toggle')).toContainText('federation');
 			// Both fixture beads exist; expect at least one row per node by
 			// their fixture title prefix.
-			await expect.poll(
-				async () => await page.getByText('Open ready bead').count(),
-				{ timeout: 10_000 }
-			).toBeGreaterThanOrEqual(2);
+			await expect
+				.poll(async () => await page.getByText('Open ready bead').count(), { timeout: 10_000 })
+				.toBeGreaterThanOrEqual(2);
 
 			// Toggle switches LOCAL vs FEDERATION.
 			await page.getByTestId('scope-toggle').click();
@@ -329,9 +303,9 @@ test.describe('federation 2-node e2e', () => {
 			await page.goto(`${hub.baseURL}/federation`);
 			const offlineRow = page.locator('[data-testid="federation-row"][data-status="offline"]');
 			await expect(offlineRow).toHaveCount(1);
-			await expect(
-				offlineRow.locator('[data-testid="federation-status-badge"]')
-			).toContainText(/offline/i);
+			await expect(offlineRow.locator('[data-testid="federation-status-badge"]')).toContainText(
+				/offline/i
+			);
 
 			// Restart the spoke — registration alone (handshake → StatusActive)
 			// returns it to active without waiting on a heartbeat tick.

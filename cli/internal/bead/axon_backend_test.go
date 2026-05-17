@@ -31,10 +31,10 @@ func newAxonStoreWithTransport(t *testing.T) (*Store, *fakeAxonGraphQLTransport)
 	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	transport := newFakeAxonGraphQLTransport()
 	s := NewStore(dir)
-	s.backend = NewAxonBackend(dir, s.LockWait,
-		WithAxonGraphQLTransport(transport),
-		WithAxonGraphQLClient(transport),
-	)
+	ax := NewAxonBackend(dir, s.LockWait)
+	ax.GraphQLTransport = transport
+	ax.GraphQLClient = transport
+	s.backend = ax
 	require.NoError(t, s.Init(testCtx()))
 	return s, transport
 }
@@ -119,10 +119,9 @@ func TestAxonBackend_GraphQLClientBoundary(t *testing.T) {
 	transport := stubAxonGraphQLTransport{}
 	client := struct{ Name string }{Name: "stub"}
 
-	ax := NewAxonBackend(dir, 3*time.Second,
-		WithAxonGraphQLTransport(transport),
-		WithAxonGraphQLClient(client),
-	)
+	ax := NewAxonBackend(dir, 3*time.Second)
+	ax.GraphQLTransport = transport
+	ax.GraphQLClient = client
 
 	assert.IsType(t, transport, ax.GraphQLTransport)
 	assert.Equal(t, transport, ax.GraphQLTransport)
@@ -247,10 +246,10 @@ func TestAxonBackend_UpdateMutatesAndPersists(t *testing.T) {
 	// Re-read through a fresh Store wired to the same on-disk dir to prove
 	// the change survives the in-memory closure.
 	s2 := NewStore(s.Dir)
-	s2.backend = NewAxonBackend(s.Dir, s.LockWait,
-		WithAxonGraphQLTransport(transport),
-		WithAxonGraphQLClient(transport),
-	)
+	ax2 := NewAxonBackend(s.Dir, s.LockWait)
+	ax2.GraphQLTransport = transport
+	ax2.GraphQLClient = transport
+	s2.backend = ax2
 	got, err := s2.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "added by update", got.Notes)
@@ -507,21 +506,6 @@ func TestAxonBackend_ConcurrentClaimsSerialised(t *testing.T) {
 	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusInProgress, got.Status)
-}
-
-func TestAxonExperimentalEnabledTruthyValues(t *testing.T) {
-	for _, val := range []string{"1", "true", "TRUE", "Yes", "on"} {
-		t.Run(val, func(t *testing.T) {
-			t.Setenv(AxonExperimentalEnv, val)
-			assert.True(t, AxonExperimentalEnabled(), "%q should enable the flag", val)
-		})
-	}
-	for _, val := range []string{"", "0", "false", "no", "off", "garbage"} {
-		t.Run("disabled-"+val, func(t *testing.T) {
-			t.Setenv(AxonExperimentalEnv, val)
-			assert.False(t, AxonExperimentalEnabled(), "%q should not enable the flag", val)
-		})
-	}
 }
 
 // TestAxonBackend_OrphanEventsDropped verifies that an event entity whose

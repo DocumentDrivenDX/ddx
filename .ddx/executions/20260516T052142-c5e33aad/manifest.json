@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260516T052142-c5e33aad",
+  "bead_id": "ddx-25d551f5",
+  "base_rev": "55684e0978a6c0e17ecdfd07b9d12c9ecb4195d3",
+  "created_at": "2026-05-16T05:21:46.965792764Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-25d551f5",
+    "title": "fix drain-queue golden selectors for the workers page",
+    "description": "PROBLEM\nThe drain-queue golden tests are failing because the workers page now exposes more than one heading named `Workers`, and the Playwright spec is using a non-unique role query. `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts:306-410` calls `getByRole('heading', { name: 'Workers' })`, but the page also renders `Reported workers`, which makes the selector ambiguous in strict mode.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts:306-410` uses a heading locator that collides with the page’s section heading.\n- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:1-120` and its rendered output define the page structure that exposes both the main page heading and the workers subsection heading.\n\nPROPOSED FIX\nMake the drain-queue test target the unique page heading or otherwise disambiguate the query so the golden flow can verify the worker dispatch and terminal-state assertions. Keep the fix confined to the drain e2e spec and any minimal accessibility label adjustment required to make the heading unique.\n\nNON-SCOPE\n- Worker dispatch semantics.\n- GraphQL or backend worker state transitions.\n- Other e2e specs.\n\nACCEPTANCE\n1. Both drain-queue golden tests in `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts` pass.\n2. `cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e src/routes/nodes/[nodeId]/projects/[projectId]/drain.e2e.ts` passes.\n3. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:frontend",
+      "kind:test",
+      "phase:iterate",
+      "spec:FEAT-010"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T052142-c5e33aad",
+    "prompt": ".ddx/executions/20260516T052142-c5e33aad/prompt.md",
+    "manifest": ".ddx/executions/20260516T052142-c5e33aad/manifest.json",
+    "result": ".ddx/executions/20260516T052142-c5e33aad/result.json",
+    "checks": ".ddx/executions/20260516T052142-c5e33aad/checks.json",
+    "usage": ".ddx/executions/20260516T052142-c5e33aad/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-25d551f5-20260516T052142-c5e33aad"
+  },
+  "prompt_sha": "62b490cb51e938139aec59f8a557989583d56aa8b53e0a5479f3b5081e218b4b"
+}

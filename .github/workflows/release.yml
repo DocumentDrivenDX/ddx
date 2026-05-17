@@ -94,6 +94,8 @@ jobs:
     needs: [prepare, test]
     strategy:
       matrix:
+        # Fizeau v0.14.32 does not currently cross-compile for Windows
+        # (github.com/easel/fizeau/internal/discoverycache uses syscall.Kill).
         include:
           - goos: linux
             goarch: amd64
@@ -107,9 +109,6 @@ jobs:
           - goos: darwin
             goarch: arm64
             runner: macos-latest
-          - goos: windows
-            goarch: amd64
-            runner: windows-latest
     runs-on: ${{ matrix.runner }}
     steps:
     - uses: actions/checkout@v4
@@ -259,7 +258,10 @@ jobs:
     - name: Create checksums file
       run: |
         cd artifacts
-        sha256sum *.tar.gz *.zip > checksums.sha256
+        find . -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' \) -print0 \
+          | sort -z \
+          | xargs -0 sha256sum > checksums.sha256
+        test -s checksums.sha256
         echo "📝 Generated checksums for all artifacts"
     
     - name: Create Release
@@ -268,10 +270,7 @@ jobs:
         name: DDx ${{ github.ref_name }}
         body_path: CHANGELOG.md
         files: |
-          artifacts/*.tar.gz
-          artifacts/*.zip
-          artifacts/*.sha256
-          artifacts/checksums.sha256
+          artifacts/*
         draft: false
         prerelease: ${{ contains(github.ref_name, '-') }}
         generate_release_notes: true

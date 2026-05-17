@@ -3,8 +3,8 @@ import { createClient } from '$lib/gql/client';
 import { gql } from 'graphql-request';
 
 export const DOCUMENTS_QUERY = gql`
-	query Documents($projectID: ID!, $first: Int, $after: String) {
-		documents(projectID: $projectID, first: $first, after: $after) {
+	query Documents($first: Int, $after: String) {
+		documents(first: $first, after: $after) {
 			edges {
 				node {
 					id
@@ -51,7 +51,6 @@ interface DocumentsResult {
 export const load: PageLoad = async ({ params, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch);
 	const data = await client.request<DocumentsResult>(DOCUMENTS_QUERY, {
-		projectID: params.projectId,
 		first: 50
 	});
 

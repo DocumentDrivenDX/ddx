@@ -490,7 +490,7 @@ func firstNonEmpty(values ...string) string {
 //
 // Migrate uses a permissive archival policy (MinAge=0, MinActiveCount=0)
 // so it drains the historical backlog. Routine archival (after Close)
-// continues to use DefaultArchivePolicy.
+// uses the policy assembled by `ddx bead archive` from its flag set.
 func (s *Store) Migrate() (MigrateStats, error) {
 	return s.ArchiveWithEvents(migratePolicy())
 }

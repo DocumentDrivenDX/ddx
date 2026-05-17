@@ -57,7 +57,7 @@
 			description: 'Attempt ready beads with the project work worker.',
 			Icon: Play,
 			accentClass:
-				'bg-accent-lever text-white hover:opacity-90 focus-visible:ring-accent-lever dark:bg-dark-accent-lever'
+				'bg-accent-lever text-white hover:opacity-90 focus-visible:ring-accent-lever dark:bg-dark-accent-lever dark:text-fg-ink'
 		},
 		{
 			id: 'align',
@@ -67,7 +67,7 @@
 			description: 'Run the HELIX alignment action against the project spec tree.',
 			Icon: RefreshCcw,
 			accentClass:
-				'bg-accent-fulcrum text-white hover:opacity-90 focus-visible:ring-accent-fulcrum dark:bg-dark-accent-fulcrum'
+				'bg-accent-fulcrum text-fg-ink hover:opacity-90 focus-visible:ring-accent-fulcrum dark:bg-dark-accent-fulcrum'
 		},
 		{
 			id: 'checks',

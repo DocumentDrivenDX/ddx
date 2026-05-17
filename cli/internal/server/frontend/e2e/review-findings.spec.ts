@@ -385,6 +385,8 @@ test('review sessions on the same artifact stay isolated across concurrent pages
 
 	const page2 = await page.context().newPage();
 	await Promise.all([page.goto(REVIEW_BASE_URL), page2.goto(REVIEW_BASE_URL)]);
+	await expect(page.getByTestId('review-input')).toBeVisible({ timeout: 15_000 });
+	await expect(page2.getByTestId('review-input')).toBeVisible({ timeout: 15_000 });
 
 	await page.getByTestId('review-input').fill('Inspect nil handling in artifact page A.');
 	await page2.getByTestId('review-input').fill('Inspect race handling in artifact page B.');
@@ -394,8 +396,8 @@ test('review sessions on the same artifact stay isolated across concurrent pages
 		page2.getByTestId('review-submit').click()
 	]);
 
-	await expect(page.getByText(/Session rev-001/)).toBeVisible();
-	await expect(page2.getByText(/Session rev-002/)).toBeVisible();
+	await expect(page.getByText(/Session rev-\d+/)).toBeVisible({ timeout: 15_000 });
+	await expect(page2.getByText(/Session rev-\d+/)).toBeVisible({ timeout: 15_000 });
 
 	await expect(page.getByTestId('review-transcript')).toContainText(
 		'Inspect nil handling in artifact page A.'

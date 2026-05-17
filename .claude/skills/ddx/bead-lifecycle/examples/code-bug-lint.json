@@ -1,0 +1,36 @@
+{
+  "mode": "lint",
+  "bead_type": "code bug",
+  "source": "Curated from ddx-1e516bc9, the audit's 8/8 calibration bead.",
+  "input_summary": {
+    "title": "fizeau Execute: explicit Harness + empty Model + non-empty Profile/MinPower must route within harness's eligible models",
+    "labels": ["phase:2", "area:agent", "kind:fix", "upstream-fizeau", "observed-failure"],
+    "parent": "ddx-e34994e2",
+    "deps": ["ddx-cfedee8e: ladder must supply MinPower for fizeau to act on"],
+    "description_traits": [
+      "problem and observed failure are explicit",
+      "root cause cites fizeau service_execute.go:193-224 and catalog locations",
+      "proposed fix and non-scope are separated"
+    ],
+    "acceptance_traits": [
+      "names TestExecute_ExplicitHarnessEmptyModelWithProfile_RoutesWithinHarness",
+      "names TestExecute_ExplicitHarnessEmptyModelNoProfile_FailsClearly",
+      "includes cd cli && go test ./internal/agent/... ./cmd/... and lefthook pre-commit"
+    ]
+  },
+  "expected_output": {
+    "score": 8,
+    "rationale": [
+      {"criterion": "a", "verdict": "pass", "reason": "title names subsystem, precondition, and expected behavior"},
+      {"criterion": "b", "verdict": "pass", "reason": "description includes observed problem, file:line root cause, proposed upstream change, and non-scope"},
+      {"criterion": "c", "verdict": "pass", "reason": "acceptance criteria name concrete Test* symbols"},
+      {"criterion": "d", "verdict": "pass", "reason": "AC asserts resolved model surfaces through spec, result, and UI endpoints"},
+      {"criterion": "e", "verdict": "pass", "reason": "go test and lefthook gates are explicit"},
+      {"criterion": "f", "verdict": "pass", "reason": "labels include phase, area, kind, and cross-reference facets"},
+      {"criterion": "g", "verdict": "pass", "reason": "parent and dependency are explicit"},
+      {"criterion": "h", "verdict": "pass", "reason": "agent can identify source, desired behavior, non-scope, and verification from the bead alone"}
+    ],
+    "suggested_fixes": [],
+    "waivers_applied": []
+  }
+}

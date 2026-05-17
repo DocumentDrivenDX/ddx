@@ -2487,6 +2487,7 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 	// Scoped/singleton: return workers for just the resolved project.
 	if _, ok := projectFromContext(r.Context()); ok {
 		m := s.workerManagerForRequest(r)
+		m.ReconcileStaleWorkers()
 		recs, err := m.List()
 		if err != nil {
 			writeJSON(w, http.StatusOK, []WorkerRecord{})
@@ -2511,6 +2512,7 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 		} else {
 			m = NewWorkerManager(proj.Path)
 		}
+		m.ReconcileStaleWorkers()
 		recs, err := m.List()
 		if err != nil {
 			continue
@@ -5140,6 +5142,7 @@ func (s *Server) graphqlHandler() http.Handler {
 		resolver.ExecuteLoopWaker = s.workers
 		resolver.Federation = fedProvider
 		resolver.ReportedWorkers = s.reportedWorkers
+		resolver.ReviewSessions = newReviewPromptDecorator(ddxgraphql.NewInMemoryReviewSessionService())
 		gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 			Resolvers:  resolver,
 			Directives: ddxgraphql.DirectiveRoot{},
@@ -5203,6 +5206,7 @@ func (s *Server) mcpWorkerManager(workingDir string) *WorkerManager {
 
 func (s *Server) mcpWorkerList(workingDir string) mcpToolResult {
 	m := s.mcpWorkerManager(workingDir)
+	m.ReconcileStaleWorkers()
 	recs, err := m.List()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}

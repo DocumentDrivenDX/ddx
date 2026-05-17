@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260516T180352-74ae6533",
+  "bead_id": "ddx-7b88e3a7",
+  "base_rev": "a05e21e9855107daefe01f424639b61b23fdbaa2",
+  "created_at": "2026-05-16T18:03:58.398484756Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7b88e3a7",
+    "title": "agent: auto_decompose_epic — wrap runPreClaimDecomposer for genuinely-undecomposed epics",
+    "description": "PROBLEM\nGenuinely undecomposed epics (IssueType==epic, totalChildCount==0, no closure-pending state) need automated decomposition into child task beads so ddx work can drain them. Today the only decomposition path is operator-invoked (bead-breakdown skill) or post-TooLarge recovery (cli/internal/agent/recovery_decompose.go). FEAT-010 §Idle-Path Diagnosis and Auto-Remediation now requires the work loop to auto-dispatch decomposition for this specific case (RC-6) with strict preconditions to avoid the v1-plan duplicate-child bug.\n\nROOT CAUSE\nNo handler exists that bridges the diagnoser's genuinely_needs_decomposition reason code to runPreClaimDecomposer (cli/internal/agent/recovery_decompose.go:48). The existing post-TooLarge hook (NewDecomposePostLadderExhaustionHook at recovery_decompose.go:107) gates only on TooLarge failure class, not on idle-scan diagnosis.\n\nPROPOSED FIX\nAdd cli/internal/agent/auto_decompose_epic.go exporting AutoDecomposeEpic(ctx, store, runner, rcfg, projectRoot, beadID) (DecomposeResult, error). It calls runPreClaimDecomposer (reused unchanged) after asserting every precondition. Preconditions (each must hold; first failing precondition produces a typed error AND increments the per-bead auto_decompose_attempted event count):\n- store.Get(beadID).IssueType == \"epic\"\n- totalChildCount(beadID) == 0 (use the same index ReadyExecutionBreakdown uses)\n- bead is not currently in the EpicClosureCandidate bucket\n- bead has no open dep_blocked_by or closed_or_missing_parent diagnoses (call the new Diagnose function on the bead; if it returns either, return ErrDepsBlockDecompose)\n- bead carries no label in {manual-hold, no-auto-decompose, container}\n- bead description is non-empty AND contains PROBLEM AND PROPOSED FIX sections AND has at least one acceptance criterion AND has at least one label matching ^(spec|area):\n- per-bead event count of auto_decompose_attempted \u003c 3\n- bead has no active execution cooldown\n- (operator override --no-auto-epic-decompose checked at the caller, not here)\n\nOn success: parent epic's execution_eligible is set to false (mirrors recovery_decompose.go behavior), child beads are created via store.Create, the auto_decompose_attempted event is emitted with body {child_ids: [...], cost_usd: N}.\n\nOn failure: SetExecutionCooldown(beadID, now+15m, \"auto_decompose_failed\", reason, baseRev), emit auto_decompose_failed event. On the 3rd cumulative attempt failure also emit auto_remediation_exhausted so the diagnoser surfaces it.\n\nNON-SCOPE\n- Wiring this into the work loop (separate bead).\n- Changing the runPreClaimDecomposer prompt (reused as-is).\n- Surfacing the operator override flag (work-loop bead handles flag plumbing).\n\nPARENT AND DEPS\nParent: ddx-2a1ece2b. Depends on ddx-79e66725 (diagnose function) and ddx-e9f3adaf (RC-1 lifecycle fix — the closure-bucket check needs the correct classifier).",
+    "acceptance": "1. cli/internal/agent/auto_decompose_epic.go exports AutoDecomposeEpic with the signature above.\n2. TestAutoDecomposeEpic_HappyPath: bead is a valid undecomposed epic with proper description+AC+labels; AutoDecomposeEpic dispatches the decomposer (use the existing AgentRunner stub from recovery_decompose tests) and creates child beads.\n3. TestAutoDecomposeEpic_PreconditionGates: one sub-test per precondition (non-epic, has children, in closure-candidate bucket, dep-blocked, manual-hold/no-auto-decompose/container label, missing description sections, missing spec:/area: label, attempt count at cap, active cooldown). Each returns the matching typed error and does NOT dispatch the agent.\n4. TestAutoDecomposeEpic_FailureSetsCooldown: dispatcher returns an error; SetExecutionCooldown is called with status=\"auto_decompose_failed\" and 15m TTL; auto_decompose_failed event emitted.\n5. TestAutoDecomposeEpic_ThirdFailureEmitsExhausted: after three cumulative failures, an auto_remediation_exhausted event is also emitted.\n6. cd cli \u0026\u0026 go test ./internal/agent/... -run TestAutoDecomposeEpic -count=1 green.\n7. cd cli \u0026\u0026 go test ./... green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-2a1ece2b",
+    "labels": [
+      "kind:feat",
+      "area:agent",
+      "phase:2",
+      "spec:FEAT-010",
+      "spec:FEAT-004"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260516T180352-74ae6533",
+    "prompt": ".ddx/executions/20260516T180352-74ae6533/prompt.md",
+    "manifest": ".ddx/executions/20260516T180352-74ae6533/manifest.json",
+    "result": ".ddx/executions/20260516T180352-74ae6533/result.json",
+    "checks": ".ddx/executions/20260516T180352-74ae6533/checks.json",
+    "usage": ".ddx/executions/20260516T180352-74ae6533/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-7b88e3a7-20260516T180352-74ae6533"
+  },
+  "prompt_sha": "a64cb0827dcfa585cb9149f410a55f171060a298c6d0de500a0384a5133e4f03"
+}

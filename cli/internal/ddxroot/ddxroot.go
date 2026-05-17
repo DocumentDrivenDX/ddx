@@ -35,10 +35,6 @@ func JoinRelative(elems ...string) string {
 	return filepath.Join(parts...)
 }
 
-func ProjectPath(projectRoot string) string {
-	return Path(context.Background(), projectRoot)
-}
-
 // ExistingPath returns the DDx state root for projectRoot only when it already
 // exists. Unlike Path, it never bootstraps a convention root.
 func ExistingPath(ctx context.Context, projectRoot string) (string, bool) {

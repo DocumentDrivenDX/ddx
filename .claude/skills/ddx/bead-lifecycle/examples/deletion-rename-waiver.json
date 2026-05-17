@@ -1,0 +1,31 @@
+{
+  "mode": "lint",
+  "bead_type": "deletion/rename",
+  "source": "Curated from rename/refactor beads such as ddx-1d867ec1.",
+  "input_summary": {
+    "title": "rename: execute_bead_loop.go to drain_loop.go",
+    "labels": ["phase:2", "area:agent", "kind:rename", "refactor"],
+    "description_traits": [
+      "root cause cites the stale filename and current command surface",
+      "proposed fix names the old and new file paths",
+      "non-scope excludes behavior changes"
+    ],
+    "acceptance_traits": [
+      "asserts no references to the old filename remain outside migration notes",
+      "asserts byte-identical behavior via existing execute loop tests",
+      "includes cd cli && go test ./internal/agent/... and lefthook run pre-commit"
+    ]
+  },
+  "expected_output": {
+    "score": 8,
+    "rationale": [
+      {"criterion": "d", "verdict": "waived", "reason": "pure rename introduces no new production path"},
+      {"criterion": "c", "verdict": "pass", "reason": "AC names preservation tests or unique go test -run filters"},
+      {"criterion": "h", "verdict": "pass", "reason": "old path, new path, non-scope, and verification are concrete"}
+    ],
+    "suggested_fixes": [],
+    "waivers_applied": [
+      {"criterion": "d", "waiver": "deletion", "reason": "scope is rename-only with behavior preservation assertions"}
+    ]
+  }
+}
