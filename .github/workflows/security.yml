@@ -30,6 +30,8 @@ jobs:
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-latest
+    env:
+      GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -44,11 +46,11 @@ jobs:
         extra_args: --debug --only-verified
     
     - name: Gitleaks
-      if: ${{ secrets.GITLEAKS_LICENSE != '' }}
+      if: ${{ env.GITLEAKS_LICENSE != '' }}
       uses: gitleaks/gitleaks-action@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+        GITLEAKS_LICENSE: ${{ env.GITLEAKS_LICENSE }}
     
     - name: Check for hardcoded secrets in Go code
       run: |
@@ -67,6 +69,9 @@ jobs:
   dependency-scan:
     name: Dependency Scanning
     runs-on: ubuntu-latest
+    env:
+      OSS_INDEX_USERNAME: ${{ secrets.OSS_INDEX_USERNAME }}
+      OSS_INDEX_TOKEN: ${{ secrets.OSS_INDEX_TOKEN }}
     defaults:
       run:
         working-directory: cli
@@ -93,7 +98,7 @@ jobs:
         head-ref: ${{ github.event.pull_request.head.sha || github.sha }}
     
     - name: Nancy vulnerability scan
-      if: ${{ secrets.OSS_INDEX_USERNAME != '' && secrets.OSS_INDEX_TOKEN != '' }}
+      if: ${{ env.OSS_INDEX_USERNAME != '' && env.OSS_INDEX_TOKEN != '' }}
       run: |
         go install github.com/sonatype-nexus-community/nancy@latest
         go list -json -deps | nancy sleuth --quiet --username "$OSS_INDEX_USERNAME" --token "$OSS_INDEX_TOKEN" || exit_code=$?
