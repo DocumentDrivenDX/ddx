@@ -364,7 +364,7 @@ test('drain-queue golden: real-config endpoint shape, click Drain, worker row, n
 	];
 
 	await page.goto(WORKERS_URL);
-	await expect(page.getByRole('heading', { name: 'Workers', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Workers', exact: true })).toBeVisible();
 	await expect(page.getByText('worker-d')).toBeVisible();
 	await expect(page.getByText('done')).toBeVisible();
 
@@ -410,7 +410,7 @@ test('drain-queue golden: typed-error completion records a reason on the bead', 
 	await installGraphqlMocks(page, state);
 
 	await page.goto(WORKERS_URL);
-	await expect(page.getByRole('heading', { name: 'Workers', exact: true })).toBeVisible();
+	await expect(page.getByRole('heading', { level: 1, name: 'Workers', exact: true })).toBeVisible();
 
 	const final = state.workers[0];
 	// Typed error (not the string "error") with a non-empty reason on the bead.
