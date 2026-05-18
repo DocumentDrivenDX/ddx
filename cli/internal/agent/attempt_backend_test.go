@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -78,6 +79,7 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 		WorkDir:     "/tmp/ddx-exec-wt/.execute-bead-clone-ddx-1-attempt",
 		BeadID:      "ddx-1",
 		AttemptID:   "20260518T100000-deadbeef",
+		DockerHome:  "/tmp/ddx-exec-wt/.execute-bead-home-ddx-1-attempt",
 	}
 	args := dockerRunArgs(&config.ExecutionsDockerConfig{
 		Memory:     "8g",
@@ -86,7 +88,7 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 		PidsLimit:  1024,
 		TmpfsSize:  "2g",
 		Network:    "none",
-	}, ws, "/usr/bin/ddx", "runner:latest")
+	}, ws, "/usr/bin/ddx", "runner:latest", []dockerToolMount{{Name: "codex", Path: "/usr/bin/codex"}})
 
 	require.Contains(t, args, "--memory")
 	require.Contains(t, args, "8g")
@@ -96,7 +98,32 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 	require.Contains(t, args, "--network")
 	require.Contains(t, args, "/tmp:rw,nosuid,nodev,size=2g,mode=1777")
 	require.Contains(t, args, "type=bind,src=/usr/bin/ddx,dst=/usr/local/bin/ddx,readonly")
+	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-home-ddx-1-attempt,dst=/tmp/ddx-home")
+	require.Contains(t, args, "type=bind,src=/usr/bin/codex,dst=/usr/local/bin/codex,readonly")
 	require.Equal(t, "runner:latest", args[len(args)-1])
+}
+
+func TestPrepareDockerAttemptHomeCopiesMinimalAuth(t *testing.T) {
+	hostHome := t.TempDir()
+	t.Setenv("HOME", hostHome)
+	require.NoError(t, os.MkdirAll(filepath.Join(hostHome, ".codex"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(hostHome, ".claude"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".codex", "auth.json"), []byte(`{"token":"test"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".codex", "config.toml"), []byte("model = 'test'\n"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".codex", "logs_2.sqlite"), []byte("large runtime state"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".claude", ".credentials.json"), []byte(`{"credential":"test"}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".claude", "history.jsonl"), []byte("runtime history"), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".claude.json"), []byte(`{"projects":{}}`), 0o600))
+
+	attemptHome := filepath.Join(t.TempDir(), "attempt-home")
+	require.NoError(t, prepareDockerAttemptHome(attemptHome))
+
+	require.FileExists(t, filepath.Join(attemptHome, ".codex", "auth.json"))
+	require.FileExists(t, filepath.Join(attemptHome, ".codex", "config.toml"))
+	require.FileExists(t, filepath.Join(attemptHome, ".claude", ".credentials.json"))
+	require.FileExists(t, filepath.Join(attemptHome, ".claude.json"))
+	require.NoFileExists(t, filepath.Join(attemptHome, ".codex", "logs_2.sqlite"))
+	require.NoFileExists(t, filepath.Join(attemptHome, ".claude", "history.jsonl"))
 }
 
 func TestShouldRetryCloneWithoutHardlinks(t *testing.T) {

@@ -23,7 +23,8 @@ const (
 	AttemptBackendLocalClone  = "local-clone"
 	AttemptBackendDockerClone = "docker-clone"
 
-	ExecuteBeadClonePrefix = ".execute-bead-clone-"
+	ExecuteBeadClonePrefix      = ".execute-bead-clone-"
+	ExecuteBeadDockerHomePrefix = ".execute-bead-home-"
 )
 
 // AttemptBackend owns the workspace and transport mechanics for one
@@ -62,6 +63,7 @@ type AttemptWorkspace struct {
 	AttemptID   string
 	BaseRev     string
 	KeepOnError bool
+	DockerHome  string
 	gitOps      GitOps
 }
 
@@ -203,6 +205,11 @@ func (b DockerCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBacke
 	}
 	ws.Backend = AttemptBackendDockerClone
 	ws.KeepOnError = b.Docker != nil && b.Docker.KeepOnError
+	ws.DockerHome = executeBeadDockerHomePath(req.ProjectRoot, req.BeadID, req.AttemptID)
+	if err := prepareDockerAttemptHome(ws.DockerHome); err != nil {
+		_ = os.RemoveAll(ws.WorkDir)
+		return nil, err
+	}
 	return ws, nil
 }
 
@@ -227,7 +234,7 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 		return nil, err
 	}
 
-	args := dockerRunArgs(cfg, req.Workspace, exe, image)
+	args := dockerRunArgs(cfg, req.Workspace, exe, image, dockerToolMounts())
 	runArgs := []string{
 		"ddx", "run",
 		"--project", "/work",
@@ -286,11 +293,18 @@ func (DockerCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptW
 }
 
 func (DockerCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	if ws != nil && ws.DockerHome != "" {
+		_ = os.RemoveAll(ws.DockerHome)
+	}
 	return (LocalCloneAttemptBackend{}).Cleanup(ctx, ws)
 }
 
 func executeBeadClonePath(projectRoot, beadID, attemptID string) string {
 	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadClonePrefix+beadID+"-"+attemptID)
+}
+
+func executeBeadDockerHomePath(projectRoot, beadID, attemptID string) string {
+	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadDockerHomePrefix+beadID+"-"+attemptID)
 }
 
 func localCloneArgs(mode, projectRoot, clonePath string) []string {
@@ -315,7 +329,7 @@ func shouldRetryCloneWithoutHardlinks(mode string, out []byte) bool {
 }
 
 func executionAttemptDirPrefixes() []string {
-	return []string{ExecuteBeadWtPrefix, ExecuteBeadClonePrefix}
+	return []string{ExecuteBeadWtPrefix, ExecuteBeadClonePrefix, ExecuteBeadDockerHomePrefix}
 }
 
 func seedAttemptCloneUserConfig(ctx context.Context, projectRoot, clonePath string) {
@@ -370,7 +384,12 @@ func dockerCloneMode(cfg *config.ExecutionsDockerConfig) string {
 	return cfg.CloneMode
 }
 
-func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe, image string) []string {
+type dockerToolMount struct {
+	Name string
+	Path string
+}
+
+func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe, image string, tools []dockerToolMount) []string {
 	name := "ddx-attempt-" + sanitizeDockerName(ws.AttemptID)
 	args := []string{
 		"run", "--rm", "--init",
@@ -388,6 +407,15 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 		"-e", DDXModeEnvKey + "=" + DDXModeBeadExecution,
 		"-e", "DDX_BEAD_ID=" + ws.BeadID,
 		"-e", "DDX_ATTEMPT_ID=" + ws.AttemptID,
+	}
+	if ws.DockerHome != "" {
+		args = append(args, "--mount", "type=bind,src="+ws.DockerHome+",dst=/tmp/ddx-home")
+	}
+	for _, tool := range tools {
+		if tool.Name == "" || tool.Path == "" {
+			continue
+		}
+		args = append(args, "--mount", "type=bind,src="+tool.Path+",dst=/usr/local/bin/"+tool.Name+",readonly")
 	}
 	for _, env := range dockerCredentialEnv() {
 		args = append(args, "-e", env)
@@ -415,6 +443,76 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 		}
 	}
 	return append(args, image)
+}
+
+func dockerToolMounts() []dockerToolMount {
+	var mounts []dockerToolMount
+	for _, name := range []string{"claude", "codex", "gemini"} {
+		path, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		if resolved, err := filepath.EvalSymlinks(path); err == nil {
+			path = resolved
+		}
+		mounts = append(mounts, dockerToolMount{Name: name, Path: path})
+	}
+	return mounts
+}
+
+func prepareDockerAttemptHome(homeDir string) error {
+	if strings.TrimSpace(homeDir) == "" {
+		return nil
+	}
+	if err := os.RemoveAll(homeDir); err != nil {
+		return fmt.Errorf("resetting docker attempt home: %w", err)
+	}
+	if err := os.MkdirAll(homeDir, 0o700); err != nil {
+		return fmt.Errorf("creating docker attempt home: %w", err)
+	}
+	hostHome, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	for _, file := range []struct {
+		src string
+		dst string
+	}{
+		{filepath.Join(hostHome, ".codex", "auth.json"), filepath.Join(homeDir, ".codex", "auth.json")},
+		{filepath.Join(hostHome, ".codex", "config.toml"), filepath.Join(homeDir, ".codex", "config.toml")},
+		{filepath.Join(hostHome, ".claude", ".credentials.json"), filepath.Join(homeDir, ".claude", ".credentials.json")},
+		{filepath.Join(hostHome, ".claude", "settings.json"), filepath.Join(homeDir, ".claude", "settings.json")},
+		{filepath.Join(hostHome, ".claude.json"), filepath.Join(homeDir, ".claude.json")},
+	} {
+		if err := copyDockerAuthFileIfExists(file.src, file.dst); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyDockerAuthFileIfExists(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat docker auth file %s: %w", src, err)
+	}
+	if info.IsDir() {
+		return nil
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("read docker auth file %s: %w", src, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o700); err != nil {
+		return fmt.Errorf("create docker auth dir %s: %w", filepath.Dir(dst), err)
+	}
+	if err := os.WriteFile(dst, raw, 0o600); err != nil {
+		return fmt.Errorf("write docker auth file %s: %w", dst, err)
+	}
+	return nil
 }
 
 func dockerCredentialEnv() []string {
