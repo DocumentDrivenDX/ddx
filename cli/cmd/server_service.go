@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/service"
 	"github.com/spf13/cobra"
 )
@@ -20,6 +21,25 @@ var envKeysForService = []string{
 	"DDX_AGENT_HARNESS",
 	"DDX_AGENT_MODEL",
 	"DDX_AGENT_EFFORT",
+}
+
+func buildServerServiceConfig(execPath, projectRoot string) service.Config {
+	runtimeDir := service.ServerRuntimeDir()
+	env := map[string]string{
+		"DDX_PROJECT_ROOT": projectRoot,
+	}
+	for _, k := range envKeysForService {
+		if v := os.Getenv(k); v != "" {
+			env[k] = v
+		}
+	}
+	return service.Config{
+		ExecPath:    execPath,
+		ProjectRoot: projectRoot,
+		WorkDir:     runtimeDir,
+		LogPath:     filepath.Join(runtimeDir, "ddx-server.log"),
+		Env:         env,
+	}
 }
 
 func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
@@ -53,20 +73,9 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 			if resolvedWork == "" {
 				return fmt.Errorf("cannot determine project root; specify --workdir")
 			}
+			resolvedWork = gitpkg.FindProjectRoot(resolvedWork)
 
-			env := map[string]string{}
-			for _, k := range envKeysForService {
-				if v := os.Getenv(k); v != "" {
-					env[k] = v
-				}
-			}
-
-			return backend.Install(service.Config{
-				ExecPath: resolvedExec,
-				WorkDir:  resolvedWork,
-				LogPath:  ddxroot.JoinProject(resolvedWork, "logs", "ddx-server.log"),
-				Env:      env,
-			})
+			return backend.Install(buildServerServiceConfig(resolvedExec, resolvedWork))
 		},
 	}
 	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root for the server (default: current directory)")

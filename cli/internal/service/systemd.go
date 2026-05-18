@@ -64,6 +64,9 @@ func (systemdBackend) Install(cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(envFile), 0o700); err != nil {
 		return err
 	}
+	if err := os.MkdirAll(cfg.WorkDir, 0o755); err != nil {
+		return fmt.Errorf("create runtime dir: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(cfg.LogPath), 0o755); err != nil {
 		return fmt.Errorf("create log dir: %w", err)
 	}

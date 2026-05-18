@@ -30,6 +30,9 @@ func (launchdBackend) Install(cfg Config) error {
 	if err := os.MkdirAll(filepath.Dir(plistPath), 0o755); err != nil {
 		return err
 	}
+	if err := os.MkdirAll(cfg.WorkDir, 0o755); err != nil {
+		return fmt.Errorf("create runtime dir: %w", err)
+	}
 	if err := os.MkdirAll(filepath.Dir(cfg.LogPath), 0o755); err != nil {
 		return err
 	}

@@ -102,14 +102,15 @@ MCP (POST /mcp):
 			if federationAllowPlainHTTP && !hubMode {
 				return fmt.Errorf("--federation-allow-plain-http requires --hub-mode")
 			}
+			projectRoot := resolveProjectRoot("", f.WorkingDir)
 			// Preflight: surface degraded startup diagnostics for missing lifecycle
 			// skills or legacy symlinks without blocking server startup.
-			preflightResult := checkProjectRuntimePreflight(f.WorkingDir)
+			preflightResult := checkProjectRuntimePreflight(projectRoot)
 			emitServerPreflightDiagnostics(cmd.ErrOrStderr(), preflightResult)
 
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
-			srv := server.New(listenAddr, f.WorkingDir)
+			srv := server.New(listenAddr, projectRoot)
 			if hubMode {
 				srv.EnableHubMode(federationAllowPlainHTTP)
 				fmt.Fprintf(cmd.OutOrStdout(), "DDx hub-mode enabled (federation routes mounted)\n")
@@ -132,7 +133,7 @@ MCP (POST /mcp):
 			// Build tsnet config. tsnet is on by default — flags override config,
 			// and --tsnet=false disables it. Hostname defaults to ddx-<hostname>.
 			tc := &config.TsnetConfig{Enabled: true}
-			if cfg, err := config.LoadWithWorkingDir(f.WorkingDir); err == nil && cfg.Server != nil && cfg.Server.Tsnet != nil {
+			if cfg, err := config.LoadWithWorkingDir(projectRoot); err == nil && cfg.Server != nil && cfg.Server.Tsnet != nil {
 				*tc = *cfg.Server.Tsnet
 			}
 			if cmd.Flags().Changed("tsnet") {

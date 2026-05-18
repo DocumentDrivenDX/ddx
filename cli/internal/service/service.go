@@ -9,10 +9,11 @@ import (
 
 // Config holds the parameters needed to install a service.
 type Config struct {
-	ExecPath string
-	WorkDir  string
-	LogPath  string
-	Env      map[string]string
+	ExecPath    string
+	ProjectRoot string
+	WorkDir     string
+	LogPath     string
+	Env         map[string]string
 }
 
 // Backend manages a service's lifecycle on a specific platform.
