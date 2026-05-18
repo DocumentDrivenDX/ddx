@@ -437,10 +437,10 @@ is the template for future platforms.
 
 Shared contract across platforms:
 
-- **Working directory:** the user's home directory by default. Operators may
-  pass an explicit project root for legacy singleton/debug installs, but the
-  default service install must not bind the per-user daemon to whichever
-  project happened to run `ddx server install`
+- **Working directory:** an XDG-scoped DDx runtime directory by default
+  (`$XDG_STATE_HOME/ddx/server`, or `~/.local/state/ddx/server`). The default
+  service install must not bind the per-user daemon to whichever project
+  happened to run `ddx server install`
 - **State location:** unchanged from FEAT-020 — `~/.local/share/ddx/`, or
   `$XDG_DATA_HOME/ddx` when set. State and address files never live inside
   the service-manager unit directory
@@ -458,13 +458,13 @@ Shared contract across platforms:
 ### Linux (systemd user unit)
 
 - **Unit path:** `~/.config/systemd/user/ddx-server.service`
-- **Working directory:** `$HOME` by default; `--workdir` is an explicit
-  compatibility override for legacy singleton/debug installs
-- **Logs:** `$XDG_DATA_HOME/ddx/logs/ddx-server.log` (or
-  `~/.local/share/ddx/logs/ddx-server.log`) via `StandardOutput=append:` and
-  `StandardError=append:` by default. Explicit `--workdir` compatibility
-  installs may continue using that project's DDx log directory. `journalctl
-  --user -u ddx-server -f` remains available for live tailing
+- **Working directory:** `$XDG_STATE_HOME/ddx/server` by default, falling back
+  to `~/.local/state/ddx/server`; `--workdir` selects the project root to
+  register at startup but does not become the service cwd
+- **Logs:** `$XDG_STATE_HOME/ddx/server/ddx-server.log` (or
+  `~/.local/state/ddx/server/ddx-server.log`) via `StandardOutput=append:` and
+  `StandardError=append:` by default. `journalctl --user -u ddx-server -f`
+  remains available for live tailing
 - **Environment file:** `~/.config/ddx/server.env`, written with mode `0600`
   at install time. Loaded through systemd `EnvironmentFile=`
 - **Reinstall behavior:** reinstalling over an already-active

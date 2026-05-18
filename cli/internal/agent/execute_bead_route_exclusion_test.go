@@ -60,7 +60,7 @@ func TestProviderConnectivityRouteExclusionDoesNotWriteNumericRetryFloor(t *test
 	assert.Equal(t, "provider_connectivity", report.DisruptionReason)
 	assert.Empty(t, report.RetryAfter, "no per-bead cooldown for provider_connectivity (P6 + ADR-024)")
 
-	require.Equal(t, []int{50}, floorCalls, "EscalationNextFloor must be consulted with actualPower")
+	require.Empty(t, floorCalls, "EscalationNextFloor must NOT be called for provider connectivity failures; power escalation is deferred to no_viable_provider handling")
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)

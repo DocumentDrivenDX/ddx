@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/service"
 	"github.com/spf13/cobra"
 )
@@ -20,6 +21,25 @@ var envKeysForService = []string{
 	"DDX_AGENT_HARNESS",
 	"DDX_AGENT_MODEL",
 	"DDX_AGENT_EFFORT",
+}
+
+func buildServerServiceConfig(execPath, projectRoot string) service.Config {
+	runtimeDir := service.ServerRuntimeDir()
+	env := map[string]string{
+		"DDX_PROJECT_ROOT": projectRoot,
+	}
+	for _, k := range envKeysForService {
+		if v := os.Getenv(k); v != "" {
+			env[k] = v
+		}
+	}
+	return service.Config{
+		ExecPath:    execPath,
+		ProjectRoot: projectRoot,
+		WorkDir:     runtimeDir,
+		LogPath:     filepath.Join(runtimeDir, "ddx-server.log"),
+		Env:         env,
+	}
 }
 
 func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
@@ -46,49 +66,20 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 				resolvedExec = execPath
 			}
 
-			cfg, err := f.serverServiceConfig(resolvedExec, workDir)
-			if err != nil {
-				return err
+			resolvedWork := f.WorkingDir
+			if workDir != "" {
+				resolvedWork = workDir
 			}
-
-			env := map[string]string{}
-			for _, k := range envKeysForService {
-				if v := os.Getenv(k); v != "" {
-					env[k] = v
-				}
+			if resolvedWork == "" {
+				return fmt.Errorf("cannot determine project root; specify --workdir")
 			}
-			cfg.Env = env
-
-			return backend.Install(cfg)
+			resolvedWork = gitpkg.FindProjectRoot(resolvedWork)
+			return backend.Install(buildServerServiceConfig(resolvedExec, resolvedWork))
 		},
 	}
-	cmd.Flags().StringVar(&workDir, "workdir", "", "Override service working directory (default: user home)")
+	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root registered on server startup (default: current directory); service cwd is XDG-scoped")
 	cmd.Flags().StringVar(&execPath, "exec", "", "Path to ddx binary (default: auto-detected)")
 	return cmd
-}
-
-func (f *CommandFactory) serverServiceConfig(execPath, workDir string) (service.Config, error) {
-	if workDir != "" {
-		return service.Config{
-			ExecPath: execPath,
-			WorkDir:  workDir,
-			LogPath:  ddxroot.JoinProject(workDir, "logs", "ddx-server.log"),
-		}, nil
-	}
-
-	defaultWorkDir, err := service.DefaultWorkDir()
-	if err != nil {
-		return service.Config{}, fmt.Errorf("resolve service working directory: %w", err)
-	}
-	defaultLogPath, err := service.DefaultLogPath()
-	if err != nil {
-		return service.Config{}, fmt.Errorf("resolve service log path: %w", err)
-	}
-	return service.Config{
-		ExecPath: execPath,
-		WorkDir:  defaultWorkDir,
-		LogPath:  defaultLogPath,
-	}, nil
 }
 
 func (f *CommandFactory) newServerUninstallCommand() *cobra.Command {

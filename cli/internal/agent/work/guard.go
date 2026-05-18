@@ -153,6 +153,13 @@ func isSystemicPreClaimError(err error) bool {
 	if strings.Contains(msg, "index.lock") {
 		return true
 	}
+	// Corrupt landing indexes are repo-health failures, not bead-specific
+	// failures. They should be surfaced once as systemic so the worker can
+	// auto-repair or ask for operator intervention without cooldowning beads.
+	if strings.Contains(msg, "index file smaller than expected") ||
+		strings.Contains(msg, "repairing landing worktree index") {
+		return true
+	}
 	return false
 }
 

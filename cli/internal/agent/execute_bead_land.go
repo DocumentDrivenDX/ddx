@@ -516,9 +516,20 @@ func isInsideGitWorktree(dir string) bool {
 
 func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
+	repairedCorruptIndex := false
 	for {
-		if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+		out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").CombinedOutput()
+		if err == nil {
 			return nil
+		}
+		if !repairedCorruptIndex && isRecoverableLandingIndexCorruption(string(out)) {
+			repairedCorruptIndex = true
+			if _, recErr := readTreeHeadWithRetry(dir); recErr != nil {
+				return fmt.Errorf("repairing landing worktree index: %w", recErr)
+			}
+			if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+				return nil
+			}
 		}
 		if time.Now().After(deadline) {
 			// The index drifted from HEAD. Two causes are possible:
@@ -548,6 +559,13 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func isRecoverableLandingIndexCorruption(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "index file smaller than expected") ||
+		strings.Contains(lower, "bad index file") ||
+		strings.Contains(lower, "unexpected end of file while reading index")
 }
 
 // indexMatchesRecentAncestorTree reports whether the current index's tree

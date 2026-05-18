@@ -357,11 +357,11 @@ with parallel lifecycle semantics:
 
 - **Linux (systemd user unit)**
   - unit path: `~/.config/systemd/user/ddx-server.service`
-  - working directory: `$HOME` by default so the per-user daemon is not bound
-    to the project that happened to run install; explicit `--workdir` remains
-    a compatibility override for legacy singleton/debug installs
-  - logs: `$XDG_DATA_HOME/ddx/logs/ddx-server.log` (or
-    `~/.local/share/ddx/logs/ddx-server.log`) by default via
+  - working directory: `$XDG_STATE_HOME/ddx/server` (or
+    `~/.local/state/ddx/server`) so the per-user daemon is not bound to the
+    project that happened to run install
+  - logs: `$XDG_STATE_HOME/ddx/server/ddx-server.log` (or
+    `~/.local/state/ddx/server/ddx-server.log`) by default via
     `StandardOutput=append:`
   - env file: `~/.config/ddx/server.env`
   - restart: `Restart=on-failure`, `RestartSec=5`

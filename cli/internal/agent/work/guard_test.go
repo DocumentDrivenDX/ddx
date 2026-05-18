@@ -150,6 +150,30 @@ func TestPreClaimIndexLock_SkipsWithoutCooldown(t *testing.T) {
 	}
 }
 
+// TestPreClaimLandingIndexCorruption_SkipsWithoutCooldown ensures a corrupt
+// landing index remains a systemic repo-health issue rather than a bead-level
+// cooldown trigger.
+func TestPreClaimLandingIndexCorruption_SkipsWithoutCooldown(t *testing.T) {
+	store := &stubCooldownStore{}
+	errMsg := "repairing landing worktree index: fatal: .git/index: index file smaller than expected"
+	guard := NewPreClaimGuard(func(ctx context.Context) error {
+		return errors.New(errMsg)
+	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
+
+	allowed1, reason1 := guard.Allow(context.Background(), "ddx-index-1")
+	allowed2, reason2 := guard.Allow(context.Background(), "ddx-index-2")
+
+	if allowed1 || allowed2 {
+		t.Fatalf("landing index corruption must skip beads")
+	}
+	if !IsSystemicPreClaimSkipReason(reason1) || !IsSystemicPreClaimSkipReason(reason2) {
+		t.Fatalf("landing index corruption must produce systemic reason prefix: %q / %q", reason1, reason2)
+	}
+	if store.calls != 0 {
+		t.Fatalf("landing index corruption must not write bead cooldowns, got %d", store.calls)
+	}
+}
+
 func TestGuard_Complexity_NilGateAllowsSilently(t *testing.T) {
 	var buf bytes.Buffer
 	guard := NewComplexityGuard(nil, &buf)

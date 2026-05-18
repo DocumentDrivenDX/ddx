@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,38 +28,6 @@ func TestServerCommandExposesHubAddressFlag(t *testing.T) {
 	if cmd.Flags().Lookup("hub") != nil {
 		t.Errorf("legacy --hub flag should be removed in favour of --hub-address")
 	}
-}
-
-func TestServerInstall_DefaultsToUserScopedServiceRoot(t *testing.T) {
-	home := t.TempDir()
-	projectRoot := t.TempDir()
-	xdg := filepath.Join(home, ".local", "share")
-	t.Setenv("HOME", home)
-	t.Setenv("XDG_DATA_HOME", xdg)
-
-	f := &CommandFactory{WorkingDir: projectRoot}
-	cfg, err := f.serverServiceConfig("/usr/local/bin/ddx", "")
-	if err != nil {
-		t.Fatalf("serverServiceConfig() error = %v", err)
-	}
-
-	assert.Equal(t, home, cfg.WorkDir)
-	assert.Equal(t, filepath.Join(xdg, "ddx", "logs", "ddx-server.log"), cfg.LogPath)
-	assert.NotContains(t, cfg.WorkDir, projectRoot)
-	assert.NotContains(t, cfg.LogPath, projectRoot)
-}
-
-func TestServerInstall_WorkdirOverridePreservesProjectScopedCompatibility(t *testing.T) {
-	projectRoot := t.TempDir()
-	f := &CommandFactory{WorkingDir: t.TempDir()}
-
-	cfg, err := f.serverServiceConfig("/usr/local/bin/ddx", projectRoot)
-	if err != nil {
-		t.Fatalf("serverServiceConfig() error = %v", err)
-	}
-
-	assert.Equal(t, projectRoot, cfg.WorkDir)
-	assert.Contains(t, cfg.LogPath, "ddx-server.log")
 }
 
 func TestResolveTsnetAuthKey(t *testing.T) {

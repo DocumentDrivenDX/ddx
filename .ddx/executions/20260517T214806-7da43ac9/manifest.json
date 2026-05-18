@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260517T214806-7da43ac9",
+  "bead_id": "ddx-eb1c62f5",
+  "base_rev": "32ab311ea6a866665efe5e48402ca00942a288c4",
+  "created_at": "2026-05-17T21:48:20.878330962Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-eb1c62f5",
+    "title": "refresh screenshot baselines for the current project shell",
+    "description": "PROBLEM\nThe screenshot suite is failing across the dashboard, beads, documents, graph, agent, project-overview, plugins, and efficacy pages because the current rendered pages are taller than the stored baselines. `cli/internal/server/frontend/e2e/screenshots.spec.ts:133-144` repeatedly reports 1280x720 expectations versus 1280px-tall actuals ranging from 729px to 1113px, which indicates baseline drift in the current shell/layout contract rather than a single-page crash.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/frontend/e2e/screenshots.spec.ts:133-144` captures the stale screenshots and reports the height mismatch.\n- The affected pages are the current shell-level routes exercised by the screenshot matrix: dashboard, beads-kanban, documents, graph, agent, project-overview, plugins, and efficacy.\n\nPROPOSED FIX\nInvestigate the current rendered output and either stabilize the shared shell layout or refresh the affected snapshots to the current contract, keeping the change limited to the screenshot test and snapshot artifacts. Do not expand the scope to unrelated page features.\n\nNON-SCOPE\n- Functional route or data-model changes unless they are required to stabilize the screenshot contract.\n- Non-screenshot e2e suites.\n- Backend data or queue changes.\n\nACCEPTANCE\n1. `cli/internal/server/frontend/e2e/screenshots.spec.ts` passes for the affected pages.\n2. `cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e e2e/screenshots.spec.ts` passes.\n3. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:frontend",
+      "kind:test",
+      "phase:iterate",
+      "spec:FEAT-008",
+      "spec:FEAT-010"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260517T214806-7da43ac9",
+    "prompt": ".ddx/executions/20260517T214806-7da43ac9/prompt.md",
+    "manifest": ".ddx/executions/20260517T214806-7da43ac9/manifest.json",
+    "result": ".ddx/executions/20260517T214806-7da43ac9/result.json",
+    "checks": ".ddx/executions/20260517T214806-7da43ac9/checks.json",
+    "usage": ".ddx/executions/20260517T214806-7da43ac9/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-eb1c62f5-20260517T214806-7da43ac9"
+  },
+  "prompt_sha": "8e549497997f9c3307ac073ae303fd51abe47b433ec91a5455b57925f6181341"
+}
