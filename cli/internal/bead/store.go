@@ -1593,7 +1593,7 @@ func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string)
 			b.Extra["closing_commit_sha"] = commitSHA
 		}
 		// ClosureGate guards the evidence-close path only; reconcile-close skips
-		// it by design (TD-031 §5).
+		// it by design (TD-031 §3.1).
 		if err := ClosureGate(b); err != nil {
 			// Surface via bead notes so a later operator audit can see why the
 			// close was refused; a single error path would be dropped by the

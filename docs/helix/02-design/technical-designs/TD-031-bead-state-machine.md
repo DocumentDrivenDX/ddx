@@ -63,9 +63,31 @@ New DDx execution semantics must use labels, events, or `extra` metadata unless 
 
 ## 3. Outcome → Label / Event / Extra Mapping
 
-When a drain attempt finishes, `execute-bead` returns one of a fixed set of outcomes plus optional no_changes lifecycle evidence. The mapping below is the canonical queue-management contract.
+When a drain attempt finishes, `execute-bead` returns one of a fixed set of outcomes plus optional no_changes lifecycle evidence. The mapping below is the canonical queue-management contract. For details on how closures work, see §3.1 (reconcile-close vs evidence-close).
 
-### 3.1 Lifecycle Reliability Invariants
+### 3.1 Bead Closure Paths: Reconcile-Close vs Evidence-Close
+
+DDx supports two distinct paths to transition a bead to `closed` status, each with different prerequisites and safety guarantees:
+
+**Reconcile-Close** (`UpdateWithLifecycleStatus` with `ManualClose=true`, invoked by `bead.Reconcile` when `CloseSatisfied=true`):
+- **When used**: When all transitive dependencies are satisfied (closed), the parent bead is automatically closed to reflect the completion of its dependency tree.
+- **Execution evidence**: The bead has no execution session and no `closing_commit_sha` of its own. Instead, closure is justified by reference — each transitive dependency has individually either passed `ClosureGate` (evidence-close) or been a prior reconcile-close, so the parent's closure inherits evidence by reference through the dependency edges.
+- **ClosureGate bypass**: Reconcile-close intentionally bypasses `ClosureGate` because the evidence is carried in the dependency graph, not in the bead's own fields. This bypass is safe by design: a bead cannot transition to `closed` via reconcile unless every transitive dependency is `closed`.
+- **Code locations**: `reconcile.go:244-250` (`UpdateWithLifecycleStatus`), `reconcile.go:239-243` (intent comment), `reconcile_test.go:TestReconcileCloseSkipsClosureGate`.
+
+**Evidence-Close** (`CloseWithEvidence` or `Store.Close`):
+- **When used**: When a bead is closed after execution, review, or manual administration. This is the primary close path for work that ran and completed.
+- **Execution evidence required**: The bead must carry one of:
+  - A `closing_commit_sha` (exact SHA of the commit that closed the work)
+  - A `session_id` (agent session that ran the work)
+  - An execute-bead success event in the events history
+  - AND a terminal verdict event (review APPROVE with non-empty rationale, explicit review-skipped marker, or manual-close marker)
+- **ClosureGate enforcement**: `CloseWithEvidence` enforces `ClosureGate` (per `ddx-e30e60a9`) to reject closes without sufficient evidence, preventing silent false-closures. `Store.Close` bypasses the gate by design as a manual-administration escape hatch.
+- **Code locations**: `store.go:1568-1610` (`CloseWithEvidence`), `store.go:1428-1560` (`Store.Close`), `store.go:1502-1558` (`ClosureGate` definition and documentation).
+
+Both paths append an event (`lifecycle_reconciled` for reconcile-close, implicit in the session evidence for evidence-close) and trigger event externalization to sidecars when needed.
+
+### 3.1.1 Lifecycle Reliability Invariants
 
 - Raw `no_changes` is attempt evidence, not a durable bead queue state. The drain loop MUST translate it into one of the rows below before mutating the bead.
 - `work-retry-after` may be set only when retrying the same bead after time passes could plausibly succeed without human/spec/dependency changes.
@@ -96,9 +118,9 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 - `closed` means implementation, verification, and the default adversarial pre-close review gate have all passed, or the work was verified as already satisfied. Review failure never reopens a closed bead; it prevents close.
 - Automatic implementation retry is bounded and applies only to classifications where the implementer had valid task context and further automated work can plausibly resolve the finding. Spec gaps, missing acceptance criteria, decomposition overflow, and exhausted reviewer failures require operator resolution only after the automatic reframe/decompose/replacement sequence cannot produce executable work.
 - Latest terminal events and close evidence beat stale `work-*` `extra` metadata. Reconciliation may clear stale management fields, but MUST preserve append-only events and evidence.
-- `ClosureGate` (`store.go:1529`, inside `closeWithEvidence` at `store.go:1582`) applies exclusively to evidence-bearing execute-bead closes via `CloseWithEvidence`. The dependency-satisfied reconcile-close path (`applyReconcilePlan` at `reconcile.go:211-261`, `CloseSatisfied=true`) is a distinct meta-close that intentionally bypasses `ClosureGate`: the bead has no execution session and no `closing_commit_sha` of its own. The bypass is safe because every transitive dependency is `closed` — each having individually passed `ClosureGate` or been a prior meta-close — so the parent's closure inherits its evidence by reference through the dependency edges.
+- Closure paths are covered in detail in §3.1: reconcile-close (automatic, dependency-driven) vs evidence-close (manual or execution-driven). See §3.1 for the safety and evidence requirements of each path.
 
-### 3.2 Mapping Table
+### 3.2 Outcome → Label / Event / Extra Mapping
 
 | Outcome or lifecycle action | Status transition | Label changes | Events appended | Extra updates |
 |---|---|---|---|---|

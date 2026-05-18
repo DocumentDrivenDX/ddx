@@ -197,7 +197,7 @@ func TestLifecycle_ParentEpicNotOrdinaryExecutionReady(t *testing.T) {
 }
 
 func TestReconcileCloseSkipsClosureGate(t *testing.T) {
-	// TD-031 §5: reconcile-close intentionally bypasses ClosureGate — the bead
+	// TD-031 §3.1: reconcile-close intentionally bypasses ClosureGate — the bead
 	// has no execution session and no closing_commit_sha; transitive deps supply evidence.
 	s := newTestStore(t)
 
@@ -205,7 +205,7 @@ func TestReconcileCloseSkipsClosureGate(t *testing.T) {
 	require.ErrorIs(t, ClosureGate(&Bead{ID: "ddx-empty", Extra: map[string]any{}}), ErrClosureGateRejected)
 
 	// A bead with no session_id, no closing_commit_sha, and a no_changes_verified event
-	// is the canonical reconcile-close shape (all deps closed per TD-031 §5).
+	// is the canonical reconcile-close shape (all deps closed per TD-031 §3.1).
 	b := &Bead{
 		ID:    "ddx-reconcile-bypass",
 		Title: "dependency-satisfied bead with no session",
