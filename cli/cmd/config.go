@@ -143,21 +143,9 @@ func (f *CommandFactory) runConfig(cmd *cobra.Command, args []string) error {
 
 // configGet retrieves a configuration value
 func configGet(workingDir string, key string, global bool) (string, error) {
-	var cfg *config.Config
-	var err error
-
-	if workingDir != "" && !global {
-		// Load config from specific working directory using new format
-		cfg, err = config.LoadWithWorkingDir(workingDir)
-		if err != nil {
-			return "", fmt.Errorf("failed to load configuration from %s: %w", workingDir, err)
-		}
-	} else {
-		// Use standard config loading (current directory)
-		cfg, err = config.Load()
-		if err != nil {
-			return "", fmt.Errorf("failed to load configuration: %w", err)
-		}
+	cfg, err := configLoadForCommand(workingDir, global)
+	if err != nil {
+		return "", err
 	}
 
 	return extractConfigValue(cfg, key)
@@ -165,35 +153,9 @@ func configGet(workingDir string, key string, global bool) (string, error) {
 
 // configSet sets a configuration value
 func configSet(workingDir string, key, value string, global bool) error {
-	var cfg *config.Config
-	var err error
-
-	if workingDir != "" && !global {
-		// Load config from specific working directory using new format
-		cfg, err = config.LoadWithWorkingDir(workingDir)
-		if err != nil {
-			// If file doesn't exist in working dir, create a new config
-			if os.IsNotExist(err) {
-				cfg = &config.Config{
-					Version: "1.0",
-					Library: &config.LibraryConfig{
-						Path: ".ddx/plugins/ddx",
-						Repository: &config.RepositoryConfig{
-							URL:    "https://github.com/DocumentDrivenDX/ddx-library",
-							Branch: "main",
-						},
-					},
-				}
-			} else {
-				return fmt.Errorf("failed to load configuration from %s: %w", workingDir, err)
-			}
-		}
-	} else {
-		// Use standard config loading (current directory)
-		cfg, err = config.Load()
-		if err != nil {
-			return fmt.Errorf("failed to load configuration: %w", err)
-		}
+	cfg, err := configLoadForCommand(workingDir, global)
+	if err != nil {
+		return err
 	}
 
 	if err := setConfigValueInStruct(cfg, key, value); err != nil {
@@ -201,6 +163,36 @@ func configSet(workingDir string, key, value string, global bool) error {
 	}
 
 	return configSave(workingDir, cfg, global)
+}
+
+func configLoadForCommand(workingDir string, global bool) (*config.Config, error) {
+	if global {
+		configPath := configGetPath(workingDir, true)
+		loader, err := config.NewConfigLoaderWithWorkingDir(filepath.Dir(configPath))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create config loader: %w", err)
+		}
+		cfg, err := loader.LoadConfigFromPath(configPath)
+		if err != nil {
+			if os.IsNotExist(err) || strings.Contains(err.Error(), "no such file") || strings.Contains(err.Error(), "failed to read config file") {
+				return config.DefaultNewConfig(), nil
+			}
+			return nil, fmt.Errorf("failed to load global configuration from %s: %w", configPath, err)
+		}
+		return cfg, nil
+	}
+	if workingDir != "" {
+		cfg, err := config.LoadWithWorkingDir(workingDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load configuration from %s: %w", workingDir, err)
+		}
+		return cfg, nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load configuration: %w", err)
+	}
+	return cfg, nil
 }
 
 // configValidate validates the configuration

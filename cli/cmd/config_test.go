@@ -259,6 +259,19 @@ persona_bindings:
 	assert.NoError(t, err)
 	assert.Contains(t, output, "author")
 	assert.Contains(t, output, "email")
+
+	_, err = executeCommand(rootCmd, "config", "--global", "set", "executions.docker.image", "runner:dev")
+	require.NoError(t, err)
+	_, err = executeCommand(rootCmd, "config", "--global", "set", "executions.docker.memory", "8g")
+	require.NoError(t, err)
+
+	output, err = executeCommand(rootCmd, "config", "--global", "get", "executions.docker.image")
+	require.NoError(t, err)
+	assert.Contains(t, output, "runner:dev")
+
+	output, err = executeCommand(rootCmd, "config", "--global", "get", "executions.docker.memory")
+	require.NoError(t, err)
+	assert.Contains(t, output, "8g")
 }
 
 // TestConfigCommand_Help tests the help output
