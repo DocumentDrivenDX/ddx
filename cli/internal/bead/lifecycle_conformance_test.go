@@ -29,6 +29,7 @@ import (
 //   - cli/internal/agent/execute_bead_post_review.go — migration-only cleanup
 //   - cli/internal/agent/execute_bead_conflict_recovery.go — migration-only cleanup
 //   - cli/internal/agent/execute_bead_loop.go — migration-only cleanup
+//   - cli/internal/agent/execute_bead_park_helpers.go — migration-only cleanup
 //   - cli/internal/agent/try/conflict_recovery.go — migration-only cleanup
 //   - cli/cmd/bead.go — operator commands, migration-only cleanup paths
 func TestNoActiveLifecycleLabelDriving(t *testing.T) {
@@ -44,6 +45,7 @@ func TestNoActiveLifecycleLabelDriving(t *testing.T) {
 		"cli/internal/agent/execute_bead_post_review.go",
 		"cli/internal/agent/execute_bead_conflict_recovery.go",
 		"cli/internal/agent/execute_bead_loop.go",
+		"cli/internal/agent/execute_bead_park_helpers.go",
 		"cli/internal/agent/try/conflict_recovery.go",
 		"cli/cmd/bead.go",
 	}

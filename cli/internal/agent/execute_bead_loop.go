@@ -551,6 +551,7 @@ type ExecuteBeadLoopStore interface {
 	Update(args ...any) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 	ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error
+	ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail string, body map[string]any, at time.Time, mutate func(*bead.Bead)) error
 }
 
 // readyDiagnoser is the optional interface the work loop uses to explain an
@@ -4044,22 +4045,17 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bea
 	)
 	body["fingerprint"] = findingFingerprint
 	body["prompt_fingerprint"] = promptFingerprint
-	bodyJSON, _ := json.Marshal(body)
-	if err := parkToProposedWithIntakeMeta(store, candidate.ID, bead.ParkIntakeRejection, ParkToProposedOpts{
-		Reason:          reason,
-		Summary:         "pre-claim intake blocked execution",
-		SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
-		Since:           at,
-	}); err != nil {
-		return false, err
-	}
-	if err := store.AppendEvent(candidate.ID, bead.BeadEvent{
-		Kind:      "intake.blocked",
-		Summary:   string(outcome),
-		Body:      string(bodyJSON),
-		Actor:     actor,
-		Source:    "ddx work",
-		CreatedAt: at,
+
+	if err := store.ParkToProposedWithIntakeEvent(candidate.ID, actor, string(outcome), reason, detail, body, at, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Labels = removeBeadLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          reason,
+			Since:           at.UTC().Format(time.RFC3339),
+			Source:          "ddx work",
+			SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
+			Summary:         "pre-claim intake blocked execution",
+		})
 	}); err != nil {
 		return false, err
 	}

@@ -1,6 +1,10 @@
 package bead
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // ParkReason identifies the canonical reason for transitioning a bead to
 // proposed status for operator attention. Each constant maps to a fixed
@@ -54,5 +58,27 @@ func (s *Store) ParkToProposed(id string, reason ParkReason, mutate func(*Bead))
 			mutate(b)
 		}
 		return nil
+	})
+}
+
+// ParkToProposedWithIntakeEvent transitions a bead to proposed status and
+// appends an intake.blocked event. It atomically performs the transition and
+// appends the event. The mutate callback runs after the status transition and
+// before the event is appended; pass nil if no additional mutations are needed.
+func (s *Store) ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail string, body map[string]any, at time.Time, mutate func(*Bead)) error {
+	// Transition to proposed with intake rejection
+	if err := s.ParkToProposed(id, ParkIntakeRejection, mutate); err != nil {
+		return err
+	}
+
+	// Append the intake.blocked event
+	bodyJSON, _ := json.Marshal(body)
+	return s.AppendEvent(id, BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   outcome,
+		Body:      string(bodyJSON),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
 	})
 }

@@ -28,6 +28,11 @@ func (s *parkCountingStore) ParkToProposed(id string, reason bead.ParkReason, mu
 	return s.Store.ParkToProposed(id, reason, mutate)
 }
 
+func (s *parkCountingStore) ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail string, body map[string]any, at time.Time, mutate func(*bead.Bead)) error {
+	atomic.AddInt32(&s.parkCalls, 1)
+	return s.Store.ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail, body, at, mutate)
+}
+
 func TestIntake_ActionableAtomic_ClaimsNormally(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
