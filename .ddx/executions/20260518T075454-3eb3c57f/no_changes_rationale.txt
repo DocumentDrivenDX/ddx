@@ -1,0 +1,3 @@
+status: open
+reason: awaiting completion of child beads B1-B6
+verification_command: bash -c 'for bid in ddx-fbfcbd17 ddx-e8956709 ddx-018da544 ddx-fe2a5722 ddx-94ff4f5d ddx-4eb047cc; do status=$(ddx bead show "$bid" --json 2>/dev/null | jq -r .Status); [ "$status" = "closed" ] || exit 1; done'
