@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260518T094218-8b6080ca",
+  "bead_id": "ddx-94ff4f5d",
+  "base_rev": "a1cc411a17b807b5904e5dca3617e380fcb8850e",
+  "created_at": "2026-05-18T09:42:28.286036066Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-94ff4f5d",
+    "title": "refactor: extract Store.ParkToProposed helper to consolidate intake rejection",
+    "description": "PROBLEM\n6 call sites in cli/internal/agent/{execute_bead_loop.go, execute_bead_post_review.go, execute_bead_review_terminal.go, execute_bead_conflict_recovery.go} duplicate the pattern of parking a bead to status=proposed with an intake event.\n\nROOT CAUSE\nparkBeadPostIntakeRejection exists in execute_bead_loop.go:4016-4050 and is called from 6+ locations, but it directly manipulates Store and appends events inline. The Store interface does not expose a single public method that encapsulates both the transition and the event atomically.\n\nPROPOSED FIX\n1. Extract a new Store.ParkToProposed(id, actor, outcome, reason, detail, at time.Time) error method that:\n   - Calls TransitionLifecycle to set status=proposed with OperatorRequired=true.\n   - Appends a structured intake event.\n   - Returns any error.\n2. Update parkBeadPostIntakeRejection to use the new Store.ParkToProposed (or deprecate parkBeadPostIntakeRejection entirely if it becomes redundant).\n3. Replace all 6 agent call sites with the new Store.ParkToProposed method.\n4. Verify no functional change: output beads must have identical status and events.\n\nNON-SCOPE\nDo not change the intake rejection policy itself. Do not add new parameters or optional behavior.\n",
+    "acceptance": "1. Store.ParkToProposed(id, actor, outcome, reason, detail, at time.Time) error exists in store.go.\n2. Store.ParkToProposed atomically transitions to proposed and appends an intake event.\n3. grep -r 'parkBeadPostIntakeRejection' cli/internal/agent/*.go shows 0 references (all replaced).\n4. All 6+ agent call sites (execute_bead_loop.go, execute_bead_post_review.go, etc.) use Store.ParkToProposed.\n5. cd cli \u0026\u0026 go test ./internal/agent/execute_bead_loop_test.go passes.\n6. cd cli \u0026\u0026 go test ./internal/agent/execute_bead_intake_decompose_test.go passes (uses intake rejection).\n",
+    "parent": "ddx-6e6d08f8",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:refactor",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Store.ParkToProposed(id, actor, outcome, reason, detail, at time.Time) error exists in store.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Store.ParkToProposed atomically transitions to proposed and appends an intake event.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"grep -r 'parkBeadPostIntakeRejection' cli/internal/agent/*.go shows 0 references (all replaced).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All 6+ agent call sites (execute_bead_loop.go, execute_bead_post_review.go, etc.) use Store.ParkToProposed.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/agent/execute_bead_loop_test.go passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/agent/execute_bead_intake_decompose_test.go passes (uses intake rejection).\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-18T09:24:36.536820767Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Store.ParkToProposed(id, actor, outcome, reason, detail, at time.Time) error exists in store.go.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Store.ParkToProposed atomically transitions to proposed and appends an intake event.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"grep -r 'parkBeadPostIntakeRejection' cli/internal/agent/*.go shows 0 references (all replaced).\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"All 6+ agent call sites (execute_bead_loop.go, execute_bead_post_review.go, etc.) use Store.ParkToProposed.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/agent/execute_bead_loop_test.go passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":6,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/agent/execute_bead_intake_decompose_test.go passes (uses intake rejection).\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-18T09:41:09.835811363Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T094218-8b6080ca",
+    "prompt": ".ddx/executions/20260518T094218-8b6080ca/prompt.md",
+    "manifest": ".ddx/executions/20260518T094218-8b6080ca/manifest.json",
+    "result": ".ddx/executions/20260518T094218-8b6080ca/result.json",
+    "checks": ".ddx/executions/20260518T094218-8b6080ca/checks.json",
+    "usage": ".ddx/executions/20260518T094218-8b6080ca/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-94ff4f5d-20260518T094218-8b6080ca"
+  },
+  "prompt_sha": "cf8b36ba1daf1c33b5d1c291570365c5034ad507a26710ca61dd88778b2c61c3"
+}
