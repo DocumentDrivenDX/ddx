@@ -75,17 +75,11 @@ func applyTerminalReviewBlock(store ExecuteBeadLoopStore, beadID, actor string, 
 }
 
 func applyReviewOperatorRequiredParking(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, reason, summary, suggestedAction string) {
-	_ = store.ParkToProposed(beadID, bead.ParkReviewTerminal, func(b *bead.Bead) {
-		// Migration-only cleanup: defensive removal for legacy rows that escaped
-		// the lifecycle migration or arrived via external import.
-		b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
-		clearReviewTriageClaimMetadata(b)
-		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-			Reason:          reason,
-			Since:           now.UTC().Format(time.RFC3339),
-			Source:          "ddx work",
-			SuggestedAction: suggestedAction,
-			Summary:         summary,
-		})
+	_ = parkToProposedWithOperatorMeta(store, beadID, bead.ParkReviewTerminal, ParkToProposedOpts{
+		Reason:          reason,
+		Summary:         summary,
+		SuggestedAction: suggestedAction,
+		Since:           now,
+		CleanupLabels:   true,
 	})
 }

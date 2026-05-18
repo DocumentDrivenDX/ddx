@@ -2287,13 +2287,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 				}
 				if hasManualLabel {
-					_ = w.Store.ParkToProposed(candidate.ID, bead.ParkLadderExhaustionManual, func(b *bead.Bead) {
-						bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-							Reason: "recovery:manual label set",
-							Since:  now().UTC().Format(time.RFC3339),
-							Source: "ddx work",
-						})
-					})
+					_ = parkToProposedSimple(w.Store, candidate.ID, bead.ParkLadderExhaustionManual, "recovery:manual label set", now().UTC())
 				} else if runtime.PostLadderExhaustionHook != nil {
 					failureClass := deriveRecoveryFailureClass(report)
 					_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass)
@@ -4051,18 +4045,11 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bea
 	body["fingerprint"] = findingFingerprint
 	body["prompt_fingerprint"] = promptFingerprint
 	bodyJSON, _ := json.Marshal(body)
-	if err := store.ParkToProposed(candidate.ID, bead.ParkIntakeRejection, func(b *bead.Bead) {
-		ensureBeadExtra(b)
-		// Migration-only cleanup: defensive removal for legacy rows that escaped
-		// the lifecycle migration or arrived via external import.
-		b.Labels = removeBeadLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
-		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-			Reason:          reason,
-			Since:           at.UTC().Format(time.RFC3339),
-			Source:          "ddx work",
-			SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
-			Summary:         "pre-claim intake blocked execution",
-		})
+	if err := parkToProposedWithIntakeMeta(store, candidate.ID, bead.ParkIntakeRejection, ParkToProposedOpts{
+		Reason:          reason,
+		Summary:         "pre-claim intake blocked execution",
+		SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
+		Since:           at,
 	}); err != nil {
 		return false, err
 	}
@@ -4271,15 +4258,15 @@ func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, act
 		}
 		emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, at)
 	}
-	return store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
-		ensureBeadExtra(b)
-		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-			Reason:          "repair cycle exhausted at top power: operator decision required",
-			Since:           at.UTC().Format(time.RFC3339),
-			Source:          "ddx work",
-			SuggestedAction: "review the blocked attempt and accept, split, or retry with a stronger model",
-			Summary:         "repair cycle exhausted: operator attention required",
-		})
+	return parkToProposedWithOperatorMeta(store, beadID, bead.ParkPostReviewMalfunction, ParkToProposedOpts{
+		Reason:          "repair cycle exhausted at top power: operator decision required",
+		Summary:         "repair cycle exhausted: operator attention required",
+		SuggestedAction: "review the blocked attempt and accept, split, or retry with a stronger model",
+		Since:           at,
+		CleanupLabels:   false,
+		AdditionalMutate: func(b *bead.Bead) {
+			ensureBeadExtra(b)
+		},
 	})
 }
 
@@ -4292,19 +4279,18 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 	if suggestedAction == "" {
 		suggestedAction = "review and accept, split, block, or cancel this proposed work"
 	}
-	return store.ParkToProposed(beadID, bead.ParkNoChangesOperatorRequired, func(b *bead.Bead) {
-		ensureBeadExtra(b)
-		clearNoChangesLifecycleLabels(b)
-		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
-		clearSmartRetryMetadata(b)
-		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
-		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-			Reason:          reason,
-			Since:           at.UTC().Format(time.RFC3339),
-			Source:          "ddx work",
-			SuggestedAction: suggestedAction,
-			Summary:         "no_changes requested operator attention",
-		})
+	return parkToProposedWithOperatorMeta(store, beadID, bead.ParkNoChangesOperatorRequired, ParkToProposedOpts{
+		Reason:          reason,
+		Summary:         "no_changes requested operator attention",
+		SuggestedAction: suggestedAction,
+		Since:           at,
+		CleanupLabels:   false,
+		AdditionalMutate: func(b *bead.Bead) {
+			ensureBeadExtra(b)
+			clearNoChangesLifecycleLabels(b)
+			clearSmartRetryMetadata(b)
+			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
+		},
 	})
 }
 
