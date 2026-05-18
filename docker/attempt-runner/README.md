@@ -73,6 +73,9 @@ The important Docker pattern is to `COPY` only manifests and lockfiles before
 the expensive setup `RUN` step. Source files should enter through the per-attempt
 clone, not through the cached image layer.
 
+For a more complete project-image guide and verification checklist, see
+[`docs/docker-attempt-build-environments.md`](../../docs/docker-attempt-build-environments.md).
+
 This image intentionally does not bake in provider credentials. The backend
 passes known provider environment variables through at runtime and mounts a
 minimal per-attempt auth home.
