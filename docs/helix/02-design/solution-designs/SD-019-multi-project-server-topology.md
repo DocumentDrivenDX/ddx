@@ -357,11 +357,17 @@ with parallel lifecycle semantics:
 
 - **Linux (systemd user unit)**
   - unit path: `~/.config/systemd/user/ddx-server.service`
-  - logs: `ddxroot.Path()/logs/ddx-server.log` for the configured service
-    workdir via `StandardOutput=append:`
+  - working directory: `$HOME` by default so the per-user daemon is not bound
+    to the project that happened to run install; explicit `--workdir` remains
+    a compatibility override for legacy singleton/debug installs
+  - logs: `$XDG_DATA_HOME/ddx/logs/ddx-server.log` (or
+    `~/.local/share/ddx/logs/ddx-server.log`) by default via
+    `StandardOutput=append:`
   - env file: `~/.config/ddx/server.env`
   - restart: `Restart=on-failure`, `RestartSec=5`
-  - install: `systemctl --user enable --now ddx-server.service`
+  - install: `systemctl --user enable ddx-server.service` followed by
+    `start` for inactive services or `restart` for active services after
+    `daemon-reload`, so rewritten unit properties apply to the live process
 
 - **macOS (launchd user agent)**
   - plist path: `~/Library/LaunchAgents/com.documentdriven.ddx-server.plist`

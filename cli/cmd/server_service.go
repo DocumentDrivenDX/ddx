@@ -46,12 +46,9 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 				resolvedExec = execPath
 			}
 
-			resolvedWork := f.WorkingDir
-			if workDir != "" {
-				resolvedWork = workDir
-			}
-			if resolvedWork == "" {
-				return fmt.Errorf("cannot determine project root; specify --workdir")
+			cfg, err := f.serverServiceConfig(resolvedExec, workDir)
+			if err != nil {
+				return err
 			}
 
 			env := map[string]string{}
@@ -60,18 +57,38 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 					env[k] = v
 				}
 			}
+			cfg.Env = env
 
-			return backend.Install(service.Config{
-				ExecPath: resolvedExec,
-				WorkDir:  resolvedWork,
-				LogPath:  ddxroot.JoinProject(resolvedWork, "logs", "ddx-server.log"),
-				Env:      env,
-			})
+			return backend.Install(cfg)
 		},
 	}
-	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root for the server (default: current directory)")
+	cmd.Flags().StringVar(&workDir, "workdir", "", "Override service working directory (default: user home)")
 	cmd.Flags().StringVar(&execPath, "exec", "", "Path to ddx binary (default: auto-detected)")
 	return cmd
+}
+
+func (f *CommandFactory) serverServiceConfig(execPath, workDir string) (service.Config, error) {
+	if workDir != "" {
+		return service.Config{
+			ExecPath: execPath,
+			WorkDir:  workDir,
+			LogPath:  ddxroot.JoinProject(workDir, "logs", "ddx-server.log"),
+		}, nil
+	}
+
+	defaultWorkDir, err := service.DefaultWorkDir()
+	if err != nil {
+		return service.Config{}, fmt.Errorf("resolve service working directory: %w", err)
+	}
+	defaultLogPath, err := service.DefaultLogPath()
+	if err != nil {
+		return service.Config{}, fmt.Errorf("resolve service log path: %w", err)
+	}
+	return service.Config{
+		ExecPath: execPath,
+		WorkDir:  defaultWorkDir,
+		LogPath:  defaultLogPath,
+	}, nil
 }
 
 func (f *CommandFactory) newServerUninstallCommand() *cobra.Command {
