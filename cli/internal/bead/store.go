@@ -1048,8 +1048,11 @@ func heartbeatIsStale(extra map[string]any) bool {
 	return time.Since(t) > HeartbeatTTL
 }
 
-// clearClaimExtraKeys deletes claim metadata keys from the Extra map.
-// It clears both ClaimMetadataExtraKeys and ClaimHeartbeatExtraKey.
+// clearClaimExtraKeys resets claim state by deleting all claim-related metadata
+// from the Extra map. It clears both legacy claim metadata (claimed-at, claimed-pid,
+// claimed-machine, claimed-session, claimed-worktree) and the claim heartbeat lease
+// timestamp. These keys are cleared when a bead is unclaimed or reopened to fully
+// reset its claim state so it can be claimed again by another worker.
 func clearClaimExtraKeys(extra map[string]any) {
 	if extra == nil {
 		return
