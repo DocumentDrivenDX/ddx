@@ -1048,6 +1048,18 @@ func heartbeatIsStale(extra map[string]any) bool {
 	return time.Since(t) > HeartbeatTTL
 }
 
+// clearClaimExtraKeys deletes claim metadata keys from the Extra map.
+// It clears both ClaimMetadataExtraKeys and ClaimHeartbeatExtraKey.
+func clearClaimExtraKeys(extra map[string]any) {
+	if extra == nil {
+		return
+	}
+	for _, k := range ClaimMetadataExtraKeys {
+		delete(extra, k)
+	}
+	delete(extra, ClaimHeartbeatExtraKey)
+}
+
 // Unclaim clears claim metadata. Only reverts status to open if the bead
 // is currently in_progress — a closed bead stays closed.
 func (s *Store) Unclaim(id string) error {
@@ -1061,12 +1073,7 @@ func (s *Store) Unclaim(id string) error {
 			}
 		}
 		b.Owner = ""
-		if b.Extra != nil {
-			for _, k := range ClaimMetadataExtraKeys {
-				delete(b.Extra, k)
-			}
-			delete(b.Extra, ClaimHeartbeatExtraKey)
-		}
+		clearClaimExtraKeys(b.Extra)
 		return nil
 	}); err != nil {
 		return err
@@ -1661,10 +1668,7 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 				b.Extra = make(map[string]any)
 			}
 			// Clear claim fields
-			for _, k := range ClaimMetadataExtraKeys {
-				delete(b.Extra, k)
-			}
-			delete(b.Extra, ClaimHeartbeatExtraKey)
+			clearClaimExtraKeys(b.Extra)
 			// Append notes
 			if appendNotes != "" {
 				if b.Notes != "" {
