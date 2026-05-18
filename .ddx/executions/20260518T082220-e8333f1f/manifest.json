@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260518T082220-e8333f1f",
+  "bead_id": "ddx-fbfcbd17",
+  "base_rev": "f92aae42fa4d847ad78951889a7064ae705b18a0",
+  "created_at": "2026-05-18T08:22:30.347819704Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fbfcbd17",
+    "title": "doc: declare reconcile-close vs evidence-close in TD-031",
+    "description": "PROBLEM\nThe bead lifecycle spec (referenced as TD-031) must formally declare the distinction between reconcile-close and evidence-close to match the implementation.\n\nROOT CAUSE\ncli/internal/bead/reconcile.go:239-243 documents via code comment that 'reconcile-close is a meta-close that intentionally bypasses ClosureGate', but this distinction is not reflected in the formal specification document. The spec exists as a reference in types.go:78 (\"TD-031 §2\") but the full document is not in this repo.\n\nPROPOSED FIX\nCreate or amend TD-031 (or equivalent specification document in docs/helix/03-design/) to:\n1. Define reconcile-close: meta-close via bead.Reconcile when all transitive dependencies are closed, bypasses ClosureGate because evidence is inherited by reference through dependency edges.\n2. Define evidence-close: direct close via Store.Close, requires closing_commit_sha evidence from execution session.\n3. Document when each is used: reconcile-close for dependency satisfaction, evidence-close for work-completion evidence.\n4. Reference both concepts from the lifecycle transition documentation.\n\nNON-SCOPE\nDo not modify the code to match spec — match spec to code. Do not move ClosureGate logic.\n",
+    "acceptance": "1. TD-031 exists as docs/helix/03-design/TD-031-bead-lifecycle.md or equivalent spec path.\n2. The spec defines reconcile-close: bytewise match reconcile.go:239-243 intent.\n3. The spec defines evidence-close and distinguishes it from reconcile-close.\n4. lifecycle.go and store.go docstrings that reference ClosureGate link to the spec section.\n5. cd cli \u0026\u0026 go test ./internal/bead/reconcile_test.go passes.\n",
+    "parent": "ddx-6e6d08f8",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "area:docs",
+      "kind:doc",
+      "refactor",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"TD-031 exists as docs/helix/03-design/TD-031-bead-lifecycle.md or equivalent spec path.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":2,\"text\":\"The spec defines reconcile-close: bytewise match reconcile.go:239-243 intent.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"The spec defines evidence-close and distinguishes it from reconcile-close.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"lifecycle.go and store.go docstrings that reference ClosureGate link to the spec section.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/bead/reconcile_test.go passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-18T08:21:21.132901998Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=2/5"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T082220-e8333f1f",
+    "prompt": ".ddx/executions/20260518T082220-e8333f1f/prompt.md",
+    "manifest": ".ddx/executions/20260518T082220-e8333f1f/manifest.json",
+    "result": ".ddx/executions/20260518T082220-e8333f1f/result.json",
+    "checks": ".ddx/executions/20260518T082220-e8333f1f/checks.json",
+    "usage": ".ddx/executions/20260518T082220-e8333f1f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-fbfcbd17-20260518T082220-e8333f1f"
+  },
+  "prompt_sha": "cdbce48dd14e23c43b9ba25c3478405756156eea054751a836c2d31fd114dd90"
+}
