@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260518T083105-cbbc50b4",
+  "bead_id": "ddx-e8956709",
+  "base_rev": "2ccb7e034b5e0d19ec87e3f54b77bae83ee53b0a",
+  "created_at": "2026-05-18T08:31:15.280428793Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e8956709",
+    "title": "code: align reconcile.go with ClosureGate specification and comment store.go:471",
+    "description": "PROBLEM\nreconcile.go:239-243 bypasses ClosureGate via ManualClose=true but the reasoning is only documented in code comments. store.go:471 (Create-time status default) needs an explicit note that it is the single exception to the lifecycle.go lifecycle-transition rule.\n\nROOT CAUSE\nB1 will document the specification. This bead aligns the code's lifecycle enforcement to match:\n1. reconcile.go bypass is safe and documented (already there, just needs cross-reference).\n2. store.go:471 Create-time StatusOpen assignment is explicit and noted as the lone exception.\n3. All other status writes flow through transitionLifecycleInPlace + ValidateLifecycleTransition.\n\nPROPOSED FIX\n1. Add a docstring reference in reconcile.go:236 to link the bypass to TD-031 §3.1 (ClosureGate semantics).\n2. Add an inline comment at store.go:471 documenting that Create-time defaults StatusOpen and does not route through ValidateLifecycleTransition (the lone exception).\n3. Verify no other Status assignments exist outside this whitelist: {Create, transitionLifecycleInPlace, lifecycle.go, reconcile.go}.\n\nNON-SCOPE\nDo not rewrite the ClosureGate enforcement itself. Do not add new helpers or refactor transitionLifecycleInPlace.\n",
+    "acceptance": "1. reconcile.go:236-250 references TD-031 §3.1 or equivalent spec section on ClosureGate bypass semantics.\n2. store.go:471 has a documented comment explaining Create-time StatusOpen is the single exception to ValidateLifecycleTransition.\n3. grep -n 'Status.*=' cli/internal/bead/{lifecycle,store,reconcile}.go confirms no other Status assignments outside Create/transitionLifecycleInPlace/lifecycle.\n4. cd cli \u0026\u0026 go test ./internal/bead/reconcile_test.go passes.\n5. cd cli \u0026\u0026 go test ./internal/bead/store_test.go passes (specifically Create and TestBackendConformance_TransitionMatrix tests).\n",
+    "parent": "ddx-6e6d08f8",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:code"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T083105-cbbc50b4",
+    "prompt": ".ddx/executions/20260518T083105-cbbc50b4/prompt.md",
+    "manifest": ".ddx/executions/20260518T083105-cbbc50b4/manifest.json",
+    "result": ".ddx/executions/20260518T083105-cbbc50b4/result.json",
+    "checks": ".ddx/executions/20260518T083105-cbbc50b4/checks.json",
+    "usage": ".ddx/executions/20260518T083105-cbbc50b4/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-e8956709-20260518T083105-cbbc50b4"
+  },
+  "prompt_sha": "0fd79e974a428b637402cce4f1a91d152a0b1d1c3977f17aefc0c2b1c0b7f8d7"
+}
