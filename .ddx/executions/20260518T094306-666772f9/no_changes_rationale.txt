@@ -1,0 +1,2 @@
+status: proposed
+reason: B5 (ddx-94ff4f5d) AC design mismatch requires operator review. Current Store.ParkToProposed uses ParkReason enum + mutate callback; AC specifies actor/outcome/reason/detail parameters. Parking consolidation is functionally complete (parkBeadPostIntakeRejection → parkToProposedWithIntakeMeta → Store.ParkToProposed), but AC describes different interface. B6 completed successfully. Recommend AC clarification with author before implementing B5.
