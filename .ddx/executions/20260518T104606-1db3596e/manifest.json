@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260518T104606-1db3596e",
+  "bead_id": "ddx-bf971663",
+  "base_rev": "cfa1bef203cf98a18cfe7ca61429041fc2b3e693",
+  "created_at": "2026-05-18T10:46:18.381330392Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bf971663",
+    "title": "bead-lifecycle: emit rule fingerprint and operator-override signal in intake.blocked",
+    "description": "PROBLEM\nintake.blocked entries appended by readiness carry only outcome and detail strings. There is no stable rule fingerprint, so duplicate warnings stack on every readiness pass, and there is no operator_override field, so operators cannot see that readiness honored a prior acceptance instead of downgrading the bead.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go:2784-2815 constructs the intake.blocked entry without a rule_fingerprint (stable hash of rule_id + bead_id + relevant evidence keys) and without an operator_override boolean.\n\nPROPOSED FIX\nExtend the intake.blocked entry schema to include rule_fingerprint and operator_override. Compute rule_fingerprint as a stable hash over rule_id, bead_id, and the evidence keys that drove the rule. Set operator_override=true when the sibling guard determined the bead was operator-promoted and the downgrade was skipped. Use rule_fingerprint to dedup entries so an identical rerun does not append a duplicate. Surface both fields in `ddx bead show` output for the bead's intake.blocked list.\n\nNON-SCOPE\n- Adding new readiness rules or changing existing rule evaluation logic.\n- Changing the readiness terminal flow itself (covered by sibling implementation bead).\n- Updating FEAT-010/ADR-023 policy text (covered by sibling spec bead).\n- Fizeau concrete route selection, model ranking, provider fallback, or profile catalog behavior.\n- Rewriting execute-bead branch merge policy.\n- Changing post-attempt review terminal outcomes that already carry concrete evidence for operator action.\n\nPARENT/DEPS\nParent: this epic. Depends on the implementation bead for the operator-promotion detection function it consumes to set operator_override.",
+    "acceptance": "1. TestIntakeBlockedCarriesRuleFingerprint asserts every intake.blocked entry emitted by readiness has a non-empty rule_fingerprint stable across reruns with identical inputs.\n2. TestIntakeBlockedSetsOperatorOverride asserts operator_override=true on entries written when readiness skipped a downgrade because the bead was operator-promoted, and false otherwise.\n3. TestIntakeBlockedFingerprintDedupes asserts running readiness twice with identical inputs appends the entry only once.\n4. TestBeadShowSurfacesFingerprintAndOverride asserts `ddx bead show` renders rule_fingerprint and operator_override for each intake.blocked entry.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/...` green.\n6. `lefthook run pre-commit` passing.",
+    "parent": "ddx-cc0641a7",
+    "labels": [
+      "adr:023",
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:observability",
+      "kind:feature",
+      "phase:2",
+      "spec:FEAT-010",
+      "td:027",
+      "td:031"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: Bead has clear scope, specific file locations, and concrete testable acceptance criteria. Well-delineated non-scope section. Primary ambiguities: (1) 'relevant evidence keys that drove the rule' requires inference from rule implementation; (2) dedup lifecycle (in-memory vs. persistent) undefined; (3) operator-promotion detection function is external dependency without clear reference. Executable with reasonable interpretation, but clarifications would reduce rework.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-18T10:45:52.030670731Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T104606-1db3596e",
+    "prompt": ".ddx/executions/20260518T104606-1db3596e/prompt.md",
+    "manifest": ".ddx/executions/20260518T104606-1db3596e/manifest.json",
+    "result": ".ddx/executions/20260518T104606-1db3596e/result.json",
+    "checks": ".ddx/executions/20260518T104606-1db3596e/checks.json",
+    "usage": ".ddx/executions/20260518T104606-1db3596e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-bf971663-20260518T104606-1db3596e"
+  },
+  "prompt_sha": "03b53704f06d4d96854299b0f348006c8131e7d892e6e11767eb39e74c4e54af"
+}
