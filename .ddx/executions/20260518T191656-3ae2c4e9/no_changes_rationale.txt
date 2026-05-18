@@ -1,0 +1,10 @@
+status: blocked
+reason: external blocker
+details:
+- `cd cli && /usr/local/go/bin/go test ./internal/agent/... ./internal/bead/... ./cmd/...` still fails in pre-existing integration/cleanup tests unrelated to the readiness fingerprint change:
+  - `TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded`
+  - `TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees`
+- The bead-specific focused tests pass:
+  - `TestIntakeBlockedCarriesRuleFingerprint`
+  - `TestIntakeBlockedFingerprintDedupes`
+  - `TestPreClaimIntakeChangedBeadInvalidatesOverride`
