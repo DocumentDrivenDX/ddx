@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260518T075754-b7eb18e9",
+  "bead_id": "ddx-099e9a81",
+  "base_rev": "be67156570415b48fae3463de0ca76ee15ca061f",
+  "created_at": "2026-05-18T07:58:04.722548801Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-099e9a81",
+    "title": "bead-lifecycle alignment review: spec, dedupe, and conformance: part 2",
+    "description": "PROBLEM\nParent bead ddx-ca1c66ee is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\n  A 2026-05-09 alignment review of the bead lifecycle (spec TD-031, types.go,\n  lifecycle.go, store.go, reconcile.go, plus all CLI/server/agent mutation\n  call sites) found the state machine is well-specified but has six concrete\n  alignment, duplication, and test-coverage gaps. The implementation funnels\n  ~all status writes through transitionLifecycleInPlace + ValidateLifecycleTransition\n  (good), but: reconcile-close bypasses ClosureGate without the spec saying so;\n  Ready() filters status twice with conflicting answers; the backend conformance\n  suite never exercises the transition matrix; \"park to proposed\" is duplicated\n  6x in agent/*.go; claim-Extra key cleanup is duplicated in Reopen + Unclaim.\n\nCURRENT STATE\n  - cli/internal/bead/lifecycle.go:97 ValidateLifecycleTransition is the single\n    transition gate.\n  - cli/internal/bead/store.go:619 transitionLifecycleInPlace is the single\n    chokepoint for status writes.\n  - cli/internal/bead/reconcile.go:236-242 closes beads via UpdateWithLifecycleStatus\n    directly, bypassing the ClosureGate enforced by store.go:1245.\n  - cli/internal/bead/store.go:1763 readyFiltered re-filters Status==StatusOpen\n    after the lifecycle module already classified the bucket.\n  - cli/internal/bead/backend_conformance_test.go:53-166 covers create/update/\n    claim/deps/events but no status transitions.\n  - 6 \"park to proposed\" call sites in cli/internal/agent/{execute_bead_loop.go,\n    execute_bead_post_review.go, execute_bead_review_terminal.go,\n    execute_bead_conflict_recovery.go} duplicate the same boilerplate.\n  - Reopen (store.go:1306-1317) and Unclaim (store.go:823-831) maintain\n    parallel lists of claim-Extra keys to clear.\n\nPROPOSED FIX\n  Decompose into 6 children, executed in dependency order:\n  - B1 (doc-only): amend TD-031 to declare reconcile-close vs evidence-close.\n  - B2 (code): align reconcile.go with amended TD-031 and add comment at\n    store.go:471 noting Create-time status default is the lone exception.\n  - B3 (code): drop redundant Status==Open filter at store.go:1763; let\n    EvaluateLifecycleQueue be the single source of truth for \"ready\".\n  - B4 (test): extend backend_conformance_test.go with the TD-031 transition\n    matrix against both backend_jsonl and axon_backend.\n  - B5 (refactor): extract Store.ParkToProposed helper covering the 6 agent\n    duplicates.\n  - B6 (refactor): consoli\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n2. lefthook run pre-commit passes.",
+    "parent": "ddx-ca1c66ee",
+    "labels": [
+      "area:bead",
+      "area:lifecycle",
+      "kind:epic",
+      "phase:6",
+      "refactor",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T075754-b7eb18e9",
+    "prompt": ".ddx/executions/20260518T075754-b7eb18e9/prompt.md",
+    "manifest": ".ddx/executions/20260518T075754-b7eb18e9/manifest.json",
+    "result": ".ddx/executions/20260518T075754-b7eb18e9/result.json",
+    "checks": ".ddx/executions/20260518T075754-b7eb18e9/checks.json",
+    "usage": ".ddx/executions/20260518T075754-b7eb18e9/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-099e9a81-20260518T075754-b7eb18e9"
+  },
+  "prompt_sha": "bee8ef21aa88572951303249f5be261e5e19fea17fd9d9bc0923033bab0bc93e"
+}
