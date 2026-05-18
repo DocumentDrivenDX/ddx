@@ -1014,9 +1014,35 @@ after-evidence action. The legacy compatibility name `PreClaimIntakeHook` and
 `MODE: intake` may still appear in migration code or notes, but they are not
 the product concept.
 
-Open is the forward-progress lane. In WARN-ONLY mode, readiness warnings
+### Forward-Progress Readiness Policy
+
+**Open is the execution lane.** `status=open` is the default runnable state for
+beads that are not yet closed, superseded, or awaiting external blockers.
+Readiness findings do not move beads from `open` to `proposed` unless a hard
+operator-required condition exists after safe rewrite and decomposition options
+are exhausted.
+
+**Proposed is the operator-decision escape.** `status=proposed` is an explicit
+operator-review gate. An operator moves a bead from `proposed` to `open` when
+they accept it as actionable despite readiness warnings or ambiguity.
+
+**Operator-promoted beads are durable.** When an operator moves a bead from
+`status=proposed` back to `status=open` (operator promotion), readiness must not
+move that same bead back to `proposed` for the same rule or finding unless:
+- A prompt-relevant field (description, acceptance, labels, parent, deps) has
+  changed materially, **or**
+- The operator explicitly requests re-triage via `--force`
+
+This non-regression clause prevents readiness from recreating a proposed→open→proposed
+loop after an operator has already made an explicit acceptance decision.
+
+Readiness assessment reports must be diagnostic and distinct from hard parking
+decisions. In WARN-ONLY mode (the default per ADR-023), readiness warnings
 proceed by default, and only a hard operator-required condition may park the
-bead in `status=proposed`.
+bead in `status=proposed`. BLOCK mode (opt-in) may stop dispatch on a valid
+low readiness score, but it still honors the operator-promotion non-regression
+clause. The staged rollout and factory mode details are in ADR-023 "Staged
+Rollout And Factory Mode" and "Operator-Promotion Non-Regression Clause".
 
 The hook receives the bead record, current execution policy, hook mode
 (`WARN-ONLY` or `BLOCK`), and the layer-3 evidence directory. It invokes the

@@ -73,7 +73,9 @@ evaluation, and triage classifies the attempt after evidence exists.
 
 Readiness treats `open` as the forward-progress lane. WARN-ONLY findings are
 proceed-by-default findings unless they expose a hard operator-required parking
-condition.
+condition. See FEAT-010 "Forward-Progress Readiness Policy" for the complete
+specification of how open/proposed status transitions interact with readiness
+assessment.
 
 Both checkpoints invoke the same nested bead-lifecycle workflow skill under the
 `ddx` skill tree. The skill is responsible for translating the rubric into
@@ -88,21 +90,29 @@ triage, becomes externally blocked, is superseded, or receives a retry cooldown.
 
 ### Staged Rollout And Factory Mode
 
-The default rollout is WARN-ONLY.
+**The default readiness mode is WARN-ONLY.** This is a load-bearing default
+that ensures beads proceed to execution by default (open is the forward-progress
+lane) while producing diagnostic quality signals. See FEAT-010
+"Forward-Progress Readiness Policy" for how WARN-ONLY interacts with
+`status=open` and `status=proposed`.
 
-- WARN-ONLY mode reports the lint score, missing criteria, waiver matches, and
-  suggested remediation, then proceeds with dispatch. Recoverable rubric gaps,
-  lint noise, uncertain model judgment, and readiness infrastructure failures
-  are proceed findings, not hard parking findings.
-- BLOCK mode is opt-in until the queue baseline confirms that ordinary
-  execution-ready beads can consistently satisfy the rubric.
-- BLOCK mode may stop only on a valid low lint score after applicable rubric
-  skips and label waivers are applied, or on a hard operator-required blocker.
-  It must not stop on hook crashes, missing skill files, transient filesystem
-  errors, or malformed lint output.
-- Reliable factory mode is BLOCK mode plus default adversarial review. In that
-  mode, poorly specified work is improved, decomposed, or blocked before claim
-  rather than allowed to consume implementation attempts.
+- **WARN-ONLY mode** reports the lint score, missing criteria, waiver matches,
+  and suggested remediation, then proceeds with dispatch. Recoverable rubric
+  gaps, lint noise, uncertain model judgment, and readiness infrastructure
+  failures are proceed findings, not hard parking findings. Readiness warnings
+  are observable but non-blocking unless a hard operator-required condition
+  exists.
+- **BLOCK mode** is opt-in until the queue baseline confirms that ordinary
+  execution-ready beads can consistently satisfy the rubric. In BLOCK mode,
+  readiness may stop dispatch on a valid low lint score, but it still honors
+  the operator-promotion non-regression clause (see below).
+- **BLOCK mode enforcement:** BLOCK mode may stop only on a valid low lint
+  score after applicable rubric skips and label waivers are applied, or on a
+  hard operator-required blocker. It must not stop on hook crashes, missing
+  skill files, transient filesystem errors, or malformed lint output.
+- **Reliable factory mode** is BLOCK mode plus default adversarial review. In
+  that mode, poorly specified work is improved, decomposed, or blocked before
+  claim rather than allowed to consume implementation attempts.
 
 This makes the policy measurable before it becomes a dispatch gate and avoids
 freezing the queue while legacy beads are being retrofitted.
@@ -173,10 +183,27 @@ Readiness must block for human input instead of inventing acceptance criteria,
 changing scope, choosing between conflicting requirements, deleting unresolved
 constraints, or guessing a missing governing artifact.
 
-Operator promotion via `triaged` is a durable override. When an operator moves a
-bead from `status=proposed` back to `status=open`, readiness must not re-park
-the same bead for the same rule or finding unless prompt-relevant fields changed
-or the operator explicitly requests re-triage.
+### Operator-Promotion Non-Regression Clause
+
+Operator promotion via `triaged` event is a durable override signal. When an
+operator moves a bead from `status=proposed` back to `status=open`, they are
+explicitly accepting the bead as actionable despite readiness concerns. This
+acceptance is a hard policy decision that readiness must honor.
+
+**Non-regression requirement:** Readiness must not move an operator-promoted bead
+back to `status=proposed` for the same rule or finding unless one of the
+following holds:
+
+1. A prompt-relevant field has changed materially (description rewritten,
+   acceptance criteria added/modified, labels/parent/deps changed), **or**
+2. The operator explicitly requests re-triage via `--force --reason`.
+
+This clause prevents readiness from recreating a proposed→open→proposed loop
+after an operator has made an explicit acceptance decision. The original rule
+that triggered the `proposed` parking may remain a readiness warning; it simply
+must not automatically park the bead again without explicit operator re-request.
+The durable record of the operator decision is the `triaged` event and the bead
+transitioning to `status=open`.
 
 If readiness finds the bead too broad, it decomposes before claim. Every parent AC
 must map to at least one child AC or be explicitly marked `operator_required` or
