@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260518T074951-030ff546",
+  "bead_id": "ddx-7a78633d",
+  "base_rev": "112ba4e9d82a923e2fc2df04f602047620fbd521",
+  "created_at": "2026-05-18T07:50:03.158336893Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7a78633d",
+    "title": "extend backend_conformance_test with TD-031 transition matrix coverage",
+    "description": "PROBLEM\n  backend_conformance_test.go:53-166 covers create/update/claim/deps/events but \n  does not exercise the bead lifecycle state transitions documented in TD-031 §2 \n  (status enumeration) and TD-031 §3.2 (outcome → state/label/event mapping table).\n  \n  The conformance suite does not verify:\n  - Valid transitions between statuses (open → in_progress → closed, etc.)\n  - All six persisted statuses (open, in_progress, closed, blocked, proposed, cancelled)\n  - Transition matrix for both backend_jsonl and axon_backend\n  - Event appending during transitions\n  - Label changes during transitions\n\nPROPOSED FIX\n  Extend backend_conformance_test.go to add a conformance suite for the TD-031 \n  transition matrix:\n  \n  1. Add TestLifecycleTransitions (or similar) that exercises the transition \n     matrix for both backend implementations (backend_jsonl and axon_backend)\n  2. Cover each valid transition with at least one test case\n  3. Verify that ValidateLifecycleTransition correctly allows/rejects transitions\n  4. Verify that events are appended during transitions\n  5. Verify that labels are correctly maintained\n  6. Run both serialization backends to ensure conformance\n\nNON-SCOPE\n  - Changing the transition matrix itself\n  - Adding new persisted statuses\n  - Testing invalid transitions (error cases tested elsewhere)\n  - High-level drain loop behavior (that's tested in integration/e2e)",
+    "acceptance": "1. backend_conformance_test.go extended with TestLifecycleTransitions (or named equivalent).\n2. Test exercises the complete TD-031 §2 transition matrix.\n3. Test runs against both backend_jsonl and axon_backend (parallel or sequential).\n4. At least 10 test cases covering distinct transition paths.\n5. Each case verifies Status transition, event appending, and label consistency.\n6. cd cli \u0026\u0026 go test ./internal/bead/backend_conformance_test.go -run TestLifecycle green.\n7. cd cli \u0026\u0026 go test ./internal/bead/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "kind:test",
+      "area:bead",
+      "area:lifecycle",
+      "spec-id:TD-031"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T074951-030ff546",
+    "prompt": ".ddx/executions/20260518T074951-030ff546/prompt.md",
+    "manifest": ".ddx/executions/20260518T074951-030ff546/manifest.json",
+    "result": ".ddx/executions/20260518T074951-030ff546/result.json",
+    "checks": ".ddx/executions/20260518T074951-030ff546/checks.json",
+    "usage": ".ddx/executions/20260518T074951-030ff546/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-7a78633d-20260518T074951-030ff546"
+  },
+  "prompt_sha": "d5b7c69ef3df37ecf2ec532a1fb583af8fa21fe6234b4a95871e7a1c3ccbece9"
+}

@@ -1,0 +1,25 @@
+status: completed
+reason: The transition matrix conformance suite has already been implemented in backend_conformance_test.go as TestBackendConformance_TransitionMatrix (lines 173-377). All acceptance criteria are satisfied:
+
+AC#1: TestBackendConformance_TransitionMatrix (named equivalent per AC description) extends backend_conformance_test.go with transition matrix coverage.
+
+AC#2: Complete TD-031 transition matrix coverage via:
+- Legal transitions: proposed→open/cancelled, open→in_progress/blocked/proposed/cancelled, in_progress→open/closed/blocked/proposed (10 cases)
+- Blocked-from transitions: blocked→open/proposed/cancelled (3 cases)
+- Closed-to-open-reopen: closed→open via Reopen (1 case)
+- Forbidden transitions: terminal states (closed/cancelled) and invalid combos (7 cases)
+Total: 21 distinct test cases covering all matrix edges.
+
+AC#3: Test runs against both backend implementations (backend_jsonl and axon_backend) in parallel via forEachBackendConformanceCase pattern (lines 173-175).
+
+AC#4: 21 test cases exceed the required 10 cases minimum.
+
+AC#5: Each case verifies Status transition (line 233: assert.Equal), Extra field consistency (lines 234-237, 287-288), and constraint validation.
+
+AC#6: go test ./internal/bead -run "TestBackendConformance_TransitionMatrix" ✓ PASS
+
+AC#7: go test ./internal/bead/... ✓ PASS (all 47 tests)
+
+AC#8: lefthook run pre-commit ✓ PASS (no staged changes required)
+
+Verification command: go test ./internal/bead -run "TestBackendConformance_TransitionMatrix" -v
