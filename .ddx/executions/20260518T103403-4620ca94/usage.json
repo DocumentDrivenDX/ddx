@@ -1,0 +1,11 @@
+{
+  "attempt_id": "20260518T103403-4620ca94",
+  "harness": "claude",
+  "model": "haiku",
+  "tokens": 15363,
+  "input_tokens": 387,
+  "cached_tokens": 3670729,
+  "cache_hit_rate": 0.9998945824648418,
+  "output_tokens": 14976,
+  "cost_usd": 0.4927499
+}

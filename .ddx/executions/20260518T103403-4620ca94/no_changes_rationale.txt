@@ -1,0 +1,1 @@
+verification_command: test -f cli/internal/bead/store.go && grep -q "func clearClaimExtraKeys(extra map\[string\]any)" cli/internal/bead/store.go && grep -q "clearClaimExtraKeys(b.Extra)" cli/internal/bead/store.go && grep -q "RemoveClaimHeartbeat" cli/internal/bead/store.go
