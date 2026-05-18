@@ -261,3 +261,42 @@ func cloneStringAnyMap(src map[string]any) map[string]any {
 	}
 	return dst
 }
+
+// ChangeEvent mirrors a GraphQL event payload for lifecycle updates.
+type ChangeEvent struct {
+	EventID   string    `json:"eventID"`
+	BeadID    string    `json:"beadID"`
+	Kind      string    `json:"kind"`
+	Summary   string    `json:"summary"`
+	Body      string    `json:"body"`
+	Actor     string    `json:"actor"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// ChangeEventFromLifecycle converts the local bead lifecycle event into the
+// Axon GraphQL event shape.
+func ChangeEventFromLifecycle(src bead.LifecycleEvent) ChangeEvent {
+	return ChangeEvent{
+		EventID:   src.EventID,
+		BeadID:    src.BeadID,
+		Kind:      src.Kind,
+		Summary:   src.Summary,
+		Body:      src.Body,
+		Actor:     src.Actor,
+		Timestamp: src.Timestamp,
+	}
+}
+
+// ToLifecycleEvent converts the GraphQL event payload back into the
+// local bead lifecycle model.
+func (c ChangeEvent) ToLifecycleEvent() bead.LifecycleEvent {
+	return bead.LifecycleEvent{
+		EventID:   c.EventID,
+		BeadID:    c.BeadID,
+		Kind:      c.Kind,
+		Summary:   c.Summary,
+		Body:      c.Body,
+		Actor:     c.Actor,
+		Timestamp: c.Timestamp,
+	}
+}
