@@ -74,11 +74,10 @@ func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
 				return fmt.Errorf("cannot determine project root; specify --workdir")
 			}
 			resolvedWork = gitpkg.FindProjectRoot(resolvedWork)
-
 			return backend.Install(buildServerServiceConfig(resolvedExec, resolvedWork))
 		},
 	}
-	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root for the server (default: current directory)")
+	cmd.Flags().StringVar(&workDir, "workdir", "", "Project root registered on server startup (default: current directory); service cwd is XDG-scoped")
 	cmd.Flags().StringVar(&execPath, "exec", "", "Path to ddx binary (default: auto-detected)")
 	return cmd
 }

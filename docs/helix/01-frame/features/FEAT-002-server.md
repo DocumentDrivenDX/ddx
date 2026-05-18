@@ -437,8 +437,10 @@ is the template for future platforms.
 
 Shared contract across platforms:
 
-- **Working directory:** the project root supplied at install time, or the
-  user's home directory if no project root is configured
+- **Working directory:** an XDG-scoped DDx runtime directory by default
+  (`$XDG_STATE_HOME/ddx/server`, or `~/.local/state/ddx/server`). The default
+  service install must not bind the per-user daemon to whichever project
+  happened to run `ddx server install`
 - **State location:** unchanged from FEAT-020 — `~/.local/share/ddx/`, or
   `$XDG_DATA_HOME/ddx` when set. State and address files never live inside
   the service-manager unit directory
@@ -456,13 +458,19 @@ Shared contract across platforms:
 ### Linux (systemd user unit)
 
 - **Unit path:** `~/.config/systemd/user/ddx-server.service`
-- **Working directory:** the project root passed via `--workdir`, defaulting
-  to the current directory at install time
-- **Logs:** `<workdir>/.ddx/logs/ddx-server.log` via `StandardOutput=append:`
-  and `StandardError=append:` (both streams share one file). `journalctl
-  --user -u ddx-server -f` remains available for live tailing
-- **Environment file:** `<workdir>/.ddx/server.env`, written with mode
-  `0600` at install time. Loaded through systemd `EnvironmentFile=`
+- **Working directory:** `$XDG_STATE_HOME/ddx/server` by default, falling back
+  to `~/.local/state/ddx/server`; `--workdir` selects the project root to
+  register at startup but does not become the service cwd
+- **Logs:** `$XDG_STATE_HOME/ddx/server/ddx-server.log` (or
+  `~/.local/state/ddx/server/ddx-server.log`) via `StandardOutput=append:` and
+  `StandardError=append:` by default. `journalctl --user -u ddx-server -f`
+  remains available for live tailing
+- **Environment file:** `~/.config/ddx/server.env`, written with mode `0600`
+  at install time. Loaded through systemd `EnvironmentFile=`
+- **Reinstall behavior:** reinstalling over an already-active
+  `ddx-server.service` must restart the service after `daemon-reload` so
+  changes to `WorkingDirectory`, logs, environment file, or executable path
+  apply to the live process
 - **Restart policy:** `Restart=on-failure`, `RestartSec=5`
 - **Lifecycle commands:**
   - install/enable: `systemctl --user daemon-reload && systemctl --user enable --now ddx-server.service`

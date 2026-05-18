@@ -39,6 +39,8 @@ type systemdUnitParams struct {
 	EnvFile  string
 }
 
+var runSystemctl = systemctl
+
 func systemdServiceDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -48,6 +50,8 @@ func systemdServiceDir() (string, error) {
 }
 
 func (systemdBackend) Install(cfg Config) error {
+	wasActive := runSystemctl("is-active", "--quiet", unitName) == nil
+
 	serviceDir, err := systemdServiceDir()
 	if err != nil {
 		return err
@@ -92,10 +96,17 @@ func (systemdBackend) Install(cfg Config) error {
 		return fmt.Errorf("write unit file %s: %w", unitPath, err)
 	}
 
-	if err := systemctl("daemon-reload"); err != nil {
+	if err := runSystemctl("daemon-reload"); err != nil {
 		return err
 	}
-	if err := systemctl("enable", "--now", unitName); err != nil {
+	if err := runSystemctl("enable", unitName); err != nil {
+		return err
+	}
+	if wasActive {
+		if err := runSystemctl("restart", unitName); err != nil {
+			return err
+		}
+	} else if err := runSystemctl("start", unitName); err != nil {
 		return err
 	}
 	fmt.Fprintf(os.Stdout, "Installed %s → %s\n", unitName, unitPath)
@@ -106,20 +117,20 @@ func (systemdBackend) Install(cfg Config) error {
 }
 
 func (systemdBackend) Uninstall() error {
-	_ = systemctl("disable", "--now", unitName)
+	_ = runSystemctl("disable", "--now", unitName)
 	serviceDir, err := systemdServiceDir()
 	if err != nil {
 		return nil
 	}
 	_ = os.Remove(filepath.Join(serviceDir, unitName))
-	_ = systemctl("daemon-reload")
+	_ = runSystemctl("daemon-reload")
 	fmt.Fprintln(os.Stdout, "Uninstalled ddx-server.service")
 	return nil
 }
 
-func (systemdBackend) Start() error  { return systemctl("start", unitName) }
-func (systemdBackend) Stop() error   { return systemctl("stop", unitName) }
-func (systemdBackend) Status() error { return systemctl("status", unitName) }
+func (systemdBackend) Start() error  { return runSystemctl("start", unitName) }
+func (systemdBackend) Stop() error   { return runSystemctl("stop", unitName) }
+func (systemdBackend) Status() error { return runSystemctl("status", unitName) }
 
 func systemctl(args ...string) error {
 	full := append([]string{"--user"}, args...)
