@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 // TestWaitForEmptyGitIndex_RecoversFromStaleIndex simulates the
@@ -82,5 +86,21 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 	staged := r.runGit("diff", "--cached", "--name-only")
 	if !strings.Contains(staged, "operator.txt") {
 		t.Fatalf("operator work was lost; staged=%q", staged)
+	}
+}
+
+// TestWaitForEmptyGitIndex_RecoversFromCorruptIndex verifies that a truncated
+// landing index is rebuilt instead of being misreported as staged work.
+func TestWaitForEmptyGitIndex_RecoversFromCorruptIndex(t *testing.T) {
+	r := newLandTestRepo(t)
+	indexPath := filepath.Join(r.dir, ".git", "index")
+	require.NoError(t, os.WriteFile(indexPath, []byte("bad"), 0o644))
+
+	if err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond); err != nil {
+		t.Fatalf("waitForEmptyGitIndex did not recover corrupt index: %v", err)
+	}
+
+	if got := r.runGit("diff", "--cached", "--name-status"); got != "" {
+		t.Fatalf("index should be clean after recovery, got %q", got)
 	}
 }
