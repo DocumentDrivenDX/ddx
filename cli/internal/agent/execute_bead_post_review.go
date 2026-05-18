@@ -417,7 +417,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Source:    "ddx work",
 			CreatedAt: now().UTC(),
 		})
-		_ = in.Store.ParkToProposed(in.Bead.ID, bead.ParkReviewRequestClarification, nil)
+		_ = parkToProposedSimple(in.Store, in.Bead.ID, bead.ParkReviewRequestClarification, "reviewer cannot adjudicate needs-judgment AC without operator input", now().UTC())
 		report.Status = ExecuteBeadStatusReviewRequestClarification
 		report.Detail = "pre-close review: REQUEST_CLARIFICATION"
 		out.Approved = false
@@ -630,19 +630,17 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 		nextPowerClass := nextEscalatedPowerClass(currentPowerClass)
 		body["next_power_class"] = string(nextPowerClass)
 	case triage.ActionOperatorRequired:
-		if err := store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
-			if b.Extra == nil {
-				b.Extra = make(map[string]any)
-			}
-			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
-			clearReviewTriageClaimMetadata(b)
-			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-				Reason:          "review BLOCK triage reached operator-required rung",
-				Since:           now.UTC().Format(time.RFC3339),
-				Source:          "ddx work",
-				SuggestedAction: "review the blocked attempt and accept, split, block, or cancel",
-				Summary:         "review BLOCK triage requires operator decision",
-			})
+		if err := parkToProposedWithOperatorMeta(store, beadID, bead.ParkPostReviewMalfunction, ParkToProposedOpts{
+			Reason:          "review BLOCK triage reached operator-required rung",
+			Summary:         "review BLOCK triage requires operator decision",
+			SuggestedAction: "review the blocked attempt and accept, split, block, or cancel",
+			Since:           now,
+			CleanupLabels:   true,
+			AdditionalMutate: func(b *bead.Bead) {
+				if b.Extra == nil {
+					b.Extra = make(map[string]any)
+				}
+			},
 		}); err != nil {
 			return err
 		}
