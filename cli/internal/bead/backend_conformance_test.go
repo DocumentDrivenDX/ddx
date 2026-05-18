@@ -170,7 +170,7 @@ func TestBackendConformance(t *testing.T) {
 	})
 }
 
-func TestBackendConformance_TransitionMatrix(t *testing.T) {
+func TestLifecycleTransitions(t *testing.T) {
 	forEachBackendConformanceCase(t, func(t *testing.T, bcc backendConformanceCase) {
 		makeStore := func(t *testing.T) *Store { return newBackendConformanceStore(t, bcc.backend) }
 
