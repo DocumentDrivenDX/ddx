@@ -310,8 +310,8 @@ type ConfigFileInfo struct {
 	Exists bool
 }
 
-const validConfigGetKeys = "version, library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root, executions.attempt_backend, executions.docker.image, executions.docker.memory, executions.docker.memory_swap, executions.docker.cpus, executions.docker.pids_limit, executions.docker.tmpfs_size, executions.docker.network, executions.docker.clone_mode, executions.docker.keep_on_error"
-const validConfigSetKeys = "library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root, executions.attempt_backend, executions.docker.image, executions.docker.memory, executions.docker.memory_swap, executions.docker.cpus, executions.docker.pids_limit, executions.docker.tmpfs_size, executions.docker.network, executions.docker.clone_mode, executions.docker.keep_on_error"
+const validConfigGetKeys = "version, library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root, executions.attempt_backend, executions.docker.image, executions.docker.project_image, executions.docker.project_dockerfile, executions.docker.project_context, executions.docker.memory, executions.docker.memory_swap, executions.docker.cpus, executions.docker.pids_limit, executions.docker.tmpfs_size, executions.docker.network, executions.docker.clone_mode, executions.docker.keep_on_error"
+const validConfigSetKeys = "library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root, executions.attempt_backend, executions.docker.image, executions.docker.project_image, executions.docker.project_dockerfile, executions.docker.project_context, executions.docker.memory, executions.docker.memory_swap, executions.docker.cpus, executions.docker.pids_limit, executions.docker.tmpfs_size, executions.docker.network, executions.docker.clone_mode, executions.docker.keep_on_error"
 
 // extractConfigValue extracts a value from config by key.
 func extractConfigValue(cfg *config.Config, key string) (string, error) {
@@ -349,6 +349,21 @@ func extractConfigValue(cfg *config.Config, key string) (string, error) {
 			return "", nil
 		}
 		return cfg.Executions.Docker.Image, nil
+	case "executions.docker.project_image":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.ProjectImage, nil
+	case "executions.docker.project_dockerfile":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.ProjectDockerfile, nil
+	case "executions.docker.project_context":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.ProjectContext, nil
 	case "executions.docker.memory":
 		if cfg.Executions == nil || cfg.Executions.Docker == nil {
 			return "", nil
@@ -431,6 +446,12 @@ func setConfigValueInStruct(cfg *config.Config, key, value string) error {
 		cfg.Executions.AttemptBackend = value
 	case "executions.docker.image":
 		ensureExecutionsDockerConfig(cfg).Image = value
+	case "executions.docker.project_image":
+		ensureExecutionsDockerConfig(cfg).ProjectImage = value
+	case "executions.docker.project_dockerfile":
+		ensureExecutionsDockerConfig(cfg).ProjectDockerfile = value
+	case "executions.docker.project_context":
+		ensureExecutionsDockerConfig(cfg).ProjectContext = value
 	case "executions.docker.memory":
 		ensureExecutionsDockerConfig(cfg).Memory = value
 	case "executions.docker.memory_swap":

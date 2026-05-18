@@ -212,6 +212,15 @@ func mergeDockerConfig(projectDocker, globalDocker *ExecutionsDockerConfig) {
 	if projectDocker.Image == "" {
 		projectDocker.Image = globalDocker.Image
 	}
+	if projectDocker.ProjectImage == "" {
+		projectDocker.ProjectImage = globalDocker.ProjectImage
+	}
+	if projectDocker.ProjectDockerfile == "" {
+		projectDocker.ProjectDockerfile = globalDocker.ProjectDockerfile
+	}
+	if projectDocker.ProjectContext == "" {
+		projectDocker.ProjectContext = globalDocker.ProjectContext
+	}
 	if projectDocker.Memory == "" {
 		projectDocker.Memory = globalDocker.Memory
 	}

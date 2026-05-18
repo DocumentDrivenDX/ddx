@@ -53,6 +53,8 @@ executions:
   temp_worktree_root: /Users/erik/Projects/.ddx-exec-wt
   docker:
     image: ddx-attempt-runner:dev
+    project_dockerfile: .ddx/attempt-runner.Dockerfile
+    project_context: .
     memory: 8g
     cpus: "4"
 `), 0o644))
@@ -76,6 +78,8 @@ executions:
 	require.NotNil(t, cfg.Executions.Docker)
 	assert.Equal(t, "/Users/erik/Projects/.ddx-exec-wt", cfg.Executions.TempWorktreeRoot)
 	assert.Equal(t, "ddx-attempt-runner:dev", cfg.Executions.Docker.Image)
+	assert.Equal(t, ".ddx/attempt-runner.Dockerfile", cfg.Executions.Docker.ProjectDockerfile)
+	assert.Equal(t, ".", cfg.Executions.Docker.ProjectContext)
 	assert.Equal(t, "4g", cfg.Executions.Docker.Memory, "project config must override global execution fields")
 	assert.Equal(t, "4", cfg.Executions.Docker.CPUs)
 }

@@ -103,6 +103,19 @@ Docker container. Select a backend with `--attempt-backend` or
 `make docker-attempt-runner` and configure `ddx-attempt-runner:dev` for local
 trials.
 
+Projects can add a cached Docker setup layer at
+`.ddx/attempt-runner.Dockerfile`. When present, `docker-clone` builds a
+project-local image from that Dockerfile with `DDX_BASE_IMAGE` pointing at
+`executions.docker.image`, then runs attempts from the project image. This is
+where a project should install Rust, Java, Go, Python, Node, or other
+toolchains and dependency caches that are too expensive to recreate for every
+attempt. `executions.docker.project_dockerfile` and
+`executions.docker.project_context` can point at a different repo-owned build
+file/context; `executions.docker.project_image` uses an already-built image.
+Large repositories should pair the project Dockerfile with a Dockerfile-specific
+ignore file such as `.ddx/attempt-runner.Dockerfile.dockerignore` so project
+image rebuilds only transfer dependency manifests and lockfiles.
+
 Before claim, `ddx try` checks the configured execution temp root and durable
 evidence root, removes partial workspaces from failed setup, imports clone
 backend result commits into the project repo before finalization, and removes

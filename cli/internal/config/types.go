@@ -341,15 +341,18 @@ type ExecutionsConfig struct {
 // backend. String fields are passed through to docker run to preserve Docker's
 // native units (e.g. "8g", "2", "1024").
 type ExecutionsDockerConfig struct {
-	Image       string `yaml:"image,omitempty" json:"image,omitempty"`
-	Memory      string `yaml:"memory,omitempty" json:"memory,omitempty"`
-	MemorySwap  string `yaml:"memory_swap,omitempty" json:"memory_swap,omitempty"`
-	CPUs        string `yaml:"cpus,omitempty" json:"cpus,omitempty"`
-	PidsLimit   int    `yaml:"pids_limit,omitempty" json:"pids_limit,omitempty"`
-	TmpfsSize   string `yaml:"tmpfs_size,omitempty" json:"tmpfs_size,omitempty"`
-	Network     string `yaml:"network,omitempty" json:"network,omitempty"`
-	CloneMode   string `yaml:"clone_mode,omitempty" json:"clone_mode,omitempty"`
-	KeepOnError bool   `yaml:"keep_on_error,omitempty" json:"keep_on_error,omitempty"`
+	Image             string `yaml:"image,omitempty" json:"image,omitempty"`
+	ProjectImage      string `yaml:"project_image,omitempty" json:"project_image,omitempty"`
+	ProjectDockerfile string `yaml:"project_dockerfile,omitempty" json:"project_dockerfile,omitempty"`
+	ProjectContext    string `yaml:"project_context,omitempty" json:"project_context,omitempty"`
+	Memory            string `yaml:"memory,omitempty" json:"memory,omitempty"`
+	MemorySwap        string `yaml:"memory_swap,omitempty" json:"memory_swap,omitempty"`
+	CPUs              string `yaml:"cpus,omitempty" json:"cpus,omitempty"`
+	PidsLimit         int    `yaml:"pids_limit,omitempty" json:"pids_limit,omitempty"`
+	TmpfsSize         string `yaml:"tmpfs_size,omitempty" json:"tmpfs_size,omitempty"`
+	Network           string `yaml:"network,omitempty" json:"network,omitempty"`
+	CloneMode         string `yaml:"clone_mode,omitempty" json:"clone_mode,omitempty"`
+	KeepOnError       bool   `yaml:"keep_on_error,omitempty" json:"keep_on_error,omitempty"`
 }
 
 func (c *ExecutionsDockerConfig) Clone() *ExecutionsDockerConfig {

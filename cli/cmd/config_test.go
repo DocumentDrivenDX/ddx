@@ -199,17 +199,20 @@ repository:
 func TestConfigCommand_DockerExecutionKeys(t *testing.T) {
 	cfg := &config.Config{}
 	settings := map[string]string{
-		"executions.attempt_backend":      "docker-clone",
-		"executions.docker.image":         "ddx-runner:latest",
-		"executions.docker.memory":        "8g",
-		"executions.docker.memory_swap":   "8g",
-		"executions.docker.cpus":          "4",
-		"executions.docker.pids_limit":    "1024",
-		"executions.docker.tmpfs_size":    "2g",
-		"executions.docker.network":       "none",
-		"executions.docker.clone_mode":    "copy",
-		"executions.docker.keep_on_error": "true",
-		"executions.temp_worktree_root":   ".ddx/workspaces",
+		"executions.attempt_backend":           "docker-clone",
+		"executions.docker.image":              "ddx-runner:latest",
+		"executions.docker.project_image":      "ddx-project-runner:latest",
+		"executions.docker.project_dockerfile": ".ddx/attempt-runner.Dockerfile",
+		"executions.docker.project_context":    ".",
+		"executions.docker.memory":             "8g",
+		"executions.docker.memory_swap":        "8g",
+		"executions.docker.cpus":               "4",
+		"executions.docker.pids_limit":         "1024",
+		"executions.docker.tmpfs_size":         "2g",
+		"executions.docker.network":            "none",
+		"executions.docker.clone_mode":         "copy",
+		"executions.docker.keep_on_error":      "true",
+		"executions.temp_worktree_root":        ".ddx/workspaces",
 	}
 	for key, value := range settings {
 		require.NoError(t, setConfigValueInStruct(cfg, key, value), key)

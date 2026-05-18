@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
 )
@@ -234,6 +235,10 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 	if req.Workspace == nil || req.Workspace.WorkDir == "" {
 		return nil, fmt.Errorf("docker-clone attempt backend missing workspace")
 	}
+	image, err := resolveDockerAttemptImage(ctx, cfg, req.ProjectRoot, image)
+	if err != nil {
+		return nil, err
+	}
 	exe, err := os.Executable()
 	if err != nil {
 		return nil, fmt.Errorf("resolving ddx executable for docker backend: %w", err)
@@ -427,6 +432,106 @@ func dockerCloneMode(cfg *config.ExecutionsDockerConfig) string {
 	return cfg.CloneMode
 }
 
+func resolveDockerAttemptImage(ctx context.Context, cfg *config.ExecutionsDockerConfig, projectRoot, baseImage string) (string, error) {
+	if cfg != nil && strings.TrimSpace(cfg.ProjectImage) != "" {
+		return strings.TrimSpace(cfg.ProjectImage), nil
+	}
+	dockerfile, ok, err := dockerProjectDockerfile(projectRoot, cfg)
+	if err != nil || !ok {
+		return baseImage, err
+	}
+	contextDir, err := dockerProjectContext(projectRoot, cfg)
+	if err != nil {
+		return "", err
+	}
+	tag := "ddx-project-attempt-" + shortPathHash(projectRoot) + ":latest"
+	args := []string{
+		"build", "-q",
+		"--build-arg", "DDX_BASE_IMAGE=" + baseImage,
+		"-f", dockerfile,
+		"-t", tag,
+		contextDir,
+	}
+	if out, err := exec.CommandContext(ctx, "docker", args...).CombinedOutput(); err != nil {
+		return "", fmt.Errorf("building docker project attempt image: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return tag, nil
+}
+
+func dockerProjectDockerfile(projectRoot string, cfg *config.ExecutionsDockerConfig) (string, bool, error) {
+	configured := ""
+	if cfg != nil {
+		configured = strings.TrimSpace(cfg.ProjectDockerfile)
+	}
+	if configured == "" {
+		defaultPath := ddxroot.InTree(projectRoot, "attempt-runner.Dockerfile")
+		info, err := os.Stat(defaultPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return "", false, nil
+			}
+			return "", false, err
+		}
+		if info.IsDir() {
+			return "", false, fmt.Errorf("docker project dockerfile is a directory: %s", defaultPath)
+		}
+		return defaultPath, true, nil
+	}
+	path, err := projectBoundPath(projectRoot, configured)
+	if err != nil {
+		return "", false, fmt.Errorf("docker project dockerfile: %w", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", false, fmt.Errorf("docker project dockerfile %s: %w", path, err)
+	}
+	if info.IsDir() {
+		return "", false, fmt.Errorf("docker project dockerfile is a directory: %s", path)
+	}
+	return path, true, nil
+}
+
+func dockerProjectContext(projectRoot string, cfg *config.ExecutionsDockerConfig) (string, error) {
+	configured := ""
+	if cfg != nil {
+		configured = strings.TrimSpace(cfg.ProjectContext)
+	}
+	if configured == "" {
+		return projectRoot, nil
+	}
+	path, err := projectBoundPath(projectRoot, configured)
+	if err != nil {
+		return "", fmt.Errorf("docker project context: %w", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("docker project context %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return "", fmt.Errorf("docker project context is not a directory: %s", path)
+	}
+	return path, nil
+}
+
+func projectBoundPath(projectRoot, path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", fmt.Errorf("path is empty")
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(projectRoot, filepath.FromSlash(path))
+	}
+	cleanRoot := filepath.Clean(projectRoot)
+	cleanPath := filepath.Clean(path)
+	rel, err := filepath.Rel(cleanRoot, cleanPath)
+	if err != nil {
+		return "", err
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes project root: %s", path)
+	}
+	return cleanPath, nil
+}
+
 type dockerToolMount struct {
 	Name string
 	Path string
@@ -447,9 +552,6 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 		"-e", "HOME=/ddx-runtime/home",
 		"-e", "XDG_CACHE_HOME=/ddx-runtime/cache",
 		"-e", "TMPDIR=/ddx-runtime/tmp",
-		"-e", "GOCACHE=/ddx-runtime/go-build-cache",
-		"-e", "GOMODCACHE=/ddx-runtime/go/pkg/mod",
-		"-e", "GOPATH=/ddx-runtime/go",
 		"-e", "GOTMPDIR=/ddx-runtime/go-tmp",
 		"-e", "DDX_PROJECT_ROOT=/work",
 		"-e", DDXModeEnvKey + "=" + DDXModeBeadExecution,

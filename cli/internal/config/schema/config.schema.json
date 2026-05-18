@@ -560,6 +560,18 @@
               "type": "string",
               "description": "Container image used to run the attempt. DDx mounts the current ddx binary into the container and runs ddx run inside /work."
             },
+            "project_image": {
+              "type": "string",
+              "description": "Optional prebuilt project-specific attempt image. When set, docker-clone uses this image instead of building a repo-local project layer."
+            },
+            "project_dockerfile": {
+              "type": "string",
+              "description": "Optional repo-owned Dockerfile for a project-specific cached attempt layer. Empty auto-detects .ddx/attempt-runner.Dockerfile when present."
+            },
+            "project_context": {
+              "type": "string",
+              "description": "Optional repo-owned docker build context for the project-specific attempt layer. Empty uses the project root."
+            },
             "memory": {
               "type": "string",
               "description": "Docker --memory value, e.g. 8g."

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/require"
 )
 
@@ -100,8 +101,9 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 	require.Contains(t, args, "/tmp:rw,nosuid,nodev,size=2g,mode=1777")
 	require.Contains(t, args, "type=bind,src=/usr/bin/ddx,dst=/usr/local/bin/ddx,readonly")
 	require.Contains(t, args, "HOME=/ddx-runtime/home")
-	require.Contains(t, args, "GOCACHE=/ddx-runtime/go-build-cache")
 	require.Contains(t, args, "GOTMPDIR=/ddx-runtime/go-tmp")
+	require.NotContains(t, args, "GOMODCACHE=/ddx-runtime/go/pkg/mod")
+	require.NotContains(t, args, "GOCACHE=/ddx-runtime/go-build-cache")
 	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt,dst=/ddx-runtime")
 	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-gocache,dst=/work/.gocache")
 	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-tmp,dst=/work/.tmp")
@@ -147,6 +149,35 @@ func TestPrepareDockerAttemptRuntimeCreatesCacheRoots(t *testing.T) {
 	} {
 		require.DirExists(t, filepath.Join(runDir, dir))
 	}
+}
+
+func TestDockerProjectDockerfileAutodetectsProjectLayer(t *testing.T) {
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(ddxroot.InTree(projectRoot), 0o755))
+	dockerfile := ddxroot.InTree(projectRoot, "attempt-runner.Dockerfile")
+	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM scratch\n"), 0o644))
+
+	got, ok, err := dockerProjectDockerfile(projectRoot, nil)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, dockerfile, got)
+}
+
+func TestDockerProjectDockerfileRejectsEscapes(t *testing.T) {
+	projectRoot := t.TempDir()
+	_, _, err := dockerProjectDockerfile(projectRoot, &config.ExecutionsDockerConfig{
+		ProjectDockerfile: "../Dockerfile",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "escapes project root")
+}
+
+func TestDockerProjectImageSkipsProjectDockerfile(t *testing.T) {
+	image, err := resolveDockerAttemptImage(context.Background(), &config.ExecutionsDockerConfig{
+		ProjectImage: "project-runner:dev",
+	}, t.TempDir(), "base-runner:dev")
+	require.NoError(t, err)
+	require.Equal(t, "project-runner:dev", image)
 }
 
 func TestShouldRetryCloneWithoutHardlinks(t *testing.T) {
