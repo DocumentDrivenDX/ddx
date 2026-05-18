@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260518T033500-d3dd51ac",
+  "bead_id": "ddx-9cbb886f",
+  "base_rev": "08809a4becac1d1a1c08b050ea3cd9b8308454c5",
+  "created_at": "2026-05-18T03:35:10.742914647Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9cbb886f",
+    "title": "agent: persist ddx try review verdicts in durable attempt metrics",
+    "description": "PROBLEM\n`ddx try` already runs the post-merge review path and emits review events, but the review verdict is not guaranteed to survive as durable, queryable attempt data for cross-bead economics. That makes it hard to answer questions like “what is the cheapest model that produces approved work?” from `.ddx/metrics/attempts.jsonl` alone.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/execute_bead_post_review.go:270-315` sets `report.ReviewVerdict` and appends a `review` bead event, while `cli/internal/agent/durable_audit.go:20-83` writes the attempt row that downstream analytics read. There is no regression proving the `ddx try` path keeps the terminal review verdict in the durable metrics row and in the bead event history together, so the analytics surface can drift from the execution path.\n\nPROPOSED FIX\n- `cli/internal/agent/execute_bead_post_review.go`: keep the final verdict attached to the attempt report on every terminal review path (`APPROVE`, `REQUEST_CHANGES`, `BLOCK`, and review-malfunction cases where a verdict was parsed).\n- `cli/internal/agent/durable_audit.go`: ensure the attempt row written for `ddx try` always carries the terminal `review_verdict` when one exists.\n- `cli/internal/attemptmetrics/attemptmetrics.go`: keep the row schema stable and add/adjust helper coverage so the review verdict round-trips through JSONL unchanged.\n- `cli/internal/agent/execute_bead_try_test.go` (new or extended): add an end-to-end regression that runs `ddx try` against a deterministic reviewer and asserts both the bead event stream and `.ddx/metrics/attempts.jsonl` contain the same verdict.\n\nNON-SCOPE\n- No new review-policy or triage behavior.\n- No UI or dashboard changes.\n- No retroactive backfill of historic rows unless required to support the regression.\n\nDEPS\nNo deps.",
+    "acceptance": "1. A `ddx try` run that reaches post-merge review writes the terminal verdict into `.ddx/metrics/attempts.jsonl` as `review_verdict` and the JSONL row round-trips through `attemptmetrics.LoadRows`.\n2. The same `ddx try` run appends a bead event with matching review verdict evidence, and the bead history can be read back with `ddx bead evidence list` / event inspection.\n3. The regression test in `cli/internal/agent/execute_bead_try_test.go` (or the nearest existing test file) exercises at least one APPROVE path and one non-APPROVE path.\n4. `cd cli \u0026\u0026 go test ./internal/agent ./internal/attemptmetrics ./cmd -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:metrics",
+      "kind:bug",
+      "phase:3",
+      "spec:ADR-026"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9cbb886f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-18T02:04:26.034972267Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"infrastructure\",\"decode_warnings\":[{\"field\":\"classification\",\"warning\":\"unknown classification\",\"raw_excerpt\":\"infrastructure\"}],\"detail\":\"committing tracker: fatal: cannot do a partial commit during a merge.: exit status 128\",\"malformed\":true,\"rationale\":\"Tracker commit failed with 'cannot do a partial commit during a merge' — a repo-state/infrastructure issue unrelated to the bead's code work; retrying after the merge state is cleared should succeed.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-18T02:04:49.50003201Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "unusable triage classification: infrastructure"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: cannot do a partial commit during a merge.: exit status 128",
+          "created_at": "2026-05-18T02:04:49.606004953Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\tcli/cmd/server.go\nM\tcli/cmd/server_service.go\nA\tcli/cmd/server_service_test.go\nA\tcli/cmd/shared_helpers_test.go\nM\tcli/internal/service/launchd.go\nA\tcli/internal/service/runtime.go\nA\tcli/internal/service/runtime_test.go\nM\tcli/internal/service/service.go\nM\tcli/internal/service/systemd.go",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-05-18T01:26:51Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T033500-d3dd51ac",
+    "prompt": ".ddx/executions/20260518T033500-d3dd51ac/prompt.md",
+    "manifest": ".ddx/executions/20260518T033500-d3dd51ac/manifest.json",
+    "result": ".ddx/executions/20260518T033500-d3dd51ac/result.json",
+    "checks": ".ddx/executions/20260518T033500-d3dd51ac/checks.json",
+    "usage": ".ddx/executions/20260518T033500-d3dd51ac/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-9cbb886f-20260518T033500-d3dd51ac"
+  },
+  "prompt_sha": "c67d2b559a83688007ffd904dae13ad38405f7d9d4c02067d829728d2c4dff7a"
+}
