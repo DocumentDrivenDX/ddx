@@ -2169,7 +2169,11 @@ func (s *Store) Blocked() ([]Bead, error) {
 
 	var blocked []Bead
 	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
-		if entry.Decision.Bucket == LifecycleBucketWaitingDependencies && entry.Status == StatusOpen {
+		// EvaluateLifecycleQueue is the authoritative classifier for queue buckets.
+		// If a bead is in LifecycleBucketWaitingDependencies, it correctly reflects
+		// all relevant state (status, dependencies, claims, etc.) without needing
+		// additional secondary status filtering.
+		if entry.Decision.Bucket == LifecycleBucketWaitingDependencies {
 			blocked = append(blocked, entry.Bead)
 		}
 	}
