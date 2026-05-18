@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260518T100918-4c4a6b06",
+  "bead_id": "ddx-ff9f446c",
+  "base_rev": "5cc117555badf14c96411bb1d890e448da4d7ba1",
+  "created_at": "2026-05-18T10:09:27.13294035Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ff9f446c",
+    "title": "consolidate claim-Extra key list for Reopen and Unclaim",
+    "description": "PROBLEM\n  Reopen (store.go:1306-1317) and Unclaim (store.go:823-831) both maintain parallel \n  lists of claim-Extra keys to clear. These lists are duplicated and must be kept \n  in sync to ensure consistent behavior when reverting claim state.\n\nCURRENT STATE\n  - Reopen:1306-1317 clears claim-Extra keys [list A]\n  - Unclaim:823-831 clears claim-Extra keys [list B]\n  - Lists [A] and [B] are not DRY and may drift\n  - No shared definition of \"claim state to clear\"\n\nPROPOSED FIX\n  1. Extract a package-level constant or small helper that defines the canonical \n     list of claim-Extra keys to clear\n  2. Update Reopen to use the canonical list\n  3. Update Unclaim to use the canonical list\n  4. Add comment explaining when/why these keys are cleared\n  \n  The canonical list should include keys like:\n  - claimed-at\n  - assignee\n  - (any other claim-related extra fields)\n\nNON-SCOPE\n  - Changing when/why Reopen or Unclaim are called\n  - Changing claim acquisition logic\n  - Changing other extra field semantics",
+    "acceptance": "1. Canonical claim-Extra key list defined (const or helper) in store.go.\n2. Comment explains which keys represent claim state and why they're cleared.\n3. Reopen updated to use canonical list; verify behavior unchanged.\n4. Unclaim updated to use canonical list; verify behavior unchanged.\n5. cd cli \u0026\u0026 go test ./internal/bead/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "kind:refactor",
+      "area:bead",
+      "area:lifecycle",
+      "spec-id:TD-031"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T100918-4c4a6b06",
+    "prompt": ".ddx/executions/20260518T100918-4c4a6b06/prompt.md",
+    "manifest": ".ddx/executions/20260518T100918-4c4a6b06/manifest.json",
+    "result": ".ddx/executions/20260518T100918-4c4a6b06/result.json",
+    "checks": ".ddx/executions/20260518T100918-4c4a6b06/checks.json",
+    "usage": ".ddx/executions/20260518T100918-4c4a6b06/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ff9f446c-20260518T100918-4c4a6b06"
+  },
+  "prompt_sha": "9095bdf1f3bf7bf80dae8008b390460bd09300bfba0d8161238033be2c749d1b"
+}
