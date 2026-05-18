@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
@@ -27,7 +28,11 @@ func keepMetaPromptReachability() {
 		return
 	}
 
-	tempRoot := filepath.Join(os.TempDir(), "ddx-metaprompt-keepalive")
+	tempRoot, err := config.MkdirExecutionScratch("", "ddx-metaprompt-keepalive")
+	if err != nil {
+		return
+	}
+	defer os.RemoveAll(tempRoot)
 	claudePath := filepath.Join(tempRoot, "CLAUDE.md")
 	libraryPath := ddxroot.JoinProject(tempRoot, "plugins", "ddx")
 

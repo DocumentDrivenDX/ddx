@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -109,7 +110,7 @@ func executeUpgrade(out io.Writer) error {
 	}
 
 	// Write to temporary file
-	tmpFile, err := os.CreateTemp("", "ddx-install-*.sh")
+	tmpFile, err := config.CreateExecutionScratch("", "ddx-install-*.sh")
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}

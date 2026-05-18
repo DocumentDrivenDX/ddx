@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -44,5 +45,23 @@ func TestExecutionCleanupManagerUsesConfiguredRoot(t *testing.T) {
 	want := filepath.Join(projectRoot, "configured-cleanup")
 	if mgr.TempRoot != want {
 		t.Fatalf("TempRoot = %q, want %q", mgr.TempRoot, want)
+	}
+}
+
+func TestLifecycleScratchDirUsesConfiguredScratchRoot(t *testing.T) {
+	t.Setenv(config.ExecutionWorktreeRootEnv, "")
+	t.Setenv("HOME", t.TempDir())
+	projectRoot := t.TempDir()
+	writeAgentExecutionRootConfig(t, projectRoot, "configured/ddx-exec-wt")
+
+	dir, err := newLifecycleScratchDir(projectRoot)
+	if err != nil {
+		t.Fatalf("newLifecycleScratchDir error = %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	wantPrefix := filepath.Join(projectRoot, "configured") + string(filepath.Separator)
+	if !strings.HasPrefix(dir, wantPrefix) {
+		t.Fatalf("lifecycle scratch dir = %q, want prefix %q", dir, wantPrefix)
 	}
 }

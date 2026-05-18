@@ -22,7 +22,7 @@ Task execution is composed from named layers:
 | Layer | Public verb | Meaning |
 | --- | --- | --- |
 | 1 | `ddx run` | one upstream agent invocation |
-| 2 | `ddx try <bead>` | one bead attempt in an isolated worktree |
+| 2 | `ddx try <bead>` | one bead attempt in an isolated workspace |
 | 3 | `ddx work` | one mechanical queue-drain loop |
 
 Each higher layer references child records from the layer beneath it. Comparison,
@@ -56,7 +56,7 @@ attachments in the same directory.
     "bead_id": "ddx-12345678",
     "base_revision": "abc123",
     "result_revision": "def456",
-    "worktree_path": ".ddx/worktrees/ddx-12345678-run_...",
+    "workspace_path": ".ddx/workspaces/ddx-12345678-run_...",
     "finalization": "merge",
     "child_run_ids": ["run_20260430T120104Z_01HV..."],
     "gate_summary": "go test ./internal/agent"
@@ -102,14 +102,14 @@ agent-reported facts.
 Layer 2 stores DDx-owned attempt orchestration:
 
 - bead id and governing artifact ids
-- base revision and worktree path
+- base revision and workspace path
 - child layer-1 run ids
 - commit/result revision, if produced
 - finalization mode: `merge`, `preserve`, `no_changes`, or `aborted`
 - preserve ref, if any
 - gate results and review verdicts
 - evidence-bundle attachment refs
-- cleanup summary: removed worktree path, preserve reason, partial setup
+- cleanup summary: removed workspace path, preserve reason, partial setup
   cleanup, and resource-preflight result
 
 Layer 2 owns success classification for a bead attempt because DDx owns commits,
@@ -238,7 +238,7 @@ removes arbitrary temp directories.
 
 ### Roots and ownership
 
-The manager knows the configured temporary worktree root, durable run/evidence
+The manager knows the configured temporary execution root, durable run/evidence
 roots, worker liveness root, and project git repository. Every created
 temporary execution directory records enough ownership to answer:
 
@@ -251,24 +251,40 @@ temporary execution directory records enough ownership to answer:
 During the legacy migration window, the manager handles both
 `.ddx/executions/<attempt-id>` and `.ddx/runs/<run-id>` evidence, but it treats
 complete evidence bundles as durable data rather than scratch.
-DDx-owned cleanup scope also includes DDx-created test and e2e scratch roots,
-generated test binaries, and run-state or liveness files. Recognized DDx-owned
-scratch prefixes are: `ddx-exec-wt`, `ddx-claim-heartbeats`,
-`ddx-metric-keepalive`, `ddx-test-`, and `ddx-e2e-`. Any directory containing
-a `cleanup.json` metadata file with matching project ownership is DDx-owned
-regardless of its name. A path is eligible for deletion when: (a) it has
-`cleanup.json` metadata and the liveness is expired or the owning attempt is
-terminal; or (b) it matches a recognized DDx prefix without metadata, the
-directory mtime is at least **6 hours** old, and no live PID or active session
-is present. The manager preserves published evidence and registered active
-worktrees.
+DDx-owned cleanup scope also includes DDx-created helper scratch beside the
+configured execution root, legacy `$TMPDIR/ddx-exec-wt` resources,
+DDx-created test and e2e scratch roots, generated test binaries, and run-state
+or liveness files. The execution root resolves in priority order:
+`DDX_EXEC_WT_DIR`, `executions.temp_worktree_root`, then the per-user cache
+root (`$XDG_CACHE_HOME/ddx/exec-wt` on Linux, or the platform cache
+equivalent). Recognized DDx-owned scratch prefixes are: `ddx-test-`,
+`ddx-e2e-`, `ddx-test-bin-`, `ddx-test-binary-`, `ddx-lifecycle-`,
+`ddx-agent-support-keepalive`, `ddx-config-anchor-`, `ddx-exec-keepalive`,
+`ddx-metric-keepalive`, `ddx-metaprompt-keepalive`,
+`ddx-persona-keepalive`, `ddx-vale-`, `ddx-gate-wt-`,
+`ddx-land-finalize-`, `ddx-land-wt-`, `ddx-push-recover-`, and
+`ddx-conflict-recover-`. Any directory containing a `cleanup.json` metadata
+file with matching project ownership is DDx-owned regardless of its name. A
+path is eligible for deletion when: (a) it has `cleanup.json` metadata and the
+liveness is expired or the owning attempt is terminal; or (b) it matches a
+recognized DDx prefix without metadata, the directory mtime is at least **6
+hours** old, and no live PID or active session is present. The manager
+preserves published evidence and active workspaces.
 
 ### Entry points
 
-Inline cleanup runs inside `ddx try` before and after worktree lifecycle
-operations. It removes partial directories from failed setup and removes the
-isolated worktree after merge, preserve, no-changes, no-evidence, failed
-publish, or cooperative interruption finalization.
+Inline cleanup runs inside `ddx try` before and after attempt workspace
+lifecycle operations. It removes partial directories from failed setup and
+removes the isolated workspace after merge, preserve, no-changes, no-evidence,
+failed publish, or cooperative interruption finalization.
+
+The attempt workspace backend is selected by `--attempt-backend` or
+`executions.attempt_backend`. The default `worktree` backend preserves the
+legacy linked git worktree behavior. The `local-clone` backend prepares a full
+local clone under the same execution root and imports result commits back into
+the project repository before landing. The `docker-clone` backend runs that
+clone inside Docker and uses `executions.docker` for image and resource-limit
+configuration.
 
 Loop cleanup runs inside `ddx work` at startup, between attempts after
 setup/finalization failure, periodically while polling, and during graceful
@@ -288,10 +304,10 @@ drain.
 
 The manager may delete:
 
-- unregistered directories under DDx temp worktree roots whose names and
+- unregistered directories under DDx temp roots whose names and
   metadata identify DDx ownership and whose liveness is absent or stale
-- registered git worktrees under DDx temp roots whose owning attempt is
-  terminal or whose liveness marker is stale
+- registered git worktrees or metadata-backed workspaces under DDx temp roots
+  whose owning attempt is terminal or whose liveness marker is stale
 - DDx-created test and e2e scratch roots that satisfy the same ownership,
   age, and liveness rules
 - generated test binaries and run-state or liveness files that are DDx-owned
@@ -301,18 +317,19 @@ The manager may delete:
 
 The manager must not delete:
 
-- preserved attempt worktrees
+- preserved attempt workspaces
 - local evidence refs under `refs/ddx/iterations/...`
+- attempt backend refs under `refs/ddx/attempt-backend/...`
 - complete `.ddx/runs/<id>` or `.ddx/executions/<attempt-id>` evidence
-- active worktrees with a live PID/session heartbeat
+- active workspaces with a live PID/session heartbeat
 - paths outside configured DDx roots
 - paths that only loosely resemble DDx names without matching ownership
   metadata or registered worktree evidence
 
 ### Resource preflight and loop-fatal handling
 
-Before `ddx try` claims a bead or creates a worktree, it checks the configured
-temp worktree root and durable evidence root for writability, free bytes, and
+Before `ddx try` claims a bead or creates a workspace, it checks the configured
+execution temp root and durable evidence root for writability, free bytes, and
 free inodes when inode data is available. If preflight fails, `ddx try` runs one
 immediate cleanup pass and repeats the check. If the check still fails, the
 attempt returns `resource_exhausted` without claiming the bead.
@@ -324,7 +341,7 @@ inodes**. If the temp roots remain below the hard stop floor of **64 MiB free
 bytes** and **1024 free inodes** after that cleanup, the loop records host
 exhaustion and stops claiming new beads.
 
-If resource exhaustion occurs after a claim or during worktree setup,
+If resource exhaustion occurs after a claim or during workspace setup,
 `ddx try` records whatever partial evidence is available, removes any partial
 unregistered directory it created, releases the claim if the bead did not close,
 and returns `resource_exhausted`.

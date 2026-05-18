@@ -45,6 +45,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
 	effort, _ := cmd.Flags().GetString("effort")
+	attemptBackend, _ := cmd.Flags().GetString("attempt-backend")
 	ignoreCooldown, _ := cmd.Flags().GetBool("ignore-cooldown")
 	cooldownReason, _ := cmd.Flags().GetString("reason")
 	once, _ := cmd.Flags().GetBool("once")
@@ -99,6 +100,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		Profile:                profile,
 		Provider:               provider,
 		Effort:                 effort,
+		AttemptBackend:         attemptBackend,
 		Mode:                   mode,
 		IdleInterval:           idleInterval,
 		NoReview:               noReview,
@@ -338,6 +340,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			MinPower:          requestedMinPower,
 			MaxPower:          spec.MaxPower,
 			OpaquePassthrough: spec.OpaquePassthrough,
+			AttemptBackend:    spec.AttemptBackend,
 		}
 		requestTimeout := spec.RequestTimeout.Duration
 		if requestTimeout > 0 {

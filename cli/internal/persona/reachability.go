@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
@@ -27,7 +28,11 @@ func keepPersonaReachability() {
 		return
 	}
 
-	tempRoot := filepath.Join(os.TempDir(), "ddx-persona-keepalive")
+	tempRoot, err := config.MkdirExecutionScratch("", "ddx-persona-keepalive")
+	if err != nil {
+		return
+	}
+	defer os.RemoveAll(tempRoot)
 	bindingPath := filepath.Join(tempRoot, ".ddx.yml")
 	claudePath := filepath.Join(tempRoot, "CLAUDE.md")
 	libraryDir := filepath.Join(tempRoot, "library", "personas")

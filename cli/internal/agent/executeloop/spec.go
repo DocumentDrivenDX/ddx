@@ -72,6 +72,9 @@ type ExecuteLoopSpec struct {
 	Provider    string `json:"provider,omitempty"`
 	Effort      string `json:"effort,omitempty"`
 	LabelFilter string `json:"label_filter,omitempty"`
+	// AttemptBackend selects the execute-bead workspace/transport backend for
+	// each attempt. Empty uses executions.attempt_backend or the binary default.
+	AttemptBackend string `json:"attempt_backend,omitempty"`
 
 	// Mode controls loop termination. Defaults to ModeDrain via ApplyDefaults.
 	Mode Mode `json:"mode,omitempty"`

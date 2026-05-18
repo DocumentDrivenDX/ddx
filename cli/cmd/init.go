@@ -553,10 +553,9 @@ func findParentDDxWorkspace(dir string) string {
 }
 
 // isExecuteBeadWorktree reports whether dir is inside an execute-bead
-// worktree. Detects both the legacy in-repo location (.execute-bead-wt-*
-// under .ddx/) and the current out-of-repo location ($TMPDIR/ddx-exec-wt/
-// or DDX_EXEC_WT_DIR override). These are linked git worktrees and must
-// not be re-initialized.
+// workspace. Detects both linked worktrees and clone-backed attempt
+// workspaces under the configured out-of-repo execution temp root. These
+// are attempt-local repositories and must not be re-initialized.
 func isExecuteBeadWorktree(dir string) bool {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -565,13 +564,18 @@ func isExecuteBeadWorktree(dir string) bool {
 	slash := filepath.ToSlash(abs)
 	// Legacy: a path component starting with .execute-bead-wt-.
 	for _, part := range strings.Split(slash, "/") {
-		if strings.HasPrefix(part, ".execute-bead-wt-") {
+		if strings.HasPrefix(part, ".execute-bead-wt-") || strings.HasPrefix(part, ".execute-bead-clone-") {
 			return true
 		}
 	}
-	// Current: $TMPDIR/ddx-exec-wt/ (or DDX_EXEC_WT_DIR) container.
-	tmpContainer := filepath.ToSlash(filepath.Join(os.TempDir(), "ddx-exec-wt"))
-	if strings.HasPrefix(slash, tmpContainer+"/") {
+	// Current: configured execution temp root.
+	currentContainer := filepath.ToSlash(config.ExecutionTempRoot(""))
+	if strings.HasPrefix(slash, currentContainer+"/") {
+		return true
+	}
+	// Legacy fallback: older binaries always used $TMPDIR/ddx-exec-wt.
+	legacyContainer := filepath.ToSlash(config.LegacyExecutionTempRoot())
+	if strings.HasPrefix(slash, legacyContainer+"/") {
 		return true
 	}
 	if override := os.Getenv("DDX_EXEC_WT_DIR"); override != "" {

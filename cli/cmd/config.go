@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -317,7 +318,10 @@ type ConfigFileInfo struct {
 	Exists bool
 }
 
-// extractConfigValue extracts a value from config by key
+const validConfigGetKeys = "version, library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root, executions.attempt_backend, executions.docker.image, executions.docker.memory, executions.docker.memory_swap, executions.docker.cpus, executions.docker.pids_limit, executions.docker.tmpfs_size, executions.docker.network, executions.docker.clone_mode, executions.docker.keep_on_error"
+const validConfigSetKeys = "library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root, executions.attempt_backend, executions.docker.image, executions.docker.memory, executions.docker.memory_swap, executions.docker.cpus, executions.docker.pids_limit, executions.docker.tmpfs_size, executions.docker.network, executions.docker.clone_mode, executions.docker.keep_on_error"
+
+// extractConfigValue extracts a value from config by key.
 func extractConfigValue(cfg *config.Config, key string) (string, error) {
 	// Handle library configuration keys
 	switch key {
@@ -343,8 +347,58 @@ func extractConfigValue(cfg *config.Config, key string) (string, error) {
 			return "", nil
 		}
 		return cfg.Executions.TempWorktreeRoot, nil
+	case "executions.attempt_backend":
+		if cfg.Executions == nil {
+			return "", nil
+		}
+		return cfg.Executions.AttemptBackend, nil
+	case "executions.docker.image":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.Image, nil
+	case "executions.docker.memory":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.Memory, nil
+	case "executions.docker.memory_swap":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.MemorySwap, nil
+	case "executions.docker.cpus":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.CPUs, nil
+	case "executions.docker.pids_limit":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil || cfg.Executions.Docker.PidsLimit == 0 {
+			return "", nil
+		}
+		return strconv.Itoa(cfg.Executions.Docker.PidsLimit), nil
+	case "executions.docker.tmpfs_size":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.TmpfsSize, nil
+	case "executions.docker.network":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.Network, nil
+	case "executions.docker.clone_mode":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return cfg.Executions.Docker.CloneMode, nil
+	case "executions.docker.keep_on_error":
+		if cfg.Executions == nil || cfg.Executions.Docker == nil {
+			return "", nil
+		}
+		return strconv.FormatBool(cfg.Executions.Docker.KeepOnError), nil
 	default:
-		return "", fmt.Errorf("unknown configuration key: %s\nValid keys: version, library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root", key)
+		return "", fmt.Errorf("unknown configuration key: %s\nValid keys: %s", key, validConfigGetKeys)
 	}
 }
 
@@ -378,10 +432,51 @@ func setConfigValueInStruct(cfg *config.Config, key, value string) error {
 			cfg.Executions = &config.ExecutionsConfig{}
 		}
 		cfg.Executions.TempWorktreeRoot = value
+	case "executions.attempt_backend":
+		if cfg.Executions == nil {
+			cfg.Executions = &config.ExecutionsConfig{}
+		}
+		cfg.Executions.AttemptBackend = value
+	case "executions.docker.image":
+		ensureExecutionsDockerConfig(cfg).Image = value
+	case "executions.docker.memory":
+		ensureExecutionsDockerConfig(cfg).Memory = value
+	case "executions.docker.memory_swap":
+		ensureExecutionsDockerConfig(cfg).MemorySwap = value
+	case "executions.docker.cpus":
+		ensureExecutionsDockerConfig(cfg).CPUs = value
+	case "executions.docker.pids_limit":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return fmt.Errorf("executions.docker.pids_limit must be a non-negative integer")
+		}
+		ensureExecutionsDockerConfig(cfg).PidsLimit = n
+	case "executions.docker.tmpfs_size":
+		ensureExecutionsDockerConfig(cfg).TmpfsSize = value
+	case "executions.docker.network":
+		ensureExecutionsDockerConfig(cfg).Network = value
+	case "executions.docker.clone_mode":
+		ensureExecutionsDockerConfig(cfg).CloneMode = value
+	case "executions.docker.keep_on_error":
+		b, err := strconv.ParseBool(value)
+		if err != nil {
+			return fmt.Errorf("executions.docker.keep_on_error must be a boolean")
+		}
+		ensureExecutionsDockerConfig(cfg).KeepOnError = b
 	default:
-		return fmt.Errorf("unknown configuration key: %s\nValid keys: library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root", key)
+		return fmt.Errorf("unknown configuration key: %s\nValid keys: %s", key, validConfigSetKeys)
 	}
 	return nil
+}
+
+func ensureExecutionsDockerConfig(cfg *config.Config) *config.ExecutionsDockerConfig {
+	if cfg.Executions == nil {
+		cfg.Executions = &config.ExecutionsConfig{}
+	}
+	if cfg.Executions.Docker == nil {
+		cfg.Executions.Docker = &config.ExecutionsDockerConfig{}
+	}
+	return cfg.Executions.Docker
 }
 
 // outputConfigFiles handles outputting configuration file locations

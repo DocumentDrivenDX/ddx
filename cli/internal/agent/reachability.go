@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // init keeps retained agent support APIs in the production reachability graph.
@@ -26,7 +28,7 @@ func keepAgentSupportReachability() {
 		return
 	}
 
-	root, err := os.MkdirTemp("", "ddx-agent-support-keepalive")
+	root, err := config.MkdirExecutionScratch("", "ddx-agent-support-keepalive")
 	if err != nil {
 		return
 	}

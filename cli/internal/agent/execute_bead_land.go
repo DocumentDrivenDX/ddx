@@ -53,6 +53,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
@@ -976,7 +977,7 @@ func landingFinalizationWorktree(projectRoot, wd, targetBranch string, gitOps La
 	if !sameFilesystemPath(projectRoot, wd) {
 		return wd, func() {}, nil
 	}
-	tempWT, err := os.MkdirTemp("", "ddx-land-finalize-*")
+	tempWT, err := config.MkdirExecutionScratch(projectRoot, "ddx-land-finalize-*")
 	if err != nil {
 		return "", nil, fmt.Errorf("creating landing finalization worktree: %w", err)
 	}
@@ -1217,7 +1218,7 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 	// ResultRev` inside it. The result is a merge commit whose parents are
 	// [currentTip, ResultRev]. Crucially, ResultRev itself is NOT rewritten:
 	// its parent is still BaseRev, so replay observes the original inputs.
-	tempWT, tempWtErr := os.MkdirTemp("", "ddx-land-wt-*")
+	tempWT, tempWtErr := config.MkdirExecutionScratch(projectRoot, "ddx-land-wt-*")
 	if tempWtErr != nil {
 		return nil, fmt.Errorf("creating temp worktree dir: %w", tempWtErr)
 	}
@@ -1569,7 +1570,7 @@ func LandConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (stri
 		return "", fmt.Errorf("resolving preserved ref %s: %w", preserveRef, err)
 	}
 
-	tempWT, mkErr := os.MkdirTemp("", "ddx-conflict-recover-*")
+	tempWT, mkErr := config.MkdirExecutionScratch(wd, "ddx-conflict-recover-*")
 	if mkErr != nil {
 		return "", fmt.Errorf("creating temp worktree: %w", mkErr)
 	}

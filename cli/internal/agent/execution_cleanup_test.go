@@ -652,6 +652,32 @@ func TestExecutionCleanup_RemovesStaleDDXScratchDirs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
 }
 
+func TestExecutionCleanup_DefaultScratchRootsIncludeConfiguredParentAndLegacyTemp(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	configuredParent := t.TempDir()
+	tempRoot := filepath.Join(configuredParent, "ddx-exec-wt")
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+
+	roots := mgr.scratchRoots(tempRoot)
+	assert.Contains(t, roots, configuredParent)
+	assert.Contains(t, roots, os.TempDir())
+}
+
+func TestExecutionCleanup_CanReclaimForeignTestOwnedPathUnderConfiguredRoot(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	configuredParent := t.TempDir()
+	tempRoot := filepath.Join(configuredParent, "ddx-exec-wt")
+	foreignTestProject := filepath.Join(os.TempDir(), "TestExecutionCleanupForeignProject", "001")
+	foreignWorktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-foreign-20260518T000000-deadbeef")
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+
+	assert.True(t, mgr.canReclaimForeignTestOwnedPath(foreignTestProject, foreignWorktree))
+}
+
 func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {
 	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
 	projectRoot := setupExecutionCleanupProjectRoot(t)

@@ -93,6 +93,7 @@ Exit codes:
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("effort", "", "Effort level")
+	cmd.Flags().String("attempt-backend", "", "Attempt backend: worktree, local-clone, or docker-clone (default: executions.attempt_backend)")
 	cmd.Flags().Bool("force-claim", false, "Ignore retry cooldown for this targeted attempt only (requires --reason)")
 	cmd.Flags().String("reason", "", "Operator reason required by --force-claim")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
@@ -137,6 +138,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
 	effort, _ := cmd.Flags().GetString("effort")
+	attemptBackend, _ := cmd.Flags().GetString("attempt-backend")
 	forceClaim, _ := cmd.Flags().GetBool("force-claim")
 	forceReason, _ := cmd.Flags().GetString("reason")
 	noReview, _ := cmd.Flags().GetBool("no-review")
@@ -339,6 +341,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				MinPower:          requestMinPower,
 				MaxPower:          maxPower,
 				OpaquePassthrough: true, // ddx try treats flags as opaque passthrough
+				AttemptBackend:    attemptBackend,
 			}
 			if requestTimeout > 0 {
 				loopOverrides.ProviderRequestTimeout = &requestTimeout
@@ -431,12 +434,13 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 
 	overrides := config.CLIOverrides{
-		Assignee: resolveClaimAssignee(),
-		Harness:  harness,
-		Model:    model,
-		Provider: provider,
-		Profile:  profile,
-		Effort:   effort,
+		Assignee:       resolveClaimAssignee(),
+		Harness:        harness,
+		Model:          model,
+		Provider:       provider,
+		Profile:        profile,
+		Effort:         effort,
+		AttemptBackend: attemptBackend,
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {

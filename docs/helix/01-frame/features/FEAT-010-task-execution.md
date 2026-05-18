@@ -45,8 +45,8 @@ what an agent opened in a DDx project is permitted to do.
 
 | DDX_MODE | Description | Allowed actions | Prohibited actions |
 |---|---|---|---|
-| `queue_steward` | Default interactive mode. Surveys, triages, and advises on the queue without claiming or executing beads. | Read tracker and docs; report status; advise on bead quality; suggest readiness fixes; run `ddx bead list/ready/status/show`. | Claiming beads; creating isolated worktrees; starting `ddx work` or `ddx try` without an explicit user directive. |
-| `bead_execution` | Worker mode. Executes one or more beads from the queue in isolated worktrees. | Full FEAT-010 layer-2 / layer-3 lifecycle: worktree creation, bead attempt, merge or preserve, evidence bundle. | Scope creep outside the named bead; switching to direct implementation without a bead. |
+| `queue_steward` | Default interactive mode. Surveys, triages, and advises on the queue without claiming or executing beads. | Read tracker and docs; report status; advise on bead quality; suggest readiness fixes; run `ddx bead list/ready/status/show`. | Claiming beads; creating isolated workspaces; starting `ddx work` or `ddx try` without an explicit user directive. |
+| `bead_execution` | Worker mode. Executes one or more beads from the queue in isolated workspaces. | Full FEAT-010 layer-2 / layer-3 lifecycle: workspace creation, bead attempt, merge or preserve, evidence bundle. | Scope creep outside the named bead; switching to direct implementation without a bead. |
 | `direct_user_implementation` | Human-directed implementation. The user has explicitly asked the agent to edit code or docs, bypassing the bead queue. | Edit code and docs as instructed; commit to the current branch. | Starting autonomous queue drain; claiming beads autonomously. |
 | `review` | Read-only review. Grades an existing implementation against AC or specs. | Read code, docs, and evidence; return a structured verdict with per-AC findings. | Writing commits; claiming beads; modifying the tracker. |
 
@@ -143,11 +143,11 @@ edits the repo directly (bead-less worktree).
 
 ### Layer 2 — `ddx try <bead>` (bead attempt)
 
-A layer-2 run is one bead attempt in an isolated worktree. It owns:
+A layer-2 run is one bead attempt in an isolated workspace. It owns:
 
-- Worktree creation from a base revision and worktree finalization
+- Workspace creation from a base revision and workspace finalization
   (merge or preserve)
-- Worktree cleanup after finalization, failed setup, failed publish, and
+- Workspace cleanup after finalization, failed setup, failed publish, and
   ordinary interruption
 - Bead → prompt resolution (description, acceptance, governing artifacts)
 - Side-effect bundling (commits, evidence, no-changes rationale)
@@ -536,26 +536,26 @@ create commits or modify worktree state.
   exhausted without an executable next step; bead moved to `status=proposed`.
 - `conflicted` — approved candidate failed to land due to merge conflict; bead
   returned to `open` for re-attempt with a fresh `base_rev`.
-- `budget-stopped` — drain-level cost or no-progress budget tripped; worktree
+- `budget-stopped` — drain-level cost or no-progress budget tripped; workspace
   preserved with evidence.
 
-**Candidate-cycle sequence** (in the still-live attempt worktree, before land):
+**Candidate-cycle sequence** (in the still-live attempt workspace, before land):
 
-1. Create isolated worktree from `base_rev`.
+1. Create isolated workspace from `base_rev`.
 2. Run implementation pass; collect `base_rev`, `result_rev`, run ids,
    verification output, and cost facts.
 3. Pin candidate ref; emit `candidate-pinned`.
 4. Run candidate checks (post-run tests, lint, gates). Failure emits
    `candidate-checks-failed`; plausibly capability-sensitive failures are
    eligible for a repair cycle when `repair_max_cycles` allows.
-5. Dispatch read-only tool reviewers in the still-live worktree, **before land**.
+5. Dispatch read-only tool reviewers in the still-live workspace, **before land**.
    Record `review_group_id`, reviewer run ids, per-AC verdict, and cost.
 6. On unanimous `APPROVE`: land, emit `final-result-landed`, close bead, clean up.
 7. On `REQUEST_CHANGES` / `BLOCK` classified `review_fixable_gap` within
    `repair_max_cycles`: emit `repair-cycle-started`, run append-only repair in
-   same worktree, return to step 3.
+   same workspace, return to step 3.
 8. On `repair_max_cycles` exhausted: emit `repair-cycle-exhausted`, preserve
-   worktree, and return the bead to the TD-031 auto-recovery path. Move to
+   workspace, and return the bead to the TD-031 auto-recovery path. Move to
    `status=proposed` only after automatic reframe/decompose/replacement cannot
    produce executable follow-up work or the finding requires operator judgment.
 9. On approved candidate that fails to land (merge conflict): emit
@@ -678,7 +678,7 @@ Layer extensions:
 - `layer1` — prompt reference, agent config, model id, token usage,
   upstream session id, structured response pointer, normalized
   `ToolCallEntry` stream captured at drain time
-- `layer2` — bead id, base revision, worktree path, finalization mode
+- `layer2` — bead id, base revision, workspace path, finalization mode
   (`merge` | `preserve`), child layer-1 run ids, evidence-bundle pointer
 - `layer3` — queue snapshot pointer, stop-condition evaluation log,
   child layer-2 attempt ids, drain disposition
@@ -758,19 +758,28 @@ DDx-created execution resources must have an owner, a liveness signal, a
 retention policy, and a cleanup path. Missing ownership, missing liveness, or
 unbounded accumulation is a correctness bug in the execution substrate.
 
-Layer 2 owns inline cleanup for one `ddx try` attempt. Before claim or worktree
-creation it validates the required execution roots:
+Layer 2 owns inline cleanup for one `ddx try` attempt. Before claim or
+workspace creation it validates the required execution roots:
 
-- the temporary worktree root, currently `$TMPDIR/ddx-exec-wt` unless
-  overridden
+- the temporary execution root, resolved in this order: `DDX_EXEC_WT_DIR`,
+  `executions.temp_worktree_root`, then the per-user cache root
+  (`$XDG_CACHE_HOME/ddx/exec-wt` on Linux, or the platform cache equivalent)
 - the durable evidence root, currently `.ddx/executions` during migration and
   `.ddx/runs` for new substrate records
-- git worktree registration/removal for the project repository
+- workspace backend setup/teardown for the project repository
 
 The validation checks writability, free bytes, and free inodes where the
 platform exposes inode counts. If validation fails, `ddx try` runs one
 immediate DDx-scoped cleanup pass, re-checks, and then either proceeds or
 returns `resource_exhausted` without claiming the bead.
+
+The attempt backend is selected by `--attempt-backend` or
+`executions.attempt_backend`. `worktree` is the default linked git worktree
+backend. `local-clone` creates a full local clone under the same execution root
+and imports result commits back into the project repo before land. `docker-clone`
+uses that clone as the Docker working tree; it requires
+`executions.docker.image` and can set Docker memory, CPU, pids, tmpfs, and
+network limits under `executions.docker`.
 
 `ddx work` and server-managed workers use the same cleanup manager before the
 first claim and before later claims whenever any checked temp or evidence root
@@ -779,18 +788,24 @@ inodes**. If cleanup does not restore all roots above the hard stop floor of
 **64 MiB free bytes** and **1024 free inodes**, the loop stops visibly with
 `resource_exhausted` and claims no more beads.
 
-After an attempt starts, Layer 2 removes the isolated worktree when the result
+After an attempt starts, Layer 2 removes the isolated workspace when the result
 has been merged, explicitly preserved, classified as no-changes/no-evidence, or
 interrupted through the cooperative shutdown path. Failed setup must remove any
-partial unregistered directory it created. A worktree may remain only when DDx
+partial unregistered directory it created. A workspace may remain only when DDx
 records an explicit preserve decision with evidence pointing at the retained
 path or ref.
 
-DDx-owned cleanup scope includes execution worktrees, DDx-created test and e2e
-scratch roots, generated test binaries, and run-state or liveness files. The
-cleanup manager may delete only DDx-owned paths. Recognized DDx-owned scratch
-prefixes are: `ddx-exec-wt`, `ddx-claim-heartbeats`, `ddx-metric-keepalive`,
-`ddx-test-`, and `ddx-e2e-`. Any temp directory that contains a `cleanup.json`
+DDx-owned cleanup scope includes execution workspaces, helper scratch roots
+created beside the configured execution root, legacy `$TMPDIR/ddx-exec-wt`
+resources, DDx-created test and e2e scratch roots, generated test binaries, and
+run-state or liveness files. The cleanup manager may delete only DDx-owned
+paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
+`ddx-test-bin-`, `ddx-test-binary-`, `ddx-lifecycle-`,
+`ddx-agent-support-keepalive`, `ddx-config-anchor-`, `ddx-exec-keepalive`,
+`ddx-metric-keepalive`, `ddx-metaprompt-keepalive`,
+`ddx-persona-keepalive`, `ddx-vale-`, `ddx-gate-wt-`,
+`ddx-land-finalize-`, `ddx-land-wt-`, `ddx-push-recover-`, and
+`ddx-conflict-recover-`. Any temp directory that contains a `cleanup.json`
 metadata file with matching project ownership is also DDx-owned regardless of
 its name.
 
@@ -801,8 +816,8 @@ Deletion is permitted only when all of the following hold:
 - **Metadata-less recognized-prefix paths**: the directory's mtime is at least
   **6 hours** old and no live PID or active session is attached.
 
-The manager must preserve published evidence, registered active worktrees, and
-anything outside DDx-owned roots.
+The manager must preserve published evidence, active workspaces, and anything
+outside DDx-owned roots.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
@@ -815,11 +830,12 @@ Long-lived DDx processes also start a background cleanup worker. The background
 worker runs occasionally with jitter and a project-level cleanup lock so multiple
 workers do not all prune at once. It is conservative and DDx-scoped: it may
 remove stale unregistered directories under DDx temp roots, registered DDx
-worktrees whose attempt is terminal or whose liveness marker is stale, stale
+worktrees or metadata-backed workspaces whose attempt is terminal or whose
+liveness marker is stale, stale
 heartbeat/liveness files for dead PIDs, and partial setup directories that were
-never published as complete evidence. It must not remove preserved worktrees,
+never published as complete evidence. It must not remove preserved workspaces,
 `refs/ddx/iterations/...`, complete `.ddx/runs/<id>` or
-`.ddx/executions/<attempt-id>` evidence, active worktrees with live
+`.ddx/executions/<attempt-id>` evidence, active workspaces with live
 PID/session liveness, or non-DDx directories.
 
 Cleanup is observable but not noisy. Routine passes are trace/debug or worker

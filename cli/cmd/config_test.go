@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -192,6 +193,32 @@ repository:
 				tt.validate(t, workDir, output, err)
 			}
 		})
+	}
+}
+
+func TestConfigCommand_DockerExecutionKeys(t *testing.T) {
+	cfg := &config.Config{}
+	settings := map[string]string{
+		"executions.attempt_backend":      "docker-clone",
+		"executions.docker.image":         "ddx-runner:latest",
+		"executions.docker.memory":        "8g",
+		"executions.docker.memory_swap":   "8g",
+		"executions.docker.cpus":          "4",
+		"executions.docker.pids_limit":    "1024",
+		"executions.docker.tmpfs_size":    "2g",
+		"executions.docker.network":       "none",
+		"executions.docker.clone_mode":    "copy",
+		"executions.docker.keep_on_error": "true",
+		"executions.temp_worktree_root":   ".ddx/workspaces",
+	}
+	for key, value := range settings {
+		require.NoError(t, setConfigValueInStruct(cfg, key, value), key)
+	}
+
+	for key, want := range settings {
+		got, err := extractConfigValue(cfg, key)
+		require.NoError(t, err, key)
+		assert.Equal(t, want, got, key)
 	}
 }
 

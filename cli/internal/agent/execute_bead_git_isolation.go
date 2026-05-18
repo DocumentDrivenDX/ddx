@@ -22,6 +22,9 @@ func prepareExecuteBeadGitIsolation(projectRoot, wtPath, stateDir string) (map[s
 	if err := enableExecuteBeadWorktreeConfig(projectRoot); err != nil {
 		return nil, err
 	}
+	if !sameFilesystemPath(projectRoot, wtPath) {
+		_ = enableExecuteBeadWorktreeConfig(wtPath)
+	}
 
 	worktreeGitDir, err := executeBeadWorktreeGitDir(wtPath)
 	if err != nil {

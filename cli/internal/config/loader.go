@@ -15,7 +15,7 @@ func anchorConfigReachability() {
 	configReachabilityOnce.Do(func() {
 		_, _ = NewConfigLoader()
 
-		tmpDir, err := os.MkdirTemp("", "ddx-config-anchor-*")
+		tmpDir, err := MkdirExecutionScratch("", "ddx-config-anchor-*")
 		if err == nil {
 			defer func() {
 				_ = os.RemoveAll(tmpDir)
