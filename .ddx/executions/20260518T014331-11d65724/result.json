@@ -1,0 +1,46 @@
+{
+  "bead_id": "ddx-9cbb886f",
+  "attempt_id": "20260518T014331-11d65724",
+  "base_rev": "9df62685a91ff7339e6d228a8efb1039d430e05f",
+  "result_rev": "e0bb57e79369240ed1c0a64d4a2f02995dc2c0d9",
+  "implementation_rev": "e0bb57e79369240ed1c0a64d4a2f02995dc2c0d9",
+  "outcome": "error",
+  "status": "execution_failed",
+  "detail": "land coordination failed: land advancer: landing worktree has staged changes after waiting 2s:\nU\t.ddx/beads.jsonl\nM\tcli/cmd/server_service.go\nM\tcli/internal/service/systemd.go\nA\tcli/internal/service/systemd_test.go\nM\tdocs/helix/01-frame/features/FEAT-002-server.md\nM\tdocs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md: land advancer: landing worktree has staged changes after waiting 2s:\nU\t.ddx/beads.jsonl\nM\tcli/cmd/server_service.go\nM\tcli/internal/service/systemd.go\nA\tcli/internal/service/systemd_test.go\nM\tdocs/helix/01-frame/features/FEAT-002-server.md\nM\tdocs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md",
+  "orchestrator_status": "execution_failed",
+  "reason": "land coordination failed: land advancer: landing worktree has staged changes after waiting 2s:\nU\t.ddx/beads.jsonl\nM\tcli/cmd/server_service.go\nM\tcli/internal/service/systemd.go\nA\tcli/internal/service/systemd_test.go\nM\tdocs/helix/01-frame/features/FEAT-002-server.md\nM\tdocs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md",
+  "preserve_ref": "refs/ddx/iterations/ddx-9cbb886f/20260518T014331-11d65724-9df62685a91f",
+  "candidate_ref": "refs/ddx/iterations/20260518T014331-11d65724/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260518T014331-11d65724",
+      "result_rev": "e0bb57e79369240ed1c0a64d4a2f02995dc2c0d9",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "haiku"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "claude",
+  "model": "haiku",
+  "session_id": "eb-6f9d4903",
+  "duration_ms": 1235984,
+  "tokens": 33411,
+  "cost_usd": 1.2047014000000003,
+  "exit_code": 0,
+  "error": "land advancer: landing worktree has staged changes after waiting 2s:\nU\t.ddx/beads.jsonl\nM\tcli/cmd/server_service.go\nM\tcli/internal/service/systemd.go\nA\tcli/internal/service/systemd_test.go\nM\tdocs/helix/01-frame/features/FEAT-002-server.md\nM\tdocs/helix/02-design/solution-designs/SD-019-multi-project-server-topology.md",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260518T014331-11d65724",
+  "prompt_file": ".ddx/executions/20260518T014331-11d65724/prompt.md",
+  "manifest_file": ".ddx/executions/20260518T014331-11d65724/manifest.json",
+  "result_file": ".ddx/executions/20260518T014331-11d65724/result.json",
+  "usage_file": ".ddx/executions/20260518T014331-11d65724/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-18T01:43:43.928992775Z",
+  "finished_at": "2026-05-18T02:04:19.913309651Z"
+}
