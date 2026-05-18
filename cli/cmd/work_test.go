@@ -20,17 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type staleSourceRunnerProbe struct {
-	t     *testing.T
-	calls int
-}
-
-func (r *staleSourceRunnerProbe) Run(opts agent.RunArgs) (*agent.Result, error) {
-	r.calls++
-	r.t.Fatalf("agent runner must not run when stale-source preflight blocks: %+v", opts)
-	return nil, nil
-}
-
 // TestWorkCommandHasPassthroughFlags verifies that ddx work exposes the
 // harness/provider/model/min-power/max-power passthrough flags that operators
 // use to constrain agent routing. These flags are forwarded opaquely; ddx work
@@ -193,9 +182,21 @@ func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {
 	}
 }
 
-func TestWork_BlocksStaleSourceBinaryBeforeQueueScan(t *testing.T) {
+// passThroughRunner accepts any prompt and returns a valid-looking JSON response;
+// used to keep work moving past the stale-binary preflight under test without
+// fataling on prompt sources that this test doesn't care about.
+type passThroughRunner struct{}
+
+func (passThroughRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
+	return &agent.Result{
+		ExitCode: 0,
+		Output:   `{"classification":"ready","rationale":"ok","readiness_checks":[],"score":9,"suggested_fixes":[],"waivers_applied":[]}`,
+	}, nil
+}
+
+func TestWork_WarnsStaleSourceBinaryButProceeds(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
-	projectRoot, buildSHA, headSHA := seedStaleSourceCheckout(t)
+	projectRoot, buildSHA, _ := seedStaleSourceCheckout(t)
 	seedExecuteBead(t, projectRoot, &bead.Bead{
 		ID:        "stale-work-bead",
 		Title:     "stale source work bead",
@@ -206,13 +207,12 @@ func TestWork_BlocksStaleSourceBinaryBeforeQueueScan(t *testing.T) {
 
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
-	runner := &staleSourceRunnerProbe{t: t}
 	factory := NewCommandFactory(projectRoot)
 	factory.Version = "0.9.0"
 	factory.Commit = buildSHA
-	factory.AgentRunnerOverride = runner
+	factory.AgentRunnerOverride = passThroughRunner{}
 
-	out, err := executeCommand(
+	out, _ := executeCommand(
 		factory.NewRootCommand(),
 		"work",
 		"--once",
@@ -220,27 +220,11 @@ func TestWork_BlocksStaleSourceBinaryBeforeQueueScan(t *testing.T) {
 		"--no-review",
 		"--no-review-i-know-what-im-doing",
 	)
-	require.Error(t, err)
-	assert.Contains(t, out, "ddx work: installed ddx binary is stale for this DDx source checkout.")
-	assert.Contains(t, out, "project root: "+projectRoot)
-	assert.Contains(t, out, "binary commit: "+buildSHA)
-	assert.Contains(t, out, "source HEAD: "+headSHA)
-	assert.Contains(t, out, "recovery: cd "+projectRoot+" && make install")
-	assert.False(t, stub.executeCalled, "work must fail before any implementation dispatch")
-	assert.Equal(t, 0, runner.calls, "work must fail before readiness hooks run")
-
-	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	got, getErr := store.Get("stale-work-bead")
-	require.NoError(t, getErr)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Empty(t, got.Owner)
-
-	events, eventsErr := store.Events("stale-work-bead")
-	require.NoError(t, eventsErr)
-	assert.Empty(t, events, "work must fail before any claim-side evidence is written")
-
-	_, statErr := os.Stat(filepath.Join(projectRoot, agent.DefaultLogDir))
-	assert.True(t, os.IsNotExist(statErr), "work must fail before attempt log setup")
+	// The work command must not hard-fail with the stale-binary blocking error.
+	assert.NotContains(t, out, "installed ddx binary is stale for this DDx source checkout",
+		"work must not emit the hard-fail blocking message; output=%s", out)
+	assert.Contains(t, out, "WARNING: installed ddx is built from",
+		"stderr must include the stale-binary warning")
 }
 
 func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *testing.T) {

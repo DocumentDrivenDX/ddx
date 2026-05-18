@@ -130,9 +130,7 @@ func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
 
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
-	if err := f.failIfInstalledBinaryBehindSource(cmd, projectRoot, ExitCodeGeneralError); err != nil {
-		return err
-	}
+	f.warnIfInstalledBinaryBehindSource(cmd)
 
 	// Preflight: warn once per process for degraded project-local skill layout.
 	// Suppressed in JSON mode to avoid corrupting machine-readable output

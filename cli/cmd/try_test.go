@@ -244,9 +244,9 @@ func TestTry_BeadUnmetDeps(t *testing.T) {
 		"stderr must name the blocking dep ID")
 }
 
-func TestTry_BlocksStaleSourceBinaryBeforeClaim(t *testing.T) {
+func TestTry_WarnsStaleSourceBinaryButProceeds(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
-	projectRoot, buildSHA, headSHA := seedStaleSourceCheckout(t)
+	projectRoot, buildSHA, _ := seedStaleSourceCheckout(t)
 	seedExecuteBead(t, projectRoot, &bead.Bead{
 		ID:        "stale-try-bead",
 		Title:     "stale source try bead",
@@ -255,40 +255,35 @@ func TestTry_BlocksStaleSourceBinaryBeforeClaim(t *testing.T) {
 		IssueType: bead.DefaultType,
 	})
 
-	runner := &staleSourceRunnerProbe{t: t}
 	executorCalled := false
 	factory := NewCommandFactory(projectRoot)
 	factory.Version = "0.9.0"
 	factory.Commit = buildSHA
-	factory.AgentRunnerOverride = runner
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 		executorCalled = true
-		t.Fatalf("executor must not run when stale-source preflight blocks: %s", beadID)
-		return agent.ExecuteBeadReport{}, nil
+		assert.Equal(t, "stale-try-bead", beadID, "executor must receive the targeted bead ID")
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "deadbeef01234567",
+		}, nil
 	})
 
-	out, err := executeCommand(factory.NewRootCommand(), "try", "stale-try-bead", "--project", projectRoot)
-	require.Error(t, err)
-	assert.Contains(t, out, "ddx try: installed ddx binary is stale for this DDx source checkout.")
-	assert.Contains(t, out, "project root: "+projectRoot)
-	assert.Contains(t, out, "binary commit: "+buildSHA)
-	assert.Contains(t, out, "source HEAD: "+headSHA)
-	assert.Contains(t, out, "recovery: cd "+projectRoot+" && make install")
-	assert.False(t, executorCalled, "try must fail before execution dispatch")
-	assert.Equal(t, 0, runner.calls, "try must fail before readiness hooks run")
-
-	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	got, getErr := store.Get("stale-try-bead")
-	require.NoError(t, getErr)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Empty(t, got.Owner)
-
-	events, eventsErr := store.Events("stale-try-bead")
-	require.NoError(t, eventsErr)
-	assert.Empty(t, events, "try must fail before claim or attempt evidence is written")
-
-	_, statErr := os.Stat(filepath.Join(projectRoot, agent.DefaultLogDir))
-	assert.True(t, os.IsNotExist(statErr), "try must fail before attempt log setup")
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"try",
+		"stale-try-bead",
+		"--project", projectRoot,
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "try must not hard-fail on stale source checkout; output=%s", out)
+	assert.NotContains(t, out, "installed ddx binary is stale for this DDx source checkout",
+		"try must not emit the hard-fail blocking message")
+	assert.Contains(t, out, "WARNING: installed ddx is built from",
+		"stderr must include the stale-binary warning")
+	assert.True(t, executorCalled, "try must proceed past the warning and invoke the executor")
 }
 
 // TestTry_HappyPath_ClaimsAndExecutes verifies the core AC: given a ready bead

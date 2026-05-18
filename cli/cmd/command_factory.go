@@ -636,44 +636,6 @@ func (s sourceCheckoutBinaryStaleness) warningMessage() string {
 	)
 }
 
-func (s sourceCheckoutBinaryStaleness) blockingMessage(commandPath string) string {
-	commandPath = strings.TrimSpace(commandPath)
-	if commandPath == "" {
-		commandPath = "ddx"
-	}
-	return fmt.Sprintf(
-		"%s: installed ddx binary is stale for this DDx source checkout.\nproject root: %s\nbinary commit: %s\nsource HEAD: %s (%s commits ahead)\nrecovery: %s",
-		commandPath,
-		s.ProjectRoot,
-		s.BinaryCommit,
-		s.SourceHead,
-		s.AheadCount,
-		s.recoveryCommand(),
-	)
-}
-
-func silenceCommandErrorOutput(cmd *cobra.Command) {
-	if cmd == nil {
-		return
-	}
-	cmd.SilenceUsage = true
-	cmd.SilenceErrors = true
-	if root := cmd.Root(); root != nil {
-		root.SilenceUsage = true
-		root.SilenceErrors = true
-	}
-}
-
-func (f *CommandFactory) failIfInstalledBinaryBehindSource(cmd *cobra.Command, projectRoot string, exitCode int) error {
-	staleness := f.detectInstalledBinaryBehindSource(projectRoot)
-	if staleness == nil {
-		return nil
-	}
-	silenceCommandErrorOutput(cmd)
-	_, _ = fmt.Fprintln(cmd.ErrOrStderr(), staleness.blockingMessage(cmd.CommandPath()))
-	return NewExitError(exitCode, "")
-}
-
 func (f *CommandFactory) detectInstalledBinaryBehindSource(projectRoot string) *sourceCheckoutBinaryStaleness {
 	if f.Version == "" || f.Version == "dev" {
 		return nil
