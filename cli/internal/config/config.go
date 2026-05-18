@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/triage"
 	"gopkg.in/yaml.v3"
 )
@@ -133,6 +134,9 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 		len(config.Agent.Routing.ProfilePriority) > 0 {
 		fmt.Fprintln(os.Stderr, "warning: agent.routing.profile_priority is deprecated and will be removed in a future version")
 	}
+	if err := mergeGlobalExecutionConfig(config, workingDir); err != nil {
+		return nil, err
+	}
 
 	// Override library path with environment variable if set
 	if envLibraryPath := os.Getenv("DDX_LIBRARY_BASE_PATH"); envLibraryPath != "" {
@@ -145,6 +149,93 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func mergeGlobalExecutionConfig(projectCfg *Config, workingDir string) error {
+	if projectCfg == nil {
+		return nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	globalPath := ddxroot.JoinHome(home, "config.yaml")
+	projectPath := projectStatePath(workingDir, "config.yaml")
+	if filepath.Clean(globalPath) == filepath.Clean(projectPath) {
+		return nil
+	}
+	if _, err := os.Stat(globalPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("stat global configuration %s: %w", globalPath, err)
+	}
+	loader, err := NewConfigLoaderWithWorkingDir(filepath.Dir(globalPath))
+	if err != nil {
+		return fmt.Errorf("failed to create global config loader: %w", err)
+	}
+	globalCfg, err := loader.LoadConfigFromPath(globalPath)
+	if err != nil {
+		return fmt.Errorf("failed to load global configuration from %s: %w", globalPath, err)
+	}
+	mergeExecutionsConfig(projectCfg, globalCfg)
+	return nil
+}
+
+func mergeExecutionsConfig(projectCfg, globalCfg *Config) {
+	if projectCfg == nil || globalCfg == nil || globalCfg.Executions == nil {
+		return
+	}
+	if projectCfg.Executions == nil {
+		cp := *globalCfg.Executions
+		cp.Docker = globalCfg.Executions.Docker.Clone()
+		projectCfg.Executions = &cp
+		return
+	}
+	if projectCfg.Executions.AttemptBackend == "" {
+		projectCfg.Executions.AttemptBackend = globalCfg.Executions.AttemptBackend
+	}
+	if projectCfg.Executions.TempWorktreeRoot == "" {
+		projectCfg.Executions.TempWorktreeRoot = globalCfg.Executions.TempWorktreeRoot
+	}
+	if projectCfg.Executions.Docker == nil {
+		projectCfg.Executions.Docker = globalCfg.Executions.Docker.Clone()
+		return
+	}
+	mergeDockerConfig(projectCfg.Executions.Docker, globalCfg.Executions.Docker)
+}
+
+func mergeDockerConfig(projectDocker, globalDocker *ExecutionsDockerConfig) {
+	if projectDocker == nil || globalDocker == nil {
+		return
+	}
+	if projectDocker.Image == "" {
+		projectDocker.Image = globalDocker.Image
+	}
+	if projectDocker.Memory == "" {
+		projectDocker.Memory = globalDocker.Memory
+	}
+	if projectDocker.MemorySwap == "" {
+		projectDocker.MemorySwap = globalDocker.MemorySwap
+	}
+	if projectDocker.CPUs == "" {
+		projectDocker.CPUs = globalDocker.CPUs
+	}
+	if projectDocker.PidsLimit == 0 {
+		projectDocker.PidsLimit = globalDocker.PidsLimit
+	}
+	if projectDocker.TmpfsSize == "" {
+		projectDocker.TmpfsSize = globalDocker.TmpfsSize
+	}
+	if projectDocker.Network == "" {
+		projectDocker.Network = globalDocker.Network
+	}
+	if projectDocker.CloneMode == "" {
+		projectDocker.CloneMode = globalDocker.CloneMode
+	}
+	if !projectDocker.KeepOnError {
+		projectDocker.KeepOnError = globalDocker.KeepOnError
+	}
 }
 
 // Validate validates the configuration structure and values (simplified)
