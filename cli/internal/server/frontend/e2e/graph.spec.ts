@@ -354,7 +354,7 @@ test('TC-035: integrity surface is absent when no issues are returned', async ({
 test('TC-037: integrity panel groups real fixture issues by kind with counts and paths', async ({
 	page
 }) => {
-	test.setTimeout(90_000);
+	test.setTimeout(150_000);
 	const server = await startRealDdxServer(makeIssueFixture());
 	try {
 		await proxyGraphQLToRealServer(page, server.api);

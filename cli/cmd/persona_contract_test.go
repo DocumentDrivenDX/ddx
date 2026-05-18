@@ -3,7 +3,9 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
@@ -49,6 +51,28 @@ persona_bindings: {}
 		[]byte(configContent),
 		0644,
 	))
+}
+
+func personaContractTempDir(t *testing.T) string {
+	t.Helper()
+
+	prefix := strings.NewReplacer("/", "-", " ", "-").Replace(t.Name())
+	dir, err := os.MkdirTemp("", prefix+"-*")
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		var removeErr error
+		for attempt := 0; attempt < 5; attempt++ {
+			removeErr = os.RemoveAll(dir)
+			if removeErr == nil {
+				return
+			}
+			time.Sleep(time.Duration(attempt+1) * 25 * time.Millisecond)
+		}
+		require.NoError(t, removeErr)
+	})
+
+	return dir
 }
 
 // Contract validation tests verify that persona CLI commands conform to their API contracts
@@ -359,7 +383,7 @@ func TestPersonaShowCommand_Contract(t *testing.T) {
 			description: "Exit code 0: Persona found and displayed",
 			args:        []string{"persona", "show", "test-reviewer"},
 			setup: func(t *testing.T) string {
-				testWorkDir := t.TempDir()
+				testWorkDir := personaContractTempDir(t)
 
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
@@ -410,7 +434,7 @@ You are an experienced code reviewer who enforces high standards.
 			description: "Exit code 6: Persona not found",
 			args:        []string{"persona", "show", "nonexistent-persona"},
 			setup: func(t *testing.T) string {
-				testWorkDir := t.TempDir()
+				testWorkDir := personaContractTempDir(t)
 
 				homeDir := t.TempDir()
 				t.Setenv("HOME", homeDir)
