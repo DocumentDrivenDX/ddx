@@ -1,0 +1,12 @@
+status: open
+reason: 2 of 6 child beads remain open
+
+Child bead status:
+- ddx-fbfcbd17 (B1 doc): closed
+- ddx-e8956709 (B2 code): closed
+- ddx-018da544 (B3 code): closed
+- ddx-fe2a5722 (B4 test): closed
+- ddx-94ff4f5d (B5 refactor): open - Store.ParkToProposed extraction not yet started
+- ddx-4eb047cc (B6 refactor): open - claim-Extra key cleanup consolidation not yet started
+
+Acceptance criteria requires all six child beads closed before parent can close.
