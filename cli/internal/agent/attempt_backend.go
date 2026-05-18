@@ -374,12 +374,25 @@ func seedAttemptCloneUserConfig(ctx context.Context, projectRoot, clonePath stri
 }
 
 func configureAttemptCloneTransientExcludes(clonePath string) {
-	excludePath := filepath.Join(clonePath, ".git", "info", "exclude")
+	out, err := internalgit.Command(context.Background(), clonePath, "rev-parse", "--git-path", "info/exclude").Output()
+	if err != nil {
+		return
+	}
+	excludePath := strings.TrimSpace(string(out))
+	if excludePath == "" {
+		return
+	}
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(clonePath, excludePath)
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return
+	}
 	raw, _ := os.ReadFile(excludePath)
 	text := string(raw)
 	var additions []string
-	for _, pattern := range []string{".gocache/", ".tmp/"} {
-		if !strings.Contains(text, pattern) {
+	for _, pattern := range []string{"/.gocache/", "/.tmp/"} {
+		if !excludeTextHasPattern(text, pattern) {
 			additions = append(additions, pattern)
 		}
 	}
@@ -391,6 +404,15 @@ func configureAttemptCloneTransientExcludes(clonePath string) {
 	}
 	text += strings.Join(additions, "\n") + "\n"
 	_ = os.WriteFile(excludePath, []byte(text), 0o644)
+}
+
+func excludeTextHasPattern(text, pattern string) bool {
+	for _, line := range strings.Split(text, "\n") {
+		if strings.TrimSpace(line) == pattern {
+			return true
+		}
+	}
+	return false
 }
 
 func gitConfigValue(ctx context.Context, dir, key string) string {
@@ -549,9 +571,11 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 		"--workdir", "/work",
 		"--mount", "type=bind,src=" + ws.WorkDir + ",dst=/work",
 		"--mount", "type=bind,src=" + exe + ",dst=/usr/local/bin/ddx,readonly",
+		"-e", "PATH=/usr/local/go/bin:/opt/go/bin:/usr/local/bin:/usr/bin:/bin",
 		"-e", "HOME=/ddx-runtime/home",
 		"-e", "XDG_CACHE_HOME=/ddx-runtime/cache",
 		"-e", "TMPDIR=/ddx-runtime/tmp",
+		"-e", "GOCACHE=/work/.gocache",
 		"-e", "GOTMPDIR=/ddx-runtime/go-tmp",
 		"-e", "DDX_PROJECT_ROOT=/work",
 		"-e", DDXModeEnvKey + "=" + DDXModeBeadExecution,

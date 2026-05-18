@@ -100,7 +100,9 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 	require.Contains(t, args, "--network")
 	require.Contains(t, args, "/tmp:rw,nosuid,nodev,size=2g,mode=1777")
 	require.Contains(t, args, "type=bind,src=/usr/bin/ddx,dst=/usr/local/bin/ddx,readonly")
+	require.Contains(t, args, "PATH=/usr/local/go/bin:/opt/go/bin:/usr/local/bin:/usr/bin:/bin")
 	require.Contains(t, args, "HOME=/ddx-runtime/home")
+	require.Contains(t, args, "GOCACHE=/work/.gocache")
 	require.Contains(t, args, "GOTMPDIR=/ddx-runtime/go-tmp")
 	require.NotContains(t, args, "GOMODCACHE=/ddx-runtime/go/pkg/mod")
 	require.NotContains(t, args, "GOCACHE=/ddx-runtime/go-build-cache")
@@ -109,6 +111,43 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-tmp,dst=/work/.tmp")
 	require.Contains(t, args, "type=bind,src=/usr/bin/codex,dst=/usr/local/bin/codex,readonly")
 	require.Equal(t, "runner:latest", args[len(args)-1])
+}
+
+func TestLocalCloneAttemptBackendExcludesTransientMountDirs(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	ws, err := (LocalCloneAttemptBackend{}).Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      "ddx-int-0001",
+		AttemptID:   "20260518T100000-deadbeef",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws)
+	})
+
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".gocache"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(ws.WorkDir, ".tmp"), 0o755))
+
+	excludePath, err := runGitIntegOutput(ws.WorkDir, "rev-parse", "--git-path", "info/exclude")
+	require.NoError(t, err)
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(ws.WorkDir, excludePath)
+	}
+	excludeRaw, err := os.ReadFile(excludePath)
+	require.NoError(t, err)
+	require.Contains(t, string(excludeRaw), "/.gocache/")
+	require.Contains(t, string(excludeRaw), "/.tmp/")
+
+	out, err := runGitIntegOutput(ws.WorkDir, "check-ignore", "-v", ".gocache", ".tmp")
+	require.NoError(t, err, out)
+	require.Contains(t, out, "/.gocache/")
+	require.Contains(t, out, "/.tmp/")
+
+	status, err := runGitIntegOutput(ws.WorkDir, "status", "--short")
+	require.NoError(t, err, status)
+	require.NotContains(t, status, ".gocache")
+	require.NotContains(t, status, ".tmp")
 }
 
 func TestPrepareDockerAttemptHomeCopiesMinimalAuth(t *testing.T) {
