@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260518T082708-af7d1f8e",
+  "bead_id": "ddx-2af07fa2",
+  "base_rev": "2532d3aeb2eadf4ec53f4dd57698eebcd4a0d16a",
+  "created_at": "2026-05-18T08:27:18.98798924Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2af07fa2",
+    "title": "extract Store.ParkToProposed helper for 6 agent duplicates",
+    "description": "PROBLEM\n  The pattern \"park bead to proposed status\" is duplicated 6 times in agent/*.go:\n  - execute_bead_loop.go\n  - execute_bead_post_review.go\n  - execute_bead_review_terminal.go\n  - execute_bead_conflict_recovery.go\n  \n  Each duplication performs the same sequence:\n  1. Park the bead to status=proposed\n  2. Update extra metadata (reason, findings ref, etc.)\n  3. Append triage/recovery event\n  4. Update labels\n  \n  This violates DRY and makes it harder to maintain consistent behavior across \n  the agent codebase.\n\nPROPOSED FIX\n  Extract a Store.ParkToProposed helper method covering:\n  1. Status transition: in_progress → proposed\n  2. Label updates (optional additional labels)\n  3. Event appending with consistent event body\n  4. Extra metadata updates (reason, recovery ref, cost, etc.)\n  \n  Refactor all 6 call sites in agent/*.go to use the helper instead of duplicating \n  the pattern.\n  \n  The helper should accept parameters for:\n  - Bead ID\n  - Reason (for event body and extra metadata)\n  - Optional labels (overlaid on defaults)\n  - Optional extra fields (merged into existing extra)\n  - Context/tracing fields (session_id, attempt_id, etc.)\n\nNON-SCOPE\n  - Changing the park-to-proposed behavior itself\n  - Changing when/why beads are parked (that's in execute-bead logic)\n  - Adding new persisted statuses\n  - Refactoring other common patterns",
+    "acceptance": "1. Store.ParkToProposed method added to store.go with clear signature and docstring.\n2. All 6 call sites in execute_bead_loop.go, execute_bead_post_review.go, execute_bead_review_terminal.go, execute_bead_conflict_recovery.go refactored to use the helper.\n3. Behavior unchanged: same status transition, event appending, label/extra updates.\n4. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "kind:refactor",
+      "area:agent",
+      "area:bead",
+      "spec-id:TD-031",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"Store.ParkToProposed method added to store.go with clear signature and docstring.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"All 6 call sites in execute_bead_loop.go, execute_bead_post_review.go, execute_bead_review_terminal.go, execute_bead_conflict_recovery.go refactored to use the helper.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Behavior unchanged: same status transition, event appending, label/extra updates.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"cd cli \\u0026\\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":5,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-18T08:26:18.456393089Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=2/5"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T082708-af7d1f8e",
+    "prompt": ".ddx/executions/20260518T082708-af7d1f8e/prompt.md",
+    "manifest": ".ddx/executions/20260518T082708-af7d1f8e/manifest.json",
+    "result": ".ddx/executions/20260518T082708-af7d1f8e/result.json",
+    "checks": ".ddx/executions/20260518T082708-af7d1f8e/checks.json",
+    "usage": ".ddx/executions/20260518T082708-af7d1f8e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-2af07fa2-20260518T082708-af7d1f8e"
+  },
+  "prompt_sha": "b40a0ee7d6c41e718e5bf3f4ab84173fb1c8d2c469d3f9da3438784dd7972027"
+}
