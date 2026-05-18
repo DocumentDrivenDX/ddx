@@ -120,6 +120,8 @@ file/context; `executions.docker.project_image` uses an already-built image.
 Large repositories should pair the project Dockerfile with a Dockerfile-specific
 ignore file such as `.ddx/attempt-runner.Dockerfile.dockerignore` so project
 image rebuilds only transfer dependency manifests and lockfiles.
+See [Docker Attempt Build Environments](docker-attempt-build-environments.md)
+for reusable setup patterns and a verification checklist.
 
 Before claim, `ddx try` checks the configured execution temp root and durable
 evidence root, removes partial workspaces from failed setup, imports clone
