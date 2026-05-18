@@ -542,8 +542,10 @@ func (s *Store) Create(args ...any) error {
 		b.IssueType = DefaultType
 	}
 	if b.Status == "" {
-		// Creation is not a transition; the only status write that does not go
-		// through transitionLifecycleInPlace (TD-031 §3 transition matrix).
+		// Bead creation is initial state assignment, not a lifecycle transition.
+		// This is the sole exception to transitionLifecycleInPlace: all other status
+		// writes go through transitionLifecycleInPlace + ValidateLifecycleTransition
+		// (TD-031 §3 transition matrix, transitionLifecycleInPlace pattern).
 		b.Status = DefaultStatus
 	}
 	b.CreatedAt = now

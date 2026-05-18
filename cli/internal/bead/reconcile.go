@@ -236,9 +236,11 @@ func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
 		return nil
 	}
 	var err error
-	// TD-031 §5: reconcile-close is a meta-close that intentionally bypasses
+	// TD-031 §3.1: reconcile-close is a meta-close that intentionally bypasses
 	// ClosureGate — the bead has no execution session and no closing_commit_sha
-	// of its own; every transitive dependency is closed, supplying evidence by reference.
+	// of its own. The bypass is safe because every transitive dependency is closed:
+	// each having individually passed ClosureGate or been a prior meta-close, so
+	// the parent's closure inherits evidence by reference through dependency edges.
 	if p.CloseSatisfied {
 		err = s.UpdateWithLifecycleStatus(p.BeadID, StatusClosed, LifecycleTransitionOptions{
 			ManualClose: true,

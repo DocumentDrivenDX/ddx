@@ -700,7 +700,6 @@ test('TC-043: doc-graph 128-node fixture settles with no circle or label overlap
 
 	// AC4: report (do not gate) settle time. The baseline was ~5 s; the bead
 	// targets ≤ 2 s but per codex the metric is informational only.
-	console.log(`TC-043 settle ms: ${layout.settleMs}`);
 });
 
 // TC-044: Deterministic bounding-box layout invariants for the doc graph.

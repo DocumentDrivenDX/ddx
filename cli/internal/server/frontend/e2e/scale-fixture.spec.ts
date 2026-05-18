@@ -97,19 +97,4 @@ test('2k fixture loads without crash', async ({ page, request }) => {
 	expect(warmFirstPaint).toBeGreaterThan(0);
 	expect(scroll.samples).toBeGreaterThan(0);
 	expect(searchLatencyMs).toBeGreaterThan(0);
-
-	console.log(
-		JSON.stringify(
-			{
-				coldFirstPaintMs: coldFirstPaint,
-				warmFirstPaintMs: warmFirstPaint,
-				scrollAverageFrameMs: scroll.averageFrameMs,
-				scrollFramesPerSecond: scroll.framesPerSecond,
-				scrollSamples: scroll.samples,
-				searchLatencyMs
-			},
-			null,
-			2
-		)
-	);
 });
