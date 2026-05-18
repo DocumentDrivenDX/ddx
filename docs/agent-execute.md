@@ -109,7 +109,12 @@ project-local image from that Dockerfile with `DDX_BASE_IMAGE` pointing at
 `executions.docker.image`, then runs attempts from the project image. This is
 where a project should install Rust, Java, Go, Python, Node, or other
 toolchains and dependency caches that are too expensive to recreate for every
-attempt. `executions.docker.project_dockerfile` and
+attempt. The setup layer should copy dependency manifests and lockfiles first
+and perform the expensive fetch/install step before any source files enter the
+image. Do not place required image contents under `/work`; the attempt clone is
+bind-mounted there at runtime and hides whatever the image had at that path.
+Use `/opt`, `/usr/local`, package-manager caches, or language-specific cache
+directories for reusable setup. `executions.docker.project_dockerfile` and
 `executions.docker.project_context` can point at a different repo-owned build
 file/context; `executions.docker.project_image` uses an already-built image.
 Large repositories should pair the project Dockerfile with a Dockerfile-specific
