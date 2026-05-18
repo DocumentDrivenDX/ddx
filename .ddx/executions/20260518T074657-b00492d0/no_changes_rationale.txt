@@ -1,0 +1,2 @@
+status: open
+reason: Child beads not yet closed. AC requires all six child beads (ddx-fbfcbd17, ddx-e8956709, ddx-018da544, ddx-fe2a5722, ddx-94ff4f5d, ddx-4eb047cc) to be closed. Currently all are in "open" status. Retry after child beads are executed and closed.
