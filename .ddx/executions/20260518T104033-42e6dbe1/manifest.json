@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260518T104033-42e6dbe1",
+  "bead_id": "ddx-cbe2d183",
+  "base_rev": "d47cc7bdec10a7a1145eaa50069a7f588a43b8df",
+  "created_at": "2026-05-18T10:40:43.23305975Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cbe2d183",
+    "title": "bead-lifecycle: guard readiness downgrade against operator-promoted beads",
+    "description": "PROBLEM\nReadiness terminal handling unconditionally parks beads at status=proposed when an ambiguous outcome is reached. When an operator has already promoted the same bead back to open, the next readiness pass downgrades it again, producing a proposed-\u003eopen-\u003eproposed loop and interrupting forward progress.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go:1207-1226 calls the terminal readiness handler that sets status=proposed without consulting the bead transition history; there is no check for a prior operator-driven proposed-\u003eopen transition.\n\nPROPOSED FIX\nBefore the terminal downgrade, inspect the bead's transition audit log for the most recent status change. If the latest transition is proposed-\u003eopen and was made by an operator (not the agent), skip the downgrade and instead record an observable readiness warning (handled by sibling observability bead). Agent-driven beads in proposed continue to receive terminal handling as today.\n\nNON-SCOPE\n- Updating FEAT-010/ADR-023 policy text (covered by sibling spec bead).\n- Extending intake.blocked payload fields (covered by sibling observability bead).\n- Fizeau concrete route selection, model ranking, provider fallback, or profile catalog behavior.\n- Rewriting execute-bead branch merge policy.\n- Changing post-attempt review terminal outcomes that already carry concrete evidence for operator action.\n\nPARENT/DEPS\nParent: this epic. Soft dependency on the spec bead for normative reference; can land in parallel.",
+    "acceptance": "1. TestReadinessPreservesOperatorPromotedOpen asserts that a bead with a recent operator-driven proposed-\u003eopen transition remains status=open after an ambiguous readiness terminal outcome.\n2. TestReadinessStillDowngradesAgentProposed asserts that a bead in status=proposed with no operator promotion still receives terminal downgrade handling.\n3. TestReadinessLoopBoundedAfterOperatorPromotion runs readiness twice over the same operator-promoted bead and asserts zero new status transitions are written on the second pass.\n4. TestReadinessHonorsOperatorAcceptanceAcrossSessions asserts the operator-acceptance signal is read from the persisted transition log, not in-memory state, so it survives process restart.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/...` green.\n6. `lefthook run pre-commit` passing.",
+    "parent": "ddx-cc0641a7",
+    "labels": [
+      "adr:023",
+      "area:agent",
+      "area:bead-lifecycle",
+      "kind:fix",
+      "phase:2",
+      "prevention",
+      "spec:FEAT-010",
+      "td:027",
+      "td:031"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T104033-42e6dbe1",
+    "prompt": ".ddx/executions/20260518T104033-42e6dbe1/prompt.md",
+    "manifest": ".ddx/executions/20260518T104033-42e6dbe1/manifest.json",
+    "result": ".ddx/executions/20260518T104033-42e6dbe1/result.json",
+    "checks": ".ddx/executions/20260518T104033-42e6dbe1/checks.json",
+    "usage": ".ddx/executions/20260518T104033-42e6dbe1/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-cbe2d183-20260518T104033-42e6dbe1"
+  },
+  "prompt_sha": "83630cd5c3c42378c824991c143805d3fa305d07d98fc98c20e8ff34a161cf8a"
+}
