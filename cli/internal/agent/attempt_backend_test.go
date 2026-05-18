@@ -79,7 +79,8 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 		WorkDir:     "/tmp/ddx-exec-wt/.execute-bead-clone-ddx-1-attempt",
 		BeadID:      "ddx-1",
 		AttemptID:   "20260518T100000-deadbeef",
-		DockerHome:  "/tmp/ddx-exec-wt/.execute-bead-home-ddx-1-attempt",
+		DockerRun:   "/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt",
+		DockerHome:  "/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/home",
 	}
 	args := dockerRunArgs(&config.ExecutionsDockerConfig{
 		Memory:     "8g",
@@ -98,7 +99,12 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 	require.Contains(t, args, "--network")
 	require.Contains(t, args, "/tmp:rw,nosuid,nodev,size=2g,mode=1777")
 	require.Contains(t, args, "type=bind,src=/usr/bin/ddx,dst=/usr/local/bin/ddx,readonly")
-	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-home-ddx-1-attempt,dst=/tmp/ddx-home")
+	require.Contains(t, args, "HOME=/ddx-runtime/home")
+	require.Contains(t, args, "GOCACHE=/ddx-runtime/go-build-cache")
+	require.Contains(t, args, "GOTMPDIR=/ddx-runtime/go-tmp")
+	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt,dst=/ddx-runtime")
+	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-gocache,dst=/work/.gocache")
+	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-tmp,dst=/work/.tmp")
 	require.Contains(t, args, "type=bind,src=/usr/bin/codex,dst=/usr/local/bin/codex,readonly")
 	require.Equal(t, "runner:latest", args[len(args)-1])
 }
@@ -124,6 +130,23 @@ func TestPrepareDockerAttemptHomeCopiesMinimalAuth(t *testing.T) {
 	require.FileExists(t, filepath.Join(attemptHome, ".claude.json"))
 	require.NoFileExists(t, filepath.Join(attemptHome, ".codex", "logs_2.sqlite"))
 	require.NoFileExists(t, filepath.Join(attemptHome, ".claude", "history.jsonl"))
+}
+
+func TestPrepareDockerAttemptRuntimeCreatesCacheRoots(t *testing.T) {
+	runDir := filepath.Join(t.TempDir(), "attempt-runtime")
+	require.NoError(t, prepareDockerAttemptRuntime(runDir))
+
+	for _, dir := range []string{
+		"cache",
+		filepath.Join("go", "pkg", "mod"),
+		"go-build-cache",
+		"go-tmp",
+		"tmp",
+		"work-gocache",
+		"work-tmp",
+	} {
+		require.DirExists(t, filepath.Join(runDir, dir))
+	}
 }
 
 func TestShouldRetryCloneWithoutHardlinks(t *testing.T) {

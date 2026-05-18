@@ -25,6 +25,7 @@ const (
 
 	ExecuteBeadClonePrefix      = ".execute-bead-clone-"
 	ExecuteBeadDockerHomePrefix = ".execute-bead-home-"
+	ExecuteBeadDockerRunPrefix  = ".execute-bead-runtime-"
 )
 
 // AttemptBackend owns the workspace and transport mechanics for one
@@ -64,6 +65,7 @@ type AttemptWorkspace struct {
 	BaseRev     string
 	KeepOnError bool
 	DockerHome  string
+	DockerRun   string
 	gitOps      GitOps
 }
 
@@ -163,6 +165,7 @@ checkout:
 		return nil, fmt.Errorf("checking out isolated clone base: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	seedAttemptCloneUserConfig(ctx, req.ProjectRoot, clonePath)
+	configureAttemptCloneTransientExcludes(clonePath)
 
 	return &AttemptWorkspace{
 		Backend:     AttemptBackendLocalClone,
@@ -205,9 +208,15 @@ func (b DockerCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBacke
 	}
 	ws.Backend = AttemptBackendDockerClone
 	ws.KeepOnError = b.Docker != nil && b.Docker.KeepOnError
-	ws.DockerHome = executeBeadDockerHomePath(req.ProjectRoot, req.BeadID, req.AttemptID)
+	ws.DockerRun = executeBeadDockerRunPath(req.ProjectRoot, req.BeadID, req.AttemptID)
+	ws.DockerHome = filepath.Join(ws.DockerRun, "home")
+	if err := prepareDockerAttemptRuntime(ws.DockerRun); err != nil {
+		_ = os.RemoveAll(ws.WorkDir)
+		return nil, err
+	}
 	if err := prepareDockerAttemptHome(ws.DockerHome); err != nil {
 		_ = os.RemoveAll(ws.WorkDir)
+		_ = os.RemoveAll(ws.DockerRun)
 		return nil, err
 	}
 	return ws, nil
@@ -234,6 +243,7 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 		return nil, err
 	}
 
+	containerName := dockerContainerName(req.Workspace)
 	args := dockerRunArgs(cfg, req.Workspace, exe, image, dockerToolMounts())
 	runArgs := []string{
 		"ddx", "run",
@@ -274,6 +284,9 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err = cmd.Run()
+	if ctx.Err() != nil {
+		_ = dockerRemoveContainer(context.Background(), containerName)
+	}
 
 	result, parseErr := parseDockerRunResult(stdout.Bytes())
 	if parseErr == nil {
@@ -293,8 +306,14 @@ func (DockerCloneAttemptBackend) PublishResult(ctx context.Context, ws *AttemptW
 }
 
 func (DockerCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
-	if ws != nil && ws.DockerHome != "" {
-		_ = os.RemoveAll(ws.DockerHome)
+	if ws != nil {
+		_ = dockerRemoveContainer(context.Background(), dockerContainerName(ws))
+		if ws.DockerHome != "" {
+			_ = os.RemoveAll(ws.DockerHome)
+		}
+		if ws.DockerRun != "" {
+			_ = os.RemoveAll(ws.DockerRun)
+		}
 	}
 	return (LocalCloneAttemptBackend{}).Cleanup(ctx, ws)
 }
@@ -305,6 +324,10 @@ func executeBeadClonePath(projectRoot, beadID, attemptID string) string {
 
 func executeBeadDockerHomePath(projectRoot, beadID, attemptID string) string {
 	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadDockerHomePrefix+beadID+"-"+attemptID)
+}
+
+func executeBeadDockerRunPath(projectRoot, beadID, attemptID string) string {
+	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadDockerRunPrefix+beadID+"-"+attemptID)
 }
 
 func localCloneArgs(mode, projectRoot, clonePath string) []string {
@@ -329,7 +352,7 @@ func shouldRetryCloneWithoutHardlinks(mode string, out []byte) bool {
 }
 
 func executionAttemptDirPrefixes() []string {
-	return []string{ExecuteBeadWtPrefix, ExecuteBeadClonePrefix, ExecuteBeadDockerHomePrefix}
+	return []string{ExecuteBeadWtPrefix, ExecuteBeadClonePrefix, ExecuteBeadDockerHomePrefix, ExecuteBeadDockerRunPrefix}
 }
 
 func seedAttemptCloneUserConfig(ctx context.Context, projectRoot, clonePath string) {
@@ -343,6 +366,26 @@ func seedAttemptCloneUserConfig(ctx context.Context, projectRoot, clonePath stri
 	}
 	_ = internalgit.Command(ctx, clonePath, "config", "user.name", userName).Run()
 	_ = internalgit.Command(ctx, clonePath, "config", "user.email", userEmail).Run()
+}
+
+func configureAttemptCloneTransientExcludes(clonePath string) {
+	excludePath := filepath.Join(clonePath, ".git", "info", "exclude")
+	raw, _ := os.ReadFile(excludePath)
+	text := string(raw)
+	var additions []string
+	for _, pattern := range []string{".gocache/", ".tmp/"} {
+		if !strings.Contains(text, pattern) {
+			additions = append(additions, pattern)
+		}
+	}
+	if len(additions) == 0 {
+		return
+	}
+	if len(text) > 0 && !strings.HasSuffix(text, "\n") {
+		text += "\n"
+	}
+	text += strings.Join(additions, "\n") + "\n"
+	_ = os.WriteFile(excludePath, []byte(text), 0o644)
 }
 
 func gitConfigValue(ctx context.Context, dir, key string) string {
@@ -390,7 +433,7 @@ type dockerToolMount struct {
 }
 
 func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe, image string, tools []dockerToolMount) []string {
-	name := "ddx-attempt-" + sanitizeDockerName(ws.AttemptID)
+	name := dockerContainerName(ws)
 	args := []string{
 		"run", "--rm", "--init",
 		"--name", name,
@@ -401,15 +444,22 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 		"--workdir", "/work",
 		"--mount", "type=bind,src=" + ws.WorkDir + ",dst=/work",
 		"--mount", "type=bind,src=" + exe + ",dst=/usr/local/bin/ddx,readonly",
-		"-e", "HOME=/tmp/ddx-home",
-		"-e", "XDG_CACHE_HOME=/tmp/ddx-cache",
+		"-e", "HOME=/ddx-runtime/home",
+		"-e", "XDG_CACHE_HOME=/ddx-runtime/cache",
+		"-e", "TMPDIR=/ddx-runtime/tmp",
+		"-e", "GOCACHE=/ddx-runtime/go-build-cache",
+		"-e", "GOMODCACHE=/ddx-runtime/go/pkg/mod",
+		"-e", "GOPATH=/ddx-runtime/go",
+		"-e", "GOTMPDIR=/ddx-runtime/go-tmp",
 		"-e", "DDX_PROJECT_ROOT=/work",
 		"-e", DDXModeEnvKey + "=" + DDXModeBeadExecution,
 		"-e", "DDX_BEAD_ID=" + ws.BeadID,
 		"-e", "DDX_ATTEMPT_ID=" + ws.AttemptID,
 	}
-	if ws.DockerHome != "" {
-		args = append(args, "--mount", "type=bind,src="+ws.DockerHome+",dst=/tmp/ddx-home")
+	if ws.DockerRun != "" {
+		args = append(args, "--mount", "type=bind,src="+ws.DockerRun+",dst=/ddx-runtime")
+		args = append(args, "--mount", "type=bind,src="+filepath.Join(ws.DockerRun, "work-gocache")+",dst=/work/.gocache")
+		args = append(args, "--mount", "type=bind,src="+filepath.Join(ws.DockerRun, "work-tmp")+",dst=/work/.tmp")
 	}
 	for _, tool := range tools {
 		if tool.Name == "" || tool.Path == "" {
@@ -445,6 +495,28 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 	return append(args, image)
 }
 
+func dockerContainerName(ws *AttemptWorkspace) string {
+	if ws == nil {
+		return "ddx-attempt-unknown"
+	}
+	return "ddx-attempt-" + sanitizeDockerName(ws.AttemptID)
+}
+
+func dockerRemoveContainer(ctx context.Context, name string) error {
+	if strings.TrimSpace(name) == "" {
+		return nil
+	}
+	out, err := exec.CommandContext(ctx, "docker", "rm", "-f", name).CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	msg := strings.ToLower(string(out))
+	if strings.Contains(msg, "no such container") {
+		return nil
+	}
+	return fmt.Errorf("removing docker attempt container %s: %s: %w", name, strings.TrimSpace(string(out)), err)
+}
+
 func dockerToolMounts() []dockerToolMount {
 	var mounts []dockerToolMount
 	for _, name := range []string{"claude", "codex", "gemini"} {
@@ -458,6 +530,30 @@ func dockerToolMounts() []dockerToolMount {
 		mounts = append(mounts, dockerToolMount{Name: name, Path: path})
 	}
 	return mounts
+}
+
+func prepareDockerAttemptRuntime(runDir string) error {
+	if strings.TrimSpace(runDir) == "" {
+		return nil
+	}
+	if err := os.RemoveAll(runDir); err != nil {
+		return fmt.Errorf("resetting docker attempt runtime: %w", err)
+	}
+	for _, dir := range []string{
+		"",
+		"cache",
+		filepath.Join("go", "pkg", "mod"),
+		"go-build-cache",
+		"go-tmp",
+		"tmp",
+		"work-gocache",
+		"work-tmp",
+	} {
+		if err := os.MkdirAll(filepath.Join(runDir, dir), 0o700); err != nil {
+			return fmt.Errorf("creating docker attempt runtime: %w", err)
+		}
+	}
+	return nil
 }
 
 func prepareDockerAttemptHome(homeDir string) error {
