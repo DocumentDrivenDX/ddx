@@ -1,0 +1,14 @@
+status: closed
+reason: All acceptance criteria verified complete in current codebase.
+
+The redundant Status==Open filter removal from store.go:Blocked() was executed in prior bead ddx-d79228c1 (commit 0018091fd). The current codebase state already satisfies all acceptance criteria:
+
+1. store.go:2176 checks only bucket classification (no Status==Open filter)
+2. Blocked() docstring (lines 2172-2175) clarifies EvaluateLifecycleQueue as authoritative
+3. TestReadyExecutionBreakdown passes
+4. Queue lifecycle tests pass
+5. TestExecuteBeadLoop tests pass
+
+All tests verified passing. Code review conducted in verification.md.
+
+verification_command: cd cli && go test ./internal/bead -run TestReadyExecutionBreakdown && go test ./internal/bead -run "TestLifecycle" && go test ./internal/agent -run ExecuteBeadLoop

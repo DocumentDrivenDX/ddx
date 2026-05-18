@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260518T083953-3e20c03f",
+  "bead_id": "ddx-018da544",
+  "base_rev": "cb5038f726332b3239cc902ee28fa1b394384105",
+  "created_at": "2026-05-18T08:40:04.586178674Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-018da544",
+    "title": "code: remove redundant Status==Open filter from store.go:2172",
+    "description": "PROBLEM\nstore.go:2172 re-filters Status==Open when iterating Blocked() results, but EvaluateLifecycleQueue already classified the bucket correctly. The double-filter creates a discrepancy: the queue classification is the source of truth, but the Status check can disagree if queued beads have status != StatusOpen in the LifecycleBucketWaitingDependencies bucket.\n\nROOT CAUSE\ncli/internal/bead/store.go:2140-2161 readyFiltered delegates to classifyLifecycleQueue for bucket classification.\ncli/internal/bead/store.go:2163-2175 Blocked() calls classifyLifecycleQueue and re-filters Status==Open at line 2172.\nlifecycle.go:EvaluateLifecycleQueue correctly identifies LifecycleBucketWaitingDependencies beads regardless of Status.\n\nPROPOSED FIX\n1. Remove the Status==Open check at store.go:2172.\n2. Update Blocked() comment to clarify it returns beads in LifecycleBucketWaitingDependencies; the bucket designation is the single source of truth.\n3. Verify Blocked() behavior is unchanged by running ReadyExecutionBreakdown breakdown tests.\n\nNON-SCOPE\nDo not refactor EvaluateLifecycleQueue. Do not change the bucket classification algorithm.\n",
+    "acceptance": "1. store.go:2172 no longer filters Status==Open; only checks entry.Decision.Bucket == LifecycleBucketWaitingDependencies.\n2. store.go:2163 Blocked() docstring clarifies 'returns beads in the LifecycleBucketWaitingDependencies bucket'.\n3. cd cli \u0026\u0026 go test ./internal/bead/store_test.go::TestReadyExecutionBreakdown passes.\n4. cd cli \u0026\u0026 go test ./internal/bead/queue_lifecycle_test.go passes (integration with EvaluateLifecycleQueue).\n5. Integration: cd cli \u0026\u0026 go test ./internal/agent/execute_bead_loop_test.go passes (uses Blocked() indirectly).\n",
+    "parent": "ddx-6e6d08f8",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:code"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T083953-3e20c03f",
+    "prompt": ".ddx/executions/20260518T083953-3e20c03f/prompt.md",
+    "manifest": ".ddx/executions/20260518T083953-3e20c03f/manifest.json",
+    "result": ".ddx/executions/20260518T083953-3e20c03f/result.json",
+    "checks": ".ddx/executions/20260518T083953-3e20c03f/checks.json",
+    "usage": ".ddx/executions/20260518T083953-3e20c03f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-018da544-20260518T083953-3e20c03f"
+  },
+  "prompt_sha": "6cb764b18f739d8d3423817b51de41c0768d7b85642fb1079c92966755fcfddb"
+}
