@@ -245,6 +245,12 @@ func mergeDockerConfig(projectDocker, globalDocker *ExecutionsDockerConfig) {
 	if !projectDocker.KeepOnError {
 		projectDocker.KeepOnError = globalDocker.KeepOnError
 	}
+	if !projectDocker.DisableSharedGoCache {
+		projectDocker.DisableSharedGoCache = globalDocker.DisableSharedGoCache
+	}
+	if projectDocker.SkipImageRebuildIfPresent == nil {
+		projectDocker.SkipImageRebuildIfPresent = globalDocker.SkipImageRebuildIfPresent
+	}
 }
 
 // Validate validates the configuration structure and values (simplified)
