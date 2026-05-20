@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-b5816493",
+  "attempt_id": "20260520T232549-3e5314c4",
+  "base_rev": "95c01a5e9f12137da9692f224ad4fad30c4bc55f",
+  "result_rev": "95c01a5e9f12137da9692f224ad4fad30c4bc55f",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "ResolveRoute: no live provider supports prompt of 1857 tokens with tools=false at policy default",
+  "session_id": "eb-4481668f",
+  "duration_ms": 10258,
+  "exit_code": 1,
+  "error": "ResolveRoute: no live provider supports prompt of 1857 tokens with tools=false at policy default",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_viable_provider",
+  "execution_dir": ".ddx/executions/20260520T232549-3e5314c4",
+  "prompt_file": ".ddx/executions/20260520T232549-3e5314c4/prompt.md",
+  "manifest_file": ".ddx/executions/20260520T232549-3e5314c4/manifest.json",
+  "result_file": ".ddx/executions/20260520T232549-3e5314c4/result.json",
+  "stderr": "Error: agent exited with code 1\n  error: ResolveRoute: no live provider supports prompt of 1857 tokens with tools=false at policy default\nError: agent exited with code 1\n  error: ResolveRoute: no live provider supports prompt of 1857 tokens with tools=false at policy default",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-20T23:25:58.761626437Z",
+  "finished_at": "2026-05-20T23:26:09.019697241Z"
+}
