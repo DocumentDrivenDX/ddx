@@ -58,16 +58,17 @@ type AttemptBackendRunRequest struct {
 }
 
 type AttemptWorkspace struct {
-	Backend     string
-	ProjectRoot string
-	WorkDir     string
-	BeadID      string
-	AttemptID   string
-	BaseRev     string
-	KeepOnError bool
-	DockerHome  string
-	DockerRun   string
-	gitOps      GitOps
+	Backend             string
+	ProjectRoot         string
+	WorkDir             string
+	BeadID              string
+	AttemptID           string
+	BaseRev             string
+	KeepOnError         bool
+	DockerHome          string
+	DockerRun           string
+	DockerSharedGoCache string
+	gitOps              GitOps
 }
 
 func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
@@ -220,6 +221,12 @@ func (b DockerCloneAttemptBackend) Prepare(ctx context.Context, req AttemptBacke
 		_ = os.RemoveAll(ws.DockerRun)
 		return nil, err
 	}
+	if !dockerSharedGoCacheDisabled(b.Docker) {
+		shared := dockerSharedGoCachePath(req.ProjectRoot)
+		if err := os.MkdirAll(shared, 0o700); err == nil {
+			ws.DockerSharedGoCache = shared
+		}
+	}
 	return ws, nil
 }
 
@@ -333,6 +340,18 @@ func executeBeadDockerHomePath(projectRoot, beadID, attemptID string) string {
 
 func executeBeadDockerRunPath(projectRoot, beadID, attemptID string) string {
 	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadDockerRunPrefix+beadID+"-"+attemptID)
+}
+
+// dockerSharedCacheRoot is a per-project directory used to persist caches
+// (notably Go's build cache) across attempts. Living outside the per-attempt
+// runtime dir means it survives Cleanup() and is reused on the next attempt,
+// turning cold Go builds into warm ones.
+func dockerSharedCacheRoot(projectRoot string) string {
+	return filepath.Join(config.ExecutionTempRoot(projectRoot), ".ddx-shared-cache-"+shortPathHash(projectRoot))
+}
+
+func dockerSharedGoCachePath(projectRoot string) string {
+	return filepath.Join(dockerSharedCacheRoot(projectRoot), "gocache")
 }
 
 func localCloneArgs(mode, projectRoot, clonePath string) []string {
@@ -467,6 +486,9 @@ func resolveDockerAttemptImage(ctx context.Context, cfg *config.ExecutionsDocker
 		return "", err
 	}
 	tag := "ddx-project-attempt-" + shortPathHash(projectRoot) + ":latest"
+	if skipRebuildIfImagePresent(cfg) && dockerImageExists(ctx, tag) {
+		return tag, nil
+	}
 	args := []string{
 		"build", "-q",
 		"--build-arg", "DDX_BASE_IMAGE=" + baseImage,
@@ -478,6 +500,34 @@ func resolveDockerAttemptImage(ctx context.Context, cfg *config.ExecutionsDocker
 		return "", fmt.Errorf("building docker project attempt image: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return tag, nil
+}
+
+// skipRebuildIfImagePresent reports whether the project-image fast-path should
+// short-circuit `docker build` when the tagged image already exists.
+// Default true.
+func skipRebuildIfImagePresent(cfg *config.ExecutionsDockerConfig) bool {
+	if cfg == nil || cfg.SkipImageRebuildIfPresent == nil {
+		return true
+	}
+	return *cfg.SkipImageRebuildIfPresent
+}
+
+func dockerImageExists(ctx context.Context, tag string) bool {
+	if strings.TrimSpace(tag) == "" {
+		return false
+	}
+	out, err := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", tag).CombinedOutput()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) != ""
+}
+
+func dockerSharedGoCacheDisabled(cfg *config.ExecutionsDockerConfig) bool {
+	if cfg == nil {
+		return false
+	}
+	return cfg.DisableSharedGoCache
 }
 
 func dockerProjectDockerfile(projectRoot string, cfg *config.ExecutionsDockerConfig) (string, bool, error) {
@@ -584,7 +634,11 @@ func dockerRunArgs(cfg *config.ExecutionsDockerConfig, ws *AttemptWorkspace, exe
 	}
 	if ws.DockerRun != "" {
 		args = append(args, "--mount", "type=bind,src="+ws.DockerRun+",dst=/ddx-runtime")
-		args = append(args, "--mount", "type=bind,src="+filepath.Join(ws.DockerRun, "work-gocache")+",dst=/work/.gocache")
+		gocacheSrc := filepath.Join(ws.DockerRun, "work-gocache")
+		if ws.DockerSharedGoCache != "" {
+			gocacheSrc = ws.DockerSharedGoCache
+		}
+		args = append(args, "--mount", "type=bind,src="+gocacheSrc+",dst=/work/.gocache")
 		args = append(args, "--mount", "type=bind,src="+filepath.Join(ws.DockerRun, "work-tmp")+",dst=/work/.tmp")
 	}
 	for _, tool := range tools {

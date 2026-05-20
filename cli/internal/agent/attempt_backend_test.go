@@ -219,6 +219,36 @@ func TestDockerProjectImageSkipsProjectDockerfile(t *testing.T) {
 	require.Equal(t, "project-runner:dev", image)
 }
 
+func TestDockerRunArgs_BindsSharedGoCacheWhenSet(t *testing.T) {
+	ws := &AttemptWorkspace{
+		ProjectRoot:         "/repo/project",
+		WorkDir:             "/tmp/ddx-exec-wt/.execute-bead-clone-ddx-1-attempt",
+		BeadID:              "ddx-1",
+		AttemptID:           "20260519T100000-deadbeef",
+		DockerRun:           "/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt",
+		DockerHome:          "/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/home",
+		DockerSharedGoCache: "/tmp/ddx-exec-wt/.ddx-shared-cache-abc123/gocache",
+	}
+	args := dockerRunArgs(nil, ws, "/usr/bin/ddx", "runner:latest", nil)
+	require.Contains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.ddx-shared-cache-abc123/gocache,dst=/work/.gocache")
+	require.NotContains(t, args, "type=bind,src=/tmp/ddx-exec-wt/.execute-bead-runtime-ddx-1-attempt/work-gocache,dst=/work/.gocache")
+}
+
+func TestSkipRebuildIfImagePresent_DefaultsTrue(t *testing.T) {
+	require.True(t, skipRebuildIfImagePresent(nil))
+	require.True(t, skipRebuildIfImagePresent(&config.ExecutionsDockerConfig{}))
+	off := false
+	require.False(t, skipRebuildIfImagePresent(&config.ExecutionsDockerConfig{SkipImageRebuildIfPresent: &off}))
+	on := true
+	require.True(t, skipRebuildIfImagePresent(&config.ExecutionsDockerConfig{SkipImageRebuildIfPresent: &on}))
+}
+
+func TestDockerSharedGoCacheDisabled(t *testing.T) {
+	require.False(t, dockerSharedGoCacheDisabled(nil))
+	require.False(t, dockerSharedGoCacheDisabled(&config.ExecutionsDockerConfig{}))
+	require.True(t, dockerSharedGoCacheDisabled(&config.ExecutionsDockerConfig{DisableSharedGoCache: true}))
+}
+
 func TestShouldRetryCloneWithoutHardlinks(t *testing.T) {
 	require.True(t, shouldRetryCloneWithoutHardlinks("", []byte("fatal: Invalid cross-device link")))
 	require.True(t, shouldRetryCloneWithoutHardlinks("hardlink", []byte("operation not permitted")))

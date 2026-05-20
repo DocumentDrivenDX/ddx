@@ -23,10 +23,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     git-lfs \
+    gnupg \
     jq \
     make \
-    nodejs \
-    npm \
     openssh-client \
     patch \
     procps \
@@ -38,8 +37,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     xz-utils \
     zip \
     zstd \
+  && curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
   && git lfs install --system \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && node --version \
+  && npm --version
 
 RUN set -eux; \
   case "$(dpkg --print-architecture)" in \

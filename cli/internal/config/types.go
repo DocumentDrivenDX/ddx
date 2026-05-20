@@ -353,6 +353,17 @@ type ExecutionsDockerConfig struct {
 	Network           string `yaml:"network,omitempty" json:"network,omitempty"`
 	CloneMode         string `yaml:"clone_mode,omitempty" json:"clone_mode,omitempty"`
 	KeepOnError       bool   `yaml:"keep_on_error,omitempty" json:"keep_on_error,omitempty"`
+	// DisableSharedGoCache opts out of the per-project shared Go build cache.
+	// Default behavior (false) bind-mounts a project-scoped GOCACHE dir so
+	// successive attempts reuse compiled package artifacts; setting true
+	// forces an attempt-private cache (cold builds every attempt).
+	DisableSharedGoCache bool `yaml:"disable_shared_gocache,omitempty" json:"disable_shared_gocache,omitempty"`
+	// SkipImageRebuildIfPresent short-circuits the per-attempt `docker build`
+	// invocation when a tagged project image already exists. Defaults to
+	// true (rebuild only when the image is missing). Set false to restore
+	// the pre-optimization "build every attempt" behavior, e.g. while
+	// iterating on the project Dockerfile.
+	SkipImageRebuildIfPresent *bool `yaml:"skip_image_rebuild_if_present,omitempty" json:"skip_image_rebuild_if_present,omitempty"`
 }
 
 func (c *ExecutionsDockerConfig) Clone() *ExecutionsDockerConfig {

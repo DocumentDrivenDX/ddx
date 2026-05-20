@@ -1,0 +1,155 @@
+{
+  "attempt_id": "20260519T145919-085b95f6",
+  "bead_id": "ddx-b5816493",
+  "base_rev": "f424d884dc18a59568a3cf1b6b9c25ea1c9a7181",
+  "created_at": "2026-05-19T14:59:26.612198812Z",
+  "requested": {
+    "harness": "claude",
+    "model": "sonnet-4.6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b5816493",
+    "title": "bead-lifecycle: add stable rule_fingerprint to intake.blocked entries with dedup",
+    "description": "PROBLEM\nintake.blocked entries appended by readiness lack a stable identifier, so identical rerun conditions stack duplicate warnings on every pass.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go:2784-2815 constructs the intake.blocked entry without a rule_fingerprint and performs no dedup against existing entries before appending.\n\nPROPOSED FIX\nExtend the intake.blocked entry schema with a rule_fingerprint field computed as a stable hash over (rule_id, bead_id, sorted evidence keys that drove the rule). Before appending a new entry, scan existing intake.blocked entries on the bead and skip the append when a matching rule_fingerprint already exists. Keep hash inputs deterministic (sorted keys, canonical encoding) so reruns with identical inputs produce identical fingerprints.\n\nNON-SCOPE\n- operator_override field (sibling child bead).\n- `ddx bead show` rendering (sibling child bead).\n- Adding new readiness rules or changing rule evaluation logic.\n- Changing the readiness terminal flow itself.\n- Updating FEAT-010/ADR-023 policy text.\n- Fizeau concrete route selection, model ranking, provider fallback, or profile catalog behavior.\n- Rewriting execute-bead branch merge policy.\n- Changing post-attempt review terminal outcomes that already carry concrete evidence for operator action.\n\nPARENT/DEPS\nParent: ddx-cc0641a7.",
+    "acceptance": "1. TestIntakeBlockedCarriesRuleFingerprint asserts every intake.blocked entry emitted by readiness has a non-empty rule_fingerprint that is stable across reruns with identical inputs.\n2. TestIntakeBlockedFingerprintDedupes asserts running readiness twice with identical inputs appends the entry only once (second pass is a no-op for an existing fingerprint).\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/...` green.\n4. `lefthook run pre-commit` passing.",
+    "parent": "ddx-bf971663",
+    "labels": [
+      "adr:023",
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:observability",
+      "kind:feature",
+      "phase:2",
+      "spec:FEAT-010",
+      "td:027",
+      "td:031"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-18T19:05:48.325476949Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260518T183122-365304fe\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":43952035,\"output_tokens\":135835,\"total_tokens\":44087870,\"cost_usd\":0,\"duration_ms\":2057777,\"exit_code\":0}",
+          "created_at": "2026-05-18T19:05:48.372733203Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=44087870 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":8}",
+          "created_at": "2026-05-18T19:11:03.633115121Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-18T19:29:39.992552685Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260518T191656-3ae2c4e9\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":9389514,\"output_tokens\":61321,\"total_tokens\":9450835,\"cost_usd\":0,\"duration_ms\":755734,\"exit_code\":0}",
+          "created_at": "2026-05-18T19:29:40.033051946Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=9450835 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-19T14:06:07.467472394Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 1857 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-19T14:06:09.495485407Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260519T140549-47e95fea\",\"bead_id\":\"ddx-b5816493\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-19T14:06:09.532783526Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no live provider supports prompt of 1857 tokens with tools=false at policy default\npowerClass=standard\nresult_rev=ecf185e6eae8f22f5da30b0ea53768357f6096b2\nbase_rev=ecf185e6eae8f22f5da30b0ea53768357f6096b2\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-19T14:06:09.583065186Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"sonnet-4.6\"}",
+          "created_at": "2026-05-19T14:40:29.265186094Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260519T143040-3f8e6621\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":35,\"output_tokens\":25614,\"total_tokens\":25649,\"cost_usd\":1.3282512,\"duration_ms\":580725,\"exit_code\":1}",
+          "created_at": "2026-05-19T14:40:29.33794557Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=25649 cost_usd=1.3283 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260519T143040-3f8e6621\",\"bead_id\":\"ddx-b5816493\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-05-19T14:40:31.36269145Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"435619167e2c5a36c9ba8ad019ae87a5a15e579b\",\"classification\":\"transport\",\"detail\":\"exit status 1\",\"rationale\":\"Agent exited with code 1 and no structured outcome reason; stderr shows only generic agent exit with no implementation evidence, consistent with a transient harness/transport failure rather than a code or spec defect.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"aa55f657f9d43451454e020b89a136fb01491d93\",\"session_id\":\"eb-086d0eeb\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-19T14:40:54.806552494Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=aa55f657f9d43451454e020b89a136fb01491d93\nbase_rev=435619167e2c5a36c9ba8ad019ae87a5a15e579b\noutcome_reason=transport",
+          "created_at": "2026-05-19T14:40:54.86101781Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260519T145919-085b95f6",
+    "prompt": ".ddx/executions/20260519T145919-085b95f6/prompt.md",
+    "manifest": ".ddx/executions/20260519T145919-085b95f6/manifest.json",
+    "result": ".ddx/executions/20260519T145919-085b95f6/result.json",
+    "checks": ".ddx/executions/20260519T145919-085b95f6/checks.json",
+    "usage": ".ddx/executions/20260519T145919-085b95f6/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-b5816493-20260519T145919-085b95f6"
+  },
+  "prompt_sha": "09f47ec347cce298920dbc591ce0e1aa3c1359b2cab899ec4c47d22435a7007a"
+}
