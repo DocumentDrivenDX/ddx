@@ -469,4 +469,5 @@ cli/gendoc
 cli/internal/server/frontend/dist/
 
 .claude/worktrees/
+.claude/scheduled_tasks.lock
 cli/internal/server/frontend/public/sql-wasm.wasm
