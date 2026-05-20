@@ -58,8 +58,13 @@ func TestExecuteBeadWorktreeAddFailure_RemovesPartialDir(t *testing.T) {
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
 
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-worktree-cleanup", rcfg, ExecuteBeadRuntime{}, gitOps)
-	require.Error(t, err)
-	assert.Nil(t, res)
+	// A disk-exhaustion worktree-add failure now surfaces as a
+	// resource_exhausted result (not a raw error) so the execute-loop releases
+	// the claim instead of leaving the bead claimed-but-open (ddx-f677a50b).
+	// The partial worktree dir must still be cleaned up.
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, res.Status)
 	assert.NotEmpty(t, gitOps.addedPath)
 	assert.Empty(t, gitOps.removedPath)
 	assert.NoFileExists(t, gitOps.addedPath)

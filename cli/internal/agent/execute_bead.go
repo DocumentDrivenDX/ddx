@@ -1471,6 +1471,27 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		workspace = ws
 		return nil
 	}); err != nil {
+		// A disk/resource-exhaustion failure during the pre-dispatch sequence
+		// (most commonly `git worktree add` running out of space while checking
+		// out the isolated worktree) must surface as a resource_exhausted
+		// outcome, not a raw error. The execute-loop releases the claim for a
+		// resource_exhausted report (parity with the pre-execution resource
+		// check above); a raw error leaves the bead claimed-but-open and
+		// execution-ineligible until a manual --unclaim (ddx-f677a50b).
+		if classifyReadinessSystemReason(err.Error(), nil) == ReadinessSystemReasonResourceExhausted {
+			res := &ExecuteBeadResult{
+				BeadID:      beadID,
+				WorkerID:    runtime.WorkerID,
+				ExitCode:    1,
+				Error:       err.Error(),
+				Reason:      err.Error(),
+				Outcome:     ExecuteBeadOutcomeTaskFailed,
+				Status:      ExecuteBeadStatusResourceExhausted,
+				ProjectRoot: projectRoot,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
+		}
 		return nil, err
 	}
 	if workspace == nil || strings.TrimSpace(workspace.WorkDir) == "" {

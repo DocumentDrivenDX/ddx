@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -261,4 +262,54 @@ func TestShouldRetryCloneWithoutHardlinks(t *testing.T) {
 	require.True(t, shouldRetryCloneWithoutHardlinks("hardlink", []byte("operation not permitted")))
 	require.False(t, shouldRetryCloneWithoutHardlinks("copy", []byte("fatal: Invalid cross-device link")))
 	require.False(t, shouldRetryCloneWithoutHardlinks("", []byte("fatal: repository not found")))
+}
+
+// failingPrepareAttemptBackend fails isolated-worktree creation with a fixed
+// error, simulating `git worktree add` running out of disk.
+type failingPrepareAttemptBackend struct{ prepareErr error }
+
+func (failingPrepareAttemptBackend) Name() string { return "failing-prepare" }
+
+func (b failingPrepareAttemptBackend) Prepare(context.Context, AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	return nil, b.prepareErr
+}
+
+func (failingPrepareAttemptBackend) Run(context.Context, AttemptBackendRunRequest) (*Result, error) {
+	return nil, fmt.Errorf("Run must not be called after Prepare fails")
+}
+
+func (failingPrepareAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (failingPrepareAttemptBackend) Cleanup(context.Context, *AttemptWorkspace) error { return nil }
+
+// TestResourceExhaustedWorktreeCreationReleasesClaim verifies that a disk
+// exhaustion failure during isolated-worktree creation (after the bead is
+// claimed, after a successful pre-execution resource preflight) surfaces as a
+// resource_exhausted ExecuteBeadResult rather than a raw error. A raw error
+// left the bead claimed-but-open and execution-ineligible until a manual
+// --unclaim (ddx-f677a50b); the resource_exhausted status routes through the
+// execute-loop's existing unclaim path. The loop's unclaim-and-leave-open
+// behavior for this status is covered by
+// TestExecuteBeadWorkerResourceExhaustedStopsLoop /
+// TestExecuteBeadWorkerResourceExhaustedUnclaimsAndNoCooldown.
+func TestResourceExhaustedWorktreeCreationReleasesClaim(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{})
+	rcfg := cfg.Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: NewRunner(Config{}),
+		AttemptBackend: failingPrepareAttemptBackend{
+			prepareErr: fmt.Errorf("creating isolated worktree: git worktree add: fatal: could not create work tree dir: No space left on device"),
+		},
+	}, &RealGitOps{})
+
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Equal(t, ExecuteBeadStatusResourceExhausted, res.Status)
+	require.Equal(t, ExecuteBeadOutcomeTaskFailed, res.Outcome)
+	require.Contains(t, res.Error, "No space left on device")
 }
