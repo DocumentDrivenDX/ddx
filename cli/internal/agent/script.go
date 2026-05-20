@@ -48,12 +48,21 @@ func runScriptFn(r *Runner, opts RunArgs) (*Result, error) {
 
 	directives := parseDirectives(string(data))
 
-	// Build env interpolation map from Correlation.
+	// Build env interpolation map from the process/runtime environment, with
+	// correlation as the most specific source when execute-bead provides it.
 	envMap := map[string]string{
-		"DDX_BEAD_ID":         "",
-		"DDX_ATTEMPT_ID":      "",
-		"DDX_WORKER_ID":       "",
-		"DDX_SESSION_LOG_DIR": opts.SessionLogDir,
+		"DDX_BEAD_ID":         os.Getenv("DDX_BEAD_ID"),
+		"DDX_ATTEMPT_ID":      os.Getenv("DDX_ATTEMPT_ID"),
+		"DDX_WORKER_ID":       os.Getenv("DDX_WORKER_ID"),
+		"DDX_SESSION_LOG_DIR": os.Getenv("DDX_SESSION_LOG_DIR"),
+	}
+	for k, v := range opts.Env {
+		if strings.HasPrefix(k, "DDX_") {
+			envMap[k] = v
+		}
+	}
+	if opts.SessionLogDir != "" {
+		envMap["DDX_SESSION_LOG_DIR"] = opts.SessionLogDir
 	}
 	if opts.Correlation != nil {
 		if v, ok := opts.Correlation["bead_id"]; ok {

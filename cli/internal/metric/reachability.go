@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
@@ -28,7 +29,7 @@ func keepMetricReachability() {
 		return
 	}
 
-	workingDir, err := os.MkdirTemp("", "ddx-metric-keepalive")
+	workingDir, err := config.MkdirExecutionScratch("", "ddx-metric-keepalive")
 	if err != nil {
 		return
 	}

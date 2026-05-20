@@ -41,6 +41,49 @@ func TestLoadConfig_DefaultOnly_Basic(t *testing.T) {
 	assert.Equal(t, DefaultConfig.Library.Repository.URL, config.Library.Repository.URL)
 }
 
+func TestLoadWithWorkingDir_MergesGlobalExecutionConfig(t *testing.T) {
+	homeDir := t.TempDir()
+	projectDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	globalDir := filepath.Join(homeDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(globalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(`version: "1.0"
+executions:
+  temp_worktree_root: /Users/erik/Projects/.ddx-exec-wt
+  docker:
+    image: ddx-attempt-runner:dev
+    project_dockerfile: .ddx/attempt-runner.Dockerfile
+    project_context: .
+    memory: 8g
+    cpus: "4"
+`), 0o644))
+
+	projectDirDDX := filepath.Join(projectDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(projectDirDDX, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDirDDX, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: .ddx/plugins/ddx
+  repository:
+    url: https://github.com/project/repo
+    branch: main
+executions:
+  docker:
+    memory: 4g
+`), 0o644))
+
+	cfg, err := LoadWithWorkingDir(projectDir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Executions)
+	require.NotNil(t, cfg.Executions.Docker)
+	assert.Equal(t, "/Users/erik/Projects/.ddx-exec-wt", cfg.Executions.TempWorktreeRoot)
+	assert.Equal(t, "ddx-attempt-runner:dev", cfg.Executions.Docker.Image)
+	assert.Equal(t, ".ddx/attempt-runner.Dockerfile", cfg.Executions.Docker.ProjectDockerfile)
+	assert.Equal(t, ".", cfg.Executions.Docker.ProjectContext)
+	assert.Equal(t, "4g", cfg.Executions.Docker.Memory, "project config must override global execution fields")
+	assert.Equal(t, "4", cfg.Executions.Docker.CPUs)
+}
+
 // TestLoadConfig_LocalConfig tests loading with local .ddx.yml
 func TestLoadConfig_LocalConfig_Basic(t *testing.T) {
 	tempDir := t.TempDir()

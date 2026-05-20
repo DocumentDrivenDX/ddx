@@ -1,0 +1,162 @@
+{
+  "attempt_id": "20260518T173227-6f3385d2",
+  "bead_id": "ddx-bf971663",
+  "base_rev": "700c146f2c25e026125d533fe5c5baa973fee4e3",
+  "created_at": "2026-05-18T17:32:35.069971281Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bf971663",
+    "title": "bead-lifecycle: emit rule fingerprint and operator-override signal in intake.blocked",
+    "description": "PROBLEM\nintake.blocked entries appended by readiness carry only outcome and detail strings. There is no stable rule fingerprint, so duplicate warnings stack on every readiness pass, and there is no operator_override field, so operators cannot see that readiness honored a prior acceptance instead of downgrading the bead.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go:2784-2815 constructs the intake.blocked entry without a rule_fingerprint (stable hash of rule_id + bead_id + relevant evidence keys) and without an operator_override boolean.\n\nPROPOSED FIX\nExtend the intake.blocked entry schema to include rule_fingerprint and operator_override. Compute rule_fingerprint as a stable hash over rule_id, bead_id, and the evidence keys that drove the rule. Set operator_override=true when the sibling guard determined the bead was operator-promoted and the downgrade was skipped. Use rule_fingerprint to dedup entries so an identical rerun does not append a duplicate. Surface both fields in `ddx bead show` output for the bead's intake.blocked list.\n\nNON-SCOPE\n- Adding new readiness rules or changing existing rule evaluation logic.\n- Changing the readiness terminal flow itself (covered by sibling implementation bead).\n- Updating FEAT-010/ADR-023 policy text (covered by sibling spec bead).\n- Fizeau concrete route selection, model ranking, provider fallback, or profile catalog behavior.\n- Rewriting execute-bead branch merge policy.\n- Changing post-attempt review terminal outcomes that already carry concrete evidence for operator action.\n\nPARENT/DEPS\nParent: this epic. Depends on the implementation bead for the operator-promotion detection function it consumes to set operator_override.",
+    "acceptance": "1. TestIntakeBlockedCarriesRuleFingerprint asserts every intake.blocked entry emitted by readiness has a non-empty rule_fingerprint stable across reruns with identical inputs.\n2. TestIntakeBlockedSetsOperatorOverride asserts operator_override=true on entries written when readiness skipped a downgrade because the bead was operator-promoted, and false otherwise.\n3. TestIntakeBlockedFingerprintDedupes asserts running readiness twice with identical inputs appends the entry only once.\n4. TestBeadShowSurfacesFingerprintAndOverride asserts `ddx bead show` renders rule_fingerprint and operator_override for each intake.blocked entry.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/...` green.\n6. `lefthook run pre-commit` passing.",
+    "parent": "ddx-cc0641a7",
+    "labels": [
+      "adr:023",
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:observability",
+      "kind:feature",
+      "phase:2",
+      "spec:FEAT-010",
+      "td:027",
+      "td:031"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: Bead has clear scope, specific file locations, and concrete testable acceptance criteria. Well-delineated non-scope section. Primary ambiguities: (1) 'relevant evidence keys that drove the rule' requires inference from rule implementation; (2) dedup lifecycle (in-memory vs. persistent) undefined; (3) operator-promotion detection function is external dependency without clear reference. Executable with reasonable interpretation, but clarifications would reduce rework.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-18T10:45:52.030670731Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-18T11:00:39.690196042Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260518T104606-1db3596e\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":7,\"output_tokens\":3,\"total_tokens\":10,\"cost_usd\":0,\"duration_ms\":695212,\"exit_code\":-1}",
+          "created_at": "2026-05-18T11:00:39.798791651Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=10 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-18T11:11:14.925345515Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260518T110040-ddee14e0\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":7,\"output_tokens\":1,\"total_tokens\":8,\"cost_usd\":0,\"duration_ms\":518645,\"exit_code\":-1}",
+          "created_at": "2026-05-18T11:11:15.087255714Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=8 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260518T110040-ddee14e0\",\"bead_id\":\"ddx-bf971663\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-18T11:11:15.666914128Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "signal: killed\npowerClass=standard\nresult_rev=a6b4678f7d095c12add535cc3f20a17daad12287\nbase_rev=a6b4678f7d095c12add535cc3f20a17daad12287\noutcome_reason=timeout",
+          "created_at": "2026-05-18T11:11:15.812190228Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-18T16:12:09.429958307Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2018 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-18T16:12:11.298355431Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260518T161150-b5be3c38\",\"bead_id\":\"ddx-bf971663\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-18T16:12:11.350037052Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no live provider supports prompt of 2018 tokens with tools=false at policy default\npowerClass=standard\nresult_rev=791fa29f81f1133b8c24a35821f436d1a3aaefc0\nbase_rev=791fa29f81f1133b8c24a35821f436d1a3aaefc0\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-18T16:12:11.420077391Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-18T17:31:58.358368295Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2018 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-18T17:32:00.377672424Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260518T173137-9a0eab2c\",\"bead_id\":\"ddx-bf971663\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-18T17:32:00.415176923Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no live provider supports prompt of 2018 tokens with tools=false at policy default\npowerClass=standard\nresult_rev=1a6b46556d63abc53fadcdbe4904318bbf82fc7c\nbase_rev=1a6b46556d63abc53fadcdbe4904318bbf82fc7c\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-18T17:32:00.468748819Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260518T173227-6f3385d2",
+    "prompt": ".ddx/executions/20260518T173227-6f3385d2/prompt.md",
+    "manifest": ".ddx/executions/20260518T173227-6f3385d2/manifest.json",
+    "result": ".ddx/executions/20260518T173227-6f3385d2/result.json",
+    "checks": ".ddx/executions/20260518T173227-6f3385d2/checks.json",
+    "usage": ".ddx/executions/20260518T173227-6f3385d2/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-bf971663-20260518T173227-6f3385d2"
+  },
+  "prompt_sha": "55eedf40c21fc1ffcacbeba5ce1d0bf471180372c7097760050941c9722e660d"
+}

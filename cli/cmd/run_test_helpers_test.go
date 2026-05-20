@@ -224,9 +224,9 @@ library:
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
 	// Mirror the production .gitignore subset that keeps the pre-execute-bead
 	// checkpoint from refusing on per-machine session log dirs written during
-	// dispatch. The production repo gitignores these; the test fixture must do
-	// the same or the checkpoint sees them as dirty implementation files.
-	gitignore := ".ddx/agent-logs/\n.ddx/workers/\n.ddx/backups/\n"
+	// dispatch. Tests set HOME to the fixture root, so XDG state from Fizeau
+	// also lands inside the repo unless this generated state path is ignored.
+	gitignore := ".ddx/agent-logs/\n.ddx/workers/\n.ddx/backups/\n.local/state/fizeau/\n"
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0o644))
 	return dir
 }

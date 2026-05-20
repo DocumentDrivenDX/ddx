@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -77,5 +78,53 @@ func TestExecutionWorktreeRoot_ExpandsTilde(t *testing.T) {
 	want := filepath.Join(home, "ddx-worktrees")
 	if got != want {
 		t.Fatalf("ExecutionWorktreeRoot = %q, want %q", got, want)
+	}
+}
+
+func TestExecutionTempRoot_DefaultsUnderUserCache(t *testing.T) {
+	t.Setenv(ExecutionWorktreeRootEnv, "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	cacheRoot := filepath.Join(home, "cache")
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+	projectRoot := t.TempDir()
+
+	got := ExecutionTempRoot(projectRoot)
+	want := filepath.Join(cacheRoot, "ddx", "exec-wt")
+	if got != want {
+		t.Fatalf("ExecutionTempRoot = %q, want %q", got, want)
+	}
+}
+
+func TestExecutionScratchRoot_SitsBesideConfiguredTempRoot(t *testing.T) {
+	t.Setenv(ExecutionWorktreeRootEnv, "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	projectRoot := t.TempDir()
+	writeExecutionRootConfig(t, filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), "configured/ddx-exec-wt")
+
+	got := ExecutionScratchRoot(projectRoot)
+	want := filepath.Join(projectRoot, "configured")
+	if got != want {
+		t.Fatalf("ExecutionScratchRoot = %q, want %q", got, want)
+	}
+}
+
+func TestMkdirExecutionScratch_UsesConfiguredScratchRoot(t *testing.T) {
+	t.Setenv(ExecutionWorktreeRootEnv, "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	projectRoot := t.TempDir()
+	writeExecutionRootConfig(t, filepath.Join(projectRoot, ddxroot.DirName, "config.yaml"), "configured/ddx-exec-wt")
+
+	dir, err := MkdirExecutionScratch(projectRoot, "ddx-test-")
+	if err != nil {
+		t.Fatalf("MkdirExecutionScratch error = %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	wantPrefix := filepath.Join(projectRoot, "configured") + string(filepath.Separator)
+	if !strings.HasPrefix(dir, wantPrefix) {
+		t.Fatalf("scratch dir = %q, want prefix %q", dir, wantPrefix)
 	}
 }

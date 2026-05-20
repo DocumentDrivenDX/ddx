@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // TempValeConfig holds paths to a temporary Vale configuration scoped to one invocation.
@@ -34,7 +36,7 @@ func NewTempValeConfig(settings Settings) (*TempValeConfig, error) {
 	}
 	packagedDDxStyles := filepath.Join(assetRoot, "styles", "DDx")
 
-	dir, err := os.MkdirTemp("", "ddx-vale-")
+	dir, err := config.MkdirExecutionScratch("", "ddx-vale-")
 	if err != nil {
 		return nil, fmt.Errorf("create temp vale dir: %w", err)
 	}

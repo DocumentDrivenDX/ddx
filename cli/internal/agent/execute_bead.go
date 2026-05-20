@@ -233,6 +233,7 @@ type ExecuteBeadRuntime struct {
 	ResourceChecker ExecutionResourceChecker
 	Service         agentlib.FizeauService
 	AgentRunner     AgentRunner
+	AttemptBackend  AttemptBackend
 	// RateLimitMaxWait bounds the per-bead total wait spent on rate-limit
 	// retries (ddx-c6e3db02 RateLimitRetryContract / TD-031 §8.4). Zero uses
 	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
@@ -399,22 +400,15 @@ const (
 	ExecuteBeadWtPrefix    = ".execute-bead-wt-"
 	ExecuteBeadArtifactDir = ".ddx/executions"
 
-	// ExecuteBeadTmpSubdir is the subdirectory under $TMPDIR in which
-	// execute-bead creates its isolated worktrees. Keeping them outside
-	// the project tree prevents child processes (tests, hooks) running
-	// inside the worktree from mutating the parent repository's
-	// .git/config via inherited GIT_DIR.
-	ExecuteBeadTmpSubdir = "ddx-exec-wt"
+	// ExecuteBeadTmpSubdir is the legacy $TMPDIR subdirectory retained for
+	// cleanup and detection of older isolated worktrees.
+	ExecuteBeadTmpSubdir = config.DefaultExecutionTempSubdir
 )
 
 // executeBeadWorktreePath returns the absolute path where an execute-bead
 // isolated worktree for (beadID, attemptID) should live.
 func executeBeadWorktreePath(projectRoot, beadID, attemptID string) string {
-	base := config.ExecutionWorktreeRoot(projectRoot)
-	if base == "" {
-		base = filepath.Join(os.TempDir(), ExecuteBeadTmpSubdir)
-	}
-	return filepath.Join(base, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
+	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadWtPrefix+beadID+"-"+attemptID)
 }
 
 const mixedCommitAndNoChangesRationaleReason = "mixed_commit_and_no_changes_rationale"
@@ -794,7 +788,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return false, nil
 	}
 
-	indexFile, err := os.CreateTemp("", "ddx-pre-dispatch-index-*")
+	indexFile, err := config.CreateExecutionScratch(projectRoot, "ddx-pre-dispatch-index-*")
 	if err != nil {
 		return false, fmt.Errorf("creating temp checkpoint index: %w", err)
 	}
@@ -1372,10 +1366,10 @@ func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info R
 	})
 }
 
-// ExecuteBeadWithConfig is the thin worker: it creates an isolated worktree,
+// ExecuteBeadWithConfig is the thin worker: it creates an isolated attempt workspace,
 // constructs the agent prompt from bead context, runs the agent harness,
 // synthesizes a commit if the agent left uncommitted changes, then cleans up
-// the worktree and returns the result. It classifies outcomes as exactly one
+// the workspace and returns the result. It classifies outcomes as exactly one
 // of:
 //
 //   - task_succeeded: agent exited 0 and produced one or more commits
@@ -1399,6 +1393,14 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	_ = rcfg.Harness()
 	if runtime.WorkerID == "" {
 		runtime.WorkerID = os.Getenv("DDX_WORKER_ID")
+	}
+	attemptBackend := runtime.AttemptBackend
+	if attemptBackend == nil {
+		var backendErr error
+		attemptBackend, backendErr = ResolveAttemptBackend(rcfg)
+		if backendErr != nil {
+			return nil, backendErr
+		}
 	}
 
 	resourceChecker := runtime.ResourceChecker
@@ -1426,10 +1428,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 
 	attemptID := GenerateAttemptID()
-	wtPath := executeBeadWorktreePath(projectRoot, beadID, attemptID)
 
 	// Serialize the parent-repo mutating pre-dispatch sequence (tracker
-	// commit, caller-dirt checkpoint, base resolution, worktree creation)
+	// commit, caller-dirt checkpoint, base resolution, workspace creation)
 	// under the tracker lock. Without this, concurrent workers race on the
 	// parent's HEAD ref between unlocked CommitTracker and SynthesizeCommit
 	// and surface as "cannot lock ref 'HEAD': is at X but expected Y" CAS
@@ -1437,11 +1438,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// The lock is held only across the brief pre-dispatch sequence (~1-2s);
 	// agent execution that follows is fully parallel.
 	var baseRev string
+	var workspace *AttemptWorkspace
 	if err := withTrackerLock(projectRoot, func() error {
-		if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
-			return fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)
-		}
-		// Commit beads.jsonl before spawning worktree so the worktree snapshot
+		// Commit beads.jsonl before spawning the attempt workspace so its snapshot
 		// includes any bead metadata updates (e.g. spec-id).
 		if err := commitTrackerLocked(projectRoot); err != nil {
 			return err
@@ -1459,18 +1458,27 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			return err
 		}
 		baseRev = rev
-		// Create the isolated worktree. Orphan recovery is the parent's responsibility
-		// (call RecoverOrphans before invoking workers).
-		if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
-			_ = os.RemoveAll(wtPath)
-			return fmt.Errorf("creating isolated worktree: %w", err)
+		ws, err := attemptBackend.Prepare(ctx, AttemptBackendPrepareRequest{
+			ProjectRoot: projectRoot,
+			BeadID:      beadID,
+			AttemptID:   attemptID,
+			BaseRev:     baseRev,
+			GitOps:      gitOps,
+		})
+		if err != nil {
+			return err
 		}
+		workspace = ws
 		return nil
 	}); err != nil {
 		return nil, err
 	}
+	if workspace == nil || strings.TrimSpace(workspace.WorkDir) == "" {
+		return nil, fmt.Errorf("attempt backend %s did not return a workspace", attemptBackend.Name())
+	}
+	wtPath := workspace.WorkDir
 	if err := excludeCleanupMetadataFromWorktreeGit(wtPath); err != nil {
-		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
+		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("excluding execute-bead cleanup metadata: %w", err)
 	}
 	if err := WriteExecutionCleanupMetadata(wtPath, ExecutionCleanupMetadata{
@@ -1481,11 +1489,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Registered:   true,
 		CreatedAt:    time.Now().UTC(),
 	}); err != nil {
-		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
+		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
 	}
 	defer func() {
-		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
+		_ = attemptBackend.Cleanup(ctx, workspace)
 	}()
 
 	// evidenceCommittedInWt is true when the evidence bundle was successfully
@@ -1502,6 +1510,12 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			publishEvidenceBundleToProjectRoot(projectRoot, wtPath, evidenceDir)
 		}
 	}()
+	publishAttemptResult := func(res *ExecuteBeadResult) error {
+		if res == nil || strings.TrimSpace(res.ResultRev) == "" || res.ResultRev == res.BaseRev {
+			return nil
+		}
+		return attemptBackend.PublishResult(ctx, workspace, res)
+	}
 
 	// Publish the live run-state so operators and HELIX can observe what is
 	// executing without polling the bead tracker (CONTRACT-001 §5). The file
@@ -1617,7 +1631,14 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
-	agentResult, agentErr := dispatchAgentRun(dispatchCtx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
+	agentResult, agentErr := attemptBackend.Run(dispatchCtx, AttemptBackendRunRequest{
+		ProjectRoot: projectRoot,
+		Workspace:   workspace,
+		Service:     runtime.Service,
+		AgentRunner: runtime.AgentRunner,
+		Config:      rcfg,
+		Runtime:     runRuntime,
+	})
 	stopRunStateRefresh()
 	finishedAt := time.Now().UTC()
 
@@ -1931,6 +1952,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.Status = ExecuteBeadStatusPreservedNeedsReview
 		res.Detail = ExecuteBeadStatusDetail(res.Status, OperatorCancelReason, "")
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		if err := publishAttemptResult(res); err != nil {
+			return res, fmt.Errorf("publishing attempt result: %w", err)
+		}
 		return res, nil
 	}
 
@@ -1938,6 +1962,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// may refine this with landing-level signals (merge conflict, gate
 	// failure) before the final result is output.
 	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+	if err := publishAttemptResult(res); err != nil {
+		return res, fmt.Errorf("publishing attempt result: %w", err)
+	}
 
 	// Record routing evidence on the bead (best-effort; errors are discarded).
 	// Include requested passthrough constraints and power bounds so analytics
@@ -1978,6 +2005,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			evidenceCommittedInWt = true
 		}
 	}
+	if err := publishAttemptResult(res); err != nil {
+		return res, fmt.Errorf("publishing attempt result: %w", err)
+	}
 
 	// Optional out-of-band mirror of the bundle (and, when configured, the
 	// associated agent-log and worker state). Wired here so the whole
@@ -1994,6 +2024,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		WorkerID:    runtime.WorkerID,
 	})
 
+	if res.ExitCode == 0 && strings.TrimSpace(res.Error) == "" {
+		workspace.KeepOnError = false
+	}
 	return res, nil
 }
 

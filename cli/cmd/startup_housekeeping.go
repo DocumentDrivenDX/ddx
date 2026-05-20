@@ -63,13 +63,9 @@ type startupHousekeepingRunner struct {
 }
 
 func newStartupHousekeepingRunner(projectRoot string) *startupHousekeepingRunner {
-	tempRoot := config.ExecutionWorktreeRoot(projectRoot)
-	if tempRoot == "" {
-		tempRoot = filepath.Join(os.TempDir(), agent.ExecuteBeadTmpSubdir)
-	}
 	return &startupHousekeepingRunner{
 		projectRoot:     projectRoot,
-		tempRoot:        tempRoot,
+		tempRoot:        config.ExecutionTempRoot(projectRoot),
 		worktreeMaxAge:  worktreeReapMaxAgeFromEnv(),
 		workerDirMaxAge: defaultWorkerDirStaleAge,
 		retentionPolicy: resolveExecutionRetentionPolicy(projectRoot),

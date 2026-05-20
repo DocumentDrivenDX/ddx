@@ -5,8 +5,9 @@
 VERSION ?= $(shell git describe --tags --always --dirty)
 CLI_DIR = cli
 CLI_BINARY = $(CLI_DIR)/build/ddx
+DOCKER_ATTEMPT_IMAGE ?= ddx-attempt-runner:dev
 
-.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema docs-routing-lint
+.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema docs-routing-lint docker-attempt-runner
 
 # Default target - build CLI
 all: build
@@ -36,6 +37,11 @@ lint: cli-lint
 docs-routing-lint:
 	@echo "Checking docs for legacy routing references..."
 	bash scripts/check-legacy-routing-docs.sh
+
+# Build the baseline image used by `ddx try --attempt-backend docker-clone`.
+docker-attempt-runner:
+	@echo "Building DDx attempt runner image $(DOCKER_ATTEMPT_IMAGE)..."
+	docker build -t $(DOCKER_ATTEMPT_IMAGE) docker/attempt-runner
 
 # Install locally
 install: build
@@ -156,6 +162,7 @@ help:
 	@echo "  cli-bead-schema - Validate the shared bead schema"
 	@echo "  cli-skill-schema - Validate bundled skill metadata"
 	@echo "  cli-deps     - Install CLI dependencies"
+	@echo "  docker-attempt-runner - Build the docker-clone attempt runner image"
 	@echo ""
 	@echo "Release:"
 	@echo "  build-all    - Build for all platforms"

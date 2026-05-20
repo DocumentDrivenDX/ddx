@@ -538,14 +538,76 @@
           "description": "Optional local retention policy. Bundles older than this are subject to local pruning while the mirror keeps full history.",
           "minimum": 0
         },
+        "attempt_backend": {
+          "type": "string",
+          "description": "Workspace/transport backend for execute-bead attempts. Empty defaults to linked worktrees.",
+          "enum": ["worktree", "local-clone", "docker-clone"]
+        },
         "temp_worktree_root": {
           "type": "string",
-          "description": "Base directory for isolated bead attempt worktrees. Relative paths in project config resolve against the project root; relative paths in global config resolve against the user's home directory. DDX_EXEC_WT_DIR overrides this value.",
+          "description": "Base directory for isolated bead attempt worktrees. Relative paths in project config resolve against the project root; relative paths in global config resolve against the user's home directory. DDX_EXEC_WT_DIR overrides this value. Empty defaults to the per-user cache root, not /tmp.",
           "examples": [
             "~/.cache/ddx/exec-wt",
             ".ddx/worktrees",
             "/var/tmp/ddx-exec-wt"
           ]
+        },
+        "docker": {
+          "type": "object",
+          "description": "Settings for the docker-clone attempt backend.",
+          "properties": {
+            "image": {
+              "type": "string",
+              "description": "Container image used to run the attempt. DDx mounts the current ddx binary into the container and runs ddx run inside /work."
+            },
+            "project_image": {
+              "type": "string",
+              "description": "Optional prebuilt project-specific attempt image. When set, docker-clone uses this image instead of building a repo-local project layer."
+            },
+            "project_dockerfile": {
+              "type": "string",
+              "description": "Optional repo-owned Dockerfile for a project-specific cached attempt layer. Empty auto-detects .ddx/attempt-runner.Dockerfile when present."
+            },
+            "project_context": {
+              "type": "string",
+              "description": "Optional repo-owned docker build context for the project-specific attempt layer. Empty uses the project root."
+            },
+            "memory": {
+              "type": "string",
+              "description": "Docker --memory value, e.g. 8g."
+            },
+            "memory_swap": {
+              "type": "string",
+              "description": "Docker --memory-swap value. Set equal to memory to disable container swap."
+            },
+            "cpus": {
+              "type": "string",
+              "description": "Docker --cpus value, e.g. 4."
+            },
+            "pids_limit": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Docker --pids-limit value."
+            },
+            "tmpfs_size": {
+              "type": "string",
+              "description": "Size for the private /tmp tmpfs mounted in the attempt container, e.g. 2g. Defaults to 2g."
+            },
+            "network": {
+              "type": "string",
+              "description": "Docker --network value. Empty uses Docker's default network."
+            },
+            "clone_mode": {
+              "type": "string",
+              "description": "Local clone strategy before mounting into Docker.",
+              "enum": ["hardlink", "copy", "no-hardlinks"]
+            },
+            "keep_on_error": {
+              "type": "boolean",
+              "description": "Preserve the local attempt clone when the docker backend cleans up."
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

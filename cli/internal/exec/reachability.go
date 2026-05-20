@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // init keeps the exec package rooted in the production reachability graph.
@@ -25,7 +27,7 @@ func keepExecReachability() {
 		return
 	}
 
-	workingDir, err := os.MkdirTemp("", "ddx-exec-keepalive")
+	workingDir, err := config.MkdirExecutionScratch("", "ddx-exec-keepalive")
 	if err != nil {
 		return
 	}

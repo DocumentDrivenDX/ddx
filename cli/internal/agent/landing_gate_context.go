@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // BuildLandingGateContext prepares the inputs the gate evaluator needs to
@@ -12,8 +14,8 @@ import (
 //
 //  1. Pin res.ResultRev to refs/ddx/gate-pins/<beadID>/<attemptID>
 //     so the SHA stays alive while the ephemeral worktree exists.
-//  2. WorktreeAdd a temp worktree (under os.TempDir() with prefix
-//     "ddx-gate-wt-") at the pinned ref so gate evaluators can read the
+//  2. WorktreeAdd a temp worktree under the configured DDx execution scratch
+//     root at the pinned ref so gate evaluators can read the
 //     result tree without disturbing the main worktree.
 //  3. Read the worker manifest from that result tree and extract governing IDs.
 //     When the manifest declares no governing IDs the temporary worktree is
@@ -46,7 +48,7 @@ func BuildLandingGateContext(projectRoot string, res *ExecuteBeadResult, gitOps 
 	}
 	unpin := func() { _ = gitOps.DeleteRef(projectRoot, pinRef) }
 
-	wt, mkErr := os.MkdirTemp("", "ddx-gate-wt-"+attemptKey+"-")
+	wt, mkErr := config.MkdirExecutionScratch(projectRoot, "ddx-gate-wt-"+attemptKey+"-")
 	if mkErr != nil {
 		unpin()
 		return "", nil, noop, fmt.Errorf("create temp worktree dir: %w", mkErr)

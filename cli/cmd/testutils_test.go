@@ -45,9 +45,13 @@ func isolateCmdTestTempRoot() func() {
 	oldTmpDir, hadTmpDir := os.LookupEnv("TMPDIR")
 	oldTmp, hadTmp := os.LookupEnv("TMP")
 	oldXDG, hadXDG := os.LookupEnv("XDG_DATA_HOME")
+	oldHome, hadHome := os.LookupEnv("HOME")
+	homeDir := filepath.Join(tempRoot, "home")
+	_ = os.MkdirAll(homeDir, 0o755)
 	_ = os.Setenv("TMPDIR", tempRoot)
 	_ = os.Setenv("TMP", tempRoot)
 	_ = os.Setenv("XDG_DATA_HOME", filepath.Join(tempRoot, "xdg"))
+	_ = os.Setenv("HOME", homeDir)
 	return func() {
 		if hadTmpDir {
 			_ = os.Setenv("TMPDIR", oldTmpDir)
@@ -63,6 +67,11 @@ func isolateCmdTestTempRoot() func() {
 			_ = os.Setenv("XDG_DATA_HOME", oldXDG)
 		} else {
 			_ = os.Unsetenv("XDG_DATA_HOME")
+		}
+		if hadHome {
+			_ = os.Setenv("HOME", oldHome)
+		} else {
+			_ = os.Unsetenv("HOME")
 		}
 		_ = os.RemoveAll(tempRoot)
 	}

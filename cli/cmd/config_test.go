@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -195,6 +196,35 @@ repository:
 	}
 }
 
+func TestConfigCommand_DockerExecutionKeys(t *testing.T) {
+	cfg := &config.Config{}
+	settings := map[string]string{
+		"executions.attempt_backend":           "docker-clone",
+		"executions.docker.image":              "ddx-runner:latest",
+		"executions.docker.project_image":      "ddx-project-runner:latest",
+		"executions.docker.project_dockerfile": ".ddx/attempt-runner.Dockerfile",
+		"executions.docker.project_context":    ".",
+		"executions.docker.memory":             "8g",
+		"executions.docker.memory_swap":        "8g",
+		"executions.docker.cpus":               "4",
+		"executions.docker.pids_limit":         "1024",
+		"executions.docker.tmpfs_size":         "2g",
+		"executions.docker.network":            "none",
+		"executions.docker.clone_mode":         "copy",
+		"executions.docker.keep_on_error":      "true",
+		"executions.temp_worktree_root":        ".ddx/workspaces",
+	}
+	for key, value := range settings {
+		require.NoError(t, setConfigValueInStruct(cfg, key, value), key)
+	}
+
+	for key, want := range settings {
+		got, err := extractConfigValue(cfg, key)
+		require.NoError(t, err, key)
+		assert.Equal(t, want, got, key)
+	}
+}
+
 // TestConfigCommand_Global tests global config operations
 func TestConfigCommand_Global(t *testing.T) {
 	// Create a fresh command for test isolation
@@ -232,6 +262,19 @@ persona_bindings:
 	assert.NoError(t, err)
 	assert.Contains(t, output, "author")
 	assert.Contains(t, output, "email")
+
+	_, err = executeCommand(rootCmd, "config", "--global", "set", "executions.docker.image", "runner:dev")
+	require.NoError(t, err)
+	_, err = executeCommand(rootCmd, "config", "--global", "set", "executions.docker.memory", "8g")
+	require.NoError(t, err)
+
+	output, err = executeCommand(rootCmd, "config", "--global", "get", "executions.docker.image")
+	require.NoError(t, err)
+	assert.Contains(t, output, "runner:dev")
+
+	output, err = executeCommand(rootCmd, "config", "--global", "get", "executions.docker.memory")
+	require.NoError(t, err)
+	assert.Contains(t, output, "8g")
 }
 
 // TestConfigCommand_Help tests the help output

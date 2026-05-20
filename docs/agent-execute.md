@@ -8,7 +8,7 @@ layers. For full flags, see `ddx run --help`, `ddx try --help`, and
 
 - **`ddx work`** — the queue-drain surface. It claims ready beads, invokes
   `ddx try`, records outcomes, and applies DDx-owned retry policy.
-- **`ddx try <id>`** — one bead attempt in an isolated worktree. It wraps
+- **`ddx try <id>`** — one bead attempt in an isolated workspace. It wraps
   prompt construction, evidence capture, and merge/preserve finalization around
   one or more `ddx run` invocations.
 - **`ddx run`** — one agent invocation atom. It calls upstream agent `Execute`
@@ -94,10 +94,42 @@ route decision back into `Execute`.
 
 ## Cleanup and Resource Exhaustion
 
-`ddx try` owns the isolated worktree lifecycle for one bead attempt. It checks
-the temporary worktree root and durable evidence root before claim, removes
-partial worktrees from failed setup, and removes the isolated worktree after the
-attempt is merged, preserved, classified, or gracefully interrupted.
+`ddx try` owns the isolated workspace lifecycle for one bead attempt. The
+default attempt backend is `worktree`; `local-clone` uses a full local clone
+with local object sharing/hardlinks, and `docker-clone` runs that clone inside a
+Docker container. Select a backend with `--attempt-backend` or
+`executions.attempt_backend`. `docker-clone` additionally requires
+`executions.docker.image`; build the repo's baseline image with
+`make docker-attempt-runner` and configure `ddx-attempt-runner:dev` for local
+trials.
+
+Projects can add a cached Docker setup layer at
+`.ddx/attempt-runner.Dockerfile`. When present, `docker-clone` builds a
+project-local image from that Dockerfile with `DDX_BASE_IMAGE` pointing at
+`executions.docker.image`, then runs attempts from the project image. This is
+where a project should install Rust, Java, Go, Python, Node, or other
+toolchains and dependency caches that are too expensive to recreate for every
+attempt. The setup layer should copy dependency manifests and lockfiles first
+and perform the expensive fetch/install step before any source files enter the
+image. Do not place required image contents under `/work`; the attempt clone is
+bind-mounted there at runtime and hides whatever the image had at that path.
+Use `/opt`, `/usr/local`, package-manager caches, or language-specific cache
+directories for reusable setup. `executions.docker.project_dockerfile` and
+`executions.docker.project_context` can point at a different repo-owned build
+file/context; `executions.docker.project_image` uses an already-built image.
+Large repositories should pair the project Dockerfile with a Dockerfile-specific
+ignore file such as `.ddx/attempt-runner.Dockerfile.dockerignore` so project
+image rebuilds only transfer dependency manifests and lockfiles.
+See [Docker Attempt Build Environments](docker-attempt-build-environments.md)
+for reusable setup patterns and a verification checklist.
+
+Before claim, `ddx try` checks the configured execution temp root and durable
+evidence root, removes partial workspaces from failed setup, imports clone
+backend result commits into the project repo before finalization, and removes
+the isolated workspace after the attempt is merged, preserved, classified, or
+gracefully interrupted. The execution temp root is `DDX_EXEC_WT_DIR`, then
+`executions.temp_worktree_root`, then the per-user cache root; helper scratch is
+created beside that root rather than in `/tmp`.
 
 `ddx work` runs cleanup at startup, after setup/finalization failures, during
 long-lived polling, and during graceful shutdown. Long-lived workers also run a
@@ -105,17 +137,17 @@ background cleanup pass occasionally with jitter and a cleanup lock so parallel
 workers do not all prune at once.
 
 Cleanup is DDx-scoped and conservative. It may remove stale DDx temp
-worktrees, stale liveness files, and partial setup directories. It must not
-remove preserved attempts, `refs/ddx/iterations/...`, complete evidence under
-`.ddx/runs` or `.ddx/executions`, active worktrees with live liveness, or
-non-DDx paths.
+workspaces, stale liveness files, and partial setup directories. It must not
+remove preserved attempts, `refs/ddx/iterations/...`,
+`refs/ddx/attempt-backend/...`, complete evidence under `.ddx/runs` or
+`.ddx/executions`, active workspaces with live liveness, or non-DDx paths.
 
 Use `ddx cleanup` to inspect stale execution resources. The command defaults
 to dry-run mode and reports what it would remove; add `--apply` when you want
 it to actually delete stale DDx temp worktrees, stale run-state files, and
 other DDx-owned scratch data.
 
-Resource exhaustion is loop-fatal. If the worktree or evidence roots run out of
+Resource exhaustion is loop-fatal. If the execution temp or evidence roots run out of
 bytes/inodes or become unwritable, DDx runs one cleanup pass and retries the
 resource check. If the roots are still unhealthy, `ddx work` stops instead of
 claiming another bead. Operators should see messages in this shape:

@@ -21,6 +21,10 @@ type CLIOverrides struct {
 	NoReview      *bool
 	Assignee      string
 	ContextBudget string
+	// AttemptBackend selects the execute-bead workspace/transport backend for
+	// this invocation. Empty uses executions.attempt_backend or the binary
+	// default.
+	AttemptBackend string
 	// ProviderRequestTimeout, when non-nil, overrides the per-request wall-clock
 	// cap applied to a single Chat/ChatStream call. Corresponds to --request-timeout
 	// on execute-bead and work. Zero pointer means "use config or model default".
@@ -123,6 +127,14 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	if c != nil && c.Executions != nil && c.Executions.Mirror != nil {
 		r.mirrorConfig = c.Executions.Mirror.Clone()
 	}
+	if overrides.AttemptBackend != "" {
+		r.attemptBackend = overrides.AttemptBackend
+	} else if c != nil && c.Executions != nil {
+		r.attemptBackend = c.Executions.AttemptBackend
+	}
+	if c != nil && c.Executions != nil && c.Executions.Docker != nil {
+		r.executionsDocker = c.Executions.Docker.Clone()
+	}
 
 	r.triagePolicy = c.ResolveTriagePolicy()
 	r.maxDecompositionDepth = c.ResolveMaxDecompositionDepth()
@@ -188,6 +200,8 @@ type ResolvedConfig struct {
 	evidenceCaps                       evidence.Caps
 	sessionLogDir                      string
 	mirrorConfig                       *ExecutionsMirrorConfig
+	attemptBackend                     string
+	executionsDocker                   *ExecutionsDockerConfig
 	reasoningLevels                    map[string][]string
 	providerRequestTimeout             time.Duration
 	beadQualityLintBlockThresholdScore int
@@ -337,6 +351,16 @@ func (r ResolvedConfig) SessionLogDir() string {
 func (r ResolvedConfig) MirrorConfig() *ExecutionsMirrorConfig {
 	r.requireSealed()
 	return r.mirrorConfig
+}
+
+func (r ResolvedConfig) AttemptBackend() string {
+	r.requireSealed()
+	return r.attemptBackend
+}
+
+func (r ResolvedConfig) ExecutionsDockerConfig() *ExecutionsDockerConfig {
+	r.requireSealed()
+	return r.executionsDocker.Clone()
 }
 
 // ReasoningLevels returns a defensive copy of the reasoning-level map.

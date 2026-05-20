@@ -19,7 +19,7 @@ import (
 // and liveness for a DDx temp execution directory.
 const ExecutionCleanupMetadataFileName = "cleanup.json"
 
-const defaultExecutionCleanupScratchMinAge = 24 * time.Hour
+const defaultExecutionCleanupScratchMinAge = 6 * time.Hour
 const defaultEvidenceRetainDays = 90
 
 var defaultExecutionCleanupScratchPrefixes = []string{
@@ -27,10 +27,14 @@ var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-e2e-",
 	"ddx-test-bin-",
 	"ddx-test-binary-",
+	"ddx-lifecycle-",
+	"ddx-agent-support-keepalive",
+	"ddx-config-anchor-",
 	"ddx-exec-keepalive",
 	"ddx-metric-keepalive",
 	"ddx-metaprompt-keepalive",
 	"ddx-persona-keepalive",
+	"ddx-vale-",
 	"ddx-gate-wt-",
 	"ddx-land-finalize-",
 	"ddx-land-wt-",
@@ -303,7 +307,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				return summary, err
 			}
 		}
-		if !strings.HasPrefix(entry.Name(), ExecuteBeadWtPrefix) {
+		if !hasAnyPrefix(entry.Name(), executionAttemptDirPrefixes()) {
 			continue
 		}
 		summary.ScannedTempDirs++
@@ -698,7 +702,16 @@ func (m *ExecutionCleanupManager) runStatesForMetadata(meta ExecutionCleanupMeta
 }
 
 func (m *ExecutionCleanupManager) canReclaimForeignTestOwnedPath(projectRoot, path string) bool {
-	return projectRoot != "" && isPathWithin(projectRoot, os.TempDir()) && isPathWithin(path, os.TempDir())
+	if projectRoot == "" || !isPathWithin(projectRoot, os.TempDir()) {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	for _, root := range m.reclaimableTempRoots() {
+		if sameCleanPath(cleanPath, root) || isPathWithin(cleanPath, root) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *ExecutionCleanupManager) isRegisteredWorktree(projectRoot, path string, summary *ExecutionCleanupSummary) bool {
@@ -734,9 +747,20 @@ func (m *ExecutionCleanupManager) scratchRoots(tempRoot string) []string {
 			roots = append(roots, parent)
 		}
 	}
-	if len(roots) == 0 {
-		roots = append(roots, os.TempDir())
+	if m.ProjectRoot != "" {
+		roots = append(roots, config.ExecutionScratchRoot(m.ProjectRoot))
 	}
+	// Always include the legacy process temp dir so changing
+	// executions.temp_worktree_root does not strand older DDx-owned scratch.
+	roots = append(roots, os.TempDir())
+	return cleanUniquePaths(roots)
+}
+
+func (m *ExecutionCleanupManager) reclaimableTempRoots() []string {
+	tempRoot := m.tempRoot()
+	roots := []string{tempRoot}
+	roots = append(roots, m.scratchRoots(tempRoot)...)
+	roots = append(roots, config.LegacyExecutionTempRoot(), os.TempDir())
 	return cleanUniquePaths(roots)
 }
 
@@ -1040,11 +1064,7 @@ func candidateRefResultDurable(meta candidateRefResultMetadata) bool {
 }
 
 func executionCleanupTempRoot(projectRoot string) string {
-	base := config.ExecutionWorktreeRoot(projectRoot)
-	if base == "" {
-		base = filepath.Join(os.TempDir(), ExecuteBeadTmpSubdir)
-	}
-	return base
+	return config.ExecutionTempRoot(projectRoot)
 }
 
 // WriteExecutionCleanupMetadata writes the ownership metadata used by the

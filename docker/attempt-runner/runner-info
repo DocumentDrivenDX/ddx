@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "ddx attempt runner baseline"
+echo "arch: $(uname -m)"
+echo "go: $(go version)"
+echo "git: $(git --version)"
+echo "bun: $(bun --version)"
+echo "node: $(node --version)"
+echo "python: $(python3 --version)"

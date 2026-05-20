@@ -373,7 +373,8 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			return out
 		}
 		if terminalClass := classifyTerminalReviewBlock(reviewRes); terminalClass != "" {
-			applyTerminalReviewBlock(in.Store, in.Bead.ID, in.Assignee, now().UTC(), terminalClass, report.ResultRev)
+			events, _ := in.Store.Events(in.Bead.ID)
+			applyTerminalReviewBlock(in.Store, in.Bead.ID, in.Assignee, now().UTC(), terminalClass, report.ResultRev, events)
 			report.Status = ExecuteBeadStatusReviewTerminalBlock
 			report.Detail = "pre-close review: terminal " + terminalClass
 			out.Report = report

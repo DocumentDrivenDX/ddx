@@ -54,14 +54,7 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 }
 
 func newLifecycleScratchDir(projectRoot string) (string, error) {
-	base := config.ExecutionWorktreeRoot(projectRoot)
-	if base == "" || (projectRoot != "" && isPathWithin(base, projectRoot)) {
-		base = filepath.Join(os.TempDir(), ExecuteBeadTmpSubdir)
-	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return "", err
-	}
-	dir, err := os.MkdirTemp(base, lifecycleScratchDirPrefix)
+	dir, err := config.MkdirExecutionScratch(projectRoot, lifecycleScratchDirPrefix)
 	if err != nil {
 		return "", err
 	}

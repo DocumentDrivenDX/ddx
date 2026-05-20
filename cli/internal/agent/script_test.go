@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // initScriptTestRepo creates a temp dir, initialises a git repo with a
@@ -262,6 +263,29 @@ commit test
 	}
 	if string(content) != "hello ddx-abc12345\n" {
 		t.Fatalf("expected 'hello ddx-abc12345\\n', got %q", string(content))
+	}
+}
+
+func TestScriptHarness_EnvVarInterpolationFallsBackToProcessEnv(t *testing.T) {
+	t.Setenv("DDX_ATTEMPT_ID", "attempt-from-env")
+
+	repo := initScriptTestRepo(t)
+	df := writeDirectives(t, `
+append-line .ddx/executions/${DDX_ATTEMPT_ID}/no_changes_rationale.txt already-satisfied
+`)
+	result, err := runScript(t, repo, df, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("expected exit 0, got %d", result.ExitCode)
+	}
+	content, ferr := os.ReadFile(ddxroot.JoinProject(repo, "executions", "attempt-from-env", "no_changes_rationale.txt"))
+	if ferr != nil {
+		t.Fatalf("rationale file not found: %v", ferr)
+	}
+	if string(content) != "already-satisfied\n" {
+		t.Fatalf("expected rationale content, got %q", string(content))
 	}
 }
 

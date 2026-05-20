@@ -324,9 +324,43 @@ type CostConfig struct {
 type ExecutionsConfig struct {
 	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
 	RetainDays *int                    `yaml:"retain_days,omitempty" json:"retain_days,omitempty"`
+	// AttemptBackend selects the execute-bead attempt backend. Empty uses the
+	// legacy linked-worktree backend. Supported values are owned by the agent
+	// package so new backends can be added without changing queue semantics.
+	AttemptBackend string `yaml:"attempt_backend,omitempty" json:"attempt_backend,omitempty"`
 	// TempWorktreeRoot is the base directory for isolated execute-bead
-	// worktrees. Empty preserves the legacy default under os.TempDir().
+	// worktrees. Empty uses the per-user cache directory; legacy
+	// os.TempDir()/ddx-exec-wt is only retained as a cleanup/detection path.
 	TempWorktreeRoot string `yaml:"temp_worktree_root,omitempty" json:"temp_worktree_root,omitempty"`
+	// Docker configures the docker-clone attempt backend. The backend still
+	// uses the centralized execution temp root for local attempt clones.
+	Docker *ExecutionsDockerConfig `yaml:"docker,omitempty" json:"docker,omitempty"`
+}
+
+// ExecutionsDockerConfig configures the experimental docker-clone attempt
+// backend. String fields are passed through to docker run to preserve Docker's
+// native units (e.g. "8g", "2", "1024").
+type ExecutionsDockerConfig struct {
+	Image             string `yaml:"image,omitempty" json:"image,omitempty"`
+	ProjectImage      string `yaml:"project_image,omitempty" json:"project_image,omitempty"`
+	ProjectDockerfile string `yaml:"project_dockerfile,omitempty" json:"project_dockerfile,omitempty"`
+	ProjectContext    string `yaml:"project_context,omitempty" json:"project_context,omitempty"`
+	Memory            string `yaml:"memory,omitempty" json:"memory,omitempty"`
+	MemorySwap        string `yaml:"memory_swap,omitempty" json:"memory_swap,omitempty"`
+	CPUs              string `yaml:"cpus,omitempty" json:"cpus,omitempty"`
+	PidsLimit         int    `yaml:"pids_limit,omitempty" json:"pids_limit,omitempty"`
+	TmpfsSize         string `yaml:"tmpfs_size,omitempty" json:"tmpfs_size,omitempty"`
+	Network           string `yaml:"network,omitempty" json:"network,omitempty"`
+	CloneMode         string `yaml:"clone_mode,omitempty" json:"clone_mode,omitempty"`
+	KeepOnError       bool   `yaml:"keep_on_error,omitempty" json:"keep_on_error,omitempty"`
+}
+
+func (c *ExecutionsDockerConfig) Clone() *ExecutionsDockerConfig {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	return &cp
 }
 
 // ResolveRetainDays returns the effective in-tree retention window.
