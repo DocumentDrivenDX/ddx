@@ -32,17 +32,17 @@ git:
 agent:
     endpoints:
         - type: lmstudio
-          host: vidar
+          host: 100.70.199.113
           port: 1234
           api_key: lmstudio
         - type: omlx
-          host: vidar
+          host: 100.70.199.113
           port: 1235
         - type: lmstudio
-          host: bragi
+          host: 100.127.38.115
           port: 1234
           api_key: lmstudio
         - type: lmstudio
-          host: grendel
+          host: 100.97.179.68
           port: 1234
           api_key: lmstudio
