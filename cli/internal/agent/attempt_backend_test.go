@@ -161,6 +161,10 @@ func TestPrepareDockerAttemptHomeCopiesMinimalAuth(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".claude", ".credentials.json"), []byte(`{"credential":"test"}`), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".claude", "history.jsonl"), []byte("runtime history"), 0o600))
 	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".claude.json"), []byte(`{"projects":{}}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(hostHome, ".local", "state", "fizeau"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".local", "state", "fizeau", "claude-quota.json"), []byte(`{"five_hour_remaining":96}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".local", "state", "fizeau", "codex-quota.json"), []byte(`{"remaining":50}`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(hostHome, ".local", "state", "fizeau", "gemini-quota.json"), []byte(`{"remaining":50}`), 0o600))
 
 	attemptHome := filepath.Join(t.TempDir(), "attempt-home")
 	require.NoError(t, prepareDockerAttemptHome(attemptHome))
@@ -169,6 +173,9 @@ func TestPrepareDockerAttemptHomeCopiesMinimalAuth(t *testing.T) {
 	require.FileExists(t, filepath.Join(attemptHome, ".codex", "config.toml"))
 	require.FileExists(t, filepath.Join(attemptHome, ".claude", ".credentials.json"))
 	require.FileExists(t, filepath.Join(attemptHome, ".claude.json"))
+	require.FileExists(t, filepath.Join(attemptHome, ".local", "state", "fizeau", "claude-quota.json"))
+	require.FileExists(t, filepath.Join(attemptHome, ".local", "state", "fizeau", "codex-quota.json"))
+	require.FileExists(t, filepath.Join(attemptHome, ".local", "state", "fizeau", "gemini-quota.json"))
 	require.NoFileExists(t, filepath.Join(attemptHome, ".codex", "logs_2.sqlite"))
 	require.NoFileExists(t, filepath.Join(attemptHome, ".claude", "history.jsonl"))
 }

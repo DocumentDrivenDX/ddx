@@ -759,6 +759,12 @@ func prepareDockerAttemptHome(homeDir string) error {
 		{filepath.Join(hostHome, ".claude", ".credentials.json"), filepath.Join(homeDir, ".claude", ".credentials.json")},
 		{filepath.Join(hostHome, ".claude", "settings.json"), filepath.Join(homeDir, ".claude", "settings.json")},
 		{filepath.Join(hostHome, ".claude.json"), filepath.Join(homeDir, ".claude.json")},
+		// Fizeau provider liveness reads its cached quota snapshots; without
+		// them a fresh per-attempt home has no live cloud provider and routing
+		// fails with no_viable_provider. Seed the snapshots from the host.
+		{filepath.Join(hostHome, ".local", "state", "fizeau", "claude-quota.json"), filepath.Join(homeDir, ".local", "state", "fizeau", "claude-quota.json")},
+		{filepath.Join(hostHome, ".local", "state", "fizeau", "codex-quota.json"), filepath.Join(homeDir, ".local", "state", "fizeau", "codex-quota.json")},
+		{filepath.Join(hostHome, ".local", "state", "fizeau", "gemini-quota.json"), filepath.Join(homeDir, ".local", "state", "fizeau", "gemini-quota.json")},
 	} {
 		if err := copyDockerAuthFileIfExists(file.src, file.dst); err != nil {
 			return err
