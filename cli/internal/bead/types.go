@@ -106,6 +106,12 @@ const (
 	// IssueTypeOperatorPrompt is the bead type used for operator-submitted
 	// prompts that the work runs as instructions.
 	IssueTypeOperatorPrompt = "operator-prompt"
+	// IssueTypeReviewFinding is a bead kind for findings produced by review engines.
+	// Parent must reference the bead under review.
+	IssueTypeReviewFinding = "review-finding"
+	// IssueTypeAlignmentReview is a bead kind for alignment review work.
+	// Parent must reference the bead under alignment.
+	IssueTypeAlignmentReview = "alignment-review"
 )
 
 // Default labels and other defaults for operator-prompt beads.
