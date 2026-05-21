@@ -1,0 +1,11 @@
+{
+  "attempt_id": "20260521T080743-0fb551fb",
+  "harness": "fiz",
+  "provider": "vidar",
+  "model": "Qwen3.6-27B-MLX-8bit",
+  "tokens": 375579,
+  "input_tokens": 374209,
+  "cached_tokens": 274432,
+  "cache_hit_rate": 0.423087655575272,
+  "output_tokens": 1370
+}
