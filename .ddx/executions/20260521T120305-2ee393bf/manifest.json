@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260521T120305-2ee393bf",
+  "bead_id": "ddx-57c40485",
+  "base_rev": "cd8b4d0fd153d1af12ddb2e48b36d4907752f362",
+  "created_at": "2026-05-21T12:03:12.650639696Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 6
+  },
+  "bead": {
+    "id": "ddx-57c40485",
+    "title": "execute-bead workers hold git index.lock for minutes; need lifetime tracking + fail-fast",
+    "description": "PROBLEM\nddx work --watch workers running execute-bead can hold the host repo's .git/index.lock for many minutes during a single bead execution. This serializes every other tracker-affecting operation in that repo (filing beads, dep edits, commits) and produces cascading tracker-lock-timeout failures for operators and other workers.\n\nOBSERVATION (Fizeau, 2026-05-17 21:38–21:44+ EDT)\n- .git/index.lock mtime 21:38; still held at 21:44 = 6+ minutes uninterrupted.\n- Holder: ddx work --watch (PID 90753) running execute-bead for fizeau-4b76e6b8 in worktree .ddx/executions/20260518T013652-2344d0e4.\n- Side-effects observed in the operator session: bead create commands intermittently failed with 'tracker lock timeout (max elapsed, lock: /Users/erik/Projects/fizeau/.ddx/.git-tracker.lock, owner pid: 2615737)' and 'tracker lock timeout (max elapsed, lock: ..., owner pid: 2809592)'. Both the git index.lock and the .ddx/.git-tracker.lock exhibit the same pattern: held far longer than the operation needs.\n- Five concurrent ddx work --watch daemons (PIDs 87523, 88624, 89333, 90753, 949868) plus a worker-spawned claude subprocess. The lock is held across the entire claude subprocess lifetime, not just the actual git mutation.\n\nWHY THIS IS A BUG\ngit's index.lock and any short-lived mutation lock should be held only for the duration of the mutation itself (single-digit seconds at most). Holding it across the full bead-execution lifetime (which includes a multi-minute LLM subprocess) means:\n1. Any concurrent ddx bead create/update/close from operators or other workers may time out.\n2. Operators cannot do tracker hygiene (annotate findings, file follow-ons) while a long bead runs.\n3. The error surface is misleading — 'tracker lock timeout' looks like a tracker bug, but the actual culprit is the index/staging-area lock.\n4. Other ddx work --watch daemons sit idle when they could be making progress on independent beads.\n\nPROPOSED FIX\nA. Scope every git mutation lock to the minimum operation, never across the LLM subprocess invocation. Specifically: do not hold .git/index.lock or .ddx/.git-tracker.lock while ddx is waiting on a claude/codex/gemini subprocess to return.\nB. Instrument lock lifetime — emit a structured metric (lock_name, acquired_at, released_at, duration_ms, holder_pid, operation) for every acquire/release.\nC. Fail-fast threshold — abort with a loud error if any worker holds a lock beyond a configured cap (proposed default: 10s for index.lock, 30s for tracker lock). Hung workers should release and let others through, not block the whole tracker.\nD. CI / load test — a multi-worker scenario test that proves 5 workers can each acquire and release the lock with p99 hold time under the cap.\n\nCROSS-REF\nFiled from Fizeau alignment-review session 2026-05-17 (AR-2026-05-17-repo). Originally surfaced during the no-static-fallback bead chain (parent fizeau-89eca738). No local Fizeau bead — this is a DDx infrastructure bug, filing directly here per AGENTS.md cross-repo triage pattern.",
+    "acceptance": "1. ddx work --watch never holds .git/index.lock across an LLM subprocess (claude/codex/gemini/etc.) invocation; lock is released before the subprocess starts and re-acquired only for the actual git mutation. Verified by an integration test that runs an execute-bead and asserts .git/index.lock mtime is older than the subprocess invocation timeline.\n2. Same property for .ddx/.git-tracker.lock: scope to the actual tracker file write, not across subprocess wait.\n3. Lock lifetime metric is emitted as a structured event (JSON line with lock_name, acquired_at, released_at, duration_ms, holder_pid, operation) for every acquire/release; visible in ddx logs.\n4. A configurable hold-time cap (default 10s for index.lock, 30s for tracker lock) is enforced: if a holder exceeds the cap, the worker logs an error, releases, and surfaces the violation in its execution evidence.\n5. A multi-worker integration test (5+ concurrent ddx work --watch on independent beads) asserts p99 lock hold time stays under the cap and no operator-issued ddx bead create/update/close in a sibling shell times out.\n6. Documentation update in ddx README or AGENTS.md naming the lock-lifetime contract.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"ddx work --watch never holds .git/index.lock across an LLM subprocess (claude/codex/gemini/etc.) invocation; lock is released before the subprocess starts and re-acquired only for the actual git mutation. Verified by an integration test that runs an execute-bead and asserts .git/index.lock mtime is older than the subprocess invocation timeline.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":2,\"text\":\"Same property for .ddx/.git-tracker.lock: scope to the actual tracker file write, not across subprocess wait.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Lock lifetime metric is emitted as a structured event (JSON line with lock_name, acquired_at, released_at, duration_ms, holder_pid, operation) for every acquire/release; visible in ddx logs.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"A configurable hold-time cap (default 10s for index.lock, 30s for tracker lock) is enforced: if a holder exceeds the cap, the worker logs an error, releases, and surfaces the violation in its execution evidence.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"A multi-worker integration test (5+ concurrent ddx work --watch on independent beads) asserts p99 lock hold time stays under the cap and no operator-issued ddx bead create/update/close in a sibling shell times out.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"Documentation update in ddx README or AGENTS.md naming the lock-lifetime contract.\",\"kind\":\"mechanical\",\"verifiable\":true}]",
+          "created_at": "2026-05-21T11:28:07.209947554Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.33 threshold=0.50 verifiable=2/6"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"vidar\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-21T12:03:04.260681477Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=vidar model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260521T112923-269b3a3d\",\"harness\":\"fiz\",\"provider\":\"vidar\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"input_tokens\":336190,\"output_tokens\":8633,\"total_tokens\":344823,\"cost_usd\":0,\"duration_ms\":2011609,\"exit_code\":1}",
+          "created_at": "2026-05-21T12:03:04.307852782Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=344823 model=Qwen3.6-27B-MLX-8bit"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260521T120305-2ee393bf",
+    "prompt": ".ddx/executions/20260521T120305-2ee393bf/prompt.md",
+    "manifest": ".ddx/executions/20260521T120305-2ee393bf/manifest.json",
+    "result": ".ddx/executions/20260521T120305-2ee393bf/result.json",
+    "checks": ".ddx/executions/20260521T120305-2ee393bf/checks.json",
+    "usage": ".ddx/executions/20260521T120305-2ee393bf/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-57c40485-20260521T120305-2ee393bf"
+  },
+  "prompt_sha": "f5157d446cf721a289bd17ab871227d4d4a0dc250c0eab90504cd9b4c398042d"
+}
