@@ -65,10 +65,30 @@ func (s *Store) ParkToProposed(id string, reason ParkReason, mutate func(*Bead))
 // appends an intake.blocked event. It atomically performs the transition and
 // appends the event. The mutate callback runs after the status transition and
 // before the event is appended; pass nil if no additional mutations are needed.
+// If the body contains a rule_fingerprint, dedup checks existing intake.blocked
+// events and skips the append if a matching fingerprint already exists.
 func (s *Store) ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail string, body map[string]any, at time.Time, mutate func(*Bead)) error {
 	// Transition to proposed with intake rejection
 	if err := s.ParkToProposed(id, ParkIntakeRejection, mutate); err != nil {
 		return err
+	}
+
+	// Check for rule_fingerprint dedup
+	ruleFp, ok := body["rule_fingerprint"].(string)
+	if ok && ruleFp != "" {
+		events, err := s.Events(id)
+		if err == nil {
+			for _, ev := range events {
+				if ev.Kind == "intake.blocked" {
+					var existing map[string]any
+					if err := json.Unmarshal([]byte(ev.Body), &existing); err == nil {
+						if existing["rule_fingerprint"] == ruleFp {
+							return nil
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Append the intake.blocked event
