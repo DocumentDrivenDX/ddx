@@ -541,6 +541,38 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 					fmt.Fprintf(out, "%s: %v\n", k, v)
 				}
 			}
+
+			// Show intake.blocked events with structured fields
+			events, err := s.Events(args[0])
+			if err == nil && len(events) > 0 {
+				var intakeBlockedEvents []bead.BeadEvent
+				for _, ev := range events {
+					if ev.Kind == "intake.blocked" || ev.Kind == "pre_claim_intake.blocked" {
+						intakeBlockedEvents = append(intakeBlockedEvents, ev)
+					}
+				}
+				if len(intakeBlockedEvents) > 0 {
+					fmt.Fprintf(out, "IntakeBlocked:\n")
+					for _, ev := range intakeBlockedEvents {
+						var body map[string]any
+						if err := json.Unmarshal([]byte(ev.Body), &body); err != nil {
+							fmt.Fprintf(out, "  - (parse error: %v)\n", err)
+							continue
+						}
+						ruleFp := ""
+						if fp, ok := body["rule_fingerprint"].(string); ok {
+							ruleFp = fp
+						}
+						operatorOverride := false
+						if override, ok := body["operator_override"].(bool); ok {
+							operatorOverride = override
+						}
+						fmt.Fprintf(out, "  - %s | outcome: %s | fingerprint: %s | override: %v\n",
+							ev.CreatedAt.Format("2006-01-02 15:04:05"), ev.Summary, ruleFp, operatorOverride)
+					}
+				}
+			}
+
 			return nil
 		},
 	}

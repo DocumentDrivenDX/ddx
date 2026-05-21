@@ -1193,3 +1193,82 @@ func TestBeadReopenClearsClaimFields(t *testing.T) {
 	_, hasClaimedPID := b["claimed-pid"]
 	assert.False(t, hasClaimedPID, "claimed-pid should be cleared on reopen")
 }
+
+func TestBeadShowSurfacesFingerprint(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+	store := factory.beadStore()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Test fingerprint rendering", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	// Append an intake.blocked event with rule_fingerprint
+	err = store.AppendEvent(id, bead.BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   "operator_required",
+		Body:      `{"rule_fingerprint":"fp-12345","outcome":"intake_blocked"}`,
+		Actor:     "test",
+		Source:    "test",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id)
+	require.NoError(t, err)
+
+	assert.Contains(t, showOut, "IntakeBlocked:", "output should contain IntakeBlocked section")
+	assert.Contains(t, showOut, "fp-12345", "output should contain rule_fingerprint")
+	assert.Contains(t, showOut, "operator_required", "output should contain outcome")
+}
+
+func TestBeadShowSurfacesOperatorOverride(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+	store := factory.beadStore()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Test override rendering", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	// Append an intake.blocked event with operator_override set to true
+	err = store.AppendEvent(id, bead.BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   "readiness_failed",
+		Body:      `{"rule_fingerprint":"fp-67890","operator_override":true,"outcome":"intake_blocked"}`,
+		Actor:     "test",
+		Source:    "test",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id)
+	require.NoError(t, err)
+
+	assert.Contains(t, showOut, "IntakeBlocked:", "output should contain IntakeBlocked section")
+	assert.Contains(t, showOut, "override: true", "output should distinguish true override")
+	assert.Contains(t, showOut, "readiness_failed", "output should contain outcome")
+
+	// Now test with operator_override set to false
+	createOut2, err := executeCommand(rootCmd, "bead", "create", "Test false override", "--type", "task")
+	require.NoError(t, err)
+	id2 := strings.TrimSpace(createOut2)
+
+	err = store.AppendEvent(id2, bead.BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   "readiness_failed",
+		Body:      `{"rule_fingerprint":"fp-99999","operator_override":false,"outcome":"intake_blocked"}`,
+		Actor:     "test",
+		Source:    "test",
+		CreatedAt: time.Now(),
+	})
+	require.NoError(t, err)
+
+	showOut2, err := executeCommand(rootCmd, "bead", "show", id2)
+	require.NoError(t, err)
+
+	assert.Contains(t, showOut2, "IntakeBlocked:", "output should contain IntakeBlocked section")
+	assert.Contains(t, showOut2, "override: false", "output should distinguish false override")
+}
