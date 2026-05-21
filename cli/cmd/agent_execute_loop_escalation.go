@@ -10,12 +10,21 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	powerladder "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
 
 type escalationFloorFinder interface {
 	Next(actualPower int) (int, error)
+}
+
+type tryLoopFloorFinder struct {
+	ladder escalationFloorFinder
+}
+
+func (f tryLoopFloorFinder) Next(actualPower int) (int, error) {
+	return nextEscalationFloor(f.ladder, actualPower)
 }
 
 func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
@@ -283,8 +292,10 @@ func runEscalatingPowerAttempts(
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
 	perBeadTracker *policyescalation.PerBeadCostTracker,
+	allowInfrastructureRetry bool,
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
+	floors := tryLoopFloorFinder{ladder: ladder}
 	for {
 		report, err := attempt(ctx, minPower)
 		if recordAttempt != nil && report.BeadID != "" {
@@ -296,9 +307,6 @@ func runEscalatingPowerAttempts(
 		if err != nil {
 			return report, err
 		}
-		if report.Disrupted || isBudgetExhaustedFailure(report) || !policyescalation.ShouldEscalate(report.Status) || policyescalation.IsInfrastructureFailure(report.Status, report.Detail) {
-			return report, nil
-		}
 		if perBeadTracker != nil {
 			if detail, tripped := perBeadTracker.Tripped(); tripped {
 				report.Status = agent.ExecuteBeadStatusExecutionFailed
@@ -307,22 +315,18 @@ func runEscalatingPowerAttempts(
 				return report, nil
 			}
 		}
-		var nextPower int
-		if report.ActualPower > 0 {
-			// Evidence-driven retry: bump MinPower one above the actual power
-			// the previous route ran at. Profile reselection in the caller's
-			// attempt callback moves to a stronger policy band only when the
-			// new floor exceeds the current band's MaxPower; otherwise the
-			// same policy intent is preserved so DDx does not duplicate
-			// Fizeau policy bounds as initial dispatch floors.
-			nextPower = report.ActualPower + 1
-		} else {
-			next, nextErr := nextEscalationFloor(ladder, minPower)
-			if nextErr != nil {
-				return report, nil
-			}
-			nextPower = next
+		transition := executeloop.DecideAttemptTransition(executeloop.AttemptTransitionInput{
+			Status:                   report.Status,
+			Detail:                   report.Detail,
+			CurrentMinPower:          minPower,
+			ActualPower:              report.ActualPower,
+			Disrupted:                report.Disrupted,
+			BudgetExhausted:          isBudgetExhaustedFailure(report),
+			AllowInfrastructureRetry: allowInfrastructureRetry,
+		}, floors)
+		if transition.Action != executeloop.TryLoopActionRetryPower {
+			return report, nil
 		}
-		minPower = nextPower
+		minPower = transition.NextMinPower
 	}
 }

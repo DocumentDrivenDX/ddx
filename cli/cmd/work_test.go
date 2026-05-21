@@ -437,7 +437,7 @@ agent:
 	}
 }
 
-func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) {
+func TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -470,7 +470,7 @@ func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) 
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-powerClass-retry",
-		Title:     "Work retries within the selected policy at MinPower=actual+1",
+		Title:     "Work retries semantic failures at the next viable MinPower",
 		IssueType: "bug",
 	}))
 
@@ -490,7 +490,63 @@ func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) 
 	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred no-requirement default policy")
 	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
 	assert.Equal(t, "default", requests[1].Policy, "retry should stay within the selected policy band")
-	assert.Equal(t, 6, requests[1].MinPower, "retry should add MinPower=actual+1 (5+1=6) as an evidence-driven floor")
+	assert.Equal(t, 7, requests[1].MinPower, "semantic retry should use the next viable model-power floor")
+}
+
+func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	implementerCalls := 0
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		if req.Role != "implementer" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+			close(ch)
+			return ch, nil
+		}
+		implementerCalls++
+		if implementerCalls == 1 {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"provider request failed: dial tcp 100.70.199.113:1235: connect: connection refused","routing_actual":{"provider":"vidar","model":"qwen-local","power":5}}`)}
+		} else {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+		}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-zero-config-work-provider-connectivity-retry",
+		Title:     "Work routes around failed provider connectivity",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	requests := capturedImplementationRequests(stub)
+	require.Len(t, requests, 2, "ddx work should retry provider connectivity with a higher floor; output=%q err=%v", out, err)
+	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred no-requirement default policy")
+	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
+	assert.Equal(t, "default", requests[1].Policy, "retry should preserve the selected policy intent")
+	assert.Equal(t, 6, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
 }
 
 func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {

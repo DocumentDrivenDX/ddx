@@ -52,7 +52,7 @@ eligible retry.
 | `no_changes` | Agent ran but produced no diff | Leave open; retry only if policy allows |
 | `land_conflict` | Merge/finalization failed | Stop as operator-action or cooldown; do not power-retry |
 | `post_run_check_failed` | Post-run checks failed after a valid attempt | Retry may raise `MinPower` if policy allows |
-| `execution_failed` | Agent or environment errored | Classify before retry; deterministic setup failures do not power-retry |
+| `execution_failed` | Agent or environment errored | Classify before retry; capability failures use the next viable power floor, and provider-connectivity failures with concrete route evidence may retry with `MinPower = actual_power + 1` |
 | `structural_validation_failed` | Bead or prompt inputs invalid | Stop; fix tracker/spec input |
 
 ## Common Operations
@@ -82,10 +82,15 @@ ddx run --min-power 10 --prompt task.md
 
 ## Retry Boundary
 
-DDx may raise `MinPower` only when DDx-owned evidence shows a stronger model
-could plausibly help after a valid attempt started. It must not power-retry
-dirty worktrees, merge conflicts, invalid bead metadata, unresolved
-dependencies, config parse errors, missing binaries, auth failures, toolchain
+DDx may raise `MinPower` only when DDx-owned evidence shows a retry can move
+the bead forward after a valid attempt started. Capability-sensitive failures
+use the next viable model-power ladder floor. Provider-connectivity failures
+are infrastructure failures, but when Fizeau reports a concrete failed route
+with `actual_power` and the operator did not pin harness/provider/model, DDx may
+retry immediately with `MinPower = actual_power + 1` so Fizeau can choose a
+different eligible route. DDx must not power-retry dirty worktrees, merge
+conflicts, invalid bead metadata, unresolved dependencies, config parse errors,
+missing binaries, auth failures without alternate route evidence, toolchain
 setup failures, or passthrough exhaustion.
 
 `ResolveRoute` and route candidate traces are status/debug-only. Normal

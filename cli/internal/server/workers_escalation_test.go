@@ -53,7 +53,7 @@ func TestEscalationLadder_WiredIntoExecutor(t *testing.T) {
 			CostUSD:    report.CostUSD,
 			DurationMS: report.DurationMS,
 		})
-	})
+	}, true)
 
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
@@ -79,7 +79,7 @@ func TestEscalationLadder_StopsAtFinalRung(t *testing.T) {
 			Detail:      "build failed",
 			ActualPower: requestedMinPower,
 		}, nil
-	}, nil)
+	}, nil, true)
 
 	require.NoError(t, err)
 	require.Equal(t, agent.ExecuteBeadStatusExecutionFailed, report.Status)

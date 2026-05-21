@@ -18,7 +18,7 @@ This TD specifies the **operational contract** by which the DDx drain loop / exe
 **Scope:**
 
 1. Persisted status enumeration (§2) — the canonical bead lifecycle values this operational layer may consume.
-2. The outcome → state mapping table (§3) — what the drain loop does with each `execute-bead` outcome.
+2. The try-loop transition machine and outcome → state mapping table (§3) — what the drain loop does with each `execute-bead` outcome.
 3. Worker-state enumeration (§4) — the in-process state of the drain loop, distinct from bead state.
 4. Auto-recovery role catalogue (§5) — when and how the drain proxy dispatches reframer/decomposer roles.
 5. `consecutive_ladder_exhaustions` policy (§6) — when the counter is incremented, reset, and threshold-triggered.
@@ -119,6 +119,32 @@ Both paths append an event (`lifecycle_reconciled` for reconcile-close, implicit
 - Automatic implementation retry is bounded and applies only to classifications where the implementer had valid task context and further automated work can plausibly resolve the finding. Spec gaps, missing acceptance criteria, decomposition overflow, and exhausted reviewer failures require operator resolution only after the automatic reframe/decompose/replacement sequence cannot produce executable work.
 - Latest terminal events and close evidence beat stale `work-*` `extra` metadata. Reconciliation may clear stale management fields, but MUST preserve append-only events and evidence.
 - Closure paths are covered in detail in §3.1: reconcile-close (automatic, dependency-driven) vs evidence-close (manual or execution-driven). See §3.1 for the safety and evidence requirements of each path.
+
+### 3.1.2 Try-Loop Attempt State Machine
+
+`ddx try` and the per-bead attempt inside `ddx work` use a small in-memory
+state machine before any durable bead lifecycle mutation. The implementation
+entrypoint is `cli/internal/agent/executeloop.DecideAttemptTransition`; CLI and
+server workers MUST call the same transition function so retry behavior does
+not drift between execution modes.
+
+The try-loop states are control-flow states only. They do not add persisted bead
+statuses.
+
+| State | Input | Transition | Action |
+|---|---|---|---|
+| `classify_result` | `success`, `already_satisfied`, `no_changes`, structural validation, or any non-escalatable status | `stop_attempt` | Return the report to the lifecycle mapper in §3.2. |
+| `classify_result` | disrupted report, budget exhaustion, or a hard passthrough/operator constraint | `stop_attempt` | Return the report; do not raise `MinPower`. |
+| `classify_result` | capability-sensitive failure such as implementation failure, post-run check failure, or review block | `retry_power` when the power ladder has a higher viable floor; otherwise `stop_attempt` | Retry the same bead with only `MinPower` raised to the next viable catalog power. Preserve policy intent and all operator pins. |
+| `classify_result` | provider-connectivity infrastructure failure with concrete route evidence (`actual_power > 0`) and no operator harness/provider/model pin | `retry_power` | Retry immediately with `MinPower = actual_power + 1`, preserving policy intent. This asks Fizeau to route above the failed low-power route without DDx naming a tier, provider, or model. |
+| `classify_result` | infrastructure failure without concrete route evidence, or with an operator harness/provider/model pin | `stop_attempt` | Record/release according to §3.2. A smarter model cannot fix an absent service when DDx has no alternate power signal, and pins must not be widened silently. |
+| `retry_power` | retry finishes | `classify_result` | Reclassify the new report through the same table. |
+| `stop_attempt` | report returned to worker | §3.2 outcome mapping | Apply the durable bead lifecycle mutation, event, and recovery policy. |
+
+`policy` remains routing intent. `MinPower` is only a retry/fallback bound after
+DDx has attempt evidence. Initial zero-config dispatch MUST NOT duplicate the
+selected policy's lower bound as `MinPower`; Fizeau owns the concrete route
+within the selected policy and any numeric power bounds DDx sends.
 
 ### 3.2 Outcome → Label / Event / Extra Mapping
 

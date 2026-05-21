@@ -298,132 +298,136 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		executor = f.tryExecutorOverride
 	} else {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, execBeadID string) (agent.ExecuteBeadReport, error) {
-			requestMinPower := minPower
-			requestProfile := profile
-			var routingNote string
-			targetBead := target
-			if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
-				targetBead = b
-			}
-			routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
-			inferredPolicy := routingIntent.InferredPowerClass
-			reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
-				report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-				applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
-				return report
-			}
-			if autoInferPowerClass {
-				var unavailableReport agent.ExecuteBeadReport
-				var unavailable bool
-				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestMinPower); selectErr == nil && selection.Name != "" {
-					requestProfile = selection.Name
-					routingNote = selection.Note
-					if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
-						unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
-						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
-						return unavailableReport, nil
-					}
-				} else {
-					requestMinPower, unavailableReport, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, requestMinPower, maxPower, loadLadder())
-					if unavailable {
-						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
-						return unavailableReport, nil
-					}
-				}
-			}
-
-			loopOverrides := config.CLIOverrides{
-				Harness:           harness,
-				Model:             model,
-				Provider:          provider,
-				Profile:           requestProfile,
-				Effort:            effort,
-				MinPower:          requestMinPower,
-				MaxPower:          maxPower,
-				OpaquePassthrough: true, // ddx try treats flags as opaque passthrough
-				AttemptBackend:    attemptBackend,
-			}
-			if requestTimeout > 0 {
-				loopOverrides.ProviderRequestTimeout = &requestTimeout
-			}
-			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
-			res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
-				FromRev:         fromRev,
-				Output:          cmd.OutOrStdout(),
-				BeadEvents:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
-				ResourceChecker: resourceChecker,
-			}, gitOps)
-			if execErr != nil && res == nil {
-				return agent.ExecuteBeadReport{}, execErr
-			}
-			if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
-				return reportFromResult(res), nil
-			}
-			if execErr != nil {
-				agent.MarkResultExecutionError(res, execErr)
-				return reportFromResult(res), nil
-			}
-			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				if wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps); ctxErr != nil {
-					fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate-context setup failed: %v (skipping required-gate eval)\n", ctxErr)
-				} else if wt != "" {
-					defer cleanup()
-					checksAbs := filepath.Join(projectRoot, res.ExecutionDir, "checks.json")
-					checksRel := filepath.Join(res.ExecutionDir, "checks.json")
-					anyFailed, ratchetFailed, evalErr := agent.EvaluateRequiredGatesForResult(wt, ids, res, projectRoot, checksAbs, checksRel)
-					if evalErr != nil {
-						fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate evaluation failed: %v (skipping)\n", evalErr)
-					} else if anyFailed || ratchetFailed {
-						preserveRef := agent.PreserveRef(res.BeadID, res.BaseRev)
-						if upErr := gitOps.UpdateRef(projectRoot, preserveRef, res.ResultRev); upErr != nil {
-							agent.MarkResultLandError(projectRoot, res, upErr)
-						} else {
-							res.PreserveRef = preserveRef
-							res.Outcome = "preserved"
-							if ratchetFailed {
-								res.Reason = agent.RatchetPreserveReason
-							} else {
-								res.Reason = "post-run checks failed"
-							}
-							res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-							res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
-						}
-						_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-						report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-						applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
-						return report, nil
-					}
-				}
+			singleAttempt := func(ctx context.Context, execBeadID string, requestMinPower int) (agent.ExecuteBeadReport, error) {
+				requestProfile := profile
+				var routingNote string
 				targetBead := target
-				landRes, _, landErr := agent.SubmitWithPreMergeChecks(
-					ctx, projectRoot, targetBead, res,
-					func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-					bead.NewStore(ddxroot.JoinProject(projectRoot)),
-					resolveClaimAssignee(), "ddx try",
-					nil,
-				)
-				if landErr == nil {
-					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
-					_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-				} else {
-					agent.MarkResultLandError(projectRoot, res, landErr)
-					_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
+				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
+					targetBead = b
+				}
+				routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
+				inferredPolicy := routingIntent.InferredPowerClass
+				reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
+					report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+					applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
+					return report
+				}
+				if autoInferPowerClass {
+					var unavailableReport agent.ExecuteBeadReport
+					var unavailable bool
+					if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, requestMinPower); selectErr == nil && selection.Name != "" {
+						requestProfile = selection.Name
+						routingNote = selection.Note
+						if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
+							unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
+							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
+							return unavailableReport, nil
+						}
+					} else {
+						requestMinPower, unavailableReport, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, requestMinPower, maxPower, loadLadder())
+						if unavailable {
+							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
+							return unavailableReport, nil
+						}
+					}
+				}
+
+				loopOverrides := config.CLIOverrides{
+					Harness:           harness,
+					Model:             model,
+					Provider:          provider,
+					Profile:           requestProfile,
+					Effort:            effort,
+					MinPower:          requestMinPower,
+					MaxPower:          maxPower,
+					OpaquePassthrough: true, // ddx try treats flags as opaque passthrough
+					AttemptBackend:    attemptBackend,
+				}
+				if requestTimeout > 0 {
+					loopOverrides.ProviderRequestTimeout = &requestTimeout
+				}
+				attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
+				res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
+					FromRev:         fromRev,
+					Output:          cmd.OutOrStdout(),
+					BeadEvents:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
+					ResourceChecker: resourceChecker,
+				}, gitOps)
+				if execErr != nil && res == nil {
+					return agent.ExecuteBeadReport{}, execErr
+				}
+				if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
 					return reportFromResult(res), nil
 				}
-			} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {
-				if res.ResultRev != "" && res.ResultRev != res.BaseRev {
-					res.Outcome = "preserved"
-				} else {
-					res.Outcome = "error"
+				if execErr != nil {
+					agent.MarkResultExecutionError(res, execErr)
+					return reportFromResult(res), nil
 				}
-				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-			} else if res != nil && res.ResultRev == res.BaseRev {
-				res.Outcome = "no-changes"
-				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+				if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+					if wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps); ctxErr != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate-context setup failed: %v (skipping required-gate eval)\n", ctxErr)
+					} else if wt != "" {
+						defer cleanup()
+						checksAbs := filepath.Join(projectRoot, res.ExecutionDir, "checks.json")
+						checksRel := filepath.Join(res.ExecutionDir, "checks.json")
+						anyFailed, ratchetFailed, evalErr := agent.EvaluateRequiredGatesForResult(wt, ids, res, projectRoot, checksAbs, checksRel)
+						if evalErr != nil {
+							fmt.Fprintf(cmd.ErrOrStderr(), "ddx: warning: gate evaluation failed: %v (skipping)\n", evalErr)
+						} else if anyFailed || ratchetFailed {
+							preserveRef := agent.PreserveRef(res.BeadID, res.BaseRev)
+							if upErr := gitOps.UpdateRef(projectRoot, preserveRef, res.ResultRev); upErr != nil {
+								agent.MarkResultLandError(projectRoot, res, upErr)
+							} else {
+								res.PreserveRef = preserveRef
+								res.Outcome = "preserved"
+								if ratchetFailed {
+									res.Reason = agent.RatchetPreserveReason
+								} else {
+									res.Reason = "post-run checks failed"
+								}
+								res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+								res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
+							}
+							_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
+							report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+							applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
+							return report, nil
+						}
+					}
+					targetBead := target
+					landRes, _, landErr := agent.SubmitWithPreMergeChecks(
+						ctx, projectRoot, targetBead, res,
+						func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
+						bead.NewStore(ddxroot.JoinProject(projectRoot)),
+						resolveClaimAssignee(), "ddx try",
+						nil,
+					)
+					if landErr == nil {
+						agent.ApplyLandResultToExecuteBeadResult(res, landRes)
+						_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
+					} else {
+						agent.MarkResultLandError(projectRoot, res, landErr)
+						_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
+						return reportFromResult(res), nil
+					}
+				} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {
+					if res.ResultRev != "" && res.ResultRev != res.BaseRev {
+						res.Outcome = "preserved"
+					} else {
+						res.Outcome = "error"
+					}
+					res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+				} else if res != nil && res.ResultRev == res.BaseRev {
+					res.Outcome = "no-changes"
+					res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+				}
+				report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
+				applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
+				return report, nil
 			}
-			report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
-			applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
-			return report, nil
+			return runEscalatingPowerAttempts(ctx, minPower, loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+				return singleAttempt(ctx, execBeadID, requestedMinPower)
+			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "")
 		})
 	}
 

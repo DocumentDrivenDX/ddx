@@ -654,14 +654,24 @@ func nextEscalationFloor(l *powerladder.Ladder, actualPower int) (int, error) {
 	}
 }
 
+type tryLoopFloorFinder struct {
+	ladder *powerladder.Ladder
+}
+
+func (f tryLoopFloorFinder) Next(actualPower int) (int, error) {
+	return nextEscalationFloor(f.ladder, actualPower)
+}
+
 func runEscalatingPowerAttempts(
 	ctx context.Context,
 	initialMinPower int,
 	ladder *powerladder.Ladder,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
+	allowInfrastructureRetry bool,
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
+	floors := tryLoopFloorFinder{ladder: ladder}
 	for {
 		report, err := attempt(ctx, minPower)
 		if recordAttempt != nil && report.BeadID != "" {
@@ -670,18 +680,19 @@ func runEscalatingPowerAttempts(
 		if err != nil {
 			return report, err
 		}
-		if report.Disrupted || isBudgetExhaustedFailure(report) || !policyescalation.ShouldEscalate(report.Status) || policyescalation.IsInfrastructureFailure(report.Status, report.Detail) {
+		transition := executeloop.DecideAttemptTransition(executeloop.AttemptTransitionInput{
+			Status:                   report.Status,
+			Detail:                   report.Detail,
+			CurrentMinPower:          minPower,
+			ActualPower:              report.ActualPower,
+			Disrupted:                report.Disrupted,
+			BudgetExhausted:          isBudgetExhaustedFailure(report),
+			AllowInfrastructureRetry: allowInfrastructureRetry,
+		}, floors)
+		if transition.Action != executeloop.TryLoopActionRetryPower {
 			return report, nil
 		}
-		basis := minPower
-		if report.ActualPower > 0 {
-			basis = report.ActualPower
-		}
-		nextPower, nextErr := nextEscalationFloor(ladder, basis)
-		if nextErr != nil {
-			return report, nil
-		}
-		minPower = nextPower
+		minPower = transition.NextMinPower
 	}
 }
 
@@ -916,7 +927,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			report, err := runEscalatingPowerAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return attemptWithCostCap(ctx, beadID, requestedMinPower)
-			}, recordAttempt)
+			}, recordAttempt, strings.TrimSpace(spec.Harness) == "" && strings.TrimSpace(spec.Provider) == "" && strings.TrimSpace(spec.Model) == "")
 			if len(attempts) > 0 {
 				winningPowerClass := ""
 				if report.Status == agent.ExecuteBeadStatusSuccess && report.PowerClass != "" {

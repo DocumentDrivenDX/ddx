@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -606,6 +607,62 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	assert.Empty(t, lastReq.Harness, "zero-config routing must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config routing must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
+}
+
+func TestTryZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	implementerCalls := 0
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		if req.Role != "implementer" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+			close(ch)
+			return ch, nil
+		}
+		implementerCalls++
+		if implementerCalls == 1 {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"provider request failed: dial tcp 100.70.199.113:1235: connect: connection refused","routing_actual":{"provider":"vidar","model":"qwen-local","power":5}}`)}
+		} else {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+		}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-zero-config-try-provider-connectivity-retry",
+		Title:     "Try routes around failed provider connectivity",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"try",
+		"ddx-zero-config-try-provider-connectivity-retry",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	requests := capturedImplementationRequests(stub)
+	require.Len(t, requests, 2, "ddx try should use the shared try-loop retry state machine; output=%q err=%v", out, err)
+	assert.Equal(t, "default", requests[0].Policy)
+	assert.Equal(t, 0, requests[0].MinPower)
+	assert.Equal(t, "default", requests[1].Policy)
+	assert.Equal(t, 6, requests[1].MinPower)
 }
 
 func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {

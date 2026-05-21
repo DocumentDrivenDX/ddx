@@ -508,6 +508,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				},
 				nil,
 				perBeadTracker,
+				strings.TrimSpace(spec.Harness) == "" && strings.TrimSpace(spec.Provider) == "" && strings.TrimSpace(spec.Model) == "",
 			)
 			if err == nil {
 				accumulateBilledCost(report)

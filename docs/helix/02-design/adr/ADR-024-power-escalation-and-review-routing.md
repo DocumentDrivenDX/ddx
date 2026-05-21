@@ -92,8 +92,19 @@ loop over concrete route names.
 
 Infrastructure failures are not capability failures. Provider 5xx responses,
 network unreachability, command-not-found, authentication failures, quota
-exhaustion, and analogous transport/setup failures do not consume escalation
-budget. DDx records the failure and leaves the bead immediately reclaimable.
+exhaustion, and analogous transport/setup failures do not consume semantic
+escalation budget. DDx records the failure and leaves the bead immediately
+reclaimable.
+
+Provider-connectivity failures have one retryable routing exception. If Fizeau
+reports concrete route evidence (`actual_power > 0`) and the operator did not
+pin `--harness`, `--provider`, or `--model`, DDx may immediately retry the same
+policy intent with `MinPower = actual_power + 1`. This is not provider/model
+fallback inside DDx; it is a numeric bound that lets Fizeau select a different
+eligible route above the failed low-power provider. If no concrete route
+evidence exists, or if an operator pin is present, DDx must stop the current
+attempt and preserve the pin unchanged.
+
 A per-bead `work-retry-after` cooldown MUST NOT be applied for
 `provider_connectivity` or `no_viable_provider` outcomes: the route-exclusion
 window and the worker's `paused-infra` state are the correct mechanisms. A
