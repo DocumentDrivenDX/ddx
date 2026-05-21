@@ -383,6 +383,124 @@ func TestNilPayloadValidation(t *testing.T) {
 	}
 }
 
+// TestInjectReviewFindingFullLifecycle tests end-to-end injection and retrieval
+// demonstrating that review-finding beads can be injected, queried, and have their
+// payloads preserved for later processing by the execute loop.
+func TestInjectReviewFindingFullLifecycle(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	// Create a parent bead (simulating a completed work item).
+	parent := &Bead{
+		ID:        "parent-work-item-001",
+		Title:     "Completed Task",
+		Status:    StatusClosed,
+		IssueType: "task",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := store.Create(parent); err != nil {
+		t.Fatalf("Create parent: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Inject a review-finding bead (as would be done by an external review system
+	// calling Store.Inject with a ReviewFindingPayload after the parent completes).
+	reviewPayload := &ReviewFindingPayload{
+		Verdict:    "REQUEST_CHANGES",
+		Findings:   "Code review identified several areas for improvement",
+		ResultRev:  "abc123def456",
+		ReviewedBy: "alice@example.com",
+	}
+
+	reviewID, err := store.Inject(ctx, parent.ID, reviewPayload, InjectOptions{
+		Title:       "Code Review Findings",
+		Description: "Findings from automated code review",
+		Labels:      []string{"kind:review-finding", "source:automated"},
+		Priority:    1,
+	})
+	if err != nil {
+		t.Fatalf("Inject review-finding: %v", err)
+	}
+
+	// Retrieve the injected bead and verify its properties.
+	bead, err := store.Get(reviewID)
+	if err != nil {
+		t.Fatalf("Get injected bead: %v", err)
+	}
+
+	// Verify bead metadata.
+	if bead.IssueType != IssueTypeReviewFinding {
+		t.Errorf("expected kind=%s, got %s", IssueTypeReviewFinding, bead.IssueType)
+	}
+	if bead.Status != StatusOpen {
+		t.Errorf("expected status=%s, got %s", StatusOpen, bead.Status)
+	}
+	if bead.Parent != parent.ID {
+		t.Errorf("expected parent=%s, got %s", parent.ID, bead.Parent)
+	}
+	if bead.Title != "Code Review Findings" {
+		t.Errorf("expected title preserved, got %s", bead.Title)
+	}
+
+	// Verify payload is stored and can be extracted.
+	if bead.Extra == nil {
+		t.Fatalf("bead.Extra is nil, cannot extract payload")
+	}
+
+	payloadData, ok := bead.Extra["payload"]
+	if !ok {
+		t.Fatalf("payload not found in bead.Extra")
+	}
+
+	payloadMap, ok := payloadData.(map[string]interface{})
+	if !ok {
+		t.Fatalf("payload has unexpected type: %T", payloadData)
+	}
+
+	// Verify all payload fields are preserved for execute-loop processing.
+	if v, ok := payloadMap["verdict"]; !ok || v != "REQUEST_CHANGES" {
+		t.Errorf("verdict not preserved: %v", v)
+	}
+	if v, ok := payloadMap["findings"]; !ok || v != "Code review identified several areas for improvement" {
+		t.Errorf("findings not preserved: %v", v)
+	}
+	if v, ok := payloadMap["result_rev"]; !ok || v != "abc123def456" {
+		t.Errorf("result_rev not preserved: %v", v)
+	}
+	if v, ok := payloadMap["reviewed_by"]; !ok || v != "alice@example.com" {
+		t.Errorf("reviewed_by not preserved: %v", v)
+	}
+
+	// Test idempotency: injecting the same payload again should return the same ID.
+	reviewID2, err := store.Inject(ctx, parent.ID, reviewPayload, InjectOptions{
+		Title: "Code Review Findings",
+	})
+	if err != nil {
+		t.Fatalf("Second inject: %v", err)
+	}
+	if reviewID2 != reviewID {
+		t.Errorf("expected idempotent ID %s, got %s", reviewID, reviewID2)
+	}
+
+	// Verify that all beads from this parent can be queried.
+	all, err := store.ReadAll(ctx)
+	if err != nil {
+		t.Fatalf("ReadAll: %v", err)
+	}
+
+	var reviewBeads int
+	for _, b := range all {
+		if b.Parent == parent.ID && b.IssueType == IssueTypeReviewFinding {
+			reviewBeads++
+		}
+	}
+	if reviewBeads != 1 {
+		t.Errorf("expected 1 review-finding bead for parent, got %d", reviewBeads)
+	}
+}
+
 // Helper to check if string contains substring.
 func contains(s, substr string) bool {
 	return len(s) > 0 && len(substr) > 0 && (s == substr || (len(s) >= len(substr)))

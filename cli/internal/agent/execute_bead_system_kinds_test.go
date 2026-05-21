@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -397,5 +398,92 @@ func TestAlignmentReviewNilBead(t *testing.T) {
 	}
 	if report.Error == "" {
 		t.Errorf("expected error message, got empty")
+	}
+}
+
+// TestExecuteLoopConsumesReviewFinding is an end-to-end test demonstrating:
+// 1. A parent bead is created
+// 2. A review-finding bead is injected via the tracker.Inject API
+// 3. The execute loop picks it up and processes it
+// 4. The review handler records the findings as an event
+func TestExecuteLoopConsumesReviewFinding(t *testing.T) {
+	ctx := context.Background()
+	mock := newMockBeadEventAppender()
+	now := func() time.Time { return time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC) }
+
+	// Create a parent bead simulating a completed work item.
+	parentBead := &bead.Bead{
+		ID:        "parent-cycle-001",
+		Title:     "Completed Work Item",
+		IssueType: "task",
+		Status:    bead.StatusClosed,
+		CreatedAt: now(),
+		UpdatedAt: now(),
+		Extra:     map[string]any{},
+	}
+
+	// Simulate injection of a review-finding bead (as would be done by an external
+	// reviewer system calling tracker.Inject with ReviewFindingPayload).
+	reviewBead := &bead.Bead{
+		ID:        "review-after-cycle-001",
+		Title:     "review-finding: parent-cycle-001",
+		IssueType: bead.IssueTypeReviewFinding,
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		Parent:    parentBead.ID,
+		CreatedAt: now(),
+		UpdatedAt: now(),
+		Extra: map[string]any{
+			"payload_hash": "test-hash",
+			"payload": map[string]interface{}{
+				"verdict":     "REQUEST_CHANGES",
+				"findings":    "Code review identified minor style issues that should be addressed before merge",
+				"result_rev":  "abc123def456",
+				"reviewed_by": "alice-reviewer@example.com",
+			},
+		},
+	}
+
+	// Execute the review-finding bead through the system kinds dispatcher
+	// (simulating what the execute loop does when it pops a review-finding bead).
+	report, handled, err := systemKindDispatcher(ctx, reviewBead.ID, reviewBead, mock, "/tmp", "ddx", now)
+
+	// Verify the dispatcher recognized and handled the review-finding kind.
+	if err != nil {
+		t.Fatalf("systemKindDispatcher: %v", err)
+	}
+	if !handled {
+		t.Fatalf("expected review-finding bead to be handled by systemKindDispatcher")
+	}
+
+	// Verify execution was successful.
+	if report.Status != ExecuteBeadStatusSuccess {
+		t.Errorf("expected success status, got %s", report.Status)
+	}
+	if report.Error != "" {
+		t.Errorf("expected no error, got: %s", report.Error)
+	}
+
+	// Verify the review finding was recorded as an event.
+	events, ok := mock.events[reviewBead.ID]
+	if !ok || len(events) == 0 {
+		t.Fatalf("expected event to be recorded for review-finding bead")
+	}
+	if events[0].Kind != "system-review-finding" {
+		t.Errorf("expected event kind=system-review-finding, got %s", events[0].Kind)
+	}
+
+	// Verify the report includes the review findings.
+	expectedDetail := "Review findings recorded: REQUEST_CHANGES from alice-reviewer@example.com"
+	if report.Detail != expectedDetail {
+		t.Errorf("expected detail %q, got %q", expectedDetail, report.Detail)
+	}
+
+	// Verify the event captures the findings.
+	if !strings.Contains(events[0].Summary, "REQUEST_CHANGES") {
+		t.Errorf("expected summary to contain verdict REQUEST_CHANGES")
+	}
+	if !strings.Contains(events[0].Body, "Code review identified") {
+		t.Errorf("expected body to contain findings")
 	}
 }
