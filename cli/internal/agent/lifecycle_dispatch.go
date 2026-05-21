@@ -32,7 +32,13 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 	if err != nil {
 		return nil, fmt.Errorf("lifecycle dispatch: create scratch workdir: %w", err)
 	}
-	defer func() { _ = os.RemoveAll(scratchDir) }()
+	defer func() {
+		// Deregister the seeded worktree (no-op/ignored if the fallback empty
+		// repo was used) before removing the directory, so it does not linger
+		// in the project's worktree registry.
+		_ = internalgit.Command(context.Background(), projectRoot, "worktree", "remove", "--force", scratchDir).Run()
+		_ = os.RemoveAll(scratchDir)
+	}()
 
 	runtime.WorkDir = scratchDir
 	runtime.PermissionsOverride = PermissionsReadOnlyLifecycle
@@ -58,9 +64,25 @@ func newLifecycleScratchDir(projectRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if out, err := internalgit.Command(context.Background(), dir, "init", "-q").CombinedOutput(); err != nil {
-		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("initialize lifecycle scratch git repo: %s: %w", strings.TrimSpace(string(out)), err)
+	// Seed the scratch workdir from the project's HEAD so the readiness-check
+	// classifier sees the project's real source files rather than an empty repo
+	// — otherwise file-presence checks block every bead (ddx-efadca32). A
+	// detached worktree keeps the classifier isolated from the master worktree
+	// (it cannot mutate tracked files there). git worktree add must create the
+	// directory itself, so clear the placeholder MkdirExecutionScratch made.
+	if rmErr := os.RemoveAll(dir); rmErr != nil {
+		return "", fmt.Errorf("reset lifecycle scratch dir: %w", rmErr)
+	}
+	if out, addErr := internalgit.Command(context.Background(), projectRoot, "worktree", "add", "--detach", dir, "HEAD").CombinedOutput(); addErr != nil {
+		// HEAD may be unborn (a project with no commits yet); readiness has
+		// nothing to check there, so fall back to an empty scratch repo.
+		if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
+			return "", fmt.Errorf("recreate lifecycle scratch dir after worktree add failed (%s): %w", strings.TrimSpace(string(out)), mkErr)
+		}
+		if out2, initErr := internalgit.Command(context.Background(), dir, "init", "-q").CombinedOutput(); initErr != nil {
+			_ = os.RemoveAll(dir)
+			return "", fmt.Errorf("initialize lifecycle scratch git repo: %s: %w", strings.TrimSpace(string(out2)), initErr)
+		}
 	}
 	return dir, nil
 }
