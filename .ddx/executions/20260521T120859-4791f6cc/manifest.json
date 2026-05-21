@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260521T120859-4791f6cc",
+  "bead_id": "ddx-0b743e7e",
+  "base_rev": "a3927de49b2af05298060dc8cf5e60e7a14dea2c",
+  "created_at": "2026-05-21T12:09:06.730912619Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0b743e7e",
+    "title": "Fix lock scoping: release .git/index.lock and .ddx/.git-tracker.lock before harness subprocess",
+    "description": "PROBLEM: execute-bead workers hold git locks across the entire LLM subprocess invocation, blocking concurrent tracker operations.\n\nFIX: Refactor to acquire locks only for the duration of git mutations, not across subprocess waits. Specifically:\n- Scope .git/index.lock acquisition to actual git commands\n- Scope .ddx/.git-tracker.lock acquisition to tracker file writes\n- Never hold locks while waiting on claude/codex/gemini subprocess\n\nCROSS-REF: Parent ddx-57c40485; original Fizeau incident AR-2026-05-17-repo.\n\nFILES TO MODIFY:\n- cli/internal/agent/tracker_lock.go\n- cli/internal/agent/execute_bead_land.go (landing)\n- cli/internal/gitlock/gitlock.go (if needed)\n- Test: git_index_lock_test.go",
+    "acceptance": "1. Integration test verifies .git/index.lock is released before harness subprocess starts; lock mtime is older than process invocation timeline.\n2. Same property verified for .ddx/.git-tracker.lock.\n3. Execute 'cd cli \u0026\u0026 go test -v ./internal/agent -run TestLockScoping' green.\n4. Execute 'cd cli \u0026\u0026 go test ./...' all passing.\n5. Lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "phase:2",
+      "priority:reliability"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260521T120859-4791f6cc",
+    "prompt": ".ddx/executions/20260521T120859-4791f6cc/prompt.md",
+    "manifest": ".ddx/executions/20260521T120859-4791f6cc/manifest.json",
+    "result": ".ddx/executions/20260521T120859-4791f6cc/result.json",
+    "checks": ".ddx/executions/20260521T120859-4791f6cc/checks.json",
+    "usage": ".ddx/executions/20260521T120859-4791f6cc/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-0b743e7e-20260521T120859-4791f6cc"
+  },
+  "prompt_sha": "9707761aa14bcc53ef71acf869a21f62e5846ad0a0b45751973c72886721321c"
+}
