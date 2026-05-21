@@ -60,12 +60,29 @@ func matchingLivenessRecord(worker LiveWorker, records []LivenessRecord) (Livene
 	if len(records) == 0 {
 		return LivenessRecord{}, false
 	}
+	// records are already filtered to fresh sidecars for this worker's project
+	// root and PID. A single fresh same-PID sidecar is authoritative: PID +
+	// freshness is sufficient, so a start-time skew between the process
+	// scanner's reported start time and the sidecar's recorded started_at must
+	// not discard it (ddx-f9b41107). The start-time check only disambiguates a
+	// reused PID — i.e. when more than one fresh sidecar claims the same PID.
+	if len(records) == 1 {
+		return records[0], true
+	}
 	for _, rec := range records {
 		if startedAtCompatible(worker.StartedAt, rec.StartedAt) {
 			return rec, true
 		}
 	}
-	return LivenessRecord{}, false
+	// Multiple fresh same-PID sidecars but none start-time-compatible: surface
+	// the most recently active one rather than nothing.
+	best := records[0]
+	for _, rec := range records[1:] {
+		if rec.LastActivityAt.After(best.LastActivityAt) {
+			best = rec
+		}
+	}
+	return best, true
 }
 
 func startedAtCompatible(workerStartedAt, sidecarStartedAt time.Time) bool {

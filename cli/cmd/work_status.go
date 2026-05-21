@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
@@ -85,10 +86,14 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("scan live workers: %w", err)
 	}
 
+	now := time.Now().UTC()
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
-		Workers:     workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), time.Now().UTC()),
+		Workers: enrichWorkersWithRunState(
+			workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
+			now,
+		),
 	}
 	if allProjects {
 		report.Scope = "all-projects"
@@ -107,6 +112,61 @@ func (f *CommandFactory) workerScanner() workerStatusScanner {
 		return f.workerScannerOverride
 	}
 	return workerstatus.New()
+}
+
+// enrichWorkersWithRunState fills bead/attempt/worktree from a fresh
+// per-attempt run-state record (.ddx/run-state/<attempt>.json) whose PID
+// matches a live worker, when liveness enrichment did not supply them — e.g.
+// the liveness sidecar was absent, start-time-skewed, or its attempt id was
+// stale (ddx-f9b41107). Run-state is read from each worker's own project root,
+// so all-projects scope does not leak attempts across projects.
+func enrichWorkersWithRunState(workers []workerstatus.LiveWorker, now time.Time) []workerstatus.LiveWorker {
+	byProject := make(map[string][]agent.RunState)
+	for i := range workers {
+		w := &workers[i]
+		if w.PID <= 0 || (w.BeadID != "" && w.AttemptID != "" && w.ExecutionWorktree != "") {
+			continue
+		}
+		states, ok := byProject[w.ProjectRoot]
+		if !ok {
+			states, _ = agent.ReadRunStates(w.ProjectRoot)
+			byProject[w.ProjectRoot] = states
+		}
+		rec, ok := freshestRunStateForPID(states, w.PID, now)
+		if !ok {
+			continue
+		}
+		if w.BeadID == "" {
+			w.BeadID = rec.BeadID
+		}
+		if w.AttemptID == "" {
+			w.AttemptID = rec.AttemptID
+		}
+		if w.ExecutionWorktree == "" {
+			w.ExecutionWorktree = rec.WorktreePath
+		}
+	}
+	return workers
+}
+
+// freshestRunStateForPID returns the most recently refreshed non-expired
+// run-state record for pid, if any.
+func freshestRunStateForPID(states []agent.RunState, pid int, now time.Time) (agent.RunState, bool) {
+	var best agent.RunState
+	found := false
+	for _, s := range states {
+		if s.PID != pid {
+			continue
+		}
+		if !s.ExpiresAt.IsZero() && now.After(s.ExpiresAt) {
+			continue
+		}
+		if !found || s.RefreshedAt.After(best.RefreshedAt) {
+			best = s
+			found = true
+		}
+	}
+	return best, found
 }
 
 func filterAndSortWorkers(all []workerstatus.LiveWorker, projectRoot string, allProjects bool) []workerstatus.LiveWorker {

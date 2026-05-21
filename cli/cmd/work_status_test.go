@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -183,6 +184,93 @@ func TestWorkStatusInfersBeadAndExecutionWorktree(t *testing.T) {
 	assert.Equal(t, projectA, w.ProjectRoot)
 	assert.Equal(t, "ddx-c3219628", w.BeadID)
 	assert.Equal(t, worktree, w.ExecutionWorktree)
+}
+
+func TestWorkStatusEnrichesFreshSamePIDLivenessDespiteStartSkew(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 4343
+
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         pid,
+			Command:     "ddx work --watch --project " + projectRoot,
+			ProjectRoot: projectRoot,
+			StartedAt:   procStartedAt,
+			Age:         "2m",
+			AgeSeconds:  120,
+		},
+	}
+	// The sidecar's started_at is skewed >10s from the process scanner's start
+	// time. Previously matchingLivenessRecord discarded the fresh same-PID
+	// sidecar over this skew, erasing the operator-facing bead/attempt fields
+	// (ddx-f9b41107). A single fresh same-PID sidecar must now be honored.
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-skew", workerstatus.LivenessRecord{
+		WorkerID:       "worker-skew",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-skew0001",
+		AttemptID:      "20260518T015704-18b08637",
+		Phase:          "running",
+		PID:            pid,
+		StartedAt:      procStartedAt.Add(-18 * time.Second),
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	textOut, err := executeCommand(root, "work", "status", "--project", projectRoot)
+	require.NoError(t, err)
+
+	assert.NotContains(t, textOut, "bead=-")
+	assert.NotContains(t, textOut, "attempt=-")
+	assert.Contains(t, textOut, "bead=ddx-skew0001")
+	assert.Contains(t, textOut, "attempt=20260518T015704-18b08637")
+}
+
+func TestWorkStatusUsesRunStateWhenLivenessAttemptIsMissingOrStale(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 5454
+	worktree := filepath.Join(t.TempDir(), ".execute-bead-wt-20260518T015727-6716231e")
+
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         pid,
+			Command:     "ddx work --watch --project " + projectRoot,
+			ProjectRoot: projectRoot,
+			StartedAt:   procStartedAt,
+			Age:         "2m",
+			AgeSeconds:  120,
+		},
+	}
+	// No liveness sidecar is written, so liveness enrichment supplies nothing.
+	// A fresh per-attempt run-state record for the same PID must fill
+	// bead/attempt/worktree (ddx-f9b41107).
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-runstate01",
+		AttemptID:    "20260518T015727-6716231e",
+		WorktreePath: worktree,
+		PID:          pid,
+		StartedAt:    procStartedAt,
+		RefreshedAt:  time.Now().UTC(),
+		ExpiresAt:    time.Now().Add(2 * time.Minute).UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	jsonOut, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, "ddx-runstate01", report.Workers[0].BeadID)
+	assert.Equal(t, "20260518T015727-6716231e", report.Workers[0].AttemptID)
+	assert.Equal(t, worktree, report.Workers[0].ExecutionWorktree)
 }
 
 func TestWorkStatusUsesFreshLivenessSidecarForActiveAttempt(t *testing.T) {
