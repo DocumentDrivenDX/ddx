@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260521T092311-e6927eb3",
+  "bead_id": "ddx-056fbb6c",
+  "base_rev": "e77dd43854f9b133ac1959380805749e2b87cbc6",
+  "created_at": "2026-05-21T09:23:20.948779596Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-056fbb6c",
+    "title": "Wire HELIX review to inject review-finding beads with --no-auto-review",
+    "description": "PROBLEM: HELIX `review` currently runs the review engine inline as a post-cycle hook on the parent bead and writes findings directly; this bypasses the ready queue, prevents scheduling/retry, and produces hook-shaped output rather than a standard evidence bundle. Operators cannot opt out except by disabling the entire hook system.\n\nROOT CAUSE: internal/helix/review/runner.go:1 — Runner.Run invokes engine.Execute synchronously after cycle completion and writes to .helix/reviews/ rather than calling tracker.Inject. cmd/helix/review.go:1 — CLI has no `--no-auto-review` flag; auto-injection toggle is buried in config under hooks.auto_review which is a runtime hook switch, not an injection switch.\n\nPROPOSED FIX: (a) Replace the post-cycle hook invocation with `tracker.Inject(ctx, parent, BeadKindReviewFinding, payload)` using the shared API from child 1; payload carries parent bead id, base_rev, result_rev, and review profile id. (b) Add `--no-auto-review` flag to `cmd/helix/review.go` and equivalent `helix.review.auto_inject` config key (default true); when false, Runner.Run returns without injecting. (c) Delete the old hook-output writer call path once injection is wired; keep config key `hooks.auto_review` only as a deprecated alias that maps to the new key with a one-cycle warning.\n\nNON-SCOPE: Alignment path (covered by child 3). Tracker bead-kind plumbing (covered by child 1). Reformatting the review-finding payload schema beyond the fields named above. Inherits all parent non-scope items. Governing artifact: parent helix-e26584d7. Depends on: child 1 (bead kind + Inject API + execute-loop dispatcher).\n\n---\nMirrored from helix-5cb4c1be on 2026-05-20 per cleanup decision: HELIX repo PRD non-goals exclude tracker/queue/execution-engine implementation. Original description below is from the pre-collapse helix-cli era and references paths that no longer exist (scripts/helix, internal/helix/, tests/helix-cli.sh) or pre-collapse modules. DDx maintainers should reinterpret against current DDx surface before acting on it.",
+    "acceptance": "AC1 TestReviewRunnerInjectsBead — after a cycle completes, Runner.Run calls tracker.Inject with kind=review-finding, correct parent and payload fields, and does not invoke the legacy hook writer.\nAC2 TestNoAutoReviewFlagSuppressesInjection — invoking `helix review --no-auto-review` (and setting helix.review.auto_inject=false) causes Runner.Run to skip injection and return nil; tracker has no new review-finding bead afterward.\nAC3 TestExecuteLoopConsumesReviewFinding — end-to-end: a parent bead completes, review-finding bead is injected, execute-loop pops it on the next tick, runs the review handler, and writes the evidence bundle to the canonical path.\nAC4 TestDeprecatedHookKeyWarns — setting only the legacy hooks.auto_review key still works but emits a deprecation warning naming the new key.\nAC5 Gates — `go test ./internal/helix/review/... ./cmd/helix/...` passes; `lefthook run pre-commit` passes; `go vet ./...` clean.",
+    "labels": [
+      "ddx",
+      "phase:design",
+      "activity:design",
+      "kind:design",
+      "area:cli",
+      "area:workflow"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: Bead references HELIX code infrastructure that is no longer in this repo (moved to ~/Projects/helix as of 2026-04-03). Description explicitly admits path references are stale ('scripts/helix', 'internal/helix/', 'tests/helix-cli.sh' no longer exist). Has explicit blocking dependency on child 1 (tracker.Inject API + bead kind) that doesn't exist yet. Unclear whether this work belongs in DDx repo at all, or should be refiled against helix project.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-21T09:23:00.231976358Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ],
+      "mirrored-from": "helix-5cb4c1be",
+      "spec-id": "ddx.helix-integration.helix-5cb4c1be"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260521T092311-e6927eb3",
+    "prompt": ".ddx/executions/20260521T092311-e6927eb3/prompt.md",
+    "manifest": ".ddx/executions/20260521T092311-e6927eb3/manifest.json",
+    "result": ".ddx/executions/20260521T092311-e6927eb3/result.json",
+    "checks": ".ddx/executions/20260521T092311-e6927eb3/checks.json",
+    "usage": ".ddx/executions/20260521T092311-e6927eb3/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-056fbb6c-20260521T092311-e6927eb3"
+  },
+  "prompt_sha": "b4d9c0c9aabc76f083cddba3f088a24028bb6b692eb577be42df254c2790ff01"
+}
