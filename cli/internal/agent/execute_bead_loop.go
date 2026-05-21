@@ -2023,24 +2023,79 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		if verificationRunner == nil {
 			verificationRunner = defaultVerificationCommandRunnerForConfig(rcfg)
 		}
-		attemptOut, err := work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
-			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
-				Bead:                candidate,
-				Executor:            tryExecutor(w.Executor),
-				Store:               w.Store,
-				ProjectRoot:         runtime.ProjectRoot,
-				SatisfactionChecker: w.SatisfactionChecker,
-				VerificationRunner:  verificationRunner,
-				AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
-				ConflictResolver:    w.ConflictResolver,
-				Assignee:            assignee,
-				Now:                 now,
-				Cooldown:            LandConflictCooldown,
-				RateLimitOnRetry: func(_ context.Context, info agenttry.RateLimitRetryInfo) {
-					appendRateLimitRetryEvent(w.Store, candidate.ID, fromTryRateLimitRetryInfo(info))
-				},
+
+		// Dispatch system kinds (review-finding, alignment-review) to dedicated handlers
+		// instead of the normal attempt flow.
+		var attemptOut agenttry.Outcome
+		var dispatchErr error
+		if candidate.IssueType == bead.IssueTypeReviewFinding || candidate.IssueType == bead.IssueTypeAlignmentReview {
+			sysReport, handled, sysErr := systemKindDispatcher(attemptCtx, candidate.ID, &candidate, w.Store, runtime.ProjectRoot, assignee, now)
+			if sysErr != nil {
+				attemptOut = agenttry.Outcome{
+					Disposition: agenttry.OutcomeReported,
+					Report: agenttry.Report{
+						SessionID: provAttemptID,
+						BeadID:    candidate.ID,
+						BaseRev:   "",
+						ResultRev: "",
+						Status:    sysReport.Status,
+						Error:     fmt.Sprintf("system kind dispatch: %v", sysErr),
+					},
+				}
+			} else if handled {
+				attemptOut = agenttry.Outcome{
+					Disposition: agenttry.OutcomeSuccess,
+					Report: agenttry.Report{
+						SessionID: provAttemptID,
+						BeadID:    candidate.ID,
+						BaseRev:   "",
+						ResultRev: "",
+						Status:    sysReport.Status,
+						Detail:    sysReport.Detail,
+					},
+				}
+			} else {
+				// Not a system kind, fall through to normal attempt
+				attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
+					return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
+						Bead:                candidate,
+						Executor:            tryExecutor(w.Executor),
+						Store:               w.Store,
+						ProjectRoot:         runtime.ProjectRoot,
+						SatisfactionChecker: w.SatisfactionChecker,
+						VerificationRunner:  verificationRunner,
+						AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
+						ConflictResolver:    w.ConflictResolver,
+						Assignee:            assignee,
+						Now:                 now,
+						Cooldown:            LandConflictCooldown,
+						RateLimitOnRetry: func(_ context.Context, info agenttry.RateLimitRetryInfo) {
+							appendRateLimitRetryEvent(w.Store, candidate.ID, fromTryRateLimitRetryInfo(info))
+						},
+					})
+				})
+			}
+		} else {
+			attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
+				return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
+					Bead:                candidate,
+					Executor:            tryExecutor(w.Executor),
+					Store:               w.Store,
+					ProjectRoot:         runtime.ProjectRoot,
+					SatisfactionChecker: w.SatisfactionChecker,
+					VerificationRunner:  verificationRunner,
+					AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
+					ConflictResolver:    w.ConflictResolver,
+					Assignee:            assignee,
+					Now:                 now,
+					Cooldown:            LandConflictCooldown,
+					RateLimitOnRetry: func(_ context.Context, info agenttry.RateLimitRetryInfo) {
+						appendRateLimitRetryEvent(w.Store, candidate.ID, fromTryRateLimitRetryInfo(info))
+					},
+				})
 			})
-		})
+		}
+		err = dispatchErr
 		if liveness != nil {
 			liveness.ClearAttempt()
 			liveness.OnTick(now())

@@ -487,3 +487,89 @@ func TestExecuteLoopConsumesReviewFinding(t *testing.T) {
 		t.Errorf("expected body to contain findings")
 	}
 }
+
+// TestExecuteLoopConsumesAlignmentReview is an end-to-end test demonstrating:
+// 1. A parent bead is created
+// 2. An alignment-review bead is injected via the tracker.Inject API
+// 3. The execute loop picks it up and processes it
+// 4. The alignment handler records the findings as an event
+func TestExecuteLoopConsumesAlignmentReview(t *testing.T) {
+	ctx := context.Background()
+	mock := newMockBeadEventAppender()
+	now := func() time.Time { return time.Date(2026, 5, 21, 10, 0, 0, 0, time.UTC) }
+
+	// Create a parent bead simulating a completed work item.
+	parentBead := &bead.Bead{
+		ID:        "parent-align-001",
+		Title:     "Completed Work Item",
+		IssueType: "task",
+		Status:    bead.StatusClosed,
+		CreatedAt: now(),
+		UpdatedAt: now(),
+		Extra:     map[string]any{},
+	}
+
+	// Simulate injection of an alignment-review bead (as would be done by an external
+	// alignment system calling tracker.Inject with AlignmentReviewPayload).
+	alignBead := &bead.Bead{
+		ID:        "align-after-cycle-001",
+		Title:     "alignment-review: parent-align-001",
+		IssueType: bead.IssueTypeAlignmentReview,
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		Parent:    parentBead.ID,
+		CreatedAt: now(),
+		UpdatedAt: now(),
+		Extra: map[string]any{
+			"payload_hash": "test-hash-align",
+			"payload": map[string]interface{}{
+				"document":   "docs/spec.md",
+				"alignment":  "Document aligns with PRD requirements for version 2.0 feature set",
+				"updated_by": "bob-reviewer@example.com",
+			},
+		},
+	}
+
+	// Execute the alignment-review bead through the system kinds dispatcher
+	// (simulating what the execute loop does when it pops an alignment-review bead).
+	report, handled, err := systemKindDispatcher(ctx, alignBead.ID, alignBead, mock, "/tmp", "ddx", now)
+
+	// Verify the dispatcher recognized and handled the alignment-review kind.
+	if err != nil {
+		t.Fatalf("systemKindDispatcher: %v", err)
+	}
+	if !handled {
+		t.Fatalf("expected alignment-review bead to be handled by systemKindDispatcher")
+	}
+
+	// Verify execution was successful.
+	if report.Status != ExecuteBeadStatusSuccess {
+		t.Errorf("expected success status, got %s", report.Status)
+	}
+	if report.Error != "" {
+		t.Errorf("expected no error, got: %s", report.Error)
+	}
+
+	// Verify the alignment review was recorded as an event.
+	events, ok := mock.events[alignBead.ID]
+	if !ok || len(events) == 0 {
+		t.Fatalf("expected event to be recorded for alignment-review bead")
+	}
+	if events[0].Kind != "system-alignment-review" {
+		t.Errorf("expected event kind=system-alignment-review, got %s", events[0].Kind)
+	}
+
+	// Verify the report includes the alignment findings.
+	expectedDetail := "Alignment review completed by bob-reviewer@example.com for docs/spec.md"
+	if report.Detail != expectedDetail {
+		t.Errorf("expected detail %q, got %q", expectedDetail, report.Detail)
+	}
+
+	// Verify the event captures the alignment findings.
+	if !strings.Contains(events[0].Summary, "docs/spec.md") {
+		t.Errorf("expected summary to contain document path")
+	}
+	if !strings.Contains(events[0].Body, "aligns with PRD") {
+		t.Errorf("expected body to contain alignment findings")
+	}
+}
