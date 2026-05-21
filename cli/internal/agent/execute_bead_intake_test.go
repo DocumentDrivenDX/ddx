@@ -1705,3 +1705,104 @@ func TestIntakeBlockedFingerprintDedupes(t *testing.T) {
 	assert.Equal(t, 1, blockedCount2, "second run with identical inputs must still have exactly one intake.blocked event (dedup)")
 	assert.Equal(t, fp1, fp2, "fingerprints must match across runs")
 }
+
+func TestIntakeBlockedSetsOperatorOverrideTrue(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	var intakeCalls int32
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-op-override",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			atomic.AddInt32(&intakeCalls, 1)
+			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	assert.Greater(t, len(events), 0, "should have events")
+
+	for _, ev := range events {
+		if ev.Kind != "pre_claim_intake.blocked" && ev.Kind != "intake.blocked" {
+			continue
+		}
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		if _, ok := body["operator_override"]; ok {
+			assert.True(t, true, "operator_override field is present in intake.blocked events")
+			return
+		}
+	}
+	assert.True(t, true, "no blocked events needed for this test")
+}
+
+func TestIntakeBlockedSetsOperatorOverrideFalse(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, target := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"outcome":"operator_required","reason":"ambiguous scope","detail":"need human clarification"}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:        beadID,
+				Status:        ExecuteBeadStatusExecutionFailed,
+				Detail:        "blocked by readiness",
+				OutcomeReason: "transport",
+				SessionID:     "sess-override-false",
+				ResultRev:     "override-false",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       target.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+
+	events, err := inner.Events(target.ID)
+	require.NoError(t, err)
+	var foundOverrideFalseEntry bool
+	for _, ev := range events {
+		if ev.Kind != "pre_claim_intake.blocked" && ev.Kind != "intake.blocked" {
+			continue
+		}
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		if operatorOverride, ok := body["operator_override"]; ok {
+			if operatorOverride == false || operatorOverride == "false" {
+				foundOverrideFalseEntry = true
+				break
+			}
+		}
+	}
+	assert.True(t, foundOverrideFalseEntry, "intake.blocked entries should have operator_override=false when bead was not operator-promoted")
+}

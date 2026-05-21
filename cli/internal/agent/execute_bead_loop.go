@@ -1602,6 +1602,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"worker_id":     runtime.WorkerID,
 					},
 				)
+				operatorOverrideTimeout, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake.timeout", ReadinessReasonSystemUnready, "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
+				eventBody["operator_override"] = operatorOverrideTimeout
 				if strictIntakeBlocking() {
 					emit("pre_claim_intake.blocked", eventBody)
 					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeError, ReadinessReasonSystemUnready, timeoutDetail, now().UTC()); berr != nil && runtime.Log != nil {
@@ -1774,11 +1776,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (%s)\n", blockedDetail, candidate.ID)
 					}
+					operatorOverrideDecompBlocked, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
 					emit("pre_claim_intake.blocked", map[string]any{
-						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeOperatorRequired),
-						"reason":  blockedDetail,
-						"detail":  blockedDetail,
+						"bead_id":           candidate.ID,
+						"operator_override": operatorOverrideDecompBlocked,
+						"outcome":           string(PreClaimIntakeOperatorRequired),
+						"reason":            blockedDetail,
+						"detail":            blockedDetail,
 					})
 					if strictIntakeBlocking() {
 						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
@@ -1801,6 +1805,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (%s)\n", decompErr, candidate.ID)
 					}
+					operatorOverrideDecompErr, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
 					emit("pre_claim_intake.blocked", readinessDecisionBody(
 						"pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)),
 						"operator_required",
@@ -1809,9 +1814,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"park",
 						"review intake result and accept, rewrite, split, block, or cancel",
 						map[string]any{
-							"bead_id": candidate.ID,
-							"outcome": string(PreClaimIntakeOperatorRequired),
-							"detail":  decompErr.Error(),
+							"bead_id":           candidate.ID,
+							"operator_override": operatorOverrideDecompErr,
+							"outcome":           string(PreClaimIntakeOperatorRequired),
+							"detail":            decompErr.Error(),
 						},
 					))
 					if strictIntakeBlocking() {
@@ -1857,6 +1863,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (%s)\n", warning, candidate.ID)
 				}
+				operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", "best-effort", "attempt", "continue with implementation; review should create follow-up work for remaining gaps")
 				emit("pre_claim_intake.blocked", readinessDecisionBody(
 					"pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)),
 					intakeResult.Reason,
@@ -1865,9 +1872,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"attempt",
 					"continue with implementation; review should create follow-up work for remaining gaps",
 					map[string]any{
-						"bead_id": candidate.ID,
-						"outcome": string(intakeOutcome),
-						"detail":  warning,
+						"bead_id":           candidate.ID,
+						"operator_override": operatorOverrideTerminal,
+						"outcome":           string(intakeOutcome),
+						"detail":            warning,
 					},
 				))
 				if strictIntakeBlocking() {
@@ -4111,6 +4119,7 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bea
 		map[string]any{
 			"intake_outcome":       string(outcome),
 			"detail":               detail,
+			"operator_override":    false,
 			"prompt_fingerprint":   promptFingerprint,
 			"accepted_fingerprint": findingFingerprint,
 		},

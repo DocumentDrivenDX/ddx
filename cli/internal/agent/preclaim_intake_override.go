@@ -93,3 +93,12 @@ func appendPreClaimIntakeOverrideHonoredEvent(store ExecuteBeadLoopStore, beadID
 		CreatedAt: at,
 	})
 }
+
+func detectIntakeBlockedOperatorOverride(store ExecuteBeadLoopStore, candidate *bead.Bead, ruleID, reason, decisionSource, policyMode, decision, suggestedAction string) (bool, error) {
+	if store == nil || candidate == nil {
+		return false, nil
+	}
+	findingFingerprint := preClaimIntakeFindingFingerprint(candidate, ruleID, reason, decisionSource, policyMode, decision, suggestedAction)
+	honored, err := preClaimIntakeOverrideHonored(store, candidate, findingFingerprint)
+	return honored, err
+}
