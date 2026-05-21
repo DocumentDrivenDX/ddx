@@ -385,6 +385,194 @@ func TestClose(t *testing.T) {
 	assert.Equal(t, StatusClosed, got.Status)
 }
 
+func TestClose_SupersededCascade_Eligible(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create Y first
+	y := &Bead{Title: "Superseding bead"}
+	require.NoError(t, s.Create(testCtx(), y))
+
+	// Then create X (open, superseded-by:Y, no other state)
+	x := &Bead{
+		Title:  "Superseded bead",
+		Status: StatusOpen,
+		Extra:  map[string]any{"superseded-by": y.ID},
+	}
+	require.NoError(t, s.Create(testCtx(), x))
+
+	// Close Y, should cascade-close X
+	require.NoError(t, s.Close(testCtx(), y.ID))
+
+	// Verify Y is closed
+	yGot, err := s.Get(testCtx(), y.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, yGot.Status)
+
+	// Verify X is also closed
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, xGot.Status)
+
+	// Verify X has superseded_close event
+	events, err := s.Events(x.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "superseded_close" {
+			assert.Contains(t, e.Body, fmt.Sprintf("closed_by_cascade_of: %s", y.ID))
+			assert.Contains(t, e.Body, fmt.Sprintf("closed_as_superseded_via:%s", y.ID))
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "X should have superseded_close event")
+}
+
+func TestClose_SupersededCascade_OperatorNotedNotCascaded(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create Y (open) and X (open, superseded-by:Y, has operator notes)
+	y := &Bead{Title: "Superseding bead"}
+	x := &Bead{
+		Title:  "Superseded bead",
+		Status: StatusOpen,
+		Notes:  "Operator decision to keep this open",
+		Extra:  map[string]any{"superseded-by": y.ID},
+	}
+	require.NoError(t, s.Create(testCtx(), y))
+	require.NoError(t, s.Create(testCtx(), x))
+
+	// Close Y, should NOT cascade-close X due to operator notes
+	require.NoError(t, s.Close(testCtx(), y.ID))
+
+	// Verify Y is closed
+	yGot, err := s.Get(testCtx(), y.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, yGot.Status)
+
+	// Verify X remains open
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, xGot.Status)
+
+	// Verify X has NO superseded_close event
+	events, err := s.Events(x.ID)
+	require.NoError(t, err)
+	for _, e := range events {
+		assert.NotEqual(t, "superseded_close", e.Kind, "X should not have superseded_close event")
+	}
+}
+
+func TestClose_SupersededCascade_OneHopCycleGuard(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create Y, X (superseded-by:Y), Z (superseded-by:X)
+	y := &Bead{Title: "Y"}
+	x := &Bead{
+		Title:  "X",
+		Status: StatusOpen,
+		Extra:  map[string]any{},
+	}
+	z := &Bead{
+		Title:  "Z",
+		Status: StatusOpen,
+		Extra:  map[string]any{},
+	}
+	require.NoError(t, s.Create(testCtx(), y))
+	require.NoError(t, s.Create(testCtx(), x))
+	require.NoError(t, s.Create(testCtx(), z))
+
+	// Set supersession chain
+	require.NoError(t, s.Update(testCtx(), x.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["superseded-by"] = y.ID
+	}))
+	require.NoError(t, s.Update(testCtx(), z.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["superseded-by"] = x.ID
+	}))
+
+	// Close Y, should cascade-close X but NOT Z (deferred to separate cascade)
+	require.NoError(t, s.Close(testCtx(), y.ID))
+
+	// Verify X is closed
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, xGot.Status)
+
+	// Verify Z remains open (one-hop limit)
+	zGot, err := s.Get(testCtx(), z.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, zGot.Status)
+}
+
+func TestClose_SupersededCascade_Idempotent(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create Y, X
+	y := &Bead{Title: "Y"}
+	x := &Bead{
+		Title:  "X",
+		Status: StatusOpen,
+		Extra:  map[string]any{"superseded-by": ""},
+	}
+	require.NoError(t, s.Create(testCtx(), y))
+	require.NoError(t, s.Create(testCtx(), x))
+
+	// Set X superseded by Y
+	require.NoError(t, s.Update(testCtx(), x.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["superseded-by"] = y.ID
+	}))
+
+	// Close Y once
+	require.NoError(t, s.Close(testCtx(), y.ID))
+	xEvents1, _ := s.Events(x.ID)
+
+	// Close Y again (should be idempotent, no new events)
+	require.NoError(t, s.Close(testCtx(), y.ID))
+	xEvents2, _ := s.Events(x.ID)
+
+	// Events should remain the same
+	assert.Len(t, xEvents1, len(xEvents2))
+}
+
+func TestClose_SupersededCascade_ClaimedOrInProgress_NotCascaded(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create Y, X in in_progress
+	y := &Bead{Title: "Y"}
+	x := &Bead{
+		Title:  "X",
+		Status: StatusInProgress,
+		Extra:  map[string]any{"superseded-by": ""},
+	}
+	require.NoError(t, s.Create(testCtx(), y))
+	require.NoError(t, s.Create(testCtx(), x))
+
+	// Set X superseded by Y
+	require.NoError(t, s.Update(testCtx(), x.ID, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra["superseded-by"] = y.ID
+	}))
+
+	// Close Y, should NOT cascade-close X since X is in_progress
+	require.NoError(t, s.Close(testCtx(), y.ID))
+
+	// Verify X remains in_progress (not closed)
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusInProgress, xGot.Status)
+}
+
 func TestListFilters(t *testing.T) {
 	s := newTestStore(t)
 

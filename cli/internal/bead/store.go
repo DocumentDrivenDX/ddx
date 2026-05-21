@@ -1481,6 +1481,10 @@ func (s *Store) Close(args ...any) error {
 	}
 	_ = s.RemoveClaimHeartbeat(id)
 	s.maybeOpportunisticMaintenance()
+
+	// Cascade-close eligible beads superseded by Y
+	_ = s.cascadeCloseSuperseeded(id)
+
 	return nil
 }
 
@@ -1507,6 +1511,142 @@ func (s *Store) externalizeEvents(id string) error {
 		}
 		return nil
 	})
+}
+
+// cascadeCloseSuperseeded scans for open beads X where superseded-by==Y,
+// checks strict scope guards, and closes eligible ones. One-hop deep only;
+// if X is a superseder for an open Z, Z's closure is deferred.
+// Idempotent: re-running is a no-op for already-closed X.
+func (s *Store) cascadeCloseSuperseeded(closedID string) error {
+	all, err := s.ReadAll(context.Background())
+	if err != nil {
+		return err
+	}
+	visited := map[string]bool{closedID: true}
+	for _, x := range all {
+		if visited[x.ID] {
+			continue
+		}
+		if !s.canCascadeCloseSuperseeded(&x, closedID, all) {
+			continue
+		}
+		visited[x.ID] = true
+		_ = s.SetLifecycleStatus(x.ID, StatusClosed, LifecycleTransitionOptions{
+			ManualClose: true,
+			Reason:      fmt.Sprintf("cascade-close superseded by %s", closedID),
+			Source:      "Store.Close.cascadeCloseSuperseeded",
+		})
+		_ = s.externalizeEvents(x.ID)
+		_ = s.AppendEvent(x.ID, BeadEvent{
+			Kind:      "superseded_close",
+			Summary:   fmt.Sprintf("closed as superseded via %s", closedID),
+			Body:      fmt.Sprintf("closed_by_cascade_of: %s\nreason: closed_as_superseded_via:%s", closedID, closedID),
+			Source:    "Store.Close.cascadeCloseSuperseeded",
+			CreatedAt: time.Now().UTC(),
+		})
+		_ = s.RemoveClaimHeartbeat(x.ID)
+	}
+	return nil
+}
+
+// canCascadeCloseSuperseeded checks all scope guards before cascade-closing X.
+// All guards must pass for a bead to be eligible. Reads current state fresh.
+func (s *Store) canCascadeCloseSuperseeded(x *Bead, closedID string, allBeads []Bead) bool {
+	// Re-read X's current state to ensure fresh snapshot
+	fresh, err := s.Get(context.Background(), x.ID)
+	if err != nil {
+		return false
+	}
+
+	// Guard 1: X is open AND (X.superseded-by == closedID OR X carries label superseded-by:closedID) AND closedID is closed
+	if fresh.Status != StatusOpen {
+		return false
+	}
+	superseededBy := lifecycleSupersededBy(*fresh)
+	if superseededBy != closedID {
+		found := false
+		for _, l := range fresh.Labels {
+			if l == fmt.Sprintf("superseded-by:%s", closedID) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	// Verify closedID is actually closed
+	var closedBead *Bead
+	for i, b := range allBeads {
+		if b.ID == closedID {
+			closedBead = &allBeads[i]
+			break
+		}
+	}
+	if closedBead == nil || closedBead.Status != StatusClosed {
+		return false
+	}
+
+	// Guard 2: X has no other open dependents (no open bead Z with Z.dependencies referencing X)
+	for _, z := range allBeads {
+		if z.Status == StatusOpen && z.ID != fresh.ID {
+			for _, d := range z.Dependencies {
+				if d.DependsOnID == fresh.ID {
+					return false
+				}
+			}
+		}
+	}
+
+	// Guard 3: X has no open dependencies of its own beyond the supersession marker
+	for _, d := range fresh.Dependencies {
+		target := findBeadByID(allBeads, d.DependsOnID)
+		if target != nil && target.Status != StatusClosed && target.Status != StatusCancelled {
+			return false
+		}
+	}
+
+	// Guard 4: X has attempt_count == 0 (no execution-related events)
+	events, _ := s.Events(fresh.ID)
+	for _, e := range events {
+		if strings.Contains(e.Kind, "execution") || strings.Contains(e.Kind, "dispatch") ||
+			strings.Contains(e.Kind, "work") || e.Kind == "execute-bead" {
+			return false
+		}
+	}
+
+	// Guard 5: X has no operator notes added after the supersession marker timestamp
+	// For simplicity, check if notes are present (indicates operator activity)
+	if strings.TrimSpace(fresh.Notes) != "" {
+		return false
+	}
+
+	// Guard 6: X is not currently claimed or in-progress (no live claim_id)
+	if fresh.Status == StatusInProgress {
+		return false
+	}
+	if claimFresh, _, err := s.ClaimHeartbeatFresh(fresh.ID); err == nil && claimFresh {
+		return false
+	}
+
+	// Guard 7: X carries no manual-hold / no-auto-close / container override label
+	for _, l := range fresh.Labels {
+		switch l {
+		case "manual-hold", "no-auto-close", "container":
+			return false
+		}
+	}
+
+	return true
+}
+
+func findBeadByID(beads []Bead, id string) *Bead {
+	for i, b := range beads {
+		if b.ID == id {
+			return &beads[i]
+		}
+	}
+	return nil
 }
 
 // ErrClosureGateRejected indicates a close was refused because the bead does
