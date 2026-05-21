@@ -2250,6 +2250,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
 			}
+			// In watch mode a single bead that cannot route (no_viable_provider)
+			// must not terminate an otherwise-healthy long-running drain
+			// (ddx-a827d07f): skip it for the rest of the pass and keep draining
+			// other ready beads. The bead is left open and untouched (no
+			// park/cooldown) so it stays immediately re-claimable; the in-memory
+			// skip clears when the queue next drains empty, giving routing a
+			// fresh retry. Once and drain modes retain the existing
+			// stop-on-routing-failure contract.
+			if loopMode == executeloop.ModeWatch {
+				transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
+				continue
+			}
 			setExit("RoutingUnavailable", "routing_unavailable")
 			return result, nil
 		}
@@ -2983,6 +2995,11 @@ type pickerSkip struct {
 }
 
 const staleCandidateSkipReason = "stale_candidate"
+
+// routingUnavailableSkipReason marks a bead transiently skipped for the rest of
+// a drain pass after a per-bead no_viable_provider routing failure, so the
+// watcher keeps draining instead of exiting (ddx-a827d07f).
+const routingUnavailableSkipReason = "routing_unavailable"
 
 func hasGuardSkips(skips []pickerSkip) bool {
 	for _, skip := range skips {

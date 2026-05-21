@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/easel/fizeau"
@@ -69,6 +70,69 @@ func (s *claimCountingStore) Reopen(id, reason, notes string) error {
 // when RoutePreflight returns the upstream typed-incompatibility error
 // (agent.ErrHarnessModelIncompatible), the loop must fail during startup
 // before any bead is claimed or executed.
+// TestWatchSurvivesPerBeadRoutingFailureAndContinues verifies that a per-bead
+// no_viable_provider routing failure no longer terminates a ddx work --watch
+// drain (ddx-a827d07f). The watcher must attempt the next ready bead instead of
+// exiting, and must leave the failed bead open and un-parked (no cooldown).
+func TestWatchSurvivesPerBeadRoutingFailureAndContinues(t *testing.T) {
+	inner, first, second := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var execCount int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			// Once both ready beads have been attempted, the watcher has
+			// demonstrably survived the first bead's routing failure; stop the
+			// otherwise-infinite watch loop.
+			if atomic.AddInt32(&execCount, 1) >= 2 {
+				cancel()
+			}
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "ResolveRoute: no live provider supports prompt of 1881 tokens with tools=false at policy cheap",
+				SessionID: "sess-routing",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: 10 * time.Millisecond,
+		ProjectRoot:  t.TempDir(),
+		SessionID:    "sess-routing-loop",
+		WorkerID:     "worker-routing",
+	})
+	require.NotNil(t, result)
+
+	// The watcher continued past the first bead's routing failure to attempt the
+	// second ready bead — the bug exited the worker after the first failure.
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&execCount), int32(2),
+		"watcher must keep draining after a per-bead routing failure")
+	assert.NotEqual(t, "routing_unavailable", result.ExitReason,
+		"a per-bead routing failure must not become a worker-level routing_unavailable exit")
+	assert.ErrorIs(t, err, context.Canceled)
+
+	// Both beads remain open, unclaimed, and un-parked (no cooldown).
+	for _, id := range []string{first.ID, second.ID} {
+		got, getErr := inner.Get(id)
+		require.NoError(t, getErr)
+		assert.Equal(t, bead.StatusOpen, got.Status)
+		assert.Empty(t, got.Owner)
+		if got.Extra != nil {
+			_, hasRetry := got.Extra["work-retry-after"]
+			assert.False(t, hasRetry, "routing failure must not park the bead with a cooldown")
+		}
+	}
+}
+
 func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
