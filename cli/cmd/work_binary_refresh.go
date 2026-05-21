@@ -26,8 +26,21 @@ func (f *CommandFactory) buildWorkBinaryRefreshCheck(cmd *cobra.Command, project
 	if currentCommit == "" {
 		return nil
 	}
+	exe := resolveReplacementDDXPath()
+	baseline, haveBaseline := snapshotBinary(exe)
 	return func(ctx context.Context) (bool, error) {
-		exe := resolveReplacementDDXPath()
+		// Only hand off when the replacement binary file has actually been
+		// replaced on disk since this worker started (an intentional
+		// reinstall). Bead-only auto-commits (chore(beads): ... doc-stamp)
+		// advance the ddx repo HEAD but never rewrite the binary, so they must
+		// not terminate the worker (ddx-65d3ba51).
+		if !haveBaseline {
+			return false, nil
+		}
+		current, ok := snapshotBinary(exe)
+		if !ok || current.equal(baseline) {
+			return false, nil
+		}
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		installedCommit, err := installedDDXCommit(checkCtx, exe)
@@ -98,6 +111,27 @@ func shouldRefreshDDXBinary(currentCommit, installedCommit string) bool {
 		}
 	}
 	return true
+}
+
+// binarySnapshot captures the on-disk identity of an executable so a worker can
+// tell whether the file was replaced (reinstalled) versus unchanged. It
+// deliberately does not look at git/version metadata — repo HEAD advances from
+// bead commits must not read as a binary change.
+type binarySnapshot struct {
+	size    int64
+	modTime time.Time
+}
+
+func snapshotBinary(path string) (binarySnapshot, bool) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return binarySnapshot{}, false
+	}
+	return binarySnapshot{size: info.Size(), modTime: info.ModTime()}, true
+}
+
+func (b binarySnapshot) equal(o binarySnapshot) bool {
+	return b.size == o.size && b.modTime.Equal(o.modTime)
 }
 
 func resolveReplacementDDXPath() string {
