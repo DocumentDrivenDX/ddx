@@ -1556,3 +1556,152 @@ func TestReadinessUnavailableOutputIsActionable(t *testing.T) {
 	// Fail-open: execution must proceed.
 	assert.Equal(t, 1, result.Successes)
 }
+
+func TestIntakeBlockedCarriesRuleFingerprint(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rule-fp",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeOperatorRequired,
+				Reason:  "test_block",
+				Detail:  "test detail",
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	got, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+
+	events, err := inner.Events(got.ID)
+	require.NoError(t, err)
+
+	blockedEvent := -1
+	for i, ev := range events {
+		if ev.Kind == "intake.blocked" {
+			blockedEvent = i
+			break
+		}
+	}
+	require.NotEqual(t, -1, blockedEvent, "must have an intake.blocked event")
+
+	var body map[string]any
+	err = json.Unmarshal([]byte(events[blockedEvent].Body), &body)
+	require.NoError(t, err)
+
+	ruleFp, ok := body["rule_fingerprint"].(string)
+	assert.True(t, ok, "rule_fingerprint must be a string")
+	assert.NotEmpty(t, ruleFp, "rule_fingerprint must not be empty")
+}
+
+func TestIntakeBlockedFingerprintDedupes(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-dedup",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	intakeHook := func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+		return PreClaimIntakeResult{
+			Outcome: PreClaimIntakeOperatorRequired,
+			Reason:  "test_block",
+			Detail:  "test detail",
+		}, nil
+	}
+
+	// First run
+	result1, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       candidate.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+
+	got1, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+
+	events1, err := inner.Events(got1.ID)
+	require.NoError(t, err)
+
+	blockedCount1 := 0
+	var fp1 string
+	for _, ev := range events1 {
+		if ev.Kind == "intake.blocked" {
+			blockedCount1++
+			var body map[string]any
+			json.Unmarshal([]byte(ev.Body), &body)
+			if ruleFp, ok := body["rule_fingerprint"].(string); ok {
+				fp1 = ruleFp
+			}
+		}
+	}
+	require.Equal(t, 1, blockedCount1, "first run must have exactly one intake.blocked event")
+	assert.NotEmpty(t, fp1, "first run must have a rule_fingerprint")
+
+	// Unclaim the bead so we can run again
+	err = inner.Unclaim(candidate.ID)
+	require.NoError(t, err)
+
+	// Second run with identical inputs
+	result2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       candidate.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+
+	got2, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+
+	events2, err := inner.Events(got2.ID)
+	require.NoError(t, err)
+
+	blockedCount2 := 0
+	var fp2 string
+	for _, ev := range events2 {
+		if ev.Kind == "intake.blocked" {
+			blockedCount2++
+			var body map[string]any
+			json.Unmarshal([]byte(ev.Body), &body)
+			if ruleFp, ok := body["rule_fingerprint"].(string); ok {
+				fp2 = ruleFp
+			}
+		}
+	}
+	assert.Equal(t, 1, blockedCount2, "second run with identical inputs must still have exactly one intake.blocked event (dedup)")
+	assert.Equal(t, fp1, fp2, "fingerprints must match across runs")
+}

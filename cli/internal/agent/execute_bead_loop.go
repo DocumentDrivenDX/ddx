@@ -4061,6 +4061,7 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bea
 		},
 	)
 	body["fingerprint"] = findingFingerprint
+	body["rule_fingerprint"] = findingFingerprint
 	body["prompt_fingerprint"] = promptFingerprint
 
 	if err := store.ParkToProposedWithIntakeEvent(candidate.ID, actor, string(outcome), reason, detail, body, at, func(b *bead.Bead) {
