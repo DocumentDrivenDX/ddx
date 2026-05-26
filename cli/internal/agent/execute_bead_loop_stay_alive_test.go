@@ -160,6 +160,108 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(out, "systemic; leaving beads untouched"))
 }
 
+// TestWorkWatch_PreClaimIdleEscalatesAfterRepeatedSameDetail covers
+// ddx-df77e668 AC #3: when the worker idles on the same pre-claim blocker for
+// preClaimIdleEscalationThreshold consecutive cycles, it emits a non-terminal
+// loop.operator_attention event carrying the bead-id, detail, and elapsed-idle
+// instead of looping silently. The beads are never cooldowned, and the loop
+// keeps idling (the escalation does not stop the worker).
+func TestWorkWatch_PreClaimIdleEscalatesAfterRepeatedSameDetail(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Errorf("executor must not run while pre-claim idles")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	progressCh := make(chan ProgressEvent, 256)
+	done := make(chan struct{})
+	var idleCount int32
+	go func() {
+		for {
+			select {
+			case evt := <-progressCh:
+				if evt.Phase == "loop.idle" && evt.Message == preClaimIdleReasonTrackerContention {
+					if atomic.AddInt32(&idleCount, 1) >= int32(preClaimIdleEscalationThreshold)+2 {
+						cancel()
+						return
+					}
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
+	var eventSink, logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Millisecond,
+		Log:          &logBuf,
+		EventSink:    &eventSink,
+		ProgressCh:   progressCh,
+		SessionID:    "sess-escalate",
+		WorkerID:     "worker-escalate",
+		PreClaimHook: func(ctx context.Context) error {
+			return errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/metrics/attempts.jsonl")
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 0, result.Failures)
+	// The escalation is non-terminal: it does not populate a terminal stop.
+	assert.Nil(t, result.OperatorAttention)
+
+	// Beads stay open and uncooldowned — tracker contention never faults a bead.
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Nil(t, gotFirst.Extra["work-retry-after"])
+
+	// Exactly one operator-attention escalation event is emitted for the streak.
+	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
+	var escalations []map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["type"] != "loop.operator_attention" {
+			continue
+		}
+		data, ok := entry["data"].(map[string]any)
+		require.True(t, ok)
+		if data["reason"] == "preclaim_idle_escalation" {
+			escalations = append(escalations, data)
+		}
+	}
+	require.Len(t, escalations, 1, "exactly one escalation event per same-detail streak")
+	esc := escalations[0]
+	assert.Contains(t, []any{first.ID, second.ID}, esc["bead_id"], "escalation must name a skipped bead")
+	assert.Contains(t, esc["detail"], ".ddx/beads.jsonl", "escalation must carry the blocker detail")
+	elapsed, ok := esc["elapsed_idle"].(string)
+	require.True(t, ok, "escalation must carry elapsed_idle")
+	assert.NotEmpty(t, elapsed)
+	idleCountVal, ok := esc["idle_count"].(float64)
+	require.True(t, ok)
+	assert.GreaterOrEqual(t, int(idleCountVal), preClaimIdleEscalationThreshold)
+
+	assert.Contains(t, logBuf.String(), "operator attention: pre-claim idled")
+}
+
 func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

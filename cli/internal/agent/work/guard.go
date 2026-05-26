@@ -16,6 +16,39 @@ const DefaultPreClaimTimeout = 5 * time.Minute
 
 const SystemicPreClaimReasonPrefix = "systemic_preclaim:"
 
+// TrackerContentionPreClaimReasonPrefix marks a pre-claim skip caused by
+// transient multi-worker contention on DDx-managed tracker/metadata files
+// (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, …) rather than a systemic
+// repo-config problem. Like systemic skips it idles without cooldowning the
+// bead, but it carries a distinct reason code so operators can tell transient
+// contention apart from a configuration wedge (ddx-df77e668).
+const TrackerContentionPreClaimReasonPrefix = "tracker_contention_preclaim:"
+
+// preClaimClass categorizes a pre-claim hook error so the guard can choose
+// between idling without cooldown (systemic / tracker-contention) and the
+// per-bead two-strikes cooldown policy (bead-specific failures).
+type preClaimClass int
+
+const (
+	preClaimClassBeadSpecific preClaimClass = iota
+	preClaimClassSystemic
+	preClaimClassTrackerContention
+)
+
+// trackerMetadataPaths are the DDx-managed metadata files that concurrent
+// workers rewrite continuously. They are append-mostly metadata, not code, so
+// a staged-changes pre-claim error that mentions only these paths is transient
+// multi-worker contention — not a systemic repo-config problem (ddx-df77e668).
+// Kept in sync with agent.durableAuditManagedPathspecs; duplicated here because
+// the agent package imports this one, so the dependency cannot run the other
+// way.
+var trackerMetadataPaths = []string{
+	".ddx/beads.jsonl",
+	".ddx/beads-archive.jsonl",
+	".ddx/metrics/attempts.jsonl",
+	".ddx/attachments",
+}
+
 // Guard decides whether a bead may proceed. Callers use the returned reason
 // for skip telemetry and logs.
 type Guard interface {
@@ -77,7 +110,18 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 	}
 	err, timedOut := callPreClaimHookWithTimeout(ctx, g.hook, g.timeout)
 	if err != nil || timedOut {
-		if err != nil && isSystemicPreClaimError(err) {
+		switch classifyPreClaimError(err) {
+		case preClaimClassTrackerContention:
+			reason := err.Error()
+			g.mu.Lock()
+			shouldLog := !g.loggedSystemic[reason]
+			g.loggedSystemic[reason] = true
+			g.mu.Unlock()
+			if shouldLog && g.log != nil {
+				_, _ = fmt.Fprintf(g.log, "pre-claim hook: %v (transient tracker-file contention; leaving beads untouched)\n", err)
+			}
+			return false, TrackerContentionPreClaimReasonPrefix + reason
+		case preClaimClassSystemic:
 			reason := err.Error()
 			g.mu.Lock()
 			shouldLog := !g.loggedSystemic[reason]
@@ -133,32 +177,113 @@ func SystemicPreClaimDetail(reason string) string {
 	return strings.TrimPrefix(reason, SystemicPreClaimReasonPrefix)
 }
 
-func isSystemicPreClaimError(err error) bool {
+func IsTrackerContentionPreClaimSkipReason(reason string) bool {
+	return strings.HasPrefix(reason, TrackerContentionPreClaimReasonPrefix)
+}
+
+func TrackerContentionPreClaimDetail(reason string) string {
+	return strings.TrimPrefix(reason, TrackerContentionPreClaimReasonPrefix)
+}
+
+// classifyPreClaimError categorizes a pre-claim hook error. Systemic and
+// tracker-contention classes both idle the worker without cooldowning the bead
+// (no bead is at fault); they differ only in the reason code surfaced to
+// operators. Anything else is treated as bead-specific and runs through the
+// two-strikes cooldown policy.
+func classifyPreClaimError(err error) preClaimClass {
 	if err == nil {
-		return false
+		return preClaimClassBeadSpecific
 	}
 	msg := err.Error()
+	// Staged tracker-file contention: a landing-worktree "staged changes" error
+	// whose staged paths are exclusively DDx-managed tracker/metadata files.
+	// Another worker's tracker commit is partially staged; the index settles
+	// within milliseconds. Treating this as bead-specific would wrongly cooldown
+	// beads during a transient multi-worker commit race (ddx-df77e668).
+	if isStagedTrackerContentionError(msg) {
+		return preClaimClassTrackerContention
+	}
 	// Branch divergence: local tracker has diverged from origin.
 	if strings.Contains(msg, "local branch ") && strings.Contains(msg, " has diverged from origin ") {
-		return true
+		return preClaimClassSystemic
 	}
-	// Staged beads.jsonl: another worker's tracker commit is partially staged.
-	// The file becomes unstaged within milliseconds; treating this as bead-specific
-	// would wrongly cooldown beads during a transient multi-worker commit race.
-	if strings.Contains(msg, "beads.jsonl") && strings.Contains(msg, "staged") {
-		return true
+	// Staged changes that include code/doc/test files: real work was never
+	// committed. This is a systemic repo state, not a transient contention.
+	if strings.Contains(msg, "staged changes") {
+		return preClaimClassSystemic
 	}
 	// Git index.lock: an external git process holds the index lock. This is
 	// transient (sub-second for normal operations); no bead is at fault.
 	if strings.Contains(msg, "index.lock") {
-		return true
+		return preClaimClassSystemic
 	}
 	// Corrupt landing indexes are repo-health failures, not bead-specific
-	// failures. They should be surfaced once as systemic so the worker can
-	// auto-repair or ask for operator intervention without cooldowning beads.
+	// failures. Surface once as systemic so the worker can auto-repair or ask
+	// for operator intervention without cooldowning beads.
 	if strings.Contains(msg, "index file smaller than expected") ||
 		strings.Contains(msg, "repairing landing worktree index") {
-		return true
+		return preClaimClassSystemic
+	}
+	return preClaimClassBeadSpecific
+}
+
+// isStagedTrackerContentionError reports whether a "landing worktree has staged
+// changes" error lists only DDx-managed tracker/metadata files. A mixed or
+// code-only staged set is NOT tracker contention (it is systemic).
+func isStagedTrackerContentionError(msg string) bool {
+	if !strings.Contains(msg, "staged changes after waiting") {
+		return false
+	}
+	paths := stagedPathsFromError(msg)
+	if len(paths) == 0 {
+		return false
+	}
+	for _, p := range paths {
+		if !isTrackerMetadataPath(p) {
+			return false
+		}
+	}
+	return true
+}
+
+// stagedPathsFromError extracts the repo-relative paths from the
+// "landing worktree has staged changes after waiting <d>:\n<status>\t<path>"
+// error body. Each path line is "<status><TAB><path>" (git diff --name-status);
+// the leading summary line (before the first newline) is skipped.
+func stagedPathsFromError(msg string) []string {
+	lines := strings.Split(msg, "\n")
+	if len(lines) <= 1 {
+		return nil
+	}
+	var paths []string
+	for _, line := range lines[1:] {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if tab := strings.IndexByte(line, '\t'); tab >= 0 {
+			line = line[tab+1:]
+		}
+		line = strings.TrimSpace(line)
+		if line != "" {
+			paths = append(paths, line)
+		}
+	}
+	return paths
+}
+
+// isTrackerMetadataPath reports whether a repo-relative path is one of the
+// DDx-managed tracker/metadata files (see trackerMetadataPaths).
+func isTrackerMetadataPath(path string) bool {
+	clean := strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+	if clean == "" {
+		return false
+	}
+	for _, managed := range trackerMetadataPaths {
+		m := strings.TrimSuffix(managed, "/")
+		if clean == m || strings.HasPrefix(clean, m+"/") {
+			return true
+		}
 	}
 	return false
 }

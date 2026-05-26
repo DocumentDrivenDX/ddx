@@ -101,13 +101,14 @@ func TestGuard_PreClaimTimeoutReturnsPromptly(t *testing.T) {
 	}
 }
 
-// TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown: AC #5 — when the only
-// blocking pre-claim condition is .ddx/beads.jsonl being staged (a transient
-// multi-worker tracker race), the guard must treat the error as systemic and
-// skip without writing a per-bead cooldown.
+// TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown: ddx-df77e668 AC #2 — when
+// the only blocking pre-claim condition is DDx-managed tracker files being
+// staged (a transient multi-worker tracker race), the guard must classify it as
+// tracker contention — a distinct reason code from systemic — and skip without
+// writing a per-bead cooldown.
 func TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown(t *testing.T) {
 	store := &stubCooldownStore{}
-	errMsg := ".ddx/beads.jsonl is staged; another worker's tracker commit is in progress"
+	errMsg := "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/metrics/attempts.jsonl"
 	guard := NewPreClaimGuard(func(ctx context.Context) error {
 		return errors.New(errMsg)
 	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
@@ -116,13 +117,44 @@ func TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown(t *testing.T) {
 	allowed2, reason2 := guard.Allow(context.Background(), "ddx-staged-2")
 
 	if allowed1 || allowed2 {
-		t.Fatalf("staged beads.jsonl must skip beads")
+		t.Fatalf("staged tracker files must skip beads")
 	}
-	if !IsSystemicPreClaimSkipReason(reason1) || !IsSystemicPreClaimSkipReason(reason2) {
-		t.Fatalf("staged beads.jsonl must produce systemic reason prefix: %q / %q", reason1, reason2)
+	if !IsTrackerContentionPreClaimSkipReason(reason1) || !IsTrackerContentionPreClaimSkipReason(reason2) {
+		t.Fatalf("staged tracker files must produce tracker-contention reason prefix: %q / %q", reason1, reason2)
+	}
+	if IsSystemicPreClaimSkipReason(reason1) || IsSystemicPreClaimSkipReason(reason2) {
+		t.Fatalf("tracker contention must be distinct from systemic: %q / %q", reason1, reason2)
 	}
 	if store.calls != 0 {
-		t.Fatalf("staged beads.jsonl must not write bead cooldowns, got %d", store.calls)
+		t.Fatalf("staged tracker files must not write bead cooldowns, got %d", store.calls)
+	}
+}
+
+// TestPreClaimStagedCodeFile_IsSystemicNotTrackerContention: ddx-df77e668
+// AC #2 (other branch) — a staged-changes error that includes a code/doc/test
+// file is a systemic "work never committed" state, NOT transient tracker
+// contention, even when tracker files are also staged.
+func TestPreClaimStagedCodeFile_IsSystemicNotTrackerContention(t *testing.T) {
+	store := &stubCooldownStore{}
+	errMsg := "landing worktree has staged changes after waiting 30s:\nM\t.ddx/beads.jsonl\nM\tcli/internal/agent/foo.go"
+	guard := NewPreClaimGuard(func(ctx context.Context) error {
+		return errors.New(errMsg)
+	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
+
+	allowed1, reason1 := guard.Allow(context.Background(), "ddx-code-1")
+	allowed2, reason2 := guard.Allow(context.Background(), "ddx-code-2")
+
+	if allowed1 || allowed2 {
+		t.Fatalf("staged code changes must skip beads")
+	}
+	if !IsSystemicPreClaimSkipReason(reason1) || !IsSystemicPreClaimSkipReason(reason2) {
+		t.Fatalf("staged code changes must produce systemic reason prefix: %q / %q", reason1, reason2)
+	}
+	if IsTrackerContentionPreClaimSkipReason(reason1) || IsTrackerContentionPreClaimSkipReason(reason2) {
+		t.Fatalf("staged code changes must not be classified as tracker contention: %q / %q", reason1, reason2)
+	}
+	if store.calls != 0 {
+		t.Fatalf("staged code changes must not write bead cooldowns, got %d", store.calls)
 	}
 }
 

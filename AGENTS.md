@@ -139,6 +139,28 @@ is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
 - If you need a factual citation, point to the smallest relevant file:line
   span and avoid broad re-reading of unrelated context.
 
+## Pre-Claim Worktree Cleanliness
+
+Before a `ddx work` worker claims the next bead, it verifies the landing
+worktree has no staged changes that a new claim could clobber. Not every
+staged path blocks a claim:
+
+- **Block pre-claim** (real work that must be committed first): any staged
+  code, doc, or test file — anything outside the DDx-managed tracker set
+  below. A staged code change surfaces as a `preclaim_systemic` idle.
+- **Do NOT block pre-claim** (DDx-managed tracker/metadata, rewritten
+  continuously by concurrent workers): `.ddx/beads.jsonl`,
+  `.ddx/beads-archive.jsonl`, `.ddx/metrics/attempts.jsonl`, and anything
+  under `.ddx/attachments/`. These are append-mostly metadata, not code, and
+  the next claim rewrites them anyway. When only these are staged the worktree
+  is treated as clean.
+
+If a worker idles specifically because tracker files are mid-commit on a busy
+multi-worker host, that transient state is reported as
+`preclaim_tracker_contention` (distinct from `preclaim_systemic`). After
+several consecutive idle cycles on the same blocker the worker raises a
+non-terminal operator-attention event instead of looping silently.
+
 <!-- DDX-AGENTS:START -->
 <!-- Managed by ddx init / ddx update. Edit outside these markers. -->
 

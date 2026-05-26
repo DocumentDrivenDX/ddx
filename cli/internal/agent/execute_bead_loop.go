@@ -956,6 +956,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	wasIdle := false
 	lastIdleQueueSignature := ""
 
+	// Pre-claim idle escalation state (ddx-df77e668 AC #3). When the worker
+	// idles on the same pre-claim blocker for preClaimIdleEscalationThreshold
+	// consecutive cycles, it emits a non-terminal operator-attention event so
+	// the stall is visible instead of looping silently. The streak resets when
+	// the blocker detail changes or the worker stops idling on it.
+	preClaimIdleDetail := ""
+	preClaimIdleStreak := 0
+	preClaimIdleFirstAt := time.Time{}
+	preClaimIdleEscalated := false
+	resetPreClaimIdleStreak := func() {
+		preClaimIdleDetail = ""
+		preClaimIdleStreak = 0
+		preClaimIdleEscalated = false
+	}
+
 	// Worker-side liveness sidecar. Updated on each heartbeat tick so an
 	// operator's `ddx work focus` / GraphQL panel can answer "is this worker
 	// alive and what is it doing?" without paying tracker rewrite cost. The
@@ -1207,12 +1222,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			emitPickerPrioritySkips(emit, candidate, skips)
 		}
 		if !ok {
-			if detail, systemic := systemicPreClaimSkipDetail(skips); systemic {
+			if detail, reasonCode, idleBeadID, isIdle := preClaimIdleSkip(skips); isIdle {
 				if runtime.Log != nil && !wasIdle {
 					_, _ = fmt.Fprintf(runtime.Log, "pre-claim hook blocked queue: %s; sleeping %s\n", detail, idleInterval)
 				}
 				emit("loop.idle", map[string]any{
-					"reason":        "preclaim_systemic",
+					"reason":        reasonCode,
 					"detail":        detail,
 					"idle_interval": idleInterval.String(),
 				})
@@ -1223,11 +1238,39 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Phase:     "loop.idle",
 					Heartbeat: true,
 					TS:        now().UTC(),
-					Message:   "preclaim_systemic",
+					Message:   reasonCode,
 				})
 				wasIdle = true
+
+				// Same-detail escalation (ddx-df77e668 AC #3): count consecutive
+				// idle cycles on an identical blocker and emit a non-terminal
+				// operator-attention event once the streak crosses the threshold,
+				// instead of looping silently forever.
+				if detail == preClaimIdleDetail {
+					preClaimIdleStreak++
+				} else {
+					preClaimIdleDetail = detail
+					preClaimIdleStreak = 1
+					preClaimIdleFirstAt = now().UTC()
+					preClaimIdleEscalated = false
+				}
+				if preClaimIdleStreak >= preClaimIdleEscalationThreshold && !preClaimIdleEscalated {
+					preClaimIdleEscalated = true
+					elapsedIdle := now().UTC().Sub(preClaimIdleFirstAt)
+					emit("loop.operator_attention", map[string]any{
+						"reason":       "preclaim_idle_escalation",
+						"bead_id":      idleBeadID,
+						"detail":       detail,
+						"elapsed_idle": elapsedIdle.String(),
+						"idle_count":   preClaimIdleStreak,
+					})
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "operator attention: pre-claim idled %d consecutive cycles on the same blocker (%s; idle for %s); manual intervention may be required\n", preClaimIdleStreak, detail, elapsedIdle)
+					}
+				}
+
 				if loopMode != executeloop.ModeWatch {
-					setExit("Preflight", "preclaim_systemic")
+					setExit("Preflight", reasonCode)
 					return result, nil
 				}
 				if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
@@ -1300,6 +1343,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				lastIdleQueueSignature = signature
 			}
 			clearTransientCandidateSkips()
+			resetPreClaimIdleStreak()
 			wasIdle = true
 			// Watch mode treats an empty queue as idle, not terminal. --once
 			// and drain exits are classified above through work.StopCondition.
@@ -1339,6 +1383,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			_, _ = fmt.Fprint(runtime.Log, workLog.FormatNextReadyTransition(candidate.ID, candidate.Title))
 		}
 		wasIdle = false
+		resetPreClaimIdleStreak()
 		emitProgress(runtime.ProgressCh, ProgressEvent{
 			EventID:   "evt-" + randomProgressID(),
 			WorkerID:  runtime.WorkerID,
@@ -3076,24 +3121,56 @@ func hasGuardSkips(skips []pickerSkip) bool {
 	return false
 }
 
-func systemicPreClaimSkipDetail(skips []pickerSkip) (string, bool) {
-	detail := ""
-	seenSystemic := false
+// preClaimIdleReasonSystemic and preClaimIdleReasonTrackerContention are the
+// loop.idle reason codes for the two non-cooldown pre-claim skip classes.
+// Tracker contention is distinguished from systemic so operators can tell
+// transient multi-worker tracker churn apart from a real repo-config wedge
+// (ddx-df77e668).
+const (
+	preClaimIdleReasonSystemic          = "preclaim_systemic"
+	preClaimIdleReasonTrackerContention = "preclaim_tracker_contention"
+)
+
+// preClaimIdleEscalationThreshold is the number of consecutive loop.idle cycles
+// with an identical pre-claim blocker detail after which the worker emits a
+// non-terminal operator-attention event (ddx-df77e668 AC #3).
+const preClaimIdleEscalationThreshold = 5
+
+// preClaimIdleSkip reports whether the picker's skips are entirely
+// transient/eligibility skips plus at least one non-cooldown pre-claim skip
+// (systemic or tracker-contention). When ok is true the loop idles without
+// cooldowning any bead. detail is the human-readable blocker, reasonCode is the
+// loop.idle reason, and beadID names a representative skipped bead. If any skip
+// is a bead-specific failure, ok is false so the caller handles it elsewhere.
+// Systemic takes precedence over tracker contention when both are present.
+func preClaimIdleSkip(skips []pickerSkip) (detail, reasonCode, beadID string, ok bool) {
 	for _, skip := range skips {
 		switch skip.Reason {
 		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead", staleCandidateSkipReason:
 			continue
+		}
+		switch {
+		case work.IsSystemicPreClaimSkipReason(skip.Reason):
+			reasonCode = preClaimIdleReasonSystemic
+			detail = work.SystemicPreClaimDetail(skip.Reason)
+			if beadID == "" {
+				beadID = skip.BeadID
+			}
+			ok = true
+		case work.IsTrackerContentionPreClaimSkipReason(skip.Reason):
+			if reasonCode != preClaimIdleReasonSystemic {
+				reasonCode = preClaimIdleReasonTrackerContention
+				detail = work.TrackerContentionPreClaimDetail(skip.Reason)
+			}
+			if beadID == "" {
+				beadID = skip.BeadID
+			}
+			ok = true
 		default:
-			if !work.IsSystemicPreClaimSkipReason(skip.Reason) {
-				return "", false
-			}
-			seenSystemic = true
-			if detail == "" {
-				detail = work.SystemicPreClaimDetail(skip.Reason)
-			}
+			return "", "", "", false
 		}
 	}
-	return detail, seenSystemic
+	return detail, reasonCode, beadID, ok
 }
 
 func queueRankValue(raw any) any {

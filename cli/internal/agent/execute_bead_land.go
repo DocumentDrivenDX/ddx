@@ -523,6 +523,17 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 		if err == nil {
 			return nil
 		}
+		// There are staged changes (or a corrupt index). DDx-managed tracker
+		// files (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, …) are
+		// append-mostly metadata that concurrent workers rewrite continuously;
+		// a short wait for them to settle reliably fails on a busy multi-worker
+		// host and wedges the queue (ddx-df77e668). They are not code, and the
+		// next claim rewrites them anyway, so they must never block a claim.
+		// When the only staged paths are tracker files, the landing worktree is
+		// clean for claim purposes.
+		if blocking, ok := blockingStagedPaths(dir); ok && len(blocking) == 0 {
+			return nil
+		}
 		if !repairedCorruptIndex && isRecoverableLandingIndexCorruption(string(out)) {
 			repairedCorruptIndex = true
 			if _, recErr := readTreeHeadWithRetry(dir); recErr != nil {
@@ -567,6 +578,45 @@ func isRecoverableLandingIndexCorruption(output string) bool {
 	return strings.Contains(lower, "index file smaller than expected") ||
 		strings.Contains(lower, "bad index file") ||
 		strings.Contains(lower, "unexpected end of file while reading index")
+}
+
+// blockingStagedPaths returns the staged paths that would genuinely block a
+// claim — i.e. every staged path that is NOT a DDx-managed tracker/metadata
+// file. ok is false when the staged list cannot be read (e.g. a corrupt
+// index), so callers can fall through to their corruption-recovery path
+// instead of mistaking the read failure for "no blocking changes".
+func blockingStagedPaths(dir string) (blocking []string, ok bool) {
+	out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").CombinedOutput()
+	if err != nil {
+		return nil, false
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		p := strings.TrimSpace(line)
+		if p == "" || isDDxManagedTrackerPath(p) {
+			continue
+		}
+		blocking = append(blocking, p)
+	}
+	return blocking, true
+}
+
+// isDDxManagedTrackerPath reports whether a repo-relative path is one of the
+// DDx-managed tracker/metadata files that workers rewrite continuously
+// (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, .ddx/attachments/, …). These
+// are append-mostly metadata, not code, so they must not block pre-claim
+// (ddx-df77e668). The managed set is the same one durable-audit commits own.
+func isDDxManagedTrackerPath(path string) bool {
+	clean := strings.TrimSpace(filepath.ToSlash(path))
+	if clean == "" {
+		return false
+	}
+	for _, managed := range durableAuditManagedPathspecs {
+		m := strings.TrimSuffix(filepath.ToSlash(managed), "/")
+		if clean == m || strings.HasPrefix(clean, m+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // indexMatchesRecentAncestorTree reports whether the current index's tree

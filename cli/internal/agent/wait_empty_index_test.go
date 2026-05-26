@@ -89,6 +89,61 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 	}
 }
 
+// TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles verifies ddx-df77e668
+// AC #1: DDx-managed tracker files staged in the landing worktree must not
+// block pre-claim. waitForEmptyGitIndex must return promptly even while
+// .ddx/beads.jsonl and .ddx/metrics/attempts.jsonl are staged, because those
+// append-mostly metadata files are continuously rewritten by other workers.
+func TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	for _, rel := range []string{".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl", ".ddx/beads-archive.jsonl"} {
+		r.writeFile(rel, "{\"id\":\"ddx-1\"}\n")
+		r.runGit("add", rel)
+	}
+
+	// Sanity-check: the tracker files really are staged.
+	staged := r.runGit("diff", "--cached", "--name-only")
+	if !strings.Contains(staged, ".ddx/beads.jsonl") {
+		t.Fatalf("setup did not stage tracker files; staged=%q", staged)
+	}
+
+	start := time.Now()
+	if err := waitForEmptyGitIndex(r.dir, 2*time.Second); err != nil {
+		t.Fatalf("staged tracker files must not block pre-claim: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("tracker-only staged state should resolve promptly, took %s", elapsed)
+	}
+
+	// The exemption must not silently clean the index — the staged tracker
+	// files remain staged for the next durable-audit commit.
+	if got := r.runGit("diff", "--cached", "--name-only"); !strings.Contains(got, ".ddx/beads.jsonl") {
+		t.Fatalf("tracker files must remain staged, got %q", got)
+	}
+}
+
+// TestWaitForEmptyGitIndex_StagedCodeStillBlocksAlongsideTracker verifies that
+// the tracker exemption does not mask a genuine code change: when a code file
+// is staged alongside tracker files, pre-claim must still surface the staged
+// error (ddx-df77e668 — only tracker-only states are exempt).
+func TestWaitForEmptyGitIndex_StagedCodeStillBlocksAlongsideTracker(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	r.writeFile(".ddx/beads.jsonl", "{\"id\":\"ddx-1\"}\n")
+	r.runGit("add", ".ddx/beads.jsonl")
+	r.writeFile("main.go", "package main\n")
+	r.runGit("add", "main.go")
+
+	err := waitForEmptyGitIndex(r.dir, 100*time.Millisecond)
+	if err == nil {
+		t.Fatalf("staged code file must block pre-claim even with tracker files staged")
+	}
+	if !strings.Contains(err.Error(), "staged changes") {
+		t.Fatalf("error = %v, want staged changes error", err)
+	}
+}
+
 // TestWaitForEmptyGitIndex_RecoversFromCorruptIndex verifies that a truncated
 // landing index is rebuilt instead of being misreported as staged work.
 func TestWaitForEmptyGitIndex_RecoversFromCorruptIndex(t *testing.T) {
