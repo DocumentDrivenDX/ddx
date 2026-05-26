@@ -1084,6 +1084,58 @@ func (s *Store) Unclaim(id string) error {
 	return s.RemoveClaimHeartbeat(id)
 }
 
+// Release is the atomic, symmetric counterpart to Claim: it transitions a
+// claimed bead back to targetStatus (StatusOpen when empty), clears Owner,
+// persists the row, AND removes the external claim-heartbeat lease sidecar —
+// all inside a single WithLock critical section. Unlike Unclaim (which removes
+// the lease only after the lock is released), Release couples claim clearing
+// and lifecycle status in one locked write, so a failure-release can never
+// leave a stale lease sidecar while `ddx bead status` reports the bead as not
+// in_progress (the phantom-lease inconsistency observed in ddx-8f2e0ebf).
+//
+// Only an in_progress bead has its status transitioned; a bead in any other
+// status (e.g. closed) keeps its status and only has Owner and the lease
+// cleared, mirroring Unclaim's guard so a released bead is never reopened.
+func (s *Store) Release(id, assignee, targetStatus string) error {
+	if strings.TrimSpace(targetStatus) == "" {
+		targetStatus = StatusOpen
+	}
+	return s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			if beads[i].Status == StatusInProgress {
+				if err := transitionLifecycleInPlace(&beads[i], targetStatus, LifecycleTransitionOptions{
+					Reason: "release",
+					Actor:  assignee,
+					Source: "Store.Release",
+				}); err != nil {
+					return err
+				}
+			}
+			beads[i].Owner = ""
+			beads[i].UpdatedAt = time.Now().UTC()
+			clearClaimExtraKeys(beads[i].Extra)
+			if err := s.validateBead(&beads[i]); err != nil {
+				return err
+			}
+			if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
+				return err
+			}
+			if err := s.WriteAll(beads); err != nil {
+				return err
+			}
+			return s.RemoveClaimHeartbeat(id)
+		}
+		return fmt.Errorf("bead: not found: %s", id)
+	})
+}
+
 // SetExecutionCooldown parks bead id until the given wall-clock time.
 // baseRev is the origin/main HEAD at cooldown time; when non-empty it enables
 // rev-bound auto-invalidation: if origin/main advances past baseRev the

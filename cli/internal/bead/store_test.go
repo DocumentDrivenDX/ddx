@@ -876,6 +876,96 @@ func TestClaimMetadataKeys_SharedByReopenAndUnclaim(t *testing.T) {
 	assert.Equal(t, "should-survive", got.Extra["claim-test-extra"], "Reopen must not clear unrelated Extra keys")
 }
 
+// TestStoreReleaseClearsClaimAtomically verifies Store.Release is the
+// symmetric counterpart to Store.Claim: it returns a claimed bead to open,
+// clears the owner and claim metadata, removes the external lease sidecar, and
+// the resulting status counts report nothing in_progress.
+func TestStoreReleaseClearsClaimAtomically(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-release-atomic", Title: "Release clears claim", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), b))
+
+	// Claim transitions to in_progress with an owner and writes a lease sidecar.
+	require.NoError(t, s.Claim(b.ID, "worker-a"))
+	claimed, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	require.Equal(t, StatusInProgress, claimed.Status)
+	require.Equal(t, "worker-a", claimed.Owner)
+	_, leasePresent, err := s.ClaimLease(b.ID)
+	require.NoError(t, err)
+	require.True(t, leasePresent, "claim must write a lease sidecar")
+
+	// Release returns the bead to open, clears the owner, and removes the lease.
+	require.NoError(t, s.Release(b.ID, "worker-a", ""))
+
+	released, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, released.Status, "release must return the bead to open")
+	assert.Empty(t, released.Owner, "release must clear the owner")
+	for _, k := range ClaimMetadataExtraKeys {
+		assert.NotContains(t, released.Extra, k, "release must clear claim metadata key %q", k)
+	}
+	assert.NotContains(t, released.Extra, ClaimHeartbeatExtraKey, "release must clear the heartbeat extra key")
+
+	_, leasePresent, err = s.ClaimLease(b.ID)
+	require.NoError(t, err)
+	assert.False(t, leasePresent, "release must remove the claim lease sidecar")
+
+	// ddx bead status must reflect the released lease: nothing in_progress.
+	counts, err := s.Status()
+	require.NoError(t, err)
+	assert.Equal(t, 0, counts.InProgress, "released bead must not be counted in_progress")
+	assert.Equal(t, 1, counts.Open, "released bead must be counted open")
+}
+
+// TestClaimReleaseStatusReflectsLease runs the claim/release lifecycle across a
+// worker goroutine while the test goroutine inspects status: while claimed the
+// bead reports in_progress with an owner; after release it reports open with no
+// owner.
+func TestClaimReleaseStatusReflectsLease(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-release-status", Title: "Status reflects lease", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), b))
+
+	claimed := make(chan struct{})
+	released := make(chan struct{})
+	observerDone := make(chan struct{})
+	claimErr := make(chan error, 1)
+	releaseErr := make(chan error, 1)
+
+	// Worker goroutine: claim, signal, hold until the observer inspects, release.
+	go func() {
+		claimErr <- s.Claim(b.ID, "worker-a")
+		close(claimed)
+		<-observerDone
+		releaseErr <- s.Release(b.ID, "worker-a", "")
+		close(released)
+	}()
+
+	// Inspect status while the claim is held by the worker goroutine.
+	<-claimed
+	require.NoError(t, <-claimErr)
+	mid, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusInProgress, mid.Status, "while claimed the bead must report in_progress")
+	assert.Equal(t, "worker-a", mid.Owner, "while claimed the bead must report an owner")
+	midCounts, err := s.Status()
+	require.NoError(t, err)
+	assert.Equal(t, 1, midCounts.InProgress, "claimed bead must be counted in_progress")
+
+	// Let the worker release, then inspect again.
+	close(observerDone)
+	<-released
+	require.NoError(t, <-releaseErr)
+	after, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, after.Status, "after release the bead must report open")
+	assert.Empty(t, after.Owner, "after release the bead must report no owner")
+	afterCounts, err := s.Status()
+	require.NoError(t, err)
+	assert.Equal(t, 0, afterCounts.InProgress, "released bead must not be counted in_progress")
+}
+
 // withHeartbeat temporarily overrides HeartbeatInterval and HeartbeatTTL for
 // the duration of a test.
 func withHeartbeat(t *testing.T, interval, ttl time.Duration) {
