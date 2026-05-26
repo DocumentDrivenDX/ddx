@@ -73,10 +73,51 @@ type preClaimReadinessClassificationPromptResult struct {
 }
 
 type preClaimReadinessCheck struct {
-	Reason                 string `json:"reason,omitempty"`
-	Verdict                string `json:"verdict,omitempty"`
-	Evidence               string `json:"evidence,omitempty"`
-	CheckableBeforeAttempt bool   `json:"checkable_before_attempt,omitempty"`
+	Reason                 string           `json:"reason,omitempty"`
+	Verdict                readinessVerdict `json:"verdict,omitempty"`
+	Evidence               string           `json:"evidence,omitempty"`
+	CheckableBeforeAttempt bool             `json:"checkable_before_attempt,omitempty"`
+}
+
+// readinessVerdict is the verdict reported for a single readiness check.
+// The intake producer may emit verdict as a JSON bool, a JSON string, or omit
+// it entirely; UnmarshalJSON coerces all three forms to a canonical string so
+// downstream fail-detection (failedReadinessReasons) can lower/trim-compare it:
+//   - JSON bool true  -> "pass"
+//   - JSON bool false -> "fail"
+//   - JSON string     -> trimmed value, passed through unchanged (e.g. "pass",
+//     "fail", "ready", "not_ready")
+//   - absent / null   -> "" (empty, same as a missing field)
+type readinessVerdict string
+
+func (v *readinessVerdict) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*v = ""
+		return nil
+	}
+	switch trimmed[0] {
+	case 't', 'f':
+		var b bool
+		if err := json.Unmarshal(data, &b); err != nil {
+			return err
+		}
+		if b {
+			*v = "pass"
+		} else {
+			*v = "fail"
+		}
+		return nil
+	case '"':
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*v = readinessVerdict(strings.TrimSpace(s))
+		return nil
+	default:
+		return fmt.Errorf("readiness_checks verdict must be a bool, string, or null")
+	}
 }
 
 type preClaimReadinessSuggestedFix struct {
@@ -782,7 +823,7 @@ func decodeReadinessClassificationPayloadWithMode(payload string, qualityMode st
 func failedReadinessReasons(checks []preClaimReadinessCheck) []string {
 	reasons := make([]string, 0, len(checks))
 	for _, check := range checks {
-		verdict := strings.ToLower(strings.TrimSpace(check.Verdict))
+		verdict := strings.ToLower(strings.TrimSpace(string(check.Verdict)))
 		if verdict != "fail" {
 			continue
 		}
@@ -806,7 +847,7 @@ func malformedReadinessChecksDetail(checks preClaimReadinessChecksPayload) strin
 
 func readinessCheckEvidence(checks []preClaimReadinessCheck) string {
 	for _, check := range checks {
-		if strings.ToLower(strings.TrimSpace(check.Verdict)) != "fail" {
+		if strings.ToLower(strings.TrimSpace(string(check.Verdict))) != "fail" {
 			continue
 		}
 		if evidence := strings.TrimSpace(check.Evidence); evidence != "" {
