@@ -65,6 +65,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	maxBeadCostUSD, _ := cmd.Flags().GetFloat64("max-bead-cost")
 	maxRecoveryCostUSD, _ := cmd.Flags().GetFloat64("max-recovery-cost")
 	preClaimTimeout, _ := cmd.Flags().GetDuration("preclaim-timeout")
+	routeResolutionTimeout, _ := cmd.Flags().GetDuration("route-resolution-timeout")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	rateLimitMaxWait, _ := cmd.Flags().GetDuration("rate-limit-max-wait")
 	minPower, _ := cmd.Flags().GetInt("min-power")
@@ -113,6 +114,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		MaxBeadCostUSD:         maxBeadCostUSD,
 		MaxRecoveryCostUSD:     maxRecoveryCostUSD,
 		PreClaimTimeout:        executeloop.Duration{Duration: preClaimTimeout},
+		RouteResolutionTimeout: executeloop.Duration{Duration: routeResolutionTimeout},
 		RequestTimeout:         executeloop.Duration{Duration: requestTimeout},
 		RateLimitMaxWait:       executeloop.Duration{Duration: rateLimitMaxWait},
 		MinPower:               minPower,
@@ -454,6 +456,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 						targetBead.Extra, time.Now().UTC(), initialMinPower,
 						svcForExcl.ResolveRoute,
 						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
+						spec.RouteResolutionTimeout.Duration,
+						loopSessionID,
 					); skip {
 						applyExecutionRoutingIntentReport(&exclusionReport, routingIntent, "", "")
 						return exclusionReport, nil
@@ -548,6 +552,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreClaimIntakeHook:           intakeHook,
 		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
+		RouteResolutionTimeout:       spec.RouteResolutionTimeout.Duration,
 		PreDispatchLintHook:          lintHook,
 		PostAttemptTriageHook:        triageHook,
 		ProseEvidenceHook:            proseHook,

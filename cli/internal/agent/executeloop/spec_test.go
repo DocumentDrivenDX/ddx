@@ -10,28 +10,29 @@ import (
 
 func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	original := executeloop.ExecuteLoopSpec{
-		ProjectRoot:        "/projects/myapp",
-		Harness:            "claude-code",
-		Model:              "claude-opus-4-7",
-		Profile:            "default",
-		Provider:           "anthropic",
-		Effort:             "high",
-		LabelFilter:        "area:agent",
-		Mode:               executeloop.ModeWatch,
-		IdleInterval:       executeloop.Duration{Duration: 45 * time.Second},
-		NoReview:           true,
-		ReviewHarness:      "reviewer-harness",
-		ReviewModel:        "claude-sonnet-4-6",
-		OpaquePassthrough:  true,
-		MaxCostUSD:         12.50,
-		MaxRecoveryCostUSD: 2.75,
-		PreClaimTimeout:    executeloop.Duration{Duration: 45 * time.Second},
-		RequestTimeout:     executeloop.Duration{Duration: 2 * time.Minute},
-		RateLimitMaxWait:   executeloop.Duration{Duration: 90 * time.Second},
-		MinPower:           2,
-		MaxPower:           5,
-		FromRev:            "abc123def456",
-		SpecVersion:        executeloop.SpecCurrentVersion,
+		ProjectRoot:            "/projects/myapp",
+		Harness:                "claude-code",
+		Model:                  "claude-opus-4-7",
+		Profile:                "default",
+		Provider:               "anthropic",
+		Effort:                 "high",
+		LabelFilter:            "area:agent",
+		Mode:                   executeloop.ModeWatch,
+		IdleInterval:           executeloop.Duration{Duration: 45 * time.Second},
+		NoReview:               true,
+		ReviewHarness:          "reviewer-harness",
+		ReviewModel:            "claude-sonnet-4-6",
+		OpaquePassthrough:      true,
+		MaxCostUSD:             12.50,
+		MaxRecoveryCostUSD:     2.75,
+		PreClaimTimeout:        executeloop.Duration{Duration: 45 * time.Second},
+		RouteResolutionTimeout: executeloop.Duration{Duration: 75 * time.Second},
+		RequestTimeout:         executeloop.Duration{Duration: 2 * time.Minute},
+		RateLimitMaxWait:       executeloop.Duration{Duration: 90 * time.Second},
+		MinPower:               2,
+		MaxPower:               5,
+		FromRev:                "abc123def456",
+		SpecVersion:            executeloop.SpecCurrentVersion,
 	}
 
 	data, err := json.Marshal(original)
@@ -91,6 +92,9 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	}
 	if got.PreClaimTimeout != original.PreClaimTimeout {
 		t.Errorf("PreClaimTimeout: got %v, want %v", got.PreClaimTimeout, original.PreClaimTimeout)
+	}
+	if got.RouteResolutionTimeout != original.RouteResolutionTimeout {
+		t.Errorf("RouteResolutionTimeout: got %v, want %v", got.RouteResolutionTimeout, original.RouteResolutionTimeout)
 	}
 	if got.RequestTimeout != original.RequestTimeout {
 		t.Errorf("RequestTimeout: got %v, want %v", got.RequestTimeout, original.RequestTimeout)

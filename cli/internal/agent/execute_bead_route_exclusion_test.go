@@ -218,6 +218,7 @@ func TestFailedRoutesDoNotWriteNumericRetryFloor(t *testing.T) {
 		context.Background(), store, first.ID, "actor", b.Extra, frozen, 50,
 		noViableRoute,
 		func(p int) (int, error) { return p + 20, nil },
+		0, "",
 	)
 
 	require.True(t, skip, "dispatch must be skipped when all routes at the requested power class are excluded")
@@ -378,4 +379,115 @@ func TestIsProviderConnectivityFailureReport_Discriminates(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRouteResolutionTimeoutDefaultIs60s pins the default route-resolution
+// timeout and the runtime fallback used by both the routing preflight and the
+// resolveRoute viability check (ddx-d8970a7b AC #1).
+func TestRouteResolutionTimeoutDefaultIs60s(t *testing.T) {
+	require.Equal(t, 60*time.Second, DefaultRouteResolutionTimeout)
+
+	var rt ExecuteBeadLoopRuntime
+	assert.Equal(t, 60*time.Second, rt.effectiveRouteResolutionTimeout(),
+		"a zero-value runtime must fall back to the 60s default")
+
+	rt.RouteResolutionTimeout = 5 * time.Second
+	assert.Equal(t, 5*time.Second, rt.effectiveRouteResolutionTimeout(),
+		"a non-zero override must be honored")
+}
+
+// TestWorkerReleasesOnRouteResolutionTimeout injects a resolveRoute stub that
+// hangs forever (ignoring context cancellation, the wedge from ddx-8f2e0ebf)
+// and asserts the worker releases the held lease within timeout+10s, returns an
+// execution_failed / route_resolution_timeout report, and emits an
+// operator-attention event carrying bead-id, attempt-id, last_activity_at, and
+// a diagnosis (ddx-d8970a7b AC #2).
+func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	frozen := time.Date(2026, 5, 26, 10, 0, 0, 0, time.UTC)
+
+	// A recent failed route makes the exclusion set non-empty so the viability
+	// check actually invokes resolveRoute.
+	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+		appendFailedRoute(b, FailedRouteEntry{
+			Provider: "bragi", Model: "qwen3-27b",
+			At: frozen.Add(-5 * time.Minute).Format(time.RFC3339),
+		})
+	}))
+	// Claim the bead so a lease is held when route resolution wedges.
+	require.NoError(t, store.Claim(first.ID, "worker-a"))
+	claimed, err := store.Get(first.ID)
+	require.NoError(t, err)
+	require.Equal(t, bead.StatusInProgress, claimed.Status)
+
+	// A resolver that hangs, ignoring context cancellation. The release channel
+	// lets the leaked goroutine exit at test cleanup.
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	resolverEntered := make(chan struct{})
+	hangingResolve := func(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		close(resolverEntered)
+		<-release
+		return nil, fmt.Errorf("never reached")
+	}
+
+	const timeout = 100 * time.Millisecond
+	const attemptID = "20260526T100000-abcd1234"
+
+	type outcome struct {
+		report ExecuteBeadReport
+		skip   bool
+	}
+	resultCh := make(chan outcome, 1)
+	start := time.Now()
+	go func() {
+		report, skip := CheckAndApplyRouteExclusions(
+			context.Background(), store, first.ID, "worker-a",
+			claimed.Extra, frozen, 50,
+			hangingResolve,
+			func(p int) (int, error) { return p + 10, nil },
+			timeout, attemptID,
+		)
+		resultCh <- outcome{report: report, skip: skip}
+	}()
+
+	var got outcome
+	select {
+	case got = <-resultCh:
+	case <-time.After(timeout + 10*time.Second):
+		t.Fatal("CheckAndApplyRouteExclusions did not return within timeout+10s on a hung resolver")
+	}
+	<-resolverEntered // the hung resolver was actually invoked
+	require.LessOrEqual(t, time.Since(start), timeout+10*time.Second)
+
+	require.True(t, got.skip, "a route-resolution timeout must skip dispatch")
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.report.Status)
+	assert.Equal(t, FailureModeRouteResolutionTimeout, got.report.OutcomeReason)
+	assert.Equal(t, first.ID, got.report.BeadID)
+
+	// The lease was released atomically: status back to open, owner cleared.
+	released, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, released.Status, "the held lease must be released to open")
+	assert.Empty(t, released.Owner, "the claim owner must be cleared on release")
+
+	// An operator-attention event was emitted with the required fields.
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var attention *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "operator_attention" {
+			attention = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, attention, "an operator_attention event must be emitted on route-resolution timeout")
+	assert.Equal(t, FailureModeRouteResolutionTimeout, attention.Summary)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(attention.Body), &body))
+	assert.Equal(t, first.ID, body["bead_id"])
+	assert.Equal(t, attemptID, body["attempt_id"])
+	assert.Equal(t, frozen.UTC().Format(time.RFC3339), body["last_activity_at"])
+	assert.NotEmpty(t, body["diagnosis"])
 }

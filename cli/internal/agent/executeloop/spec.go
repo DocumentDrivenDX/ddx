@@ -99,8 +99,12 @@ type ExecuteLoopSpec struct {
 	PreClaimTimeout    Duration `json:"preclaim_timeout,omitempty"`
 	RequestTimeout     Duration `json:"request_timeout,omitempty"`
 	RateLimitMaxWait   Duration `json:"rate_limit_max_wait,omitempty"`
-	MinPower           int      `json:"min_power,omitempty"`
-	MaxPower           int      `json:"max_power,omitempty"`
+	// RouteResolutionTimeout bounds routing preflight and the resolveRoute
+	// viability check so a hung resolver cannot wedge the worker. Zero uses the
+	// binary default (agent.DefaultRouteResolutionTimeout, 60s).
+	RouteResolutionTimeout Duration `json:"route_resolution_timeout,omitempty"`
+	MinPower               int      `json:"min_power,omitempty"`
+	MaxPower               int      `json:"max_power,omitempty"`
 
 	// FromRev, if set, narrows execution to beads introduced after this git revision.
 	FromRev string `json:"from_rev,omitempty"`

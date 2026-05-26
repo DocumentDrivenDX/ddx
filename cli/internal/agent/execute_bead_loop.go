@@ -70,6 +70,11 @@ type ExecuteBeadLoopRuntime struct {
 	// binary default so a hanging readiness check cannot park the worker
 	// forever.
 	PreClaimTimeout time.Duration
+	// RouteResolutionTimeout bounds the routing preflight (RoutePreflight) and
+	// the resolveRoute viability check so a hung resolver cannot wedge the
+	// single-threaded worker for hours while a lease is held (ddx-8f2e0ebf).
+	// Zero means use DefaultRouteResolutionTimeout (60s).
+	RouteResolutionTimeout time.Duration
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
 	// work-layer StopCondition before any new bead is claimed. The companion
@@ -141,6 +146,22 @@ func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
 		idleInterval = 30 * time.Second
 	}
 	return mode, idleInterval
+}
+
+// DefaultRouteResolutionTimeout bounds routing preflight and the resolveRoute
+// viability check when ExecuteBeadLoopRuntime.RouteResolutionTimeout is unset.
+// A hung resolver previously wedged the single-threaded worker for hours while
+// holding a lease (ddx-8f2e0ebf); 60s is short enough to release promptly and
+// long enough not to false-trip a slow-but-healthy resolver.
+const DefaultRouteResolutionTimeout = 60 * time.Second
+
+// effectiveRouteResolutionTimeout returns the configured route-resolution
+// timeout, falling back to DefaultRouteResolutionTimeout when unset.
+func (r ExecuteBeadLoopRuntime) effectiveRouteResolutionTimeout() time.Duration {
+	if r.RouteResolutionTimeout > 0 {
+		return r.RouteResolutionTimeout
+	}
+	return DefaultRouteResolutionTimeout
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -1072,7 +1093,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		return true
 	}
 	if runtime.RoutePreflight != nil {
-		if rerr := runtime.RoutePreflight(ctx, harness, model); rerr != nil {
+		routeTimeout := runtime.effectiveRouteResolutionTimeout()
+		rerr, timedOut := runRoutePreflightBounded(ctx, routeTimeout, func(c context.Context) error {
+			return runtime.RoutePreflight(c, harness, model)
+		})
+		if timedOut {
+			detail := fmt.Sprintf("routing preflight timed out after %s (harness=%s model=%s); no lease held at startup",
+				routeTimeout, harness, model)
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s\n", detail)
+			}
+			emit("loop.operator_attention", map[string]any{
+				"reason":           FailureModeRouteResolutionTimeout,
+				"harness":          harness,
+				"model":            model,
+				"last_activity_at": now().UTC().Format(time.RFC3339),
+				"timeout":          routeTimeout.String(),
+				"diagnosis":        detail,
+				"startup":          true,
+			})
+			report := ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				Detail:        detail,
+				Harness:       harness,
+				Model:         model,
+				OutcomeReason: FailureModeRouteResolutionTimeout,
+			}
+			result.OperatorAttention = &OperatorAttentionStop{
+				Reason:  FailureModeRouteResolutionTimeout,
+				Message: detail,
+			}
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			result.Results = append(result.Results, report)
+			setExit("OperatorAttention", "operator_attention")
+			return result, nil
+		}
+		if rerr != nil {
 			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
 				harness, model, rerr.Error())
 			if runtime.Log != nil {
@@ -4879,24 +4936,127 @@ func buildExcludedRoutes(failedRoutes []FailedRouteEntry, now time.Time, window 
 	return out
 }
 
+// leaseReleaser is the narrow capability CheckAndApplyRouteExclusions needs to
+// atomically release a held lease on a route-resolution timeout. *bead.Store
+// satisfies it via Store.Release (ddx-449baa1d).
+type leaseReleaser interface {
+	Release(id, assignee, targetStatus string) error
+}
+
+// resolveRouteBounded runs resolveRoute under a route-resolution deadline. The
+// resolver is invoked in a goroutine and selected against the deadline so a
+// resolver that ignores context cancellation cannot wedge the single-threaded
+// worker past the timeout (the hang observed in ddx-8f2e0ebf). timedOut is true
+// only when the deadline fired before the resolver returned; a parent-context
+// cancellation reports timedOut=false.
+func resolveRouteBounded(
+	ctx context.Context,
+	timeout time.Duration,
+	resolveRoute func(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error),
+	req agentlib.RouteRequest,
+) (decision *agentlib.RouteDecision, err error, timedOut bool) {
+	tctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	type routeResult struct {
+		decision *agentlib.RouteDecision
+		err      error
+	}
+	done := make(chan routeResult, 1)
+	go func() {
+		d, e := resolveRoute(tctx, req)
+		done <- routeResult{decision: d, err: e}
+	}()
+	select {
+	case res := <-done:
+		return res.decision, res.err, false
+	case <-tctx.Done():
+		return nil, tctx.Err(), errors.Is(tctx.Err(), context.DeadlineExceeded)
+	}
+}
+
+// runRoutePreflightBounded runs fn under a route-resolution deadline, returning
+// timedOut=true only when the deadline fired before fn returned. fn runs in a
+// goroutine so a preflight resolver that ignores context cancellation cannot
+// wedge the worker past the timeout.
+func runRoutePreflightBounded(ctx context.Context, timeout time.Duration, fn func(ctx context.Context) error) (err error, timedOut bool) {
+	tctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- fn(tctx) }()
+	select {
+	case e := <-done:
+		return e, false
+	case <-tctx.Done():
+		return tctx.Err(), errors.Is(tctx.Err(), context.DeadlineExceeded)
+	}
+}
+
+// routeResolutionTimeoutReport atomically releases the bead's lease (via
+// Store.Release when the store supports it), appends a durable
+// operator_attention event carrying bead-id, attempt-id, last_activity_at, and
+// a diagnosis, and returns the execution_failed / route_resolution_timeout
+// report. The report is intentionally NOT marked Disrupted so the loop parks it
+// with a cooldown rather than immediately re-claiming it — route resolution
+// must not auto-retry without operator attention (ddx-d8970a7b).
+func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now time.Time, timeout time.Duration) ExecuteBeadReport {
+	diagnosis := fmt.Sprintf(
+		"route resolution exceeded %s; released lease and flagged for operator attention (no auto-retry)",
+		timeout,
+	)
+	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
+		_ = releaser.Release(beadID, assignee, "")
+	}
+	if store != nil && beadID != "" {
+		body, _ := json.Marshal(map[string]any{
+			"reason":           FailureModeRouteResolutionTimeout,
+			"bead_id":          beadID,
+			"attempt_id":       attemptID,
+			"last_activity_at": now.UTC().Format(time.RFC3339),
+			"diagnosis":        diagnosis,
+			"timeout":          timeout.String(),
+		})
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "operator_attention",
+			Summary:   FailureModeRouteResolutionTimeout,
+			Body:      string(body),
+			Actor:     assignee,
+			Source:    "ddx work",
+			CreatedAt: now.UTC(),
+		})
+	}
+	return ExecuteBeadReport{
+		BeadID:        beadID,
+		Status:        ExecuteBeadStatusExecutionFailed,
+		Detail:        diagnosis,
+		OutcomeReason: FailureModeRouteResolutionTimeout,
+	}
+}
+
 // CheckAndApplyRouteExclusions builds ExcludedRoutes from the bead's
 // failed-routes list, calls resolveRoute to verify a viable candidate
 // remains, and when none does returns a no-viable-provider report so the
 // current execution path can escalate without mutating bead metadata.
 //
+// The resolveRoute viability check is bounded by timeout (defaulting to
+// DefaultRouteResolutionTimeout): on timeout the lease is released atomically,
+// an operator-attention event is emitted, and a route_resolution_timeout report
+// is returned (ddx-d8970a7b).
+//
 // Returns (report, true) when dispatch should be skipped (all routes
-// excluded or resolveRoute returned an error); (zero, false) when the
-// caller may proceed with dispatch normally.
+// excluded, resolveRoute returned an error, or route resolution timed out);
+// (zero, false) when the caller may proceed with dispatch normally.
 // A nil resolveRoute is treated as a no-op and returns false.
 func CheckAndApplyRouteExclusions(
 	ctx context.Context,
-	_ ExecuteBeadLoopStore,
-	beadID, _ string,
+	store ExecuteBeadLoopStore,
+	beadID, assignee string,
 	extra map[string]any,
 	now time.Time,
 	minPower int,
 	resolveRoute func(ctx context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error),
 	nextFloorFn func(int) (int, error),
+	timeout time.Duration,
+	attemptID string,
 ) (ExecuteBeadReport, bool) {
 	if resolveRoute == nil {
 		return ExecuteBeadReport{}, false
@@ -4910,7 +5070,14 @@ func CheckAndApplyRouteExclusions(
 		MinPower:       minPower,
 		ExcludedRoutes: excluded,
 	}
-	if _, routeErr := resolveRoute(ctx, req); routeErr == nil {
+	if timeout <= 0 {
+		timeout = DefaultRouteResolutionTimeout
+	}
+	_, routeErr, timedOut := resolveRouteBounded(ctx, timeout, resolveRoute, req)
+	if timedOut {
+		return routeResolutionTimeoutReport(store, beadID, assignee, attemptID, now, timeout), true
+	}
+	if routeErr == nil {
 		return ExecuteBeadReport{}, false
 	}
 	// No viable candidate at minPower with the current exclusions: let the

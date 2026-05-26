@@ -43,7 +43,12 @@ const (
 	FailureModeAgentPowerUnsatisfied          = "agent_power_unsatisfied"
 	FailureModeLockContention                 = "lock_contention"
 	FailureModeWorktreeLost                   = "worktree_lost"
-	FailureModeUnknown                        = "unknown"
+	// FailureModeRouteResolutionTimeout classifies an attempt that was parked
+	// because route resolution / routing preflight exceeded the configured
+	// route-resolution timeout. The lease is released and the bead is flagged
+	// for operator attention rather than auto-retried (ddx-d8970a7b).
+	FailureModeRouteResolutionTimeout = "route_resolution_timeout"
+	FailureModeUnknown                = "unknown"
 )
 
 // ResourceExhaustedStopMessage is the operator-visible message emitted when

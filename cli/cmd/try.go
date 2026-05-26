@@ -101,6 +101,7 @@ Exit codes:
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart powerClass)")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
+	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout bounding routing preflight and the resolveRoute viability check; on expiry the lease is released and the bead is flagged for operator attention")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
