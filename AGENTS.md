@@ -161,6 +161,34 @@ multi-worker host, that transient state is reported as
 several consecutive idle cycles on the same blocker the worker raises a
 non-terminal operator-attention event instead of looping silently.
 
+## Wedge / Timeout Lease-Release Contract
+
+A `ddx work` worker that claims a bead holds a lease on it. Three guards release
+that lease and flag the bead for operator attention rather than letting a single
+wedged bead hold its lease (and stall the single-threaded worker) indefinitely:
+
+- **Route-resolution timeout** — route resolution / routing preflight is bounded
+  by a per-operation deadline (default **60s**, `DefaultRouteResolutionTimeout`,
+  override with `--route-resolution-timeout`). On expiry the lease is released
+  and the bead is flagged, not auto-retried.
+- **Progress watchdog** — phase-empty heartbeats (harness, model, and route all
+  empty) that persist past the applicable phase budget (defaults: **5m while
+  resolving**, **30m while running**; `work.DefaultPhaseBudgets`) fire the
+  watchdog, which cancels the attempt and releases the lease.
+- **Consecutive-wedge guard** — when a bead wedges (route-resolution timeout or
+  watchdog fire) on consecutive claims up to the threshold (default **2**,
+  `DefaultConsecutiveWedgeThreshold`), the worker stops re-claiming it, parks it
+  to `proposed`, and continues draining the rest of the queue.
+
+Each release appends a durable `operator_attention` event carrying the bead-id,
+attempt-id, last_activity_at, and a diagnosis string. Inspect every such release
+with:
+
+```bash
+ddx bead operator-attention            # text: one line per release
+ddx bead operator-attention --json     # structured rows for tooling
+```
+
 <!-- DDX-AGENTS:START -->
 <!-- Managed by ddx init / ddx update. Edit outside these markers. -->
 

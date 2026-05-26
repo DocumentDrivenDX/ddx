@@ -5378,12 +5378,13 @@ func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assigne
 		return err
 	}
 	body, _ := json.Marshal(map[string]any{
-		"reason":      FailureModeConsecutiveWedge,
-		"bead_id":     beadID,
-		"count":       marker.Count,
-		"threshold":   threshold,
-		"last_reason": marker.LastReason,
-		"diagnosis":   diagnosis,
+		"reason":           FailureModeConsecutiveWedge,
+		"bead_id":          beadID,
+		"count":            marker.Count,
+		"threshold":        threshold,
+		"last_reason":      marker.LastReason,
+		"last_activity_at": marker.At,
+		"diagnosis":        diagnosis,
 	})
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      "operator_attention",

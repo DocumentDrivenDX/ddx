@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -54,6 +55,7 @@ Examples:
 	cmd.AddCommand(f.newBeadListCommand())
 	cmd.AddCommand(f.newBeadReadyCommand())
 	cmd.AddCommand(f.newBeadNeedsHumanCommand())
+	cmd.AddCommand(f.newBeadOperatorAttentionCommand())
 	cmd.AddCommand(f.newBeadHumanCommand())
 	cmd.AddCommand(f.newBeadBlockedCommand())
 	cmd.AddCommand(f.newBeadStatusCommand())
@@ -1221,6 +1223,122 @@ func (f *CommandFactory) newBeadNeedsHumanCommand() *cobra.Command {
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd
+}
+
+// beadOperatorAttentionRow is one wedge/timeout lease release surfaced by
+// `ddx bead operator-attention`. When a ddx work worker gives up a held lease
+// on a wedge or timeout it emits a durable operator_attention event; this row
+// carries the four fields an operator needs to triage it (bead-id, attempt-id,
+// last_activity_at, diagnosis) without tailing JSONL agent-logs and noticing
+// empty harness/route fields (ddx-58a69bb0, parent ddx-8f2e0ebf criterion D).
+type beadOperatorAttentionRow struct {
+	BeadID         string `json:"bead_id"`
+	AttemptID      string `json:"attempt_id,omitempty"`
+	LastActivityAt string `json:"last_activity_at,omitempty"`
+	Reason         string `json:"reason"`
+	Diagnosis      string `json:"diagnosis,omitempty"`
+	CreatedAt      string `json:"created_at,omitempty"`
+}
+
+// wedgeReleaseReasons is the set of operator_attention event summaries that
+// represent a worker releasing a held lease on a wedge or timeout: the
+// route-resolution timeout (ddx-d8970a7b), the progress-watchdog fire
+// (ddx-dc23f001), and the consecutive-wedge guard (ddx-9714eaac).
+var wedgeReleaseReasons = map[string]bool{
+	agentpkg.FailureModeRouteResolutionTimeout: true,
+	agentpkg.FailureModeProgressWatchdog:       true,
+	agentpkg.FailureModeConsecutiveWedge:       true,
+}
+
+func (f *CommandFactory) newBeadOperatorAttentionCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "operator-attention",
+		Short: "List wedge/timeout lease releases needing operator attention",
+		Long: `List every lease release a "ddx work" worker emitted because it gave
+up a held lease on a wedge or timeout: a route-resolution timeout, a
+progress-watchdog fire, or the consecutive-wedge guard. Each release shows the
+bead-id, attempt-id, last_activity_at, and a diagnosis so an operator can
+triage it without tailing JSONL agent-logs for empty harness/route fields.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			rows, err := f.collectOperatorAttentionReleases()
+			if err != nil {
+				return err
+			}
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(rows)
+			}
+			if len(rows) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No wedge/timeout lease releases.")
+				return nil
+			}
+			for _, row := range rows {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  attempt=%s  last_activity_at=%s  %s  %s\n",
+					row.BeadID, dashIfEmpty(row.AttemptID), dashIfEmpty(row.LastActivityAt), row.Reason, row.Diagnosis)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+// collectOperatorAttentionReleases scans every bead's event stream for the
+// operator_attention events emitted by the wedge-release primitives and returns
+// them oldest-first.
+func (f *CommandFactory) collectOperatorAttentionReleases() ([]beadOperatorAttentionRow, error) {
+	s := f.beadStore()
+	beads, err := s.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]beadOperatorAttentionRow, 0)
+	for _, b := range beads {
+		events, err := s.Events(b.ID)
+		if err != nil {
+			continue
+		}
+		for _, ev := range events {
+			if ev.Kind != "operator_attention" || !wedgeReleaseReasons[ev.Summary] {
+				continue
+			}
+			rows = append(rows, operatorAttentionRowFromEvent(b.ID, ev))
+		}
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		return rows[i].CreatedAt < rows[j].CreatedAt
+	})
+	return rows, nil
+}
+
+// operatorAttentionRowFromEvent extracts the four triage fields from an
+// operator_attention event. The event Summary is the failure mode (reason); the
+// JSON body carries bead_id, attempt_id, last_activity_at, and diagnosis when
+// the emitting primitive recorded them.
+func operatorAttentionRowFromEvent(beadID string, ev bead.BeadEvent) beadOperatorAttentionRow {
+	row := beadOperatorAttentionRow{BeadID: beadID, Reason: ev.Summary}
+	if !ev.CreatedAt.IsZero() {
+		row.CreatedAt = ev.CreatedAt.UTC().Format(time.RFC3339)
+	}
+	var body map[string]any
+	if err := json.Unmarshal([]byte(ev.Body), &body); err == nil {
+		if v, ok := body["bead_id"].(string); ok && v != "" {
+			row.BeadID = v
+		}
+		if v, ok := body["attempt_id"].(string); ok {
+			row.AttemptID = v
+		}
+		if v, ok := body["last_activity_at"].(string); ok {
+			row.LastActivityAt = v
+		}
+		if v, ok := body["diagnosis"].(string); ok {
+			row.Diagnosis = v
+		}
+	}
+	return row
 }
 
 func (f *CommandFactory) newBeadHumanCommand() *cobra.Command {
