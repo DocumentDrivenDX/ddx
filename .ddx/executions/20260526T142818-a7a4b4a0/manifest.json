@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260526T142818-a7a4b4a0",
+  "bead_id": "ddx-7ed41858",
+  "base_rev": "11631a6562fc4d5f9324554bf0aad1a1fb6264c3",
+  "created_at": "2026-05-26T14:28:24.944268523Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7ed41858",
+    "title": "agent: stop calling git fetch from buildCLIPreClaimHook; restore P9 network-free drain",
+    "description": "PROBLEM\nReliability principle P9 (docs/helix/06-iterate/reliability-principles.md:71-87) states \"`git fetch` and `git push` are never called from `Land()` or from the `ddx work` queue loop.\" The CLI pre-claim hook violates this every iteration: it shells `git fetch origin \u003cbranch\u003e` before each claim from the drain loop, which couples the queue's forward progress to network reachability and origin availability. This is one of the recurring blockers operators see (`pre-claim hook blocked queue: ...`) when origin is unreachable or the local branch has diverged.\n\nROOT CAUSE\n- `cli/cmd/shared_helpers.go:51-69` (`buildCLIPreClaimHook`) calls `gitOps.FetchOriginAncestryCheck(projectRoot, branch)` for every iteration of the drain loop.\n- `cli/internal/agent/execute_bead_land.go:806` is the actual `git fetch origin \u003cbranch\u003e` invocation inside `fetchOriginAncestryCheckLocked` (called from `RealLandingGitOps.FetchOriginAncestryCheck` at line 782).\n- The hook is wired into `ddx work` at `cli/cmd/execute_loop_shared.go:544` (`PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps)`) and into `ddx try` at `cli/cmd/try.go:480`.\n\nPROPOSED FIX\nRemove the `git fetch` from the per-claim hot path. Two acceptable shapes:\n  (a) Drop the fetch entirely from `buildCLIPreClaimHook` and rely on local ancestry against `refs/remotes/origin/\u003cbranch\u003e` as last-observed; FEAT-023 `ddx sync` is the operator-driven refresh path.\n  (b) Move the fetch to a one-time pre-drain preflight that runs at the start of `runWork`/`runTry` before the loop begins (still violates P9 for `try`, but `try` is a single-bead path so it's bounded).\n\nRecommend (a). The ancestry check itself (comparing local SHA vs `refs/remotes/origin/\u003cbranch\u003e`) can stay; only the fetch is forbidden.\n\nIN-SCOPE FILES\n- `cli/cmd/shared_helpers.go` (buildCLIPreClaimHook)\n- `cli/internal/agent/execute_bead_land.go` (FetchOriginAncestryCheck, fetchOriginAncestryCheckLocked)\n- `cli/internal/server/workers.go:1677` if the server-side preclaim has the same defect — audit and apply parallel fix.\n- `cli/cmd/work_test.go` (new TestWork_NetworkFreeDrain_NoFetchInLoop)\n- `cli/cmd/try.go:480` (callsite parity)\n\nNON-SCOPE\n- Do not change `ddx sync` semantics.\n- Do not remove the ancestry comparison itself — only the fetch.\n- Do not touch the `Land()` post-claim git push path (P9 also forbids it but that's separate, file a sibling bead if it's still present).\n\nREFERENCES\n- Helix align audit run-id: helix-align-20260518T074735Z (R2)\n- Reliability principles: docs/helix/06-iterate/reliability-principles.md (P9)",
+    "acceptance": "1. `grep -rn 'FetchOriginAncestryCheck' cli/cmd/execute_loop_shared.go cli/cmd/shared_helpers.go cli/cmd/try.go cli/internal/server/workers.go` returns either no callsites or callsites guarded by a once-per-process preflight outside the drain loop.\n2. New test `TestWork_NetworkFreeDrain_NoFetchInLoop` (in `cli/cmd/work_test.go`) constructs a fixture repo with an unreachable origin (file:// URL pointing at a deleted path) and asserts that `ddx work --once` claims and drains a ready bead without error.\n3. New test `TestBuildCLIPreClaimHook_DoesNotCallGitFetch` (in `cli/cmd/shared_helpers_test.go` or sibling) injects a stub `preClaimGitOps` and asserts that no method calling `git fetch` is invoked from the hook.\n4. Existing ancestry-divergence behavior preserved: a fixture where local main has diverged from `refs/remotes/origin/main` (with origin still pointing at file://) still returns the same skip-with-reason result it does today.\n5. `cd cli \u0026\u0026 go test ./cmd ./internal/agent/... -run 'PreClaim|NetworkFree|Land' -count=1` green.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "spec:FEAT-010",
+      "spec:reliability-principles",
+      "observability",
+      "source:helix-align-20260518T074735Z"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-26T14:26:05.789980931Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_min_power\":5}",
+          "created_at": "2026-05-26T14:26:15.564553151Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260526T142607-cc6101c1\",\"bead_id\":\"ddx-7ed41858\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-05-26T14:26:17.275791835Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli harness=claude note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"0c4b583203b1254949e43ccc8a7060d4d4748ff1\",\"classification\":\"recoverable\",\"detail\":\"docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \\\"bind\\\": bind source path does not exist: /home/erik/.local/bin/ddx\\n\\nRun 'docker run --help' for more information: exit status 125\",\"rationale\":\"Attempt died in docker-clone setup before any implementation began (duration_ms=18, result_rev==base_rev): bind mount source /home/erik/.local/bin/ddx did not exist. This is an infrastructure/environment setup failure analogous to failed worktree creation, not a bead-quality defect — the bead's git-fetch/P9 scope was never exercised. Re-running once the ddx binary is present at the expected mount path can plausibly succeed.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"0c4b583203b1254949e43ccc8a7060d4d4748ff1\",\"session_id\":\"eb-4a0e247f\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-26T14:27:18.642173842Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/bin/ddx\n\nRun 'docker run --help' for more information: exit status 125\nresult_rev=0c4b583203b1254949e43ccc8a7060d4d4748ff1\nbase_rev=0c4b583203b1254949e43ccc8a7060d4d4748ff1\nretry_after=2026-05-26T20:27:18Z\noutcome_reason=recoverable",
+          "created_at": "2026-05-26T14:27:18.745700448Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-cooldown-base-rev": "0c4b583203b1254949e43ccc8a7060d4d4748ff1",
+      "work-last-detail": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/bin/ddx\n\nRun 'docker run --help' for more information: exit status 125",
+      "work-last-status": "execution_failed",
+      "work-retry-after": "2026-05-26T20:27:18Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260526T142818-a7a4b4a0",
+    "prompt": ".ddx/executions/20260526T142818-a7a4b4a0/prompt.md",
+    "manifest": ".ddx/executions/20260526T142818-a7a4b4a0/manifest.json",
+    "result": ".ddx/executions/20260526T142818-a7a4b4a0/result.json",
+    "checks": ".ddx/executions/20260526T142818-a7a4b4a0/checks.json",
+    "usage": ".ddx/executions/20260526T142818-a7a4b4a0/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7ed41858-20260526T142818-a7a4b4a0"
+  },
+  "prompt_sha": "78f60267070b3f10190100bdfe8e14e7bb8186dc3f0f8b615d1bbc28a2a95528"
+}
