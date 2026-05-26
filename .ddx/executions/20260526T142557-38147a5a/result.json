@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-7ed41858",
+  "attempt_id": "20260526T142557-38147a5a",
+  "base_rev": "6d3edb5a7ef2b2c78eac1463351892bc2110dca2",
+  "result_rev": "6d3edb5a7ef2b2c78eac1463351892bc2110dca2",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/bin/ddx\n\nRun 'docker run --help' for more information: exit status 125",
+  "harness": "claude",
+  "session_id": "eb-a2dd149f",
+  "duration_ms": 55,
+  "exit_code": 1,
+  "error": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/bin/ddx\n\nRun 'docker run --help' for more information: exit status 125",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260526T142557-38147a5a",
+  "prompt_file": ".ddx/executions/20260526T142557-38147a5a/prompt.md",
+  "manifest_file": ".ddx/executions/20260526T142557-38147a5a/manifest.json",
+  "result_file": ".ddx/executions/20260526T142557-38147a5a/result.json",
+  "started_at": "2026-05-26T14:26:05.027191434Z",
+  "finished_at": "2026-05-26T14:26:05.082591255Z"
+}
