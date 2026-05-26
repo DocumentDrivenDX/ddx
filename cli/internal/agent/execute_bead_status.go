@@ -48,7 +48,14 @@ const (
 	// route-resolution timeout. The lease is released and the bead is flagged
 	// for operator attention rather than auto-retried (ddx-d8970a7b).
 	FailureModeRouteResolutionTimeout = "route_resolution_timeout"
-	FailureModeUnknown                = "unknown"
+	// FailureModeProgressWatchdog classifies an attempt the progress watchdog
+	// terminated because phase-empty heartbeats (harness/model/route all empty)
+	// persisted past the phase budget. The worker appeared fresh to the
+	// liveness TTL while making no forward progress, so the lease is released
+	// and the bead is flagged for operator attention (ddx-dc23f001, parent
+	// ddx-8f2e0ebf criterion B).
+	FailureModeProgressWatchdog = "progress_watchdog"
+	FailureModeUnknown          = "unknown"
 )
 
 // ResourceExhaustedStopMessage is the operator-visible message emitted when

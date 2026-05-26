@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	agentlib "github.com/easel/fizeau"
@@ -20,6 +21,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
 // ExecuteBeadLoopRuntime carries the non-serializable plumbing and
@@ -2121,6 +2123,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
 		attemptCtx := ContextWithReadinessEstimatedDifficulty(ctx, readinessEstimatedDifficulty)
+		// A cancelable attempt context so the progress watchdog and the
+		// external-close watcher can terminate a wedged or already-landed
+		// attempt promptly (ddx-dc23f001).
+		attemptCtx, attemptCancel := context.WithCancel(attemptCtx)
 		if liveness != nil {
 			liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), profile, harness, model, profile, 0)
 			// Tick once now so the sidecar shows the new attempt before the
@@ -2129,6 +2135,48 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			liveness.OnTick(now())
 		}
 		attemptStarted = true
+
+		// Progress watchdog + external-close watcher run alongside WithHeartbeat
+		// for the lifetime of this attempt. The watchdog fires when phase-empty
+		// heartbeats (harness/model/route all empty) persist past the phase
+		// budget — an 80-minute wedge that the liveness TTL alone treats as
+		// healthy (ddx-8f2e0ebf criterion B). The external-close watcher fires
+		// when a parallel attempt closes the same bead, so a wedged worker stops
+		// holding a stale lease. The first guard to fire releases the lease;
+		// term carries the reason so the loop skips normal failure escalation.
+		term := &attemptTermination{}
+		var guardWG sync.WaitGroup
+		candidateID := candidate.ID
+		guardWG.Add(1)
+		go func() {
+			defer guardWG.Done()
+			work.RunExternalCloseWatcher(attemptCtx, heartbeatInterval, work.ExternalCloseWatcherConfig{
+				IsClosed: func() (bool, error) { return beadClosedExternally(w.Store, candidateID) },
+				OnClosed: func() {
+					if term.set("external_close") {
+						releaseClosedExternally(w.Store, candidateID, assignee, now().UTC())
+						attemptCancel()
+					}
+				},
+			})
+		}()
+		if liveness != nil {
+			guardWG.Add(1)
+			go func() {
+				defer guardWG.Done()
+				work.RunProgressWatchdog(attemptCtx, heartbeatInterval, work.ProgressWatchdogConfig{
+					Budgets:  work.DefaultPhaseBudgets(),
+					Snapshot: liveness.Snapshot,
+					Now:      now,
+					OnWedged: func(rec workerstatus.LivenessRecord, budget time.Duration) {
+						if term.set("progress_watchdog") {
+							flagWedgedForOperatorAttention(w.Store, candidateID, assignee, rec.AttemptID, rec.Phase, rec.LastActivityAt, budget, now().UTC())
+							attemptCancel()
+						}
+					},
+				})
+			}()
+		}
 		verificationRunner := w.VerificationRunner
 		if verificationRunner == nil {
 			verificationRunner = defaultVerificationCommandRunnerForConfig(rcfg)
@@ -2205,10 +2253,30 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			})
 		}
+		// The attempt has returned. Stop the guards and wait for any in-flight
+		// OnWedged/OnClosed callback (lease release + event emit) to finish
+		// before reading the termination reason.
+		attemptCancel()
+		guardWG.Wait()
 		err = dispatchErr
 		if liveness != nil {
 			liveness.ClearAttempt()
 			liveness.OnTick(now())
+		}
+		// A guard terminated this attempt: the lease was already released and,
+		// for a wedge, operator attention was flagged. Skip normal report
+		// processing so a context-cancelled attempt is not re-escalated as a
+		// failure (ddx-dc23f001). The bead is either closed (external close) or
+		// released to open with an operator_attention event (wedge).
+		if termReason := term.get(); termReason != "" {
+			emit("loop.attempt_terminated", map[string]any{
+				"bead_id": candidate.ID,
+				"reason":  termReason,
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "attempt %s terminated by %s; lease released\n", candidate.ID, termReason)
+			}
+			continue
 		}
 		report := fromTryReport(attemptOut.Report)
 		if report.BeadID == "" {
@@ -5029,6 +5097,116 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 		Status:        ExecuteBeadStatusExecutionFailed,
 		Detail:        diagnosis,
 		OutcomeReason: FailureModeRouteResolutionTimeout,
+	}
+}
+
+// attemptTermination records which guard (the progress watchdog or the
+// external-close watcher) terminated an attempt. Both guards run concurrently;
+// set serialises them so only the first to fire releases the lease, and reason
+// is read after the guards have stopped so the loop knows to skip normal
+// failure escalation for an already-handled termination.
+type attemptTermination struct {
+	mu     sync.Mutex
+	reason string
+}
+
+// set records reason and reports whether this caller was the first to fire. A
+// second guard firing observes reason already set and returns false so it does
+// not double-release the lease.
+func (t *attemptTermination) set(reason string) bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.reason != "" {
+		return false
+	}
+	t.reason = reason
+	return true
+}
+
+// get returns the recorded termination reason, or "" when no guard fired.
+func (t *attemptTermination) get() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.reason
+}
+
+// beadStatusReader is the narrow read capability the external-close watcher
+// needs. ExecuteBeadLoopStore satisfies it via Get.
+type beadStatusReader interface {
+	Get(args ...any) (*bead.Bead, error)
+}
+
+// beadClosedExternally reports whether beadID has transitioned to closed —
+// the signal that a parallel attempt landed the same bead, so the current
+// attempt can stop holding its lease (ddx-8f2e0ebf).
+func beadClosedExternally(store beadStatusReader, beadID string) (bool, error) {
+	if store == nil || beadID == "" {
+		return false, nil
+	}
+	b, err := store.Get(beadID)
+	if err != nil {
+		return false, err
+	}
+	if b == nil {
+		return false, nil
+	}
+	return b.Status == bead.StatusClosed, nil
+}
+
+// releaseClosedExternally releases the lease on a bead another attempt closed
+// and records a non-failure termination event. The work is already done, so no
+// failure mode is escalated. Store.Release leaves a closed bead's status
+// untouched (it only clears Owner and the lease), so the bead stays closed.
+func releaseClosedExternally(store ExecuteBeadLoopStore, beadID, assignee string, at time.Time) {
+	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
+		_ = releaser.Release(beadID, assignee, "")
+	}
+	if store != nil && beadID != "" {
+		body, _ := json.Marshal(map[string]any{
+			"reason":  "bead_closed_externally",
+			"bead_id": beadID,
+		})
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "attempt.terminated",
+			Summary:   "bead closed by another attempt; released lease without failure",
+			Body:      string(body),
+			Actor:     assignee,
+			Source:    "ddx work",
+			CreatedAt: at,
+		})
+	}
+}
+
+// flagWedgedForOperatorAttention atomically releases a wedged worker's lease
+// and appends a durable operator_attention event carrying bead-id, attempt-id,
+// last_activity_at, and a diagnosis. It mirrors routeResolutionTimeoutReport's
+// release-and-flag contract for the phase-empty progress watchdog
+// (ddx-dc23f001).
+func flagWedgedForOperatorAttention(store ExecuteBeadLoopStore, beadID, assignee, attemptID, phase string, lastActivityAt time.Time, budget time.Duration, at time.Time) {
+	diagnosis := fmt.Sprintf(
+		"phase-empty heartbeats (harness/model/route empty) persisted past the %s budget while phase=%q; released lease and flagged for operator attention",
+		budget, phase,
+	)
+	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
+		_ = releaser.Release(beadID, assignee, "")
+	}
+	if store != nil && beadID != "" {
+		body, _ := json.Marshal(map[string]any{
+			"reason":           FailureModeProgressWatchdog,
+			"bead_id":          beadID,
+			"attempt_id":       attemptID,
+			"last_activity_at": lastActivityAt.UTC().Format(time.RFC3339),
+			"diagnosis":        diagnosis,
+			"budget":           budget.String(),
+		})
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "operator_attention",
+			Summary:   FailureModeProgressWatchdog,
+			Body:      string(body),
+			Actor:     assignee,
+			Source:    "ddx work",
+			CreatedAt: at,
+		})
 	}
 }
 
