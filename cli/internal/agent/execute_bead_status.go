@@ -55,6 +55,13 @@ const (
 	// and the bead is flagged for operator attention (ddx-dc23f001, parent
 	// ddx-8f2e0ebf criterion B).
 	FailureModeProgressWatchdog = "progress_watchdog"
+	// FailureModeConsecutiveWedge classifies a bead the consecutive-wedge guard
+	// stopped re-claiming because it wedged (route_resolution_timeout or
+	// progress_watchdog) on consecutive claims up to the threshold. The bead is
+	// parked to proposed for operator attention so the single-threaded worker
+	// keeps draining the rest of the queue instead of re-wedging the same bead
+	// indefinitely (ddx-9714eaac, parent ddx-8f2e0ebf criterion E).
+	FailureModeConsecutiveWedge = "consecutive_wedge"
 	FailureModeUnknown          = "unknown"
 )
 

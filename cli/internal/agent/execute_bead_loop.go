@@ -77,6 +77,12 @@ type ExecuteBeadLoopRuntime struct {
 	// single-threaded worker for hours while a lease is held (ddx-8f2e0ebf).
 	// Zero means use DefaultRouteResolutionTimeout (60s).
 	RouteResolutionTimeout time.Duration
+	// ConsecutiveWedgeThreshold is the number of consecutive wedges
+	// (route_resolution_timeout / progress_watchdog) on the same bead that
+	// trips the consecutive-wedge guard: the worker stops re-claiming the bead
+	// and parks it for operator attention. Zero means use
+	// DefaultConsecutiveWedgeThreshold (2) (ddx-9714eaac).
+	ConsecutiveWedgeThreshold int
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
 	// work-layer StopCondition before any new bead is claimed. The companion
@@ -164,6 +170,22 @@ func (r ExecuteBeadLoopRuntime) effectiveRouteResolutionTimeout() time.Duration 
 		return r.RouteResolutionTimeout
 	}
 	return DefaultRouteResolutionTimeout
+}
+
+// DefaultConsecutiveWedgeThreshold is the number of consecutive wedges on the
+// same bead that trips the consecutive-wedge guard when
+// ExecuteBeadLoopRuntime.ConsecutiveWedgeThreshold is unset. A single transient
+// wedge (count 1) stays below the default so the bead remains re-claimable; two
+// consecutive wedges sideline it for operator attention (ddx-9714eaac).
+const DefaultConsecutiveWedgeThreshold = 2
+
+// effectiveConsecutiveWedgeThreshold returns the configured consecutive-wedge
+// threshold, falling back to DefaultConsecutiveWedgeThreshold when unset.
+func (r ExecuteBeadLoopRuntime) effectiveConsecutiveWedgeThreshold() int {
+	if r.ConsecutiveWedgeThreshold > 0 {
+		return r.ConsecutiveWedgeThreshold
+	}
+	return DefaultConsecutiveWedgeThreshold
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -1476,6 +1498,30 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			continue
 		}
 		candidate = *freshCandidate
+		// Consecutive-wedge guard (ddx-9714eaac): if this bead wedged
+		// (route_resolution_timeout / progress_watchdog) on its immediately
+		// preceding claim(s) up to the threshold, stop re-claiming it. A
+		// route-independent wedge carries no failed-route entry, so without this
+		// guard a freshly released wedged bead is re-claimed and re-wedged
+		// indefinitely while ready work starves (parent ddx-8f2e0ebf criterion E).
+		// The bead is parked to proposed for operator attention; `continue` moves
+		// the loop on to the next ready bead so the queue keeps draining.
+		if marker := readWedgeMarker(candidate.Extra); consecutiveWedgeGuardTrips(marker, runtime.effectiveConsecutiveWedgeThreshold()) {
+			threshold := runtime.effectiveConsecutiveWedgeThreshold()
+			if parkErr := flagConsecutiveWedgeForOperator(w.Store, candidate.ID, assignee, marker, threshold, now().UTC()); parkErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: failed to park %s for operator attention: %v\n", candidate.ID, parkErr)
+			}
+			emit("loop.consecutive_wedge_guard", map[string]any{
+				"bead_id":     candidate.ID,
+				"count":       marker.Count,
+				"threshold":   threshold,
+				"last_reason": marker.LastReason,
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: %s wedged %d consecutive claims (>= %d); flagged for operator attention, continuing to next ready bead\n", candidate.ID, marker.Count, threshold)
+			}
+			continue
+		}
 		// Claim atomically before model-backed intake and lint to prevent
 		// concurrent workers from issuing duplicate model calls or appending
 		// duplicate lint events for the same bead. Terminal non-actionable
@@ -2278,6 +2324,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			continue
 		}
+		// The attempt ran to completion without a wedge guard firing — the route
+		// resolved and the agent executed (real progress). Reset any
+		// consecutive-wedge marker so a single transient wedge does not
+		// permanently sideline a bead that subsequently makes progress
+		// (ddx-9714eaac AC #2).
+		clearConsecutiveWedge(w.Store, candidate.ID)
 		report := fromTryReport(attemptOut.Report)
 		if report.BeadID == "" {
 			report.BeadID = candidate.ID
@@ -5074,6 +5126,7 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
 		_ = releaser.Release(beadID, assignee, "")
 	}
+	recordConsecutiveWedge(store, beadID, FailureModeRouteResolutionTimeout, now)
 	if store != nil && beadID != "" {
 		body, _ := json.Marshal(map[string]any{
 			"reason":           FailureModeRouteResolutionTimeout,
@@ -5190,6 +5243,7 @@ func flagWedgedForOperatorAttention(store ExecuteBeadLoopStore, beadID, assignee
 	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
 		_ = releaser.Release(beadID, assignee, "")
 	}
+	recordConsecutiveWedge(store, beadID, FailureModeProgressWatchdog, at)
 	if store != nil && beadID != "" {
 		body, _ := json.Marshal(map[string]any{
 			"reason":           FailureModeProgressWatchdog,
@@ -5208,6 +5262,138 @@ func flagWedgedForOperatorAttention(store ExecuteBeadLoopStore, beadID, assignee
 			CreatedAt: at,
 		})
 	}
+}
+
+// executeLoopWedgeMarkerKey is the bead Extra key holding the consecutive-wedge
+// marker — recorded when an attempt is released due to a route-resolution
+// timeout (ddx-d8970a7b) or a progress-watchdog fire (ddx-dc23f001). A
+// route-independent wedge (resolver hang, phase-empty heartbeats) records no
+// failed (provider, model) route, so without this marker a freshly released
+// wedged bead is immediately re-claimed and re-wedged (ddx-9714eaac, parent
+// ddx-8f2e0ebf criterion E).
+const executeLoopWedgeMarkerKey = "work-consecutive-wedges"
+
+// WedgeMarker is the JSON shape persisted under executeLoopWedgeMarkerKey. Count
+// is the number of consecutive wedges on the bead's most recent claims; it is
+// reset to zero (the marker removed) when the bead next makes real progress.
+type WedgeMarker struct {
+	Count      int    `json:"count"`
+	LastReason string `json:"last_reason,omitempty"`
+	At         string `json:"at,omitempty"`
+}
+
+// readWedgeMarker decodes the consecutive-wedge marker from a bead's Extra.
+// Returns a zero-value marker when absent or malformed; never errors. Mirrors
+// readFailedRoutes' marshal-then-unmarshal round-trip so a marker reloaded from
+// JSONL (a map[string]any) decodes the same as one set in-process.
+func readWedgeMarker(extra map[string]any) WedgeMarker {
+	if len(extra) == 0 {
+		return WedgeMarker{}
+	}
+	raw, ok := extra[executeLoopWedgeMarkerKey]
+	if !ok {
+		return WedgeMarker{}
+	}
+	encoded, err := json.Marshal(raw)
+	if err != nil {
+		return WedgeMarker{}
+	}
+	var m WedgeMarker
+	if err := json.Unmarshal(encoded, &m); err != nil {
+		return WedgeMarker{}
+	}
+	return m
+}
+
+// recordConsecutiveWedge increments the bead's consecutive-wedge marker and
+// persists it via store.Update. Called from the wedge-release primitives
+// (routeResolutionTimeoutReport, flagWedgedForOperatorAttention) so a
+// route-independent wedge is counted even when no failed-route entry is written.
+func recordConsecutiveWedge(store ExecuteBeadLoopStore, beadID, reason string, at time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	_ = store.Update(beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		m := readWedgeMarker(b.Extra)
+		m.Count++
+		m.LastReason = reason
+		m.At = at.UTC().Format(time.RFC3339)
+		b.Extra[executeLoopWedgeMarkerKey] = m
+	})
+}
+
+// clearConsecutiveWedge removes the bead's consecutive-wedge marker after the
+// bead makes real progress (a resolved route / LLM call / commit), so a single
+// transient wedge does not permanently sideline a bead that subsequently makes
+// progress (ddx-9714eaac AC #2).
+func clearConsecutiveWedge(store ExecuteBeadLoopStore, beadID string) {
+	if store == nil || beadID == "" {
+		return
+	}
+	_ = store.Update(beadID, func(b *bead.Bead) {
+		if len(b.Extra) == 0 {
+			return
+		}
+		delete(b.Extra, executeLoopWedgeMarkerKey)
+	})
+}
+
+// consecutiveWedgeGuardTrips reports whether the bead's consecutive-wedge count
+// has reached threshold, meaning the worker must stop re-claiming it. A
+// non-positive threshold falls back to DefaultConsecutiveWedgeThreshold.
+func consecutiveWedgeGuardTrips(marker WedgeMarker, threshold int) bool {
+	if threshold <= 0 {
+		threshold = DefaultConsecutiveWedgeThreshold
+	}
+	return marker.Count >= threshold
+}
+
+// flagConsecutiveWedgeForOperator parks a bead that wedged on consecutive claims
+// to proposed (operator attention) and appends a durable operator_attention
+// event. It is the consecutive-wedge guard's terminal action: the
+// single-threaded worker stops re-claiming and re-wedging this bead while the
+// rest of the queue keeps draining (ddx-9714eaac AC #1).
+func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assignee string, marker WedgeMarker, threshold int, at time.Time) error {
+	if store == nil || beadID == "" {
+		return nil
+	}
+	if threshold <= 0 {
+		threshold = DefaultConsecutiveWedgeThreshold
+	}
+	diagnosis := fmt.Sprintf(
+		"bead wedged on %d consecutive claims (>= threshold %d; last wedge %q); stopped re-claiming and flagged for operator attention",
+		marker.Count, threshold, marker.LastReason,
+	)
+	suggestedAction := "investigate the repeated wedge (resolver hang / phase-empty heartbeats) and clear the operator-attention state once resolved"
+	if err := store.ParkToProposed(beadID, bead.ParkAutoRecoveryFailed, func(b *bead.Bead) {
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          FailureModeConsecutiveWedge,
+			Since:           at.UTC().Format(time.RFC3339),
+			Source:          "ddx work",
+			SuggestedAction: suggestedAction,
+			Summary:         diagnosis,
+		})
+	}); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"reason":      FailureModeConsecutiveWedge,
+		"bead_id":     beadID,
+		"count":       marker.Count,
+		"threshold":   threshold,
+		"last_reason": marker.LastReason,
+		"diagnosis":   diagnosis,
+	})
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   FailureModeConsecutiveWedge,
+		Body:      string(body),
+		Actor:     assignee,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
+	return nil
 }
 
 // CheckAndApplyRouteExclusions builds ExcludedRoutes from the bead's
