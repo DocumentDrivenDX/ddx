@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -684,6 +685,66 @@ func TestPreClaimReadiness_DecodesFractionalScore(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
+}
+
+func TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent(t *testing.T) {
+	// buildEntry returns a readiness_checks entry with the given raw JSON for
+	// the verdict field, or omits the field entirely when verdictJSON is "".
+	buildEntry := func(verdictJSON string) string {
+		entry := `{"reason":"missing_verification","evidence":"AC lacks go test"`
+		if verdictJSON != "" {
+			entry += `,"verdict":` + verdictJSON
+		}
+		return entry + `}`
+	}
+
+	cases := []struct {
+		name        string
+		verdictJSON string
+		want        readinessVerdict
+	}{
+		{name: "bool_true_to_pass", verdictJSON: `true`, want: "pass"},
+		{name: "bool_false_to_fail", verdictJSON: `false`, want: "fail"},
+		{name: "string_fail_passthrough", verdictJSON: `"fail"`, want: "fail"},
+		{name: "string_ready_passthrough", verdictJSON: `"ready"`, want: "ready"},
+		{name: "absent_empty", verdictJSON: "", want: ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := buildEntry(tc.verdictJSON)
+			// AC2: both the array case and the singleton-object case must accept
+			// the verdict and decode to the same canonical value.
+			payloads := map[string]string{
+				"array":  `{"classification":"needs_refine","rationale":"check","readiness_checks":[` + entry + `]}`,
+				"object": `{"classification":"needs_refine","rationale":"check","readiness_checks":` + entry + `}`,
+			}
+			for label, payload := range payloads {
+				var classified preClaimReadinessClassificationPromptResult
+				require.NoError(t, json.Unmarshal([]byte(payload), &classified), label)
+				require.Len(t, classified.ReadinessChecks.Checks, 1, label)
+				assert.Equal(t, tc.want, classified.ReadinessChecks.Checks[0].Verdict, label)
+
+				// AC3: the full intake decode must not return a type error.
+				_, err := decodePreClaimIntakePayloadResult(payload)
+				require.NoError(t, err, label)
+			}
+		})
+	}
+
+	// AC4: regression — verdict=false produces a failed readiness reason via
+	// failedReadinessReasons, identical to verdict="fail".
+	t.Run("bool_false_maps_to_fail_reason", func(t *testing.T) {
+		decodeChecks := func(verdictJSON string) []preClaimReadinessCheck {
+			payload := `{"classification":"needs_refine","rationale":"check","readiness_checks":[` + buildEntry(verdictJSON) + `]}`
+			var classified preClaimReadinessClassificationPromptResult
+			require.NoError(t, json.Unmarshal([]byte(payload), &classified))
+			return classified.ReadinessChecks.Checks
+		}
+		stringFailReasons := failedReadinessReasons(decodeChecks(`"fail"`))
+		boolFalseReasons := failedReadinessReasons(decodeChecks(`false`))
+		assert.Equal(t, []string{"missing_verification"}, stringFailReasons)
+		assert.Equal(t, stringFailReasons, boolFalseReasons)
+	})
 }
 
 func TestDecompositionHook_ActionableButRewrittenParsesRewrite(t *testing.T) {
