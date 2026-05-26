@@ -778,8 +778,12 @@ func (RealLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
 	return paths, nil
 }
 
-// FetchOriginAncestryCheck performs the pre-claim origin ancestry check used
-// by the CLI and server preclaim hooks.
+// FetchOriginAncestryCheck performs an origin ancestry check that first fetches
+// origin/<targetBranch>. Because it performs network I/O it MUST NOT be called
+// from the network-free `ddx work` drain loop (reliability principle P9,
+// docs/helix/06-iterate/reliability-principles.md). The drain-loop and `ddx try`
+// pre-claim hooks call LocalAncestryCheck instead; this fetch variant is
+// reserved for the operator-driven refresh path (FEAT-023 `ddx sync`).
 func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
 	var result PreClaimResult
 	err := withMainGitLock(dir, func() error {
@@ -790,20 +794,36 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 	return result, err
 }
 
+// LocalAncestryCheck compares the local target branch against the last-observed
+// origin remote-tracking ref (refs/remotes/origin/<targetBranch>) WITHOUT any
+// network I/O. It is the network-free pre-claim check used by the `ddx work`
+// drain loop and `ddx try` (reliability principle P9: `git fetch` is never
+// called from the queue loop). Refreshing the remote-tracking ref is the
+// operator's responsibility via FEAT-023 `ddx sync`. When no origin remote is
+// configured, or no remote-tracking ref has been observed yet, the check
+// fails open (Action=="no-origin") rather than wedging the queue.
+func (RealLandingGitOps) LocalAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
+	var result PreClaimResult
+	err := withMainGitLock(dir, func() error {
+		var checkErr error
+		result, checkErr = localAncestryCheckLocked(dir, targetBranch)
+		return checkErr
+	})
+	return result, err
+}
+
 func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
 	if err := ensureLandingWorktreeReady(dir, targetBranch); err != nil {
 		return PreClaimResult{}, err
 	}
 
-	// Step 1: check for origin remote.
-	out, err := internalgit.Command(context.Background(), dir, "remote", "get-url", "origin").CombinedOutput()
-	if err != nil {
+	// Check for origin remote.
+	if _, err := internalgit.Command(context.Background(), dir, "remote", "get-url", "origin").CombinedOutput(); err != nil {
 		// No origin remote — single-machine case; skip check.
 		return PreClaimResult{Action: "no-origin"}, nil
 	}
-	_ = out // remote URL not needed
 
-	// Step 2: fetch origin/targetBranch (best-effort; failure is non-fatal but surfaced).
+	// Fetch origin/targetBranch (best-effort; failure is non-fatal but surfaced).
 	if fetchOut, fetchErr := internalgit.Command(context.Background(), dir, "fetch", "origin", targetBranch).CombinedOutput(); fetchErr != nil {
 		if trimmed := strings.TrimSpace(string(fetchOut)); trimmed != "" {
 			return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %s: %w", targetBranch, trimmed, fetchErr)
@@ -811,21 +831,49 @@ func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, e
 		return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %w", targetBranch, fetchErr)
 	}
 
-	// Step 3: resolve local tip.
+	return compareLocalAgainstOriginTracking(dir, targetBranch)
+}
+
+func localAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
+	if err := ensureLandingWorktreeReady(dir, targetBranch); err != nil {
+		return PreClaimResult{}, err
+	}
+
+	// Check for origin remote.
+	if _, err := internalgit.Command(context.Background(), dir, "remote", "get-url", "origin").CombinedOutput(); err != nil {
+		// No origin remote — single-machine case; skip check.
+		return PreClaimResult{Action: "no-origin"}, nil
+	}
+
+	// No last-observed origin tip yet (never synced) — skip rather than wedge
+	// the queue. FEAT-023 `ddx sync` populates the remote-tracking ref.
+	if err := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", "refs/remotes/origin/"+targetBranch).Run(); err != nil {
+		return PreClaimResult{Action: "no-origin"}, nil
+	}
+
+	return compareLocalAgainstOriginTracking(dir, targetBranch)
+}
+
+// compareLocalAgainstOriginTracking resolves refs/heads/<targetBranch> and the
+// last-observed refs/remotes/origin/<targetBranch> and reports their ancestry
+// relationship. It performs no network I/O. The caller must hold the main git
+// lock and must have already verified that an origin remote exists.
+func compareLocalAgainstOriginTracking(dir, targetBranch string) (PreClaimResult, error) {
+	// Resolve local tip.
 	localOut, localErr := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", "refs/heads/"+targetBranch).CombinedOutput()
 	if localErr != nil {
 		return PreClaimResult{}, fmt.Errorf("resolving local %s: %s: %w", targetBranch, strings.TrimSpace(string(localOut)), localErr)
 	}
 	localSHA := strings.TrimSpace(string(localOut))
 
-	// Step 4: resolve origin tip.
+	// Resolve last-observed origin tip from the remote-tracking ref.
 	originOut, originErr := internalgit.Command(context.Background(), dir, "rev-parse", "--verify", "refs/remotes/origin/"+targetBranch).CombinedOutput()
 	if originErr != nil {
 		return PreClaimResult{}, fmt.Errorf("resolving origin/%s: %s: %w", targetBranch, strings.TrimSpace(string(originOut)), originErr)
 	}
 	originSHA := strings.TrimSpace(string(originOut))
 
-	// Step 5: compare.
+	// Compare.
 	if localSHA == originSHA {
 		return PreClaimResult{Action: "unchanged", LocalSHA: localSHA, OriginSHA: originSHA}, nil
 	}

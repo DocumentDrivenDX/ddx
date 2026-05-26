@@ -1671,13 +1671,15 @@ func (m *WorkerManager) SubscribeProgress(workerID string) (<-chan agent.Progres
 
 type preClaimGitOps interface {
 	CurrentBranch(dir string) (string, error)
-	FetchOriginAncestryCheck(dir, targetBranch string) (agent.PreClaimResult, error)
+	LocalAncestryCheck(dir, targetBranch string) (agent.PreClaimResult, error)
 }
 
-// buildPreClaimHook returns a PreClaimHook function that fetches origin and
-// verifies ancestry before each bead claim. It resolves the target branch at
-// call time via CurrentBranch so detached-HEAD and non-main trunks are
-// handled correctly.
+// buildPreClaimHook returns a PreClaimHook function that verifies the local
+// target branch against the last-observed origin remote-tracking ref before
+// each bead claim. It resolves the target branch at call time via CurrentBranch
+// so detached-HEAD and non-main trunks are handled correctly. It performs no
+// network I/O (reliability principle P9): origin refresh is operator-driven via
+// `ddx sync`.
 func buildPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		branch, err := gitOps.CurrentBranch(projectRoot)
@@ -1685,7 +1687,7 @@ func buildPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx conte
 			// Can't determine branch — skip rather than block.
 			return nil
 		}
-		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
+		res, err := gitOps.LocalAncestryCheck(projectRoot, branch)
 		if err != nil {
 			if !agent.IsIgnorableFetchOriginError(err) {
 				return err

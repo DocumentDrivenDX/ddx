@@ -34,7 +34,7 @@ func (g *preClaimHookGitOps) StageDir(_, _ string) error                    { re
 func (g *preClaimHookGitOps) CommitStaged(_, _ string) (string, error)      { return "", nil }
 func (g *preClaimHookGitOps) DiffNumstat(_, _, _ string) (string, error)    { return "", nil }
 func (g *preClaimHookGitOps) DiffNameOnly(_, _, _ string) ([]string, error) { return nil, nil }
-func (g *preClaimHookGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
+func (g *preClaimHookGitOps) LocalAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return g.result, g.err
 }
 

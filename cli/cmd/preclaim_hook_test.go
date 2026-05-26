@@ -34,8 +34,46 @@ func (g *preClaimHookGitOps) StageDir(_, _ string) error                    { re
 func (g *preClaimHookGitOps) CommitStaged(_, _ string) (string, error)      { return "", nil }
 func (g *preClaimHookGitOps) DiffNumstat(_, _, _ string) (string, error)    { return "", nil }
 func (g *preClaimHookGitOps) DiffNameOnly(_, _, _ string) ([]string, error) { return nil, nil }
-func (g *preClaimHookGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
+func (g *preClaimHookGitOps) LocalAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return g.result, g.err
+}
+
+// fetchTrackingGitOps records which ancestry-check method the hook invokes.
+// LocalAncestryCheck is the network-free path; FetchOriginAncestryCheck is the
+// fetch-then-compare path that performs network I/O and must never be reached
+// from the drain-loop pre-claim hook (reliability principle P9).
+type fetchTrackingGitOps struct {
+	branch             string
+	result             agent.PreClaimResult
+	localAncestryCalls int
+	fetchCalls         int
+}
+
+func (g *fetchTrackingGitOps) CurrentBranch(string) (string, error) { return g.branch, nil }
+
+func (g *fetchTrackingGitOps) LocalAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
+	g.localAncestryCalls++
+	return g.result, nil
+}
+
+// FetchOriginAncestryCheck is intentionally not part of preClaimGitOps; it is
+// here only so the hook would compile-and-call it if the wiring regressed to
+// the fetch variant, letting the assertion below catch the regression.
+func (g *fetchTrackingGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
+	g.fetchCalls++
+	return g.result, nil
+}
+
+func TestBuildCLIPreClaimHook_DoesNotCallGitFetch(t *testing.T) {
+	ops := &fetchTrackingGitOps{
+		branch: "main",
+		result: agent.PreClaimResult{Action: "unchanged"},
+	}
+	hook := buildCLIPreClaimHook(t.TempDir(), ops)
+
+	require.NoError(t, hook(context.Background()))
+	require.Equal(t, 1, ops.localAncestryCalls, "hook must run the network-free local ancestry check")
+	require.Zero(t, ops.fetchCalls, "hook must not invoke the git-fetch ancestry variant")
 }
 
 func TestCLIServerPreClaimHook_ErrorPolicyParity(t *testing.T) {

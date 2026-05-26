@@ -15,6 +15,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -151,6 +152,75 @@ func TestWork_IgnoreCooldownDrainsCooledQueue(t *testing.T) {
 	)
 	require.NoError(t, err, "ddx work must drain cooled beads when override is explicit: %s", out)
 	assert.Equal(t, []string{"cool-0", "cool-1", "cool-2", "cool-3", "cool-4"}, got)
+}
+
+// TestWork_NetworkFreeDrain_NoFetchInLoop verifies reliability principle P9:
+// the drain loop's pre-claim hook never blocks on network I/O. The fixture
+// repo has an origin remote whose URL points at a deleted path; the last
+// observed refs/remotes/origin/main remains as a cached tip. A network-free
+// drain must claim and execute a ready bead without error even though no
+// `git fetch` against origin could succeed.
+func TestWork_NetworkFreeDrain_NoFetchInLoop(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	gitEnv := gitpkg.CleanEnv()
+	runGitEnv := func(dir string, args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = dir
+		c.Env = gitEnv
+		out, err := c.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+
+	originDir := t.TempDir()
+	workDir := t.TempDir()
+	runGitEnv(originDir, "init", "--bare", "-b", "main")
+	runGitEnv(workDir, "clone", originDir, ".")
+	runGitEnv(workDir, "config", "user.email", "test@ddx.test")
+	runGitEnv(workDir, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "seed.txt"), []byte("seed\n"), 0o644))
+	runGitEnv(workDir, "add", "seed.txt")
+	runGitEnv(workDir, "commit", "-m", "chore: initial seed")
+	runGitEnv(workDir, "push", "-u", "origin", "main")
+
+	// Break origin: point the remote URL at a deleted path and remove the bare
+	// repo. refs/remotes/origin/main survives as the last-observed tip, so a
+	// network-free ancestry check still resolves, but any fetch would fail.
+	deletedOrigin := filepath.Join(t.TempDir(), "gone")
+	runGitEnv(workDir, "remote", "set-url", "origin", "file://"+deletedOrigin)
+	require.NoError(t, os.RemoveAll(originDir))
+
+	seedExecuteBead(t, workDir, &bead.Bead{
+		ID:        "ddx-network-free-drain",
+		Title:     "network-free drain bead",
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		IssueType: bead.DefaultType,
+	})
+
+	var executed []string
+	factory := NewCommandFactory(workDir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		executed = append(executed, beadID)
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "rev-" + beadID,
+		}, nil
+	})
+
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"work",
+		"--once",
+		"--project", workDir,
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "network-free drain must claim and drain without origin reachability: %s", out)
+	assert.Equal(t, []string{"ddx-network-free-drain"}, executed, "the ready bead must be claimed and executed")
 }
 
 func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {

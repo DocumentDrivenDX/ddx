@@ -43,18 +43,21 @@ func commandStatePath(workingDir string, elems ...string) string {
 
 type preClaimGitOps interface {
 	CurrentBranch(dir string) (string, error)
-	FetchOriginAncestryCheck(dir, targetBranch string) (agent.PreClaimResult, error)
+	LocalAncestryCheck(dir, targetBranch string) (agent.PreClaimResult, error)
 }
 
-// buildCLIPreClaimHook returns a PreClaimHook for inline queue work
-// that fetches origin and verifies ancestry before each bead claim.
+// buildCLIPreClaimHook returns a PreClaimHook for inline queue work that
+// verifies the local target branch against the last-observed origin
+// remote-tracking ref before each bead claim. It performs no network I/O
+// (reliability principle P9): the queue's forward progress is never coupled to
+// origin reachability. Origin refresh is operator-driven via `ddx sync`.
 func buildCLIPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		branch, err := gitOps.CurrentBranch(projectRoot)
 		if err != nil {
 			return nil // can't determine branch — skip
 		}
-		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
+		res, err := gitOps.LocalAncestryCheck(projectRoot, branch)
 		if err != nil {
 			if !agent.IsIgnorableFetchOriginError(err) {
 				return err

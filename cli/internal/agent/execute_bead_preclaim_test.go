@@ -183,6 +183,88 @@ func TestPreClaimDivergedError(t *testing.T) {
 	assert.Equal(t, localSHA, runGitInteg(t, workDir, "rev-parse", "refs/heads/main"))
 }
 
+// TestLocalAncestryCheckNoOriginSkip verifies that the network-free check
+// returns Action=="no-origin" when the repo has no remote configured.
+func TestLocalAncestryCheckNoOriginSkip(t *testing.T) {
+	root := t.TempDir()
+	runGitInteg(t, root, "init", "-b", "main")
+	runGitInteg(t, root, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, root, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "f.txt"), []byte("x\n"), 0644))
+	runGitInteg(t, root, "add", ".")
+	runGitInteg(t, root, "commit", "-m", "init")
+
+	ops := RealLandingGitOps{}
+	res, err := ops.LocalAncestryCheck(root, "main")
+	require.NoError(t, err)
+	assert.Equal(t, "no-origin", res.Action)
+}
+
+// TestLocalAncestryCheckNoRemoteTrackingRefSkips verifies that when an origin
+// remote is configured but no refs/remotes/origin/main has been observed yet,
+// the network-free check fails open (Action=="no-origin") rather than
+// erroring and wedging the queue.
+func TestLocalAncestryCheckNoRemoteTrackingRefSkips(t *testing.T) {
+	root := t.TempDir()
+	runGitInteg(t, root, "init", "-b", "main")
+	runGitInteg(t, root, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, root, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "f.txt"), []byte("x\n"), 0644))
+	runGitInteg(t, root, "add", ".")
+	runGitInteg(t, root, "commit", "-m", "init")
+	// Configure an origin remote but never fetch, so no remote-tracking ref exists.
+	runGitInteg(t, root, "remote", "add", "origin", "file://"+filepath.Join(t.TempDir(), "gone"))
+
+	ops := RealLandingGitOps{}
+	res, err := ops.LocalAncestryCheck(root, "main")
+	require.NoError(t, err)
+	assert.Equal(t, "no-origin", res.Action)
+}
+
+// TestLocalAncestryCheckDivergedWithUnreachableOrigin verifies that the
+// network-free check reports Action=="diverged" when the local branch and the
+// last-observed refs/remotes/origin/main have diverged — even when origin is
+// unreachable (URL points at a deleted path). This is the same skip-with-reason
+// the drain loop produces today; only the network fetch is gone.
+func TestLocalAncestryCheckDivergedWithUnreachableOrigin(t *testing.T) {
+	workDir, originDir, initialSHA := setupBareOrigin(t)
+
+	// Advance origin via a second clone, then fetch into workDir so the cached
+	// remote-tracking ref records the new origin tip.
+	secondDir := t.TempDir()
+	runGitInteg(t, secondDir, "clone", originDir, ".")
+	runGitInteg(t, secondDir, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, secondDir, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(secondDir, "origin-change.txt"), []byte("origin\n"), 0644))
+	runGitInteg(t, secondDir, "add", "origin-change.txt")
+	runGitInteg(t, secondDir, "commit", "-m", "feat: origin commit")
+	runGitInteg(t, secondDir, "push", "origin", "main")
+	originNewSHA := runGitInteg(t, secondDir, "rev-parse", "HEAD")
+	runGitInteg(t, workDir, "fetch", "origin", "main")
+
+	// Local main is still at initialSHA; add a different local commit so local
+	// and the cached origin tip diverge.
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "local-change.txt"), []byte("local\n"), 0644))
+	runGitInteg(t, workDir, "add", "local-change.txt")
+	runGitInteg(t, workDir, "commit", "-m", "feat: local diverging commit")
+	localSHA := runGitInteg(t, workDir, "rev-parse", "HEAD")
+	require.NotEqual(t, initialSHA, localSHA)
+
+	// Make origin unreachable: point at a deleted path and remove the bare repo.
+	runGitInteg(t, workDir, "remote", "set-url", "origin", "file://"+filepath.Join(t.TempDir(), "gone"))
+	require.NoError(t, os.RemoveAll(originDir))
+
+	ops := RealLandingGitOps{}
+	res, err := ops.LocalAncestryCheck(workDir, "main")
+	require.NoError(t, err)
+	assert.Equal(t, "diverged", res.Action)
+	assert.Equal(t, localSHA, res.LocalSHA)
+	assert.Equal(t, originNewSHA, res.OriginSHA)
+
+	// Local branch must be unchanged (no fast-forward, no fetch).
+	assert.Equal(t, localSHA, runGitInteg(t, workDir, "rev-parse", "refs/heads/main"))
+}
+
 // ---------------------------------------------------------------------------
 // PreClaimHook wiring in ExecuteBeadWorker.Run
 // ---------------------------------------------------------------------------
