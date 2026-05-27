@@ -31,6 +31,10 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
+	// Keep cmd tests hermetic. Background update checks can outlive a single
+	// test and write into another test's temp HOME/TMPDIR, which makes temp-dir
+	// cleanup flaky under the full suite.
+	_ = os.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	cleanupTemp := isolateCmdTestTempRoot()
 	code := m.Run()
 	cleanupTemp()
