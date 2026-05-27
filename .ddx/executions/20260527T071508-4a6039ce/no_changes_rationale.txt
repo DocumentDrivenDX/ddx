@@ -1,0 +1,1 @@
+verification_command: (cd cli && go test ./internal/agent/... -run TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold && go test ./cmd/... -run 'TestWorkCommandHasPassthroughFlags|TestWork.*Claim|TestWork_PreservesJSONResultSchema' && lefthook run pre-commit)
