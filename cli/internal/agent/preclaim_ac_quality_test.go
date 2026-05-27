@@ -75,6 +75,92 @@ func TestPreClaimACQuality_CommandInProseACs_ScoreAboveThreshold(t *testing.T) {
 	assert.Equal(t, 1, result.ProseCount, "AC 4 is prose")
 }
 
+func TestPreClaimACQuality_TestFunctionNameCountsAsVerifiable(t *testing.T) {
+	acceptance := "1. TestFoo_Bar_Baz passes"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.VerifiableCount)
+	assert.True(t, result.PassesThreshold)
+	assert.True(t, result.Items[0].Verifiable)
+	assert.Equal(t, "test-name", result.Items[0].Kind)
+}
+
+func TestPreClaimACQuality_ConcreteGoRunCommandCountsAsVerifiable(t *testing.T) {
+	acceptance := "1. go run golang.org/x/tools/cmd/deadcode ./... | rg foo should exit 0"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.VerifiableCount)
+	assert.True(t, result.PassesThreshold)
+	assert.True(t, result.Items[0].Verifiable)
+	assert.Equal(t, "build-gate", result.Items[0].Kind)
+}
+
+func TestPreClaimACQuality_FilePathLineRefCountsAsVerifiable(t *testing.T) {
+	acceptance := "1. cli/cmd/work.go:133 contains the entry point"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.VerifiableCount)
+	assert.True(t, result.PassesThreshold)
+	assert.True(t, result.Items[0].Verifiable)
+	assert.Equal(t, "file-path", result.Items[0].Kind)
+}
+
+func TestPreClaimACQuality_PlainProseStillNotVerifiable(t *testing.T) {
+	acceptance := "1. Operators should see better behavior in the queue."
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 0, result.VerifiableCount)
+	assert.False(t, result.PassesThreshold)
+	assert.False(t, result.Items[0].Verifiable)
+	assert.Equal(t, "prose", result.Items[0].Kind)
+}
+
+func TestPreClaimACQuality_BashScriptsCommandCountsAsVerifiable(t *testing.T) {
+	acceptance := "1. bash scripts/validate.sh runs without error"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.VerifiableCount)
+	assert.True(t, result.PassesThreshold)
+	assert.True(t, result.Items[0].Verifiable)
+	assert.Equal(t, "build-gate", result.Items[0].Kind)
+}
+
+func TestPreClaimACQuality_BunRunCommandCountsAsVerifiable(t *testing.T) {
+	acceptance := "1. bun run test:unit passes all tests"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 1, result.Total)
+	assert.Equal(t, 1, result.VerifiableCount)
+	assert.True(t, result.PassesThreshold)
+	assert.True(t, result.Items[0].Verifiable)
+	assert.Equal(t, "build-gate", result.Items[0].Kind)
+}
+
+func TestPreClaimACQuality_MisclassifiedACsNowScore(t *testing.T) {
+	// Regression test: replays a bead that previously scored low due to
+	// misclassifying file-path and go-run ACs as prose.
+	// AC#1: File path reference (was classified as prose, now file-path)
+	// AC#2: go run command (was classified as prose, now build-gate)
+	// AC#3-#5: test-name, symbol, build-gate (were verifiable before)
+	// AC#6: plain prose (still prose)
+	acceptance := "1. cli/internal/agent/preclaim_ac_quality.go:99 has the classifier emission\n" +
+		"2. go run golang.org/x/tools/cmd/deadcode ./cli/... | rg preclaim logs no unused\n" +
+		"3. TestPreClaimACQuality_FilePathRef passes\n" +
+		"4. `ClassifyFilePath` function exists\n" +
+		"5. cd cli && go test ./internal/agent/... green\n" +
+		"6. Operators have better diagnostics\n"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.Equal(t, 6, result.Total)
+	assert.GreaterOrEqual(t, result.VerifiableCount, 4, "expected ≥4 verifiable ACs after fix (file-path, go-run, test, symbol, build-gate)")
+	assert.True(t, result.PassesThreshold, "score %.2f should pass threshold %.2f", result.Score, result.Threshold)
+	// Verify specific items:
+	assert.True(t, result.Items[0].Verifiable, "AC#1 (file-path) should be verifiable")
+	assert.True(t, result.Items[1].Verifiable, "AC#2 (go-run) should be verifiable")
+	assert.True(t, result.Items[2].Verifiable, "AC#3 (test-name) should be verifiable")
+	assert.True(t, result.Items[3].Verifiable, "AC#4 (symbol) should be verifiable")
+	assert.True(t, result.Items[4].Verifiable, "AC#5 (build-gate) should be verifiable")
+	assert.False(t, result.Items[5].Verifiable, "AC#6 (prose) should not be verifiable")
+}
+
 func TestPreClaimACQuality_LowQualityEmitsACQualityEvent(t *testing.T) {
 	b := &bead.Bead{
 		ID:         "ddx-test0001",
