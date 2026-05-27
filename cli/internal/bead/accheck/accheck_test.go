@@ -62,6 +62,45 @@ func TestClassify_BuildGate(t *testing.T) {
 	}
 }
 
+func TestClassify_BuildGate_GoRun(t *testing.T) {
+	k, _ := classify("go run golang.org/x/tools/cmd/deadcode ./... | rg unused")
+	if k != KindBuildGate {
+		t.Errorf("kind: want %s, got %s", KindBuildGate, k)
+	}
+}
+
+func TestClassify_BuildGate_BashScripts(t *testing.T) {
+	k, _ := classify("bash scripts/check-formatting.sh exits with 0")
+	if k != KindBuildGate {
+		t.Errorf("kind: want %s, got %s", KindBuildGate, k)
+	}
+}
+
+func TestClassify_BuildGate_BunRun(t *testing.T) {
+	k, _ := classify("bun run test:e2e passes")
+	if k != KindBuildGate {
+		t.Errorf("kind: want %s, got %s", KindBuildGate, k)
+	}
+}
+
+func TestClassify_FilePath(t *testing.T) {
+	cases := []string{
+		"cli/cmd/work.go:133 contains the entry point",
+		"Modify cli/internal/agent/preclaim_ac_quality.go:99 to add new pattern",
+		"File cli/internal/bead/accheck/accheck.go:180 has the regex",
+		"See docs/helix/06-iterate/bead-authoring-template.md:42 for details",
+		"Add code to cli/internal/server/frontend/src/App.svelte:15",
+		"Update config.yaml:25 to add new setting",
+		"Check test result in tests/e2e.ts:100",
+	}
+	for _, text := range cases {
+		k, _ := classify(text)
+		if k != KindFilePath {
+			t.Errorf("classify(%q): want %s, got %s", text, KindFilePath, k)
+		}
+	}
+}
+
 func TestClassify_Mechanical_Rename(t *testing.T) {
 	k, _ := classify("rename module path from x to y")
 	if k != KindMechanical {

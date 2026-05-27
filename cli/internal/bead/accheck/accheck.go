@@ -26,13 +26,15 @@ const SchemaVersion = 1
 type Kind string
 
 const (
-	KindTestName   Kind = "test-name"
-	KindBuildGate  Kind = "build-gate"
-	KindNegative   Kind = "negative"
-	KindSymbol     Kind = "symbol"
-	KindMechanical Kind = "mechanical"
-	KindCommand    Kind = "command"
-	KindProse      Kind = "prose"
+	KindTestName    Kind = "test-name"
+	KindBuildGate   Kind = "build-gate"
+	KindNegative    Kind = "negative"
+	KindSymbol      Kind = "symbol"
+	KindMechanical  Kind = "mechanical"
+	KindCommand     Kind = "command"
+	KindFilePath    Kind = "file-path"
+	KindCommandInvk Kind = "command-invocation"
+	KindProse       Kind = "prose"
 )
 
 // Result is the verdict on one AC item.
@@ -131,7 +133,12 @@ func ParseAcceptance(s string) []Item {
 // classify inspects an AC line and decides which mechanical evaluator should
 // resolve it. Order matters: more-specific patterns first.
 func classify(text string) (Kind, string) {
-	// 1. Backtick-symbol AC: `Foo.Bar()`, `pruneEvidenceDirs`, etc.
+	// 1. File path with line number AC: cli/cmd/work.go:133, etc.
+	if m := filePathRE.FindString(text); m != "" {
+		return KindFilePath, ""
+	}
+
+	// 2. Backtick-symbol AC: `Foo.Bar()`, `pruneEvidenceDirs`, etc.
 	if m := backtickSymbolRE.FindStringSubmatch(text); m != nil {
 		// If the negative cue appears outside the backticks, this is a negative
 		// AC about the symbol, not a positive symbol AC.
@@ -141,29 +148,30 @@ func classify(text string) (Kind, string) {
 		return KindSymbol, m[1]
 	}
 
-	// 2. Test-name AC: explicit Go test identifier.
+	// 3. Test-name AC: explicit Go test identifier.
 	if m := testNameRE.FindString(text); m != "" {
 		return KindTestName, m
 	}
 
-	// 3. Build-gate AC: lefthook, go test ./..., pre-commit pass language.
+	// 4. Build-gate AC: lefthook, go test ./..., pre-commit pass language,
+	// go run, bash scripts, bun run, etc.
 	if buildGateRE.MatchString(text) {
 		return KindBuildGate, ""
 	}
 
-	// 4. Negative AC without backticks (still operates on a symbol name).
+	// 5. Negative AC without backticks (still operates on a symbol name).
 	if hasNegativeCue(text) {
 		if name := extractNegativeSymbol(text); name != "" {
 			return KindNegative, name
 		}
 	}
 
-	// 5. Mechanical AC: rename / doc / comment / file moves.
+	// 6. Mechanical AC: rename / doc / comment / file moves.
 	if mechanicalRE.MatchString(text) {
 		return KindMechanical, ""
 	}
 
-	// 6. Command AC: a quoted or unquoted shell-like command followed by an
+	// 7. Command AC: a quoted or unquoted shell-like command followed by an
 	// outcome verb (returns/exits/passes/fails/outputs). These are mechanically
 	// verifiable — the orchestrator/operator runs the command and ratifies the
 	// outcome — and must not be misclassified as prose.
@@ -171,14 +179,15 @@ func classify(text string) (Kind, string) {
 		return KindCommand, ""
 	}
 
-	// 7. Default: prose.
+	// 8. Default: prose.
 	return KindProse, ""
 }
 
 var (
 	backtickSymbolRE = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_.]*(?:\\(\\))?)`")
 	testNameRE       = regexp.MustCompile(`\bTest[A-Z]\w*`)
-	buildGateRE      = regexp.MustCompile(`(?i)\b(lefthook|go test|go build|pre-commit|all pass|test.* green|tests? pass)\b`)
+	buildGateRE      = regexp.MustCompile(`(?i)\b(lefthook|go test|go build|go run|bun run|bash scripts|pre-commit|all pass|test.* green|tests? pass|cd \S+ &&)\b`)
+	filePathRE       = regexp.MustCompile(`\b[\w./-]+\.(go|md|yaml|yml|json|sh|ts|tsx|svelte):\d+\b`)
 	negativeCueRE    = regexp.MustCompile(`(?i)\b(no longer|does not|do not|never|removed?|cannot|must not|no calls? to|absence of|without|excluded from|stop tracking|untrack)\b`)
 	mechanicalRE     = regexp.MustCompile(`(?i)\b(rename|relocate(d|s)?|moved? to|file (exists?|present)|comment|docs?(\s+only)?|documentation|gitignore)\b`)
 	negSymbolWordRE  = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_.]{3,}`)
@@ -246,6 +255,8 @@ func evaluateOne(item Item, ctx Context) Entry {
 		return evalMechanical(item, ctx)
 	case KindCommand:
 		return evalCommand(item, ctx)
+	case KindFilePath:
+		return evalFilePath(item, ctx)
 	default:
 		return Entry{
 			AC:       item.AC,
@@ -387,6 +398,18 @@ func evalMechanical(item Item, ctx Context) Entry {
 		Kind:     KindMechanical,
 		Result:   ResultNeedsJudgment,
 		Evidence: "mechanical AC; reviewer adjudicates against diff name-status",
+	}
+}
+
+func evalFilePath(item Item, ctx Context) Entry {
+	// File path with line reference ACs reference specific locations in the
+	// codebase. The reviewer checks these paths and line numbers against the
+	// diff to verify they exist and make sense in context.
+	return Entry{
+		AC:       item.AC,
+		Kind:     KindFilePath,
+		Result:   ResultNeedsJudgment,
+		Evidence: "file path with line reference; reviewer verifies path exists and line is relevant",
 	}
 }
 
