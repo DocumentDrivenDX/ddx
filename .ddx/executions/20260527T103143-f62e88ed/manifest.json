@@ -1,0 +1,216 @@
+{
+  "attempt_id": "20260527T103143-f62e88ed",
+  "bead_id": "ddx-f9ddaa68",
+  "base_rev": "59944f1a8ca0ca4e0dc98a92bb44fb9feec5dd00",
+  "created_at": "2026-05-27T10:31:50.487113126Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f9ddaa68",
+    "title": "pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire fizeau queue idle",
+    "description": "PROBLEM\nddx work --watch's pre-claim intake decoder fails to unmarshal the readiness_checks response when verdict is a JSON bool. Every claim attempt produces the same warn-only rejection, so the worker logs a warning and skips. With 23 ready beads in the fizeau queue and one fizeau-scoped daemon, the entire queue is idle indefinitely.\n\nOBSERVATION (Fizeau, 2026-05-18 05:27-05:39 UTC; about an hour after the previous wedge bug ddx-8f2e0ebf)\n- Worker: PID 1527216, ddx work --watch in /Users/erik/Projects/fizeau, etime 01:22:40 at observation.\n- Log: /Users/erik/Projects/fizeau/.ddx/agent-logs/agent-loop-1779077845655338391.jsonl\n- Pattern every ~50s: resource.preflight (status ok) -\u003e pre_claim_intake.start -\u003e pre_claim_intake.warn -\u003e loop.idle.\n- Sample pre_claim_intake.warn payload:\n  {\n    \"bead_id\":\"fizeau-5b2a8950\",\n    \"decision\":\"warn\",\n    \"decision_source\":\"pre_claim_intake\",\n    \"detail\":\"decode result: json: cannot unmarshal bool into Go struct field .readiness_checks.verdict of type string\",\n    \"fingerprint\":\"15155a1cd44e96daf53eabb14c8eb3ccd8b0e5271d881208cfcbbf2869899f4f\",\n    \"outcome\":\"intake_error\",\n    \"policy_mode\":\"warn-only\",\n    \"reason\":\"system_unready\",\n    \"rule_id\":\"pre_claim_intake.system_unready\",\n    \"suggested_action\":\"check the readiness route or harness configuration and retry\",\n    \"system_reason\":\"unavailable\"\n  }\n- Identical fingerprint across multiple bead_ids confirms it is a schema mismatch, not a bead-specific issue.\n- Queue state at observation: open=44, ready=23, dependency-waiting=19. None of the 23 ready beads got claimed in the prior 30 minutes; commit log empty for the same window.\n- Other beads (fizeau-a15106ab, fizeau-90b85c8b) WERE successfully closed earlier in the night through some other path (perhaps a different worker version or a different execute-bead invocation). Suggests this decoder bug appeared mid-session OR only affects certain readiness routes.\n\nWHY THIS IS A BUG\n1. Schema drift between the readiness-check producer and the pre_claim_intake consumer. One emits verdict as bool, the other parses it as string. Either the producer or consumer changed without coordination.\n2. warn-only policy_mode masks the failure: the worker keeps polling and looks alive (loop.idle every 50s) but never claims anything. Operator has no signal beyond tailing the agent-loop log.\n3. The 'suggested_action' text ('check the readiness route or harness configuration and retry') is not actionable for the operator — the actual fault is in DDx's own decoder, not in the route or harness config.\n4. Same-fingerprint repeat: 100% of attempts produce the same error code; the worker should escalate to FAIL after N consecutive identical warn-only fingerprints instead of looping silently.\n\nPROPOSED FIX\nA. Decoder tolerance: accept verdict as bool, string, or both; coerce to a canonical representation. Add a regression test against a payload with verdict=true/false and verdict=\"ready\"/\"not_ready\".\nB. Producer-side schema lock: pin the readiness_checks JSON schema in a shared place that both producer and consumer reference; CI gate that fails on drift.\nC. Same-fingerprint escalation: when the pre_claim_intake produces the same warn fingerprint on N (default 5) consecutive attempts across distinct bead_ids, escalate to operator-attention with the fingerprint and a single example payload. Do not keep silently looping.\nD. policy_mode='warn-only' must not mask a 100% failure rate. Add a per-fingerprint counter and a guard.\nE. ddx work --watch should emit a top-level operator-visible message (stderr or status command) when its claim success rate over a rolling window falls below a threshold (e.g., 0% over 10 attempts) — silent idle on a full queue is a stuck state masquerading as healthy.\n\nCROSS-REF\nAdjacent bugs filed in this session: ddx-57c40485 (index.lock held minutes); ddx-8f2e0ebf (worker wedges on route resolution). All three share a theme: silent failures inside the worker that look healthy from the outside. The user is currently unable to make progress on the AR-2026-05-17 follow-up beads because of this.",
+    "acceptance": "1. pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\n2. CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\n3. Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\n4. Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\n5. Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-claim",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-26T15:14:53.1988509Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260526T150743-f9b8cb0a\",\"harness\":\"claude\",\"input_tokens\":3513,\"output_tokens\":30739,\"total_tokens\":34252,\"cost_usd\":2.1662910000000006,\"duration_ms\":421812,\"exit_code\":0}",
+          "created_at": "2026-05-26T15:14:53.243406152Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=34252 cost_usd=2.1663"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260526T150743-f9b8cb0a\",\"bead_id\":\"ddx-f9ddaa68\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-05-26T15:14:54.916868523Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli harness=claude note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=Bead ddx-f9ddaa68 is too large for one atomic commit. Its 5 ACs mix decoder implementation (AC1), CI schema-gate infrastructure (AC2), worker-loop escalation (AC3), CLI observability (AC4), and documentation (AC5), and the description names five distinct feature-sized fixes (A-E across the pre-claim decoder, the drain loop, the work CLI, CI, and docs). This trips the Step-0 \"too big\" triggers: AC mixes implementation/CI/docs, and the description names multiple feature-sized pieces in unrelated subsystems. Decomposed into 5 atomic children (depth 1; parent is depth 0, split permitted). children: ddx-606fe854  AC1  pre-claim intake decoder: accept readiness_checks[].verdict as JSON bool, string, or absent (root-cause fix; no deps) ddx-d67f124e  AC3  ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints (folds in proposed fix D, the warn-only 100%-failure guard; no deps) ddx-977e1a7f  AC4  ddx work --watch: surface low claim-success-rate over a rolling window (no deps) ddx-c5d485c9  AC2  Lock readiness_checks JSON schema in a shared location with a CI drift gate (depends on ddx-606fe854) ddx-757a3344  AC5  Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README (depends on ddx-606fe854, ddx-d67f124e, ddx-977e1a7f, ddx-c5d485c9) edges: Children linked to parent via the Parent field (repo decomposition convention; recovery_decompose.go:184-223), making ddx-f9ddaa68 an epic excluded from execution-ready. A child-\u003eparent dep edge was deliberately NOT used because DepAdd(id, dep) means \"id depends on dep\" (gaps_test.go:334) and a parent with open children never closes (diagnose.go:336), which would wedge every child. Inter-child blocking deps recorded: ddx-c5d485c9 depends on ddx-606fe854; ddx-757a3344 depends on all four others. notes: ddx-f9ddaa68 updated with --notes recording the child IDs. Parent lifecycle is orchestrator-owned.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-05-26T15:14:55.008565691Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\norchestrator_action: decompose\nreason: Bead ddx-f9ddaa68 is too large for one atomic commit. Its 5 ACs mix decoder implementation (AC1), CI schema-gate infrastructure (AC2), worker-loop escalation (AC3), CLI observability (AC4), and documentation (AC5), and the description names five distinct feature-sized fixes (A-E across the pre-claim decoder, the drain loop, the work CLI, CI, and docs). This trips the Step-0 \"too big\" triggers: AC mixes implementation/CI/docs, and the description names multiple feature-sized pieces in unrelated subsystems. Decomposed into 5 atomic children (depth 1; parent is depth 0, split permitted).\n\nchildren:\n  ddx-606fe854  AC1  pre-claim intake decoder: accept readiness_checks[].verdict as JSON bool, string, or absent (root-cause fix; no deps)\n  ddx-d67f124e  AC3  ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints (folds in proposed fix D, the warn-only 100%-failure guard; no deps)\n  ddx-977e1a7f  AC4  ddx work --watch: surface low claim-success-rate over a rolling window (no deps)\n  ddx-c5d485c9  AC2  Lock readiness_checks JSON schema in a shared location with a CI drift gate (depends on ddx-606fe854)\n  ddx-757a3344  AC5  Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README (depends on ddx-606fe854, ddx-d67f124e, ddx-977e1a7f, ddx-c5d485c9)\n\nedges:\n  Children linked to parent via the Parent field (repo decomposition convention; recovery_decompose.go:184-223), making ddx-f9ddaa68 an epic excluded from execution-ready. A child-\u003eparent dep edge was deliberately NOT used because DepAdd(id, dep) means \"id depends on dep\" (gaps_test.go:334) and a parent with open children never closes (diagnose.go:336), which would wedge every child. Inter-child blocking deps recorded: ddx-c5d485c9 depends on ddx-606fe854; ddx-757a3344 depends on all four others.\n\nnotes: ddx-f9ddaa68 updated with --notes recording the child IDs. Parent lifecycle is orchestrator-owned.\nresult_rev=5aafa4def7de7b915b2c53fcc91bdeea62c294df\nbase_rev=5aafa4def7de7b915b2c53fcc91bdeea62c294df\nretry_after=2026-05-26T15:19:55Z\noutcome_reason=no_changes",
+          "created_at": "2026-05-26T15:14:55.125429336Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.\",\"kind\":\"mechanical\",\"verifiable\":true}]",
+          "created_at": "2026-05-27T04:57:32.782409484Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-27T04:59:19.489986074Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T045803-d54608dd\",\"harness\":\"claude\",\"input_tokens\":3177,\"output_tokens\":4731,\"total_tokens\":7908,\"cost_usd\":0.415598,\"duration_ms\":68940,\"exit_code\":0}",
+          "created_at": "2026-05-27T04:59:19.538385685Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=7908 cost_usd=0.4156"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T045803-d54608dd\",\"bead_id\":\"ddx-f9ddaa68\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"cli\"}",
+          "created_at": "2026-05-27T04:59:21.332589212Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=cli harness=claude note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"AC1: pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, string, or absent; coerces to a documented canonical form; focused decoder test.\",\"coverage\":\"already_satisfied_in_tree — root fix shipped: readinessVerdict.UnmarshalJSON (cli/internal/agent/preclaim_intake_hook.go:91-121) coerces bool true-\\u003epass, false-\\u003efail, string passthrough, absent-\\u003eempty, covered by TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent (cli/internal/agent/preclaim_intake_hook_test.go:690). Regression-locked by Child 1 AC2/AC4 (TestReadinessChecksSchema) so the shipped behavior cannot drift.\"},{\"parent_ac\":\"AC2: CI schema gate — readiness_checks JSON schema defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"coverage\":\"Child 1 (Lock readiness_checks JSON schema with a make readiness-schema CI drift gate) AC1-AC4: shared schema at cli/internal/agent/schema/readiness-checks.schema.json + TestReadinessChecksSchema + `make readiness-schema` wired into ci.yml after the bead-schema step.\"},{\"parent_ac\":\"AC3: Same-fingerprint escalation — after N (default 5) consecutive warn outcomes the worker emits an operator-attention event and stops looping silently; tested by injecting a faulty readiness payload (folds in proposed fix D, the warn-only 100%-failure guard).\",\"coverage\":\"already_satisfied_in_tree — shipped under ddx-df77e668: preClaimIdleEscalationThreshold=5 (cli/internal/agent/execute_bead_loop.go:3314), consecutive-same-blocker streak + non-terminal operator-attention emission at cli/internal/agent/execute_bead_loop.go:1330-1349, covered by execute_bead_loop_stay_alive_test.go. The complementary rate-based guard (proposed fix E) is Child 2; the failure-class mapping is documented by Child 3 AC1-AC2.\"},{\"parent_ac\":\"AC4: Operator-visible signal — ddx work --watch surfaces a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold (proposed fix E).\",\"coverage\":\"Child 2 (ddx work --watch: warn on low claim-success-rate over a rolling window) AC1-AC4: rolling-window claim-success tracking, one-shot stderr + structured-event warning below threshold, --claim-rate-window/--claim-rate-threshold flags, TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold.\"},{\"parent_ac\":\"AC5: Documentation — ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators diagnose silent-idle.\",\"coverage\":\"Child 3 (Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis) AC1-AC3: README/work.md section + diagnosis runbook + TestReadmeDocumentsPreClaimIntakeContract.\"}],\"child_ids\":[\"ddx-db5b6382\",\"ddx-d514ed6a\",\"ddx-fba37caa\"],\"rationale\":\"Investigation of the live tree (cli/internal/agent/preclaim_intake_hook.go, readiness_classification.go, execute_bead_loop.go) shows the two root-cause code fixes the parent calls for have ALREADY SHIPPED: AC1's verdict decoder (readinessVerdict.UnmarshalJSON:91-121, TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent) and AC3's consecutive-warn escalation (preClaimIdleEscalationThreshold=5 at execute_bead_loop.go:3314, ddx-df77e668). Re-filing children for them would return no_changes. The parent remains too large because the THREE genuinely-unimplemented ACs mix unrelated subsystems and implementation/CI/docs: AC2 (CI schema-drift gate), AC4 (live claim-success-rate operator signal), and AC5 (operator docs). Each becomes one atomic, independently executable child with PROBLEM/ROOT-CAUSE(file:line)/PROPOSED-FIX/NON-SCOPE, a named Test* symbol, and `cd cli \\u0026\\u0026 go test`/`lefthook run pre-commit` gates. Child 1 (schema) additionally regression-locks the already-shipped AC1 decoder so producer/consumer cannot drift again — the exact failure mode in the parent incident. Child 2 is scoped to NOT duplicate the existing same-blocker idle escalation; it adds the complementary rate-based guard (proposed fix E). Child 3 is docs-only and depends on Children 1 and 2 so it can reference the shipped schema target and the --claim-rate-window/--claim-rate-threshold flag names; no child-\\u003eparent dep edge is used (a parent with open children never closes). Parent non-scope, the FEAT-010/ADR-023 governing references, and cross-ref beads ddx-57c40485 / ddx-8f2e0ebf / ddx-df77e668 are preserved across the children.\"}",
+          "created_at": "2026-05-27T04:59:21.431483934Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-db5b6382, ddx-d514ed6a, ddx-fba37caa"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.\",\"kind\":\"mechanical\",\"verifiable\":true}]",
+          "created_at": "2026-05-27T05:43:04.969638155Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.\",\"kind\":\"mechanical\",\"verifiable\":true}]",
+          "created_at": "2026-05-27T05:47:40.670954185Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"AC1: pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, string, or absent; coerces to a documented canonical form; unit test covers all three\",\"coverage\":\"Child 'pre-claim intake: decode readiness_checks[].verdict as JSON bool, string, or absent' AC1 (readinessVerdict.UnmarshalJSON accepts bool/string/null) and AC2 (decodePreClaimIntakePayloadResult decodes bool verdict)\"},{\"parent_ac\":\"AC2: CI schema gate — readiness_checks JSON schema defined in a shared place, producer and consumer both consume it, CI fails on schema drift\",\"coverage\":\"Child 'Lock readiness_checks JSON schema in a shared file with a CI drift gate' AC1 (shared schema file with verdict oneOf) and AC2 (TestReadinessChecksSchema drift gate)\"},{\"parent_ac\":\"AC3: same-fingerprint escalation — after N (default 5) consecutive identical warn fingerprints the worker emits operator-attention and stops looping silently (folds proposed fix D)\",\"coverage\":\"Child 'ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints' AC1 (escalation after N identical fingerprints) and AC2 (counter reset on success/changed fingerprint)\"},{\"parent_ac\":\"AC4: operator-visible signal — ddx work --watch surfaces a warning when claim success rate over a configurable rolling window drops below a configurable threshold\",\"coverage\":\"Child 'ddx work --watch: warn when rolling claim-success rate falls below threshold' AC1 (rolling-window stderr warning) and AC2 (--claim-rate-window/--claim-rate-threshold flags)\"},{\"parent_ac\":\"AC5: documentation — README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators diagnose silent-idle\",\"coverage\":\"Child 'Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README' AC1 (TestReadmeDocumentsPreClaimIntakeContract)\"}],\"child_ids\":[\"ddx-12a6a072\",\"ddx-92358bd8\",\"ddx-c135246c\",\"ddx-16f87c87\",\"ddx-fef097ea\"],\"rationale\":\"The parent's 5 ACs mix root-cause decoder code (AC1), CI schema-gate infrastructure (AC2), worker-loop escalation (AC3), CLI observability (AC4), and documentation (AC5) — distinct subsystems that cannot land in one atomic commit, which is why prior autonomous attempts returned no_changes/decompose. Split one-AC-per-child so each is independently executable with its own named Test* symbols and go test + lefthook gates. The decoder child is the root-cause fix and has no dependencies. The schema-lock child depends on the decoder child (the schema's verdict oneOf must match the kinds the decoder accepts). The escalation and claim-rate children are independent worker-loop observability fixes (distinct triggers: repeated identical fingerprint vs low rolling success rate); the escalation child folds in parent proposed-fix D (warn-only must not mask a 100% failure rate). The docs child depends on all four and lands last. Proposed fixes A-E map onto these children: A-\\u003edecoder, B-\\u003eschema, C+D-\\u003eescalation, E-\\u003eclaim-rate. Every parent non-scope intent (FEAT-010/ADR-023 readiness vocabulary, cross-refs ddx-57c40485/ddx-8f2e0ebf/ddx-9714eaac, P7 standalone-context requirement) and verification requirement is preserved across the child descriptions and AC.\"}",
+          "created_at": "2026-05-27T05:49:46.328675901Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-12a6a072, ddx-92358bd8, ddx-c135246c, ddx-16f87c87, ddx-fef097ea"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"1. pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\",\"coverage\":\"Child 1 AC1-AC4 cover decoder tolerance, canonical coercion, focused tests, go test, and lefthook.\"},{\"parent_ac\":\"2. CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"coverage\":\"Child 4 AC1-AC5 cover the shared schema, prompt/schema/decoder contract, CI-accessible schema gate, go test, and lefthook.\"},{\"parent_ac\":\"3. Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"coverage\":\"Child 2 AC1-AC5 cover default N=5 same-fingerprint escalation, operator-attention evidence, non-regression for transient warnings, go test, and lefthook.\"},{\"parent_ac\":\"4. Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\",\"coverage\":\"Child 3 AC1-AC6 cover rolling claim-success-rate warning, reset behavior, CLI knobs, go test for agent and cmd surfaces, and lefthook.\"},{\"parent_ac\":\"5. Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.\",\"coverage\":\"Child 5 AC1-AC5 cover README documentation, documentation contract test, preservation of cross-references, cmd go test, and lefthook.\"}],\"child_ids\":[\"ddx-1ecdeb6d\",\"ddx-b1bd6072\",\"ddx-7e0f78a5\",\"ddx-066cceaf\",\"ddx-387dd863\"],\"rationale\":\"The parent bead spans five independently executable subsystems: decoder behavior, repeated-warning escalation, work-watch observability, schema/CI contract, and README documentation. The split keeps each child within a narrow file/test surface while preserving the parent incident context, non-scope constraints, adjacent-bug cross-references, and verification gates. Dependency ordering is captured in child descriptions: schema locking depends on decoder tolerance, and documentation depends on the runtime/schema children so docs describe landed behavior rather than planned behavior.\"}",
+          "created_at": "2026-05-27T05:50:45.963359208Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-1ecdeb6d, ddx-b1bd6072, ddx-7e0f78a5, ddx-066cceaf, ddx-387dd863"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.\",\"kind\":\"mechanical\",\"verifiable\":true}]",
+          "created_at": "2026-05-27T09:20:11.975742289Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"decomposed_epic\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"0b7169b488525475f46eeb2241766f48ffc96806f975df5f8a01fd9bfb910329\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"0b7169b488525475f46eeb2241766f48ffc96806f975df5f8a01fd9bfb910329\"}",
+          "created_at": "2026-05-27T09:21:06.915970081Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T09:22:10.59422606Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T092129-ee89e738\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":16,\"output_tokens\":1297,\"total_tokens\":1313,\"cost_usd\":0.04056365,\"duration_ms\":24882,\"exit_code\":0}",
+          "created_at": "2026-05-27T09:22:10.658912278Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=1313 cost_usd=0.0406 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T092129-ee89e738\",\"bead_id\":\"ddx-f9ddaa68\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T09:22:12.875523676Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"pre_claim_intake decoder accepts readiness_checks.verdict as JSON bool, JSON string, or absent; coerces to a documented canonical form. Unit test covers all three. Verified by a focused decoder test in the pre-claim intake package.\",\"coverage\":\"covered by child 1: pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 1\"},{\"parent_ac\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"coverage\":\"covered by child 2: pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 2\"},{\"parent_ac\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"coverage\":\"covered by child 2: pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 2\"},{\"parent_ac\":\"Operator-visible signal: ddx work --watch surfaces (via stderr or 'ddx bead status' or a new 'ddx work status' subcommand) a warning when claim success rate over a configurable rolling window (default 10 attempts) drops below a configurable threshold.\",\"coverage\":\"covered by child 3: pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 3\"},{\"parent_ac\":\"Documentation: ddx README names the pre-claim intake contract, the failure-class mapping (warn vs operator-attention vs hard error), and how operators should diagnose silent-idle.\",\"coverage\":\"covered by child 3: pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 3\"}],\"child_ids\":[\"ddx-1e415ccc\",\"ddx-61f6c57d\",\"ddx-ffba7e77\"],\"rationale\":\"deterministic fallback split after agent decomposer returned invalid output\"}",
+          "created_at": "2026-05-27T09:22:12.999433827Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-1e415ccc, ddx-61f6c57d, ddx-ffba7e77"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/attachments/ddx-e582c37a/events.jsonl, .ddx/beads.jsonl, .ddx/metrics/attempts.jsonl)\",\"fingerprint\":\"20e349759943af739a8aa8e1be62d1160ba57d7bd5aa089618c3e3a281af50b1\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"20e349759943af739a8aa8e1be62d1160ba57d7bd5aa089618c3e3a281af50b1\"}",
+          "created_at": "2026-05-27T10:31:33.088176206Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-last-detail": "Bead ddx-f9ddaa68 is too large for one atomic commit. Its 5 ACs mix decoder implementation (AC1), CI schema-gate infrastructure (AC2), worker-loop escalation (AC3), CLI observability (AC4), and documentation (AC5), and the description names five distinct feature-sized fixes (A-E across the pre-claim decoder, the drain loop, the work CLI, CI, and docs). This trips the Step-0 \"too big\" triggers: AC mixes implementation/CI/docs, and the description names multiple feature-sized pieces in unrelated subsystems. Decomposed into 5 atomic children (depth 1; parent is depth 0, split permitted). children: ddx-606fe854  AC1  pre-claim intake decoder: accept readiness_checks[].verdict as JSON bool, string, or absent (root-cause fix; no deps) ddx-d67f124e  AC3  ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints (folds in proposed fix D, the warn-only 100%-failure guard; no deps) ddx-977e1a7f  AC4  ddx work --watch: surface low claim-success-rate over a rolling window (no deps) ddx-c5d485c9  AC2  Lock readiness_checks JSON schema in a shared location with a CI drift gate (depends on ddx-606fe854) ddx-757a3344  AC5  Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README (depends on ddx-606fe854, ddx-d67f124e, ddx-977e1a7f, ddx-c5d485c9) edges: Children linked to parent via the Parent field (repo decomposition convention; recovery_decompose.go:184-223), making ddx-f9ddaa68 an epic excluded from execution-ready. A child-\u003eparent dep edge was deliberately NOT used because DepAdd(id, dep) means \"id depends on dep\" (gaps_test.go:334) and a parent with open children never closes (diagnose.go:336), which would wedge every child. Inter-child blocking deps recorded: ddx-c5d485c9 depends on ddx-606fe854; ddx-757a3344 depends on all four others. notes: ddx-f9ddaa68 updated with --notes recording the child IDs. Parent lifecycle is orchestrator-owned.",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 3,
+      "work-retry-after": "2026-05-26T15:19:55Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "Bead ddx-f9ddaa68 is too large for one atomic commit. Its 5 ACs mix decoder implementation (AC1), CI schema-gate infrastructure (AC2), worker-loop escalation (AC3), CLI observability (AC4), and documentation (AC5), and the description names five distinct feature-sized fixes (A-E across the pre-claim decoder, the drain loop, the work CLI, CI, and docs). This trips the Step-0 \"too big\" triggers: AC mixes implementation/CI/docs, and the description names multiple feature-sized pieces in unrelated subsystems. Decomposed into 5 atomic children (depth 1; parent is depth 0, split permitted). children: ddx-606fe854  AC1  pre-claim intake decoder: accept readiness_checks[].verdict as JSON bool, string, or absent (root-cause fix; no deps) ddx-d67f124e  AC3  ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints (folds in proposed fix D, the warn-only 100%-failure guard; no deps) ddx-977e1a7f  AC4  ddx work --watch: surface low claim-success-rate over a rolling window (no deps) ddx-c5d485c9  AC2  Lock readiness_checks JSON schema in a shared location with a CI drift gate (depends on ddx-606fe854) ddx-757a3344  AC5  Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README (depends on ddx-606fe854, ddx-d67f124e, ddx-977e1a7f, ddx-c5d485c9) edges: Children linked to parent via the Parent field (repo decomposition convention; recovery_decompose.go:184-223), making ddx-f9ddaa68 an epic excluded from execution-ready. A child-\u003eparent dep edge was deliberately NOT used because DepAdd(id, dep) means \"id depends on dep\" (gaps_test.go:334) and a parent with open children never closes (diagnose.go:336), which would wedge every child. Inter-child blocking deps recorded: ddx-c5d485c9 depends on ddx-606fe854; ddx-757a3344 depends on all four others. notes: ddx-f9ddaa68 updated with --notes recording the child IDs. Parent lifecycle is orchestrator-owned.",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T103143-f62e88ed",
+    "prompt": ".ddx/executions/20260527T103143-f62e88ed/prompt.md",
+    "manifest": ".ddx/executions/20260527T103143-f62e88ed/manifest.json",
+    "result": ".ddx/executions/20260527T103143-f62e88ed/result.json",
+    "checks": ".ddx/executions/20260527T103143-f62e88ed/checks.json",
+    "usage": ".ddx/executions/20260527T103143-f62e88ed/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f9ddaa68-20260527T103143-f62e88ed"
+  },
+  "prompt_sha": "cfde511b7e714353ed687e9786ae3fcb01e095c5000e803bcb36b7a3f0dc00a1"
+}
