@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260527T050638-8bd193a1",
+  "bead_id": "ddx-db5b6382",
+  "base_rev": "c53c35b64e7bae78f2f84cb5de6c715a59257e0b",
+  "created_at": "2026-05-27T05:06:46.086980907Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-db5b6382",
+    "title": "Lock readiness_checks JSON schema with a make readiness-schema CI drift gate",
+    "description": "PROBLEM\nThe pre-claim intake readiness payload is enforced only by ad-hoc Go struct tags and custom UnmarshalJSON methods. There is no shared, versioned JSON schema that both the readiness-prompt producer (the bead-lifecycle skill that emits readiness_checks) and the consumer (decodePreClaimIntakePayloadResultWithMode) reference, and no CI gate that fails when the two drift. The original wedge (parent ddx-f9ddaa68; fizeau queue idle 2026-05-18) was exactly a producer/consumer schema mismatch: the producer emitted readiness_checks[].verdict as a JSON bool while the consumer parsed it as a Go string, so every claim attempt produced the same warn fingerprint and the queue idled silently.\n\nROOT CAUSE\nThere is no single source of truth for the readiness schema. The canonical shape lives implicitly across preClaimReadinessClassificationPromptResult (cli/internal/agent/preclaim_intake_hook.go:60-73), preClaimReadinessCheck (cli/internal/agent/preclaim_intake_hook.go:75-80), and the readinessVerdict coercion (cli/internal/agent/preclaim_intake_hook.go:91-121); the producer contract lives separately in the buildPreClaimIntakePrompt instructions (cli/internal/agent/preclaim_intake_hook.go:616-621) and the bead-lifecycle SKILL.md. Nothing fails CI when they diverge. Contrast the bead record, which IS schema-locked: cli/internal/bead/schema/bead-record.schema.json validated by TestBeadRecordSchema via `make bead-schema` (cli/Makefile:147-150) and wired into CI at .github/workflows/ci.yml:63-64.\n\nPROPOSED FIX\n1. Add cli/internal/agent/schema/readiness-checks.schema.json describing the readiness payload: classification, tractability, score, rationale, difficulty, readiness_checks[] (each {reason, verdict, evidence, checkable_before_attempt}), suggested_fixes, suggested_child_beads, waivers_applied. verdict MUST be oneOf bool/string/null, matching readinessVerdict.UnmarshalJSON (cli/internal/agent/preclaim_intake_hook.go:91-121).\n2. Add a Go test TestReadinessChecksSchema (cli/internal/agent) that validates the schema is well-formed and asserts every form the decoder accepts — verdict=true, false, \"fail\", \"ready\", and absent — validates against the schema, so producer and consumer cannot drift without failing the test.\n3. Add a `readiness-schema` make target mirroring cli/Makefile:147-150 and wire it into .github/workflows/ci.yml immediately after the bead-schema step (line 64).\n\nNON-SCOPE\nDo NOT modify the verdict decoder itself — readinessVerdict.UnmarshalJSON already accepts bool/string/absent and is covered by TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent (cli/internal/agent/preclaim_intake_hook_test.go:690); this child only locks that shipped behavior behind a schema. Do NOT touch the worker idle-escalation (ddx-df77e668) or add the claim-success-rate signal (sibling child). Governing artifacts: FEAT-010 / ADR-023 readiness vocabulary. Dependencies: none.\n\nAC\n1. cli/internal/agent/schema/readiness-checks.schema.json exists and describes the full readiness payload; readiness_checks[].verdict is oneOf bool/string/null.\n2. TestReadinessChecksSchema asserts verdict forms true/false/\"fail\"/\"ready\"/absent each validate against the schema and decode to the canonical readinessVerdict (pass/fail/passthrough/empty).\n3. `make readiness-schema` runs TestReadinessChecksSchema and is invoked from .github/workflows/ci.yml immediately after the bead-schema step.\n4. Regression: TestReadinessChecksSchema fails if any form readinessVerdict.UnmarshalJSON (cli/internal/agent/preclaim_intake_hook.go:91-121) accepts is rejected by the schema.\n5. cd cli \u0026\u0026 go test ./internal/agent/... green\n6. lefthook run pre-commit passes",
+    "acceptance": "1. cli/internal/agent/schema/readiness-checks.schema.json exists and describes the full readiness payload; readiness_checks[].verdict is oneOf bool/string/null.\n2. TestReadinessChecksSchema asserts verdict forms true/false/\"fail\"/\"ready\"/absent each validate against the schema and decode to the canonical readinessVerdict (pass/fail/passthrough/empty).\n3. `make readiness-schema` runs TestReadinessChecksSchema and is invoked from .github/workflows/ci.yml immediately after the bead-schema step (.github/workflows/ci.yml:64).\n4. Regression: TestReadinessChecksSchema fails if any verdict form that readinessVerdict.UnmarshalJSON (cli/internal/agent/preclaim_intake_hook.go:91-121) accepts is rejected by the schema.\n5. cd cli \u0026\u0026 go test ./internal/agent/... green\n6. lefthook run pre-commit passes",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:pre-claim",
+      "area:ci",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T050638-8bd193a1",
+    "prompt": ".ddx/executions/20260527T050638-8bd193a1/prompt.md",
+    "manifest": ".ddx/executions/20260527T050638-8bd193a1/manifest.json",
+    "result": ".ddx/executions/20260527T050638-8bd193a1/result.json",
+    "checks": ".ddx/executions/20260527T050638-8bd193a1/checks.json",
+    "usage": ".ddx/executions/20260527T050638-8bd193a1/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-db5b6382-20260527T050638-8bd193a1"
+  },
+  "prompt_sha": "030b77fdab28d55dac2f9db95d96b4335159bf635e280fe7dca6f149ffb451e6"
+}
