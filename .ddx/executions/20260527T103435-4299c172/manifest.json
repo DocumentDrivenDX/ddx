@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260527T103435-4299c172",
+  "bead_id": "ddx-f2f89aa8",
+  "base_rev": "2899b5eac0df08de4f64b75e7866cbe9ce85b42a",
+  "created_at": "2026-05-27T10:34:57.938307322Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-f2f89aa8",
+    "title": "execute-bead: prevent duplicate long-running matrix commands inside one attempt",
+    "description": "PROBLEM\nA Niflheim `ddx work --once --json` attempt on `niflheim-27416d39` started 2026-05-20T22:50Z and made real progress, but then repeatedly launched the same 600-second writeamp command for the same default ARCH-C configuration instead of advancing through the bead's required default/aggressive/legacy matrix or stopping with a retryable rationale. Evidence directories observed in the isolated worktree:\n- `20260520T225406Z-arch-c-default-1a4fe557`\n- `20260520T230623Z-arch-c-default-1a4fe557`\n- `20260520T231849Z-arch-c-default-1a4fe557`\n- `20260520T233102Z-arch-c-default-1a4fe557`\n\nThe worker was not parked and not blocked; it consumed 40+ minutes on duplicate long-running validation with no matrix-progress guard. This is continuous activity, but not continuous forward progress.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead.go:2312` defines Step 0 size/decomposition rules, but the prompt does not require agents to make an explicit execution plan for long-running matrix beads before launching expensive commands.\n- `cli/internal/agent/execute_bead.go:2335` defines the no_changes contract, but does not tell agents to stop with `status: open` + retryable reason when a required metric is missing after one bounded run.\n- `cli/internal/agent/work/stop.go:51` only classifies no-progress between completed attempts; it does not detect intra-attempt duplicate long-running commands.\n- `cli/internal/agent/execute_bead_loop.go:2026` wraps an entire attempt in heartbeat liveness, so repeated child-process activity keeps the worker live even when the attempt is cycling the same workload.\n\nPROPOSED FIX\nAdd execute-bead guardrails for long-running matrix/benchmark beads:\n1. Prompt-level: require a short matrix plan before running expensive commands; for each required config, name the output path and completion criterion.\n2. Prompt-level: prohibit rerunning the same long-running command/config more than once unless the agent records why the prior output is invalid and what changed before retrying.\n3. Orchestrator-level where feasible: detect duplicate long-running command fingerprints from harness event streams or execution evidence, emit an actionable warning, and fail the attempt as `no_changes`/`status: open` before another 10-minute duplicate run starts.\n4. Observability: expose the current bead/attempt from the liveness sidecar consistently during long child commands; this overlaps with `ddx-f9b41107` and can depend on it rather than duplicating that fix.\n\nNON-SCOPE\n- Do not change Niflheim's writeamp harness or Niflheim service configuration.\n- Do not forbid legitimate reruns after a config change, service restart, or command correction.\n- Do not lower the global request timeout; this is about repeated same-command progress, not provider timeout.\n- Do not mark the Niflheim bead blocked solely because one worker behaved inefficiently.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent -run 'TestExecuteBeadPromptRequiresMatrixPlanForLongRunningWork|TestExecuteBeadPromptRequiresRerunJustificationForDuplicateLongCommands' -count=1` passes.\n2. `cd cli \u0026\u0026 go test ./internal/agent -run 'TestWorkDetectsDuplicateLongRunningCommandFingerprint|TestWorkDuplicateCommandGuardAllowsChangedConfig' -count=1` passes, or the bead documents why prompt-only enforcement was chosen and includes equivalent prompt snapshot tests.\n3. A fixture based on the Niflheim incident with repeated `python3 -m benchmarks.throughput.src.writeamp ... --duration 600 ... arch-c-default` commands produces a warning or terminal retryable `no_changes` outcome before launching a third identical long-running command.\n4. The implementation does not flag retries when the command fingerprint changes by config name, output path, or declared retry reason.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:work",
+      "area:observability",
+      "kind:bug",
+      "downstream:niflheim",
+      "priority:reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260527T103435-4299c172",
+    "prompt": ".ddx/executions/20260527T103435-4299c172/prompt.md",
+    "manifest": ".ddx/executions/20260527T103435-4299c172/manifest.json",
+    "result": ".ddx/executions/20260527T103435-4299c172/result.json",
+    "checks": ".ddx/executions/20260527T103435-4299c172/checks.json",
+    "usage": ".ddx/executions/20260527T103435-4299c172/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f2f89aa8-20260527T103435-4299c172"
+  },
+  "prompt_sha": "e86eda62e40218c44b26bc3e7cee170f9c692f37a3789b8de4c303f2cce2d4bf"
+}
