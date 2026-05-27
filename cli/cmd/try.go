@@ -93,7 +93,7 @@ Exit codes:
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("effort", "", "Effort level")
-	cmd.Flags().String("attempt-backend", "", "Attempt backend: worktree, local-clone, or docker-clone (default: executions.attempt_backend)")
+	cmd.Flags().String("attempt-backend", "", "Attempt backend: worktree, local-clone, docker-clone, or in-tree (default: executions.attempt_backend)")
 	cmd.Flags().Bool("force-claim", false, "Ignore retry cooldown for this targeted attempt only (requires --reason)")
 	cmd.Flags().String("reason", "", "Operator reason required by --force-claim")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")

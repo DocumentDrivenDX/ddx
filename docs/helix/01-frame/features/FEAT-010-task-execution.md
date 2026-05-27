@@ -779,7 +779,12 @@ backend. `local-clone` creates a full local clone under the same execution root
 and imports result commits back into the project repo before land. `docker-clone`
 uses that clone as the Docker working tree; it requires
 `executions.docker.image` and can set Docker memory, CPU, pids, tmpfs, and
-network limits under `executions.docker`.
+network limits under `executions.docker`. `in-tree` (opt-in) runs the attempt
+directly in the project checkout; it requires clean working tree before claim,
+enforces exclusive single-worker locking, and is designed for data-heavy
+validation tasks that need access to project-local state (untracked datasets,
+running services, checked-out fixtures). On failure with dirty tree, the bead is
+unclaimed and a rescue message is left for manual recovery.
 
 `ddx work` and server-managed workers use the same cleanup manager before the
 first claim and before later claims whenever any checked temp or evidence root

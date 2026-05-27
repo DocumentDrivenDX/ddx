@@ -23,10 +23,12 @@ const (
 	AttemptBackendWorktree    = "worktree"
 	AttemptBackendLocalClone  = "local-clone"
 	AttemptBackendDockerClone = "docker-clone"
+	AttemptBackendInTree      = "in-tree"
 
 	ExecuteBeadClonePrefix      = ".execute-bead-clone-"
 	ExecuteBeadDockerHomePrefix = ".execute-bead-home-"
 	ExecuteBeadDockerRunPrefix  = ".execute-bead-runtime-"
+	ExecuteBeadInTreeLockPrefix = ".execute-bead-in-tree-lock-"
 )
 
 // AttemptBackend owns the workspace and transport mechanics for one
@@ -69,6 +71,7 @@ type AttemptWorkspace struct {
 	DockerRun           string
 	DockerSharedGoCache string
 	gitOps              GitOps
+	inTreeLockFile      *os.File
 }
 
 func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
@@ -83,9 +86,11 @@ func ResolveAttemptBackend(rcfg config.ResolvedConfig) (AttemptBackend, error) {
 		return LocalCloneAttemptBackend{CloneMode: dockerCloneMode(rcfg.ExecutionsDockerConfig())}, nil
 	case AttemptBackendDockerClone, "docker":
 		return DockerCloneAttemptBackend{Docker: rcfg.ExecutionsDockerConfig()}, nil
+	case AttemptBackendInTree:
+		return InTreeAttemptBackend{}, nil
 	default:
-		return nil, fmt.Errorf("unknown attempt backend %q (valid: %s, %s, %s)",
-			name, AttemptBackendWorktree, AttemptBackendLocalClone, AttemptBackendDockerClone)
+		return nil, fmt.Errorf("unknown attempt backend %q (valid: %s, %s, %s, %s)",
+			name, AttemptBackendWorktree, AttemptBackendLocalClone, AttemptBackendDockerClone, AttemptBackendInTree)
 	}
 }
 
@@ -328,6 +333,113 @@ func (DockerCloneAttemptBackend) Cleanup(ctx context.Context, ws *AttemptWorkspa
 		}
 	}
 	return (LocalCloneAttemptBackend{}).Cleanup(ctx, ws)
+}
+
+type InTreeAttemptBackend struct{}
+
+func (InTreeAttemptBackend) Name() string { return AttemptBackendInTree }
+
+func (InTreeAttemptBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	if err := checkTreeClean(ctx, req.ProjectRoot, req.BeadID); err != nil {
+		return nil, fmt.Errorf("in-tree backend requires clean working tree before claim: %w", err)
+	}
+
+	lockPath := executeBeadInTreeLockPath(req.ProjectRoot, req.BeadID)
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		return nil, fmt.Errorf("creating in-tree lock parent dir: %w", err)
+	}
+
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("opening in-tree lock file: %w", err)
+	}
+
+	if err := acquireExclusiveLock(lockFile); err != nil {
+		lockFile.Close()
+		return nil, fmt.Errorf("in-tree attempt already running for this bead (worker lock held by another process): %w", err)
+	}
+
+	_, _ = fmt.Fprintf(lockFile, "%d\n", os.Getpid())
+	_ = lockFile.Sync()
+
+	return &AttemptWorkspace{
+		Backend:        AttemptBackendInTree,
+		ProjectRoot:    req.ProjectRoot,
+		WorkDir:        req.ProjectRoot,
+		BeadID:         req.BeadID,
+		AttemptID:      req.AttemptID,
+		BaseRev:        req.BaseRev,
+		gitOps:         req.GitOps,
+		inTreeLockFile: lockFile,
+	}, nil
+}
+
+func (InTreeAttemptBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	return dispatchAgentRun(ctx, req.Workspace.ProjectRoot, req.Service, req.AgentRunner, req.Config, req.Runtime)
+}
+
+func (InTreeAttemptBackend) PublishResult(context.Context, *AttemptWorkspace, *ExecuteBeadResult) error {
+	return nil
+}
+
+func (InTreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) error {
+	if ws == nil {
+		return nil
+	}
+	if ws.inTreeLockFile != nil {
+		_ = releaseExclusiveLock(ws.inTreeLockFile)
+		_ = ws.inTreeLockFile.Close()
+	}
+	if ws.BeadID != "" {
+		lockPath := executeBeadInTreeLockPath(ws.ProjectRoot, ws.BeadID)
+		_ = os.Remove(lockPath)
+	}
+	return nil
+}
+
+func checkTreeClean(ctx context.Context, projectRoot, beadID string) error {
+	out, err := internalgit.Command(ctx, projectRoot, "status", "--porcelain").Output()
+	if err != nil {
+		return fmt.Errorf("checking git status: %w", err)
+	}
+
+	var dirtyFiles []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if path == "" {
+			continue
+		}
+		if strings.HasPrefix(path, ".ddx") || strings.HasPrefix(path, ExecuteBeadArtifactDir) {
+			continue
+		}
+		dirtyFiles = append(dirtyFiles, path)
+	}
+
+	if len(dirtyFiles) > 0 {
+		return fmt.Errorf("working tree is not clean; modified files:\n%s", strings.Join(dirtyFiles, "\n"))
+	}
+	return nil
+}
+
+func executeBeadInTreeLockPath(projectRoot, beadID string) string {
+	return filepath.Join(config.ExecutionTempRoot(projectRoot), ExecuteBeadInTreeLockPrefix+beadID)
+}
+
+func acquireExclusiveLock(lockFile *os.File) error {
+	if lockFile == nil {
+		return fmt.Errorf("lock file is nil")
+	}
+	return inTreeLockAcquire(lockFile)
+}
+
+func releaseExclusiveLock(lockFile *os.File) error {
+	if lockFile == nil {
+		return nil
+	}
+	return inTreeLockRelease(lockFile)
 }
 
 func executeBeadClonePath(projectRoot, beadID, attemptID string) string {
