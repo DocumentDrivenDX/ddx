@@ -83,6 +83,13 @@ type ExecuteBeadLoopRuntime struct {
 	// and parks it for operator attention. Zero means use
 	// DefaultConsecutiveWedgeThreshold (2) (ddx-9714eaac).
 	ConsecutiveWedgeThreshold int
+	// ClaimSuccessRateWindow and ClaimSuccessRateThreshold control the rolling
+	// claim-throughput warning emitted by ddx work. A full window whose claim
+	// success rate is at or below the configured threshold triggers a single
+	// operator-visible warning until a later successful claim clears the warned
+	// state.
+	ClaimSuccessRateWindow    int
+	ClaimSuccessRateThreshold float64
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
 	// work-layer StopCondition before any new bead is claimed. The companion
@@ -186,6 +193,33 @@ func (r ExecuteBeadLoopRuntime) effectiveConsecutiveWedgeThreshold() int {
 		return r.ConsecutiveWedgeThreshold
 	}
 	return DefaultConsecutiveWedgeThreshold
+}
+
+// DefaultClaimSuccessRateWindow is the number of recent claim attempts used to
+// compute the rolling claim-success rate warning.
+const DefaultClaimSuccessRateWindow = 10
+
+// effectiveClaimSuccessRateWindow returns the configured claim-success window,
+// falling back to DefaultClaimSuccessRateWindow when unset.
+func (r ExecuteBeadLoopRuntime) effectiveClaimSuccessRateWindow() int {
+	if r.ClaimSuccessRateWindow > 0 {
+		return r.ClaimSuccessRateWindow
+	}
+	return DefaultClaimSuccessRateWindow
+}
+
+// DefaultClaimSuccessRateThreshold is the minimum rolling claim-success rate
+// before the loop emits a warning. Zero means only a full window of
+// non-successes trips the signal.
+const DefaultClaimSuccessRateThreshold = 0.0
+
+// effectiveClaimSuccessRateThreshold returns the configured claim-success
+// threshold, falling back to DefaultClaimSuccessRateThreshold when unset.
+func (r ExecuteBeadLoopRuntime) effectiveClaimSuccessRateThreshold() float64 {
+	if r.ClaimSuccessRateThreshold >= 0 {
+		return r.ClaimSuccessRateThreshold
+	}
+	return DefaultClaimSuccessRateThreshold
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -1031,6 +1065,58 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
+	claimSuccessRateWindowSize := runtime.effectiveClaimSuccessRateWindow()
+	claimSuccessRateThreshold := runtime.effectiveClaimSuccessRateThreshold()
+	claimSuccessRateWindow := make([]bool, 0, claimSuccessRateWindowSize)
+	claimSuccessRateSuccesses := 0
+	claimSuccessRateWarned := false
+	recordClaimAttempt := func(success bool, beadID string) {
+		if claimSuccessRateWindowSize <= 0 {
+			return
+		}
+		if len(claimSuccessRateWindow) == claimSuccessRateWindowSize {
+			if claimSuccessRateWindow[0] {
+				claimSuccessRateSuccesses--
+			}
+			copy(claimSuccessRateWindow, claimSuccessRateWindow[1:])
+			claimSuccessRateWindow = claimSuccessRateWindow[:claimSuccessRateWindowSize-1]
+		}
+		claimSuccessRateWindow = append(claimSuccessRateWindow, success)
+		if success {
+			claimSuccessRateSuccesses++
+			claimSuccessRateWarned = false
+			return
+		}
+		if len(claimSuccessRateWindow) < claimSuccessRateWindowSize {
+			return
+		}
+		rate := float64(claimSuccessRateSuccesses) / float64(claimSuccessRateWindowSize)
+		if rate > claimSuccessRateThreshold || claimSuccessRateWarned {
+			return
+		}
+		claimSuccessRateWarned = true
+		detail := fmt.Sprintf(
+			"claim success rate %.3f over the last %d claim attempts (%d successes, %d non-successes) is at or below threshold %.3f; manual intervention may be required",
+			rate,
+			claimSuccessRateWindowSize,
+			claimSuccessRateSuccesses,
+			claimSuccessRateWindowSize-claimSuccessRateSuccesses,
+			claimSuccessRateThreshold,
+		)
+		emit("loop.operator_attention", map[string]any{
+			"reason":        "claim_success_rate_below_threshold",
+			"bead_id":       beadID,
+			"detail":        detail,
+			"window_size":   claimSuccessRateWindowSize,
+			"successes":     claimSuccessRateSuccesses,
+			"non_successes": claimSuccessRateWindowSize - claimSuccessRateSuccesses,
+			"success_rate":  rate,
+			"threshold":     claimSuccessRateThreshold,
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", detail)
+		}
+	}
 	clearTransientCandidateSkips := func() {
 		for beadID := range transientCandidateSkips {
 			delete(transientCandidateSkips, beadID)
@@ -1491,6 +1577,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before claim: %s\n", candidate.ID, staleSkip.Detail)
 			}
 			emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_claim")
+			recordClaimAttempt(false, candidate.ID)
 			if stopAfterNonAttemptSkip() {
 				applyStop(work.StopInput{Once: true})
 				return result, nil
@@ -1520,6 +1607,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: %s wedged %d consecutive claims (>= %d); flagged for operator attention, continuing to next ready bead\n", candidate.ID, marker.Count, threshold)
 			}
+			recordClaimAttempt(false, candidate.ID)
 			continue
 		}
 		// Claim atomically before model-backed intake and lint to prevent
@@ -1546,8 +1634,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				"queue_rank": queueRankValue(candidate.Extra["queue-rank"]),
 				"reason":     claimErr.Error(),
 			})
+			recordClaimAttempt(false, candidate.ID)
 			continue
 		}
+		recordClaimAttempt(true, candidate.ID)
 
 		overrideRetryAfter := ""
 		overrideMeta := forcedCooldownMetadata{}

@@ -140,6 +140,28 @@ func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Write
 	}
 }
 
+func optionalIntFlag(cmd *cobra.Command, name string, defaultValue int) int {
+	if cmd.Flags().Lookup(name) == nil {
+		return defaultValue
+	}
+	value, err := cmd.Flags().GetInt(name)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
+func optionalFloat64Flag(cmd *cobra.Command, name string, defaultValue float64) float64 {
+	if cmd.Flags().Lookup(name) == nil {
+		return defaultValue
+	}
+	value, err := cmd.Flags().GetFloat64(name)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
 func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
 	spec, dispatch, err := parseExecuteLoopSpec(cmd, treatPassthroughAsOpaque)
 	if err != nil {
@@ -569,6 +591,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		PreClaimIntakeHook:           intakeHook,
 		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
 		RouteResolutionTimeout:       spec.RouteResolutionTimeout.Duration,
+		ClaimSuccessRateWindow:       optionalIntFlag(cmd, "claim-rate-window", agent.DefaultClaimSuccessRateWindow),
+		ClaimSuccessRateThreshold:    optionalFloat64Flag(cmd, "claim-rate-threshold", agent.DefaultClaimSuccessRateThreshold),
 		PreDispatchLintHook:          lintHook,
 		PostAttemptTriageHook:        triageHook,
 		ProseEvidenceHook:            proseHook,
