@@ -81,6 +81,9 @@ claim-success-rate warning knobs `--claim-rate-window` and
 when the rolling claim success rate stays low even though the queue is not
 fully idle, which helps separate slow progress from a silent intake failure.
 
+**Related reliability context:** AR-2026-05-17 follow-up; lock handling
+(ddx-57c40485); route-resolution wedge handling (ddx-8f2e0ebf).
+
 ## Development
 
 ### Local Install

@@ -32,16 +32,23 @@ func TestReadmeDocumentsPreClaimIntakeContract(t *testing.T) {
 		"readiness_checks",
 		"bool `true` -> `pass`",
 		"bool `false` -> `fail`",
+		"null",
+		"absent",
 		"ClassifyReadinessWithMode",
 		"warn-only",
 		"operator-attention",
+		"loop.operator_attention",
 		"hard errors",
 		"worker idles on a full queue",
 		"loop.idle",
+		"same fingerprint",
 		"preClaimIdleEscalationThreshold",
 		"ddx-df77e668",
 		"--claim-rate-window",
 		"--claim-rate-threshold",
+		"AR-2026-05-17",
+		"ddx-57c40485",
+		"ddx-8f2e0ebf",
 	}
 	for _, term := range required {
 		assert.Contains(t, readme, term, "README.md must document %q", term)
