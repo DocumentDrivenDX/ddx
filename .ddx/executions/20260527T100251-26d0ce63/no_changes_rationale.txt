@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./... && lefthook run pre-commit
+reason: the repository already contains the shared readiness_checks schema gate and the same-fingerprint escalation path requested by this bead, so no source changes were required.
