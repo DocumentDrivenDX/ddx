@@ -21,6 +21,33 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type claimSuccessRateWarningStore struct {
+	*bead.Store
+	attempts atomic.Int32
+	cancel   context.CancelFunc
+}
+
+func (s *claimSuccessRateWarningStore) Claim(id, assignee string) error {
+	return s.claim(id, assignee, "", "")
+}
+
+func (s *claimSuccessRateWarningStore) ClaimWithOptions(id, assignee, session, worktree string) error {
+	return s.claim(id, assignee, session, worktree)
+}
+
+func (s *claimSuccessRateWarningStore) claim(id, assignee, session, worktree string) error {
+	attempt := s.attempts.Add(1)
+	switch attempt {
+	case 1, 2, 3, 5:
+		if attempt == 5 && s.cancel != nil {
+			defer s.cancel()
+		}
+		return fmt.Errorf("synthetic claim failure %d", attempt)
+	default:
+		return s.Store.ClaimWithOptions(id, assignee, session, worktree)
+	}
+}
+
 // TestLoop_StaysAliveWithEmptyQueue covers watch mode: the loop must
 // NOT exit when nextCandidate returns no
 // eligible bead. It must reset the per-Run attempted/hookFailed maps and
@@ -260,6 +287,83 @@ func TestWorkWatch_PreClaimIdleEscalatesAfterRepeatedSameDetail(t *testing.T) {
 	assert.GreaterOrEqual(t, int(idleCountVal), preClaimIdleEscalationThreshold)
 
 	assert.Contains(t, logBuf.String(), "operator attention: pre-claim idled")
+}
+
+// TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold verifies the
+// rolling claim-success signal: a full window of non-successful claim attempts
+// emits exactly one operator-attention warning, a later successful claim
+// clears the warned state, and the next below-threshold crossing warns again.
+func TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	for i := 1; i <= 3; i++ {
+		require.NoError(t, store.Create(&bead.Bead{
+			ID:       fmt.Sprintf("ddx-claim-rate-%d", i),
+			Title:    fmt.Sprintf("claim rate bead %d", i),
+			Priority: i,
+		}))
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	workerStore := &claimSuccessRateWarningStore{Store: store, cancel: cancel}
+	worker := &ExecuteBeadWorker{
+		Store: workerStore,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				ResultRev: "rev-" + beadID,
+			}, nil
+		}),
+	}
+
+	var logBuf, eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:                      executeloop.ModeDrain,
+		Log:                       &logBuf,
+		EventSink:                 &eventSink,
+		WorkerID:                  "worker-claim-rate",
+		SessionID:                 "sess-claim-rate",
+		ClaimSuccessRateWindow:    3,
+		ClaimSuccessRateThreshold: 0.5,
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, 2, strings.Count(logBuf.String(), "claim success rate"), "warning should emit once per below-threshold crossing")
+
+	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
+	var warnings []map[string]any
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		if entry["type"] != "loop.operator_attention" {
+			continue
+		}
+		data, ok := entry["data"].(map[string]any)
+		require.True(t, ok)
+		if data["reason"] != "claim_success_rate_below_threshold" {
+			continue
+		}
+		warnings = append(warnings, data)
+	}
+
+	require.Len(t, warnings, 2, "a later success must clear the warned state so a new crossing warns again")
+	assert.Equal(t, float64(3), warnings[0]["window_size"])
+	assert.Equal(t, float64(0.5), warnings[0]["threshold"])
+	assert.Equal(t, float64(0), warnings[0]["successes"])
+	assert.Equal(t, float64(3), warnings[0]["non_successes"])
+	assert.Equal(t, float64(3), warnings[1]["window_size"])
+	assert.Equal(t, float64(0.5), warnings[1]["threshold"])
+	assert.Equal(t, float64(1), warnings[1]["successes"])
+	assert.Equal(t, float64(2), warnings[1]["non_successes"])
 }
 
 func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing.T) {

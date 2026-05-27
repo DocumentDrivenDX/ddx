@@ -33,12 +33,14 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	require.NoError(t, err, "ddx work must exist")
 	require.NotNil(t, workCmd)
 
-	for _, name := range []string{"harness", "provider", "model", "min-power", "max-power"} {
+	for _, name := range []string{"harness", "provider", "model", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold"} {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
 	assert.NotNil(t, workCmd.Flags().Lookup("ignore-cooldown"), "ddx work must expose --ignore-cooldown")
 	assert.NotNil(t, workCmd.Flags().Lookup("reason"), "ddx work must expose --reason")
+	assert.Equal(t, "10", workCmd.Flags().Lookup("claim-rate-window").DefValue, "ddx work must default claim-rate window to 10")
+	assert.Equal(t, "0", workCmd.Flags().Lookup("claim-rate-threshold").DefValue, "ddx work must default claim-rate threshold to 0.0")
 }
 
 func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
@@ -615,7 +617,7 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 	require.Len(t, requests, 2, "ddx work should retry provider connectivity with a higher floor; output=%q err=%v", out, err)
 	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred no-requirement default policy")
 	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
-	assert.Equal(t, "default", requests[1].Policy, "retry should preserve the selected policy intent")
+	assert.Equal(t, requests[0].Policy, requests[1].Policy, "retry should preserve the selected policy intent")
 	assert.Equal(t, 6, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
 }
 
