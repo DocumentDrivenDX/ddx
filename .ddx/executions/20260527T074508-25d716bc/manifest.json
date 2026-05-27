@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260527T074508-25d716bc",
+  "bead_id": "ddx-387dd863",
+  "base_rev": "acf6ddf2bd1e4971be3c91186c145572e2388870",
+  "created_at": "2026-05-27T07:45:15.610602416Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-387dd863",
+    "title": "Document pre-claim intake contract and silent-idle diagnosis",
+    "description": "PROBLEM\nOperators lack a concise, durable guide for diagnosing a `ddx work --watch` loop that appears alive but does not claim ready beads. The parent incident's suggested action pointed to route/harness configuration even though the actionable fault was DDx's readiness decoder/worker behavior.\n\nROOT CAUSE WITH FILE:LINE\nThe user-facing README is the natural top-level diagnostic surface, but the pre-claim intake contract and silent-idle escalation behavior need to be stated there near the quick-start operational commands in `README.md:40-45`. Worker behavior is implemented in the readiness classification and work loop, but operators should not need to read `cli/internal/agent/execute_bead_loop.go` to know what warn-only, operator-attention, and hard errors mean.\n\nPROPOSED FIX\nUpdate the README to name the `readiness_checks` contract, canonical verdict forms, failure-class mapping, same-fingerprint/operator-attention behavior, claim-success-rate warning knobs, and first diagnostic commands/logs for a full ready queue that is idling. Keep the guidance implementation-neutral enough to remain valid as the specific worker internals evolve.\n\nNON-SCOPE\nDo not change runtime behavior, decoder behavior, schema validation, Fizeau route/harness configuration, lock handling from ddx-57c40485, or route-resolution wedge handling from ddx-8f2e0ebf. Do not add long incident narrative or depend on the external Fizeau log path. Parent lifecycle, child dependency wiring, and tracker mutation are orchestrator-owned.\n\nGOVERNING ARTIFACT / CROSS-REF\nAR-2026-05-17 follow-up context; ADR-023 readiness warn-only policy; adjacent reliability bugs ddx-57c40485 and ddx-8f2e0ebf are cross-references only.\n\nDEPENDENCIES\nDepends on the decoder, same-fingerprint escalation, claim-success-rate warning, and schema-lock children so the docs describe landed behavior.",
+    "acceptance": "1. `README.md` includes a section for pre-claim intake and silent-idle diagnosis that documents the canonical verdict forms, warn vs operator-attention vs hard-error mapping, and operator commands/logs to inspect when a ready queue idles.\n2. `TestReadmeDocumentsPreClaimIntakeContract` asserts the README mentions `readiness_checks`, bool/string/null-or-absent verdict handling, `loop.operator_attention`, same-fingerprint or repeated idle escalation, and claim-success-rate warning knobs.\n3. The docs preserve the parent cross-references to AR-2026-05-17 follow-up context, ddx-57c40485, and ddx-8f2e0ebf as related reliability context without making them part of this implementation scope.\n4. `cd cli \u0026\u0026 go test ./cmd/... -run TestReadmeDocumentsPreClaimIntakeContract` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-claim",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "ac-quality:needs-refinement"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T074508-25d716bc",
+    "prompt": ".ddx/executions/20260527T074508-25d716bc/prompt.md",
+    "manifest": ".ddx/executions/20260527T074508-25d716bc/manifest.json",
+    "result": ".ddx/executions/20260527T074508-25d716bc/result.json",
+    "checks": ".ddx/executions/20260527T074508-25d716bc/checks.json",
+    "usage": ".ddx/executions/20260527T074508-25d716bc/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-387dd863-20260527T074508-25d716bc"
+  },
+  "prompt_sha": "81616a6b47c3ac7fd4bb0ae3147c8c916465e58d4542acf1c37b7687e4bf4e2a"
+}
