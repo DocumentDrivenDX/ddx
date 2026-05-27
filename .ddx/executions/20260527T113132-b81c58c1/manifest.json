@@ -1,0 +1,43 @@
+{
+  "attempt_id": "20260527T113132-b81c58c1",
+  "bead_id": "ddx-8032e685",
+  "base_rev": "1979a0565776c4dfa551ae096ba31fa09d2c20fc",
+  "created_at": "2026-05-27T11:31:39.882472134Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8032e685",
+    "title": "Document pre-claim intake contract, failure-class mapping, and silent-idle diagnosis in README",
+    "description": "PROBLEM\nOperators have no documented contract for the pre-claim intake, no mapping of failure classes (warn-only vs operator-attention escalation vs hard error), and no playbook for diagnosing silent-idle on a full queue. During the Fizeau idle, the warn payload's suggested_action (\"check the readiness route or harness configuration and retry\") actively misdirected the operator: the real fault was DDx's own decoder, not the route or harness config.\n\nROOT CAUSE\nThe README lacks a pre-claim intake section, so the readiness_checks verdict forms, the failure-class mapping, the warn-fingerprint escalation threshold, the claim-rate window flags, and the silent-idle diagnosis steps are undocumented.\n\nPROPOSED FIX (parent AC5)\nAdd a \"Pre-claim Intake and Silent-Idle Diagnosis\" section to README.md documenting: (a) the readiness_checks contract including the canonical verdict forms (bool/string/null); (b) the failure-class mapping warn-only -\u003e operator-attention -\u003e hard error; (c) the consecutive-warn-fingerprint escalation threshold and the --claim-rate-window / --claim-rate-threshold flags; (d) a step-by-step silent-idle diagnosis playbook (how to tell a stuck full queue from a legitimately empty one via the agent-loop log and status surfaces).\n\nDEPENDS ON\nAll four code children (decoder coercion, schema lock, warn-fingerprint escalation, claim-rate window) must land first so the documented contract, flags, and thresholds match shipped behavior.\n\nNON-SCOPE\n- Any code changes to the decoder, schema, loop, or CLI (covered by the four sibling code children this depends on).\n\nCROSS-REF\nGoverning artifact: AR-2026-05-17 follow-up beads. Adjacent silent-failure bugs documented alongside: ddx-57c40485, ddx-8f2e0ebf.",
+    "acceptance": "1. README.md contains a pre-claim intake section documenting the readiness_checks contract (verdict bool/string/null), the failure-class mapping (warn-only vs operator-attention vs hard error), the warn-fingerprint escalation threshold, the --claim-rate-window/--claim-rate-threshold flags, and a silent-idle diagnosis playbook; verified by TestReadmeDocumentsPreClaimIntakeContract in cli/cmd/readme_preclaim_intake_test.go.\n2. cd cli \u0026\u0026 go test ./cmd/... green.\n3. lefthook run pre-commit passes.",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:pre-claim",
+      "kind:docs",
+      "observability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .crush/skills/nano-banana-pro-openrouter, .pi/skills/nano-banana-pro-openrouter, cli/.agents/skills/helix-align, cli/.agents/skills/helix-backfill, cli/.agents/skills/helix-build, cli/.agents/skills/helix-check, cli/.agents/skills/helix-commit, cli/.agents/skills/helix-design, cli/.agents/skills/helix-evolve, cli/.agents/skills/helix-experiment, cli/.agents/skills/helix-frame, cli/.agents/skills/helix-implement, cli/.agents/skills/helix-next, cli/.agents/skills/helix-plan, cli/.agents/skills/helix-polish, cli/.agents/skills/helix-review, cli/.agents/skills/helix-run, cli/.agents/skills/helix-triage, cli/.agents/skills/helix-worker, cli/.claude/skills/helix-align, cli/.claude/skills/helix-backfill, cli/.claude/skills/helix-build, cli/.claude/skills/helix-check, cli/.claude/skills/helix-commit, cli/.claude/skills/helix-design, cli/.claude/skills/helix-evolve, cli/.claude/skills/helix-experiment, cli/.claude/skills/helix-frame, cli/.claude/skills/helix-implement, cli/.claude/skills/helix-next, cli/.claude/skills/helix-plan, cli/.claude/skills/helix-polish, cli/.claude/skills/helix-review, cli/.claude/skills/helix-run, cli/.claude/skills/helix-triage, cli/.claude/skills/helix-worker)\",\"fingerprint\":\"98afa370d3838a3716376ab23f2105cc380d36cf50c1d0e283fa387e1ee54eda\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"98afa370d3838a3716376ab23f2105cc380d36cf50c1d0e283fa387e1ee54eda\"}",
+          "created_at": "2026-05-27T11:31:21.195256632Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T113132-b81c58c1",
+    "prompt": ".ddx/executions/20260527T113132-b81c58c1/prompt.md",
+    "manifest": ".ddx/executions/20260527T113132-b81c58c1/manifest.json",
+    "result": ".ddx/executions/20260527T113132-b81c58c1/result.json",
+    "checks": ".ddx/executions/20260527T113132-b81c58c1/checks.json",
+    "usage": ".ddx/executions/20260527T113132-b81c58c1/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8032e685-20260527T113132-b81c58c1"
+  },
+  "prompt_sha": "8a0ea02eec2bcdece191a910428c735319207a50dc56e76e9156b3addb61f149"
+}
