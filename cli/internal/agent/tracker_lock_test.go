@@ -184,6 +184,65 @@ func TestCommitTrackerConventionModeCommitsXDGTracker(t *testing.T) {
 	require.Empty(t, projectStatus)
 }
 
+// TestTrackerLock_SharedAcrossLinkedWorktrees ensures the main-git lock uses a
+// shared DDx workspace for linked worktrees, not the caller's checkout-local
+// .ddx directory. Without this, two worktrees for the same repository can both
+// enter the landing/tracker critical section and interleave ref updates.
+func TestTrackerLock_SharedAcrossLinkedWorktrees(t *testing.T) {
+	root := initTrackerRepo(t)
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGitInteg(t, root, "worktree", "add", "--detach", linked)
+	t.Cleanup(func() { runGitInteg(t, root, "worktree", "remove", "--force", linked) })
+
+	require.Equal(t, trackerLockPath(root), trackerLockPath(linked), "linked worktrees must share the same main-git lock")
+
+	acquired := make(chan string, 2)
+	release := make(chan struct{})
+	done := make(chan error, 2)
+
+	go func() {
+		done <- withTrackerLock(root, func() error {
+			acquired <- "root"
+			<-release
+			return nil
+		})
+	}()
+
+	select {
+	case who := <-acquired:
+		require.Equal(t, "root", who)
+	case <-time.After(2 * time.Second):
+		t.Fatal("primary worktree did not acquire the tracker lock")
+	}
+
+	go func() {
+		done <- withTrackerLock(linked, func() error {
+			acquired <- "linked"
+			return nil
+		})
+	}()
+
+	select {
+	case who := <-acquired:
+		t.Fatalf("linked worktree acquired the tracker lock while the primary holder was still active: %s", who)
+	case <-time.After(200 * time.Millisecond):
+		// Expected: the second caller is blocked on the shared lock.
+	}
+
+	close(release)
+
+	select {
+	case who := <-acquired:
+		require.Equal(t, "linked", who)
+	case <-time.After(2 * time.Second):
+		t.Fatal("linked worktree did not acquire the tracker lock after release")
+	}
+
+	for i := 0; i < 2; i++ {
+		require.NoError(t, <-done)
+	}
+}
+
 // TestTrackerCommit_MalformedRegularFileLockRecovery verifies that a stale
 // regular file at the lock path (as opposed to the expected directory) is
 // removed with single-path removal and that CommitTracker then succeeds.
