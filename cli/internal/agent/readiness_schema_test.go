@@ -86,4 +86,12 @@ func TestReadinessChecksSchema(t *testing.T) {
 			assert.Equal(t, tc.want, classified.ReadinessChecks.Checks[0].Verdict)
 		})
 	}
+
+	t.Run("malformed_kind_rejected", func(t *testing.T) {
+		payload := buildPayload(`{"kind":"pass"}`)
+
+		var v any
+		require.NoError(t, json.Unmarshal([]byte(payload), &v))
+		require.Error(t, schema.Validate(v), "object verdicts must be rejected by readiness-checks.schema.json")
+	})
 }

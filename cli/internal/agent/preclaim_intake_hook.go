@@ -18,6 +18,8 @@ import (
 // dispatch in session logs and tests.
 const PreClaimIntakePromptSource = "bead-lifecycle-intake"
 
+const readinessChecksSchemaPath = "cli/internal/agent/schema/readiness-checks.schema.json"
+
 type preClaimIntakePromptEnvelope struct {
 	Title         string                  `json:"title"`
 	Description   string                  `json:"description"`
@@ -80,6 +82,8 @@ type preClaimReadinessCheck struct {
 }
 
 // readinessVerdict is the verdict reported for a single readiness check.
+// Keep this coercion aligned with cli/internal/agent/schema/readiness-checks.schema.json
+// so the shared producer prompt and this decoder accept the same payload shape.
 // The intake producer may emit verdict as a JSON bool, a JSON string, or omit
 // it entirely; UnmarshalJSON coerces all three forms to a canonical lowercased
 // string so downstream fail-detection (failedReadinessReasons) can compare it
@@ -370,6 +374,8 @@ func (p *preClaimReadinessWaiversPayload) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// preClaimReadinessChecksPayload mirrors cli/internal/agent/schema/readiness-checks.schema.json
+// so the producer prompt and this decoder stay aligned on the same readiness payload shape.
 type preClaimReadinessChecksPayload struct {
 	Checks    []preClaimReadinessCheck
 	Present   bool
@@ -630,6 +636,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("MODE: intake\n")
 	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
 	sb.WriteString("Do not rewrite bead fields in intake mode. If the bead is executable as written, classify it as ready even when the prose could be cleaner.\n")
+	sb.WriteString("Canonical schema: " + readinessChecksSchemaPath + ". Treat it as the source of truth for readiness_checks[].verdict and for forward-compatible extra fields.\n")
 	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, difficulty, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
 	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")
