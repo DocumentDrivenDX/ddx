@@ -491,3 +491,148 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 	assert.Equal(t, frozen.UTC().Format(time.RFC3339), body["last_activity_at"])
 	assert.NotEmpty(t, body["diagnosis"])
 }
+
+// TestParseProviderConnectivityFacts asserts that the endpoint URL and the
+// transport timeout class are extracted from a provider connectivity failure
+// report — the exact actionable facts the bead names (provider, model,
+// endpoint, timeout class).
+func TestParseProviderConnectivityFacts(t *testing.T) {
+	cases := []struct {
+		name             string
+		report           ExecuteBeadReport
+		wantEndpoint     string
+		wantTimeoutClass string
+	}{
+		{
+			name: "vidar_io_timeout_from_bead_evidence",
+			report: ExecuteBeadReport{
+				Provider: "vidar",
+				Model:    "Qwen3.6-27B-MLX-8bit",
+				Error:    "openai POST http://vidar:1235/v1/chat/completions dial tcp 100.108.162.80:1235 i/o timeout",
+			},
+			wantEndpoint:     "http://vidar:1235/v1/chat/completions",
+			wantTimeoutClass: "i/o timeout",
+		},
+		{
+			name: "connection_refused_from_repro_notes",
+			report: ExecuteBeadReport{
+				Provider: "vidar",
+				Detail:   "connect: connection refused to http://vidar:1235/v1/chat/completions",
+			},
+			wantEndpoint:     "http://vidar:1235/v1/chat/completions",
+			wantTimeoutClass: "connection refused",
+		},
+		{
+			name: "quoted_go_url_error",
+			report: ExecuteBeadReport{
+				Provider: "bragi",
+				Error:    "Post \"http://bragi:1234/v1/chat\": dial tcp: connection refused",
+			},
+			wantEndpoint:     "http://bragi:1234/v1/chat",
+			wantTimeoutClass: "connection refused",
+		},
+		{
+			name: "no_url_present",
+			report: ExecuteBeadReport{
+				Provider: "bragi",
+				Detail:   "dial tcp 100.127.38.115:1234: i/o timeout",
+			},
+			wantEndpoint:     "",
+			wantTimeoutClass: "i/o timeout",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			endpoint, timeoutClass := parseProviderConnectivityFacts(tc.report)
+			assert.Equal(t, tc.wantEndpoint, endpoint, "endpoint")
+			assert.Equal(t, tc.wantTimeoutClass, timeoutClass, "timeout class")
+		})
+	}
+}
+
+// TestApplyProviderConnectivityRouteExclusion_RecordsEndpointAndTimeoutClass
+// asserts that a provider connectivity failure persists the endpoint URL and
+// timeout class on the bead's failed-route record, making the recorded route
+// fact actionable for operators and for downstream route exclusion.
+func TestApplyProviderConnectivityRouteExclusion_RecordsEndpointAndTimeoutClass(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	at := time.Date(2026, 5, 21, 8, 5, 48, 0, time.UTC)
+	report := ExecuteBeadReport{
+		BeadID:      first.ID,
+		Status:      ExecuteBeadStatusExecutionFailed,
+		Provider:    "vidar",
+		Model:       "Qwen3.6-27B-MLX-8bit",
+		ActualPower: 50,
+		Error:       "openai POST http://vidar:1235/v1/chat/completions dial tcp 100.108.162.80:1235 i/o timeout",
+	}
+	noopFloor := func(p int) (int, error) { return p + 10, nil }
+
+	require.NoError(t, applyProviderConnectivityRouteExclusion(store, first.ID, "actor", report, false, noopFloor, at))
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	entries := readFailedRoutes(got.Extra)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "vidar", entries[0].Provider)
+	assert.Equal(t, "Qwen3.6-27B-MLX-8bit", entries[0].Model)
+	assert.Equal(t, "http://vidar:1235/v1/chat/completions", entries[0].Endpoint, "endpoint URL must be recorded")
+	assert.Equal(t, "i/o timeout", entries[0].TimeoutClass, "timeout class must be recorded")
+}
+
+// TestEmitRouteFailureEvent_IncludesEndpointAndTimeoutClass asserts the
+// route-failure event body carries the endpoint and timeout-class facts so the
+// durable audit trail records what was unreachable and how it failed.
+func TestEmitRouteFailureEvent_IncludesEndpointAndTimeoutClass(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	report := ExecuteBeadReport{
+		BeadID:   first.ID,
+		Status:   ExecuteBeadStatusExecutionFailed,
+		Provider: "vidar",
+		Model:    "Qwen3.6-27B-MLX-8bit",
+		Error:    "openai POST http://vidar:1235/v1/chat/completions dial tcp 100.108.162.80:1235 i/o timeout",
+	}
+
+	emitRouteFailureEvent(store, first.ID, "actor", report, time.Now().UTC())
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var body map[string]any
+	for _, ev := range events {
+		if ev.Kind == "route-failure" {
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			break
+		}
+	}
+	require.NotNil(t, body, "route-failure event must be appended")
+	assert.Equal(t, "http://vidar:1235/v1/chat/completions", body["endpoint"])
+	assert.Equal(t, "i/o timeout", body["timeout_class"])
+}
+
+// TestNormalizeFailedRoutes_PreservesEndpointAndTimeoutClass asserts that
+// collapsing duplicate (provider, model) entries retains the endpoint and
+// timeout-class facts (including back-filling from an older duplicate when the
+// newer one omitted them).
+func TestNormalizeFailedRoutes_PreservesEndpointAndTimeoutClass(t *testing.T) {
+	t1 := time.Date(2026, 5, 21, 8, 0, 0, 0, time.UTC)
+	t2 := t1.Add(5 * time.Minute)
+
+	// Newer entry carries the facts; older does not — collapse keeps newer's.
+	collapsedNewer := normalizeFailedRoutes([]FailedRouteEntry{
+		{Provider: "vidar", Model: "q", At: t1.Format(time.RFC3339)},
+		{Provider: "vidar", Model: "q", Endpoint: "http://vidar:1235/v1/chat/completions", TimeoutClass: "i/o timeout", At: t2.Format(time.RFC3339)},
+	})
+	require.Len(t, collapsedNewer, 1)
+	assert.Equal(t, "http://vidar:1235/v1/chat/completions", collapsedNewer[0].Endpoint)
+	assert.Equal(t, "i/o timeout", collapsedNewer[0].TimeoutClass)
+	assert.Equal(t, 2, collapsedNewer[0].Count)
+
+	// Older entry carries the facts; newer omits them — collapse back-fills.
+	collapsedOlder := normalizeFailedRoutes([]FailedRouteEntry{
+		{Provider: "vidar", Model: "q", Endpoint: "http://vidar:1235/v1/chat/completions", TimeoutClass: "connection refused", At: t1.Format(time.RFC3339)},
+		{Provider: "vidar", Model: "q", At: t2.Format(time.RFC3339)},
+	})
+	require.Len(t, collapsedOlder, 1)
+	assert.Equal(t, "http://vidar:1235/v1/chat/completions", collapsedOlder[0].Endpoint, "endpoint must be back-filled from older duplicate")
+	assert.Equal(t, "connection refused", collapsedOlder[0].TimeoutClass, "timeout class must be back-filled from older duplicate")
+}

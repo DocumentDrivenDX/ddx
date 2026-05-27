@@ -4897,6 +4897,48 @@ func isProviderConnectivityFailureReport(report ExecuteBeadReport) bool {
 	return false
 }
 
+// providerEndpointURLRe extracts the first http(s) URL from a transport error
+// message (e.g. `openai POST http://vidar:1235/v1/chat/completions dial tcp ...`).
+// Stops at whitespace or a closing quote so a quoted Go URL error
+// (`Post "http://bragi:1234/v1/chat": dial tcp...`) yields the bare URL.
+var providerEndpointURLRe = regexp.MustCompile(`https?://[^\s"'\\]+`)
+
+// timeoutClassMarkers orders transport failure classes most-specific first so a
+// compound message like "dial tcp ...: i/o timeout" classifies as "i/o timeout"
+// rather than the generic "dial tcp" prefix.
+var timeoutClassMarkers = []string{
+	"connection refused",
+	"connection reset",
+	"i/o timeout",
+	"no route to host",
+	"network is unreachable",
+	"bad gateway",
+	"service unavailable",
+	"gateway timeout",
+	"dial tcp",
+}
+
+// parseProviderConnectivityFacts extracts the actionable route facts —
+// the dialed endpoint URL and the transport timeout class — from a provider
+// connectivity failure report. Both returns are best-effort: an empty string
+// means the corresponding fact could not be parsed from Detail/Error/Stderr.
+func parseProviderConnectivityFacts(report ExecuteBeadReport) (endpoint, timeoutClass string) {
+	combined := strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n")
+	endpoint = strings.TrimSpace(providerEndpointURLRe.FindString(combined))
+	lower := strings.ToLower(combined)
+	for _, marker := range timeoutClassMarkers {
+		if strings.Contains(lower, marker) {
+			timeoutClass = marker
+			break
+		}
+	}
+	return endpoint, timeoutClass
+}
+
 // executeLoopFailedRoutesKey is the bead Extra key holding the JSON-encoded
 // list of (provider, model, actual_power) tuples that have failed with a
 // provider-connectivity error. Subsequent routing-evidence events read this
@@ -4924,8 +4966,18 @@ type FailedRouteEntry struct {
 	Model       string `json:"model,omitempty"`
 	ActualPower int    `json:"actual_power,omitempty"`
 	Reason      string `json:"reason,omitempty"`
-	At          string `json:"at,omitempty"`
-	Count       int    `json:"count,omitempty"`
+	// Endpoint is the concrete provider URL the failed dispatch dialed
+	// (e.g. http://vidar:1235/v1/chat/completions), parsed from the worker's
+	// transport error. Actionable route fact for operators diagnosing an
+	// unreachable endpoint; empty when no URL could be parsed.
+	Endpoint string `json:"endpoint,omitempty"`
+	// TimeoutClass is the transport failure class parsed from the error
+	// (e.g. "i/o timeout", "connection refused", "no route to host"). It
+	// distinguishes a down endpoint (connection refused) from an unreachable
+	// one (i/o timeout / no route to host) so remediation can be targeted.
+	TimeoutClass string `json:"timeout_class,omitempty"`
+	At           string `json:"at,omitempty"`
+	Count        int    `json:"count,omitempty"`
 }
 
 // readFailedRoutes decodes the failed-route list from a bead's Extra. Returns
@@ -4973,16 +5025,32 @@ func normalizeFailedRoutes(entries []FailedRouteEntry) []FailedRouteEntry {
 				ec = 1
 			}
 			if e.At > collapsed[i].At {
+				endpoint := e.Endpoint
+				if endpoint == "" {
+					endpoint = collapsed[i].Endpoint
+				}
+				timeoutClass := e.TimeoutClass
+				if timeoutClass == "" {
+					timeoutClass = collapsed[i].TimeoutClass
+				}
 				collapsed[i] = FailedRouteEntry{
-					Provider:    e.Provider,
-					Model:       e.Model,
-					ActualPower: e.ActualPower,
-					Reason:      e.Reason,
-					At:          e.At,
-					Count:       existingCount + ec,
+					Provider:     e.Provider,
+					Model:        e.Model,
+					ActualPower:  e.ActualPower,
+					Reason:       e.Reason,
+					Endpoint:     endpoint,
+					TimeoutClass: timeoutClass,
+					At:           e.At,
+					Count:        existingCount + ec,
 				}
 			} else {
 				collapsed[i].Count = existingCount + ec
+				if collapsed[i].Endpoint == "" {
+					collapsed[i].Endpoint = e.Endpoint
+				}
+				if collapsed[i].TimeoutClass == "" {
+					collapsed[i].TimeoutClass = e.TimeoutClass
+				}
 			}
 		} else {
 			index[k] = len(collapsed)
@@ -5014,6 +5082,12 @@ func appendFailedRoute(b *bead.Bead, entry FailedRouteEntry) {
 			}
 			if entry.Reason != "" {
 				existing[i].Reason = entry.Reason
+			}
+			if entry.Endpoint != "" {
+				existing[i].Endpoint = entry.Endpoint
+			}
+			if entry.TimeoutClass != "" {
+				existing[i].TimeoutClass = entry.TimeoutClass
 			}
 			existing[i].Count = e.Count + 1
 			b.Extra[executeLoopFailedRoutesKey] = existing
@@ -5499,6 +5573,7 @@ func applyProviderConnectivityRouteExclusion(
 		repeatFailure bool
 		repeatCount   int
 	)
+	endpoint, timeoutClass := parseProviderConnectivityFacts(report)
 	if err := store.Update(beadID, func(b *bead.Bead) {
 		existing := readFailedRoutes(b.Extra)
 		for _, e := range existing {
@@ -5509,23 +5584,27 @@ func applyProviderConnectivityRouteExclusion(
 			}
 		}
 		appendFailedRoute(b, FailedRouteEntry{
-			Provider:    report.Provider,
-			Model:       report.Model,
-			ActualPower: report.ActualPower,
-			Reason:      FailureModeProviderConnectivity,
-			At:          at.UTC().Format(time.RFC3339),
+			Provider:     report.Provider,
+			Model:        report.Model,
+			ActualPower:  report.ActualPower,
+			Reason:       FailureModeProviderConnectivity,
+			Endpoint:     endpoint,
+			TimeoutClass: timeoutClass,
+			At:           at.UTC().Format(time.RFC3339),
 		})
 	}); err != nil {
 		return err
 	}
 	if repeatFailure {
 		body, _ := json.Marshal(map[string]any{
-			"provider":     report.Provider,
-			"model":        report.Model,
-			"actual_power": report.ActualPower,
-			"count":        repeatCount,
-			"reason":       FailureModeProviderConnectivity,
-			"action":       "keep_open_for_autonomous_retry",
+			"provider":      report.Provider,
+			"model":         report.Model,
+			"actual_power":  report.ActualPower,
+			"count":         repeatCount,
+			"reason":        FailureModeProviderConnectivity,
+			"endpoint":      endpoint,
+			"timeout_class": timeoutClass,
+			"action":        "keep_open_for_autonomous_retry",
 		})
 		_ = store.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      "provider_connectivity.auto_retry",
@@ -5652,11 +5731,14 @@ func emitRouteFailureEvent(store BeadEventAppender, beadID, actor string, report
 	if store == nil || beadID == "" {
 		return
 	}
+	endpoint, timeoutClass := parseProviderConnectivityFacts(report)
 	body, err := json.Marshal(map[string]any{
 		"provider":       report.Provider,
 		"model":          report.Model,
 		"harness":        report.Harness,
 		"actual_power":   report.ActualPower,
+		"endpoint":       endpoint,
+		"timeout_class":  timeoutClass,
 		"detail":         report.Detail,
 		"error":          report.Error,
 		"outcome_reason": FailureModeProviderConnectivity,
@@ -5667,6 +5749,12 @@ func emitRouteFailureEvent(store BeadEventAppender, beadID, actor string, report
 	summary := "provider=" + report.Provider
 	if report.Model != "" {
 		summary += " model=" + report.Model
+	}
+	if endpoint != "" {
+		summary += " endpoint=" + endpoint
+	}
+	if timeoutClass != "" {
+		summary += " (" + timeoutClass + ")"
 	}
 	summary += " connectivity failure"
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
