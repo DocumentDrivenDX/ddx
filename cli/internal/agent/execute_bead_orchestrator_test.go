@@ -2,6 +2,7 @@ package agent
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -264,6 +265,42 @@ func TestLandBeadResult_MergeConflictPreserves(t *testing.T) {
 	}
 	if res.PreserveRef == "" {
 		t.Error("expected a preserve ref after merge conflict")
+	}
+}
+
+// TestLandBeadResult_RequiresIndependentVerificationBeforeMergedOutcome
+// verifies that a lander returning a preserved result after the merged tree
+// verification fails does not get reported as merged by LandBeadResult.
+func TestLandBeadResult_RequiresIndependentVerificationBeforeMergedOutcome(t *testing.T) {
+	repo := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := repo.commitOn(repo.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	res := makeWorkerResult("ddx-orch-verify-01", repo.baseSHA, workerSHA, 0)
+
+	advancer := func(res *ExecuteBeadResult) (*LandResult, error) {
+		req := BuildLandRequestFromResult(repo.dir, res)
+		req.TargetBranch = "main"
+		req.PostLandCommand = []string{"sh", "-c", "printf 'build failed'; exit 7"}
+		return Land(repo.dir, req, ops)
+	}
+
+	landing, err := LandBeadResult(repo.dir, res, &orchTestGitOps{}, BeadLandingOptions{
+		LandingAdvancer: advancer,
+	})
+	if err != nil {
+		t.Fatalf("LandBeadResult: %v", err)
+	}
+	ApplyLandingToResult(res, landing)
+
+	if res.Outcome != "preserved" {
+		t.Fatalf("expected outcome=preserved after verification failure, got %q", res.Outcome)
+	}
+	if landing.Reason == "" || !strings.Contains(landing.Reason, "post-land gate failed") {
+		t.Fatalf("expected preserved reason to report the verification failure, got %+v", landing)
+	}
+	if res.Status == ExecuteBeadStatusSuccess {
+		t.Fatalf("merged outcome must not be reported as success when verification fails")
 	}
 }
 

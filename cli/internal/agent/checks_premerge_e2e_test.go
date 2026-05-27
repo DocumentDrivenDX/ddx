@@ -125,6 +125,17 @@ command: |
 	}
 }
 
+func (r *preMergeRepo) writeGitConfig(yaml string) {
+	r.t.Helper()
+	cfgDir := filepath.Join(r.dir, ddxroot.DirName)
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		r.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
 // makeBead creates an open bead in the tracker and returns it. extra is
 // merged into bead.Extra so callers can attach a checks_bypass annotation.
 func (r *preMergeRepo) makeBead(id string, extra map[string]any) *bead.Bead {
@@ -370,6 +381,76 @@ func TestSubmitWithPreMergeChecks_BypassAllowsMerge(t *testing.T) {
 	}
 	if !strings.Contains(bypassEvents[0].Body, "reason=fixture: dummy-fail is always-block") {
 		t.Fatalf("checks-bypass event body must echo the operator-supplied reason; got %q", bypassEvents[0].Body)
+	}
+}
+
+// TestSubmitWithPreMergeChecks_StillHonorsBypassedHooksButDoesNotSkipLandVerification
+// covers the bypass path while proving the land-time verification still runs:
+// the bypassed pre-merge check no longer blocks submission, but the configured
+// post-land command still fails the merged tree and preserves the result.
+func TestSubmitWithPreMergeChecks_StillHonorsBypassedHooksButDoesNotSkipLandVerification(t *testing.T) {
+	r := newPreMergeRepo(t)
+	r.writeDummyFailCheck()
+	r.writeGitConfig(`version: "1.0"
+git:
+  post_land_command:
+    - sh
+    - -c
+    - printf 'build failed'; exit 7
+`)
+	b := r.makeBead("pmc-verify-001", map[string]any{
+		"checks_bypass": []any{
+			map[string]any{
+				"name":   "dummy-fail",
+				"reason": "fixture: dummy-fail bypassed to reach land verification",
+				"bead":   "pmc-verify-001",
+			},
+		},
+	})
+	resultSHA := r.commitNoOp()
+
+	attemptID := time.Now().UTC().Format("20060102T150405") + "-pmcver1"
+	res := &ExecuteBeadResult{
+		BeadID:       b.ID,
+		BaseRev:      r.baseSHA,
+		ResultRev:    resultSHA,
+		ExecutionDir: filepath.Join(ddxroot.DirName, "executions", attemptID),
+		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
+		Status:       ExecuteBeadStatusSuccess,
+		ExitCode:     0,
+	}
+
+	submitCalled := false
+	submit := func(req LandRequest) (*LandResult, error) {
+		submitCalled = true
+		wantPostLand := []string{"sh", "-c", "printf 'build failed'; exit 7"}
+		if strings.Join(req.PostLandCommand, "\x00") != strings.Join(wantPostLand, "\x00") {
+			t.Fatalf("submit got PostLandCommand %v; want %v", req.PostLandCommand, wantPostLand)
+		}
+		return Land(r.dir, req, RealLandingGitOps{})
+	}
+
+	land, outcome, err := SubmitWithPreMergeChecks(
+		context.Background(), r.dir, b, res,
+		submit, r.store, "ddx-test-actor", "test-source", nil,
+	)
+	if err != nil {
+		t.Fatalf("SubmitWithPreMergeChecks: %v", err)
+	}
+	if !submitCalled {
+		t.Fatalf("submit MUST be called when the only blocking check is bypassed")
+	}
+	if outcome == nil || outcome.Blocked {
+		t.Fatalf("outcome must not be blocked when bypassed check is honoured; got %+v", outcome)
+	}
+	if len(outcome.Bypassed) != 1 || outcome.Bypassed[0].Name != "dummy-fail" {
+		t.Fatalf("Bypassed slice must record dummy-fail; got %+v", outcome.Bypassed)
+	}
+	if land == nil || land.Status != "preserved" {
+		t.Fatalf("LandResult must be preserved by land-time verification; got %+v", land)
+	}
+	if !strings.Contains(land.Reason, "post-land gate failed") {
+		t.Fatalf("LandResult reason must report the land-time verification failure; got %q", land.Reason)
 	}
 }
 

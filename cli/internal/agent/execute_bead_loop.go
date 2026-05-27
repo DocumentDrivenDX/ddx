@@ -358,9 +358,14 @@ func SubmitWithPreMergeChecks(
 		_ = AppendPreMergeChecksEvents(eventStore, res.BeadID, outcome, actor, source, now().UTC())
 	}
 	var submitted *LandResult
+	cfg, cfgErr := config.LoadWithWorkingDir(projectRoot)
 	_, landErr := LandBeadResult(projectRoot, res, &RealOrchestratorGitOps{}, BeadLandingOptions{
 		LandingAdvancer: func(res *ExecuteBeadResult) (*LandResult, error) {
-			land, err := submit(BuildLandRequestFromResult(projectRoot, res))
+			req := BuildLandRequestFromResult(projectRoot, res)
+			if cfgErr == nil && cfg != nil && cfg.Git != nil && len(cfg.Git.PostLandCommand) > 0 {
+				req.PostLandCommand = append([]string(nil), cfg.Git.PostLandCommand...)
+			}
+			land, err := submit(req)
 			if err == nil {
 				submitted = land
 			}
