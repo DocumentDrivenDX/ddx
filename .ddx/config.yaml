@@ -29,6 +29,14 @@ update_check:
 git:
     auto_commit: always
     commit_prefix: chore
+    # Land-time independent verification gate (ddx-ec2d3c1b): a failing command
+    # rejects the merge (restores the ref, post-land gate failed) so non-compiling
+    # work — production OR tests, e.g. the ddx-c135246c regression — cannot land.
+    # go vet compiles both; ~7s cached. Activated 2026-05-27.
+    post_land_command:
+        - sh
+        - -c
+        - 'export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli && go vet ./...'
 agent:
     endpoints:
         - type: lmstudio
