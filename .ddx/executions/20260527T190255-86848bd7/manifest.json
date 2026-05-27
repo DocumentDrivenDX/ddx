@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260527T190255-86848bd7",
+  "bead_id": "ddx-60e4dc97",
+  "base_rev": "344ec3c4afd9cff5d12ad9147f2e02d688428092",
+  "created_at": "2026-05-27T19:03:24.375408274Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-60e4dc97",
+    "title": "readiness: discount stale external blockers cleared by newer notes",
+    "description": "PROBLEM\nThe readiness hook can over-weight stale external-blocker history and under-weight explicit operator notes that say the blocker was cleared. This produces misleading `intake.warn` text and can steer an implementation attempt toward obsolete infrastructure conclusions even when the bead is intentionally unblocked for forward progress.\n\nOBSERVED EVIDENCE\nNiflheim bead `niflheim-439a49ae` has notes saying: `Unblocked 2026-05-18: the prior Redpanda/AIO blocker was stale after commit 90cd8348 bounded Redpanda test storage with an owned tmpfs mount... The container became ready and was cleaned up.` During `ddx work --once` on 2026-05-21, readiness still emitted `bead readiness blocked: redpanda environment can support 32-partition stress test... prior_attempts show a hard external blocker: Redpanda fails to start due to AIO slot exhaustion on WSL2`. The attempt continued because readiness was warn-only, but the warning contradicted current bead notes and polluted the agent context.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/triage_hook.go:60` includes bead notes in the triage/readiness payload model, and `cli/internal/agent/types.go:298` carries notes in the execute-bead payload, but the readiness prompt/contract does not require stale prior blockers to be discounted when a later note explicitly clears them. The current tests in `cli/internal/agent/execute_bead_intake_test.go` cover warn-only continuation and intake event recording, but not precedence between later unblocked notes and older `no_changes_blocked`/external-blocker events.\n\nPROPOSED FIX\nUpdate the readiness prompt/contract and pre-claim intake tests so later explicit operator notes or reopen/unblocked notes supersede older external-blocker events unless current evidence revalidates the blocker. Readiness may still mention stale blocker history as historical context, but it must not phrase the bead as currently blocked or require operator action when a newer note says the blocker was cleared and no fresh recheck failed.\n\nNON-SCOPE\n- Changing lifecycle status semantics for actual `status=blocked` beads.\n- Suppressing all prior-attempt history.\n- Removing warn-only readiness behavior.\n- Niflheim benchmark implementation.\n\nIN-SCOPE FILES\n- `cli/internal/agent/execute_bead_intake_test.go`\n- `cli/internal/agent/bead_lifecycle_skill_contract_test.go`\n- DDx bead-lifecycle skill text under `.agents/skills/ddx/bead-lifecycle/SKILL.md` and `.claude/skills/ddx/bead-lifecycle/SKILL.md` if the prompt contract lives there.\n- Any pre-claim intake prompt assembly code that formats notes/events for readiness.",
+    "acceptance": "1. Add a regression test with an older `no_changes_blocked`/external-blocker event and a newer note that explicitly says the blocker was cleared; readiness must not produce a current-blocker/operator-required decision from the stale event alone.\n2. The readiness prompt/skill contract tells the model that newer operator notes, reopen notes, or unblocked notes supersede older blocker events unless current evidence revalidates the blocker.\n3. The recorded `intake.warn` detail for that fixture may mention blocker history only as historical context and must include the newer unblocked note as current state.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'Test.*Readiness.*(Stale|Unblock|ExternalBlocker|Notes)' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:bead-lifecycle",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260527T190255-86848bd7",
+    "prompt": ".ddx/executions/20260527T190255-86848bd7/prompt.md",
+    "manifest": ".ddx/executions/20260527T190255-86848bd7/manifest.json",
+    "result": ".ddx/executions/20260527T190255-86848bd7/result.json",
+    "checks": ".ddx/executions/20260527T190255-86848bd7/checks.json",
+    "usage": ".ddx/executions/20260527T190255-86848bd7/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-60e4dc97-20260527T190255-86848bd7"
+  },
+  "prompt_sha": "dbb9675a1ddd9281763cd3fbfee8771a821adc86fbfb129f63dee2400b790873"
+}
