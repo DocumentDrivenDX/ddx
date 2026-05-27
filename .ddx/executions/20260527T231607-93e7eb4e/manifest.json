@@ -1,0 +1,174 @@
+{
+  "attempt_id": "20260527T231607-93e7eb4e",
+  "bead_id": "ddx-b2846610",
+  "base_rev": "cb973a9f7132169568c6e0dccb1aafe88117ba48",
+  "created_at": "2026-05-27T23:16:26.102119731Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-b2846610",
+    "title": "execute-bead: post-commit review/land wedge unguarded — progress watchdog cannot fire once harness is set; bound review+land with a timeout",
+    "description": "PROBLEM\nddx work/try attempts wedge AFTER the implementation subprocess commits its fix: the worker enters the post-commit review+land orchestration and hangs indefinitely with phase=running, harness set (e.g. claude/codex), model=\"\" route=\"\", last_activity_at advancing every 30s via heartbeat, but no review completion, no land, no new commit. The lease is held until the process is killed. Observed and MANUALLY SALVAGED ~5x on 2026-05-27 (beads ddx-606fe854, ddx-dc23f001, ddx-9714eaac, ddx-58a69bb0; longest single wedge 97 min). This is the top blocker to unattended `ddx work` drain.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/work/watchdog.go phaseEmpty(harness, model, route) returns true only when ALL THREE of harness, model, route are empty.\n- cli/internal/agent/execute_bead_loop.go:2177 liveness.SetAttempt(candidate.ID, provAttemptID, PhaseRunning, profile, harness, model, profile, 0) sets harness (non-empty) once at attempt start and NEVER passes route; no later call updates model/route on the liveness record.\n- Therefore once an attempt is running, harness != \"\" so phaseEmpty() is permanently false, and RunProgressWatchdog (watchdog.go:102, wired at execute_bead_loop.go:2210) can NEVER fire for the running/post-commit phase it was designed to catch (ddx-8f2e0ebf criterion B). The route-resolution timeout (ddx-d8970a7b) only bounds the PRE-route window. So the post-commit review+land hang is unguarded by both mechanisms.\n\nPROPOSED FIX (recommended: bound the post-commit phase, do not rely on field-emptiness)\nAdd a configurable timeout around the post-commit review+land orchestration in the attempt (mirroring the route-resolution timeout d8970a7b): when the implementation subprocess has returned/committed and the worker is in review or land, bound that work with a deadline (default e.g. 15m). On expiry: cancel the attempt context, release the lease, mark the attempt failed/preserved, and emit an operator-attention event (reuse flagWedgedForOperatorAttention). Field-emptiness (phaseEmpty) is the WRONG discriminator for a running attempt that has already done real work, so the fix must be progress/elapsed-based, not field-based.\n\nNON-SCOPE\n- Do not change the route-resolution timeout (ddx-d8970a7b) or the external-close watcher (ddx-dc23f001 RunExternalCloseWatcher).\n- Do not change the resolving-phase all-empty detection (still valid before harness is assigned).\n- Do not change harness/model routing.\n\nCROSS-REF: follow-up to closed epic ddx-8f2e0ebf (criterion B was not actually covered by the landed progress watchdog).",
+    "acceptance": "1. The post-commit review+land orchestration is bounded by a configurable timeout (default documented); on expiry the attempt context is cancelled, the lease is released, and an operator-attention event is emitted. Verified by an integration test (e.g. TestExecuteBead_PostCommitReviewLandTimeoutReleasesLease in cli/internal/agent) that injects a hanging review/land stub and asserts the lease is released within timeout+epsilon with an operator-attention record.\n2. A review+land that completes within the budget is unaffected (regression): TestExecuteBead_PostCommitReviewLandWithinBudgetCompletes (or equivalent) passes.\n3. The fix is elapsed/progress-based, not phaseEmpty-based: a running attempt with harness set and model/route empty that exceeds the budget is released (asserted by the test in AC1), proving the watchdog gap is closed.\n4. cd cli \u0026\u0026 go test ./internal/agent/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "observability",
+      "spec:FEAT-010",
+      "prevention:ddx-8f2e0ebf"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/executions/20260527T190612-db97c7d0/embedded/git-bin/git, .ddx/executions/20260527T190612-db97c7d0/embedded/git-global.cfg, .ddx/executions/20260527T190612-db97c7d0/embedded/git-local-private.cfg, .ddx/executions/20260527T190612-db97c7d0/manifest.json, .ddx/executions/20260527T190612-db97c7d0/prompt.md, .ddx/executions/20260527T190612-db97c7d0/result.json, .ddx/metrics/locks.jsonl)\",\"fingerprint\":\"17e646516ca24c5b5a20684aa980e36884eaece06eca52ef01c51b9037a7b641\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17e646516ca24c5b5a20684aa980e36884eaece06eca52ef01c51b9037a7b641\"}",
+          "created_at": "2026-05-27T19:07:48.486296234Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:08:11.08216673Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T19:08:32.119540627Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T190813-88b894c5\",\"bead_id\":\"ddx-b2846610\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T19:08:34.148076965Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"202c69f82ba659f0ae4c67dde0a4b0808798791b\",\"classification\":\"transport\",\"detail\":\"docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \\\"bind\\\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\\n\\nRun 'docker run --help' for more information: exit status 125\",\"rationale\":\"Attempt failed in 37ms before any work began: docker-clone could not start because the bind mount source /home/erik/.local/share/claude/versions/2.1.152 does not exist. base_rev==result_rev confirms no implementation or commit occurred. This is an environmental/infrastructure failure (stale/missing claude version path in the docker mount config), unrelated to the bead content, which is well-formed.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"202c69f82ba659f0ae4c67dde0a4b0808798791b\",\"session_id\":\"eb-2203b237\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:09:00.273657214Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\n\nRun 'docker run --help' for more information: exit status 125\npowerClass=standard\nresult_rev=202c69f82ba659f0ae4c67dde0a4b0808798791b\nbase_rev=202c69f82ba659f0ae4c67dde0a4b0808798791b\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:09:00.353357659Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T19:11:04.133693171Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:11:28.043701517Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T19:11:46.657060606Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T191130-608a942c\",\"bead_id\":\"ddx-b2846610\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T19:11:49.213425505Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"c7b8145380318ac3dd17d7ce00b1bd609f7fce63\",\"classification\":\"transport\",\"detail\":\"docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \\\"bind\\\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\\n\\nRun 'docker run --help' for more information: exit status 125\",\"rationale\":\"Attempt failed in 39ms before any work began: docker-clone could not start because the bind mount source /home/erik/.local/share/claude/versions/2.1.152 does not exist. base_rev==result_rev (c7b8145380318ac3dd17d7ce00b1bd609f7fce63) confirms no implementation or commit occurred. This is an environmental/infrastructure failure (stale/missing claude version path in the docker mount config), not a defect in the bead, which is well-formed and remains executable once the docker mount is fixed.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"c7b8145380318ac3dd17d7ce00b1bd609f7fce63\",\"session_id\":\"eb-8e3d9b7c\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:12:21.711323483Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\n\nRun 'docker run --help' for more information: exit status 125\npowerClass=standard\nresult_rev=c7b8145380318ac3dd17d7ce00b1bd609f7fce63\nbase_rev=c7b8145380318ac3dd17d7ce00b1bd609f7fce63\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:12:21.768658756Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .crush/skills/nano-banana-pro-openrouter)\",\"fingerprint\":\"1578e45aa884a6f5f4e3b10befdbd987c6bde6fcd7067ea754deb3e0c1f359bd\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"1578e45aa884a6f5f4e3b10befdbd987c6bde6fcd7067ea754deb3e0c1f359bd\"}",
+          "created_at": "2026-05-27T22:32:29.050918198Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260527T223229-18b38cda\",\"bead_id\":\"ddx-b2846610\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-05-27T23:02:59Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-05-27T23:03:29.171581849Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T23:16:03.31896051Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T223242-36998b05\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":90,\"output_tokens\":3040,\"total_tokens\":3130,\"cost_usd\":1.9242328000000009,\"duration_ms\":1826538,\"exit_code\":-1}",
+          "created_at": "2026-05-27T23:16:03.402177843Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=3130 cost_usd=1.9242 model=haiku"
+        }
+      ],
+      "work-consecutive-wedges": {
+        "at": "2026-05-27T23:03:29Z",
+        "count": 1,
+        "last_reason": "progress_watchdog"
+      }
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T231607-93e7eb4e",
+    "prompt": ".ddx/executions/20260527T231607-93e7eb4e/prompt.md",
+    "manifest": ".ddx/executions/20260527T231607-93e7eb4e/manifest.json",
+    "result": ".ddx/executions/20260527T231607-93e7eb4e/result.json",
+    "checks": ".ddx/executions/20260527T231607-93e7eb4e/checks.json",
+    "usage": ".ddx/executions/20260527T231607-93e7eb4e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b2846610-20260527T231607-93e7eb4e"
+  },
+  "prompt_sha": "77aa57a4aa48df61b75e2ec7f9a053f36adf9eb3d5bbe0c689e0f78661b76322"
+}
