@@ -170,17 +170,26 @@ func runAuditWithFinalizeErr(t *testing.T, finalizeErr error) *ExecuteBeadLoopRe
 // a transient .git/index.lock failure on the durable-audit commit does NOT halt
 // the worker (ddx-23ac2796).
 func TestWork_IndexLockContentionDuringAuditCommitIsTransientNotFatal(t *testing.T) {
-	lockErr := fmt.Errorf("staging tracker: fatal: Unable to create '/x/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository: exit status 128")
-	result := runAuditWithFinalizeErr(t, lockErr)
-	require.Nil(t, result.OperatorAttention, "transient index.lock contention during audit commit must not stop the worker")
-	require.NotEqual(t, "operator_attention", result.ExitReason)
+	// Each of these transient git index/ref contention forms must be retried,
+	// not stop the worker (ddx-23ac2796 + sibling variants seen 2026-05-27).
+	for name, errMsg := range map[string]string{
+		"index_lock_file_exists":     "staging tracker: fatal: Unable to create '/x/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository: exit status 128",
+		"unable_to_write_new_index":  "committing durable audit outputs: fatal: unable to write new index file: exit status 128",
+		"cannot_lock_ref":            "committing durable audit outputs: error: cannot lock ref 'refs/heads/main': exit status 128",
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := runAuditWithFinalizeErr(t, fmt.Errorf("%s", errMsg))
+			require.Nil(t, result.OperatorAttention, "transient git contention during audit commit must not stop the worker")
+			require.NotEqual(t, "operator_attention", result.ExitReason)
+		})
+	}
 }
 
 // TestWork_NonLockAuditCommitFailureStillStopsWorker is the regression guard: a
-// genuine (non-lock) durable-audit commit failure must still surface operator
-// attention and stop the worker.
+// genuine (non-contention) durable-audit commit failure must still surface
+// operator attention and stop the worker.
 func TestWork_NonLockAuditCommitFailureStillStopsWorker(t *testing.T) {
-	result := runAuditWithFinalizeErr(t, fmt.Errorf("fatal: unable to write new index file: no space left on device"))
+	result := runAuditWithFinalizeErr(t, fmt.Errorf("committing durable audit outputs: fatal: insufficient permission for adding an object to repository database .git/objects: exit status 128"))
 	require.NotNil(t, result.OperatorAttention, "a genuine audit-commit failure must still surface operator attention")
 	require.Equal(t, "durable_audit_commit_failed", result.OperatorAttention.Reason)
 }
