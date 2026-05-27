@@ -470,4 +470,8 @@ cli/internal/server/frontend/dist/
 
 .claude/worktrees/
 .claude/scheduled_tasks.lock
+# crush-tool skill dir is tool-managed scratch; its symlinks get materialized
+# into dirs by skill tooling, which dirties the worktree and halts ddx work
+# pre-claim (recurring worker-killer, see ddx-3885cce5). Untracked + ignored.
+.crush/
 cli/internal/server/frontend/public/sql-wasm.wasm
