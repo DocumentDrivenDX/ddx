@@ -1,0 +1,8 @@
+status: blocked
+reason: Pre-commit hook hangs on go-test phase. Lefthook remains stuck for 20+ minutes despite all changes being implemented correctly and AC tests passing locally. Manual "lefthook run pre-commit" times out at 60s while in go-build phase. Multiple orphaned go test processes (20+) prevent hook completion and commit creation. Implementation is complete and verified correct - all acceptance criteria met through local testing.
+
+External blocker: Pre-commit validation infrastructure
+Implementation status: COMPLETE and VERIFIED
+AC tests status: ALL PASSING (verified individually)
+Changes staged: YES (16 insertions in attempt_backend.go)
+Commit ready: YES, blocked only by pre-commit hook timeout
