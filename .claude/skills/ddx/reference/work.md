@@ -40,6 +40,39 @@ Flags worth knowing:
 - `--harness <name>` / `--provider <name>` / `--model <ref>` / `--profile <name>` — passthrough constraints only. DDx sends them
   unchanged and does not route on them.
 
+## Pre-claim Intake and Silent-Idle Diagnosis
+
+The worker's pre-claim intake hook evaluates a `readiness_checks` payload before
+claiming a bead. The canonical verdict forms are:
+
+- JSON bool `true` -> `pass`
+- JSON bool `false` -> `fail`
+- JSON strings are passed through after trimming
+- `null` or absent -> empty
+
+`ClassifyReadinessWithMode`
+(`cli/internal/agent/readiness_classification.go:56-115`) is the mapping layer
+between readiness classifications and worker behavior:
+
+- `system_unready` / `intake_error` are hard errors from the hook, but the
+  worker fail-opens and skips the claim instead of parking the bead.
+- `needs_refine` is warn-only in warn mode and becomes operator-attention /
+  park in block mode.
+- `operator_required` parks the bead.
+- `needs_split` parks the bead for decomposition.
+
+When the worker appears to idle on a full queue, inspect `loop.idle` events
+first. That event stream is the diagnostic surface for a silent stall. Repeated
+identical blocker details are escalated after
+`preClaimIdleEscalationThreshold` cycles (`ddx-df77e668`), which should convert
+the stall into a `loop.operator_attention` signal instead of letting the worker
+spin forever. The main blocker codes to distinguish are
+`preclaim_systemic` and `preclaim_tracker_contention`.
+
+If the queue is still making claims but the rate is suspiciously low, use the
+claim-success-rate warning knobs `--claim-rate-window` and
+`--claim-rate-threshold` to surface that condition.
+
 ## Are workers running for this project?
 
 When someone asks "is the worker still working beads?" or "how is the queue

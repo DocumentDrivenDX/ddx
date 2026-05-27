@@ -42,6 +42,38 @@ ddx persona list
 ddx bead list
 ```
 
+## Pre-claim Intake and Silent-Idle Diagnosis
+
+Before a bead is claimed, DDx runs the pre-claim intake hook and evaluates the
+`readiness_checks` payload. The canonical verdict forms are:
+
+- JSON bool `true` -> `pass`
+- JSON bool `false` -> `fail`
+- JSON strings are passed through after trimming
+- `null` or absent -> empty
+
+See `ClassifyReadinessWithMode`
+(`cli/internal/agent/readiness_classification.go:56-115`) for the mapping from
+readiness classifications to worker behavior.
+
+- `system_unready` / `intake_error` are hard errors from the hook, but the
+  worker fail-opens and skips the claim instead of parking the bead.
+- `needs_refine` is warn-only in warn mode and becomes operator-attention /
+  park in block mode.
+- `operator_required` parks the bead.
+- `needs_split` parks the bead for decomposition.
+
+If the worker idles on a full queue, inspect `loop.idle` events first. Repeated
+identical blocker details are escalated after
+`preClaimIdleEscalationThreshold` cycles (`ddx-df77e668`), so a silent stall
+should eventually become a `loop.operator_attention` signal instead of looping
+forever. Track the exact blocker detail, and distinguish
+`preclaim_systemic` from `preclaim_tracker_contention`.
+
+For a queue that is technically moving but still claims very slowly, use the
+claim-success-rate warning knobs `--claim-rate-window` and
+`--claim-rate-threshold` to surface the low-claim-rate condition.
+
 ## Development
 
 ### Local Install
