@@ -57,7 +57,7 @@ See `ClassifyReadinessWithMode`
 (`cli/internal/agent/readiness_classification.go:56-115`) for the mapping from
 readiness classifications to worker behavior. The worker treats the shared
 schema as a read-only intake contract and classifies the verdict into one of
-the following behaviors:
+the following failure classes:
 
 - `system_unready` / `intake_error` are hard errors from the hook, but the
   worker fail-opens and skips the claim instead of parking the bead.
@@ -77,9 +77,11 @@ blocker detail, and distinguish `preclaim_systemic` from
 
 For a queue that is technically moving but still claims very slowly, use the
 claim-success-rate warning knobs `--claim-rate-window` and
-`--claim-rate-threshold` to surface the low-claim-rate condition. These warn
-when the rolling claim success rate stays low even though the queue is not
-fully idle, which helps separate slow progress from a silent intake failure.
+`--claim-rate-threshold` to surface the low-claim-rate condition. `ddx work --watch`
+emits the warning to the operator stream once the rolling success rate over a
+full window falls at or below the threshold, so a low-claim loop is visible
+even when the queue is not fully idle. Use the latest agent loop log plus
+`ddx work status` to distinguish slow progress from a silent intake failure.
 
 **Related reliability context:** AR-2026-05-17 follow-up; lock handling
 (ddx-57c40485); route-resolution wedge handling (ddx-8f2e0ebf).
