@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260527T031913-bff01402",
+  "bead_id": "ddx-725b65b4",
+  "base_rev": "bc8d9bac5b1ee1794245ae2784c2a285700fb2c3",
+  "created_at": "2026-05-27T03:19:20.356352699Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-725b65b4",
+    "title": "execute-bead: reject post-commit mutation and empty gate evidence",
+    "description": "PROBLEM\nDuring Niflheim ddx work monitoring, attempt 20260518T021035-da282d6e for bead niflheim-bc47ed66 violated the execute-bead contract while still landing as success. The prompt told the implementer to run gates before committing, rerun lefthook after staging when staged files are required, commit exactly once, and stop after the commit.\n\nObserved behavior:\n- The agent ran lefthook before staging, so every hook skipped with no matching staged files.\n- The agent committed 1551674d, then a later post-commit lefthook/clippy run found compile errors.\n- The agent edited after the commit and amended to e7ae0424.\n- A later cargo check found more missing shard_id initializers; the agent edited after the second final summary and amended again to 66beb39b.\n- After those amendments, lefthook evidence still included a no-staged-files run, not a meaningful staged pre-commit gate.\n- DDx accepted the attempt as success and landed it with result.json status=success/outcome=merged.\n\nThis makes the execution audit trail less trustworthy: a successful attempt can contain post-commit mutation, multiple amended implementation commits, and gate output that did not actually test the staged commit set.\n\nPROPOSED FIX\n- Teach execute-bead result validation to detect when the implementation commit was amended or replaced after the first successful commit event, and either reject the attempt or record a blocking validation error.\n- Treat lefthook runs that report no matching staged files/no staged files as non-evidence for pre-commit acceptance when the prompt requires staged-file gates.\n- Add a structured post-agent validation step that compares the first implementation commit event, final implementation_rev, dirty state, and evidence commands before marking success.\n- Preserve successful retry behavior by allowing the orchestrator to rerun the bead in a fresh attempt instead of letting an in-attempt agent rewrite its own commit history.\n\nEVIDENCE\nNiflheim repo attempt: /home/erik/Projects/niflheim/.ddx/executions/20260518T021035-da282d6e\nFinal DDx result: implementation_rev=66beb39ba598dfe12301dec195f0673e750e1c98, status=success, outcome=merged.\nAgent log shows commits 1551674d, e7ae0424, and 66beb39b in the same attempt.",
+    "acceptance": "1. A regression test simulates an execute-bead transcript with an initial implementation commit followed by an amend/replacement and asserts the attempt is rejected or marked non-success.\n2. A regression test simulates lefthook output where every hook skips because there are no staged files and asserts it is not accepted as pre-commit gate evidence for a code-changing bead.\n3. Successful execute-bead attempts still pass when they stage specific files, run the staged gate meaningfully, create one implementation commit, and leave a clean worktree.\n4. The result JSON or bead event explains the validation failure clearly enough for an operator to distinguish implementation failure from DDx infrastructure validation.\n5. Relevant cli/internal tests for execute-bead/work result validation pass.",
+    "parent": "ddx-eeced112",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:work",
+      "area:execute-bead",
+      "kind:bug",
+      "operator-ux",
+      "observed-failure",
+      "spec:FEAT-010",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"A regression test simulates an execute-bead transcript with an initial implementation commit followed by an amend/replacement and asserts the attempt is rejected or marked non-success.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"A regression test simulates lefthook output where every hook skips because there are no staged files and asserts it is not accepted as pre-commit gate evidence for a code-changing bead.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":3,\"text\":\"Successful execute-bead attempts still pass when they stage specific files, run the staged gate meaningfully, create one implementation commit, and leave a clean worktree.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"The result JSON or bead event explains the validation failure clearly enough for an operator to distinguish implementation failure from DDx infrastructure validation.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Relevant cli/internal tests for execute-bead/work result validation pass.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T03:18:47.387471202Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260527T031913-bff01402",
+    "prompt": ".ddx/executions/20260527T031913-bff01402/prompt.md",
+    "manifest": ".ddx/executions/20260527T031913-bff01402/manifest.json",
+    "result": ".ddx/executions/20260527T031913-bff01402/result.json",
+    "checks": ".ddx/executions/20260527T031913-bff01402/checks.json",
+    "usage": ".ddx/executions/20260527T031913-bff01402/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-725b65b4-20260527T031913-bff01402"
+  },
+  "prompt_sha": "9c04e32a31c451e97a7244e7f53d01bcf5bd912193419c983d6474bd0755976b"
+}
