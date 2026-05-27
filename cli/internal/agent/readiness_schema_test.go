@@ -65,6 +65,7 @@ func TestReadinessChecksSchema(t *testing.T) {
 		{name: "bool_false_to_fail", verdictJSON: `false`, want: "fail"},
 		{name: "string_fail_passthrough", verdictJSON: `"fail"`, want: "fail"},
 		{name: "string_ready_passthrough", verdictJSON: `"ready"`, want: "ready"},
+		{name: "string_not_ready_passthrough", verdictJSON: `"not_ready"`, want: "not_ready"},
 		{name: "null_empty", verdictJSON: `null`, want: ""},
 		{name: "absent_empty", verdictJSON: "", want: ""},
 	}
