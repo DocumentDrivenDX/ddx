@@ -499,8 +499,14 @@ func TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema(t *testing.T) {
 	prompt, err := buildPreClaimIntakePrompt(root, store, b)
 	require.NoError(t, err)
 
+	schema := compileReadinessChecksSchema(t)
+	var documented any
+	require.NoError(t, json.Unmarshal([]byte(`{"classification":"needs_refine","rationale":"check","readiness_checks":[{"reason":"missing_verification","evidence":"AC lacks go test","checkable_before_attempt":true,"verdict":true}]}`), &documented))
+	require.NoError(t, schema.Validate(documented))
+
 	lower := strings.ToLower(prompt)
 	for _, want := range []string{
+		readinessChecksSchemaPath,
 		"classification",
 		"tractability",
 		"score",
@@ -510,6 +516,7 @@ func TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema(t *testing.T) {
 		"rewrite",
 		"suggested_child_beads",
 		"waivers_applied",
+		"verdict may be a json bool, string, null, or omitted",
 	} {
 		assert.Contains(t, lower, want)
 	}

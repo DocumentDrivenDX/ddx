@@ -637,6 +637,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
 	sb.WriteString("Do not rewrite bead fields in intake mode. If the bead is executable as written, classify it as ready even when the prose could be cleaner.\n")
 	sb.WriteString("Canonical schema: " + readinessChecksSchemaPath + ". Treat it as the source of truth for readiness_checks[].verdict and for forward-compatible extra fields.\n")
+	sb.WriteString("readiness_checks[].verdict may be a JSON bool, string, null, or omitted; match the schema and the Go decoder contract exactly.\n")
 	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, difficulty, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
 	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")

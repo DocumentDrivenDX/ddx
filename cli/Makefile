@@ -152,7 +152,7 @@ bead-schema:
 # Validate the shared readiness-checks payload schema
 readiness-schema:
 	@echo "Validating readiness-checks schema..."
-	go test ./internal/agent -run 'TestReadinessChecksSchema' -count=1
+	go test ./internal/agent -run 'TestReadinessChecksSchema|TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema|TestPreClaimReadinessPromptSpecifiesOutputShapes' -count=1
 
 # Validate bundled skill metadata
 skill-schema:
