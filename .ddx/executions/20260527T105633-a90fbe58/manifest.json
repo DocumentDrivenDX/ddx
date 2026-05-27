@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260527T105633-a90fbe58",
+  "bead_id": "ddx-2d44cb4f",
+  "base_rev": "9817646b0593b94e4f3b2d5983fff23a6add8d1c",
+  "created_at": "2026-05-27T10:56:43.495991245Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2d44cb4f",
+    "title": "attempt backend: add opt-in in-tree execution mode",
+    "description": "PROBLEM\nProjects with very large local data, external services, or benchmark fixtures cannot safely rely on the existing DDx attempt backends for every bead. Niflheim is the concrete case: many ready beads are evidence/validation tasks that mostly run tests or long benchmark harnesses against data and services already present in the checked-out tree. The current backends all move execution away from that tree: `worktree`, `local-clone`, and `docker-clone`. That is correct for code-edit isolation, but it makes data-heavy validation fragile or impossible when the attempt needs untracked local datasets, running service state, or a checkout too expensive to duplicate.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/cmd/work.go:83` and `cli/cmd/try.go:96` expose only `worktree`, `local-clone`, and `docker-clone` as attempt backend choices.\n- `docs/agent-execute.md:97-104` and `docs/helix/01-frame/features/FEAT-010-task-execution.md:776-782` specify the same isolated-backend-only model.\n- There is no documented or implemented backend that runs a single claimed bead directly in the project checkout while still preserving DDx's claim, evidence, review, commit, and cleanup contracts.\n\nPROPOSED FIX\nAdd an explicit opt-in `in-tree` attempt backend for `ddx try` and `ddx work`. It should run the agent in the project checkout itself, not in a linked worktree, local clone, or Docker clone. The backend must be conservative because it trades isolation for access to local data:\n- require a clean git index/worktree before claim, except for DDx-owned tracker/worker metadata that the orchestrator intentionally writes;\n- take a per-project exclusive worker lock so two in-tree attempts cannot run concurrently in the same checkout;\n- record the same attempt evidence and routing/review metadata as isolated backends;\n- after success, stage and commit only files actually changed by the attempt plus the associated tracker/evidence changes;\n- on failure, unclaim/release the bead and leave an explicit rescue message if the tree is dirty rather than silently discarding edits;\n- keep the default backend unchanged (`worktree`) so parallel code-editing remains isolated by default.\n\nNON-SCOPE\n- Replacing the default backend.\n- Making in-tree attempts safe for concurrent workers in one checkout.\n- Solving the existing `docker-clone` remote-daemon bind-mount defect; that is tracked separately by ddx-6967f6e6.\n- Changing Fizeau model routing.\n\nIN-SCOPE FILES\n- `cli/cmd/work.go`\n- `cli/cmd/try.go`\n- `cli/internal/agent/*attempt*` and adjacent tests that select/setup attempt backends\n- `docs/agent-execute.md`\n- `docs/helix/01-frame/features/FEAT-010-task-execution.md`\n\nOUT-OF-SCOPE FILES\n- Fizeau routing code\n- Niflheim benchmark logic\n- Docker runner image contents",
+    "acceptance": "1. `ddx try --help` and `ddx work --help` list `in-tree` alongside `worktree`, `local-clone`, and `docker-clone`.\n2. Add targeted backend-selection tests proving `--attempt-backend in-tree` selects an in-project execution backend and does not create a linked worktree or local clone.\n3. Add a dirty-tree guard test proving `in-tree` refuses to start when non-DDx project files are modified before claim.\n4. Add an exclusive-lock test proving a second `in-tree` worker for the same project exits with an actionable lock/worker-in-progress message instead of running concurrently.\n5. Add a success-path test proving only files changed by the attempt plus DDx tracker/evidence files are staged/committed.\n6. Documentation in `docs/agent-execute.md` and FEAT-010 explains when to use `in-tree`, its clean-tree requirement, single-worker constraint, and failure/rescue behavior.\n7. `cd cli \u0026\u0026 go test ./cmd ./internal/agent/... -run 'Test.*(AttemptBackend|InTree|DirtyTree|WorkerLock)' -count=1` passes.\n8. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "kind:feature",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260527T105633-a90fbe58",
+    "prompt": ".ddx/executions/20260527T105633-a90fbe58/prompt.md",
+    "manifest": ".ddx/executions/20260527T105633-a90fbe58/manifest.json",
+    "result": ".ddx/executions/20260527T105633-a90fbe58/result.json",
+    "checks": ".ddx/executions/20260527T105633-a90fbe58/checks.json",
+    "usage": ".ddx/executions/20260527T105633-a90fbe58/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2d44cb4f-20260527T105633-a90fbe58"
+  },
+  "prompt_sha": "b49cf26ac24ecd73fe73080cfedde7217ad235fb2499873a2917077c1411b028"
+}
