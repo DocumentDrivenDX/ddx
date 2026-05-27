@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./internal/agent -run 'TestReadinessChecksSchema|TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema|TestPreClaimReadinessPromptSpecifiesOutputShapes' -count=1 && make readiness-schema
