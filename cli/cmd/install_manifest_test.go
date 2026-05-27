@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -717,6 +719,60 @@ Sample body.
 	homePluginDir := filepath.Join(homeDir, ddxroot.DirName, "plugins", "sample-plugin")
 	_, statErr := os.Stat(homePluginDir)
 	assert.True(t, os.IsNotExist(statErr), "FEAT-015: nothing must land under $HOME/.ddx/plugins/")
+}
+
+// TestInstallLocalSkipsBrokenSymlinksUnderGitignoredPaths reproduces ddx-686564bf:
+// `ddx install --local` validated every symlink in the source tree, including
+// broken ones under gitignored scratch/tmp directories (e.g.
+// doctor/home/.codex/tmp/) that were never meant to ship. The install must
+// succeed because the offending path is gitignored in the source repo.
+func TestInstallLocalSkipsBrokenSymlinksUnderGitignoredPaths(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	// Initialize a git repo so `git check-ignore` can consult .gitignore.
+	require.NoError(t, internalgit.Command(context.Background(), localPlugin, "init").Run())
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, ".gitignore"), []byte(".codex\n"), 0o644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
+version: 1.0.0
+description: Sample plugin
+type: plugin
+source: https://example.com/sample-plugin
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/sample-plugin
+  skills:
+    - source: skills/
+      target: .agents/skills/
+`), 0o644))
+	skillDir := filepath.Join(localPlugin, "skills", "sample-skill")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: sample-skill
+description: Sample skill
+---
+
+Sample body.
+`), 0o644))
+
+	// A stale broken symlink under a gitignored scratch path (matches ".codex").
+	scratchDir := filepath.Join(localPlugin, "doctor", "home", ".codex", "tmp")
+	require.NoError(t, os.MkdirAll(scratchDir, 0o755))
+	if err := os.Symlink("/nonexistent/build-machine/apply_patch", filepath.Join(scratchDir, "apply_patch")); err != nil {
+		t.Skipf("symlink creation unsupported: %v", err)
+	}
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	assertLocalSymlink(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "sample-plugin"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "sample-skill"), skillDir)
 }
 
 func assertLocalSymlink(t *testing.T, linkPath, expectedTarget string) {

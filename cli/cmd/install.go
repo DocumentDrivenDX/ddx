@@ -724,13 +724,39 @@ func addLocalOverlayIgnores(repoRoot string, paths []string) error {
 func filterLocalInstallValidationIssues(root string, issues []registry.ValidationIssue) []registry.ValidationIssue {
 	filtered := issues[:0]
 	roots := localInstallRootAliases(root)
+	ignoreCache := map[string]bool{}
 	for _, issue := range issues {
-		if rel, ok := localInstallIssueRel(roots, issue.Path); ok && shouldSkipLocalInstallIssue(rel) {
+		if rel, ok := localInstallIssueRel(roots, issue.Path); ok &&
+			(shouldSkipLocalInstallIssue(rel) || localInstallPathIsGitIgnored(root, rel, ignoreCache)) {
 			continue
 		}
 		filtered = append(filtered, issue)
 	}
 	return filtered
+}
+
+// localInstallPathIsGitIgnored reports whether rel (a slash path relative to
+// the local install source root) is gitignored in the source repository.
+// ddx install --local must not fail validation on broken symlinks that live
+// under gitignored scratch/tmp paths (e.g. doctor/home/.codex/tmp/...) the
+// operator never intended to ship. Returns false when the source is not a git
+// repo or git is unavailable, leaving the well-known-prefix skip list as the
+// fallback.
+func localInstallPathIsGitIgnored(root, rel string, cache map[string]bool) bool {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return false
+	}
+	if cached, ok := cache[rel]; ok {
+		return cached
+	}
+	// git check-ignore exits 0 when the path is ignored, 1 when it is not, and
+	// 128 when the source is not a git repository — treat anything but 0 as
+	// "not ignored" so non-git sources fall through to the prefix skip list.
+	cmd := internalgit.Command(context.Background(), root, "check-ignore", "-q", "--", filepath.FromSlash(rel))
+	ignored := cmd.Run() == nil
+	cache[rel] = ignored
+	return ignored
 }
 
 func localInstallRootAliases(root string) []string {
