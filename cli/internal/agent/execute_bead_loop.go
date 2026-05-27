@@ -1209,6 +1209,32 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		cleanupStop(ctx.Err() != nil && attemptStarted)
 	}()
 	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
+	leaseReader, _ := w.Store.(orphanHarnessLeaseReader)
+	releaser, _ := w.Store.(orphanHarnessLeaseReleaser)
+	appender, _ := w.Store.(orphanHarnessEventAppender)
+	if reaped, reapErr := reapOrphanedHarnessChildren(
+		ctx,
+		runtime.ProjectRoot,
+		newOrphanHarnessProcessScanner(),
+		leaseReader,
+		releaser,
+		appender,
+		assignee,
+		runtime.Log,
+		emit,
+		func(pid int) error { return killProcessGroup(pid) },
+	); reapErr != nil {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper failed: %v\n", reapErr)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":       "orphan_harness_reaper_failed",
+			"project_root": runtime.ProjectRoot,
+			"error":        reapErr.Error(),
+		})
+	} else if reaped > 0 && runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper killed %d orphaned harness process(es)\n", reaped)
+	}
 	setExit := func(condition, reason string) {
 		exitReason = reason
 		result.StopCondition = condition
