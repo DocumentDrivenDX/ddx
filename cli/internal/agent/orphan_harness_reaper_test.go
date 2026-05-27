@@ -203,6 +203,82 @@ func TestWorkStartup_DoesNotReapLiveOwnedChildren(t *testing.T) {
 	assert.Empty(t, store.events[liveBeadID], "live-owned child must not be reaped")
 }
 
+func TestWorkStartup_ReaperDoesNotKillOtherWorkspaceHarness(t *testing.T) {
+	projectRoot := t.TempDir()
+	otherProjectRoot := t.TempDir()
+	tempRoot := filepath.Join(t.TempDir(), "exec-wt")
+	otherTempRoot := filepath.Join(t.TempDir(), "other-exec-wt")
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(projectRoot), 0o755))
+	require.NoError(t, os.MkdirAll(ddxroot.JoinProject(otherProjectRoot), 0o755))
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	require.NoError(t, os.MkdirAll(otherTempRoot, 0o755))
+
+	projectBeadID := "ddx-11111111"
+	otherProjectBeadID := "ddx-22222222"
+	projectWorktree := filepath.Join(tempRoot, ExecuteBeadWtPrefix+projectBeadID+"-20260527T090438-aaaa")
+	otherProjectWorktree := filepath.Join(otherTempRoot, ExecuteBeadWtPrefix+otherProjectBeadID+"-20260527T090438-bbbb")
+	require.NoError(t, os.MkdirAll(projectWorktree, 0o755))
+	require.NoError(t, os.MkdirAll(otherProjectWorktree, 0o755))
+
+	// Set ExecutionTempRoot to our test's tempRoot for this project
+	t.Setenv(config.ExecutionWorktreeRootEnv, tempRoot)
+
+	deadOwnerPID := deadPID(t)
+	store := &fakeOrphanHarnessLeaseStore{
+		leases: map[string]bead.ClaimLeaseRecord{
+			projectBeadID: {
+				BeadID: projectBeadID,
+				PID:    deadOwnerPID,
+			},
+			otherProjectBeadID: {
+				BeadID: otherProjectBeadID,
+				PID:    deadOwnerPID,
+			},
+		},
+	}
+	var killed []int
+	// Both harnesses appear orphaned (PPID=1), but only the one in the current
+	// project's execRoot should be reaped.
+	scanner := fakeOrphanHarnessScanner{
+		processes: []orphanHarnessProcess{
+			{
+				PID:     6161,
+				PPID:    1,
+				Command: "claude exec --json -C " + projectWorktree,
+				Cwd:     projectWorktree,
+			},
+			{
+				PID:     6262,
+				PPID:    1,
+				Command: "codex exec --json -C " + otherProjectWorktree,
+				Cwd:     otherProjectWorktree,
+			},
+		},
+	}
+
+	// Only pass the projectRoot, not otherProjectRoot
+	reaped, err := reapOrphanedHarnessChildren(
+		context.Background(),
+		projectRoot,
+		scanner,
+		store,
+		store,
+		store,
+		"worker-a",
+		&bytes.Buffer{},
+		nil,
+		func(pid int) error {
+			killed = append(killed, pid)
+			return nil
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, 1, reaped, "only harness within project's execRoot should be reaped")
+	require.Equal(t, []int{6161}, killed)
+	require.Equal(t, []string{projectBeadID}, store.released)
+	assert.Empty(t, store.events[otherProjectBeadID], "other-workspace harness must not be reaped")
+}
+
 func deadPID(t *testing.T) int {
 	t.Helper()
 
