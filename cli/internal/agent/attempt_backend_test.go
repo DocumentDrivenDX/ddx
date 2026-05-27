@@ -315,3 +315,156 @@ func TestResourceExhaustedWorktreeCreationReleasesClaim(t *testing.T) {
 	require.Equal(t, ExecuteBeadOutcomeTaskFailed, res.Outcome)
 	require.Contains(t, res.Error, "No space left on device")
 }
+
+func TestResolveAttemptBackend_InTreeFromOverride(t *testing.T) {
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{
+		AttemptBackend: AttemptBackendInTree,
+	})
+	backend, err := ResolveAttemptBackend(rcfg)
+	require.NoError(t, err)
+	require.Equal(t, AttemptBackendInTree, backend.Name())
+}
+
+func TestInTreeAttemptBackendSelectsProjectRoot(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	backend := InTreeAttemptBackend{}
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-test",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+	require.Equal(t, projectRoot, ws.WorkDir)
+	require.Equal(t, AttemptBackendInTree, ws.Backend)
+	t.Cleanup(func() {
+		_ = backend.Cleanup(context.Background(), ws)
+	})
+}
+
+func TestInTreeAttemptBackendDirtyTreeGuard(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0002"
+
+	dirtyFile := filepath.Join(projectRoot, "dirty.txt")
+	require.NoError(t, os.WriteFile(dirtyFile, []byte("dirty content"), 0o644))
+
+	backend := InTreeAttemptBackend{}
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-test",
+		BaseRev:     baseRev,
+	})
+	require.Error(t, err)
+	require.Nil(t, ws)
+	require.Contains(t, err.Error(), "clean working tree")
+	require.Contains(t, err.Error(), "dirty.txt")
+}
+
+func TestInTreeAttemptBackendExcludesDDxDir(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0003"
+
+	ddxDir := ddxroot.InTree(projectRoot)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxFile := filepath.Join(ddxDir, "test.txt")
+	require.NoError(t, os.WriteFile(ddxFile, []byte("ddx state"), 0o644))
+
+	backend := InTreeAttemptBackend{}
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-test",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+	t.Cleanup(func() {
+		_ = backend.Cleanup(context.Background(), ws)
+	})
+}
+
+func TestInTreeAttemptBackendExcludesExecutionArtifacts(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0004"
+	attemptID := "20260527T105633-test"
+
+	execDir := filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)
+	require.NoError(t, os.MkdirAll(execDir, 0o755))
+	execFile := filepath.Join(execDir, "result.json")
+	require.NoError(t, os.WriteFile(execFile, []byte(`{"status":"success"}`), 0o644))
+
+	backend := InTreeAttemptBackend{}
+	ws, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   attemptID,
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws)
+	t.Cleanup(func() {
+		_ = backend.Cleanup(context.Background(), ws)
+	})
+}
+
+func TestInTreeAttemptBackendExclusiveLock(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0005"
+
+	backend := InTreeAttemptBackend{}
+
+	ws1, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-first",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws1)
+	t.Cleanup(func() {
+		_ = backend.Cleanup(context.Background(), ws1)
+	})
+
+	ws2, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-second",
+		BaseRev:     baseRev,
+	})
+	require.Error(t, err)
+	require.Nil(t, ws2)
+	require.Contains(t, err.Error(), "already running")
+}
+
+func TestInTreeAttemptBackendReleasesLockOnCleanup(t *testing.T) {
+	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0006"
+
+	backend := InTreeAttemptBackend{}
+
+	ws1, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-first",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	_ = backend.Cleanup(context.Background(), ws1)
+
+	ws2, err := backend.Prepare(context.Background(), AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   "20260527T105633-second",
+		BaseRev:     baseRev,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, ws2)
+	t.Cleanup(func() {
+		_ = backend.Cleanup(context.Background(), ws2)
+	})
+}

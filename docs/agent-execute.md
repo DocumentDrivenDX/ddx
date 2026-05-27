@@ -100,13 +100,28 @@ route decision back into `Execute`.
 ## Cleanup and Resource Exhaustion
 
 `ddx try` owns the isolated workspace lifecycle for one bead attempt. The
-default attempt backend is `worktree`; `local-clone` uses a full local clone
-with local object sharing/hardlinks, and `docker-clone` runs that clone inside a
-Docker container. Select a backend with `--attempt-backend` or
-`executions.attempt_backend`. `docker-clone` additionally requires
-`executions.docker.image`; build the repo's baseline image with
-`make docker-attempt-runner` and configure `ddx-attempt-runner:dev` for local
-trials.
+default attempt backend is `worktree`. Select a backend with `--attempt-backend` or
+`executions.attempt_backend`:
+
+- **`worktree`** (default): Creates an isolated git worktree. Provides clean
+  isolation for code-edit attempts. Requires disk space for the linked worktree
+  and may not work well with large checkouts or complex submodule structures.
+- **`local-clone`**: Creates a full local clone with local object sharing/hardlinks.
+  Slightly more robust than worktree for systems with filesystem limitations, at the
+  cost of additional disk I/O.
+- **`docker-clone`**: Runs a local clone inside a Docker container. Provides
+  strong isolation and stable toolchain setup via project-layer Dockerfile.
+  Additionally requires `executions.docker.image`; build the repo's baseline image with
+  `make docker-attempt-runner` and configure `ddx-attempt-runner:dev` for local
+  trials.
+- **`in-tree`** (opt-in): Runs the attempt directly in the project checkout without
+  creating an isolated workspace. Trades isolation for access to local data
+  (untracked datasets, running services, checked-out fixtures). Requires clean
+  working tree before claim and enforces exclusive single-worker locking to prevent
+  concurrent modifications. Use this backend only for data-heavy validation tasks
+  that must run against project-local state (e.g., benchmark harnesses against
+  in-repo datasets). On attempt failure with dirty tree, the bead is unclaimed and
+  a rescue message is left to aid manual recovery.
 
 Projects can add a cached Docker setup layer at
 `.ddx/attempt-runner.Dockerfile`. When present, `docker-clone` builds a
