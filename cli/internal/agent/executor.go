@@ -8,6 +8,7 @@ import (
 	"io"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -173,7 +174,16 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		cmd.Stdin = strings.NewReader(stdin)
 	}
 
-	if err := cmd.Start(); err != nil {
+	// Lock the OS thread before Start to ensure Pdeathsig is properly
+	// associated with this thread. Pdeathsig is sent when the thread dies,
+	// not the process, so we must prevent Go runtime from migrating the
+	// goroutine to a different thread during the critical exec operation.
+	// We unlock immediately after Start succeeds, as the kernel has already
+	// bound the child to this thread's PID via Pdeathsig.
+	runtime.LockOSThread()
+	err = cmd.Start()
+	runtime.UnlockOSThread()
+	if err != nil {
 		return nil, err
 	}
 
