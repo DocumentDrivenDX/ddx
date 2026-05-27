@@ -134,6 +134,7 @@ func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	lockmetrics.SetSink(lockmetrics.FileSink(projectRoot))
+	lockmetrics.SetCapEnforcement(projectRoot, "")
 	f.warnIfInstalledBinaryBehindSource(cmd)
 
 	// Preflight: warn once per process for degraded project-local skill layout.

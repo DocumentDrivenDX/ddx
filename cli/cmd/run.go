@@ -85,6 +85,7 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 
 	workDir := resolveProjectRoot(projectFlag, f.WorkingDir)
 	lockmetrics.SetSink(lockmetrics.FileSink(workDir))
+	lockmetrics.SetCapEnforcement(workDir, "")
 
 	// Resolve prompt source.
 	prompt := promptText

@@ -18,16 +18,17 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // Event is one lock lifecycle event. An acquire event carries the
 // acquisition-time fields; the matching release event additionally carries
-// ReleasedAt and DurationMS so the held window is fully described.
+// ReleasedAt and DurationMS so the held window is fully described. A
+// "violation" event is emitted when a hold exceeds its configured cap (see
+// InstrumentCapped) and carries Severity "error" and CapMS.
 type Event struct {
-	// Event is "acquire" or "release".
+	// Event is "acquire", "release", or "violation".
 	Event string `json:"event"`
 	// LockName identifies the lock, e.g. "index.lock" or "tracker.lock".
 	LockName string `json:"lock_name"`
@@ -41,9 +42,15 @@ type Event struct {
 	// ReleasedAt is the RFC3339Nano timestamp the lock was released.
 	// Empty on the acquire event.
 	ReleasedAt string `json:"released_at,omitempty"`
-	// DurationMS is ReleasedAt minus AcquiredAt in milliseconds.
-	// Zero on the acquire event.
+	// DurationMS is the held duration in milliseconds. On a release event it
+	// is ReleasedAt minus AcquiredAt; on a violation event it is the hold so
+	// far at the moment the cap tripped. Zero on the acquire event.
 	DurationMS int64 `json:"duration_ms,omitempty"`
+	// Severity is "error" on a "violation" event; empty otherwise.
+	Severity string `json:"severity,omitempty"`
+	// CapMS is the configured hold-time cap in milliseconds. Set only on a
+	// "violation" event.
+	CapMS int64 `json:"cap_ms,omitempty"`
 }
 
 var (
@@ -75,29 +82,12 @@ func Emit(ev Event) {
 // the measured hold duration. The holder pid is the current process. The
 // release event is emitted even if critical panics. critical's error is
 // returned unchanged.
-func Instrument(lockName, operation string, critical func() error) (err error) {
-	pid := os.Getpid()
-	acquiredAt := time.Now()
-	Emit(Event{
-		Event:      "acquire",
-		LockName:   lockName,
-		Operation:  operation,
-		HolderPID:  pid,
-		AcquiredAt: acquiredAt.UTC().Format(time.RFC3339Nano),
-	})
-	defer func() {
-		releasedAt := time.Now()
-		Emit(Event{
-			Event:      "release",
-			LockName:   lockName,
-			Operation:  operation,
-			HolderPID:  pid,
-			AcquiredAt: acquiredAt.UTC().Format(time.RFC3339Nano),
-			ReleasedAt: releasedAt.UTC().Format(time.RFC3339Nano),
-			DurationMS: releasedAt.Sub(acquiredAt).Milliseconds(),
-		})
-	}()
-	return critical()
+//
+// When process-wide cap enforcement is enabled (see SetCapEnforcement),
+// Instrument additionally arms a hold-time cap for the lock; otherwise it is a
+// pure metric wrapper.
+func Instrument(lockName, operation string, critical func() error) error {
+	return InstrumentCapped(lockName, operation, resolveCapConfig(lockName), critical)
 }
 
 // Path returns the absolute path to the lock-events stream under the project's
