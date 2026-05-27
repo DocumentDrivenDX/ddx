@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260527T012742-98e4ae8a",
+  "bead_id": "ddx-694180d7",
+  "base_rev": "ca16958fe39772012aec912f24edb23b8875747f",
+  "created_at": "2026-05-27T01:27:49.032710186Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-694180d7",
+    "title": "Avoid unreachable Vidar route after provider_connectivity failure",
+    "description": "PROBLEM\nA Niflheim ddx work attempt for bead niflheim-27416d39 reached execution and then failed after DDx/Fizeau routed the continuation to provider vidar model Qwen3.6-27B-MLX-8bit. The route failed with provider_connectivity: openai POST http://vidar:1235/v1/chat/completions dial tcp 100.108.162.80:1235 i/o timeout.\n\nIMPACT\nThe project queue remains worker-ready, but attempts can fail after useful work if the default/cheap route selects an unreachable Vidar endpoint. This is infrastructure, not a Niflheim acceptance failure.\n\nEVIDENCE\nNiflheim attempt id: 20260518T190003-d738a271. Worker output ended with: provider_connectivity, provider=vidar, model=Qwen3.6-27B-MLX-8bit, endpoint http://vidar:1235/v1/chat/completions, i/o timeout.\n\nPROPOSED FIX\nMake provider health or route selection avoid unreachable Vidar endpoints, or mark Vidar unhealthy before dispatch so DDx falls back to a reachable provider. Add regression coverage for provider-connectivity failures so a failed route is recorded and retried/falls back without consuming the useful attempt.\n\nNON-SCOPE\nDo not change Niflheim beads. Do not mask genuine task failures as provider failures.",
+    "acceptance": "1. A diagnostic or health check marks an unreachable Vidar endpoint unavailable before DDx/Fizeau selects it for work.\n2. A provider_connectivity failure records actionable route facts including provider, model, endpoint, and timeout class.\n3. A retry/fallback path avoids repeatedly selecting the same unreachable Vidar route for the same bead attempt.\n4. Focused tests for provider connectivity failure handling pass.\n5. Repository pre-commit or equivalent local gate passes.",
+    "labels": [
+      "area:routing",
+      "area:provider-health",
+      "area:work",
+      "kind:bug",
+      "priority:reliability",
+      "downstream:niflheim",
+      "provider:vidar",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"A diagnostic or health check marks an unreachable Vidar endpoint unavailable before DDx/Fizeau selects it for work.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"A provider_connectivity failure records actionable route facts including provider, model, endpoint, and timeout class.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"A retry/fallback path avoids repeatedly selecting the same unreachable Vidar route for the same bead attempt.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Focused tests for provider connectivity failure handling pass.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Repository pre-commit or equivalent local gate passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-27T01:27:17.137778236Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.20 threshold=0.50 verifiable=1/5"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T012742-98e4ae8a",
+    "prompt": ".ddx/executions/20260527T012742-98e4ae8a/prompt.md",
+    "manifest": ".ddx/executions/20260527T012742-98e4ae8a/manifest.json",
+    "result": ".ddx/executions/20260527T012742-98e4ae8a/result.json",
+    "checks": ".ddx/executions/20260527T012742-98e4ae8a/checks.json",
+    "usage": ".ddx/executions/20260527T012742-98e4ae8a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-694180d7-20260527T012742-98e4ae8a"
+  },
+  "prompt_sha": "521fd744838eb07d643d0c8514b7877cd7ab33bc63ae128f74ca4d8e9decb992"
+}
