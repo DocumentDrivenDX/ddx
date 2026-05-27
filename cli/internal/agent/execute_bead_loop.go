@@ -1121,8 +1121,38 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	claimSuccessRateWarned := false
 	preClaimWarnThreshold := runtime.effectivePreClaimWarnRepeatThreshold()
 	preClaimWarnState := preClaimWarnRepeatState{}
-	appendPreClaimWarn := func(beadID, reason, detail string, at time.Time) {
-		appendPreClaimIntakeWarning(w.Store, emit, &preClaimWarnState, preClaimWarnThreshold, beadID, assignee, reason, detail, at)
+	// exitReason is populated as the loop exits to surface a structured reason
+	// in the loop.end event (ddx-dc157075 AC #4). Work-owned terminal reasons
+	// are classified through work.StopCondition; fatal_config,
+	// preflight_failed, resource_exhausted, and future provider exhaustion are
+	// still subsystem-specific exits.
+	exitReason := ""
+	setExit := func(condition, reason string) {
+		exitReason = reason
+		result.StopCondition = condition
+		result.ExitReason = reason
+	}
+	appendPreClaimWarn := func(beadID, reason, detail string, at time.Time) bool {
+		escalated := appendPreClaimIntakeWarning(w.Store, emit, &preClaimWarnState, preClaimWarnThreshold, beadID, assignee, reason, detail, at)
+		if !escalated {
+			return false
+		}
+		detailText := fmt.Sprintf(
+			"pre-claim warn fingerprint repeated %d times across %d distinct bead IDs",
+			preClaimWarnState.Count,
+			len(preClaimWarnState.DistinctBeadIDs),
+		)
+		result.OperatorAttention = &OperatorAttentionStop{
+			Reason:      "preclaim_warn_repeated",
+			BeadID:      beadID,
+			ProjectRoot: runtime.ProjectRoot,
+			Message:     detailText,
+		}
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", detailText)
+		}
+		return true
 	}
 	recordClaimAttempt := func(success bool, beadID string) {
 		if claimSuccessRateWindowSize <= 0 {
@@ -1193,12 +1223,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		"mode":         string(loopMode),
 		"once":         loopMode == executeloop.ModeOnce,
 	})
-	// exitReason is populated as the loop exits to surface a structured reason
-	// in the loop.end event (ddx-dc157075 AC #4). Work-owned terminal reasons
-	// are classified through work.StopCondition; fatal_config,
-	// preflight_failed, resource_exhausted, and future provider exhaustion are
-	// still subsystem-specific exits.
-	exitReason := ""
 	cleanupLog := runtime.CleanupLog
 	if cleanupLog == nil {
 		cleanupLog = runtime.Log
@@ -1234,11 +1258,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		})
 	} else if reaped > 0 && runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper killed %d orphaned harness process(es)\n", reaped)
-	}
-	setExit := func(condition, reason string) {
-		exitReason = reason
-		result.StopCondition = condition
-		result.ExitReason = reason
 	}
 	finalizeDurableAuditOrStop := func(candidateID string, report ExecuteBeadReport) bool {
 		if runtime.FinalizeDurableAudit == nil {
@@ -1834,7 +1853,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						continue
 					}
 				} else {
-					appendPreClaimWarn(candidate.ID, "decomposition_depth_cap", overflowDetail, now().UTC())
+					if appendPreClaimWarn(candidate.ID, "decomposition_depth_cap", overflowDetail, now().UTC()) {
+						return result, nil
+					}
 					emit("pre_claim_intake.warn", readinessDecisionBody(
 						"pre_claim_intake.decomposition_depth_cap",
 						"too_large",
@@ -1959,7 +1980,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					continue
 				} else {
 					emit("pre_claim_intake.warn", eventBody)
-					appendPreClaimWarn(candidate.ID, "timeout", timeoutDetail, now().UTC())
+					if appendPreClaimWarn(candidate.ID, "timeout", timeoutDetail, now().UTC()) {
+						return result, nil
+					}
 					intakeOutcome = PreClaimIntakeActionableAtomic
 				}
 			}
@@ -1997,7 +2020,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":        warning,
 					},
 				))
-				appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC())
+				if appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+					return result, nil
+				}
 			case intakeOutcome == PreClaimIntakeActionableAtomic:
 				// pass-through
 			case intakeOutcome == PreClaimIntakeActionableButRewritten:
@@ -2019,7 +2044,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							"detail":  warning,
 						},
 					))
-					appendPreClaimWarn(candidate.ID, "rewrite_rejected", warning, now().UTC())
+					if appendPreClaimWarn(candidate.ID, "rewrite_rejected", warning, now().UTC()) {
+						return result, nil
+					}
 				}
 			case intakeOutcome == PreClaimIntakeError:
 				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
@@ -2057,7 +2084,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":        warning,
 					},
 				))
-				appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC())
+				if appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+					return result, nil
+				}
 			case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
 				// too_large_decomposed should move work forward by splitting before
 				// claim. Some intake classifiers only identify the need to split;
@@ -2079,7 +2108,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						if runtime.Log != nil {
 							_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", hookErr.Error(), candidate.ID)
 						}
-						appendPreClaimWarn(candidate.ID, "decomposition_hook_unavailable", warning, now().UTC())
+						if appendPreClaimWarn(candidate.ID, "decomposition_hook_unavailable", warning, now().UTC()) {
+							return result, nil
+						}
 						emit("pre_claim_intake.warn", map[string]any{
 							"bead_id": candidate.ID,
 							"outcome": string(PreClaimIntakeTooLargeDecomposed),
@@ -2094,7 +2125,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", warning, candidate.ID)
 					}
-					appendPreClaimWarn(candidate.ID, "decomposition_hook_empty", warning, now().UTC())
+					if appendPreClaimWarn(candidate.ID, "decomposition_hook_empty", warning, now().UTC()) {
+						return result, nil
+					}
 					emit("pre_claim_intake.warn", map[string]any{
 						"bead_id": candidate.ID,
 						"outcome": string(PreClaimIntakeTooLargeDecomposed),
@@ -2136,7 +2169,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							continue
 						}
 					} else {
-						appendPreClaimWarn(candidate.ID, "decomposition_blocked_best_effort", blockedDetail, now().UTC())
+						if appendPreClaimWarn(candidate.ID, "decomposition_blocked_best_effort", blockedDetail, now().UTC()) {
+							return result, nil
+						}
 					}
 					break
 				}
@@ -2172,7 +2207,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							continue
 						}
 					} else {
-						appendPreClaimWarn(candidate.ID, "decomposition_error_best_effort", decompErr.Error(), now().UTC())
+						if appendPreClaimWarn(candidate.ID, "decomposition_error_best_effort", decompErr.Error(), now().UTC()) {
+							return result, nil
+						}
 					}
 					break
 				}
@@ -2230,7 +2267,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						continue
 					}
 				} else {
-					appendPreClaimWarn(candidate.ID, "readiness_best_effort", warning, now().UTC())
+					if appendPreClaimWarn(candidate.ID, "readiness_best_effort", warning, now().UTC()) {
+						return result, nil
+					}
 				}
 			}
 		}
@@ -2301,7 +2340,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					continue
 				}
-				appendPreClaimWarn(candidate.ID, "lint_blocked_best_effort", blockMsg, now().UTC())
+				if appendPreClaimWarn(candidate.ID, "lint_blocked_best_effort", blockMsg, now().UTC()) {
+					return result, nil
+				}
 			}
 		}
 		freshCandidate, staleSkip, refreshErr = w.refreshClaimedCandidateBeforeAttempt(ctx, candidate)
@@ -4681,9 +4722,9 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bea
 	return true, nil
 }
 
-func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, map[string]any), warnState *preClaimWarnRepeatState, threshold int, beadID, actor, reason, detail string, at time.Time) {
+func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, map[string]any), warnState *preClaimWarnRepeatState, threshold int, beadID, actor, reason, detail string, at time.Time) bool {
 	if store == nil {
-		return
+		return false
 	}
 	fingerprint := preClaimIntakeWarningFingerprint(reason, detail)
 	body := readinessDecisionBodyJSON(
@@ -4718,8 +4759,8 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, m
 		Source:    "ddx work",
 		CreatedAt: at,
 	})
-	if warnState == nil || emit == nil {
-		return
+	if warnState == nil {
+		return false
 	}
 	snapshot, escalated := warnState.record(fingerprint, beadID, detail, map[string]any{
 		"bead_id":     beadID,
@@ -4728,7 +4769,7 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, m
 		"fingerprint": fingerprint,
 	}, at, threshold)
 	if !escalated {
-		return
+		return false
 	}
 	detailText := fmt.Sprintf(
 		"pre-claim warn fingerprint repeated %d times across %d distinct bead IDs",
@@ -4746,7 +4787,9 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, m
 		"first_observed_at": snapshot.FirstObservedAt.UTC().Format(time.RFC3339),
 		"example_payload":   cloneStringAnyMap(snapshot.ExamplePayload),
 	}
-	emit("loop.operator_attention", payload)
+	if emit != nil {
+		emit("loop.operator_attention", payload)
+	}
 	attentionBody, _ := json.Marshal(payload)
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      "operator_attention",
@@ -4756,6 +4799,7 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, m
 		Source:    "ddx work",
 		CreatedAt: at,
 	})
+	return true
 }
 
 type preClaimIntakeHookCallResult struct {

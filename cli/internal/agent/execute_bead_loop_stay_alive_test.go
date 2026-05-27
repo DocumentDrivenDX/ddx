@@ -189,7 +189,8 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 
 // TestPreClaimWarnSameFingerprintEscalatesAfterThreshold verifies that the
 // loop escalates repeated identical pre-claim warn fingerprints across
-// distinct bead IDs without parking or cooldowning ordinary ready beads.
+// distinct bead IDs, stops before claiming the threshold bead, and leaves the
+// remaining ready queue untouched.
 func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
@@ -242,17 +243,24 @@ func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, len(beadIDs), result.Attempts)
-	assert.Equal(t, len(beadIDs), result.Successes)
+	assert.Equal(t, len(beadIDs)-1, result.Attempts)
+	assert.Equal(t, len(beadIDs)-1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
-	assert.Nil(t, result.OperatorAttention)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, "preclaim_warn_repeated", result.OperatorAttention.Reason)
+	assert.Equal(t, beadIDs[len(beadIDs)-1], result.OperatorAttention.BeadID)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
 
-	for _, beadID := range beadIDs {
+	for _, beadID := range beadIDs[:len(beadIDs)-1] {
 		got, err := store.Get(beadID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status)
 		assert.Nil(t, got.Extra["work-retry-after"])
 	}
+	lastBead, err := store.Get(beadIDs[len(beadIDs)-1])
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, lastBead.Status)
 
 	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
 	var escalations []map[string]any
