@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260527T084447-d0044e99",
+  "bead_id": "ddx-b06b7e85",
+  "base_rev": "ff293a11fca649fcfa8f2311cd954bc38a0e2cfa",
+  "created_at": "2026-05-27T08:44:54.219159817Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b06b7e85",
+    "title": "execute-bead: set Pdeathsig on harness children so the kernel kills them when the worker dies abnormally (SIGKILL/crash)",
+    "description": "PROBLEM\nWhen a `ddx work` orchestrator dies abnormally (SIGKILL, crash, OOM, host reboot of the supervising process) while a bead attempt is in flight, the spawned harness child (e.g. `claude --print -p --verbose --output-format stream-json ... \u003cexecute-bead\u003e` or `codex exec --json ...`) is NOT reaped. It reparents to PID 1 and keeps running indefinitely. Observed 2026-05-27 on the dev host: a `claude --print` execute-bead child orphaned with PPID 1 for ~9h53m after its `ddx work` parent had gone. Graceful SIGINT/SIGTERM cleanup works, but it cannot run when the parent is killed uncatchably.\n\nROOT CAUSE (file:line)\n- cli/internal/agent/executor.go:156-157 — OSExecutor.ExecuteInDir spawns the harness via exec.Command(binary, args...) then calls cmdSetProcessGroup(cmd).\n- cli/internal/agent/executor_unix.go:13-15 — cmdSetProcessGroup sets ONLY SysProcAttr{Setpgid: true}. There is NO Pdeathsig, so the kernel does nothing automatically when the parent dies.\n- cli/internal/agent/executor.go:190-194 / :231-255 — cmdKillProcessGroup is only invoked from the executor's graceful paths (idle/wall-clock timeout, auth/rate-limit pattern, ctx cancellation). These never run on an uncatchable parent death.\n- cli/cmd/root.go:49-50 — the worker context is signal.NotifyContext on os.Interrupt + SIGTERM only; SIGKILL/crash cannot be caught, so the defer/stopProcess chain never fires and the child orphans.\n- cli/internal/agent/executor_windows.go:7-8 — cmdSetProcessGroup is a documented no-op on Windows; Pdeathsig is Linux-only, so the non-Linux gap must be handled explicitly.\n\nPROPOSED FIX\nSet SysProcAttr.Pdeathsig = SIGKILL in cmdSetProcessGroup (cli/internal/agent/executor_unix.go) so the kernel signals the harness child when the parent thread dies, regardless of how the parent died. Handle the well-known caveat that Pdeathsig keys off the spawning OS *thread*: guard against Go runtime thread migration (runtime.LockOSThread around cmd.Start, or re-verify parent PID in the child path) so the death signal actually fires. Document the macOS/Windows gap (Pdeathsig is Linux-only) and the chosen fallback there (the orphan reaper child bead is the cross-platform backstop). Note: Pdeathsig is in golang.org/x/sys/unix / syscall on Linux only; keep the !windows build constraint and any darwin-specific behavior correct.\n\nNON-SCOPE\n- Graceful SIGINT/SIGTERM shutdown already works (executor.go:231-255); this change must NOT regress it.\n- Startup-time reaping of orphans from already-dead prior workers is a separate child (the backstop reaper).\n- docker-clone backend process-group cleanup is a separate child.\n- The harness-runner-INTERNAL leak is covered by fizeau-50b6f055; this bead is strictly the ddx orchestrator -\u003e harness-child spawn boundary.\n\nCROSS-REF: fizeau-50b6f055 (fizeau harness-runner process-group cleanup).",
+    "acceptance": "1. A harness child spawned by the execute-bead executor does NOT survive abnormal death of its parent worker. TestExecutor_OrphanKilledOnParentSIGKILL starts the executor (or a thin test harness around ExecuteInDir) against a fake harness binary that forks a long-lived grandchild, SIGKILLs the parent worker process (not graceful SIGTERM), and asserts the harness child + grandchild are gone (not PID-1 orphans) within a bounded grace.\n2. TestCmdSetProcessGroup_Pdeathsig asserts cmdSetProcessGroup sets SysProcAttr.Pdeathsig (to SIGKILL) on Linux in cli/internal/agent/executor_unix.go.\n3. The thread-migration caveat is handled (runtime.LockOSThread around Start, or equivalent parent-PID re-check) so the death signal reliably fires; a test or a documented code-comment rationale covers this, and the non-Linux fallback (Windows no-op / macOS gap) is documented with the reaper as the backstop.\n4. Graceful SIGINT/SIGTERM shutdown still terminates in-flight harness children (regression guard). TestExecutor_GracefulShutdownKillsChild cancels the executor context / sends graceful stop and asserts the child process group is killed via cmdKillProcessGroup.\n5. cd cli \u0026\u0026 go test ./internal/agent/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-93d2ac52",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "ref:fizeau-50b6f055"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T084447-d0044e99",
+    "prompt": ".ddx/executions/20260527T084447-d0044e99/prompt.md",
+    "manifest": ".ddx/executions/20260527T084447-d0044e99/manifest.json",
+    "result": ".ddx/executions/20260527T084447-d0044e99/result.json",
+    "checks": ".ddx/executions/20260527T084447-d0044e99/checks.json",
+    "usage": ".ddx/executions/20260527T084447-d0044e99/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b06b7e85-20260527T084447-d0044e99"
+  },
+  "prompt_sha": "34a13c45214d94b8184362ac6887b8b7c4cf8c04e9ff085b9a3b06c19ea55ef8"
+}
