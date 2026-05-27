@@ -154,6 +154,47 @@ func TestIntegration_MultiWorkerLockContention_NoOperatorTimeouts(t *testing.T) 
 	}
 }
 
+// TestDocs_LockContractSectionPresent asserts the repo-root AGENTS.md documents
+// the lock-lifetime contract this test file enforces: the "Lock Lifetime
+// Contract" heading plus the configured caps (10s/30s) and the violation
+// evidence file name. This keeps the contributor-facing doc in lockstep with
+// the enforcement so future changes do not silently regress it.
+func TestDocs_LockContractSectionPresent(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	// Walk up to the cli/ module root (go.mod); AGENTS.md is its repo-root parent.
+	dir := wd
+	cliRoot := ""
+	for i := 0; i < 8; i++ {
+		if _, statErr := os.Stat(filepath.Join(dir, "go.mod")); statErr == nil {
+			cliRoot = dir
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
+	if cliRoot == "" {
+		t.Fatalf("could not locate cli/ module root from %s", wd)
+	}
+	agentsPath := filepath.Join(filepath.Dir(cliRoot), "AGENTS.md")
+	data, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatalf("read %s: %v", agentsPath, err)
+	}
+	content := string(data)
+	for _, want := range []string{
+		"## Lock Lifetime Contract",
+		"10s",
+		"30s",
+		"lock-violation.json",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("%s missing required lock-contract string %q", agentsPath, want)
+		}
+	}
+}
+
 // runContentionScenario builds the fixture, spawns the workers and operators,
 // drives them to completion, and returns the captured lock metrics + operator
 // outcomes.

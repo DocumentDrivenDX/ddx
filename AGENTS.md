@@ -189,6 +189,33 @@ ddx bead operator-attention            # text: one line per release
 ddx bead operator-attention --json     # structured rows for tooling
 ```
 
+## Lock Lifetime Contract
+
+The two short-lived git locks an executing worker touches must be scoped to
+the mutation window only — never held across the long LLM/harness wait. Do not
+regress this:
+
+- **Never hold a lock across an LLM subprocess.** `.git/index.lock` and
+  `.ddx/.git-tracker.lock` may be held only for the git/tracker mutation
+  itself. Acquire after the harness returns, release before the next wait.
+  The "LLM wait" happens entirely outside any lock.
+- **Hold-time caps.** A worker that holds a lock past its cap is treated as
+  hung: the lock is force-released and a violation is recorded. Defaults are
+  **10s** for `index.lock` (`DefaultIndexLockCap`) and **30s** for
+  `tracker.lock` (`DefaultTrackerLockCap`), defined in
+  `cli/internal/lockmetrics/lockcap.go`. Override per-lock in milliseconds via
+  the `DDX_LOCK_CAP_INDEX_MS` and `DDX_LOCK_CAP_TRACKER_MS` environment
+  variables.
+- **Violation evidence.** When a cap is exceeded the watchdog writes
+  `.ddx/executions/<run-id>/lock-violation.json` (lock name, cap, actual hold,
+  holder PID, stack) so the post-execution reviewer sees the over-long hold.
+- **Enforcing test.** The wired-in proof is
+  `cli/internal/integration/lock_contention_test.go`
+  (`TestIntegration_MultiWorkerLockContention_*`): 5 concurrent `ddx work`
+  workers drain a shared queue while an operator hammers the tracker, and the
+  p99 index/tracker hold times must stay under the caps with no operator
+  timeouts.
+
 <!-- DDX-AGENTS:START -->
 <!-- Managed by ddx init / ddx update. Edit outside these markers. -->
 
