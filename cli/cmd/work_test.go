@@ -619,6 +619,129 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 	assert.Equal(t, 6, requests[1].MinPower, "provider connectivity retry should ask Fizeau for a route above the failed power")
 }
 
+// TestWorkProviderConnectivityCommitsEvidence is the ddx-ca94d157 regression
+// test. A ddx work attempt that terminally fails with provider_connectivity —
+// the routed local endpoint is unreachable before any agent output — published
+// its .ddx/executions/<attempt>/ evidence bundle (manifest.json, prompt.md,
+// result.json) into the project root but the CLI execute/work finalizer never
+// committed it, leaving the worktree dirty after the tracker commit had already
+// landed. The finalizer must now leave the worktree clean (mirroring the server
+// worker path) while still recording route-failure evidence on the bead.
+//
+// The route is pinned (--provider/--model, harness left empty so dispatch
+// still flows through the stubbed Fizeau service) so the escalation ladder is
+// disabled: exactly one attempt runs, it fails connectivity, and ModeOnce
+// returns — the terminal failure path the bead describes.
+func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		if req.Role != "implementer" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+			close(ch)
+			return ch, nil
+		}
+		// The implementer dispatch fails at the routed provider endpoint before
+		// any agent output — the terminal provider_connectivity path (the exact
+		// niflheim failure: dial tcp ... i/o timeout).
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout","routing_actual":{"provider":"grendel-omlx","model":"qwen-local","power":5}}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	// Use the production .gitignore so the policy-excluded embedded session logs
+	// (.ddx/executions/*/embedded/) are ignored just as they are in a real
+	// `ddx init` project — the finalizer is only responsible for the tracked
+	// evidence files (manifest/prompt/result), not the runtime-only logs.
+	require.NoError(t, os.WriteFile(filepath.Join(dir, ".gitignore"),
+		[]byte(strings.Join(initGitignoreRules, "\n")+"\n"), 0o644))
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init())
+	beadID := "ddx-provider-connectivity-evidence"
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        beadID,
+		Title:     "Work commits evidence for terminal provider connectivity failures",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--provider", "grendel-omlx",
+		"--model", "qwen-local",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "output=%q", out)
+
+	// AC #2: the worktree is clean after the terminal failure path — the
+	// published evidence bundle is committed, not left untracked. The only
+	// tolerated leftover is .ddx/metrics/locks.jsonl: per-machine lock-latency
+	// diagnostics rewritten on every `ddx work` run, runtime-only state outside
+	// this bead's evidence contract.
+	statusOut, statusErr := exec.Command("git", "-C", dir, "status", "--porcelain").CombinedOutput()
+	require.NoError(t, statusErr, string(statusOut))
+	var dirty []string
+	for _, line := range strings.Split(strings.TrimSpace(string(statusOut)), "\n") {
+		if strings.TrimSpace(line) == "" || strings.Contains(line, ".ddx/metrics/") {
+			continue
+		}
+		dirty = append(dirty, line)
+	}
+	require.Empty(t, dirty,
+		"worktree must be clean after a provider_connectivity attempt; output=%q\nstatus:\n%s", out, statusOut)
+
+	// AC #1: any execution-evidence bundle that survived to the project root is
+	// committed (tracked), never left untracked. A clean worktree (above) plus
+	// a present-and-tracked or absent bundle satisfies the contract.
+	logOut, logErr := exec.Command("git", "-C", dir, "log", "--all", "--name-only", "--pretty=format:").CombinedOutput()
+	require.NoError(t, logErr, string(logOut))
+	execDir := filepath.Join(dir, ddxroot.DirName, "executions")
+	if entries, statErr := os.ReadDir(execDir); statErr == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			for _, name := range []string{"manifest.json", "prompt.md", "result.json"} {
+				if _, ferr := os.Stat(filepath.Join(execDir, e.Name(), name)); ferr != nil {
+					continue
+				}
+				tracked := filepath.ToSlash(filepath.Join(ddxroot.DirName, "executions", e.Name(), name))
+				require.Contains(t, string(logOut), tracked,
+					"evidence file %s present on disk must be committed", tracked)
+			}
+		}
+	}
+
+	// AC #3: route-failure evidence is recorded on the bead with provider,
+	// model, reason, and error detail.
+	events, evErr := store.Events(beadID)
+	require.NoError(t, evErr)
+	var routeFailure *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "route-failure" {
+			routeFailure = &events[i]
+		}
+	}
+	require.NotNil(t, routeFailure, "expected a kind=route-failure event recorded on the bead")
+	require.Contains(t, routeFailure.Body, "grendel-omlx", "route-failure event must record the failed provider")
+	require.Contains(t, routeFailure.Body, "provider_connectivity", "route-failure event must record the outcome reason")
+	require.Contains(t, routeFailure.Body, "i/o timeout", "route-failure event must record the transport error detail")
+}
+
 func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {
 	var out bytes.Buffer
 	budget := 42 * time.Second
