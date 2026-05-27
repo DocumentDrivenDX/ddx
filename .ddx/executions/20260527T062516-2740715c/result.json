@@ -8,9 +8,9 @@
   "landed_branch": "main",
   "outcome": "merged",
   "status": "success",
-  "detail": "merged onto current tip",
+  "detail": "merged onto current tip; checkout_sync_deferred: cli/internal/agent/execute_bead_loop.go",
   "orchestrator_status": "success",
-  "reason": "merged onto current tip",
+  "reason": "merged onto current tip; checkout_sync_deferred: cli/internal/agent/execute_bead_loop.go",
   "candidate_ref": "refs/ddx/iterations/20260527T062516-2740715c/0",
   "cycle_trace": [
     {

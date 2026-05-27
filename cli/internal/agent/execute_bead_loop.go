@@ -21,6 +21,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
+	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
@@ -90,10 +91,6 @@ type ExecuteBeadLoopRuntime struct {
 	// state.
 	ClaimSuccessRateWindow    int
 	ClaimSuccessRateThreshold float64
-	// PreClaimWarnFingerprintThreshold controls how many consecutive identical
-	// pre-claim warn fingerprints the loop tolerates before escalating to
-	// operator attention. Zero means use DefaultPreClaimWarnFingerprintThreshold.
-	PreClaimWarnFingerprintThreshold int
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
 	// work-layer StopCondition before any new bead is claimed. The companion
@@ -224,22 +221,6 @@ func (r ExecuteBeadLoopRuntime) effectiveClaimSuccessRateThreshold() float64 {
 		return r.ClaimSuccessRateThreshold
 	}
 	return DefaultClaimSuccessRateThreshold
-}
-
-// DefaultPreClaimWarnFingerprintThreshold is the number of consecutive
-// identical pre-claim warn fingerprints the loop tolerates before escalating
-// to operator attention when ExecuteBeadLoopRuntime.PreClaimWarnFingerprintThreshold
-// is unset.
-const DefaultPreClaimWarnFingerprintThreshold = 5
-
-// effectivePreClaimWarnFingerprintThreshold returns the configured pre-claim
-// warn fingerprint threshold, falling back to
-// DefaultPreClaimWarnFingerprintThreshold when unset.
-func (r ExecuteBeadLoopRuntime) effectivePreClaimWarnFingerprintThreshold() int {
-	if r.PreClaimWarnFingerprintThreshold > 0 {
-		return r.PreClaimWarnFingerprintThreshold
-	}
-	return DefaultPreClaimWarnFingerprintThreshold
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -1090,8 +1071,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	claimSuccessRateWindow := make([]bool, 0, claimSuccessRateWindowSize)
 	claimSuccessRateSuccesses := 0
 	claimSuccessRateWarned := false
-	preClaimWarnFingerprintThreshold := runtime.effectivePreClaimWarnFingerprintThreshold()
-	preClaimWarnFingerprintStreak := preClaimWarnFingerprintState{}
 	recordClaimAttempt := func(success bool, beadID string) {
 		if claimSuccessRateWindowSize <= 0 {
 			return
@@ -1138,28 +1117,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", detail)
 		}
-	}
-	emitPreClaimWarnFingerprintEscalation := func(candidate bead.Bead) {
-		body := preClaimWarnFingerprintEscalationBody(candidate.ID, preClaimWarnFingerprintStreak, preClaimWarnFingerprintThreshold)
-		detail, _ := body["detail"].(string)
-		emit("loop.operator_attention", body)
-		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s (%s)\n", detail, candidate.ID)
-		}
-		result.OperatorAttention = &OperatorAttentionStop{
-			Reason:  preClaimWarnFingerprintEscalationReason,
-			BeadID:  candidate.ID,
-			Message: detail,
-		}
-		result.StopCondition = "OperatorAttention"
-		result.ExitReason = "operator_attention"
-	}
-	recordPreClaimWarn := func(candidate bead.Bead, payload map[string]any) bool {
-		if !preClaimWarnFingerprintStreak.observe(payload, preClaimWarnFingerprintThreshold) {
-			return false
-		}
-		emitPreClaimWarnFingerprintEscalation(candidate)
-		return true
 	}
 	clearTransientCandidateSkips := func() {
 		for beadID := range transientCandidateSkips {
@@ -1209,6 +1166,24 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return false
 		}
 		if err := runtime.FinalizeDurableAudit(report); err != nil {
+			// Transient .git/index.lock contention from concurrent workers must
+			// not stop the drain (ddx-23ac2796). The pending tracker/audit
+			// changes remain staged and are committed on a later iteration, so
+			// treat lock contention as retryable rather than operator attention —
+			// a transient lock conflict must never halt an unattended worker.
+			if gitlock.IsIndexLockError(err.Error()) {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"transient index.lock contention committing durable audit outputs for %s; not stopping (will retry next iteration): %v\n",
+						candidateID, err)
+				}
+				emit("loop.durable_audit_transient", map[string]any{
+					"reason":  "index_lock_contention",
+					"bead_id": candidateID,
+					"detail":  strings.TrimSpace(err.Error()),
+				})
+				return false
+			}
 			projectRoot := strings.TrimSpace(firstNonEmpty(report.ProjectRoot, runtime.ProjectRoot))
 			dirtyPaths := append([]string(nil), durableAuditManagedPathspecs...)
 			result.OperatorAttention = &OperatorAttentionStop{
@@ -1906,10 +1881,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				} else {
 					emit("pre_claim_intake.warn", eventBody)
 					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "timeout", timeoutDetail, now().UTC())
-					if recordPreClaimWarn(candidate, eventBody) {
-						_ = w.Store.Unclaim(candidate.ID)
-						return result, nil
-					}
 					intakeOutcome = PreClaimIntakeActionableAtomic
 				}
 			}
@@ -1947,25 +1918,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":        warning,
 					},
 				))
-				if recordPreClaimWarn(candidate, readinessDecisionBody(
-					"pre_claim_intake.system_unready",
-					classified.Reason,
-					"pre_claim_intake",
-					"warn-only",
-					"warn",
-					"check the readiness route or harness configuration and retry",
-					map[string]any{
-						"bead_id":       candidate.ID,
-						"outcome":       string(PreClaimIntakeError),
-						"system_reason": classified.SystemReason,
-						"detail":        warning,
-					},
-				)) {
-					_ = w.Store.Unclaim(candidate.ID)
-					return result, nil
-				}
 			case intakeOutcome == PreClaimIntakeActionableAtomic:
-				preClaimWarnFingerprintStreak.recordSuccess()
+				// pass-through
 			case intakeOutcome == PreClaimIntakeActionableButRewritten:
 				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
 					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
@@ -1986,24 +1940,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						},
 					))
 					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "rewrite_rejected", warning, now().UTC())
-					if recordPreClaimWarn(candidate, readinessDecisionBody(
-						"pre_claim_intake.rewrite_rejected",
-						"rewrite_rejected",
-						"pre_claim_intake",
-						"warn-only",
-						"warn",
-						"revise the rewrite so it preserves every explicit commitment",
-						map[string]any{
-							"bead_id": candidate.ID,
-							"outcome": string(PreClaimIntakeActionableButRewritten),
-							"detail":  warning,
-						},
-					)) {
-						_ = w.Store.Unclaim(candidate.ID)
-						return result, nil
-					}
-				} else {
-					preClaimWarnFingerprintStreak.recordSuccess()
 				}
 			case intakeOutcome == PreClaimIntakeError:
 				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
@@ -2041,23 +1977,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":        warning,
 					},
 				))
-				if recordPreClaimWarn(candidate, readinessDecisionBody(
-					"pre_claim_intake.system_unready",
-					reason,
-					"pre_claim_intake",
-					"warn-only",
-					"warn",
-					"check the readiness route or harness configuration and retry",
-					map[string]any{
-						"bead_id":       candidate.ID,
-						"outcome":       string(PreClaimIntakeError),
-						"system_reason": systemReason,
-						"detail":        warning,
-					},
-				)) {
-					_ = w.Store.Unclaim(candidate.ID)
-					return result, nil
-				}
 			case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
 				// too_large_decomposed should move work forward by splitting before
 				// claim. Some intake classifiers only identify the need to split;
@@ -2086,15 +2005,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							"reason":  "decomposition_hook_unavailable",
 							"detail":  warning,
 						})
-						if recordPreClaimWarn(candidate, map[string]any{
-							"bead_id": candidate.ID,
-							"outcome": string(PreClaimIntakeTooLargeDecomposed),
-							"reason":  "decomposition_hook_unavailable",
-							"detail":  warning,
-						}) {
-							_ = w.Store.Unclaim(candidate.ID)
-							return result, nil
-						}
 						break
 					}
 				}
@@ -2110,15 +2020,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"reason":  "decomposition_hook_empty",
 						"detail":  warning,
 					})
-					if recordPreClaimWarn(candidate, map[string]any{
-						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeTooLargeDecomposed),
-						"reason":  "decomposition_hook_empty",
-						"detail":  warning,
-					}) {
-						_ = w.Store.Unclaim(candidate.ID)
-						return result, nil
-					}
 					break
 				}
 				// too_large_decomposed with concrete child specs: validate the AC map,
@@ -2194,7 +2095,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					break
 				}
-				preClaimWarnFingerprintStreak.recordSuccess()
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "bead decomposed into %s (releasing %s)\n", strings.Join(childIDs, ", "), candidate.ID)
 				}
@@ -5620,87 +5520,6 @@ func clearConsecutiveWedge(store ExecuteBeadLoopStore, beadID string) {
 		}
 		delete(b.Extra, executeLoopWedgeMarkerKey)
 	})
-}
-
-type preClaimWarnFingerprintState struct {
-	Fingerprint    string
-	Count          int
-	Escalated      bool
-	ExamplePayload map[string]any
-}
-
-const preClaimWarnFingerprintEscalationReason = "pre_claim_intake_warn_fingerprint_escalation"
-
-func (s *preClaimWarnFingerprintState) reset() {
-	*s = preClaimWarnFingerprintState{}
-}
-
-func (s *preClaimWarnFingerprintState) recordSuccess() {
-	s.reset()
-}
-
-// observe records a pre-claim warn fingerprint and returns true exactly once
-// when the streak reaches threshold. A missing fingerprint clears the streak so
-// unrelated warning payloads do not keep a stale consecutive count alive.
-func (s *preClaimWarnFingerprintState) observe(payload map[string]any, threshold int) bool {
-	fp := strings.TrimSpace(stringValue(payload["fingerprint"]))
-	if fp == "" {
-		s.reset()
-		return false
-	}
-	if threshold <= 0 {
-		threshold = DefaultPreClaimWarnFingerprintThreshold
-	}
-	if s.Fingerprint != fp {
-		s.Fingerprint = fp
-		s.Count = 1
-		s.Escalated = false
-		s.ExamplePayload = cloneAnyMap(payload)
-		return false
-	}
-	s.Count++
-	if s.Escalated || s.Count < threshold {
-		return false
-	}
-	s.Escalated = true
-	return true
-}
-
-func cloneAnyMap(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
-
-func stringValue(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-func preClaimWarnFingerprintEscalationBody(beadID string, state preClaimWarnFingerprintState, threshold int) map[string]any {
-	if threshold <= 0 {
-		threshold = DefaultPreClaimWarnFingerprintThreshold
-	}
-	detail := fmt.Sprintf(
-		"pre-claim intake emitted fingerprint %q %d consecutive times (threshold %d); stopped re-looping and flagged for operator attention",
-		state.Fingerprint,
-		state.Count,
-		threshold,
-	)
-	return map[string]any{
-		"reason":          preClaimWarnFingerprintEscalationReason,
-		"bead_id":         beadID,
-		"fingerprint":     state.Fingerprint,
-		"count":           state.Count,
-		"threshold":       threshold,
-		"example_payload": cloneAnyMap(state.ExamplePayload),
-		"detail":          detail,
-	}
 }
 
 // consecutiveWedgeGuardTrips reports whether the bead's consecutive-wedge count

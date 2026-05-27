@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -123,4 +124,63 @@ func newDurableAuditProject(t *testing.T) string {
 	runGitInteg(t, root, "config", "user.name", "DDx Test")
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# audit\n"), 0o644))
 	return root
+}
+
+// runAuditWithFinalizeErr drives one failed attempt whose durable-audit commit
+// returns finalizeErr, and returns the loop result so callers can assert the
+// stop behavior (ddx-23ac2796).
+func runAuditWithFinalizeErr(t *testing.T, finalizeErr error) *ExecuteBeadLoopResult {
+	t.Helper()
+	projectRoot := newDurableAuditProject(t)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	require.NoError(t, store.Init())
+	candidate := &bead.Bead{ID: "ddx-audit-lock", Title: "lock", Priority: 0}
+	require.NoError(t, store.Create(candidate))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
+	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				AttemptID:   "20260527T060000-audit-lock",
+				Status:      ExecuteBeadStatusExecutionFailed,
+				Detail:      "implementation failed",
+				BaseRev:     head,
+				ResultRev:   head,
+				SessionID:   "sess-audit-lock",
+				ProjectRoot: projectRoot,
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:                 true,
+		ProjectRoot:          projectRoot,
+		FinalizeDurableAudit: func(report ExecuteBeadReport) error { return finalizeErr },
+	})
+	require.NoError(t, err)
+	return result
+}
+
+// TestWork_IndexLockContentionDuringAuditCommitIsTransientNotFatal asserts that
+// a transient .git/index.lock failure on the durable-audit commit does NOT halt
+// the worker (ddx-23ac2796).
+func TestWork_IndexLockContentionDuringAuditCommitIsTransientNotFatal(t *testing.T) {
+	lockErr := fmt.Errorf("staging tracker: fatal: Unable to create '/x/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository: exit status 128")
+	result := runAuditWithFinalizeErr(t, lockErr)
+	require.Nil(t, result.OperatorAttention, "transient index.lock contention during audit commit must not stop the worker")
+	require.NotEqual(t, "operator_attention", result.ExitReason)
+}
+
+// TestWork_NonLockAuditCommitFailureStillStopsWorker is the regression guard: a
+// genuine (non-lock) durable-audit commit failure must still surface operator
+// attention and stop the worker.
+func TestWork_NonLockAuditCommitFailureStillStopsWorker(t *testing.T) {
+	result := runAuditWithFinalizeErr(t, fmt.Errorf("fatal: unable to write new index file: no space left on device"))
+	require.NotNil(t, result.OperatorAttention, "a genuine audit-commit failure must still surface operator attention")
+	require.Equal(t, "durable_audit_commit_failed", result.OperatorAttention.Reason)
 }
