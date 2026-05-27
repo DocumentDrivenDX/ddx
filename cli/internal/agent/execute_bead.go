@@ -2324,7 +2324,7 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // TestPromptGuardrails_AllPresent enforce this list; add a guardrail here
 // AND to both tests when you introduce one.
 //
-// 22 guardrails (FEAT-022 cross-reference):
+// 24 guardrails (FEAT-022 cross-reference):
 //  1. AC checkbox: every AC satisfied by a specific code/test/file (anti-handwave)
 //  2. Read named files / referenced specs first, before editing
 //  3. Missing-governing fallback note (non-minimal renders only — see
@@ -2351,6 +2351,10 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // 20. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
 // 21. Stop after the commit (Agent post-commit runaway guard)
 // 22. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
+// 23. Long-running matrix/benchmark beads (FEAT-010): require explicit matrix
+//     plan before running expensive commands; document output path and completion criterion
+// 24. Prohibit rerunning identical long-running commands without documenting why
+//     prior output is invalid and what changed before the retry
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
 // Both variants emit it verbatim; per-variant preamble runs before it.
@@ -2425,6 +2429,17 @@ const instrCoreConstraints = `
 - Do not modify files outside the bead's named scope.
 - Do not rewrite CLAUDE.md, AGENTS.md, or other instruction files unless the bead asks.`
 
+// instrLongRunningMatrixGuards is the shared long-running matrix/benchmark guardrails (FEAT-010).
+const instrLongRunningMatrixGuards = `
+
+## Long-running matrix/benchmark beads
+
+For expensive commands (benchmarks, load tests, validation > 60s per variant):
+
+- Write a matrix plan before launching expensive commands: list required configs, output paths, completion criteria.
+- Do not re-run the same long-running command unless: (1) the command fingerprint changed (args/env/config), AND (2) you document why prior output is invalid and what changed.
+- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.`
+
 // executeBeadInstructionsClaudeText is the <instructions> body used when the
 // harness carries its own rich system prompt (claude, codex, opencode,
 // unknown). It composes a Claude-specific preamble + process body with the
@@ -2450,6 +2465,7 @@ const executeBeadInstructionsClaudeText = `You are executing one bead in an isol
 	instrBeadOverride +
 	instrReviewGate +
 	instrCoreConstraints +
+	instrLongRunningMatrixGuards +
 	`
 
 ## When the work is done
@@ -2484,7 +2500,8 @@ The bead's <description> and <acceptance> are the contract. Every AC must be sat
 	instrInvestigationReports +
 	instrBeadOverride +
 	instrReviewGate +
-	instrCoreConstraints
+	instrCoreConstraints +
+	instrLongRunningMatrixGuards
 
 // executeBeadInstructionsText selects the right instructions variant for the
 // given harness. Harnesses with rich system prompts (claude, codex, opencode)

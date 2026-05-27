@@ -67,6 +67,14 @@ DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward de
 - Do not modify files outside the bead's named scope.
 - Do not rewrite CLAUDE.md, AGENTS.md, or other instruction files unless the bead asks.
 
+## Long-running matrix/benchmark beads
+
+For expensive commands (benchmarks, load tests, validation > 60s per variant):
+
+- Write a matrix plan before launching expensive commands: list required configs, output paths, completion criteria.
+- Do not re-run the same long-running command unless: (1) the command fingerprint changed (args/env/config), AND (2) you document why prior output is invalid and what changed.
+- If a long-running command times out or is incomplete, exit with `status: open` + retryable `reason` in `no_changes_rationale.txt`. Do not silently retry; let the orchestrator decide.
+
 ## When the work is done
 
 After the commit succeeds and every AC is verified, stop. Return control to the orchestrator.
