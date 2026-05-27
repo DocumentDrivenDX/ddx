@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 )
 
 // LockRetryPolicy describes the retry/backoff curve used when attempting to
@@ -207,7 +208,7 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 	waitDur := time.Since(start)
 	holdStart := time.Now()
 	defer os.RemoveAll(lockDir)
-	fnErr := fn()
+	fnErr := lockmetrics.Instrument("tracker.lock", "tracker.commit", fn)
 	if sink := TrackerLockMetricsSink; sink != nil {
 		sink(TrackerLockSample{LockDir: lockDir, Wait: waitDur, Hold: time.Since(holdStart), Retries: retries})
 	}

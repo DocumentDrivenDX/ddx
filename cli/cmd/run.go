@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/spf13/cobra"
 )
@@ -83,6 +84,7 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 	projectFlag, _ := cmd.Flags().GetString("project")
 
 	workDir := resolveProjectRoot(projectFlag, f.WorkingDir)
+	lockmetrics.SetSink(lockmetrics.FileSink(workDir))
 
 	// Resolve prompt source.
 	prompt := promptText

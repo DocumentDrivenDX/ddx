@@ -14,6 +14,7 @@ import (
 	"time"
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 )
 
 // StaleAge is the age after which a .git/index.lock with no identifiable live
@@ -166,6 +167,25 @@ func RecoverGitIndexLock(projectRoot string) (IndexLockRecoveryResult, error) {
 // with the most recent recovery diagnostic. The helper deliberately does NOT
 // loop for tens of seconds — stalling is not acceptable here.
 func RunGitWithIndexLockRecovery(ctx context.Context, dir string, args ...string) ([]byte, error) {
+	var out []byte
+	err := lockmetrics.Instrument("index.lock", indexLockOperation(args), func() error {
+		var e error
+		out, e = runGitWithIndexLockRecovery(ctx, dir, args...)
+		return e
+	})
+	return out, err
+}
+
+// indexLockOperation labels an index.lock hold by the git subcommand that
+// took it, e.g. "index.commit" or "index.add".
+func indexLockOperation(args []string) string {
+	if len(args) == 0 {
+		return "index"
+	}
+	return "index." + args[0]
+}
+
+func runGitWithIndexLockRecovery(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	var lastOut []byte
 	var lastErr error
 	var lastDiag string
