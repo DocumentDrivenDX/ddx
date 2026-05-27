@@ -99,6 +99,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Float64("max-recovery-cost", escalation.DefaultMaxRecoveryCostUSD, "Per-bead automated recovery budget in USD for reframe/decompose attempts after repeated ladder exhaustion")
 	cmd.Flags().Int("claim-rate-window", agent.DefaultClaimSuccessRateWindow, "Rolling window of recent claim attempts used to compute the claim success rate warning")
 	cmd.Flags().Float64("claim-rate-threshold", agent.DefaultClaimSuccessRateThreshold, "Warn when the rolling claim success rate over a full window is at or below this threshold")
+	cmd.Flags().Int("preclaim-warn-threshold", agent.DefaultPreClaimWarnRepeatThreshold, "Consecutive identical pre-claim warn fingerprints across distinct bead IDs required before the loop emits operator attention")
 	cmd.Flags().Duration("preclaim-timeout", workguard.DefaultPreClaimTimeout, "Pre-claim readiness timeout for preflight/readiness hooks")
 	cmd.Flags().Duration("route-resolution-timeout", agent.DefaultRouteResolutionTimeout, "Timeout bounding routing preflight and the resolveRoute viability check; on expiry the lease is released and the bead is flagged for operator attention")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")

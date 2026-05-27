@@ -33,7 +33,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	require.NoError(t, err, "ddx work must exist")
 	require.NotNil(t, workCmd)
 
-	for _, name := range []string{"harness", "provider", "model", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold"} {
+	for _, name := range []string{"harness", "provider", "model", "min-power", "max-power", "claim-rate-window", "claim-rate-threshold", "preclaim-warn-threshold"} {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
@@ -41,6 +41,7 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	assert.NotNil(t, workCmd.Flags().Lookup("reason"), "ddx work must expose --reason")
 	assert.Equal(t, "10", workCmd.Flags().Lookup("claim-rate-window").DefValue, "ddx work must default claim-rate window to 10")
 	assert.Equal(t, "0", workCmd.Flags().Lookup("claim-rate-threshold").DefValue, "ddx work must default claim-rate threshold to 0.0")
+	assert.Equal(t, "5", workCmd.Flags().Lookup("preclaim-warn-threshold").DefValue, "ddx work must default preclaim warn threshold to 5")
 }
 
 func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
@@ -72,6 +73,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("review-model", "gpt-5.4")
 	setFlag("max-cost", "12.5")
 	setFlag("max-recovery-cost", "2.5")
+	setFlag("preclaim-warn-threshold", "7")
 	setFlag("preclaim-timeout", "45s")
 	setFlag("request-timeout", "2m")
 	setFlag("rate-limit-max-wait", "90s")

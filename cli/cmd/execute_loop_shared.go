@@ -593,6 +593,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		RouteResolutionTimeout:       spec.RouteResolutionTimeout.Duration,
 		ClaimSuccessRateWindow:       optionalIntFlag(cmd, "claim-rate-window", agent.DefaultClaimSuccessRateWindow),
 		ClaimSuccessRateThreshold:    optionalFloat64Flag(cmd, "claim-rate-threshold", agent.DefaultClaimSuccessRateThreshold),
+		PreClaimWarnRepeatThreshold:  optionalIntFlag(cmd, "preclaim-warn-threshold", agent.DefaultPreClaimWarnRepeatThreshold),
 		PreDispatchLintHook:          lintHook,
 		PostAttemptTriageHook:        triageHook,
 		ProseEvidenceHook:            proseHook,
