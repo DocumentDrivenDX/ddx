@@ -1,0 +1,168 @@
+{
+  "attempt_id": "20260527T223656-dac3afd8",
+  "bead_id": "ddx-d67f124e",
+  "base_rev": "635234a85a940065f3c5da10595f257a30825b36",
+  "created_at": "2026-05-27T22:37:18.022736488Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d67f124e",
+    "title": "ddx work: escalate to operator-attention after N consecutive identical pre-claim warn fingerprints",
+    "description": "PROBLEM\nUnder warn-only quality mode, a schema-mismatch or other systemic pre-claim intake fault produces the SAME warn fingerprint on every candidate (observed Fizeau 2026-05-18: fingerprint 15155a1c... repeated across distinct bead_ids). The drain loop keeps polling (loop.idle every ~50s) and looks alive, but never claims anything. A 100% identical-fingerprint failure rate is silently masked by warn-only policy; the operator has no signal short of tailing the agent-loop JSONL.\n\nCONTEXT / WHERE\nPre-claim warn decisions are emitted with a stable fingerprint by readinessDecisionFingerprint (cli/internal/agent/readiness_decision.go:23-39), surfaced in the pre_claim_intake.warn event body['fingerprint']. The drain loop lives in cli/internal/agent/execute_bead_loop.go; the pre-claim intake hook returns PreClaimIntakeResult and the loop already tracks per-bead counters such as consecutive_ladder_exhaustions (execute_bead_loop.go:5348-5398) as a model for cross-iteration accounting.\n\nPROPOSED FIX\nAdd a cross-iteration counter in the drain loop keyed by the pre-claim warn fingerprint. When the same warn fingerprint is produced on N (default 5, configurable) consecutive pre-claim warn outcomes across distinct candidate bead_ids, the loop must:\n  - emit a single operator-attention event (kind/event consistent with existing operator-attention emission in execute_bead_loop.go, e.g. around lines 4974/5026) carrying the fingerprint and ONE example payload/detail, and\n  - stop looping silently (break the drain / surface a terminal operator-attention state) rather than continuing to poll.\nReset the counter when a different fingerprint appears or a claim succeeds.\n\nNON-SCOPE\nDo not change the decoder (separate child ddx-606fe854), the rolling claim-success-rate signal (separate child), the CI schema gate, or README docs. Only the consecutive-identical-fingerprint escalation + guard.",
+    "acceptance": "1. The drain loop tracks consecutive pre-claim warn outcomes by fingerprint and, after N (default 5) consecutive outcomes with the same fingerprint, emits exactly one operator-attention event containing the fingerprint and a single example detail/payload, then stops looping instead of continuing to poll.\n2. The threshold N is configurable (constant or config field) with a documented default of 5; the counter resets when a different fingerprint is observed or a claim succeeds.\n3. A test in cli/internal/agent (e.g. TestDrainLoop_EscalatesAfterConsecutiveIdenticalPreClaimWarnFingerprint) injects a pre-claim intake hook that returns the same warn fingerprint for N successive candidates and asserts (a) the operator-attention event is emitted once with the fingerprint, and (b) the loop terminates / does not issue further claim attempts.\n4. A negative test asserts that alternating/differing fingerprints below the threshold do NOT escalate.\n5. cd cli \u0026\u0026 go test ./internal/agent/... green\n6. lefthook run pre-commit passes",
+    "parent": "ddx-f9ddaa68",
+    "labels": [
+      "area:workers",
+      "area:pre-claim",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T19:06:00.04501973Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:06:21.896120915Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T19:06:54.765109065Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T190623-2a5ed707\",\"bead_id\":\"ddx-d67f124e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T19:06:57.193570231Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"156a5f83117c8f31617f1deab271827cc3b80e26\",\"classification\":\"transport\",\"detail\":\"docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \\\"bind\\\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\\n\\nRun 'docker run --help' for more information: exit status 125\",\"rationale\":\"execution_failed at 42ms with base_rev==result_rev: docker-clone could not start because the bind-mount source /home/erik/.local/share/claude/versions/2.1.152 does not exist. This is an environmental/infrastructure fault unrelated to the bead content; no agent work was performed. Releasing the claim and retrying (after the host/runner is fixed) is appropriate.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"156a5f83117c8f31617f1deab271827cc3b80e26\",\"session_id\":\"eb-607588ce\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:07:31.942925071Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\n\nRun 'docker run --help' for more information: exit status 125\npowerClass=standard\nresult_rev=156a5f83117c8f31617f1deab271827cc3b80e26\nbase_rev=156a5f83117c8f31617f1deab271827cc3b80e26\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:07:31.999173484Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"execution_failed with detail 'committing tracker: fatal: unable to write new index file: exit status 128'. exit status 128 on a git index write is an environmental/infrastructure fault (disk, lock, or permissions on the local repo) during the tracker-commit step, unrelated to the bead's content. No meaningful agent work was performed against the bead. Consistent with the prior transport classification this iteration (docker-clone bind-mount failure), the claim should be released and retried once the host/runner is healthy.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:11:26.724657476Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:11:26.802955847Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .crush/skills/nano-banana-pro-openrouter)\",\"fingerprint\":\"1578e45aa884a6f5f4e3b10befdbd987c6bde6fcd7067ea754deb3e0c1f359bd\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"1578e45aa884a6f5f4e3b10befdbd987c6bde6fcd7067ea754deb3e0c1f359bd\"}",
+          "created_at": "2026-05-27T22:18:26.53105317Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T22:26:05.894005214Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T221839-1734cf8c\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":471,\"output_tokens\":34638,\"total_tokens\":35109,\"cost_usd\":0.9555411,\"duration_ms\":395489,\"exit_code\":0}",
+          "created_at": "2026-05-27T22:26:05.98849285Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=35109 cost_usd=0.9555 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T221839-1734cf8c\",\"bead_id\":\"ddx-d67f124e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T22:26:08.382691092Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-27T22:26:08.506710455Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-27T22:26:08.607086294Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/execute_bead_loop.go, cli/internal/agent/preclaim_warn_guard.go, cli/internal/agent/preclaim_warn_guard_test.go\npowerClass=standard\nresult_rev=b564d1243aa3f9cf7bc1191116e5e584dad0116e\nbase_rev=b564d1243aa3f9cf7bc1191116e5e584dad0116e\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-27T22:26:08.656042132Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead is atomic, clearly scoped, and executable as written. Prior failures are environmental (git transport, docker version), not bead-quality issues. The feature is well-bounded: add a consecutive-identical-fingerprint counter to the drain loop with escalation logic and tests. Implementation guidance is concrete (execute_bead_loop.go, reference to consecutive_ladder_exhaustions pattern), test names are specified (TestDrainLoop_EscalatesAfterConsecutiveIdenticalPreClaimWarnFingerprint with negative case), and acceptance criteria are all verifiable.\",\"fingerprint\":\"037a2e319c65418d0604c81cc77ca76ef37551582246aae665f4feef62714050\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"037a2e319c65418d0604c81cc77ca76ef37551582246aae665f4feef62714050\"}",
+          "created_at": "2026-05-27T22:36:43.40434244Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T223656-dac3afd8",
+    "prompt": ".ddx/executions/20260527T223656-dac3afd8/prompt.md",
+    "manifest": ".ddx/executions/20260527T223656-dac3afd8/manifest.json",
+    "result": ".ddx/executions/20260527T223656-dac3afd8/result.json",
+    "checks": ".ddx/executions/20260527T223656-dac3afd8/checks.json",
+    "usage": ".ddx/executions/20260527T223656-dac3afd8/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d67f124e-20260527T223656-dac3afd8"
+  },
+  "prompt_sha": "db99131763b4b7ed5ff0ddca3fd30a2395d631571b72e0222fed83013e01a33f"
+}
