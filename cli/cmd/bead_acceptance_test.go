@@ -1272,3 +1272,46 @@ func TestBeadShowSurfacesOperatorOverride(t *testing.T) {
 	assert.Contains(t, showOut2, "IntakeBlocked:", "output should contain IntakeBlocked section")
 	assert.Contains(t, showOut2, "override: false", "output should distinguish false override")
 }
+
+// TestBeadShowSurfacesFingerprintAndOverride asserts that `ddx bead show`
+// renders both rule_fingerprint and operator_override for each intake.blocked
+// entry on a single line, so an operator can read the readiness-decision
+// history without inspecting the raw event JSON.
+func TestBeadShowSurfacesFingerprintAndOverride(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+	store := factory.beadStore()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Test combined surfacing", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	// Two intake.blocked entries with distinct fingerprints and override flags.
+	require.NoError(t, store.AppendEvent(id, bead.BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   "operator_required",
+		Body:      `{"rule_fingerprint":"fp-aaa","operator_override":false,"outcome":"intake_blocked"}`,
+		Actor:     "test",
+		Source:    "test",
+		CreatedAt: time.Now(),
+	}))
+	require.NoError(t, store.AppendEvent(id, bead.BeadEvent{
+		Kind:      "pre_claim_intake.blocked",
+		Summary:   "operator_required",
+		Body:      `{"rule_fingerprint":"fp-bbb","operator_override":true,"outcome":"intake_blocked"}`,
+		Actor:     "test",
+		Source:    "test",
+		CreatedAt: time.Now(),
+	}))
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id)
+	require.NoError(t, err)
+
+	assert.Contains(t, showOut, "IntakeBlocked:", "output should contain IntakeBlocked section")
+	// Both the fingerprint and the override flag must be rendered for each entry.
+	assert.Contains(t, showOut, "fp-aaa", "first entry rule_fingerprint must be rendered")
+	assert.Contains(t, showOut, "override: false", "first entry operator_override must be rendered")
+	assert.Contains(t, showOut, "fp-bbb", "second entry rule_fingerprint must be rendered")
+	assert.Contains(t, showOut, "override: true", "second entry operator_override must be rendered")
+}

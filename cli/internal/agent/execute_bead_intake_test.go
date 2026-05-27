@@ -1806,3 +1806,114 @@ func TestIntakeBlockedSetsOperatorOverrideFalse(t *testing.T) {
 	}
 	assert.True(t, foundOverrideFalseEntry, "intake.blocked entries should have operator_override=false when bead was not operator-promoted")
 }
+
+// TestIntakeBlockedSetsOperatorOverride asserts that the intake.blocked entry
+// emitted by readiness carries operator_override=true when readiness skipped a
+// downgrade because the bead was operator-promoted (a prior triaged acceptance
+// covers the current finding), and operator_override=false otherwise.
+func TestIntakeBlockedSetsOperatorOverride(t *testing.T) {
+	const reason = "ambiguous_scope"
+	// ruleID / decision tuple must match the terminal default emit site in
+	// the readiness flow so the seeded triaged acceptance fingerprint lines up.
+	const ruleID = "pre_claim_intake.operator_required"
+	const suggested = "continue with implementation; review should create follow-up work for remaining gaps"
+
+	intakeHook := func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+		return PreClaimIntakeResult{
+			Outcome: PreClaimIntakeOperatorRequired,
+			Reason:  reason,
+			Detail:  "needs human clarification",
+		}, nil
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	newWorker := func(store ExecuteBeadLoopStore) *ExecuteBeadWorker {
+		return &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-override",
+					ResultRev: "abc123",
+				}, nil
+			}),
+		}
+	}
+
+	t.Run("true_when_operator_promoted", func(t *testing.T) {
+		inner, candidate, _ := newExecuteLoopTestStore(t)
+		store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+		// Seed a prior operator acceptance (triaged) whose accepted
+		// fingerprints match the readiness finding so the sibling guard
+		// reports the bead as operator-promoted and the downgrade is skipped.
+		findingFP := preClaimIntakeFindingFingerprint(candidate, ruleID, reason, "pre_claim_intake", "best-effort", "attempt", suggested)
+		promptFP := bead.PromptFingerprint(*candidate)
+		require.NotEmpty(t, findingFP, "finding fingerprint must be computable")
+		triagedBody, err := json.Marshal(map[string]any{
+			"accepted_fingerprint":        findingFP,
+			"accepted_prompt_fingerprint": promptFP,
+		})
+		require.NoError(t, err)
+		require.NoError(t, inner.AppendEvent(candidate.ID, bead.BeadEvent{
+			Kind:      "triaged",
+			Summary:   "operator accepted",
+			Body:      string(triagedBody),
+			Actor:     "operator",
+			Source:    "test",
+			CreatedAt: time.Now().UTC(),
+		}))
+
+		var eventSink bytes.Buffer
+		_, err = newWorker(store).Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:               true,
+			TargetBeadID:       candidate.ID,
+			EventSink:          &eventSink,
+			PreClaimIntakeHook: intakeHook,
+		})
+		require.NoError(t, err)
+
+		blocked := loopEventDataByType(parseLoopEvents(t, eventSink.String()), "pre_claim_intake.blocked")
+		require.NotEmpty(t, blocked, "must emit a pre_claim_intake.blocked entry")
+		foundTrue := false
+		for _, data := range blocked {
+			if override, ok := data["operator_override"].(bool); ok && override {
+				foundTrue = true
+			}
+		}
+		assert.True(t, foundTrue, "operator_override must be true when readiness skipped a downgrade for an operator-promoted bead")
+	})
+
+	t.Run("false_when_not_operator_promoted", func(t *testing.T) {
+		inner, candidate, _ := newExecuteLoopTestStore(t)
+		store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+		var eventSink bytes.Buffer
+		_, err := newWorker(store).Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:               true,
+			TargetBeadID:       candidate.ID,
+			EventSink:          &eventSink,
+			PreClaimIntakeHook: intakeHook,
+		})
+		require.NoError(t, err)
+
+		events, err := inner.Events(candidate.ID)
+		require.NoError(t, err)
+		sawBlockedEntry := false
+		for _, ev := range events {
+			if ev.Kind != "intake.blocked" && ev.Kind != "pre_claim_intake.blocked" {
+				continue
+			}
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			override, ok := body["operator_override"].(bool)
+			require.True(t, ok, "intake.blocked entry must carry an operator_override boolean")
+			assert.False(t, override, "operator_override must be false when the bead was not operator-promoted")
+			sawBlockedEntry = true
+		}
+		assert.True(t, sawBlockedEntry, "must write an intake.blocked entry to the bead event log")
+	})
+}
