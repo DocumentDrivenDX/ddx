@@ -93,6 +93,8 @@ func TestDockerRunArgs_AppliesResourceLimitsAndMounts(t *testing.T) {
 		Network:    "none",
 	}, ws, "/usr/bin/ddx", "runner:latest", []dockerToolMount{{Name: "codex", Path: "/usr/bin/codex"}})
 
+	require.Contains(t, args, "--rm")
+	require.Contains(t, args, "--init")
 	require.Contains(t, args, "--memory")
 	require.Contains(t, args, "8g")
 	require.Contains(t, args, "--memory-swap")

@@ -290,15 +290,15 @@ func (b DockerCloneAttemptBackend) Run(ctx context.Context, req AttemptBackendRu
 	}
 	args = append(args, runArgs...)
 
-	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd := dockerAttemptCommand(ctx, args...)
 	cmd.Dir = req.Workspace.ProjectRoot
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err = cmd.Run()
-	if ctx.Err() != nil {
+	defer func() {
 		_ = dockerRemoveContainer(context.Background(), containerName)
-	}
+	}()
+	err = cmd.Run()
 
 	result, parseErr := parseDockerRunResult(stdout.Bytes())
 	if parseErr == nil {
@@ -680,6 +680,12 @@ func dockerContainerName(ws *AttemptWorkspace) string {
 		return "ddx-attempt-unknown"
 	}
 	return "ddx-attempt-" + sanitizeDockerName(ws.AttemptID)
+}
+
+func dockerAttemptCommand(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmdSetProcessGroup(cmd)
+	return cmd
 }
 
 func dockerRemoveContainer(ctx context.Context, name string) error {
