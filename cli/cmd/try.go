@@ -354,6 +354,18 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					BeadEvents:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
 					ResourceChecker: resourceChecker,
 				}, gitOps)
+				// Safety net: commit any execution-evidence bundle that
+				// ExecuteBeadWithConfig published to the project root but the land
+				// flow did not pick up — e.g. a terminal provider_connectivity /
+				// route-failure that never produced a commit to land. Without this
+				// the project worktree is left dirty after the tracker commit
+				// already landed (ddx-ca94d157). Mirrors the server worker path
+				// (internal/server/workers.go).
+				if res != nil && res.AttemptID != "" {
+					defer func(attemptID string) {
+						_ = agent.VerifyCleanWorktree(projectRoot, attemptID)
+					}(res.AttemptID)
+				}
 				if execErr != nil && res == nil {
 					return agent.ExecuteBeadReport{}, execErr
 				}

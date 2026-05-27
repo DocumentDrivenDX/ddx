@@ -324,6 +324,19 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	singlePolicyAttempt := func(ctx context.Context, beadID string, requestedMinPower int, requestedProfile string, routingIntent escalation.ExecutionHint, routingNote string, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
+		// Safety net: after the attempt returns, commit any execution-evidence
+		// bundle that ExecuteBeadWithConfig published to the project root but the
+		// land flow did not pick up — e.g. a terminal provider_connectivity /
+		// route-failure that never produced a commit to land. Without this the
+		// project worktree is left dirty after the tracker commit already landed
+		// (ddx-ca94d157). Mirrors the server worker path
+		// (internal/server/workers.go).
+		var safetyNetAttemptID string
+		defer func() {
+			if safetyNetAttemptID != "" {
+				_ = agent.VerifyCleanWorktree(projectRoot, safetyNetAttemptID)
+			}
+		}()
 		attemptProvider := spec.Provider
 		if resolvedProvider != "" {
 			attemptProvider = resolvedProvider
@@ -356,6 +369,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			f.AgentRunnerOverride,
 			resourceChecker,
 		), gitOps)
+		if res != nil {
+			safetyNetAttemptID = res.AttemptID
+		}
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr
 		}
