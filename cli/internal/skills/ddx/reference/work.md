@@ -52,7 +52,8 @@ claiming a bead. The canonical verdict forms are:
 
 `ClassifyReadinessWithMode`
 (`cli/internal/agent/readiness_classification.go:56-115`) is the mapping layer
-between readiness classifications and worker behavior:
+between readiness classifications and worker behavior. It divides the intake
+responses into the same failure classes used by the worker:
 
 - `system_unready` / `intake_error` are hard errors from the hook, but the
   worker fail-opens and skips the claim instead of parking the bead.
@@ -71,7 +72,11 @@ spin forever. The main blocker codes to distinguish are
 
 If the queue is still making claims but the rate is suspiciously low, use the
 claim-success-rate warning knobs `--claim-rate-window` and
-`--claim-rate-threshold` to surface that condition.
+`--claim-rate-threshold` to surface that condition. `ddx work --watch` emits
+the warning to the operator stream once the rolling success rate over a full
+window falls at or below the threshold, so a low-claim loop is visible even
+when the queue is not fully idle. Pair that warning with the latest agent loop
+log and `ddx work status` when diagnosing silent-idle behavior.
 
 ## Are workers running for this project?
 
