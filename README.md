@@ -45,7 +45,8 @@ ddx bead list
 ## Pre-claim Intake and Silent-Idle Diagnosis
 
 Before a bead is claimed, DDx runs the pre-claim intake hook and evaluates the
-`readiness_checks` payload. The canonical verdict forms are:
+shared `readiness_checks` payload. The intake contract accepts these canonical
+verdict forms:
 
 - JSON bool `true` -> `pass`
 - JSON bool `false` -> `fail`
@@ -54,7 +55,9 @@ Before a bead is claimed, DDx runs the pre-claim intake hook and evaluates the
 
 See `ClassifyReadinessWithMode`
 (`cli/internal/agent/readiness_classification.go:56-115`) for the mapping from
-readiness classifications to worker behavior.
+readiness classifications to worker behavior. The worker treats the shared
+schema as a read-only intake contract and classifies the verdict into one of
+the following behaviors:
 
 - `system_unready` / `intake_error` are hard errors from the hook, but the
   worker fail-opens and skips the claim instead of parking the bead.
@@ -63,16 +66,20 @@ readiness classifications to worker behavior.
 - `operator_required` parks the bead.
 - `needs_split` parks the bead for decomposition.
 
-If the worker idles on a full queue, inspect `loop.idle` events first. Repeated
-identical blocker details are escalated after
+If the worker idles on a full queue, inspect the latest
+`.ddx/agent-logs/agent-loop-*.jsonl` file and start with `loop.idle` events.
+Repeated identical blocker details are escalated after
 `preClaimIdleEscalationThreshold` cycles (`ddx-df77e668`), so a silent stall
-should eventually become a `loop.operator_attention` signal instead of looping
-forever. Track the exact blocker detail, and distinguish
-`preclaim_systemic` from `preclaim_tracker_contention`.
+with the same fingerprint should eventually become a
+`loop.operator_attention` signal instead of looping forever. Track the exact
+blocker detail, and distinguish `preclaim_systemic` from
+`preclaim_tracker_contention`.
 
 For a queue that is technically moving but still claims very slowly, use the
 claim-success-rate warning knobs `--claim-rate-window` and
-`--claim-rate-threshold` to surface the low-claim-rate condition.
+`--claim-rate-threshold` to surface the low-claim-rate condition. These warn
+when the rolling claim success rate stays low even though the queue is not
+fully idle, which helps separate slow progress from a silent intake failure.
 
 ## Development
 
