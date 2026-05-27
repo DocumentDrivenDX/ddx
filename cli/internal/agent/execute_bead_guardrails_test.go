@@ -88,6 +88,8 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "no_no_changes_with_blocking", any: []string{"do not declare `no_changes` with blocking findings open"}},
 		{name: "stop_after_commit", variants: []string{"agent"}, any: []string{"Stop immediately after the commit"}},
 		{name: "agent_use_tools_not_bash", variants: []string{"agent"}, any: []string{"`bash: cat`", "`bash: rg`"}},
+		{name: "long_running_matrix_plan", any: []string{"Long-running matrix/benchmark beads", "matrix plan", "output paths", "completion criteria"}},
+		{name: "long_running_rerun_justification", any: []string{"Do not re-run the same long-running command", "document why prior output is invalid"}},
 	}
 
 	cases := []struct{ variant, harness string }{
@@ -321,9 +323,10 @@ func TestExecuteBeadInstructionsMissingGoverningGate(t *testing.T) {
 // at HEAD before the shared-block extraction dep landed.
 func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 	// Pre-tightening baselines from TestPromptSizeReport before ddx-fcdbc731.
+	// Updated for FEAT-010 (long-running matrix guardrails).
 	const (
-		baselineClaude = 1048
-		baselineAgent  = 968
+		baselineClaude = 1105
+		baselineAgent  = 1065
 		floor          = 0.70 // ≥30% reduction; words ≤ 0.70 * baseline
 	)
 	cases := []struct {
@@ -484,4 +487,57 @@ func anyContains(s string, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// TestExecuteBeadPromptRequiresMatrixPlanForLongRunningWork verifies FEAT-010
+// guardrail 23: agents must document a matrix plan before running expensive
+// long-duration commands (> 60s per variant).
+func TestExecuteBeadPromptRequiresMatrixPlanForLongRunningWork(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			requiredSubstrings := []string{
+				"Long-running matrix/benchmark beads",
+				"matrix plan",
+				"output paths",
+				"completion criteria",
+			}
+			for _, sub := range requiredSubstrings {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing matrix-plan substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+// TestExecuteBeadPromptRequiresRerunJustificationForDuplicateLongCommands
+// verifies FEAT-010 guardrail 24: agents must document why a prior long-running
+// command's output is invalid before rerunning the same command.
+func TestExecuteBeadPromptRequiresRerunJustificationForDuplicateLongCommands(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			requiredSubstrings := []string{
+				"Do not re-run the same long-running command",
+				"document why prior output is invalid",
+				"what changed",
+			}
+			for _, sub := range requiredSubstrings {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing rerun-justification substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
 }
