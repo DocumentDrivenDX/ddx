@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260527T030229-008cb906",
+  "bead_id": "ddx-f0a70134",
+  "base_rev": "667cb021e1813b4baa971545910697d3cabdcd0c",
+  "created_at": "2026-05-27T03:02:35.943371475Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f0a70134",
+    "title": "document lock-lifetime contract in AGENTS.md",
+    "description": "PROBLEM\nThe lock-lifetime contract introduced by [[scope-locks-to-mutation-window]], [[lock-lifetime-metric]], and [[lock-hold-time-cap]] must be discoverable by future contributors and agents so they do not regress it.\n\nROOT CAUSE\nAGENTS.md (or the equivalent contributor guidance file at repo root) has no section describing acceptable lock-holding patterns or the configured caps. Executing agent should locate the contributor-facing doc — `ls AGENTS.md README.md docs/CONTRIBUTING.md` — and add the section there.\n\nPROPOSED FIX\nAdd a 'Lock Lifetime Contract' section that states: (a) git index.lock and .ddx/.git-tracker.lock must never be held across an LLM subprocess; (b) default caps (10s index, 30s tracker) and the env vars that override them; (c) where lock-violation evidence is written (.ddx/executions/\u003crun-id\u003e/lock-violation.json); (d) link to the integration test that enforces this.\n\nNON-SCOPE\n- Code changes (handled by sibling children)\n- Website documentation updates\n- Cross-repo (HELIX, Dun) doc updates.",
+    "acceptance": "1. AGENTS.md (or located equivalent) contains a 'Lock Lifetime Contract' section with the four bullet items listed in PROPOSED FIX.\n2. TestDocs_LockContractSectionPresent (or a simple grep-based check in an existing docs test) asserts the section heading and key strings ('10s', '30s', 'lock-violation.json') are present.\n3. cd cli \u0026\u0026 go test ./... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-57c40485",
+    "labels": [
+      "area:docs",
+      "kind:docs",
+      "priority:reliability"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T030229-008cb906",
+    "prompt": ".ddx/executions/20260527T030229-008cb906/prompt.md",
+    "manifest": ".ddx/executions/20260527T030229-008cb906/manifest.json",
+    "result": ".ddx/executions/20260527T030229-008cb906/result.json",
+    "checks": ".ddx/executions/20260527T030229-008cb906/checks.json",
+    "usage": ".ddx/executions/20260527T030229-008cb906/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f0a70134-20260527T030229-008cb906"
+  },
+  "prompt_sha": "8dadb1b9f5cb7ae1a0c7520b8ee0050751ee91680a839abf261f0bc43ab4bd0b"
+}
