@@ -166,17 +166,47 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 	assert.Equal(t, ReadinessReasonSystemUnready, system.Reason)
 	assert.Equal(t, ReadinessSystemReasonRouting, system.SystemReason)
 
-	split, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_split","rationale":"too broad","readiness_checks":[{"reason":"too_large","verdict":"fail","evidence":"AC spans three subsystems"}]}`)
+	split, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_split","rationale":"too broad","readiness_checks":[{"reason":"too_large","verdict":false,"evidence":"AC spans three subsystems"}]}`)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeTooLargeDecomposed, split.Outcome)
 	assert.Equal(t, ReadinessReasonTooLarge, split.Reason)
 	assert.Contains(t, split.Detail, ReadinessReasonTooLarge)
 
-	refine, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`)
+	refine, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":false,"evidence":"AC lacks go test"}]}`)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, refine.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, refine.Reason)
 	assert.Empty(t, refine.SystemReason)
+}
+
+func TestReadinessVerdict_AcceptsBoolStringOrNull(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload string
+		want    readinessVerdict
+		wantErr string
+	}{
+		{name: "bool_true", payload: `true`, want: "pass"},
+		{name: "bool_false", payload: `false`, want: "fail"},
+		{name: "string_lowercase", payload: `"ready"`, want: "ready"},
+		{name: "string_trimmed_uppercase", payload: `"  PASS  "`, want: "pass"},
+		{name: "null", payload: `null`, want: ""},
+		{name: "object", payload: `{}`, wantErr: "readiness_checks verdict must be a bool, string, or null, got object"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var verdict readinessVerdict
+			err := json.Unmarshal([]byte(tc.payload), &verdict)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tc.wantErr)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, verdict)
+		})
+	}
 }
 
 func TestReadinessClassification_DecodesEstimatedDifficulty(t *testing.T) {

@@ -81,12 +81,12 @@ type preClaimReadinessCheck struct {
 
 // readinessVerdict is the verdict reported for a single readiness check.
 // The intake producer may emit verdict as a JSON bool, a JSON string, or omit
-// it entirely; UnmarshalJSON coerces all three forms to a canonical string so
-// downstream fail-detection (failedReadinessReasons) can lower/trim-compare it:
+// it entirely; UnmarshalJSON coerces all three forms to a canonical lowercased
+// string so downstream fail-detection (failedReadinessReasons) can compare it
+// deterministically:
 //   - JSON bool true  -> "pass"
 //   - JSON bool false -> "fail"
-//   - JSON string     -> trimmed value, passed through unchanged (e.g. "pass",
-//     "fail", "ready", "not_ready")
+//   - JSON string     -> trimmed, lowercased value (for example "PASS" -> "pass")
 //   - absent / null   -> "" (empty, same as a missing field)
 type readinessVerdict string
 
@@ -113,10 +113,27 @@ func (v *readinessVerdict) UnmarshalJSON(data []byte) error {
 		if err := json.Unmarshal(data, &s); err != nil {
 			return err
 		}
-		*v = readinessVerdict(strings.TrimSpace(s))
+		*v = readinessVerdict(strings.ToLower(strings.TrimSpace(s)))
 		return nil
 	default:
-		return fmt.Errorf("readiness_checks verdict must be a bool, string, or null")
+		return fmt.Errorf("readiness_checks verdict must be a bool, string, or null, got %s", jsonKindName(trimmed[0]))
+	}
+}
+
+func jsonKindName(first byte) string {
+	switch first {
+	case '{':
+		return "object"
+	case '[':
+		return "array"
+	case '"':
+		return "string"
+	case 't', 'f':
+		return "bool"
+	case 'n':
+		return "null"
+	default:
+		return "number"
 	}
 }
 
