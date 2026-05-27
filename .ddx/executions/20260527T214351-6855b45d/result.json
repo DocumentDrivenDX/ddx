@@ -1,0 +1,33 @@
+{
+  "bead_id": "ddx-a88865ca",
+  "attempt_id": "20260527T214351-6855b45d",
+  "base_rev": "cb27b83a2d910e4fdcb786b8f1fbb444ef62c18c",
+  "result_rev": "cb27b83a2d910e4fdcb786b8f1fbb444ef62c18c",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/go.mod, cli/go.sum, cli/internal/agent/durable_audit_test.go",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "no_evidence_paths": [
+    "cli/go.mod",
+    "cli/go.sum",
+    "cli/internal/agent/durable_audit_test.go"
+  ],
+  "harness": "claude",
+  "model": "haiku",
+  "session_id": "eb-e5b32fac",
+  "duration_ms": 441684,
+  "tokens": 31248,
+  "cost_usd": 1.2319685500000002,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/go.mod, cli/go.sum, cli/internal/agent/durable_audit_test.go",
+  "project_root": "/home/erik/Projects/ddx",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260527T214351-6855b45d",
+  "prompt_file": ".ddx/executions/20260527T214351-6855b45d/prompt.md",
+  "manifest_file": ".ddx/executions/20260527T214351-6855b45d/manifest.json",
+  "result_file": ".ddx/executions/20260527T214351-6855b45d/result.json",
+  "usage_file": ".ddx/executions/20260527T214351-6855b45d/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-27T21:43:59.802971986Z",
+  "finished_at": "2026-05-27T21:51:21.487152704Z"
+}
