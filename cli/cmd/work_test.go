@@ -922,6 +922,15 @@ func TestWorkWatchModeFlagsArePresent(t *testing.T) {
 	require.NotNil(t, idle)
 	assert.Equal(t, "30s", idle.DefValue)
 	assert.Contains(t, idle.Usage, "watch mode")
+
+	// Verify claim-success-rate monitoring flags are present and correctly defaulted
+	windowFlag := workCmd.Flags().Lookup("claim-rate-window")
+	require.NotNil(t, windowFlag, "ddx work must expose --claim-rate-window")
+	assert.Equal(t, "10", windowFlag.DefValue, "claim-rate-window must default to 10")
+
+	thresholdFlag := workCmd.Flags().Lookup("claim-rate-threshold")
+	require.NotNil(t, thresholdFlag, "ddx work must expose --claim-rate-threshold")
+	assert.Equal(t, "0", thresholdFlag.DefValue, "claim-rate-threshold must default to 0.0 (warn on 100% failure)")
 }
 
 func TestWorkPollIntervalRemoved(t *testing.T) {
