@@ -63,6 +63,9 @@ jobs:
     - name: Validate bead schema
       run: make bead-schema
 
+    - name: Validate readiness-checks schema
+      run: make readiness-schema
+
     - name: Validate skill metadata
       run: make skill-schema
 

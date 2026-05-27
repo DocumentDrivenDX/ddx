@@ -149,6 +149,11 @@ bead-schema:
 	@echo "Validating bead record schema..."
 	go test ./internal/bead -run 'TestBeadRecordSchema' -count=1
 
+# Validate the shared readiness-checks payload schema
+readiness-schema:
+	@echo "Validating readiness-checks schema..."
+	go test ./internal/agent -run 'TestReadinessChecksSchema' -count=1
+
 # Validate bundled skill metadata
 skill-schema:
 	@echo "Validating bundled skill metadata..."

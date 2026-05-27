@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ddx.dev/schemas/readiness-checks.schema.json",
+  "title": "DDx Pre-Claim Readiness Payload",
+  "description": "Canonical pre-claim intake readiness payload (FEAT-010 / ADR-023 vocabulary) emitted by the bead-lifecycle readiness producer and consumed by decodePreClaimIntakePayloadResult. Single source of truth so the producer prompt and the Go decoder cannot drift. Unknown fields are tolerated for forward-compatibility.",
+  "type": "object",
+  "properties": {
+    "classification": {
+      "type": "string"
+    },
+    "tractability": {
+      "type": "string"
+    },
+    "score": {},
+    "rationale": {
+      "type": "string"
+    },
+    "detail": {
+      "type": "string"
+    },
+    "reasoning": {
+      "type": "string"
+    },
+    "difficulty": {
+      "type": "object",
+      "properties": {
+        "estimated_difficulty": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": true
+    },
+    "readiness_checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "verdict": {
+            "oneOf": [
+              { "type": "boolean" },
+              { "type": "string" },
+              { "type": "null" }
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "checkable_before_attempt": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "suggested_fixes": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "object" }
+        ]
+      }
+    },
+    "suggested_child_beads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    },
+    "waivers_applied": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "object" }
+        ]
+      }
+    },
+    "rewrite": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "acceptance": {
+          "type": "string"
+        },
+        "changed_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

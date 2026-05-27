@@ -7,7 +7,7 @@ CLI_DIR = cli
 CLI_BINARY = $(CLI_DIR)/build/ddx
 DOCKER_ATTEMPT_IMAGE ?= ddx-attempt-runner:dev
 
-.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema docs-routing-lint docker-attempt-runner
+.PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-readiness-schema cli-skill-schema bead-schema readiness-schema skill-schema docs-routing-lint docker-attempt-runner
 
 # Default target - build CLI
 all: build
@@ -26,6 +26,9 @@ test: cli-test
 
 # Validate the shared bead schema
 bead-schema: cli-bead-schema
+
+# Validate the shared readiness-checks schema
+readiness-schema: cli-readiness-schema
 
 # Validate bundled skill metadata
 skill-schema: cli-skill-schema
@@ -69,6 +72,10 @@ cli-test:
 cli-bead-schema:
 	@echo "Validating bead schema..."
 	cd $(CLI_DIR) && $(MAKE) bead-schema
+
+cli-readiness-schema:
+	@echo "Validating readiness-checks schema..."
+	cd $(CLI_DIR) && $(MAKE) readiness-schema
 
 cli-skill-schema:
 	@echo "Validating skill metadata..."
