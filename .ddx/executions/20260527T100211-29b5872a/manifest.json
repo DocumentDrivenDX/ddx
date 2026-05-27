@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260527T100211-29b5872a",
+  "bead_id": "ddx-0d7d5f0e",
+  "base_rev": "b35627f0c026454b8e8e1e5a2e7ad92a6d6f24f8",
+  "created_at": "2026-05-27T10:02:18.313369515Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0d7d5f0e",
+    "title": "fix executor: enforce parent-death cleanup for execute-bead harness children on Linux",
+    "description": "PROBLEM\nWhen a `ddx work` orchestrator dies abnormally (SIGKILL, crash, OOM, or supervising-process loss) while an execute-bead attempt is running, the spawned harness child can reparent to PID 1 and continue indefinitely. Observed 2026-05-27: a `claude --print` execute-bead child remained orphaned with PPID 1 for ~9h53m after its `ddx work` parent exited.\n\nROOT CAUSE (file:line)\n- cli/internal/agent/executor.go:156 spawns the harness via `exec.Command(binary, args...)` and then calls `cmdSetProcessGroup(cmd)`.\n- cli/internal/agent/executor_unix.go:13-15 sets only `SysProcAttr{Setpgid: true}`. There is no Linux `Pdeathsig`, so the kernel does not signal the harness when the parent dies abnormally.\n- cli/internal/agent/executor_unix.go:20-25 kills the process group only from graceful executor paths.\n- cli/cmd/root.go:49-54 uses `signal.NotifyContext` for os.Interrupt and SIGTERM only. SIGKILL and crashes cannot be caught, so executor cleanup does not run.\n\nPROPOSED FIX\nOn Linux, set `SysProcAttr.Pdeathsig` to SIGKILL or SIGTERM for execute-bead harness commands in `cmdSetProcessGroup`. Handle the Go runtime thread-migration caveat with `runtime.LockOSThread` around process start or an equivalent parent-PID guard so the parent-death signal is attached to the intended parent thread. Preserve process-group setup so existing graceful cancellation and timeout cleanup still kill the whole harness tree. Document the macOS/Windows fallback because `Pdeathsig` is Linux-only.\n\nNON-SCOPE\n- Graceful SIGINT/SIGTERM shutdown already works through executor.go:231-255; do not regress it.\n- The harness-runner-internal leak in fizeau is covered by fizeau-50b6f055; this child bead is only the DDx orchestrator-to-harness-child boundary.\n- Startup orphan reaping is covered by a separate child bead from this decomposition.\n- docker-clone backend cleanup is covered by a separate child bead from this decomposition.\n\nCROSS-REF\n- fizeau-50b6f055: fizeau harness-runner process-group cleanup.\n- ddx-8f2e0ebf: lease release / operator-attention.",
+    "acceptance": "1. `TestExecutorLinuxPdeathsigKillsHarnessOnParentSIGKILL` starts an execute-bead executor path against a fake harness binary that forks a long-lived grandchild, SIGKILLs the parent worker process rather than sending graceful SIGTERM, and asserts the harness child and grandchild are gone within a bounded grace instead of becoming PID-1 orphans.\n2. `TestCmdSetProcessGroupLinuxSetsPdeathsigAndSetpgid` verifies the Linux executor command configuration includes both process-group isolation and a parent-death signal.\n3. `TestExecutorStartParentDeathSignalThreadGuard` or an equivalent focused test/rationale covers the `Pdeathsig` parent-thread caveat using `runtime.LockOSThread` or a parent-PID guard.\n4. `TestExecutorGracefulSignalStillTerminatesHarnessTree` proves existing SIGINT/SIGTERM or context-cancellation cleanup still terminates in-flight harness children.\n5. Non-Linux behavior is covered by `TestExecutorParentDeathSignalNonLinuxFallbackDocumented` or build-tagged documentation explaining the fallback and why `Pdeathsig` is unavailable.\n6. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-93d2ac52",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "observability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T10:02:01.387929785Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T100211-29b5872a",
+    "prompt": ".ddx/executions/20260527T100211-29b5872a/prompt.md",
+    "manifest": ".ddx/executions/20260527T100211-29b5872a/manifest.json",
+    "result": ".ddx/executions/20260527T100211-29b5872a/result.json",
+    "checks": ".ddx/executions/20260527T100211-29b5872a/checks.json",
+    "usage": ".ddx/executions/20260527T100211-29b5872a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0d7d5f0e-20260527T100211-29b5872a"
+  },
+  "prompt_sha": "a0fe3f5eb85b8bdabe1e40ea480ac0c7388aef7dfcbc989c584e6b8764119512"
+}
