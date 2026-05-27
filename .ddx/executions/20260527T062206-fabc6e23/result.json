@@ -1,0 +1,46 @@
+{
+  "bead_id": "ddx-fef097ea",
+  "attempt_id": "20260527T062206-fabc6e23",
+  "base_rev": "3b337646237dbc82f04595a5d36b91f558337dab",
+  "result_rev": "473ec2389179d56e3a7ffc83ca836ac0e72a91bb",
+  "implementation_rev": "77c97f85a2f45e94e158cda7f3369423c6942226",
+  "landed_rev": "473ec2389179d56e3a7ffc83ca836ac0e72a91bb",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "merged onto current tip",
+  "orchestrator_status": "success",
+  "reason": "merged onto current tip",
+  "candidate_ref": "refs/ddx/iterations/20260527T062206-fabc6e23/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260527T062206-fabc6e23",
+      "result_rev": "77c97f85a2f45e94e158cda7f3369423c6942226",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "predicted_power": 8,
+  "predicted_cost_usd_per_1k_tokens": 0.0075,
+  "predicted_cost_source": "subscription",
+  "session_id": "eb-7ab9ae9f",
+  "duration_ms": 166358,
+  "tokens": 1100749,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260527T062206-fabc6e23",
+  "prompt_file": ".ddx/executions/20260527T062206-fabc6e23/prompt.md",
+  "manifest_file": ".ddx/executions/20260527T062206-fabc6e23/manifest.json",
+  "result_file": ".ddx/executions/20260527T062206-fabc6e23/result.json",
+  "usage_file": ".ddx/executions/20260527T062206-fabc6e23/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-27T06:22:13.652725443Z",
+  "finished_at": "2026-05-27T06:25:00.011074601Z"
+}
