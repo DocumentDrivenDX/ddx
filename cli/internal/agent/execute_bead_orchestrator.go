@@ -215,6 +215,23 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 		return landing, nil
 	}
 
+	// Integrity violation detected by the worker's structured post-agent
+	// validation (ddx-725b65b4): the agent exited cleanly and left commits, but
+	// the attempt rewrote its commit, left empty pre-commit gate evidence, or
+	// left tracked files uncommitted. Preserve the commits for operator review
+	// under an iteration ref with the integrity reason rather than letting them
+	// merge as success; the specific explanation rides on res.Error.
+	if res.FailureMode == FailureModeAttemptIntegrity && res.ResultRev != res.BaseRev {
+		ref := PreserveRef(res.BeadID, res.BaseRev)
+		if err := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); err != nil {
+			return nil, fmt.Errorf("preserving result ref: %w", err)
+		}
+		landing.Outcome = "preserved"
+		landing.PreserveRef = ref
+		landing.Reason = AttemptIntegrityPreserveReason
+		return landing, nil
+	}
+
 	// Agent failed but produced commits: preserve without attempting merge.
 	if agentFailed {
 		ref := PreserveRef(res.BeadID, res.BaseRev)

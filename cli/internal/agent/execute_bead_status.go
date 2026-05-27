@@ -62,6 +62,13 @@ const (
 	// keeps draining the rest of the queue instead of re-wedging the same bead
 	// indefinitely (ddx-9714eaac, parent ddx-8f2e0ebf criterion E).
 	FailureModeConsecutiveWedge = "consecutive_wedge"
+	// FailureModeAttemptIntegrity classifies an attempt that produced commits
+	// and a clean agent exit but failed DDx's structured post-agent integrity
+	// validation (post-commit mutation, empty pre-commit gate evidence, or
+	// uncommitted tracked changes after the implementation commit). It is
+	// distinct from implementation/agent failures so operators can tell a DDx
+	// validation rejection apart from a genuine task failure (ddx-725b65b4).
+	FailureModeAttemptIntegrity = "attempt_integrity"
 	FailureModeUnknown          = "unknown"
 )
 
@@ -262,6 +269,8 @@ func classifyLandingFailureMode(landingOutcome, landingReason string, gateResult
 			return classifyGateFailure(gateResults)
 		case landingReason == RatchetPreserveReason:
 			return FailureModeRatchetMiss
+		case landingReason == AttemptIntegrityPreserveReason:
+			return FailureModeAttemptIntegrity
 		case landingReason == OperatorCancelReason:
 			return ""
 		}
@@ -430,6 +439,8 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 			return ExecuteBeadStatusPostRunCheckFailed
 		case reason == RatchetPreserveReason:
 			return ExecuteBeadStatusRatchetFailed
+		case reason == AttemptIntegrityPreserveReason:
+			return ExecuteBeadStatusPreservedNeedsReview
 		case reason == OperatorCancelReason:
 			return ExecuteBeadStatusPreservedNeedsReview
 		}

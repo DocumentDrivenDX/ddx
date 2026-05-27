@@ -1983,6 +1983,32 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// may refine this with landing-level signals (merge conflict, gate
 	// failure) before the final result is output.
 	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+
+	// Structured post-agent integrity validation (ddx-725b65b4). A clean agent
+	// exit with a commit is not sufficient evidence of a contract-honoring
+	// attempt: reject attempts that rewrote the implementation commit after the
+	// first commit, left required pre-commit gate evidence empty, or left tracked
+	// files uncommitted. Such attempts are demoted to task_failed with a distinct
+	// FailureMode so the orchestrator preserves them for review (rather than
+	// merging) and an operator can tell the DDx validation rejection apart from
+	// an implementation failure. The evidence-bundle commit (below) has not run
+	// yet, so the reflog only carries the agent's own commits.
+	if res.Outcome == ExecuteBeadOutcomeTaskSucceeded && res.ExitCode == 0 && res.ImplementationRev != "" {
+		verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+			BaseRev:           baseRev,
+			ImplementationRev: res.ImplementationRev,
+			CommitEvents:      readWorktreeCommitEvents(wtPath),
+			DirtyPaths:        integrityDirtyPaths(wtPath),
+			CodeChanging:      true,
+		})
+		if !verdict.OK {
+			res.Outcome = ExecuteBeadOutcomeTaskFailed
+			res.Reason = AttemptIntegrityPreserveReason
+			res.Error = verdict.Detail
+			res.FailureMode = FailureModeAttemptIntegrity
+		}
+	}
+
 	if err := publishAttemptResult(res); err != nil {
 		return res, fmt.Errorf("publishing attempt result: %w", err)
 	}
