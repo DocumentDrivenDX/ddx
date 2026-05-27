@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260527T190801-2034331d",
+  "bead_id": "ddx-b2846610",
+  "base_rev": "ce7ef3ca9e26422868d772e5f11c33c6acfb90c3",
+  "created_at": "2026-05-27T19:08:10.565703187Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b2846610",
+    "title": "execute-bead: post-commit review/land wedge unguarded — progress watchdog cannot fire once harness is set; bound review+land with a timeout",
+    "description": "PROBLEM\nddx work/try attempts wedge AFTER the implementation subprocess commits its fix: the worker enters the post-commit review+land orchestration and hangs indefinitely with phase=running, harness set (e.g. claude/codex), model=\"\" route=\"\", last_activity_at advancing every 30s via heartbeat, but no review completion, no land, no new commit. The lease is held until the process is killed. Observed and MANUALLY SALVAGED ~5x on 2026-05-27 (beads ddx-606fe854, ddx-dc23f001, ddx-9714eaac, ddx-58a69bb0; longest single wedge 97 min). This is the top blocker to unattended `ddx work` drain.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/work/watchdog.go phaseEmpty(harness, model, route) returns true only when ALL THREE of harness, model, route are empty.\n- cli/internal/agent/execute_bead_loop.go:2177 liveness.SetAttempt(candidate.ID, provAttemptID, PhaseRunning, profile, harness, model, profile, 0) sets harness (non-empty) once at attempt start and NEVER passes route; no later call updates model/route on the liveness record.\n- Therefore once an attempt is running, harness != \"\" so phaseEmpty() is permanently false, and RunProgressWatchdog (watchdog.go:102, wired at execute_bead_loop.go:2210) can NEVER fire for the running/post-commit phase it was designed to catch (ddx-8f2e0ebf criterion B). The route-resolution timeout (ddx-d8970a7b) only bounds the PRE-route window. So the post-commit review+land hang is unguarded by both mechanisms.\n\nPROPOSED FIX (recommended: bound the post-commit phase, do not rely on field-emptiness)\nAdd a configurable timeout around the post-commit review+land orchestration in the attempt (mirroring the route-resolution timeout d8970a7b): when the implementation subprocess has returned/committed and the worker is in review or land, bound that work with a deadline (default e.g. 15m). On expiry: cancel the attempt context, release the lease, mark the attempt failed/preserved, and emit an operator-attention event (reuse flagWedgedForOperatorAttention). Field-emptiness (phaseEmpty) is the WRONG discriminator for a running attempt that has already done real work, so the fix must be progress/elapsed-based, not field-based.\n\nNON-SCOPE\n- Do not change the route-resolution timeout (ddx-d8970a7b) or the external-close watcher (ddx-dc23f001 RunExternalCloseWatcher).\n- Do not change the resolving-phase all-empty detection (still valid before harness is assigned).\n- Do not change harness/model routing.\n\nCROSS-REF: follow-up to closed epic ddx-8f2e0ebf (criterion B was not actually covered by the landed progress watchdog).",
+    "acceptance": "1. The post-commit review+land orchestration is bounded by a configurable timeout (default documented); on expiry the attempt context is cancelled, the lease is released, and an operator-attention event is emitted. Verified by an integration test (e.g. TestExecuteBead_PostCommitReviewLandTimeoutReleasesLease in cli/internal/agent) that injects a hanging review/land stub and asserts the lease is released within timeout+epsilon with an operator-attention record.\n2. A review+land that completes within the budget is unaffected (regression): TestExecuteBead_PostCommitReviewLandWithinBudgetCompletes (or equivalent) passes.\n3. The fix is elapsed/progress-based, not phaseEmpty-based: a running attempt with harness set and model/route empty that exceeds the budget is released (asserted by the test in AC1), proving the watchdog gap is closed.\n4. cd cli \u0026\u0026 go test ./internal/agent/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "priority:reliability",
+      "severity:high",
+      "observability",
+      "spec:FEAT-010",
+      "prevention:ddx-8f2e0ebf"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/executions/20260527T190612-db97c7d0/embedded/git-bin/git, .ddx/executions/20260527T190612-db97c7d0/embedded/git-global.cfg, .ddx/executions/20260527T190612-db97c7d0/embedded/git-local-private.cfg, .ddx/executions/20260527T190612-db97c7d0/manifest.json, .ddx/executions/20260527T190612-db97c7d0/prompt.md, .ddx/executions/20260527T190612-db97c7d0/result.json, .ddx/metrics/locks.jsonl)\",\"fingerprint\":\"17e646516ca24c5b5a20684aa980e36884eaece06eca52ef01c51b9037a7b641\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17e646516ca24c5b5a20684aa980e36884eaece06eca52ef01c51b9037a7b641\"}",
+          "created_at": "2026-05-27T19:07:48.486296234Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260527T190801-2034331d",
+    "prompt": ".ddx/executions/20260527T190801-2034331d/prompt.md",
+    "manifest": ".ddx/executions/20260527T190801-2034331d/manifest.json",
+    "result": ".ddx/executions/20260527T190801-2034331d/result.json",
+    "checks": ".ddx/executions/20260527T190801-2034331d/checks.json",
+    "usage": ".ddx/executions/20260527T190801-2034331d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-clone-ddx-b2846610-20260527T190801-2034331d"
+  },
+  "prompt_sha": "aec644141a811f23412f8b3d209b01158a06b33122b3e3ae89c209f3081aa20c"
+}
