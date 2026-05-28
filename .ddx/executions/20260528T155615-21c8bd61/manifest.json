@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260528T155615-21c8bd61",
+  "bead_id": "ddx-a57814a7",
+  "base_rev": "36cfa2e9c8d6f427da8cb3a3061cd5ad57436dc0",
+  "created_at": "2026-05-28T15:56:23.135337141Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a57814a7",
+    "title": "server: eliminate panicking root GraphQL Query resolvers + add gqlgen SetRecoverFunc and schema-walk no-panic test",
+    "description": "PROBLEM: 15 root Query resolvers are panic(\"not implemented\") stubs (resolver.go:198-299) while their fields are advertised in schema.graphql and reachable via /graphql + /graphiql; calling them returns an opaque 'internal system error' and spams stderr stack traces. SD-022/FEAT-002 expect every advertised schema operation to work. No SetRecoverFunc exists. Zero test coverage (verified). The web UI consumes NONE of these 15 fields (opus frontend grep) — so most should be TRIMMED, not implemented.\nROOT CAUSE: resolver.go:198-299; no gqlgen recover configured. health/ready/metrics have REST twins (server.go:1252-1285, 3067-3127) so are pure duplication.\nPROPOSED FIX: (a) add a gqlgen SetRecoverFunc returning a clean error (stops opaque-500 + stack spam) — the high-value nugget; (b) for each of the 15 fields decide implement-vs-remove using 'is it used by frontend/src?': UI-unused fields (health, ready, metrics*, beadDepTree, doc*, providers, provider) → REMOVE from schema.graphql; only wire fields the UI needs. NOTE: search is NOT covered here — handleSearch is not a valid full-text twin (see the full-text-search bead). NOTE: project-scoped doc GraphQL is a separate bead.\nNON-SCOPE: implementing real full-text search; frontend scoping.",
+    "acceptance": "1. graphql server installs a SetRecoverFunc that converts resolver panics into structured GraphQL errors (no HTTP 500, no raw stack to client).\n2. TestGraphQLNoPanicOnAnyQueryField issues a minimal selection against every root Query field (introspection-driven) and asserts none returns 'internal system error'.\n3. UI-unused panicking fields are removed from schema.graphql OR implemented; no panic(\"not implemented\") remains in resolver.go.\n4. cd cli \u0026\u0026 go test ./internal/server/graphql/... green\n5. lefthook run pre-commit passes",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "area:graphql",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-002",
+      "review:codex+opus"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T155615-21c8bd61",
+    "prompt": ".ddx/executions/20260528T155615-21c8bd61/prompt.md",
+    "manifest": ".ddx/executions/20260528T155615-21c8bd61/manifest.json",
+    "result": ".ddx/executions/20260528T155615-21c8bd61/result.json",
+    "checks": ".ddx/executions/20260528T155615-21c8bd61/checks.json",
+    "usage": ".ddx/executions/20260528T155615-21c8bd61/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-a57814a7-20260528T155615-21c8bd61"
+  },
+  "prompt_sha": "00bd23083b55a0d7d899331155e40e97bcf293a480cd09f19f6c820bfb14aebd"
+}
