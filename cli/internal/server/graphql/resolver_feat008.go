@@ -296,21 +296,62 @@ func personaGraphQLError(err error) error {
 }
 
 // QueueSummary is the resolver for the queueSummary field.
+// InProgress counts both beads with status==in_progress plus in-flight attempts
+// from live run-state.json (for inline work).
 func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error) {
-	store := projectBeadStore(r.projectRoot(ctx, projectID))
+	projectRoot := r.projectRoot(ctx, projectID)
+	store := projectBeadStore(projectRoot)
 	counts, err := store.Status()
 	if err != nil {
 		return nil, err
 	}
+
+	// Count in-flight attempts from run-state.json as in-progress.
+	inProgressFromRunState := countInFlightAttempts(projectRoot)
+
 	return &QueueSummary{
 		Ready:             counts.Ready,
 		Blocked:           counts.ExternalBlocked,
-		InProgress:        counts.InProgress,
+		InProgress:        counts.InProgress + inProgressFromRunState,
 		OperatorAttention: counts.OperatorAttention,
 		DependencyWaiting: counts.DependencyWaiting,
 		ExternalBlocked:   counts.ExternalBlocked,
 		Cancelled:         counts.Cancelled,
 	}, nil
+}
+
+// countInFlightAttempts returns the number of non-expired run-state.json files
+// in the project, representing in-flight execution attempts.
+func countInFlightAttempts(projectRoot string) int {
+	if projectRoot == "" {
+		return 0
+	}
+	runStateDir := filepath.Join(projectRoot, ddxroot.DirName, agent.RunStateDirName)
+	entries, err := os.ReadDir(runStateDir)
+	if err != nil {
+		return 0
+	}
+	now := time.Now().UTC()
+	count := 0
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(runStateDir, entry.Name()))
+		if err != nil {
+			continue
+		}
+		var state agent.RunState
+		if err := json.Unmarshal(data, &state); err != nil {
+			continue
+		}
+		// Skip expired runs.
+		if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
+			continue
+		}
+		count++
+	}
+	return count
 }
 
 // QueueAndWorkersSummary backs the global drain indicator (ddx-b6cf025c).

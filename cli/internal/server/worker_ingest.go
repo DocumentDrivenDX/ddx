@@ -29,7 +29,8 @@ import (
 // registry and the log are best-effort: if the server crashes the workers
 // keep operating and re-register on next probe.
 
-const workerIngestMaxBodyBytes = 1 << 20 // 1 MiB cap on register/event/backfill payloads.
+const workerIngestMaxBodyBytes = 1 << 20             // 1 MiB cap on register/event/backfill payloads.
+const workerIngestDisconnectedTTL = 10 * time.Minute // Evict workers disconnected longer than this
 
 // errUnknownWorker signals that a worker_id is not present in the in-memory
 // registry. Surfaced as 410 Gone so the worker re-registers within the same
@@ -161,13 +162,30 @@ func (r *workerIngestRegistry) recordBackfill(workerID string, req workerBackfil
 	return nil
 }
 
+// reap removes entries from the registry that have been disconnected past the
+// TTL. Called with lock held.
+func (r *workerIngestRegistry) reapLocked(now time.Time) {
+	var toRemove []string
+	for id, rec := range r.workers {
+		age := now.Sub(rec.LastEventAt)
+		if age > workerIngestDisconnectedTTL {
+			toRemove = append(toRemove, id)
+		}
+	}
+	for _, id := range toRemove {
+		delete(r.workers, id)
+	}
+}
+
 // snapshot returns a copy of the registry for read-only inspection (tests
 // and future GraphQL consumers). The returned slice is a stable copy; the
 // records themselves are pointers into the registry and must be treated
-// as read-only.
+// as read-only. Stale entries disconnected past the TTL are reaped.
 func (r *workerIngestRegistry) snapshot() []*workerRecord {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	now := time.Now().UTC()
+	r.reapLocked(now)
 	out := make([]*workerRecord, 0, len(r.workers))
 	for _, rec := range r.workers {
 		copy := *rec

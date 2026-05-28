@@ -352,3 +352,37 @@ func TestWorkerEvent_410_TriggersReregister(t *testing.T) {
 		t.Fatalf("log lines after reregister: got %d, want 1", len(logged))
 	}
 }
+
+func TestWorkerIngest_ReapsDisconnected(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	// Register two workers.
+	id1 := registerWorker(t, srv, dir)
+	id2 := registerWorker(t, srv, dir)
+
+	snap := srv.workerIngest.snapshot()
+	if len(snap) != 2 {
+		t.Fatalf("initial registry size: got %d, want 2", len(snap))
+	}
+
+	// Manually advance the LastEventAt of id1 to be past the disconnect TTL.
+	srv.workerIngest.mu.Lock()
+	rec1 := srv.workerIngest.workers[id1]
+	rec1.LastEventAt = time.Now().UTC().Add(-11 * time.Minute)
+	srv.workerIngest.mu.Unlock()
+
+	// snapshot() should reap id1 since it's disconnected past the TTL.
+	snap = srv.workerIngest.snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("after reap: got %d entries, want 1", len(snap))
+	}
+	if snap[0].WorkerID != id2 {
+		t.Fatalf("remaining worker: got %q, want %q", snap[0].WorkerID, id2)
+	}
+
+	// Verify id1 is gone.
+	if _, exists := srv.workerIngest.workers[id1]; exists {
+		t.Errorf("worker %q should have been reaped", id1)
+	}
+}
