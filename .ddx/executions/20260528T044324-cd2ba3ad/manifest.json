@@ -1,0 +1,314 @@
+{
+  "attempt_id": "20260528T044324-cd2ba3ad",
+  "bead_id": "ddx-fd02cf6e",
+  "base_rev": "ab41e324c741829f193d2f43771c9eb601c9a88a",
+  "created_at": "2026-05-28T04:43:34.398517016Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fd02cf6e",
+    "title": "pre_claim_intake decoder rejects readiness_checks.verdict=bool; entire f: part 1",
+    "description": "PROBLEM\nParent bead ddx-61f6c57d is too broad for one execution pass. This child owns part 1 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-f9ddaa68 is too broad for one execution pass. This child owns part 2 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nddx work --watch's pre-claim intake decoder fails to unmarshal the readiness_checks response when verdict is a JSON bool. Every claim attempt produces the same warn-only rejection, so the worker logs a warning and skips. With 23 ready beads in the fizeau queue and one fizeau-scoped daemon, the entire queue is idle indefinitely.\n\nOBSERVATION (Fizeau, 2026-05-18 05:27-05:39 UTC; about an hour after the previous wedge bug ddx-8f2e0ebf)\n- Worker: PID 1527216, ddx work --watch in /Users/erik/Projects/fizeau, etime 01:22:40 at observation.\n- Log: /Users/erik/Projects/fizeau/.ddx/agent-logs/agent-loop-1779077845655338391.jsonl\n- Pattern every ~50s: resource.preflight (status ok) -\u003e pre_claim_intake.start -\u003e pre_claim_intake.warn -\u003e loop.idle.\n- Sample pre_claim_intake.warn payload:\n  {\n    \"bead_id\":\"fizeau-5b2a8950\",\n    \"decision\":\"warn\",\n    \"decision_source\":\"pre_claim_intake\",\n    \"detail\":\"decode result: json: cannot unmarshal bool into Go struct field .readiness_checks.verdict of type string\",\n    \"fingerprint\":\"15155a1cd44e96daf53eabb14c8eb3ccd8b0e5271d881208cfcbbf2869899f4f\",\n    \"outcome\":\"intake_error\",\n    \"policy_mode\":\"warn-only\",\n    \"reason\":\"system_unready\",\n    \"rule_id\":\"pre_claim_intake.system_unready\",\n    \"suggested_action\":\"check the readiness route or harness configuration and retry\",\n    \"system_reason\":\"unavailable\"\n  }\n- Identical fingerprint across multiple bead_ids confirms it is a schema mismatch, not a bead-specific issue.\n- Queue state at observation: open=44, ready=23, dependency-waiting=19. None of the 23 ready beads got claimed in the prior 30 minutes; commit log empty for the same window.\n- Other beads (fizeau-a15106ab, fizeau-90b85c8b) WERE successfully closed earlier in the night through some other path (perhaps a different worker version or a different execute-bead invocation). Suggests this decoder bug appeared mid-session OR only affects certain readiness routes.\n\nWHY THIS IS A BUG\n1. Schema drift between the readiness-check producer and the pre_claim_intake consumer. One emits verdict as bool, the other parses it as string. Either the producer or consumer changed without coordination.\n2. warn-only policy_mode masks the failure: the worker keeps polling and looks alive (loop.idle every 5\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\n- Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\n2. Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.",
+    "parent": "ddx-61f6c57d",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-claim",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T09:44:57.897118152Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-27T09:46:51.468447955Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-05-27T10:15:45.777953065Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T10:28:01.611271175Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T101557-6c1de066\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":520,\"output_tokens\":23052,\"total_tokens\":23572,\"cost_usd\":0.9413957999999998,\"duration_ms\":716873,\"exit_code\":0}",
+          "created_at": "2026-05-27T10:28:01.680173132Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=23572 cost_usd=0.9414 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-fd02cf6e\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T10:28:16.143525431Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"The attempt failed while committing tracker metadata with `fatal: unable to write new index file`, which is an infrastructure/git index write failure after execution rather than evidence that the bead scope or implementation is invalid.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[{\"target\":\"acceptance\",\"amendment\":\"Replace prose-only AC with named verification, including specific Test* symbols or unique go test -run filters, the relevant `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` command, and `lefthook run pre-commit`.\"}],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T10:28:51.341380641Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-05-27T10:28:51.393039734Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T11:55:04.449011602Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1856 tokens with tools=false at policy default\",\"fingerprint\":\"3b1f32107ba960d1e1a8afb064104d506679c17c8112895ca296aa412a7f8559\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3b1f32107ba960d1e1a8afb064104d506679c17c8112895ca296aa412a7f8559\"}",
+          "created_at": "2026-05-27T11:55:50.49176728Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T17:53:15.01404102Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description corrupted or truncated: Bead description appears corrupted or incomplete: text repeats 'PROBLEM' and 'PARENT BEAD' twice, and title contains 'entire f: part 1' (incomplete). Prior execution attempt failed with git error ('fatal: unable to write new index file: exit status 128'). Root cause of the git failure is not documented. Acceptance criteria are preventative (CI schema gate, escalation) rather than direct fixes for the decoder mismatch; missing clarity on which component changes (schema definition, producer, or consumer). Without understanding the prior failure mode and confirming description accuracy, executor cannot confidently proceed.\",\"fingerprint\":\"9f15c64011eb0efd61a31faf62e4324c0ba7448d604f39af0ec730f308492c16\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"9f15c64011eb0efd61a31faf62e4324c0ba7448d604f39af0ec730f308492c16\"}",
+          "created_at": "2026-05-27T17:54:35.587618967Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T17:56:11.999417721Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description_coherence: Description contains contradictory parent/scope statements (references both ddx-61f6c57d as parent with 'part 1 of 2' and ddx-f9ddaa68 with 'part 2 of 3' scope, despite single parent field). AC #2 contradicts itself ('stops looping silently' vs 'emits an operator-attention event'). AC lack required specificity: no test function names, no go test filters, no final go test green + lefthook lines. Missing: root-cause AC that fixes the actual schema mismatch (decoder should accept both bool and string, OR producer should emit consistently). Prior execution_failed with git commit error; unclear if issue was resolved or if bead was refiled unchanged.\",\"fingerprint\":\"617116637346794b13f810592c7d2eb71e0dfdb4086bfa51747f1513a6cae130\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"617116637346794b13f810592c7d2eb71e0dfdb4086bfa51747f1513a6cae130\"}",
+          "created_at": "2026-05-27T17:57:26.040205789Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T17:58:04.200452116Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description corruption: Bead has strong evidence and clear root cause, but description is corrupted, scope is ambiguous across a parent→child split, AC lacks specifics, and prior failure context is unaddressed. Requires operator refinement before claim.\",\"fingerprint\":\"98cd87292e0567dc9f95bc8a391846c9e298e6d9ee7d9d925ee29f451b9e393c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"98cd87292e0567dc9f95bc8a391846c9e298e6d9ee7d9d925ee29f451b9e393c\"}",
+          "created_at": "2026-05-27T17:58:57.731810683Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T17:59:24.595615964Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description boilerplate consistency: The bead describes a concrete, reproducible bug (schema mismatch: decoder expects string verdict, but producer emits bool) with detailed observation logs, fingerprints, and queue impact. Root cause is clear; proposed fix (CI schema gate + graceful escalation) is sound. The bead is executable as written, though several details are ambiguous: AC#1 assumes schema exists in a 'shared place' and is mutually consumed but doesn't verify; AC#2 uses undefined terms ('operator-attention event', N=5 rationale); AC#1 lacks explicit success and test criteria. Description also contains boilerplate corruption (two parent IDs referenced, 'part 1 of 2' vs. 'part 2 of 3'). None of these block execution: schema file can be located, logging mechanism is standard, N=5 is a reasonable default, and test method is inferrable. Prior execution_failed attempt (git error, not scope) shows conceptual understanding. A competent agent can proceed by resolving ambiguities through code inspection and reasonable assumptions.\",\"fingerprint\":\"ac5d8473903c13c0bc017652893a633bd258b3ef9f35a3acf1e827af7004a49d\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"ac5d8473903c13c0bc017652893a633bd258b3ef9f35a3acf1e827af7004a49d\"}",
+          "created_at": "2026-05-27T18:01:08.826957777Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:01:14.209096379Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:01:35.813208447Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"acceptance criteria do not explicitly specify the decoder fix: Problem and root cause are well-documented (schema mismatch: verdict emitted as bool, decoder expects string; strong evidence via Fizeau logs and identical fingerprints). However, acceptance criteria do not directly address the decoder failure. AC 1 (CI schema gate) and AC 2 (escalation) are defensive measures but do not specify the core fix: should the decoder accept both bool and string, should the producer be changed to emit string, or should the schema definition be updated to permit bool? An agent could implement the stated AC without resolving the immediate queue wedge.\",\"fingerprint\":\"4eba85580baa1da2976bb2a886a30459d5033cd60e0452f8600a040502e15724\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4eba85580baa1da2976bb2a886a30459d5033cd60e0452f8600a040502e15724\"}",
+          "created_at": "2026-05-27T18:02:33.814925265Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:03:01.179229439Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"operator-attention event type undefined: Problem is well-observed with logs, reproduction path, and queue stall impact. AC are syntactically clear but semantically under-specified: 'operator-attention event' lacks definition (log format? structured event? external system?), 'stops looping silently' contradicts 'emits event' (break loop entirely? pause? change behavior?), contradictory parent references (ddx-61f6c57d vs ddx-f9ddaa68 with '1 of 2' vs '2 of 3') create scope ambiguity, and prior execution failure (git index write, exit 128) is unresolved. AC also only add detection/escalation without fixing root schema mismatch (bool vs string verdict). Requires operator clarification before agent execution.\",\"fingerprint\":\"fb90a8464721c0f65b1f6b9357fb0470e8f8742c1ef17d6ac033a1855b10c596\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"fb90a8464721c0f65b1f6b9357fb0470e8f8742c1ef17d6ac033a1855b10c596\"}",
+          "created_at": "2026-05-27T18:03:25.717290379Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead has clear problem (schema mismatch in pre_claim_intake decoder) and strong observational evidence (fingerprint tracking, log patterns, queue stall). However, description is truncated mid-sentence with '[truncated]' marker, blocking full context. Additionally, parent reference is ambiguous: description mentions both ddx-61f6c57d and ddx-f9ddaa68 with conflicting decomposition counts (part 1 of 2 vs part 2 of 3). AC criteria are numbered but implementation-vague: AC1 doesn't specify schema file path or which CI gate enforces it; AC2 doesn't specify where escalation logic lives, how fingerprint counter persists, or what structured event format is expected. Prior attempt failed on git signing (tracker write). Bead is pre-labeled ac-quality:needs-refinement, confirming AC polish is outstanding. Cannot proceed to implementation without: (1) complete untruncated description, (2) parent clarification, (3) AC specificity on schema file paths and escalation implementation location.\",\"fingerprint\":\"8e30447931c86253640543af64492f436d298f18a2b0f1d01a22e61d067aebde\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8e30447931c86253640543af64492f436d298f18a2b0f1d01a22e61d067aebde\"}",
+          "created_at": "2026-05-27T18:04:06.594976797Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:04:10.675779521Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:04:33.505102717Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode readiness classification result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\"}",
+          "created_at": "2026-05-27T18:05:04.554649719Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description_completeness: Bead is too ambiguous and incomplete to attempt. Description is truncated mid-PROPOSED FIX; schema drift and escalation logic are identified but AC lacks file:line citations, undefined terms (\\\"operator-attention event\\\"), and specific test function names. Prior failure suggests unresolved transient or systematic issue. Multiple parent references (ddx-61f6c57d vs ddx-f9ddaa68 in description) create scope confusion. Clarify before claim.\",\"fingerprint\":\"42c6910a9415caf5cde70cf6e36a650499c14b5e08348804429f2739f2ef5b80\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"42c6910a9415caf5cde70cf6e36a650499c14b5e08348804429f2739f2ef5b80\"}",
+          "created_at": "2026-05-27T18:05:25.256597956Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:06:03.938092293Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-27T18:08:36.476732132Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"title_clarity: Bead is well-scoped as a decomposed child of ddx-61f6c57d, and the problem root cause is clearly identified with evidence (schema mismatch, specific log payloads, fingerprint confirmation). However, acceptance criteria lack sufficient specificity for autonomous execution: AC 1 references 'a shared place' for the schema instead of the concrete file path, AC 2 says 'Tested by injecting' without naming the test function, and there is no `cd cli \\u0026\\u0026 go test` verification command. Title is also truncated ('entire f: part 1' is incomplete). The prior execution failure on git index write may indicate the Linux git-signing blocker (project_git_signing_linux_blocker) needs to be addressed first or listed as a dependency.\",\"fingerprint\":\"904ecb3e5d204f8bf582e0a0fa69cf4237244820e2b5861e1566802f07c7f7cc\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"904ecb3e5d204f8bf582e0a0fa69cf4237244820e2b5861e1566802f07c7f7cc\"}",
+          "created_at": "2026-05-27T18:09:30.384503464Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"coverage\":\"Child 1 (Enforce shared readiness_checks schema gate) AC1 (schema single source of truth + TestReadinessChecksSchema), AC2 (producer prompt cites schema + TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema), AC3 (readiness-schema Makefile target invoked by ci.yml so CI fails on drift).\"},{\"parent_ac\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"coverage\":\"Child 2 (Escalate repeated same-fingerprint pre-claim warn outcomes) AC1 (loop.operator_attention emitted after DefaultPreClaimWarnRepeatThreshold consecutive same-fingerprint warns, stops silent loop.idle) and AC2 (TestPreClaimWarnSameFingerprintEscalatesAfterThreshold injects faulty payload and asserts escalation).\"}],\"child_ids\":[\"ddx-1d071ef5\",\"ddx-a88865ca\"],\"rationale\":\"The parent bundles two independent reliability mechanisms for the same wedge: a build-time schema-drift gate (verdict-type contract between producer prompt and Go decoder) and a runtime silent-idle guard (escalate repeated identical-fingerprint warns to operator attention). They touch disjoint files (preclaim_intake_hook.go + schema + Makefile + ci.yml vs execute_bead_loop.go), have separate test entrypoints, and neither depends on the other's completion, so splitting along that seam yields two independently executable children that together cover both parent acceptance criteria.\"}",
+          "created_at": "2026-05-27T18:09:41.270501123Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-1d071ef5, ddx-a88865ca"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"CI schema gate: the readiness_checks JSON schema is defined in a shared place; producer and consumer both consume it; CI fails on schema drift.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Same-fingerprint escalation: after N (default 5) consecutive warn outcomes with the same fingerprint, the worker emits an operator-attention event and stops looping silently. Tested by injecting a faulty readiness payload and asserting the escalation.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-05-28T04:42:03.565528201Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-05-28T04:43:11.166022028Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T044324-cd2ba3ad",
+    "prompt": ".ddx/executions/20260528T044324-cd2ba3ad/prompt.md",
+    "manifest": ".ddx/executions/20260528T044324-cd2ba3ad/manifest.json",
+    "result": ".ddx/executions/20260528T044324-cd2ba3ad/result.json",
+    "checks": ".ddx/executions/20260528T044324-cd2ba3ad/checks.json",
+    "usage": ".ddx/executions/20260528T044324-cd2ba3ad/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-fd02cf6e-20260528T044324-cd2ba3ad"
+  },
+  "prompt_sha": "3e5b6145d96184a6688133bac856cb13c2c7355e2386564e08041782b6506625"
+}
