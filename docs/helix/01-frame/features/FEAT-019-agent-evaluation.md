@@ -98,6 +98,26 @@ Workflow plugins own invocation policies: when to experiment, which variables to
 sweep, quality gates using grading results, power-selection heuristics, and
 exploration loops.
 
+### Review Surface and Run Detail Links
+
+Evaluation records (comparison, replay, benchmark) link to preserved `ddx try`
+and `ddx run` iterations through the shared project-scoped **run-detail surface**
+at `/runs/[runId]`. The review surface does not duplicate the run-detail page;
+instead, drill-down links from comparison, replay, and benchmark views navigate
+to the canonical run-detail page where users can inspect the full prompt,
+response, tool trace, and evidence. The run-detail surface provides:
+
+- **Prompt Tab**: Raw prompt body sent to the agent
+- **Response Tab**: Raw response body returned by the agent
+- **Tools Tab**: Paginated list of tool calls executed, with inputs and outputs
+- **Evidence Tab**: Bundle file listing with inline viewer (64 KB soft limit;
+  whitelisted files: `*.txt`, `*.md`, `manifest.json`, `prompt.md`, `result.json`)
+- **Session Tab** (run-layer only): Agent session metadata (harness, model, tokens, cost)
+
+Access to the run-detail surface is gated by project-scoped membership visibility.
+The `raw_transcript_viewed` audit event is recorded when a user accesses prompt,
+response, or stderr fields.
+
 ## Problem Statement
 
 **Current situation:**
