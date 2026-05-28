@@ -1,0 +1,97 @@
+{
+  "attempt_id": "20260528T091928-8690763e",
+  "bead_id": "ddx-4c03beca",
+  "base_rev": "835a4985f35f19afb186ad31e65652b839b209c7",
+  "created_at": "2026-05-28T09:19:50.285832177Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4c03beca",
+    "title": "Escalate repeated identical pre-claim warn fingerprints to operator attention instead of looping silently",
+    "description": "PROBLEM\nWhen pre_claim_intake produces a warn-only rejection with the same fingerprint repeatedly (for example a readiness schema mismatch), the worker logs a warning and goes idle every cycle (pre_claim_intake.warn -\u003e loop.idle). With many ready beads and one daemon, none get claimed and the worker looks alive while making zero progress, leaving the queue idle indefinitely.\n\nROOT CAUSE\n- warn-only policy mode masks the failure: the loop emits pre_claim_intake.warn at cli/internal/agent/execute_bead_loop.go:1859, :1982, :2009, :2034, :2073, each carrying a fingerprint computed in cli/internal/agent/readiness_decision.go:23-24, and then goes loop.idle (cli/internal/agent/execute_bead_loop.go:1637-1649) with no guard counting consecutive identical fingerprints across distinct bead IDs to break the silent loop.\n- The threshold knob exists at cli/internal/agent/execute_bead_loop.go:76-79 (ExecuteBeadLoopRuntime.PreClaimWarnRepeatThreshold; zero means DefaultPreClaimWarnRepeatThreshold) and the escalation message format at cli/internal/agent/execute_bead_loop.go:1141.\n\nPROPOSED FIX\nAfter N (default DefaultPreClaimWarnRepeatThreshold) consecutive pre-claim warn outcomes sharing the same fingerprint across distinct bead IDs, emit a loop.operator_attention event and a durable operator_attention bead event (reason \"preclaim_warn_repeated\", carrying fingerprint, count, distinct_bead_ids, example_detail, example_payload), stop before claiming the threshold bead, and leave the remaining ready queue untouched. The threshold is configurable via ExecuteBeadLoopRuntime.PreClaimWarnRepeatThreshold; zero falls back to the default.\n\nNON-SCOPE\n- Do NOT implement the CI schema drift gate (owned by the sibling child bead).\n- Do NOT change verdict decoding or readiness payload schema.\n- Do NOT introduce go.mod replace directives.\n\nDEPENDENCIES: no deps.",
+    "acceptance": "1. TestPreClaimWarnSameFingerprintEscalatesAfterThreshold in cli/internal/agent/execute_bead_loop_stay_alive_test.go asserts the loop escalates after DefaultPreClaimWarnRepeatThreshold identical-fingerprint warns across distinct bead IDs, stops before claiming the threshold bead (result.OperatorAttention.Reason == \"preclaim_warn_repeated\", result.ExitReason == \"operator_attention\"), and leaves the last bead StatusOpen.\n2. The same test confirms a loop.operator_attention event AND a durable operator_attention bead event (Summary \"preclaim_warn_repeated\") carry fingerprint, count (== DefaultPreClaimWarnRepeatThreshold), and distinct_bead_ids.\n3. cd cli \u0026\u0026 go test ./internal/agent/... green\n4. lefthook run pre-commit passes",
+    "parent": "ddx-fd02cf6e",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-claim",
+      "area:workers",
+      "kind:reliability",
+      "observability",
+      "priority:reliability",
+      "severity:high",
+      "decomposed",
+      "needs-human-decomposition"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"depth\":3,\"max\":3}",
+          "created_at": "2026-05-28T09:11:34.07079721Z",
+          "kind": "triage-overflow",
+          "source": "ddx work",
+          "summary": "depth cap exceeded"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"bead depth 3 reached max_decomposition_depth 3; operator must split\",\"fingerprint\":\"8be2b3e37f417332181338d16f8b37841cacd543a9e3b32f8df87ed5f2e22aaa\",\"policy_mode\":\"warn-only\",\"reason\":\"decomposition_depth_cap\",\"rule_id\":\"pre_claim_intake.decomposition_depth_cap\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8be2b3e37f417332181338d16f8b37841cacd543a9e3b32f8df87ed5f2e22aaa\"}",
+          "created_at": "2026-05-28T09:11:34.2035365Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "decomposition_depth_cap"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-4c03beca\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T09:12:02.045375664Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-28T09:12:32.138431305Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128",
+          "created_at": "2026-05-28T09:12:32.203680597Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"depth\":3,\"max\":3}",
+          "created_at": "2026-05-28T09:19:10.111217118Z",
+          "kind": "triage-overflow",
+          "source": "ddx work",
+          "summary": "depth cap exceeded"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"bead depth 3 reached max_decomposition_depth 3; operator must split\",\"fingerprint\":\"8be2b3e37f417332181338d16f8b37841cacd543a9e3b32f8df87ed5f2e22aaa\",\"policy_mode\":\"warn-only\",\"reason\":\"decomposition_depth_cap\",\"rule_id\":\"pre_claim_intake.decomposition_depth_cap\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8be2b3e37f417332181338d16f8b37841cacd543a9e3b32f8df87ed5f2e22aaa\"}",
+          "created_at": "2026-05-28T09:19:10.227149929Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "decomposition_depth_cap"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T091928-8690763e",
+    "prompt": ".ddx/executions/20260528T091928-8690763e/prompt.md",
+    "manifest": ".ddx/executions/20260528T091928-8690763e/manifest.json",
+    "result": ".ddx/executions/20260528T091928-8690763e/result.json",
+    "checks": ".ddx/executions/20260528T091928-8690763e/checks.json",
+    "usage": ".ddx/executions/20260528T091928-8690763e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-4c03beca-20260528T091928-8690763e"
+  },
+  "prompt_sha": "a3a1c3a769e73547eba40aecd847df02a71dc66340f096ea89b2af22d9697ac1"
+}
