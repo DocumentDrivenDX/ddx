@@ -1,0 +1,10 @@
+{
+  "attempt_id": "20260528T070329-7546a9aa",
+  "harness": "claude",
+  "model": "haiku",
+  "tokens": 8,
+  "input_tokens": 7,
+  "cached_tokens": 132315,
+  "cache_hit_rate": 0.999947098743973,
+  "output_tokens": 1
+}
