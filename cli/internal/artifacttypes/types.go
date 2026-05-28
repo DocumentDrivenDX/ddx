@@ -52,46 +52,6 @@ func (i *Index) Clone() *Index {
 	return clone
 }
 
-// ByPlugin returns all types belonging to plugin in deterministic order.
-func (i *Index) ByPlugin(plugin string) []Type {
-	if i == nil || len(i.Types) == 0 {
-		return nil
-	}
-	idxs := i.byPlugin[plugin]
-	if len(idxs) == 0 {
-		return nil
-	}
-	out := make([]Type, 0, len(idxs))
-	for _, idx := range idxs {
-		out = append(out, cloneType(i.Types[idx]))
-	}
-	return out
-}
-
-// Lookup returns the type for a plugin/typeID pair.
-func (i *Index) Lookup(plugin, typeID string) (Type, bool) {
-	if i == nil {
-		return Type{}, false
-	}
-	idx, ok := i.byKey[keyFor(plugin, typeID)]
-	if !ok {
-		return Type{}, false
-	}
-	return cloneType(i.Types[idx]), true
-}
-
-// LookupPrefix returns the first type that claims prefix.
-func (i *Index) LookupPrefix(prefix string) (Type, bool) {
-	if i == nil {
-		return Type{}, false
-	}
-	idx, ok := i.byPrefix[prefix]
-	if !ok {
-		return Type{}, false
-	}
-	return cloneType(i.Types[idx]), true
-}
-
 func buildIndex(types []Type) (*Index, error) {
 	sorted := make([]Type, len(types))
 	copy(sorted, types)
