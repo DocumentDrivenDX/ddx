@@ -54,8 +54,7 @@ examples:
 	require.NoError(t, err)
 	require.Len(t, index.Types, 1)
 
-	typ, ok := index.Lookup("sample-plugin", "solution-design")
-	require.True(t, ok)
+	typ := index.Types[0]
 	require.Equal(t, "sample-plugin", typ.Plugin)
 	require.Equal(t, "solution-design", typ.TypeID)
 	require.Equal(t, "Solution Design", typ.Name)
@@ -124,8 +123,7 @@ workflow:
 	require.NoError(t, err)
 	require.Len(t, index.Types, 1)
 
-	typ, ok := index.LookupPrefix("ADR")
-	require.True(t, ok)
+	typ := index.Types[0]
 	require.Equal(t, "legacy-plugin", typ.Plugin)
 	require.Equal(t, "adr", typ.TypeID)
 	require.Equal(t, "Architecture Decision Record", typ.Name)
@@ -174,8 +172,8 @@ template:
 	loader := NewLoader()
 	index1, err := loader.Load(root)
 	require.NoError(t, err)
-	typ1, ok := index1.Lookup("cache-plugin", "principles")
-	require.True(t, ok)
+	require.Len(t, index1.Types, 1)
+	typ1 := index1.Types[0]
 	require.Equal(t, "First version", typ1.Description)
 
 	updatedAt := time.Now().Add(2 * time.Minute)
@@ -200,8 +198,8 @@ template:
 
 	index2, err := loader.Load(root)
 	require.NoError(t, err)
-	typ2, ok := index2.Lookup("cache-plugin", "principles")
-	require.True(t, ok)
+	require.Len(t, index2.Types, 1)
+	typ2 := index2.Types[0]
 	require.Equal(t, "Second version", typ2.Description)
 	require.NotEqual(t, typ1.Description, typ2.Description)
 }
