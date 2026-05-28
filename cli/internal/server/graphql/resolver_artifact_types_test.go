@@ -193,3 +193,19 @@ func TestTypeDefinitions_LargeFile_Truncated(t *testing.T) {
 		t.Fatal("expected truncated template content to be returned")
 	}
 }
+
+func TestTypeDefinitions_NoArtifactTypes(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	writeArtifactFixture(t, workDir, "DOC-004", "docs/helix/01-frame/none.md", "# none")
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	out := fetchArtifactTypeDefinitions(t, srv, projID, "doc:DOC-004")
+	defs := out.Data.Artifact.TypeDefinitions
+	if len(defs) != 0 {
+		t.Fatalf("expected 0 artifact type definitions, got %d", len(defs))
+	}
+}

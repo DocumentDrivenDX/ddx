@@ -45,6 +45,9 @@ func artifactTypeDefinitionsForPath(workingDir, artifactPath string) ([]*Artifac
 		if err != nil {
 			return nil, fmt.Errorf("loading artifact types from %s: %w", root, err)
 		}
+		if index == nil {
+			return nil, fmt.Errorf("loading artifact types from %s: received nil index", root)
+		}
 		for _, typ := range index.Types {
 			if typ.Prefix != prefix {
 				continue

@@ -373,3 +373,38 @@ func TestArtifacts_Search_PaginationDeterministic(t *testing.T) {
 		}
 	}
 }
+
+func TestArtifacts_NoArtifactTypes_Success(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	setupSearchFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+	projID := "proj-integration-" + filepath.Base(workDir)
+
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\") { totalCount edges { node { id title } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected HTTP 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+
+	if errs, ok := result["errors"]; ok && errs != nil {
+		errList, _ := json.Marshal(errs)
+		t.Fatalf("unexpected GraphQL errors: %s", string(errList))
+	}
+
+	if result["data"] == nil {
+		t.Fatal("expected data in response, got nil")
+	}
+}
