@@ -64,7 +64,10 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 		libPath = filepath.Join(wd, libPath)
 	}
 
-	fullPath := filepath.Join(libPath, cleaned)
+	fullPath, err := ResolveDocumentPath(libPath, cleaned)
+	if err != nil {
+		return nil, nil // path outside library → null
+	}
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return nil, nil // not found → null

@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
 // TestRunBundleFile_PathTraversalRejected covers AC: bundleFile rejects path
@@ -335,6 +336,51 @@ func TestResolveRunBundlePath_DotDotEscape(t *testing.T) {
 	// Sanity: a normal relative path resolves without error.
 	if _, err := resolveRunBundlePath(root, "a/b.txt"); err != nil {
 		t.Errorf("unexpected error for normal path: %v", err)
+	}
+}
+
+// TestDocumentPathConfinement_RejectsSymlinkEscape creates a symlink inside
+// the library that targets a file outside the root and confirms
+// ResolveDocumentPath and the REST/GraphQL endpoints refuse to read/write it.
+func TestDocumentPathConfinement_RejectsSymlinkEscape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlinks not portable on windows test runners")
+	}
+	workDir := t.TempDir()
+	writeConfig(t, workDir, `version: "1.0"`+"\n")
+
+	libPath := filepath.Join(workDir, "library")
+	if err := os.MkdirAll(libPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	outsideFile := filepath.Join(workDir, "outside-secret.txt")
+	if err := os.WriteFile(outsideFile, []byte("secret"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	symlinkPath := filepath.Join(libPath, "escape.txt")
+	if err := os.Symlink(outsideFile, symlinkPath); err != nil {
+		t.Fatal(err)
+	}
+
+	// ResolveDocumentPath should reject the symlink escape.
+	_, err := ddxgraphql.ResolveDocumentPath(libPath, "escape.txt")
+	if err == nil || err != ddxgraphql.ErrDocumentOutsideLibrary {
+		t.Errorf("expected ErrDocumentOutsideLibrary for symlink escape, got: %v", err)
+	}
+
+	// Also test that normal relative paths are accepted.
+	normalFile := filepath.Join(libPath, "normal.txt")
+	if err := os.WriteFile(normalFile, []byte("content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := ddxgraphql.ResolveDocumentPath(libPath, "normal.txt")
+	if err != nil {
+		t.Fatalf("expected normal path to resolve, got error: %v", err)
+	}
+	if resolved != normalFile {
+		t.Errorf("expected %q, got %q", normalFile, resolved)
 	}
 }
 

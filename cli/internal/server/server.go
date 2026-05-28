@@ -1353,14 +1353,11 @@ func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Prevent path traversal
-	cleaned := filepath.Clean(docPath)
-	if strings.Contains(cleaned, "..") {
+	fullPath, err := ddxgraphql.ResolveDocumentPath(libPath, docPath)
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
 		return
 	}
-
-	fullPath := filepath.Join(libPath, cleaned)
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "document not found"})
@@ -1368,8 +1365,9 @@ func (s *Server) handleReadDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clamped, truncated, originalBytes := evidence.ClampOutput(string(data), serverInlineCapBytes)
+	relPath, _ := filepath.Rel(libPath, fullPath)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"path":           cleaned,
+		"path":           relPath,
 		"content":        clamped,
 		"truncated":      truncated,
 		"original_bytes": originalBytes,
@@ -1393,8 +1391,8 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cleaned := filepath.Clean(docPath)
-	if strings.Contains(cleaned, "..") {
+	fullPath, err := ddxgraphql.ResolveDocumentPath(libPath, docPath)
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid path"})
 		return
 	}
@@ -1407,13 +1405,13 @@ func (s *Server) handleWriteDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullPath := filepath.Join(libPath, cleaned)
 	if err := os.WriteFile(fullPath, []byte(body.Content), 0o644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"path": cleaned, "status": "saved"})
+	relPath, _ := filepath.Rel(libPath, fullPath)
+	writeJSON(w, http.StatusOK, map[string]string{"path": relPath, "status": "saved"})
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -4194,14 +4192,14 @@ func (s *Server) mcpReadDocument(workingDir, path string) mcpToolResult {
 			IsError: true,
 		}
 	}
-	cleaned := filepath.Clean(path)
-	if strings.Contains(cleaned, "..") {
+	fullPath, err := ddxgraphql.ResolveDocumentPath(libPath, path)
+	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText("invalid path")},
 			IsError: true,
 		}
 	}
-	data, err := os.ReadFile(filepath.Join(libPath, cleaned))
+	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText("document not found")},
