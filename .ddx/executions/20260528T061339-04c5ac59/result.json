@@ -1,0 +1,35 @@
+{
+  "bead_id": "ddx-f49ec1fb",
+  "attempt_id": "20260528T061339-04c5ac59",
+  "base_rev": "2a4a9d23679cde979a36498907f935c576853e7d",
+  "result_rev": "39dcfafeb7e2dc6d450d2bb7cbd1a81263fd69c2",
+  "implementation_rev": "39dcfafeb7e2dc6d450d2bb7cbd1a81263fd69c2",
+  "outcome": "preserved",
+  "status": "post_run_check_failed",
+  "detail": "pre-merge checks blocked: production-reachability",
+  "orchestrator_status": "post_run_check_failed",
+  "reason": "pre-merge checks blocked: production-reachability",
+  "preserve_ref": "refs/ddx/iterations/ddx-f49ec1fb/20260528T064359Z-2a4a9d23679c",
+  "candidate_ref": "refs/ddx/iterations/20260528T061339-04c5ac59/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260528T061339-04c5ac59",
+      "result_rev": "39dcfafeb7e2dc6d450d2bb7cbd1a81263fd69c2",
+      "implementer_route": {},
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "session_id": "eb-8b6dbe1f",
+  "duration_ms": 1805569,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260528T061339-04c5ac59",
+  "prompt_file": ".ddx/executions/20260528T061339-04c5ac59/prompt.md",
+  "manifest_file": ".ddx/executions/20260528T061339-04c5ac59/manifest.json",
+  "result_file": ".ddx/executions/20260528T061339-04c5ac59/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-28T06:13:50.275325241Z",
+  "finished_at": "2026-05-28T06:43:55.844668705Z"
+}
