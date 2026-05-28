@@ -77,7 +77,8 @@ to `~/.local/bin/ddx` and installer-owned shell integration. They must not
 write `~/.ddx`, `~/.agents`, or `~/.claude`.
 
 **Project scope:** DDx-managed project content lives under the repository:
-`.ddx/`, `.agents/skills/`, `.claude/skills/`, `AGENTS.md`, and `CLAUDE.md`.
+`.ddx/` (plugins, config, versions), `.agents/skills/`, `.claude/skills/` (installer outputs),
+`AGENTS.md`, and `CLAUDE.md`.
 
 **Registry plugin installs:** install real files for clone portability and
 cross-platform safety.
@@ -128,10 +129,10 @@ Desired behavior:
 #### Repository Initialization (`ddx init`)
 
 3. **Project Structure Creation**
-   - Creates `.ddx/` directory with config.yaml and library structure
-   - Copies the bootstrap `ddx` skill as **real files** to `.ddx/skills/`
-   - Copies the bootstrap `ddx` skill to `.agents/skills/` and `.claude/skills/` as **real files**
-   - All files are git-trackable (no symlinks for project-local skills)
+   - Creates `.ddx/` directory with config.yaml, library structure, and versions.yaml
+   - Installs the default `ddx` plugin through the embedded package installer
+   - Produces `.agents/skills/ddx/` and `.claude/skills/ddx/` as **real files** (no symlinks)
+   - All files are git-trackable for project portability
 
 3a. **Bootstrap Skill Cleanup (Stale ddx-* Removal)**
    - Before copying bootstrap skills, scans each target directory (`.ddx/skills/`, `.agents/skills/`, `.claude/skills/`) for existing `ddx-*` subdirectories
@@ -281,18 +282,16 @@ project/
 │   ├── versions.yaml     (system-managed: ddx_version)
 │   ├── plugins.yaml      (project plugin state)
 │   ├── library/
-│   ├── skills/
-│   │   └── ddx/          (real files, git-tracked)
 │   ├── executions/       (tracked execute-bead attempt bundles; see FEAT-006)
 │   │   └── <attempt-id>/ (prompt.md, manifest.json, result.json, ...)
 │   └── plugins/
 │       └── helix/        (registry install: real files; local install: symlink)
 │           └── skills/helix/
 ├── .agents/skills/
-│   ├── ddx/              (real files, copied by ddx init)
+│   ├── ddx/              (real files, installed by package installer)
 │   └── helix/            (registry: real files; local: symlink to checkout)
 ├── .claude/skills/
-│   ├── ddx/              (real files, copied by ddx init)
+│   ├── ddx/              (real files, installed by package installer)
 │   └── helix/            (registry: real files; local: symlink to checkout)
 └── ...
 ```
@@ -360,9 +359,8 @@ test ! -e ~/.claude
 ```bash
 # In empty project directory
 ddx init
-ls .ddx/skills/ddx/         # → real files (not symlinks)
-ls .agents/skills/ddx/      # → real files (copied, not symlinked)
-ls .claude/skills/ddx/      # → real files (copied, not symlinked)
+ls .agents/skills/ddx/      # → real files (installed by package installer)
+ls .claude/skills/ddx/      # → real files (installed by package installer)
 git add .agents/ .claude/     # → works (real files tracked by git)
 ```
 
@@ -391,7 +389,7 @@ git diff --cached --quiet                      # → local install does not auto
 
 ### AC-005: Missing DDx Detection
 ```bash
-# Clone a project with .ddx/skills/ddx/ but no ddx binary
+# Clone a project with .agents/skills/ddx/ and .claude/skills/ddx/ but no ddx binary
 # ddx skill guidance detects missing binary and prompts install
 ```
 
