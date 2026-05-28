@@ -605,3 +605,110 @@ func TestTrackerLock_RecordsRetryCount(t *testing.T) {
 		t.Fatalf("LockDir = %q, want %q", got[0].LockDir, lockDir)
 	}
 }
+
+// TestTrackerLock_StaleLockAfterPartialLocalLand verifies that a worker
+// that acquires withMainGitLock, successfully calls UpdateRefTo (advancing
+// local main), and then crashes without releasing the lock, can be recovered
+// by breakStaleTrackerLock so a subsequent worker can proceed.
+func TestTrackerLock_StaleLockAfterPartialLocalLand(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	// Create a second, independent commit branch to land.
+	landSHA := r.commitOn(r.baseSHA, "worker.txt", "worker content\n", "feat: worker change")
+
+	// First phase: simulate a worker that advances local main via UpdateRefTo,
+	// then crash (by leaving the lock in place). We do this in a controlled way
+	// inside a withMainGitLock block so we can verify UpdateRefTo succeeded.
+	lockDir := trackerLockPath(r.dir)
+	updateRefSucceeded := make(chan struct{})
+	lockAcquired := make(chan struct{})
+
+	go func() {
+		_ = withMainGitLock(r.dir, func() error {
+			close(lockAcquired)
+
+			// Worker acquired the lock. Perform UpdateRefTo to advance main
+			// locally (simulating the fast-path in Land).
+			targetRef := "refs/heads/main"
+			if err := ops.UpdateRefTo(r.dir, targetRef, landSHA, r.baseSHA); err != nil {
+				return fmt.Errorf("UpdateRefTo failed: %w", err)
+			}
+
+			// Signal that UpdateRefTo succeeded while we hold the lock.
+			close(updateRefSucceeded)
+
+			// Now simulate a crash by panicking. This will escape the
+			// withMainGitLock's defer cleanup because panic unwinds the stack
+			// differently. To properly simulate this without actually panicking
+			// (which would fail the test), we manually remove the defer cleanup
+			// by manipulating the lock after returning from this function.
+			return nil
+		})
+
+		// After exiting withMainGitLock, the defer will have cleaned up the lock.
+		// We simulate the crash scenario by recreating the stale lock.
+		_ = os.MkdirAll(lockDir, 0o755)
+		_ = os.WriteFile(filepath.Join(lockDir, "pid"), []byte("99999"), 0o644)
+		staleTime := time.Now().Add(-2 * trackerLockStaleAge).UTC().Format(time.RFC3339)
+		_ = os.WriteFile(filepath.Join(lockDir, "acquired_at"), []byte(staleTime), 0o644)
+	}()
+
+	// Wait for the first worker to acquire the lock and advance main.
+	select {
+	case <-lockAcquired:
+	case <-time.After(5 * time.Second):
+		t.Fatal("worker did not acquire lock in time")
+	}
+
+	select {
+	case <-updateRefSucceeded:
+	case <-time.After(5 * time.Second):
+		t.Fatal("UpdateRefTo did not complete in time")
+	}
+
+	// Give the first goroutine time to recreate the stale lock.
+	time.Sleep(10 * time.Millisecond)
+
+	// Verify that main has been advanced locally.
+	mainTip, err := ops.ResolveRef(r.dir, "refs/heads/main")
+	require.NoError(t, err)
+	if mainTip != landSHA {
+		t.Fatalf("main not advanced by worker: tip = %s, want = %s", mainTip, landSHA)
+	}
+
+	// Verify that the stale lock is in place.
+	if _, err := os.Stat(lockDir); err != nil {
+		t.Fatalf("lock dir should exist: %v", err)
+	}
+
+	// Second worker arrives and attempts to acquire the lock. It should
+	// observe the stale lock, break it, and proceed with its work.
+	secondWorkerErr := make(chan error, 1)
+	go func() {
+		secondWorkerErr <- withMainGitLock(r.dir, func() error {
+			// Verify that we can see the local-ahead state (main is already at landSHA).
+			tip, err := ops.ResolveRef(r.dir, "refs/heads/main")
+			if err != nil {
+				return fmt.Errorf("resolving main: %w", err)
+			}
+			if tip != landSHA {
+				return fmt.Errorf("expected main at %s, got %s", landSHA, tip)
+			}
+			return nil
+		})
+	}()
+
+	// Wait for the second worker to complete.
+	select {
+	case err := <-secondWorkerErr:
+		require.NoError(t, err, "second worker should proceed after stale lock recovery")
+	case <-time.After(5 * time.Second):
+		t.Fatal("second worker did not complete in time")
+	}
+
+	// Verify the lock was cleaned up after the second worker.
+	if _, err := os.Stat(lockDir); !os.IsNotExist(err) {
+		t.Fatalf("lock dir should be cleaned up after second worker: stat err = %v", err)
+	}
+}
