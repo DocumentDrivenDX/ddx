@@ -1,0 +1,220 @@
+{
+  "attempt_id": "20260528T104813-0198f35c",
+  "bead_id": "ddx-73bb933a",
+  "base_rev": "45a10ada34026116539374a4536ef309cd9fde88",
+  "created_at": "2026-05-28T10:48:22.638830855Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-73bb933a",
+    "title": "docs: align skill specs to package-owned DDx skill layout",
+    "description": "PROBLEM\n  The governing specs still describe the old copied-bootstrap skill layout and need to be aligned with the package-owned DDx skill model so future workers do not reintroduce copied mirrors or home skill installs.\n\nROOT CAUSE\n  FEAT-011 documents the five-copy model at docs/helix/01-frame/features/FEAT-011-skills.md:214-244 and acceptance checks across five paths at docs/helix/01-frame/features/FEAT-011-skills.md:295-317. FEAT-015 still says `ddx init` copies bootstrap skills to `.ddx/skills`, `.agents/skills`, and `.claude/skills` at docs/helix/01-frame/features/FEAT-015-installation-architecture.md:128-166, even though its 2026-05-12 amendment at lines 16-34 already requires no home skill installs and local symlink overlays. SD-011 still says skill source lives in `cli/internal/skills/ddx` and `ddx init` writes `.ddx/skills/ddx` at docs/helix/02-design/solution-designs/SD-011-agent-skills.md:91-112.\n\nPROPOSED FIX\n  - Update FEAT-011 to name `library/skills/ddx` as the canonical package-owned skill source and describe generated/install outputs instead of five checked-in mirrors.\n  - Update FEAT-015 init and plugin-install sections so `ddx init` uses the embedded default package installer and local overlays link package skill children from manifest mappings.\n  - Update SD-011 to match the package-owned source, embedded package copy, and project-local output paths.\n  - Update generated AGENTS/CLAUDE guidance or command help snippets that still describe `.ddx/skills/ddx` as a committed bootstrap mirror.\n\nNON-SCOPE\n  - Implementing the installer behavior; sibling code beads own implementation.\n  - Reopening legacy compatibility guidance for old skill names.\n  - Adding home-directory skill installation instructions.\n\nPARENT + DEPS\n  Parent: ddx-6862f2ac. Depends on implementation beads so docs can describe the final behavior, not an intermediate state.",
+    "acceptance": "1. FEAT-011 no longer describes `skills/ddx`, `.agents/skills/ddx`, `.claude/skills/ddx`, `.ddx/skills/ddx`, and `cli/internal/skills/ddx` as five maintained checked-in shipped paths.\n2. FEAT-015 states that `ddx init` installs the default DDx package through the embedded package installer, registry installs write real project files, and local installs create project-local symlink overlays without updating pins or auto-committing.\n3. SD-011 states that canonical DDx skill source lives under `library/skills/ddx` and that `.agents/skills/ddx` plus `.claude/skills/ddx` are package installer outputs.\n4. Generated AGENTS/CLAUDE guidance and relevant command help no longer instruct users to commit `.ddx/skills/ddx` as a DDx skill mirror.\n5. `rg -n 'skills/ddx/|cli/internal/skills/ddx|\\.ddx/skills/ddx|five shipped|copy-skills' docs/helix/01-frame/features/FEAT-011-skills.md docs/helix/01-frame/features/FEAT-015-installation-architecture.md docs/helix/02-design/solution-designs/SD-011-agent-skills.md AGENTS.md cli/cmd` returns only intentionally historical or migration-plan references.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6862f2ac",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:skills",
+      "area:plugins",
+      "kind:docs",
+      "plan-2026-05-13",
+      "spec:plan-2026-05-13-ddx-skill-package-layout"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-14T15:38:52.045117637Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-73bb933a\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T15:38:52.095681978Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-14T15:38:52.197664743Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"grendel-omlx\",\"resolved_model\":\"Qwen3.6-27B-MLX-8bit\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T17:19:20.681715392Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"Qwen3.6-27B-MLX-8bit\",\"actual_power\":5,\"actual_provider\":\"grendel-omlx\",\"attempt_id\":\"20260514T171606-f74535ce\",\"bead_id\":\"ddx-73bb933a\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T17:19:20.895113999Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=Qwen3.6-27B-MLX-8bit harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"error\":\"agent: provider error: openai: Post \\\"http://grendel:1235/v1/chat/completions\\\": dial tcp 100.97.179.68:1235: i/o timeout\",\"harness\":\"fiz\",\"model\":\"Qwen3.6-27B-MLX-8bit\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"grendel-omlx\"}",
+          "created_at": "2026-05-14T17:19:21.058757828Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=grendel-omlx model=Qwen3.6-27B-MLX-8bit connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: Post \"http://grendel:1235/v1/chat/completions\": dial tcp 100.97.179.68:1235: i/o timeout\npowerClass=cheap\nresult_rev=b8793242ac94ec462c1ab520075c7f6bb63cd2ac\nbase_rev=b8793242ac94ec462c1ab520075c7f6bb63cd2ac\nretry_after=2026-05-14T17:34:21Z\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T17:19:21.195743498Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"hel\",\"resolved_model\":\"qwen/qwen3.6-27b\",\"fallback_chain\":[],\"actual_power\":5}",
+          "created_at": "2026-05-14T22:15:23.252367497Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=hel model=qwen/qwen3.6-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen/qwen3.6-27b\",\"actual_power\":5,\"actual_provider\":\"hel\",\"attempt_id\":\"20260514T221433-908a911b\",\"bead_id\":\"ddx-73bb933a\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T22:15:23.530808566Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen/qwen3.6-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"qwen/qwen3.6-27b\",\"provider\":\"hel\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-14T22:15:23.663100429Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=hel model=qwen/qwen3.6-27b"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://hel:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"error\":\"agent: provider error: openai: POST \\\"http://hel:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen/qwen3.6-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"hel\"}",
+          "created_at": "2026-05-14T22:15:23.792208325Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=hel model=qwen/qwen3.6-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://hel:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=ec5b658e14bf55c84ba8ecb2c7cd092b994f1beb\nbase_rev=ec5b658e14bf55c84ba8ecb2c7cd092b994f1beb\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T22:15:23.890095869Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"hel\",\"resolved_model\":\"qwen/qwen3.6-27b\",\"fallback_chain\":[],\"requested_min_power\":6,\"actual_power\":5}",
+          "created_at": "2026-05-14T23:44:46.482400917Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=hel model=qwen/qwen3.6-27b"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"fiz\",\"actual_model\":\"qwen/qwen3.6-27b\",\"actual_power\":5,\"actual_provider\":\"hel\",\"attempt_id\":\"20260514T234401-c1e189c2\",\"bead_id\":\"ddx-73bb933a\",\"inferred_power_class\":\"cheap\",\"rejected_route_pins\":null,\"requested_profile\":\"\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-14T23:44:46.788370472Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic powerClass=cheap model=qwen/qwen3.6-27b harness=fiz"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"model\":\"qwen/qwen3.6-27b\",\"provider\":\"hel\",\"reason\":\"ladder exhausted at power 5\"}",
+          "created_at": "2026-05-14T23:44:46.895803171Z",
+          "kind": "execution-escalation-aborted",
+          "source": "ddx work",
+          "summary": "escalation aborted: ladder exhausted at power 5 provider=hel model=qwen/qwen3.6-27b"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"actual_power\":5,\"detail\":\"agent: provider error: openai: POST \\\"http://hel:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"error\":\"agent: provider error: openai: POST \\\"http://hel:1234/v1/chat/completions\\\": 502 Bad Gateway \",\"harness\":\"fiz\",\"model\":\"qwen/qwen3.6-27b\",\"outcome_reason\":\"provider_connectivity\",\"provider\":\"hel\"}",
+          "created_at": "2026-05-14T23:44:47.055331364Z",
+          "kind": "route-failure",
+          "source": "ddx work",
+          "summary": "provider=hel model=qwen/qwen3.6-27b connectivity failure"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: provider error: openai: POST \"http://hel:1234/v1/chat/completions\": 502 Bad Gateway \npowerClass=cheap\nresult_rev=8d44705e6ea0b944b950869b9477f8faa8c0f20b\nbase_rev=8d44705e6ea0b944b950869b9477f8faa8c0f20b\noutcome_reason=provider_connectivity",
+          "created_at": "2026-05-14T23:44:47.141380815Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"accepted_fingerprint\":\"\",\"accepted_prompt_fingerprint\":\"\",\"actor\":\"erik\",\"from_status\":\"proposed\",\"operator_required\":true,\"prompt_fingerprint\":\"933890207d53c9bc8b00a7a2cfe9ce72d92688c3db28c606507a04e1fa0e6802\",\"reason\":\"provider connectivity failure is retryable route evidence; reopening for autonomous fallback\",\"source\":\"ddx work\",\"to_status\":\"open\"}",
+          "created_at": "2026-05-17T21:34:03.084112525Z",
+          "kind": "triaged",
+          "source": "ddx work",
+          "summary": "operator accepted proposed bead"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"reopen_for_autonomous_retry\",\"reason\":\"provider_connectivity\"}",
+          "created_at": "2026-05-17T21:34:01.811056226Z",
+          "kind": "provider_connectivity.auto_reopen",
+          "source": "ddx work",
+          "summary": "reopened provider-connectivity operator-attention bead for autonomous retry"
+        }
+      ],
+      "spec-id": "plan-2026-05-13-ddx-skill-package-layout",
+      "triage.power_hint": 6,
+      "work-failed-routes": [
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T17:19:21Z",
+          "count": 1,
+          "model": "Qwen3.6-27B-MLX-8bit",
+          "provider": "grendel-omlx",
+          "reason": "provider_connectivity"
+        },
+        {
+          "actual_power": 5,
+          "at": "2026-05-14T23:44:46Z",
+          "count": 2,
+          "model": "qwen/qwen3.6-27b",
+          "provider": "hel",
+          "reason": "provider_connectivity"
+        }
+      ],
+      "work-last-detail": "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl",
+      "work-last-status": "preclaim-hook-failed"
+    }
+  },
+  "governing": [
+    {
+      "id": "plan-2026-05-13-ddx-skill-package-layout",
+      "path": "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
+      "title": "DDx Skill Package Layout"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260528T104813-0198f35c",
+    "prompt": ".ddx/executions/20260528T104813-0198f35c/prompt.md",
+    "manifest": ".ddx/executions/20260528T104813-0198f35c/manifest.json",
+    "result": ".ddx/executions/20260528T104813-0198f35c/result.json",
+    "checks": ".ddx/executions/20260528T104813-0198f35c/checks.json",
+    "usage": ".ddx/executions/20260528T104813-0198f35c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-73bb933a-20260528T104813-0198f35c"
+  },
+  "prompt_sha": "931624d87a42df369c45d816a88e5fd74142054d050e36fd0d891eeaae658f9b"
+}
