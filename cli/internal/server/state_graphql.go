@@ -49,8 +49,10 @@ func (s *ServerState) GetProjectSnapshotByID(id string) (*ddxgraphql.Project, bo
 }
 
 type beadIndexEntry struct {
-	ProjectID   string
-	ProjectPath string
+	ProjectID       string
+	ProjectPath     string
+	Snapshot        *ddxgraphql.BeadSnapshot
+	SnapshotMtimeNs int64
 }
 
 // GetBeadSnapshots implements ddxgraphql.StateProvider.
@@ -112,8 +114,9 @@ func (s *ServerState) beadSnapshotsForProjectEntry(proj ProjectEntry, pred func(
 	}
 	out := make([]ddxgraphql.BeadSnapshot, 0, len(beads))
 	for _, b := range beads {
-		s.rememberBeadLocation(b.ID, proj)
-		out = append(out, beadSnapshotFromStoreBead(proj.ID, b))
+		snap := beadSnapshotFromStoreBead(proj.ID, b)
+		s.rememberBeadLocation(b.ID, proj, &snap)
+		out = append(out, snap)
 	}
 	return out
 }
@@ -148,8 +151,12 @@ func (s *ServerState) GetBeadSnapshot(id string) (*ddxgraphql.BeadSnapshot, bool
 	}
 
 	if loc, ok := s.lookupBeadLocation(id); ok {
+		if loc.Snapshot != nil && isCacheValid(loc) {
+			return loc.Snapshot, true
+		}
 		proj := ProjectEntry{ID: loc.ProjectID, Path: loc.ProjectPath}
 		if snap, ok := readBeadSnapshotFromProject(proj, id); ok {
+			s.rememberBeadLocation(id, proj, snap)
 			return snap, true
 		}
 		s.forgetBeadLocation(id)
@@ -157,14 +164,26 @@ func (s *ServerState) GetBeadSnapshot(id string) (*ddxgraphql.BeadSnapshot, bool
 
 	for _, proj := range s.GetProjects() {
 		if snap, ok := readBeadSnapshotFromProject(proj, id); ok {
-			s.rememberBeadLocation(id, proj)
+			s.rememberBeadLocation(id, proj, snap)
 			return snap, true
 		}
 	}
 	return nil, false
 }
 
-func (s *ServerState) rememberBeadLocation(id string, proj ProjectEntry) {
+func isCacheValid(entry beadIndexEntry) bool {
+	if entry.Snapshot == nil || entry.SnapshotMtimeNs == 0 {
+		return false
+	}
+	beadPath := filepath.Join(entry.ProjectPath, ddxroot.DirName, "beads", entry.Snapshot.ID+".jsonl")
+	info, err := os.Stat(beadPath)
+	if err != nil {
+		return false
+	}
+	return info.ModTime().UnixNano() == entry.SnapshotMtimeNs
+}
+
+func (s *ServerState) rememberBeadLocation(id string, proj ProjectEntry, snapshots ...*ddxgraphql.BeadSnapshot) {
 	if id == "" || proj.ID == "" || proj.Path == "" {
 		return
 	}
@@ -173,7 +192,15 @@ func (s *ServerState) rememberBeadLocation(id string, proj ProjectEntry) {
 	if s.beadIndex == nil {
 		s.beadIndex = make(map[string]beadIndexEntry)
 	}
-	s.beadIndex[id] = beadIndexEntry{ProjectID: proj.ID, ProjectPath: proj.Path}
+	entry := beadIndexEntry{ProjectID: proj.ID, ProjectPath: proj.Path}
+	if len(snapshots) > 0 && snapshots[0] != nil {
+		entry.Snapshot = snapshots[0]
+		beadPath := filepath.Join(proj.Path, ddxroot.DirName, "beads", snapshots[0].ID+".jsonl")
+		if info, err := os.Stat(beadPath); err == nil {
+			entry.SnapshotMtimeNs = info.ModTime().UnixNano()
+		}
+	}
+	s.beadIndex[id] = entry
 }
 
 func (s *ServerState) lookupBeadLocation(id string) (beadIndexEntry, bool) {
