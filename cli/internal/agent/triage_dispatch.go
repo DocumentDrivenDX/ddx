@@ -18,13 +18,3 @@ func IsLockContentionError(errMsg string) bool {
 	)
 }
 
-// IsGitUpdateRefCompareAndSwapFailure reports whether errMsg is git's
-// conditional update-ref race: the caller supplied an expected old SHA, but
-// the ref had already advanced. This is coordination state, not a model
-// implementation failure.
-func IsGitUpdateRefCompareAndSwapFailure(errMsg string) bool {
-	lower := strings.ToLower(errMsg)
-	return strings.Contains(lower, "cannot lock ref") &&
-		strings.Contains(lower, " is at ") &&
-		strings.Contains(lower, " but expected ")
-}

@@ -13,48 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSelectCheapestProfile_LowestBandWithAvailableModel(t *testing.T) {
-	snap := ProfileSnapshot{
-		Profiles: []agentlib.PolicyInfo{
-			{Name: "standard", MinPower: 7, MaxPower: 8},
-			{Name: "cheap", MinPower: 5, MaxPower: 5},
-			{Name: "too-low", MinPower: 1, MaxPower: 2},
-		},
-		Models: []agentlib.ModelInfo{
-			{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
-			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
-		},
-	}
-
-	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
-}
-
-func TestSelectCheapestProfile_UsesPolicyMetadataWhenModelSnapshotEmpty(t *testing.T) {
-	snap := ProfileSnapshot{
-		Profiles: []agentlib.PolicyInfo{
-			{Name: "cheap", MinPower: 5, MaxPower: 5},
-			{Name: "default", MinPower: 7, MaxPower: 8},
-			{Name: "smart", MinPower: 9, MaxPower: 10},
-		},
-	}
-
-	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
-	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.PowerStandard).Name)
-}
-
-func TestSelectCheapestProfile_TieDoesNotPreferLocalPolicy(t *testing.T) {
-	snap := ProfileSnapshot{
-		Profiles: []agentlib.PolicyInfo{
-			{Name: "z-local", MinPower: 5, MaxPower: 5, AllowLocal: true},
-			{Name: "a-remote", MinPower: 5, MaxPower: 5},
-		},
-		Models: []agentlib.ModelInfo{
-			{ID: "candidate", Power: 5, Available: true, AutoRoutable: true},
-		},
-	}
-
-	assert.Equal(t, "a-remote", SelectCheapestProfile(snap))
-}
 
 func TestSelectStrongestProfile_HighestBandWithAvailableModel(t *testing.T) {
 	snap := ProfileSnapshot{
@@ -101,7 +59,6 @@ func TestSelectProfile_ReturnsEmptyWhenNothingSatisfies(t *testing.T) {
 		},
 	}
 
-	assert.Empty(t, SelectCheapestProfile(snap))
 	assert.Empty(t, SelectStrongestProfile(snap))
 	assert.Empty(t, SelectStrongestProfileAbove(snap, 1))
 }
@@ -160,12 +117,6 @@ func TestSelectImplementationProfile_DoesNotSelectRequirementProfileForOrdinaryW
 	got := SelectImplementationProfile(snap, escalation.PowerCheap)
 
 	assert.Equal(t, "cheap", got.Name)
-}
-
-func TestSelectCheapestProfile_DoesNotSelectRequirementProfile(t *testing.T) {
-	snap := canonicalFizeauPolicySnapshot()
-
-	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
 }
 
 func TestSelectImplementationProfile_MetadataTieBreaksByCostAndSpeedNotLocalPreference(t *testing.T) {

@@ -12,13 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsGitUpdateRefCompareAndSwapFailure(t *testing.T) {
-	errText := "git update-ref refs/heads/main: fatal: cannot lock ref 'HEAD': is at ba3e68b6fc8056c86249f5b90995027cfabf77b0 but expected 5ded70c695aab58235d4d2159dd9b2fb2870c2ff: exit status 128"
-	assert.True(t, IsGitUpdateRefCompareAndSwapFailure(errText))
-	assert.False(t, IsGitUpdateRefCompareAndSwapFailure("fatal: Unable to create '.git/index.lock': File exists"))
-	assert.False(t, IsGitUpdateRefCompareAndSwapFailure("fatal: cannot lock ref 'refs/heads/main': permission denied"))
-}
-
 func TestRealLandingGitOpsUpdateRefToRefusesHEAD(t *testing.T) {
 	err := (RealLandingGitOps{}).UpdateRefTo(t.TempDir(), "HEAD", "deadbeef", "")
 	require.Error(t, err)

@@ -66,27 +66,6 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	return loadProfileSnapshot(ctx, key, svc)
 }
 
-// WarmProfileSnapshotForProject starts a non-blocking refresh of the profile
-// snapshot used by lifecycle hooks. It is intentionally best-effort; callers
-// should proceed without a DDx-selected profile when no hot snapshot is present.
-func WarmProfileSnapshotForProject(projectRoot string, svc agentlib.FizeauService, runner AgentRunner) {
-	if runner != nil {
-		return
-	}
-	selectedSvc := svc
-	if selectedSvc == nil {
-		factory := serviceRunFactory
-		if factory == nil {
-			factory = NewServiceFromWorkDir
-		}
-		built, err := factory(projectRoot)
-		if err != nil {
-			return
-		}
-		selectedSvc = built
-	}
-	startProfileSnapshotRefresh(profileSnapshotProjectCacheKey(projectRoot, selectedSvc), selectedSvc)
-}
 
 func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauService) (ProfileSnapshot, error) {
 	now := profileSnapshotNow()
@@ -250,25 +229,6 @@ func cloneProfileSnapshot(snap ProfileSnapshot) ProfileSnapshot {
 	}
 }
 
-// SelectCheapestProfile returns the lowest-power profile band that has at least
-// one available, auto-routable model.
-func SelectCheapestProfile(snap ProfileSnapshot) string {
-	profiles := satisfiableProfiles(snap, 0)
-	sort.SliceStable(profiles, func(i, j int) bool {
-		left, right := profiles[i], profiles[j]
-		if profileMaxForSort(left) != profileMaxForSort(right) {
-			return profileMaxForSort(left) < profileMaxForSort(right)
-		}
-		if left.MinPower != right.MinPower {
-			return left.MinPower < right.MinPower
-		}
-		return preferProfile(left, right)
-	})
-	if len(profiles) == 0 {
-		return ""
-	}
-	return profiles[0].Name
-}
 
 // SelectStrongestProfile returns the highest-power profile band that has at
 // least one available, auto-routable model.

@@ -575,42 +575,6 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	return caps, nil
 }
 
-// TestProviderConnectivityViaService runs a HealthCheck against the named
-// harness and translates the result into a ProviderStatus. It is the
-// production replacement for Runner.TestProviderConnectivity.
-func TestProviderConnectivityViaService(ctx context.Context, workDir, harnessName string, timeout time.Duration) ProviderStatus {
-	status := ProviderStatus{Reachable: false}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if harnessName == "virtual" || harnessName == "agent" {
-		status.Reachable = true
-		status.CreditsOK = true
-		return status
-	}
-	svc, err := resolveService(workDir)
-	if err != nil {
-		status.Error = err.Error()
-		return status
-	}
-	if timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, timeout)
-		defer cancel()
-	}
-	if err := svc.HealthCheck(ctx, agentlib.HealthTarget{Type: "harness", Name: harnessName}); err != nil {
-		errStr := strings.ToLower(err.Error())
-		status.Error = err.Error()
-		if strings.Contains(errStr, "429") || strings.Contains(errStr, "quota") ||
-			strings.Contains(errStr, "credit") || strings.Contains(errStr, "insufficient") {
-			status.CreditsOK = false
-		}
-		return status
-	}
-	status.Reachable = true
-	status.CreditsOK = true
-	return status
-}
 
 // ValidateForExecuteLoopViaService is the production replacement for
 // Runner.ValidateForExecuteLoop. When harness is empty it is a no-op (routing
@@ -660,37 +624,3 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	return nil
 }
 
-// ValidateEffortForRunViaService rejects effort requests that no currently
-// available harness can satisfy. `legacy agent run` passes effort through to the
-// service rather than resolving a route locally, but the command still needs a
-// fast failure for obviously impossible combinations so operators get a useful
-// error instead of a silent success path.
-func ValidateEffortForRunViaService(ctx context.Context, workDir, profile, effort string) error {
-	if effort == "" {
-		return nil
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	svc, err := resolveService(workDir)
-	if err != nil {
-		return fmt.Errorf("agent: build service: %w", err)
-	}
-	infos, err := svc.ListHarnesses(ctx)
-	if err != nil {
-		return fmt.Errorf("agent: list harnesses: %w", err)
-	}
-	registry := newHarnessRegistry()
-	for _, info := range infos {
-		if !info.Available {
-			continue
-		}
-		if harness, ok := registry.Get(info.Name); ok && harness.EffortFlag != "" {
-			return nil
-		}
-	}
-	if profile == "" {
-		return fmt.Errorf("agent: no selected provider candidate satisfies effort %q", effort)
-	}
-	return fmt.Errorf("agent: no selected provider candidate satisfies profile %q and effort %q", profile, effort)
-}

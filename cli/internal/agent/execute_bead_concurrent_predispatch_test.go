@@ -94,7 +94,8 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 	for i, e := range errs {
 		if e != nil {
 			msg := e.Error()
-			if IsGitUpdateRefCompareAndSwapFailure(msg) {
+			lower := strings.ToLower(msg)
+			if strings.Contains(lower, "cannot lock ref") && strings.Contains(lower, " is at ") && strings.Contains(lower, " but expected ") {
 				t.Fatalf("worker %d hit HEAD CAS race (regression): %v", i, e)
 			}
 			require.NoErrorf(t, e, "worker %d returned unexpected error: %v", i, e)
@@ -173,7 +174,9 @@ func TestRun_LockScopeIncludesSynthesizeCommit(t *testing.T) {
 		if e == nil {
 			continue
 		}
-		if IsGitUpdateRefCompareAndSwapFailure(e.Error()) ||
+		msg := e.Error()
+		lower := strings.ToLower(msg)
+		if (strings.Contains(lower, "cannot lock ref") && strings.Contains(lower, " is at ") && strings.Contains(lower, " but expected ")) ||
 			strings.Contains(e.Error(), "cannot lock ref") {
 			t.Fatalf("goroutine %d hit HEAD CAS race inside locked block: %v", i, e)
 		}
