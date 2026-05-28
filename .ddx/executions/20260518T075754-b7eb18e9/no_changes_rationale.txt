@@ -1,1 +1,0 @@
-verification_command: bash -c 'cd cli && go test ./internal/bead/... ./internal/agent/... ./cmd/... >/dev/null 2>&1 && lefthook run pre-commit >/dev/null 2>&1'

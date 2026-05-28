@@ -1,3 +1,0 @@
-status: blocked
-reason: This bead is still too large to execute safely at depth 2. The requested rename spans task-execution internals, CLI wiring, docs, test updates, and stale-bead cleanup, so it needs parent-level rescoping or a fresh decomposed bead set before implementation.
-verification_command: rg -n "cli/internal/agent|AgentRunRuntime|AgentRunner|ExecuteBead|ExecuteLoop|ddx agent" cli docs .agents/skills .claude/skills skills

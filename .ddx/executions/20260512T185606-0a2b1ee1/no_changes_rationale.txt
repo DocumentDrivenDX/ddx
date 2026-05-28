@@ -1,4 +1,0 @@
-status: blocked
-reason: The bead surface is already implemented and the targeted artifact type vitest passes, but the full frontend vitest suite fails on an unrelated pre-existing test in `cli/internal/server/frontend/src/lib/components/D3Graph.contrast.spec.ts` during `bun run test:unit -- --run`. That baseline failure prevents proving `bun run test`/full vitest green for this pass.
-verification_command: cd cli/internal/server/frontend && bun run test:unit -- --run src/lib/artifactTypePanel.test.ts
-follow_up: Resolve the unrelated D3Graph contrast spec failure, then rerun `bun run test:unit -- --run` and `lefthook run pre-commit` before closing the bead.

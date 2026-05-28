@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test ./...` fails in unrelated pre-existing packages (`internal/bead`, `internal/server`, `internal/server/graphql`) with existing fixture/performance failures, so the bead cannot be landed green without out-of-scope fixes.

@@ -1,2 +1,0 @@
-status: blocked
-reason: bun run test:e2e is red on this tree with multiple unrelated failures, including GraphQL DocStale panics in the server and failing navigation/documents/sessions/screenshots specs. The 2k fixture and perf baseline artifact are in place, but AC 5 ("bun run test:e2e green") is not currently satisfiable without addressing the broader suite regressions first.

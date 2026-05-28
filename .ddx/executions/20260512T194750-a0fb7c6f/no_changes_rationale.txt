@@ -1,2 +1,0 @@
-status: blocked
-reason: This bead requires a package-wide ctx-first API migration for Store and its callers to satisfy the requested compile-time assertions, but the current depth-3 decomposition cap prevents a safe further split in this pass.

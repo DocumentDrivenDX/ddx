@@ -1,3 +1,0 @@
-status: blocked
-reason: `env -u DDX_EXECUTE_BEAD_ID lefthook run pre-commit` still fails in `go-test` on existing `cli/cmd` cases outside this bead's scope, including `TestInstallPackageAllowsRecoverableBrokenSkillSymlinks`, `TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower`, `TestTryZeroConfigCheapTaskSkipsRequirementProfile`, `TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower`, and `TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy`.
-verification_command: env -u DDX_EXECUTE_BEAD_ID lefthook run pre-commit

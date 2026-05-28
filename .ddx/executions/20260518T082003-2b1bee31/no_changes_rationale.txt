@@ -1,2 +1,0 @@
-status: open
-reason: Child beads (B1-B6) are all currently in open status. This coordination bead's AC ("All six child beads closed") requires the child beads to be executed and closed individually via ddx try or ddx work. Retry this bead after child beads are executed and closed.

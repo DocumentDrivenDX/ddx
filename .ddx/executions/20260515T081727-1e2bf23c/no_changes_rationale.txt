@@ -1,2 +1,0 @@
-status: open
-reason: parent bead was already decomposed into ddx-49737227, ddx-887e2bd3, and ddx-edd8085b; this attempt finalized the parent as a decomposed container by unclaiming it, recording explicit notes, and setting execution-eligible=false so direct execution does not repeat.

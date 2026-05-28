@@ -1,3 +1,0 @@
-status: open
-orchestrator_action: decompose
-reason: The bead scope is too large for one execution pass and exceeds the allowed decomposition depth in this workspace. It spans new core interfaces, store method signature changes, JSONL backend changes, and broad caller migration across multiple packages, which cannot be completed and verified safely as one bead here.

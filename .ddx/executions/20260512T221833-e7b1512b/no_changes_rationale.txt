@@ -1,3 +1,0 @@
-status: blocked
-reason: The ctx-first foundation migration for bead.Store fans out into a large cross-package caller sweep across internal/agent and cli/cmd (Init/Create/Get/ReadAll call sites plus agent-side interface adapters). That exceeds this bead slice and cannot be completed safely here without decomposing into additional follow-up work.
-what_was_done: Partially updated cli/internal/bead context accessors, foundation interface declarations, Store signatures, and the new context round-trip tests before the broader compile fallout became clear.

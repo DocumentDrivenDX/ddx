@@ -1,7 +1,0 @@
-{
-  "ran": true,
-  "changed_docs": [
-    "docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md",
-    "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md"
-  ]
-}

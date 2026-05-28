@@ -1,1 +1,0 @@
-verification_command: sh -c '! grep -R -nE '"'"'NewCommandFactory\("/tmp"\)'"'"' cli/cmd && cd cli && go test ./cmd/... && lefthook run pre-commit'

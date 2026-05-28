@@ -1,2 +1,0 @@
-status: blocked
-reason: Existing repository test failures block completion of the required verification gate for this doc-only bead. `lefthook run pre-commit` passed, but `cd cli && go test ./internal/agent/... ./internal/bead/...` timed out in `TestConcurrentLand_PreservationRateUnderLoadIsBounded` and failed `TestHeartbeatKeepsActiveClaimAlive`, so I cannot claim the bead green without changing code outside the bead scope.

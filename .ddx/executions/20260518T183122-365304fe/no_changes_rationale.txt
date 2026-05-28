@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test ./internal/agent/... ./internal/bead/... ./cmd/...` still fails in `TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded` with landing worktree errors on staged `.ddx/beads.jsonl`; this appears to be a separate integration stability issue outside the intake fingerprint/dedup change.

@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./internal/server/... && lefthook run pre-commit
-reason: review dispatcher, prompt assembly, no-tool harness gating, and turn recording are already present in cli/internal/server and covered by passing focused and package-level tests.

@@ -1,6 +1,0 @@
-status: blocked
-reason: The acceptance item that requires `var _ BeadInitializer = (*Store)(nil)`, `var _ BeadReader = (*Store)(nil)`, and `var _ BeadLifecycle = (*Store)(nil)` cannot be satisfied inside this bead alone. The current `cli/internal/bead/store.go` API is still the legacy no-`ctx` surface, while `cli/internal/bead/backend.go` already declares ctx-first interfaces. Making `*Store` satisfy those interfaces would require a broad signature migration and caller updates across `cli/cmd`, `cli/internal/agent`, `cli/internal/server`, and other packages, which is outside this bead's named scope.
-
-what_is_done: Verified that `cli/internal/bead/errors.go`, `cli/internal/bead/context.go`, `cli/internal/bead/id.go`, and `cli/internal/bead/operation.go` already contain the sentinel errors, typed context helpers, ID helpers, and operation adapter pieces.
-
-follow_up_needed: A repo-wide refactor bead that migrates the `Store` API and all call sites to ctx-first methods, or a revised acceptance slice that limits this child to the already-present foundation helpers and tests.

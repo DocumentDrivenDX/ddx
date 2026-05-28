@@ -1,8 +1,0 @@
-rationale: status: blocked
-reason: AC 1 (minimum-prompt rule in FEAT-022) is already satisfied — the rule exists as section 3a in docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md (added in commit 3a015fbcb). No code or spec edits are needed for this bead's scope.
-
-AC 2 (ddx doc audit clean) is blocked by a pre-existing repo-wide cycle: TD-004 ↔ TD-027. This cycle was introduced in commit da3c9735f (bead architecture consolidation) and is unrelated to FEAT-022. The cycle involves docs/helix/02-design/technical-designs/TD-004-beads-claims-evidence.md and docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md, neither of which are within this bead's named scope. Fixing the cycle requires editing both TD-004 and TD-027, which would exceed the bead's scope.
-
-verification_command: ddx doc audit --json
-
-A follow-up bead scoped to TD-004/TD-027 cycle resolution is needed to clear the doc audit before this bead's AC 2 can be satisfied.

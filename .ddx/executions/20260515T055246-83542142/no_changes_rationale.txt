@@ -1,8 +1,0 @@
-status: open
-reason: execute-bead size gate exceeded for ddx-e4c3d791; the exact `rg 'filepath\.Join\([^)]*"\.ddx"' cli/ --type go | grep -v '^cli/internal/ddxroot/'` audit still spans hundreds of production and test call sites across cmd, config, git, agent, exec, server, graphql, and helper packages, so the slice was decomposed before implementation.
-children:
-- ddx-fd98ffaa: worktree registry CLI and focused tests
-- ddx-b6fea19a: cmd/config/git state-path audit
-- ddx-3bbf066b: agent and exec state-path audit
-- ddx-16fcc557: server and graphql state-path audit
-- ddx-2f93f5d9: test/helper sweep and pre-commit audit wiring
