@@ -1,0 +1,292 @@
+{
+  "attempt_id": "20260528T015138-75f03745",
+  "bead_id": "ddx-60e4dc97",
+  "base_rev": "48cc3dec4b973297b61502d35e4235ca83d3442b",
+  "created_at": "2026-05-28T01:51:48.631179213Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-60e4dc97",
+    "title": "readiness: discount stale external blockers cleared by newer notes",
+    "description": "PROBLEM\nThe readiness hook can over-weight stale external-blocker history and under-weight explicit operator notes that say the blocker was cleared. This produces misleading `intake.warn` text and can steer an implementation attempt toward obsolete infrastructure conclusions even when the bead is intentionally unblocked for forward progress.\n\nOBSERVED EVIDENCE\nNiflheim bead `niflheim-439a49ae` has notes saying: `Unblocked 2026-05-18: the prior Redpanda/AIO blocker was stale after commit 90cd8348 bounded Redpanda test storage with an owned tmpfs mount... The container became ready and was cleaned up.` During `ddx work --once` on 2026-05-21, readiness still emitted `bead readiness blocked: redpanda environment can support 32-partition stress test... prior_attempts show a hard external blocker: Redpanda fails to start due to AIO slot exhaustion on WSL2`. The attempt continued because readiness was warn-only, but the warning contradicted current bead notes and polluted the agent context.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/triage_hook.go:60` includes bead notes in the triage/readiness payload model, and `cli/internal/agent/types.go:298` carries notes in the execute-bead payload, but the readiness prompt/contract does not require stale prior blockers to be discounted when a later note explicitly clears them. The current tests in `cli/internal/agent/execute_bead_intake_test.go` cover warn-only continuation and intake event recording, but not precedence between later unblocked notes and older `no_changes_blocked`/external-blocker events.\n\nPROPOSED FIX\nUpdate the readiness prompt/contract and pre-claim intake tests so later explicit operator notes or reopen/unblocked notes supersede older external-blocker events unless current evidence revalidates the blocker. Readiness may still mention stale blocker history as historical context, but it must not phrase the bead as currently blocked or require operator action when a newer note says the blocker was cleared and no fresh recheck failed.\n\nNON-SCOPE\n- Changing lifecycle status semantics for actual `status=blocked` beads.\n- Suppressing all prior-attempt history.\n- Removing warn-only readiness behavior.\n- Niflheim benchmark implementation.\n\nIN-SCOPE FILES\n- `cli/internal/agent/execute_bead_intake_test.go`\n- `cli/internal/agent/bead_lifecycle_skill_contract_test.go`\n- DDx bead-lifecycle skill text under `.agents/skills/ddx/bead-lifecycle/SKILL.md` and `.claude/skills/ddx/bead-lifecycle/SKILL.md` if the prompt contract lives there.\n- Any pre-claim intake prompt assembly code that formats notes/events for readiness.",
+    "acceptance": "1. Add a regression test with an older `no_changes_blocked`/external-blocker event and a newer note that explicitly says the blocker was cleared; readiness must not produce a current-blocker/operator-required decision from the stale event alone.\n2. The readiness prompt/skill contract tells the model that newer operator notes, reopen notes, or unblocked notes supersede older blocker events unless current evidence revalidates the blocker.\n3. The recorded `intake.warn` detail for that fixture may mention blocker history only as historical context and must include the newer unblocked note as current state.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'Test.*Readiness.*(Stale|Unblock|ExternalBlocker|Notes)' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:bead-lifecycle",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T19:03:25.193812588Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T19:04:02.619419421Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T190327-e9476c88\",\"bead_id\":\"ddx-60e4dc97\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-05-27T19:04:05.123679756Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"b068e1de9c3cbeb624a1e64cbba21d7e3eabdc37\",\"classification\":\"transport\",\"detail\":\"docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \\\"bind\\\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\\n\\nRun 'docker run --help' for more information: exit status 125\",\"rationale\":\"Infrastructure failure before agent start: docker-clone backend could not create the container because the bind mount source /home/erik/.local/share/claude/versions/2.1.152 does not exist (exit 125). Failed in 30ms with base_rev==result_rev, so no code was attempted and the bead content is irrelevant to the failure. Release the claim and retry once the host's claude version path / docker-clone mount config is repaired.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"b068e1de9c3cbeb624a1e64cbba21d7e3eabdc37\",\"session_id\":\"eb-8a7a5f6a\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:04:43.655825382Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "docker-clone attempt failed: docker: Error response from daemon: invalid mount config for type \"bind\": bind source path does not exist: /home/erik/.local/share/claude/versions/2.1.152\n\nRun 'docker run --help' for more information: exit status 125\npowerClass=standard\nresult_rev=b068e1de9c3cbeb624a1e64cbba21d7e3eabdc37\nbase_rev=b068e1de9c3cbeb624a1e64cbba21d7e3eabdc37\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:04:43.711870347Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"Infrastructure failure unrelated to bead content: the run died with 'committing tracker: fatal: unable to write new index file: exit status 128', a git index write failure (likely a stale index.lock, disk, or permission issue in the working tree) that occurred during tracker commit rather than during agent work. No code change was attempted on the bead itself, so the readiness-precedence task is irrelevant to this outcome. Release the claim and retry once the git index/lock state on the host is healthy.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T19:06:15.113315513Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-27T19:06:15.170079384Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-27T22:22:32.576822625Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T220632-975a26b5\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":184,\"output_tokens\":4515,\"total_tokens\":4699,\"cost_usd\":1.6817334,\"duration_ms\":948372,\"exit_code\":0}",
+          "created_at": "2026-05-27T22:22:32.631804624Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4699 cost_usd=1.6817 model=haiku"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-05-27T22:29:44.235560405Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-60e4dc97\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T22:30:10.795116403Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"The run died with 'committing tracker: fatal: unable to write new index file: exit status 128', a git index write failure (stale index.lock, disk, or permission issue in the working tree) that occurred during the tracker commit rather than during agent work. No code change was attempted on the bead, so the readiness-precedence task content is irrelevant to this outcome. This is the same infrastructure fault already triaged as transport in the prior event. Release the claim and retry once the host git index/lock state is healthy.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T22:30:50.426463686Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-27T22:30:50.48569714Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-05-27T22:33:40.171102413Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260527T222237-a763ebe5\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":562,\"output_tokens\":19822,\"total_tokens\":20384,\"cost_usd\":1.0874003499999998,\"duration_ms\":633591,\"exit_code\":0}",
+          "created_at": "2026-05-27T22:33:40.237285071Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=20384 cost_usd=1.0874 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"haiku\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260527T222237-a763ebe5\",\"bead_id\":\"ddx-60e4dc97\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-27T22:33:42.602244957Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=haiku harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"aa7d83739cf4b773b237021565642b44171b69ef\",\"classification\":\"recoverable\",\"detail\":\"DDx validation: tracked files remained uncommitted after the implementation commit (.crush/skills/nano-banana-pro-openrouter); the contract requires a clean worktree. Detected by DDx, not an implementation failure.\",\"rationale\":\"The agent completed work and produced an implementation commit (result_rev/implementation_rev b910134 != base aa7d837), but DDx's pre-merge clean-worktree integrity check failed because a pre-existing, out-of-scope tracked file (.crush/skills/nano-banana-pro-openrouter — already shown dirty in the host git status before the attempt) remained uncommitted. The report itself states this was 'Detected by DDx, not an implementation failure.' This is host worktree/environment pollution, not a bead defect, a tests_red verification failure, or a transport/network fault; per the skill contract, worktree-state and evidence-integrity failures are recoverable infrastructure conditions. Release the claim and retry after the stray tracked file is reset/cleaned so the worktree starts clean.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"b910134d035351a382a2b94d01f387d8aa66fc3d\",\"session_id\":\"eb-cb8badd1\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-27T22:34:56.17139607Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "DDx validation: tracked files remained uncommitted after the implementation commit (.crush/skills/nano-banana-pro-openrouter); the contract requires a clean worktree. Detected by DDx, not an implementation failure.\npowerClass=standard\nresult_rev=b910134d035351a382a2b94d01f387d8aa66fc3d\nbase_rev=aa7d83739cf4b773b237021565642b44171b69ef\noutcome_reason=recoverable",
+          "created_at": "2026-05-27T22:34:56.240697807Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 2015 tokens with tools=false at policy default\",\"fingerprint\":\"7576bf20c777e393fd0e2ea6818f33c478dc68e1df9b060025a7b0116cb7bb88\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"7576bf20c777e393fd0e2ea6818f33c478dc68e1df9b060025a7b0116cb7bb88\"}",
+          "created_at": "2026-05-28T00:35:37.286453157Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T00:52:51.391442074Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T003554-b0b8a5bc\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":881,\"output_tokens\":21563,\"total_tokens\":22444,\"cost_usd\":1.2172432500000003,\"duration_ms\":1007122,\"exit_code\":143}",
+          "created_at": "2026-05-28T00:52:51.470707718Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=22444 cost_usd=1.2172 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-60e4dc97\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T00:53:11.290303458Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-28T00:53:42.42426521Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128",
+          "created_at": "2026-05-28T00:53:42.503456103Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead is executable as written. Clear problem statement with identified root cause in specific files (triage_hook.go:60, types.go:298, execute_bead_intake_test.go). Acceptance criteria are numbered, testable, and include a specific test filter. Prior execution failures (5 attempts) all show infrastructure/transport issues (git index write failures, docker mount path), not bead clarity or scope problems. The bead itself is well-scoped and unambiguous.\",\"fingerprint\":\"2a8082af6530424bb447050dcc822ec4856083095e27df60dfd8b1db6ce3d8d8\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2a8082af6530424bb447050dcc822ec4856083095e27df60dfd8b1db6ce3d8d8\"}",
+          "created_at": "2026-05-28T01:04:50.802291389Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T01:25:37.2986179Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T010507-1af2cf85\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":44,\"output_tokens\":2573,\"total_tokens\":2617,\"cost_usd\":1.2788222999999999,\"duration_ms\":1219786,\"exit_code\":0}",
+          "created_at": "2026-05-28T01:25:37.367235476Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=2617 cost_usd=1.2788 model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-60e4dc97\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-28T01:25:56.397246973Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"The attempt failed with 'committing tracker: fatal: unable to write new index file: exit status 128' — a git infrastructure failure during tracker commit, not a code or bead-clarity issue. The agent produced empty output (no work landed), and the pre-claim intake explicitly notes the bead is well-scoped and that all 5 prior failures were infrastructure/transport (git index write, docker mount), not clarity or scope problems. This is a transient local environment fault that warrants releasing the claim and retrying, not amending the bead.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-28T01:26:34.065388241Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-28T01:26:34.231306374Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1976 tokens with tools=false at policy default\",\"fingerprint\":\"cb02413b9f1e213886b933b5a4e68f11cc1ab9149fd98846a6469b2eb067a6f8\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"cb02413b9f1e213886b933b5a4e68f11cc1ab9149fd98846a6469b2eb067a6f8\"}",
+          "created_at": "2026-05-28T01:51:23.968823757Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260528T015138-75f03745",
+    "prompt": ".ddx/executions/20260528T015138-75f03745/prompt.md",
+    "manifest": ".ddx/executions/20260528T015138-75f03745/manifest.json",
+    "result": ".ddx/executions/20260528T015138-75f03745/result.json",
+    "checks": ".ddx/executions/20260528T015138-75f03745/checks.json",
+    "usage": ".ddx/executions/20260528T015138-75f03745/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-60e4dc97-20260528T015138-75f03745"
+  },
+  "prompt_sha": "0059242ed3086c56dad53cab5f086ac8901a8e081506b3e774fb5a8e99928157"
+}
