@@ -4,7 +4,7 @@ go 1.26.3
 
 require (
 	github.com/99designs/gqlgen v0.17.89
-	github.com/easel/fizeau v0.14.32
+	github.com/easel/fizeau v0.14.33
 	github.com/fatih/color v1.18.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/itchyny/gojq v0.12.19
@@ -13,7 +13,6 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	github.com/vektah/gqlparser/v2 v2.5.32
-	go.opentelemetry.io/otel/trace v1.43.0
 	golang.org/x/text v0.34.0
 	golang.org/x/tools v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -79,6 +78,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.opentelemetry.io/otel v1.43.0 // indirect
 	go.opentelemetry.io/otel/metric v1.43.0 // indirect
+	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go4.org/mem v0.0.0-20240501181205-ae6ca9944745 // indirect
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/crypto v0.48.0 // indirect
