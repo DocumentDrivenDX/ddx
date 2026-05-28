@@ -896,6 +896,51 @@ func restoreCheckpointSkipWorktreePaths(projectRoot string, paths []string) erro
 	return nil
 }
 
+// isMaterializedSkillSymlink reports whether a path is a skill directory symlink
+// that has been materialized into a real directory by an external tool. Skill
+// symlinks (.crush/skills/*, .claude/skills/*, .agents/skills/*) tracked in git
+// as symlinks (mode 120000) but present in the working tree as directories are
+// benign and do not indicate uncommitted implementation changes.
+func isMaterializedSkillSymlink(projectRoot, path string) bool {
+	// Check if path is in a skill directory root
+	skillDirs := []string{".crush/skills", ".claude/skills", ".agents/skills"}
+	var isSkillPath bool
+	for _, skillDir := range skillDirs {
+		if path == skillDir || strings.HasPrefix(path, skillDir+"/") {
+			isSkillPath = true
+			break
+		}
+	}
+	if !isSkillPath {
+		return false
+	}
+
+	// Check if it's tracked in git as a symlink
+	mode, err := internalgit.Command(context.Background(), projectRoot,
+		"ls-files", "--stage", "--", path).Output()
+	if err != nil || len(mode) == 0 {
+		return false
+	}
+	// ls-files --stage output is: "<mode> <object> <stage>\t<file>"
+	// We need to extract the mode field (first field, 120000 for symlink)
+	parts := strings.Fields(string(mode))
+	if len(parts) < 1 {
+		return false
+	}
+	gitMode := parts[0]
+	if gitMode != "120000" {
+		return false
+	}
+
+	// Check if the working tree has it as a directory
+	fullPath := filepath.Join(projectRoot, filepath.FromSlash(path))
+	info, err := os.Stat(fullPath)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
+}
+
 func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 	out, err := internalgit.Command(context.Background(), projectRoot,
 		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").Output()
@@ -930,6 +975,9 @@ func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 		if preDispatchCheckpointIgnoredPath(path) {
 			continue
 		}
+		if isMaterializedSkillSymlink(projectRoot, path) {
+			continue
+		}
 		if path != "" && !seen[path] {
 			seen[path] = true
 			paths = append(paths, path)
@@ -950,6 +998,9 @@ func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 				continue
 			}
 			if preDispatchCheckpointIgnoredPath(path) {
+				continue
+			}
+			if isMaterializedSkillSymlink(projectRoot, path) {
 				continue
 			}
 			if path != "" && !seen[path] {

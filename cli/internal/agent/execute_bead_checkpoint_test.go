@@ -452,3 +452,82 @@ func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
 	assert.Contains(t, err.Error(), "cli/internal/agent/dirty_impl.go")
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
 }
+
+// TestPreDispatchCheckpoint_MaterializedSkillSymlinkIsNotDirt verifies that a
+// tracked skill symlink materialized into a directory by an external tool is
+// not reported as an uncommitted implementation change. This handles the case
+// where tool-managed skill symlinks (.crush/skills/*, .claude/skills/*,
+// .agents/skills/*) are converted from symlinks to directories.
+func TestPreDispatchCheckpoint_MaterializedSkillSymlinkIsNotDirt(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+
+	skillDirs := []string{".crush/skills", ".claude/skills", ".agents/skills"}
+	for _, skillDir := range skillDirs {
+		skillPath := filepath.Join(projectRoot, filepath.FromSlash(skillDir), "test-skill")
+		require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+
+		// Create a target directory for the symlink
+		targetDir := filepath.Join(projectRoot, "skill-targets", "test-skill")
+		require.NoError(t, os.MkdirAll(targetDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(targetDir, "SKILL.md"), []byte("# Test Skill\n"), 0o644))
+
+		// Create and commit a symlink
+		require.NoError(t, os.Symlink(filepath.Join("..", "..", "skill-targets", "test-skill"), skillPath))
+		runGitInteg(t, projectRoot, "add", filepath.ToSlash(filepath.Join(skillDir, "test-skill")))
+		runGitInteg(t, projectRoot, "commit", "-m", "test: add skill symlink")
+
+		// Remove the symlink and materialize it as a directory
+		require.NoError(t, os.Remove(skillPath))
+		require.NoError(t, os.MkdirAll(skillPath, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte("# Test Skill\n"), 0o644))
+
+		// Verify that the materialized symlink is not reported as dirty
+		paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+		require.NoError(t, err)
+		assert.NotContains(t, paths, filepath.ToSlash(filepath.Join(skillDir, "test-skill")),
+			"materialized skill symlink should not be reported as dirty in %s", skillDir)
+
+		// Clean up for next iteration
+		runGitInteg(t, projectRoot, "reset", "--hard", "HEAD")
+		os.RemoveAll(filepath.Join(projectRoot, filepath.FromSlash(skillDir)))
+		os.RemoveAll(filepath.Join(projectRoot, "skill-targets"))
+	}
+}
+
+// TestPreDispatchCheckpoint_MaterializedSymlinkWithImplementationChanges is a
+// regression test to ensure that genuine uncommitted implementation changes are
+// still detected even when a symlink has been materialized. This guards against
+// overly broad filtering.
+func TestPreDispatchCheckpoint_MaterializedSymlinkWithImplementationChanges(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+
+	// Create and commit a skill symlink
+	skillPath := filepath.Join(projectRoot, ".crush", "skills", "test-skill")
+	targetDir := filepath.Join(projectRoot, "skill-targets", "test-skill")
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(targetDir, "SKILL.md"), []byte("# Test Skill\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+	require.NoError(t, os.Symlink(filepath.Join("..", "..", "skill-targets", "test-skill"), skillPath))
+	runGitInteg(t, projectRoot, "add", filepath.ToSlash(filepath.Join(".crush", "skills", "test-skill")))
+	runGitInteg(t, projectRoot, "commit", "-m", "test: add skill symlink")
+
+	// Materialize the symlink into a directory
+	require.NoError(t, os.Remove(skillPath))
+	require.NoError(t, os.MkdirAll(skillPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte("# Test Skill\n"), 0o644))
+
+	// Add a genuine implementation file
+	implPath := filepath.Join(projectRoot, "feature.txt")
+	require.NoError(t, os.WriteFile(implPath, []byte("real implementation\n"), 0o644))
+
+	// Verify that both the materialized symlink and the implementation change are detected,
+	// but the implementation change is the one that matters
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+
+	// The materialized symlink should NOT be in the dirty paths
+	assert.NotContains(t, paths, ".crush/skills/test-skill")
+
+	// But the implementation file should still be caught
+	assert.Contains(t, paths, "feature.txt")
+}
