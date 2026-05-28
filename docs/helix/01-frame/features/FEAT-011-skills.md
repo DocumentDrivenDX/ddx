@@ -10,7 +10,7 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Implemented (root `ddx` skill with nested workflow skills present in `skills/`, `cli/internal/skills/`, `.agents/skills/`, `.claude/skills/`, and `.ddx/skills/`; site copy pending)
+**Status:** Implemented (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`)
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -65,7 +65,7 @@ The consolidated design fixes each of these.
 ### Root skill plus nested workflow skills
 
 ```
-skills/ddx/
+library/skills/ddx/        # package-owned canonical source
 ├── SKILL.md                # overview, vocabulary, intent-router directive
 ├── reference/
 │   ├── beads.md            # writing execution-ready beads (best practices)
@@ -168,7 +168,7 @@ Router precedence is load-bearing:
 - `breakdown` returns filed bead IDs, parent/dependency edges, named tests, and
   verification commands.
 
-The route fixtures under `skills/ddx/evals/routing.jsonl` assert a stable row
+The route fixtures under `library/skills/ddx/evals/routing.jsonl` assert a stable row
 schema: `phrase`, `mode`, `references`, `queue_commands`,
 `tracker_mutation_allowed`, `code_edits_allowed`, and
 `expected_next_action`. The evaluation driver consumes those fields directly;
@@ -207,42 +207,29 @@ wording, which remains only as an implementation detail for older hooks.
 
 ### Installation
 
-> See FEAT-015 (2026-04-29 amendment) for the authoritative install
-> model: project-local copy semantics, zero symlinks created by
-> `ddx install`, and the no-`~` manifest invariant.
+> See FEAT-015 (2026-05-12 amendment) and plan-2026-05-13-ddx-skill-package-layout
+> for the authoritative install model: package-owned source, embedded package copy,
+> and project-local installer outputs.
 
-- `ddx init` copies `skills/ddx/` into `.claude/skills/ddx/`,
-  `.agents/skills/ddx/`, and `.ddx/skills/ddx/` as real files
-  (symlinks break after `git clone` on a fresh machine, and DDx no
-  longer creates symlinks during install — see FEAT-015).
-- DDx maintains five shipped copies of the root skill tree:
-  `skills/ddx/` as source, `cli/internal/skills/ddx/` for `go:embed`,
-  `.agents/skills/ddx/` for Codex and agentskills-compatible harnesses,
-  `.claude/skills/ddx/` for Claude Code, and `.ddx/skills/ddx/` as the
-  project-local DDx-managed copy.
+- Canonical DDx skill source lives in `library/skills/ddx/` and is owned by the
+  default `ddx` plugin package. This is the single source of truth.
+- The binary embeds the entire default package library via `//go:embed` at
+  `cli/internal/registry/defaultplugin/library/`, so the skill ships offline
+  without separate download.
+- `ddx init` installs the default `ddx` plugin through the embedded package
+  installer, producing real project files at `.agents/skills/ddx/` and
+  `.claude/skills/ddx/` (no symlinks, git-trackable).
 - On init and on `ddx init --force`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
   `ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
   `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
   untouched.
-- Skills embed into the binary via `//go:embed all:ddx` against a
-  copy under `cli/internal/skills/ddx/`. Because `go:embed` cannot
-  traverse upward, a `make copy-skills` target rsyncs
-  `skills/ddx/` → `cli/internal/skills/ddx/` before every build.
-  That target covers only the embedded copy.
-- Source skill edits that affect shipped interactive behavior must also refresh
-  the project-local copies under `.agents/skills/ddx/`, `.claude/skills/ddx/`,
-  and `.ddx/skills/ddx/` through `ddx init --force` behavior or an
-  explicit repo-local sync command. Tests must compare touched files across all
-  five shipped paths so a green `make copy-skills` cannot mask stale project
-  copies.
-- The five shipped `ddx` skill paths are:
-  `skills/ddx/` (source), `cli/internal/skills/ddx/` (embedded copy),
-  `.agents/skills/ddx/` (Codex/agentskills project copy),
-  `.claude/skills/ddx/` (Claude Code project copy), and
-  `.ddx/skills/ddx/` (DDx-managed project copy). Nested workflow skills
-  live under each copied tree so lifecycle hooks and human-invoked skills
-  see the same instructions.
+- Nested workflow skills live under `library/skills/ddx/` so the entire tree
+  is owned by the default package. On install, all nested subdirectories become
+  project-local content at `.agents/skills/ddx/` and `.claude/skills/ddx/`.
+- For development overlays, `ddx plugin install ddx --local library --force`
+  creates project-local symlinks to the source for live editing without
+  auto-committing.
 
 ### AGENTS.md: merge, not clobber
 
@@ -271,21 +258,21 @@ command phrasing). Re-running `ddx init` updates the block in place.
 Anthropic's skill-authoring guidance treats evaluations as
 load-bearing, not optional. The repo ships:
 
-- `skills/ddx/evals/routing.jsonl` — at least 15 rows, each a user phrase plus
+- `library/skills/ddx/evals/routing.jsonl` — at least 15 rows, each a user phrase plus
   mode, references, queue commands, mutation permissions, and expected next
   action, covering every intent-router entry and edge phrasing.
 - `scripts/eval-skill.sh` — driver that validates the fixture schema, runs each
   row against `--harness claude` and `--harness codex`, and verifies the richer
   routing contract. `--validate` mode does agentskills.io spec conformance.
-- `make eval-skill` in CI on PRs that touch `skills/ddx/`.
+- `make eval-skill` in CI on PRs that touch `library/skills/ddx/`.
 
 ## Requirements
 
 ### Functional
 
-1. DDx ships exactly one root skill tree (`ddx`) in `skills/ddx/`; no sibling
+1. DDx ships exactly one root skill tree (`ddx`) in `library/skills/ddx/`; no sibling
    `ddx-*` skill directories. Workflow-specific DDx skills live as nested
-   subdirectories under the root tree.
+   subdirectories under the root tree in the package.
 2. `SKILL.md` frontmatter contains only `name` and `description`.
 3. `SKILL.md` body is under 500 lines and includes an explicit
    intent-router directive.
@@ -296,14 +283,16 @@ load-bearing, not optional. The repo ships:
    merges the AGENTS.md block without clobbering user content.
 6. `ddx init --force` refreshes `.claude/skills/ddx/` and removes stale
    dirs.
-7. `skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
+7. `library/skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
    passing the richer route schema and then passing against `claude` and
    `codex` harnesses via `make eval-skill`.
-8. `SKILL.md` passes `scripts/eval-skill.sh --validate` (agentskills.io
-   spec conformance).
-9. `reference/interactive.md` is present in every shipped skill copy and defines
-   the interactive-steward loop, phase output contracts, mutation policy,
+8. `library/skills/ddx/SKILL.md` passes `scripts/eval-skill.sh --validate`
+   (agentskills.io spec conformance).
+9. `reference/interactive.md` is present in `library/skills/ddx/reference/` and
+   defines the interactive-steward loop, phase output contracts, mutation policy,
    consent-gated adversarial review, and `ddx work focus` fallback behavior.
+   After `ddx init`, this file is present at `.agents/skills/ddx/reference/interactive.md`
+   and `.claude/skills/ddx/reference/interactive.md`.
 10. Generated AGENTS guidance uses the same precedence as the skill: broad
     interactive prompts route to `interactive-steward`, explicit worker prompts
     route to `bead_execution`, and `DDX_MODE=bead_execution` never overrides
@@ -312,9 +301,9 @@ load-bearing, not optional. The repo ships:
     (`mode`, `references`, `queue_commands`, `tracker_mutation_allowed`,
     `code_edits_allowed`, `expected_next_action`) instead of relying only on
     the legacy `expected_reference` / `expected_cli` fields.
-12. Tests or validation commands prove touched files match across
-    `skills/ddx/`, `cli/internal/skills/ddx/`, `.agents/skills/ddx/`,
-    `.claude/skills/ddx/`, and `.ddx/skills/ddx/`.
+12. After `ddx init`, `.agents/skills/ddx/` and `.claude/skills/ddx/` contain
+    project-local copies of `library/skills/ddx/` generated by the package
+    installer. The canonical source is `library/skills/ddx/`.
 
 ### Non-Functional
 
@@ -371,7 +360,7 @@ loop
 token budget and doesn't compete with conversation context
 
 **Acceptance Criteria:**
-- `wc -l skills/ddx/SKILL.md` < 500.
+- `wc -l library/skills/ddx/SKILL.md` < 500.
 - `scripts/eval-skill.sh --validate` passes.
 
 ### US-112: `ddx init` handles existing projects cleanly

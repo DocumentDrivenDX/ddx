@@ -28,12 +28,13 @@ directly.
 
 ## Skill Format
 
-> **FEAT-015 amendment:** Skill directories are project-local under
-> `<projectRoot>/.agents/skills/`. Home-directory skill paths are retired.
-> The layout below uses the current project-local model.
+> **FEAT-015 amendment (2026-05-12):** Skill directories are project-local under
+> `<projectRoot>/.agents/skills/` and `<projectRoot>/.claude/skills/` as installer
+> outputs from the package-owned `library/skills/ddx/`. Home-directory skill paths
+> are retired. The layout below uses the current project-local model.
 
 ```
-.agents/skills/ddx/   # project-local (FEAT-015)
+library/skills/ddx/       # package-owned canonical source
 ├── SKILL.md
 ├── evals/
 │   └── routing.jsonl
@@ -43,6 +44,9 @@ directly.
     ├── executions.md
     ├── personas.md
     └── ...
+
+.agents/skills/ddx/       # project-local (installed by package installer)
+.claude/skills/ddx/       # project-local (installed by package installer)
 ```
 
 ### SKILL.md Frontmatter
@@ -86,23 +90,26 @@ Reference files cover:
 
 ## Installation Mechanism
 
-### Embedded Source
+### Package-Owned Source
 
-Skill source lives in `cli/internal/skills/ddx/`. The binary embeds
-the tree via `//go:embed` (FEAT-011) so the skill ships with every
-DDx release and never requires a separate download.
+Canonical skill source lives in `library/skills/ddx/`. The binary embeds
+the entire default package library via `//go:embed` at
+`cli/internal/registry/defaultplugin/library/` (FEAT-011, plan-2026-05-13)
+so the skill ships with every DDx release and never requires a separate
+download.
 
 ### Project-Local Install (`ddx init`)
 
-`ddx init` writes a project-local copy into `.ddx/skills/ddx/` and
-registers skill symlinks under `.agents/skills/` and `.claude/skills/`
-for the two major skill runtimes. Real files are copied (not
-symlinked to global) so project worktrees can evolve independently.
+`ddx init` installs the default `ddx` plugin through the embedded package
+installer, writing project-local real files (not symlinks) to
+`.agents/skills/ddx/` and `.claude/skills/ddx/` for the two major skill
+runtimes. Real files are installed (not symlinked to global) so project
+worktrees can evolve independently and remain git-portable.
 
-### Global Install (`ddx install --global`)
+### Local Development Overlay
 
-> **Retired (FEAT-015):** `ddx install --global` has been removed. Skills are
-> installed project-locally via `ddx init`. No home-directory writes occur.
+For development, `ddx plugin install ddx --local library --force` creates
+project-local symlinks to the source for live editing without auto-committing.
 
 ### Plugin-Declared Skills (`ddx plugin install <plugin>`)
 
@@ -132,21 +139,21 @@ positional argument guessing.
   `argument-hint`, rejects nested `skill:` metadata, requires a
   non-empty body.
 - `make skill-schema` (at `cli/Makefile:82`) runs `ddx skills check`
-  against both the canonical source (`skills/ddx`) and the embedded
-  copy (`cli/internal/skills/ddx`). Pre-commit and CI both enforce
-  this gate.
-- Unit tests in `cli/internal/skills/` verify the embedded tree
-  parses cleanly.
+  against the canonical source (`library/skills/ddx`) and the embedded
+  default-package copy (`cli/internal/registry/defaultplugin/library/skills/ddx`).
+  Pre-commit and CI both enforce this gate.
+- Unit tests verify that the embedded default package tree parses cleanly.
 
 ## Testing Strategy
 
 - Static validation of every bundled `SKILL.md` via
-  `ddx skills check`.
-- Router evals: `skills/ddx/evals/routing.jsonl` contains labelled
+  `ddx skills check` against the source and embedded copy.
+- Router evals: `library/skills/ddx/evals/routing.jsonl` contains labelled
   user phrasings and expected reference-file selections. The eval is
   the regression harness for router drift.
-- Integration tests for `ddx init` assert the skill directory exists
-  and contains a readable `SKILL.md` after initialization.
+- Integration tests for `ddx init` assert the skill directories exist
+  at `.agents/skills/ddx/` and `.claude/skills/ddx/` and contain readable
+  `SKILL.md` files after initialization.
 - No end-to-end agent execution tests — skill correctness is
   validated by inspecting the skill content and router evals, not by
   running an agent.
