@@ -1534,8 +1534,11 @@ func (s *Store) Close(args ...any) error {
 	_ = s.RemoveClaimHeartbeat(id)
 	s.maybeOpportunisticMaintenance()
 
-	// Cascade-close eligible beads superseded by Y
-	_ = s.cascadeCloseSuperseeded(id)
+	// Cascade-close eligible beads superseded by X, then walk up one hop
+	// to close dead-intermediate (execution-eligible==false) beads.
+	// Both operations share a visited set to prevent cycles within Close().
+	visited := map[string]bool{id: true}
+	_ = s.cascadeAndWalkUp(id, visited)
 
 	return nil
 }
@@ -1563,6 +1566,102 @@ func (s *Store) externalizeEvents(id string) error {
 		}
 		return nil
 	})
+}
+
+// cascadeAndWalkUp performs both cascade-close (RC-2) and walk-up (RC-3) cleanup
+// within a single Close() invocation, sharing the visited set to prevent cycles.
+// First cascades close beads superseded by closedID, then walks up one hop to
+// check if the closed bead's parent should be auto-closed as a dead-intermediate.
+func (s *Store) cascadeAndWalkUp(closedID string, visited map[string]bool) error {
+	all, err := s.ReadAll(context.Background())
+	if err != nil {
+		return err
+	}
+
+	// RC-2: Cascade-close superseded beads
+	for _, x := range all {
+		if visited[x.ID] {
+			continue
+		}
+		if !s.canCascadeCloseSuperseeded(&x, closedID, all) {
+			continue
+		}
+		visited[x.ID] = true
+		_ = s.SetLifecycleStatus(x.ID, StatusClosed, LifecycleTransitionOptions{
+			ManualClose: true,
+			Reason:      fmt.Sprintf("cascade-close superseded by %s", closedID),
+			Source:      "Store.Close.cascadeCloseSuperseeded",
+		})
+		_ = s.externalizeEvents(x.ID)
+		_ = s.AppendEvent(x.ID, BeadEvent{
+			Kind:      "superseded_close",
+			Summary:   fmt.Sprintf("closed as superseded via %s", closedID),
+			Body:      fmt.Sprintf("closed_by_cascade_of: %s\nreason: closed_as_superseded_via:%s", closedID, closedID),
+			Source:    "Store.Close.cascadeCloseSuperseeded",
+			CreatedAt: time.Now().UTC(),
+		})
+		_ = s.RemoveClaimHeartbeat(x.ID)
+	}
+
+	// RC-3: Walk up one hop to close dead-intermediate (execution-eligible==false) beads
+	closedBead := findBeadByID(all, closedID)
+	if closedBead != nil && closedBead.Parent != "" {
+		if !visited[closedBead.Parent] {
+			s.walkUpClosureCandidate(closedBead.Parent, all, visited)
+		}
+	}
+
+	return nil
+}
+
+// walkUpClosureCandidate checks if parent should be auto-closed as a dead-intermediate
+// and closes it if criteria are met: execution-eligible==false AND all children closed
+// AND has children. Single-hop only; does not chase the grandparent.
+func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited map[string]bool) {
+	parent := findBeadByID(allBeads, parentID)
+	if parent == nil {
+		return
+	}
+
+	// Count children to check closure eligibility
+	openChildCount := 0
+	totalChildCount := 0
+	for _, b := range allBeads {
+		if b.Parent == parentID {
+			totalChildCount++
+			if b.Status != StatusClosed {
+				openChildCount++
+			}
+		}
+	}
+
+	// Check closure criteria: execution-eligible==false AND no open children AND has children
+	executionEligible, executionEligibleKnown := lifecycleExecutionEligible(*parent)
+	if !executionEligibleKnown || executionEligible {
+		// execution-eligible is not explicitly false, skip
+		return
+	}
+	if openChildCount > 0 || totalChildCount == 0 {
+		// Still has open children or no children at all, skip
+		return
+	}
+
+	// All criteria met: close the parent as a dead-intermediate
+	visited[parentID] = true
+	_ = s.SetLifecycleStatus(parentID, StatusClosed, LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "auto-close dead-intermediate (all children closed, not execution-eligible)",
+		Source:      "Store.Close.walkUpClosureCandidate",
+	})
+	_ = s.externalizeEvents(parentID)
+	_ = s.AppendEvent(parentID, BeadEvent{
+		Kind:      "dead_intermediate_close",
+		Summary:   "closed as dead-intermediate bead (all children closed, execution-eligible=false)",
+		Body:      fmt.Sprintf("closed_because: all_children_closed\nexecution_eligible: false\ntotal_children: %d", totalChildCount),
+		Source:    "Store.Close.walkUpClosureCandidate",
+		CreatedAt: time.Now().UTC(),
+	})
+	_ = s.RemoveClaimHeartbeat(parentID)
 }
 
 // cascadeCloseSuperseeded scans for open beads X where superseded-by==Y,

@@ -573,6 +573,161 @@ func TestClose_SupersededCascade_ClaimedOrInProgress_NotCascaded(t *testing.T) {
 	assert.Equal(t, StatusInProgress, xGot.Status)
 }
 
+func TestClose_WalkUp_DeadIntermediateClosureCandidate(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create parent P (execution-eligible=false, epic container)
+	p := &Bead{
+		Title:     "Epic parent",
+		IssueType: "epic",
+		Status:    StatusOpen,
+		Extra:     map[string]any{ExtraExecutionElig: false},
+	}
+	require.NoError(t, s.Create(testCtx(), p))
+
+	// Create child X (open, parent=P)
+	x := &Bead{
+		Title:  "Child X",
+		Status: StatusOpen,
+		Parent: p.ID,
+	}
+	require.NoError(t, s.Create(testCtx(), x))
+
+	// Close X, should auto-close P as dead-intermediate
+	require.NoError(t, s.Close(testCtx(), x.ID))
+
+	// Verify X is closed
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, xGot.Status)
+
+	// Verify P is also closed (walk-up closure candidate)
+	pGot, err := s.Get(testCtx(), p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, pGot.Status)
+
+	// Verify P has dead_intermediate_close event
+	pEvents, err := s.Events(p.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range pEvents {
+		if e.Kind == "dead_intermediate_close" {
+			assert.Contains(t, e.Body, "all_children_closed")
+			assert.Contains(t, e.Body, "execution_eligible: false")
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "P should have dead_intermediate_close event")
+}
+
+func TestClose_WalkUp_DeadIntermediateWithRemainingOpenChildren(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create parent P (execution-eligible=false)
+	p := &Bead{
+		Title:     "Epic parent",
+		IssueType: "epic",
+		Status:    StatusOpen,
+		Extra:     map[string]any{ExtraExecutionElig: false},
+	}
+	require.NoError(t, s.Create(testCtx(), p))
+
+	// Create children X and Z (both open, parent=P)
+	x := &Bead{
+		Title:  "Child X",
+		Status: StatusOpen,
+		Parent: p.ID,
+	}
+	z := &Bead{
+		Title:  "Child Z",
+		Status: StatusOpen,
+		Parent: p.ID,
+	}
+	require.NoError(t, s.Create(testCtx(), x))
+	require.NoError(t, s.Create(testCtx(), z))
+
+	// Close X, should NOT auto-close P because Z is still open
+	require.NoError(t, s.Close(testCtx(), x.ID))
+
+	// Verify X is closed
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, xGot.Status)
+
+	// Verify P remains open (Z is still pending)
+	pGot, err := s.Get(testCtx(), p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, pGot.Status)
+
+	// Verify P has NO dead_intermediate_close event
+	pEvents, err := s.Events(p.ID)
+	require.NoError(t, err)
+	for _, e := range pEvents {
+		assert.NotEqual(t, "dead_intermediate_close", e.Kind, "P should not have dead_intermediate_close event")
+	}
+}
+
+func TestClose_WalkUp_SingleHopOnly(t *testing.T) {
+	s := newTestStore(t)
+
+	// Create chain P → Q → X (all execution-eligible=false)
+	p := &Bead{
+		Title:     "Epic P",
+		IssueType: "epic",
+		Status:    StatusOpen,
+		Extra:     map[string]any{ExtraExecutionElig: false},
+	}
+	q := &Bead{
+		Title:     "Epic Q",
+		IssueType: "epic",
+		Status:    StatusOpen,
+		Parent:    "", // Will be set after creation
+		Extra:     map[string]any{ExtraExecutionElig: false},
+	}
+	x := &Bead{
+		Title:  "Child X",
+		Status: StatusOpen,
+		Parent: "", // Will be set after creation
+	}
+	require.NoError(t, s.Create(testCtx(), p))
+	require.NoError(t, s.Create(testCtx(), q))
+	require.NoError(t, s.Create(testCtx(), x))
+
+	// Set parent relationships: P → Q → X
+	require.NoError(t, s.Update(testCtx(), q.ID, func(b *Bead) {
+		b.Parent = p.ID
+	}))
+	require.NoError(t, s.Update(testCtx(), x.ID, func(b *Bead) {
+		b.Parent = q.ID
+	}))
+
+	// Close X, should auto-close Q (one hop), but NOT P (next Close() will handle)
+	require.NoError(t, s.Close(testCtx(), x.ID))
+
+	// Verify X is closed
+	xGot, err := s.Get(testCtx(), x.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, xGot.Status)
+
+	// Verify Q is closed (one hop up from X)
+	qGot, err := s.Get(testCtx(), q.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, qGot.Status)
+
+	// Verify P is still open (single-hop only, not chased to grandparent)
+	pGot, err := s.Get(testCtx(), p.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, pGot.Status)
+
+	// P should have no dead_intermediate_close event (not closed yet)
+	pEvents, err := s.Events(p.ID)
+	require.NoError(t, err)
+	for _, e := range pEvents {
+		assert.NotEqual(t, "dead_intermediate_close", e.Kind, "P should not have dead_intermediate_close event yet")
+	}
+}
+
 func TestListFilters(t *testing.T) {
 	s := newTestStore(t)
 
