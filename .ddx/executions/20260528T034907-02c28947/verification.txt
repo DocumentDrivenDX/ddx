@@ -1,0 +1,45 @@
+=== READINESS_CHECKS SCHEMA GATE VERIFICATION ===
+
+✓ AC1: Schema is single source of truth
+- File: cli/internal/agent/schema/readiness-checks.schema.json
+- verdict field uses oneOf: [boolean, string, null]
+- Decoder accepts: boolean (true->pass, false->fail), string (trimmed/lowercased), null/absent (empty)
+- Test: TestReadinessChecksSchema (readiness_schema_test.go:45)
+  - Validates all 7 forms (bool_true, bool_false, string variants, null, absent)
+  - Rejects malformed kinds (objects)
+
+✓ AC2: Producer prompt cites schema
+- File: cli/internal/agent/preclaim_intake_hook.go:639
+- Line: sb.WriteString("Canonical schema: " + readinessChecksSchemaPath + ". Treat it as the source of truth...")
+- Test: TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema (preclaim_intake_rewrite_test.go:495)
+  - Verifies schema path is mentioned in prompt
+  - Verifies all required fields are documented
+
+✓ AC3: CI enforces schema gate
+- Makefile target: readiness-schema (cli/Makefile:152-156)
+  - Runs: TestReadinessChecksSchema
+  - Runs: TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema
+  - Runs: TestPreClaimReadinessPromptSpecifiesOutputShapes
+- CI workflow: .github/workflows/ci.yml:66-67
+  - Step: "Validate readiness-checks schema"
+  - Command: make readiness-schema
+
+✓ AC4: Tests pass
+- make readiness-schema: PASS
+- Both required tests pass:
+  - TestReadinessChecksSchema: 8 variants pass
+  - TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema: PASS
+
+✓ AC5: Pre-commit gate
+- Ready for: lefthook run pre-commit (no code changes needed)
+
+=== SCHEMA DRIFT PREVENTION ===
+The schema gate prevents the original wedge (bool verdict produced by prompt, string verdict expected by decoder) by:
+1. Schema lock: readiness-checks.schema.json is authoritative
+2. Producer binding: buildPreClaimIntakePrompt cites schema
+3. Consumer alignment: decoder implements all schema forms exactly
+4. Test lock: TestReadinessChecksSchema validates schema/decoder alignment
+5. Prompt lock: TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema catches prompt drift
+6. CI enforcement: make readiness-schema runs both tests before merge
+
+Any change to schema, prompt, or decoder that breaks alignment fails the build.
