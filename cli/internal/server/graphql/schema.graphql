@@ -2588,8 +2588,11 @@ type Query {
   ): String!
 
   """
-  List workers reported via the worker_ingest derived view (ADR-022 §Worker-server interface).
-  Distinct from the `workers` query, which surfaces the in-process work registry.
+  List workers from two sources: the worker_ingest derived view (ADR-022 §Worker-server interface)
+  and in-flight attempts from live run-state.json (for inline work). Provides unified visibility
+  into both registered worker reports and live attempts without polling the bead tracker.
+  Worker panes (dashboard, workers listing) primarily use this query.
+  Distinct from the `workers` query, which surfaces the on-disk worker registry.
   Each entry is classified connected/stale/disconnected by elapsed time since last_event_at
   per the rev-5 freshness state model.
   """

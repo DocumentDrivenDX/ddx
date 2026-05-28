@@ -195,7 +195,7 @@ func New(addr, workingDir string) *Server {
 		operatorPromptAutoApproveAllowlist: parseOperatorPromptAllowlistEnv(os.Getenv("DDX_OPERATOR_PROMPT_ALLOWLIST")),
 		workerIngest:                       newWorkerIngestRegistry(workingDir),
 	}
-	s.reportedWorkers = newReportedWorkersAdapter(s.workerIngest)
+	s.reportedWorkers = newReportedWorkersAdapterWithWorkingDir(s.workerIngest, workingDir)
 	state.coordinatorReg = workers.LandCoordinators
 
 	// Register the server's own project immediately.

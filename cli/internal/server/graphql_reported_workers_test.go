@@ -8,11 +8,15 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -191,6 +195,69 @@ func TestGraphQL_Workers_MultipleWorkersPerProject(t *testing.T) {
 	}
 	if seen[rec2.WorkerID] != "codex" {
 		t.Fatalf("worker2 harness: want codex, got %q", seen[rec2.WorkerID])
+	}
+}
+
+// TestGraphQL_ReportedWorkers_SurfacesInFlightAttempts verifies that
+// in-flight attempts from live run-state.json appear as active workers
+// with "connected" freshness state in the reportedWorkers query.
+func TestGraphQL_ReportedWorkers_SurfacesInFlightAttempts(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	reg := newWorkerIngestRegistry(workingDir)
+	t.Cleanup(func() { _ = reg.close() })
+
+	// Create adapter with working directory so it can read run-state.json.
+	adapter := newReportedWorkersAdapterWithWorkingDir(reg, workingDir)
+	now := time.Now().UTC()
+
+	// Manually write a run-state.json file simulating an in-flight attempt.
+	runStateDir := ddxroot.JoinProject(workingDir, agent.RunStateDirName)
+	if err := os.MkdirAll(runStateDir, 0o755); err != nil {
+		t.Fatalf("mkdir run-state: %v", err)
+	}
+	runState := agent.RunState{
+		BeadID:      "bead-123",
+		AttemptID:   "attempt-abc",
+		Harness:     "claude",
+		Model:       "claude-opus",
+		StartedAt:   now.Add(-5 * time.Minute),
+		RefreshedAt: now,
+		ExpiresAt:   now.Add(1 * time.Minute),
+	}
+	runStateData, err := json.Marshal(runState)
+	if err != nil {
+		t.Fatalf("marshal run-state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(runStateDir, "attempt-abc.json"), runStateData, 0o644); err != nil {
+		t.Fatalf("write run-state: %v", err)
+	}
+
+	// Override the adapter's now function to use our fixed time.
+	adapter.mu.Lock()
+	adapter.now = func() time.Time { return now }
+	adapter.mu.Unlock()
+
+	workers := adapter.GetReportedWorkers()
+	if len(workers) != 1 {
+		t.Fatalf("want 1 in-flight worker, got %d", len(workers))
+	}
+	w := workers[0]
+	if w.ID != "inline-attempt-abc" {
+		t.Errorf("id: want inline-attempt-abc, got %q", w.ID)
+	}
+	if w.State != "connected" {
+		t.Errorf("state: want connected, got %q", w.State)
+	}
+	if w.Harness != "claude" {
+		t.Errorf("harness: want claude, got %q", w.Harness)
+	}
+	if w.CurrentBead == nil || *w.CurrentBead != "bead-123" {
+		t.Errorf("currentBead: want bead-123, got %v", w.CurrentBead)
+	}
+	if w.CurrentAttempt == nil || *w.CurrentAttempt != "attempt-abc" {
+		t.Errorf("currentAttempt: want attempt-abc, got %v", w.CurrentAttempt)
 	}
 }
 
