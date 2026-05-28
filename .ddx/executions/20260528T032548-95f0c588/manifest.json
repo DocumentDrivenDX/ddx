@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260528T032548-95f0c588",
+  "bead_id": "ddx-8db8674f",
+  "base_rev": "b1ede00df2d88ee2b562e3d692c0074135fce881",
+  "created_at": "2026-05-28T03:25:58.353378193Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8db8674f",
+    "title": "server: Artifacts GraphQL resolver returns HTTP 500 — guard nil artifact-type index and stop resolver panics surfacing as 500",
+    "description": "PROBLEM: Browsing the Artifacts page in the ddx-server web UI returns HTTP 500 (observed 2026-05-27). A 500 (rather than a GraphQL error inside a 200 body) means something in the artifacts resolver chain PANICS and the HTTP layer converts it to 500.\n\nROOT CAUSE (identified candidate): cli/internal/server/graphql/resolver_artifact_types.go:44-48 — attachArtifactTypeDefinitionsToArtifacts() loops project roots calling artifactTypeLoader.Load(root); it checks the returned err but does NOT check whether `index` is nil, then dereferences `index.Types` at line 48. A nil index (now, or after a future loader change) panics with a nil-pointer dereference. attachArtifactTypeDefinitionsToArtifacts is invoked from the Artifacts() query resolver at cli/internal/server/graphql/resolver_artifacts.go:184 (resolver entry at resolver_artifacts.go:92). More generally, any panic anywhere in the Artifacts() chain becomes a 500 instead of a structured GraphQL error.\n\nPROPOSED FIX:\n1. Reproduce the actual 500: issue the `artifacts(projectID: ...)` GraphQL query (see frontend query in cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.ts) against a registered project and capture the panic/stack from the server.\n2. Add a nil-index guard after Load() in resolver_artifact_types.go (return a wrapped error, never dereference a nil index).\n3. Fix the specific panic the repro surfaces, and confirm the gqlgen panic-recovery path returns a structured error (HTTP 200 + errors[]) rather than 500.\n\nNON-SCOPE: frontend changes; the Documents resolver; artifact content rendering.",
+    "acceptance": "1. resolver_artifact_types.go guards a nil index returned by artifactTypeLoader.Load and returns an error instead of dereferencing index.Types.\n2. New test in cli/internal/server/graphql/resolver_artifact_types_test.go (e.g. TestAttachArtifactTypeDefinitions_NilIndexReturnsError) asserts a nil-index path returns an error and does NOT panic.\n3. New/extended test in cli/internal/server/graphql/artifacts_test.go exercises Artifacts() end-to-end against a project with NO artifact-type definitions and asserts success (no panic / no 500).\n4. cd cli \u0026\u0026 go test ./internal/server/graphql/... green\n5. lefthook run pre-commit passes",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "area:graphql",
+      "kind:bug",
+      "observed-failure",
+      "reliability",
+      "operator-ux",
+      "spec:FEAT-008"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T032548-95f0c588",
+    "prompt": ".ddx/executions/20260528T032548-95f0c588/prompt.md",
+    "manifest": ".ddx/executions/20260528T032548-95f0c588/manifest.json",
+    "result": ".ddx/executions/20260528T032548-95f0c588/result.json",
+    "checks": ".ddx/executions/20260528T032548-95f0c588/checks.json",
+    "usage": ".ddx/executions/20260528T032548-95f0c588/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8db8674f-20260528T032548-95f0c588"
+  },
+  "prompt_sha": "d9afe8f8c59370d6addaeaedbc439b64da8738a81a333625322d371464a1853b"
+}
