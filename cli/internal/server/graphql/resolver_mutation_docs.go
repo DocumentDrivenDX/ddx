@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
@@ -41,23 +40,24 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 		return nil, fmt.Errorf("path is required")
 	}
 
-	cleaned := filepath.Clean(path)
-	if strings.Contains(cleaned, "..") {
-		return nil, fmt.Errorf("invalid path: must not contain ..")
-	}
-
 	libPath, err := r.libraryPath(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	fullPath := filepath.Join(libPath, cleaned)
+	fullPath, err := ResolveDocumentPath(libPath, path)
+	if err != nil {
+		return nil, fmt.Errorf("invalid path")
+	}
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return nil, fmt.Errorf("creating directory: %w", err)
 	}
 	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 		return nil, fmt.Errorf("writing document: %w", err)
 	}
+
+	// Compute relative path for graph lookup.
+	cleaned, _ := filepath.Rel(libPath, fullPath)
 
 	// Rebuild graph to pick up the newly written file and return the document.
 	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
