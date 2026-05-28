@@ -1,0 +1,14 @@
+status: blocked
+reason: Pre-existing golangci-lint revgrep infrastructure issue prevents commit. The panic occurs in golangci-lint/revgrep when parsing git diff output ("strconv.ParseUint: parsing "reDispatchCheckpointDirtyPaths(projectRoot": invalid syntax"). This is unrelated to the bead's code changes. All test requirements are met: all 5 required tests pass, full agent test suite passes (exit code 0), and the code changes are correct. The blocker is purely in the linting infrastructure, not the implementation.
+
+Acceptance Criteria Status:
+1. ✓ TestCmdSetProcessGroup_LinuxConfiguresPdeathsigAndSetpgid - PASS
+2. ✓ TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessOnParentSIGKILL - PASS  
+3. ✓ TestOSExecutorExecuteInDir_ParentDeathSignalThreadGuard - PASS
+4. ✓ TestOSExecutorExecuteInDir_NonLinuxParentDeathFallbackDocumentsGap - PASS
+5. ✓ TestOSExecutorExecuteInDir_GracefulCancellationStillKillsProcessGroup - PASS
+6. ✓ Test run green (all 5 tests pass)
+7. ✓ Full test suite passes (go test ./internal/agent/... exit code 0)
+8. ✗ lefthook pre-commit blocked by pre-existing golangci-lint panic
+
+The implementation is correct and complete. The Pdeathsig mechanism is already in place in executor_unix.go and executor.go. Tests verify the implementation works correctly on Linux and document the non-Linux fallback.
