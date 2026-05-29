@@ -389,15 +389,46 @@ func firstPositiveInt(values ...int) int {
 	return 0
 }
 
-// availableSubscriptionHarnesses returns the set of harness names that are
-// currently Available and billed as a subscription (flat-rate, CLI-based).
-// A transient connectivity blip on such a harness must NOT be replayed as a
-// hard route exclusion: doing so can empty the candidate set during a local
-// fleet outage where the subscription harness is the only live option
-// (no_viable_provider). Returns an empty set on any service error so seeding
-// behavior is unchanged (fail-open) when the harness list is unavailable.
-func availableSubscriptionHarnesses(ctx context.Context, svc agentlib.FizeauService) map[string]struct{} {
+// knownSubscriptionHarnesses is the fixed set of CLI subscription harnesses.
+// It is the fail-open fallback for isShieldedSubscriptionHarness when the live
+// harness list cannot prove (or wrongly denies, via tainted liveness) that a
+// subscription harness binary is present: a transient connectivity blip must
+// never hard-exclude one of these harnesses during a local-fleet outage.
+var knownSubscriptionHarnesses = map[string]struct{}{
+	"claude": {},
+	"codex":  {},
+	"gemini": {},
+}
+
+// shieldedSubscriptionHarnesses returns the set of harness names whose recorded
+// connectivity failures must NOT be replayed as hard route exclusions. A harness
+// is shielded when it is a subscription (flat-rate CLI) harness whose binary is
+// discoverable on PATH.
+//
+// CRITICAL: the dispatchability signal here is binary-on-PATH, NOT the
+// HarnessInfo.Available liveness flag. During an outage fizeau's route-health
+// store can flip a subscription harness's Available to false purely from the
+// replayed connectivity blips we are trying to shield against — using Available
+// would make the shield circular (it stops firing exactly when it is needed).
+// HarnessInfo.Path is set from exec.LookPath of the harness binary in fizeau's
+// registry.Discover() and reflects binary presence, not recent-call success.
+//
+// Detection is layered, each independent of tainted liveness:
+//  1. Live list, billing==subscription AND Path non-empty (binary on PATH).
+//  2. Live list, billing==subscription AND name in knownSubscriptionHarnesses
+//     (covers a present binary whose Path was momentarily blank).
+//  3. Always: every name in knownSubscriptionHarnesses (fail-open when the
+//     harness list is unavailable, e.g. svc nil or ListHarnesses errored).
+//
+// The fixed-set members are always included so that even a hard service error
+// cannot let a connectivity blip exclude claude/codex/gemini.
+// All keys returned are lower-cased and whitespace-trimmed so callers can match
+// with a single normalized membership test (see isShieldedSubscriptionHarness).
+func shieldedSubscriptionHarnesses(ctx context.Context, svc agentlib.FizeauService) map[string]struct{} {
 	out := map[string]struct{}{}
+	for name := range knownSubscriptionHarnesses {
+		out[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+	}
 	if svc == nil {
 		return out
 	}
@@ -406,11 +437,39 @@ func availableSubscriptionHarnesses(ctx context.Context, svc agentlib.FizeauServ
 		return out
 	}
 	for _, info := range infos {
-		if info.Available && info.Billing == agentlib.BillingModelSubscription {
-			out[info.Name] = struct{}{}
+		if info.Billing != agentlib.BillingModelSubscription {
+			continue
+		}
+		name := strings.ToLower(strings.TrimSpace(info.Name))
+		if name == "" {
+			continue
+		}
+		if strings.TrimSpace(info.Path) != "" {
+			// Binary discoverable on PATH (registry.Discover sets Path from
+			// exec.LookPath, independent of recent-call liveness).
+			out[name] = struct{}{}
+			continue
+		}
+		if _, known := knownSubscriptionHarnesses[name]; known {
+			out[name] = struct{}{}
 		}
 	}
 	return out
+}
+
+// isShieldedSubscriptionHarness reports whether the named route harness/provider
+// is a subscription CLI harness whose binary is discoverable on PATH (and thus
+// must never be hard-excluded from routing due to replayed connectivity blips).
+// shielded is the set returned by shieldedSubscriptionHarnesses; passing it in
+// keeps the (potentially I/O-bound) ListHarnesses lookup to one call per
+// exclusion pass. The name is matched case/whitespace-insensitively.
+func isShieldedSubscriptionHarness(name string, shielded map[string]struct{}) bool {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return false
+	}
+	_, ok := shielded[n]
+	return ok
 }
 
 func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.FizeauService, projectRoot string, now time.Time) {
@@ -422,7 +481,7 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 	if err != nil {
 		return
 	}
-	skipSubscription := availableSubscriptionHarnesses(ctx, svc)
+	skipSubscription := shieldedSubscriptionHarnesses(ctx, svc)
 	cutoff := now.Add(-ProviderUnavailableCooldown)
 	seen := map[string]struct{}{}
 	for _, b := range beads {
@@ -434,8 +493,8 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 			if at.Before(cutoff) || at.After(now.Add(time.Minute)) || strings.TrimSpace(failed.Provider) == "" {
 				continue
 			}
-			if _, ok := skipSubscription[strings.TrimSpace(failed.Provider)]; ok {
-				// Available subscription harness: a transient connectivity blip
+			if isShieldedSubscriptionHarness(failed.Provider, skipSubscription) {
+				// Shielded subscription harness: a transient connectivity blip
 				// must not become a hard exclusion that removes the only live
 				// option during a local-fleet outage.
 				continue
@@ -483,10 +542,10 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 			}
 			harness := strings.TrimSpace(fmt.Sprint(body["harness"]))
 			model := strings.TrimSpace(fmt.Sprint(body["model"]))
-			if _, ok := skipSubscription[harness]; ok {
+			if isShieldedSubscriptionHarness(harness, skipSubscription) {
 				continue
 			}
-			if _, ok := skipSubscription[provider]; ok {
+			if isShieldedSubscriptionHarness(provider, skipSubscription) {
 				continue
 			}
 			key := harness + "\x00" + provider + "\x00" + model

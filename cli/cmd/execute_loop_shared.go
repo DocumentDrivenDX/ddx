@@ -490,7 +490,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				// in memory for the next attempt.
 				if svcForExcl, svcExclErr := agent.ResolveServiceFromWorkDir(projectRoot); svcExclErr == nil {
 					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
-						ctx, store, beadID, resolveClaimAssignee(),
+						ctx, svcForExcl, store, beadID, resolveClaimAssignee(),
 						targetBead.Extra, time.Now().UTC(), initialMinPower,
 						svcForExcl.ResolveRoute,
 						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },

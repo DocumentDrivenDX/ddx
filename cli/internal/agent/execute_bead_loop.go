@@ -5508,6 +5508,27 @@ func buildExcludedRoutes(failedRoutes []FailedRouteEntry, now time.Time, window 
 	return out
 }
 
+// filterShieldedExcludedRoutes drops any ExcludedRoute whose Provider names a
+// shielded subscription CLI harness (binary on PATH, billing==subscription).
+// Such a route must never be hard-excluded from a RouteRequest just because a
+// recent connectivity blip was recorded against it: doing so can empty the
+// candidate set during a local-fleet outage where the subscription harness is
+// the only live option (the no_viable_provider bug). shielded is the set
+// returned by shieldedSubscriptionHarnesses; an empty set is a no-op.
+func filterShieldedExcludedRoutes(excluded []agentlib.ExcludedRoute, shielded map[string]struct{}) []agentlib.ExcludedRoute {
+	if len(excluded) == 0 || len(shielded) == 0 {
+		return excluded
+	}
+	out := excluded[:0:0]
+	for _, e := range excluded {
+		if isShieldedSubscriptionHarness(e.Provider, shielded) {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // leaseReleaser is the narrow capability CheckAndApplyRouteExclusions needs to
 // atomically release a held lease on a route-resolution timeout. *bead.Store
 // satisfies it via Store.Release (ddx-449baa1d).
@@ -5865,6 +5886,7 @@ func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assigne
 // A nil resolveRoute is treated as a no-op and returns false.
 func CheckAndApplyRouteExclusions(
 	ctx context.Context,
+	svc agentlib.FizeauService,
 	store ExecuteBeadLoopStore,
 	beadID, assignee string,
 	extra map[string]any,
@@ -5880,6 +5902,12 @@ func CheckAndApplyRouteExclusions(
 	}
 	failedRoutes := readFailedRoutes(extra)
 	excluded := buildExcludedRoutes(failedRoutes, now, RouteExclusionWindow)
+	// Never hard-exclude a subscription CLI harness whose binary is on PATH:
+	// the failed-route entries replay connectivity blips that must not empty
+	// the candidate set during a local-fleet outage (same shield as the
+	// tracker-seeding path in service_run.go — single source of truth).
+	shielded := shieldedSubscriptionHarnesses(ctx, svc)
+	excluded = filterShieldedExcludedRoutes(excluded, shielded)
 	if len(excluded) == 0 {
 		return ExecuteBeadReport{}, false
 	}
