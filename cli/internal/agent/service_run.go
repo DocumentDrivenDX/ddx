@@ -389,6 +389,30 @@ func firstPositiveInt(values ...int) int {
 	return 0
 }
 
+// availableSubscriptionHarnesses returns the set of harness names that are
+// currently Available and billed as a subscription (flat-rate, CLI-based).
+// A transient connectivity blip on such a harness must NOT be replayed as a
+// hard route exclusion: doing so can empty the candidate set during a local
+// fleet outage where the subscription harness is the only live option
+// (no_viable_provider). Returns an empty set on any service error so seeding
+// behavior is unchanged (fail-open) when the harness list is unavailable.
+func availableSubscriptionHarnesses(ctx context.Context, svc agentlib.FizeauService) map[string]struct{} {
+	out := map[string]struct{}{}
+	if svc == nil {
+		return out
+	}
+	infos, err := svc.ListHarnesses(ctx)
+	if err != nil {
+		return out
+	}
+	for _, info := range infos {
+		if info.Available && info.Billing == agentlib.BillingModelSubscription {
+			out[info.Name] = struct{}{}
+		}
+	}
+	return out
+}
+
 func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.FizeauService, projectRoot string, now time.Time) {
 	if svc == nil || strings.TrimSpace(projectRoot) == "" {
 		return
@@ -398,6 +422,7 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 	if err != nil {
 		return
 	}
+	skipSubscription := availableSubscriptionHarnesses(ctx, svc)
 	cutoff := now.Add(-ProviderUnavailableCooldown)
 	seen := map[string]struct{}{}
 	for _, b := range beads {
@@ -407,6 +432,12 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 				at = now
 			}
 			if at.Before(cutoff) || at.After(now.Add(time.Minute)) || strings.TrimSpace(failed.Provider) == "" {
+				continue
+			}
+			if _, ok := skipSubscription[strings.TrimSpace(failed.Provider)]; ok {
+				// Available subscription harness: a transient connectivity blip
+				// must not become a hard exclusion that removes the only live
+				// option during a local-fleet outage.
 				continue
 			}
 			key := "\x00" + failed.Provider + "\x00" + failed.Model
@@ -452,6 +483,12 @@ func seedRecentRouteAttemptsFromTracker(ctx context.Context, svc agentlib.Fizeau
 			}
 			harness := strings.TrimSpace(fmt.Sprint(body["harness"]))
 			model := strings.TrimSpace(fmt.Sprint(body["model"]))
+			if _, ok := skipSubscription[harness]; ok {
+				continue
+			}
+			if _, ok := skipSubscription[provider]; ok {
+				continue
+			}
 			key := harness + "\x00" + provider + "\x00" + model
 			if _, ok := seen[key]; ok {
 				continue
@@ -575,7 +612,6 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	return caps, nil
 }
 
-
 // ValidateForExecuteLoopViaService is the production replacement for
 // Runner.ValidateForExecuteLoop. When harness is empty it is a no-op (routing
 // will pick at claim time). When harness is specified it confirms the harness
@@ -623,4 +659,3 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	}
 	return nil
 }
-
