@@ -437,6 +437,7 @@ cli/internal/agent/.ddx/
 
 .ddx/executions/
 .ddx/executions-archive/
+.ddx/harness-sessions/
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/
