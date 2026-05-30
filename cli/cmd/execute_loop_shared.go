@@ -514,10 +514,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 						return unavailableReport, nil
 					}
 				} else {
-					initialMinPower, unavailableReport, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, initialMinPower, spec.MaxPower, loadLadder())
+					var degradeNote string
+					initialMinPower, unavailableReport, degradeNote, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, initialMinPower, spec.MaxPower, loadLadder())
 					if unavailable {
 						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 						return unavailableReport, nil
+					}
+					if degradeNote != "" {
+						initialRoutingNote = degradeNote
 					}
 				}
 			}

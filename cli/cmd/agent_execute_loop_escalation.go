@@ -64,6 +64,12 @@ func highestViableEscalationFloor(l escalationFloorFinder) (int, error) {
 			}
 			return 0, err
 		}
+		if next <= floor {
+			if highest > 0 {
+				return highest, nil
+			}
+			return 0, powerladder.ErrLadderExhausted
+		}
 		highest = next
 		floor = next
 	}
@@ -225,14 +231,18 @@ func intFromAny(value any) int {
 	}
 }
 
+// resolvePowerFloor maps an inferred power class to a concrete ladder floor.
+// When the ladder cannot satisfy the requested class, it degrades through the
+// hierarchy (Smart → Standard → Cheap) per ADR-024 P1 ("cheapest first") so
+// dispatch hands the bead to Fizeau with a viable bound rather than failing
+// outright. Returning (0, false) means "no MinPower pin; let Fizeau pick".
 func resolvePowerFloor(powerClass policyescalation.PowerClass, ladder escalationFloorFinder) (int, bool) {
 	switch powerClass {
 	case policyescalation.PowerSmart:
-		floor, err := highestViableEscalationFloor(ladder)
-		if err != nil {
-			return 0, false
+		if floor, err := highestViableEscalationFloor(ladder); err == nil {
+			return floor, true
 		}
-		return floor, true
+		return resolvePowerFloor(policyescalation.PowerStandard, ladder)
 	case policyescalation.PowerStandard:
 		first, err := nextEscalationFloor(ladder, 0)
 		if err != nil {
@@ -248,21 +258,34 @@ func resolvePowerFloor(powerClass policyescalation.PowerClass, ladder escalation
 	}
 }
 
-func zeroConfigInitialMinPower(b *bead.Bead, powerClass policyescalation.PowerClass, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
+// zeroConfigInitialMinPower selects the initial MinPower for a bead when the
+// caller has no explicit routing flags or project routing config. The third
+// return value carries a degradation note when the inferred class could not
+// be pinned to a ladder floor and was downgraded to Cheap-equivalent
+// (no MinPower pin). Callers should propagate the note into RoutingIntentNote
+// so the evidence stream records why dispatch ended up unpinned.
+func zeroConfigInitialMinPower(b *bead.Bead, powerClass policyescalation.PowerClass, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, string, bool) {
 	if powerClass == "" {
-		return baseMinPower, agent.ExecuteBeadReport{}, false
+		return baseMinPower, agent.ExecuteBeadReport{}, "", false
 	}
 	powerFloor, hasPowerFloor := resolvePowerFloor(powerClass, ladder)
-	if !hasPowerFloor && powerClass != policyescalation.PowerCheap {
-		return baseMinPower, routeUnavailableReport(b, baseMinPower, maxPower, fmt.Errorf("no viable routing floor for inferred powerClass %s", powerClass)), true
+	if !hasPowerFloor {
+		note := ""
+		if powerClass != policyescalation.PowerCheap {
+			note = fmt.Sprintf(
+				"no ladder floor for inferred powerClass %s; degraded to cheap-equivalent (no MinPower pin)",
+				powerClass,
+			)
+		}
+		return baseMinPower, agent.ExecuteBeadReport{}, note, false
 	}
 	if powerFloor > baseMinPower {
 		if maxPower > 0 && powerFloor >= maxPower {
-			return baseMinPower, routeUnavailableReport(b, powerFloor, maxPower, nil), true
+			return baseMinPower, routeUnavailableReport(b, powerFloor, maxPower, nil), "", true
 		}
-		return powerFloor, agent.ExecuteBeadReport{}, false
+		return powerFloor, agent.ExecuteBeadReport{}, "", false
 	}
-	return baseMinPower, agent.ExecuteBeadReport{}, false
+	return baseMinPower, agent.ExecuteBeadReport{}, "", false
 }
 
 func routeUnavailableReport(b *bead.Bead, minPower, maxPower int, cause error) agent.ExecuteBeadReport {

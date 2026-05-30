@@ -325,10 +325,14 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 							return unavailableReport, nil
 						}
 					} else {
-						requestMinPower, unavailableReport, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, requestMinPower, maxPower, loadLadder())
+						var degradeNote string
+						requestMinPower, unavailableReport, degradeNote, unavailable = zeroConfigInitialMinPower(targetBead, inferredPolicy, requestMinPower, maxPower, loadLadder())
 						if unavailable {
 							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 							return unavailableReport, nil
+						}
+						if degradeNote != "" {
+							routingNote = degradeNote
 						}
 					}
 				}
