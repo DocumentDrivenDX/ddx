@@ -641,18 +641,55 @@ func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
 	var eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	// Use a generous outer ceiling (safety net) and rely on synchronization
+	// (polling for both beads to close) to cancel the worker once the
+	// behavior under test has happened. The earlier 750ms wall-clock budget
+	// was too tight for two real git claim+execute+land cycles on a
+	// normally-loaded developer machine (observed 1.9s-7s elapsed). The
+	// surrounding tests use the same require.Eventually idiom -- see
+	// internal/agent/execute_bead_loop_cleanup_test.go.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		Mode:         executeloop.ModeWatch,
-		IdleInterval: time.Hour,
-		EventSink:    &eventSink,
-		ProjectRoot:  projectRoot,
-		SessionID:    "sess-watch-stable-predispatch",
-		WorkerID:     "worker-watch-stable-predispatch",
-	})
 
-	require.ErrorIs(t, err, context.DeadlineExceeded)
+	type runOutcome struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}
+	runCh := make(chan runOutcome, 1)
+	go func() {
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Mode:         executeloop.ModeWatch,
+			IdleInterval: time.Hour,
+			EventSink:    &eventSink,
+			ProjectRoot:  projectRoot,
+			SessionID:    "sess-watch-stable-predispatch",
+			WorkerID:     "worker-watch-stable-predispatch",
+		})
+		runCh <- runOutcome{result: result, err: err}
+	}()
+
+	// Wait deterministically for both beads to close (the behavior under
+	// test), then cancel the worker so Run returns context.Canceled.
+	require.Eventually(t, func() bool {
+		first, err := store.Get("ddx-int-0001")
+		if err != nil || first.Status != bead.StatusClosed {
+			return false
+		}
+		second, err := store.Get("ddx-int-0002")
+		if err != nil || second.Status != bead.StatusClosed {
+			return false
+		}
+		return true
+	}, 25*time.Second, 10*time.Millisecond, "both beads must close within the safety net")
+
+	cancel()
+	outcome := <-runCh
+	result, err := outcome.result, outcome.err
+
+	require.Error(t, err)
+	require.True(t,
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded),
+		"worker.Run should return context.Canceled or context.DeadlineExceeded, got %v", err)
 	require.NotNil(t, result)
 	assert.Equal(t, 2, result.Attempts)
 	assert.Equal(t, 2, result.Successes)
