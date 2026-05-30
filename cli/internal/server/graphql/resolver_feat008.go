@@ -844,6 +844,25 @@ var sessionEfficacyCache struct {
 	byQuery map[string]sessionEfficacyCacheEntry
 }
 
+// sessionLogDirCache memoizes agent.SessionLogDirForWorkDir per projectRoot.
+// Without this, every efficacySnapshot call routes through ddxroot.Path, which
+// re-runs bootstrapConventionRoot (git rev-parse / init / worktrees.json writes)
+// on every request when the project has no in-tree .ddx/. That bootstrap costs
+// ~125 ms per call and dominates the perf assertions in
+// TestEfficacyRowsDateFilterAndPerfTargets / TestEfficacyRowsSmokeOverRealBackend.
+// The mapping is stable for the lifetime of a project root within a process,
+// so a sync.Map is sufficient.
+var sessionLogDirCache sync.Map // map[string]string
+
+func cachedSessionLogDirForWorkDir(projectRoot string) string {
+	if v, ok := sessionLogDirCache.Load(projectRoot); ok {
+		return v.(string)
+	}
+	logDir := agent.SessionLogDirForWorkDir(projectRoot)
+	sessionLogDirCache.Store(projectRoot, logDir)
+	return logDir
+}
+
 func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, projectID, promptSHA *string) (efficacySnapshot, error) {
 	projectRoot := r.workingDir(ctx)
 	if projectID != nil && strings.TrimSpace(*projectID) != "" {
@@ -857,7 +876,7 @@ func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, proj
 	if err != nil {
 		return efficacySnapshot{}, err
 	}
-	logDir := agent.SessionLogDirForWorkDir(projectRoot)
+	logDir := cachedSessionLogDirForWorkDir(projectRoot)
 	query := agent.SessionIndexQuery{
 		StartedAfter:  startedAfter,
 		StartedBefore: startedBefore,
