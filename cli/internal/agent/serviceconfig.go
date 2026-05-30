@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -85,17 +86,56 @@ func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Dur
 // project. Fizeau owns provider config, provider discovery, include-by-default
 // semantics, and policy routing; DDx project endpoint blocks are used by status
 // surfaces below, not as an execution-time replacement for Fizeau config.
+//
+// NOTE on goroutine lifecycle: the returned service spawns background probe /
+// quota-refresh / aliveness goroutines that are tied to
+// ServiceOptions.QuotaRefreshContext (default context.Background). Short-lived
+// callers (HTTP handlers, one-off CLI subcommands, tests) MUST prefer
+// NewServiceFromWorkDirCtx and pass a request-scoped context so those
+// goroutines are cancelled when the caller is done. Otherwise the goroutines
+// leak for the lifetime of the process and accumulate under repeated calls
+// (see bead ddx-server-fizeau-leak).
 func NewServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	return agentlib.New(agentlib.ServiceOptions{})
+}
+
+// NewServiceFromWorkDirCtx is the context-scoped variant of
+// NewServiceFromWorkDir. Cancelling ctx terminates the background quota
+// refresh, quota recovery probe, and aliveness probe goroutines spawned by
+// the returned service. Callers that issue requests at HTTP / RPC granularity
+// SHOULD use this form with their request context to avoid goroutine leaks.
+func NewServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.FizeauService, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx})
 }
 
 // NewStatusProbeServiceFromWorkDir constructs a service for status surfaces
 // without pre-filtering .legacy agent endpoints by /models reachability. The
 // returned service still probes when ListProviders is called, but unreachable
 // configured endpoints remain present in the result as unreachable rows.
+//
+// See the NewServiceFromWorkDir doc-comment for the goroutine-lifecycle
+// caveat; prefer NewStatusProbeServiceFromWorkDirCtx for request-scoped use.
 func NewStatusProbeServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
+	return newStatusProbeService(context.Background(), workDir)
+}
+
+// NewStatusProbeServiceFromWorkDirCtx is the context-scoped variant of
+// NewStatusProbeServiceFromWorkDir. Cancelling ctx terminates the spawned
+// background probe / quota-refresh goroutines.
+func NewStatusProbeServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.FizeauService, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return newStatusProbeService(ctx, workDir)
+}
+
+func newStatusProbeService(ctx context.Context, workDir string) (agentlib.FizeauService, error) {
 	opts := agentlib.ServiceOptions{
-		ConfigPath: filepath.Join(workDir, "config.yaml"),
+		ConfigPath:          filepath.Join(workDir, "config.yaml"),
+		QuotaRefreshContext: ctx,
 	}
 	sc, err := serviceConfigFromDDxEndpointsNoFilter(workDir)
 	if err != nil {

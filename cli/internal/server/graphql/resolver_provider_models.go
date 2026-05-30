@@ -173,7 +173,7 @@ func doProviderModelsFetch(ctx context.Context, workDir, name string, kind Provi
 // by harness name. The returned baseURL is sanitized (credentials, query, and
 // fragment stripped) for ts-net display safety; harness rows return "".
 func fetchProviderModelsLive(ctx context.Context, workDir, name string, kind ProviderKind) (*ProviderModelsResult, error) {
-	svc, err := agent.NewServiceFromWorkDir(workDir)
+	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent service: %w", err)
 	}

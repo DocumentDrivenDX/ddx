@@ -80,7 +80,10 @@ func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus
 // taken from HarnessInfo.Available, rolling usage from the sessions index,
 // and quota/auth/model data directly from the upstream HarnessInfo DTO.
 func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus, error) {
-	svc, err := agentlib.New(agentlib.ServiceOptions{})
+	// Pipe ctx into QuotaRefreshContext so the fizeau background probe /
+	// quota-refresh goroutines spawned by agentlib.New are cancelled when
+	// the GraphQL request completes. Without this they leak per-request.
+	svc, err := agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx})
 	if err != nil {
 		return []*ProviderStatus{}, nil //nolint:nilerr
 	}
@@ -96,7 +99,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 
 // DefaultRouteStatus is the resolver for the defaultRouteStatus field.
 func (r *queryResolver) DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error) {
-	svc, err := agent.NewServiceFromWorkDir(r.workingDir(ctx))
+	svc, err := agent.NewServiceFromWorkDirCtx(ctx, r.workingDir(ctx))
 	if err != nil {
 		return nil, nil //nolint:nilerr
 	}
@@ -190,7 +193,7 @@ func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string,
 	if sig, ok := LookupHarnessRateLimit(name); ok {
 		return ProviderKindHarness, detectedFromQuota(QuotaFromRateLimitSignal(sig))
 	}
-	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
+	if svc, err := agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx}); err == nil {
 		harnesses, _ := svc.ListHarnesses(ctx)
 		for _, h := range harnesses {
 			if strings.EqualFold(h.Name, name) {
@@ -306,7 +309,7 @@ func sumTailTokens(buckets []agent.UsageBucket, maxBuckets int) int {
 }
 
 func liveProviderInfos(ctx context.Context, workDir string) ([]agentlib.ProviderInfo, error) {
-	svc, err := agent.NewStatusProbeServiceFromWorkDir(workDir)
+	svc, err := agent.NewStatusProbeServiceFromWorkDirCtx(ctx, workDir)
 	if err != nil {
 		return nil, err
 	}
