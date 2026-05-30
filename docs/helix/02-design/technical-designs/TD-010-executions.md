@@ -97,6 +97,31 @@ If an `execute-bead` iteration runs graph-authored execution definitions, it
 may reference `exec-runs` records from its bundle, but it must not collapse the
 two storage classes into one path or retention policy.
 
+## Worktree Environment Passthrough
+
+The tracked `execute-bead` attempt worktree is an isolation boundary for git
+state, not a toolchain build-cache policy engine. DDx launches the agent process
+inside that worktree with the caller's environment passed through unchanged.
+Environment variables that influence native toolchain caches therefore flow from
+the `ddx try` or `ddx work` caller into the attempt without DDx-specific
+translation, including but not limited to `CARGO_TARGET_DIR`,
+`GRADLE_USER_HOME`, `MAVEN_OPTS`, `GOPATH`, `GOMODCACHE`,
+`npm_config_cache`, `PIP_CACHE_DIR`, `UV_CACHE_DIR`, and `CCACHE_DIR`.
+
+The invariant is intentionally narrow: DDx never sets, overrides, normalizes, or
+unsets a toolchain cache environment variable for an attempt. Operator or
+project policy owns whether worktrees use cold local build output, a shared
+build cache, a remote cache, a wrapper-provided cache directory, or no cache at
+all. This keeps the execution substrate language-neutral and prevents the
+generic run model from depending on Rust, JVM, Go, Node, Python, C/C++, or any
+other specific build system.
+
+This passthrough rule does not create a concurrency or I/O budget guarantee.
+When multiple `ddx work` workers execute build-heavy attempts concurrently, the
+resulting toolchain processes may contend on the same host resources or shared
+caches. DDx records execution evidence and preserves the attempt boundary; it
+does not arbitrate native build scheduling.
+
 ## Pre-exec Metric Storage Migration
 
 Prior to the exec substrate (before commit `2647ae4`), the metric store wrote
