@@ -100,17 +100,27 @@ type ProviderDetail struct {
 
 // ---- HTTP handlers ----
 
+// providerHandlerTimeout bounds the wall-clock cost of provider HTTP / MCP
+// handlers so a slow subprocess inside fizeau's RouteStatus (e.g. the `pi`
+// harness shelling out for --list-models when the binary is absent or
+// unresponsive) cannot stall the request indefinitely. 10s mirrors
+// handleAgentModels and is well below test-suite per-test budgets.
+const providerHandlerTimeout = 10 * time.Second
+
 // handleListProviders serves GET /api/providers — list all configured harnesses
 // with routing availability, auth state, quota/headroom, and signal freshness.
 // Not project-scoped; provider config is host+user global.
 func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), providerHandlerTimeout)
+	defer cancel()
+
 	now := time.Now().UTC()
-	infos, err := listHarnessInfos(r.Context(), s.WorkingDir)
+	infos, err := listHarnessInfos(ctx, s.WorkingDir)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	report := liveRouteStatusReport(r.Context(), s.WorkingDir)
+	report := liveRouteStatusReport(ctx, s.WorkingDir)
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
@@ -127,7 +137,10 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harness required"})
 		return
 	}
-	infos, err := listHarnessInfos(r.Context(), s.WorkingDir)
+	ctx, cancel := context.WithTimeout(r.Context(), providerHandlerTimeout)
+	defer cancel()
+
+	infos, err := listHarnessInfos(ctx, s.WorkingDir)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -139,7 +152,7 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	report := liveRouteStatusReport(r.Context(), s.WorkingDir)
+	report := liveRouteStatusReport(ctx, s.WorkingDir)
 
 	detail := buildProviderDetail(info, report, now)
 	writeJSON(w, http.StatusOK, detail)
@@ -148,13 +161,21 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 // ---- MCP tool implementations ----
 
 func (s *Server) mcpProviderList() mcpToolResult {
+	// Bound the ctx so the fizeau probe goroutines started inside
+	// listHarnessInfos / liveRouteStatusReport are cancelled when the MCP
+	// call returns. Without this they would inherit context.Background()
+	// and leak for the lifetime of the server process. The timeout also
+	// guards against a slow subprocess inside RouteStatus.
+	ctx, cancel := context.WithTimeout(context.Background(), providerHandlerTimeout)
+	defer cancel()
+
 	now := time.Now().UTC()
-	infos, err := listHarnessInfos(context.Background(), s.WorkingDir)
+	infos, err := listHarnessInfos(ctx, s.WorkingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 
-	report := liveRouteStatusReport(context.Background(), s.WorkingDir)
+	report := liveRouteStatusReport(ctx, s.WorkingDir)
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
@@ -171,7 +192,13 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	if harnessName == "" {
 		return mcpToolResult{Content: []mcpContent{mcpText("harness required")}, IsError: true}
 	}
-	infos, err := listHarnessInfos(context.Background(), s.WorkingDir)
+	// Bound the ctx so probe goroutines started inside listHarnessInfos /
+	// liveRouteStatusReport terminate when the MCP call returns. The
+	// timeout also guards against a slow subprocess inside RouteStatus.
+	ctx, cancel := context.WithTimeout(context.Background(), providerHandlerTimeout)
+	defer cancel()
+
+	infos, err := listHarnessInfos(ctx, s.WorkingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
@@ -181,7 +208,7 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	}
 
 	now := time.Now().UTC()
-	report := liveRouteStatusReport(context.Background(), s.WorkingDir)
+	report := liveRouteStatusReport(ctx, s.WorkingDir)
 
 	detail := buildProviderDetail(info, report, now)
 	data, err := json.Marshal(detail)
@@ -384,15 +411,39 @@ func computeProviderBurnEstimate(
 
 // listHarnessInfos returns the harness inventory via the agent service.
 // Replaces the older in-package harness inventory.
+//
+// The fizeau service constructed here spawns background probe goroutines that
+// are tied to ctx via NewServiceFromWorkDirCtx, so the caller's request /
+// background ctx governs their lifetime. This is critical for HTTP and test
+// callers where a context.Background() service would leak the goroutines.
+//
+// Like RouteStatus, ListHarnesses internally invokes harness-discovery code
+// paths that may shell out to subprocesses; see the liveRouteStatusReport
+// doc-comment for the upstream-ctx-ignore caveat. The detached-goroutine
+// pattern bounds the wall-clock cost to ctx's deadline.
 func listHarnessInfos(ctx context.Context, workDir string) ([]agentlib.HarnessInfo, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	svc, err := agent.NewServiceFromWorkDir(workDir)
+	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
 	if err != nil {
 		return nil, err
 	}
-	return svc.ListHarnesses(ctx)
+	type result struct {
+		infos []agentlib.HarnessInfo
+		err   error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		infos, err := svc.ListHarnesses(ctx)
+		resCh <- result{infos: infos, err: err}
+	}()
+	select {
+	case r := <-resCh:
+		return r.infos, r.err
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // findHarnessInfo locates a HarnessInfo in the slice by name.
@@ -406,17 +457,46 @@ func findHarnessInfo(infos []agentlib.HarnessInfo, name string) (agentlib.Harnes
 }
 
 // liveRouteStatusReport loads the current live route-status report from the
-// Fizeau service for the current worktree.
+// Fizeau service for the current worktree. The service constructed here is
+// scoped to ctx via NewServiceFromWorkDirCtx so background probe goroutines
+// terminate when the caller's request / RPC ctx ends.
+//
+// fizeau's RouteStatus synchronously invokes subprocess model-discovery
+// helpers (e.g. `pi --list-models`) which the upstream library currently
+// hard-codes to context.Background() (see pi/runner.go DefaultModelSnapshot
+// in fizeau v0.14.33). That means our request-scoped ctx cancellation does
+// NOT propagate into the running subprocess. To preserve handler
+// responsiveness — especially under load where the subprocess takes far
+// longer than its usual sub-second cost — the call is executed in a
+// detached goroutine and a ctx.Done() race is observed. On timeout the
+// handler returns a nil report (treated as "no live data available"); the
+// upstream goroutine completes asynchronously and is GC'd.
 func liveRouteStatusReport(ctx context.Context, workDir string) *agentlib.RouteStatusReport {
-	svc, err := agent.NewServiceFromWorkDir(workDir)
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
 	if err != nil {
 		return nil
 	}
-	report, err := svc.RouteStatus(ctx)
-	if err != nil {
+	type result struct {
+		report *agentlib.RouteStatusReport
+		err    error
+	}
+	resCh := make(chan result, 1)
+	go func() {
+		r, err := svc.RouteStatus(ctx)
+		resCh <- result{report: r, err: err}
+	}()
+	select {
+	case r := <-resCh:
+		if r.err != nil {
+			return nil
+		}
+		return r.report
+	case <-ctx.Done():
 		return nil
 	}
-	return report
 }
 
 // providerPerformanceFromRouteStatus derives recent provider performance from

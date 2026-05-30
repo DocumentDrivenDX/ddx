@@ -35,7 +35,7 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
-	svc, err := agent.NewServiceFromWorkDir(workDir)
+	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workDir)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -135,7 +135,7 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	svc, err := agent.NewServiceFromWorkDir(workingDir)
+	svc, err := agent.NewServiceFromWorkDirCtx(ctx, workingDir)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}

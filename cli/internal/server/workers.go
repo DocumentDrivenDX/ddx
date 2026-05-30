@@ -850,13 +850,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		loadLadder := func() *powerladder.Ladder {
 			ladderOnce.Do(func() {
 				ladder = powerladder.NewLadder(nil)
-				if svc, svcErr := agent.NewServiceFromWorkDir(projectRoot); svcErr == nil {
+				modelCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+				defer cancel()
+				// Tie the fizeau service to modelCtx so its background probe
+				// goroutines terminate when this short-lived lookup ends.
+				if svc, svcErr := agent.NewServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
 					modelFilter := agentlib.ModelFilter{}
 					if harness := rcfg.Harness(); harness != "" {
 						modelFilter.Harness = harness
 					}
-					modelCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-					defer cancel()
 					if models, listErr := svc.ListModels(modelCtx, modelFilter); listErr == nil {
 						ladder = powerladder.NewLadder(models)
 					}
@@ -865,11 +867,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			return ladder
 		}
 		costCap = policyescalation.NewCostCapTracker(maxCostUSD, func(harnessName string) bool {
-			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
+			// Per-callback bounded ctx so fizeau probe goroutines do not
+			// outlive this cost-cap check.
+			cbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			svc, svcErr := agent.NewServiceFromWorkDirCtx(cbCtx, projectRoot)
 			if svcErr != nil {
 				return true
 			}
-			infos, err := svc.ListHarnesses(context.Background())
+			infos, err := svc.ListHarnesses(cbCtx)
 			if err != nil {
 				return true
 			}
