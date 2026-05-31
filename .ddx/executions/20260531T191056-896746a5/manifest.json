@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260531T191056-896746a5",
+  "bead_id": "ddx-d27a1895",
+  "base_rev": "faca41725140d542e681e3a1aa27a6249cafcc05",
+  "created_at": "2026-05-31T19:11:04.050003884Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d27a1895",
+    "title": "routing P1: ddx applies failure-classification table; single one-hop middle-\u003emax escalation + per-pool cap",
+    "description": "ddx maps each outcome per the FEAT-004 addendum table; owns the single middle-\u003emax escalation (only on typed genuine failure); per-pool in-flight max-attempt cap prevents multi-worker stampede; quota-exhausted -\u003e global pool cooldown not per-bead. Depends on escalation-owner decision + shared classifier. See fizeau docs/helix/01-frame/features/FEAT-004-model-routing.md Addendum for the normative failure-classification table + tier policy.",
+    "acceptance": "1. ddx classifies each outcome per the table (table test). 2. exactly one middle-\u003emax, only on genuine failure; no_changes/dirty/transport/quota/auth do NOT escalate. 3. per-pool max-attempt cap test (concurrent failures). 4. quota-exhausted -\u003e global cooldown test. 5. cd ddx/cli \u0026\u0026 go test ./internal/agent/... green. 6. lefthook passes.",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:feature",
+      "spec:FEAT-004",
+      "phase:1"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"feat-004 addendum failure-classification table inlined in bead body: Four blockers prevent autonomous execution: (1) the normative failure-classification table lives only in fizeau/helix FEAT-004 addendum — cross-repo reference not self-contained per P7; (2) 'escalation-owner decision' is unresolved with no inlined text or bead ID; (3) 'shared classifier' has no bead ID or Go interface contract; (4) 'per-pool in-flight max-attempt cap' and 'global pool cooldown' introduce concepts absent from the codebase with undefined parameters (pool scope, cap value, cooldown duration, trigger conditions).\",\"fingerprint\":\"a0ab3a7e4355f54a550fbc592b68b1d9fb772153ab53ab088461411f29df2e00\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"a0ab3a7e4355f54a550fbc592b68b1d9fb772153ab53ab088461411f29df2e00\"}",
+          "created_at": "2026-05-31T19:10:41.954145538Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ],
+      "spec-id": "FEAT-004"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-004",
+      "path": "docs/helix/01-frame/features/FEAT-004-beads.md",
+      "title": "Feature: Beads (Work Item Tracker)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260531T191056-896746a5",
+    "prompt": ".ddx/executions/20260531T191056-896746a5/prompt.md",
+    "manifest": ".ddx/executions/20260531T191056-896746a5/manifest.json",
+    "result": ".ddx/executions/20260531T191056-896746a5/result.json",
+    "checks": ".ddx/executions/20260531T191056-896746a5/checks.json",
+    "usage": ".ddx/executions/20260531T191056-896746a5/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d27a1895-20260531T191056-896746a5"
+  },
+  "prompt_sha": "39bcd64a3de24a3acd733d33e99ac05ca66d90ab502bbc0de603b1647ae4e472"
+}
