@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260528T163318-0e4a0afc",
+  "bead_id": "ddx-a57814a7",
+  "base_rev": "8c45c55a96b7cf82a56f9198bde9fc7286016c10",
+  "created_at": "2026-05-28T16:33:27.50056126Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a57814a7",
+    "title": "server: eliminate panicking root GraphQL Query resolvers + add gqlgen SetRecoverFunc and schema-walk no-panic test",
+    "description": "PROBLEM: 15 root Query resolvers are panic(\"not implemented\") stubs (resolver.go:198-299) while their fields are advertised in schema.graphql and reachable via /graphql + /graphiql; calling them returns an opaque 'internal system error' and spams stderr stack traces. SD-022/FEAT-002 expect every advertised schema operation to work. No SetRecoverFunc exists. Zero test coverage (verified). The web UI consumes NONE of these 15 fields (opus frontend grep) — so most should be TRIMMED, not implemented.\nROOT CAUSE: resolver.go:198-299; no gqlgen recover configured. health/ready/metrics have REST twins (server.go:1252-1285, 3067-3127) so are pure duplication.\nPROPOSED FIX: (a) add a gqlgen SetRecoverFunc returning a clean error (stops opaque-500 + stack spam) — the high-value nugget; (b) for each of the 15 fields decide implement-vs-remove using 'is it used by frontend/src?': UI-unused fields (health, ready, metrics*, beadDepTree, doc*, providers, provider) → REMOVE from schema.graphql; only wire fields the UI needs. NOTE: search is NOT covered here — handleSearch is not a valid full-text twin (see the full-text-search bead). NOTE: project-scoped doc GraphQL is a separate bead.\nNON-SCOPE: implementing real full-text search; frontend scoping.",
+    "acceptance": "1. graphql server installs a SetRecoverFunc that converts resolver panics into structured GraphQL errors (no HTTP 500, no raw stack to client).\n2. TestGraphQLNoPanicOnAnyQueryField issues a minimal selection against every root Query field (introspection-driven) and asserts none returns 'internal system error'.\n3. UI-unused panicking fields are removed from schema.graphql OR implemented; no panic(\"not implemented\") remains in resolver.go.\n4. cd cli \u0026\u0026 go test ./internal/server/graphql/... green\n5. lefthook run pre-commit passes",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "area:graphql",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-002",
+      "review:codex+opus"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260528T155552-18b3c5ca\",\"bead_id\":\"ddx-a57814a7\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-05-28T16:26:22Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-05-28T16:26:52.414087409Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"haiku\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-28T16:31:38.485142863Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=haiku"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260528T155615-21c8bd61\",\"harness\":\"claude\",\"model\":\"haiku\",\"input_tokens\":30,\"output_tokens\":1623,\"total_tokens\":1653,\"cost_usd\":1.5447121000000001,\"duration_ms\":1829470,\"exit_code\":-1}",
+          "created_at": "2026-05-28T16:31:38.544064264Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=1653 cost_usd=1.5447 model=haiku"
+        }
+      ],
+      "work-consecutive-wedges": {
+        "at": "2026-05-28T16:26:52Z",
+        "count": 1,
+        "last_reason": "progress_watchdog"
+      }
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260528T163318-0e4a0afc",
+    "prompt": ".ddx/executions/20260528T163318-0e4a0afc/prompt.md",
+    "manifest": ".ddx/executions/20260528T163318-0e4a0afc/manifest.json",
+    "result": ".ddx/executions/20260528T163318-0e4a0afc/result.json",
+    "checks": ".ddx/executions/20260528T163318-0e4a0afc/checks.json",
+    "usage": ".ddx/executions/20260528T163318-0e4a0afc/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-a57814a7-20260528T163318-0e4a0afc"
+  },
+  "prompt_sha": "acb51d6c8661a035a2553a9b73964d5705a2b1b5118de97dc6c47eb83c2e60cf"
+}
