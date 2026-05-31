@@ -80,6 +80,7 @@ Examples:
 	cmd.AddCommand(f.newBeadValidateReadyCommand())
 	cmd.AddCommand(f.newBeadReplayCommand())
 	cmd.AddCommand(f.newBeadReplayBenchCommand())
+	cmd.AddCommand(f.newBeadReapCommand())
 
 	return cmd
 }
@@ -2095,4 +2096,68 @@ func (f *CommandFactory) runBeadClearCooldown(cmd *cobra.Command, _ []string) er
 		fmt.Fprintf(w, "  %s\n", id)
 	}
 	return nil
+}
+
+// newBeadReapCommand wires `ddx bead reap [--apply]`.
+// Lists epic beads whose children have all reached terminal state; with --apply
+// closes them in a batch. Useful for backfill-closing epics that predate the
+// auto-close feature (which fires during ddx bead close going forward).
+func (f *CommandFactory) newBeadReapCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reap",
+		Short: "List (or close) epics whose children are all terminal",
+		Long: `Reap lists epic beads whose children have all reached a terminal state
+(closed or cancelled). With --apply, it closes those epics in a batch.
+
+Going forward, auto-close fires during ddx bead close whenever the last
+non-terminal child of an epic transitions to a terminal state. Reap is
+provided as a backfill tool for epics that landed before auto-close.
+
+Examples:
+  ddx bead reap           # List candidates (dry run)
+  ddx bead reap --apply   # Close all candidates`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			apply, _ := cmd.Flags().GetBool("apply")
+			s := f.beadStore()
+
+			candidates, err := s.EpicClosureCandidates(context.Background())
+			if err != nil {
+				return err
+			}
+			if len(candidates) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "no epics with all-terminal children found")
+				return nil
+			}
+
+			if !apply {
+				fmt.Fprintf(cmd.OutOrStdout(), "%d epic(s) with all-terminal children:\n", len(candidates))
+				for _, b := range candidates {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s\n", b.ID, b.Title)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "\nRun with --apply to close them.")
+				return nil
+			}
+
+			return f.withBeadTrackerWriteLock(func() error {
+				closed := 0
+				for _, b := range candidates {
+					if err := s.Close(context.Background(), b.ID); err != nil {
+						fmt.Fprintf(cmd.ErrOrStderr(), "warning: failed to close %s: %v\n", b.ID, err)
+						continue
+					}
+					fmt.Fprintf(cmd.OutOrStdout(), "closed %s  %s\n", b.ID, b.Title)
+					closed++
+				}
+				if closed > 0 {
+					if _, err := f.beadAutoCommit(fmt.Sprintf("reap %d epic(s)", closed)); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+		},
+	}
+	cmd.Flags().Bool("apply", false, "Close the candidate epics (default is dry run)")
+	return cmd
 }

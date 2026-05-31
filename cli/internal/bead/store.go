@@ -1614,54 +1614,111 @@ func (s *Store) cascadeAndWalkUp(closedID string, visited map[string]bool) error
 	return nil
 }
 
-// walkUpClosureCandidate checks if parent should be auto-closed as a dead-intermediate
-// and closes it if criteria are met: execution-eligible==false AND all children closed
-// AND has children. Single-hop only; does not chase the grandparent.
+// walkUpClosureCandidate checks if parent should be auto-closed when all its
+// children reach terminal state. Two closure paths:
+//   - Dead-intermediate: parent has execution-eligible=false; auto-closes once
+//     all children are terminal (RC-3 walk-up closure).
+//   - Epic auto-close: parent is an epic bead; auto-closes when every child is
+//     closed or cancelled (both count as terminal).
+//
+// Cancelled children are treated as terminal for both paths.
+// Single-hop only; does not chase the grandparent.
 func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited map[string]bool) {
 	parent := findBeadByID(allBeads, parentID)
 	if parent == nil {
 		return
 	}
 
-	// Count children to check closure eligibility
-	openChildCount := 0
+	// Count children; closed AND cancelled both count as terminal.
+	nonTerminalChildCount := 0
 	totalChildCount := 0
 	for _, b := range allBeads {
 		if b.Parent == parentID {
 			totalChildCount++
-			if b.Status != StatusClosed {
-				openChildCount++
+			if b.Status != StatusClosed && b.Status != StatusCancelled {
+				nonTerminalChildCount++
 			}
 		}
 	}
 
-	// Check closure criteria: execution-eligible==false AND no open children AND has children
-	executionEligible, executionEligibleKnown := lifecycleExecutionEligible(*parent)
-	if !executionEligibleKnown || executionEligible {
-		// execution-eligible is not explicitly false, skip
-		return
-	}
-	if openChildCount > 0 || totalChildCount == 0 {
-		// Still has open children or no children at all, skip
+	if nonTerminalChildCount > 0 || totalChildCount == 0 {
 		return
 	}
 
-	// All criteria met: close the parent as a dead-intermediate
+	executionEligible, executionEligibleKnown := lifecycleExecutionEligible(*parent)
+	isDeadIntermediate := executionEligibleKnown && !executionEligible
+	isEpic := isEpicBead(*parent)
+
+	if !isDeadIntermediate && !isEpic {
+		return
+	}
+
+	var eventKind, reason, summary, body string
+	if isDeadIntermediate {
+		reason = "auto-close dead-intermediate (all children closed, not execution-eligible)"
+		eventKind = "dead_intermediate_close"
+		summary = "closed as dead-intermediate bead (all children closed, execution-eligible=false)"
+		body = fmt.Sprintf("closed_because: all_children_closed\nexecution_eligible: false\ntotal_children: %d", totalChildCount)
+	} else {
+		reason = "auto-close epic: all children reached terminal state"
+		eventKind = "epic_auto_close"
+		summary = "auto-closed: all children reached terminal state"
+		body = fmt.Sprintf("closed_because: all_children_terminal\ntotal_children: %d", totalChildCount)
+	}
+
 	visited[parentID] = true
 	_ = s.SetLifecycleStatus(parentID, StatusClosed, LifecycleTransitionOptions{
 		ManualClose: true,
-		Reason:      "auto-close dead-intermediate (all children closed, not execution-eligible)",
+		Reason:      reason,
 		Source:      "Store.Close.walkUpClosureCandidate",
 	})
 	_ = s.externalizeEvents(parentID)
 	_ = s.AppendEvent(parentID, BeadEvent{
-		Kind:      "dead_intermediate_close",
-		Summary:   "closed as dead-intermediate bead (all children closed, execution-eligible=false)",
-		Body:      fmt.Sprintf("closed_because: all_children_closed\nexecution_eligible: false\ntotal_children: %d", totalChildCount),
+		Kind:      eventKind,
+		Summary:   summary,
+		Body:      body,
 		Source:    "Store.Close.walkUpClosureCandidate",
 		CreatedAt: time.Now().UTC(),
 	})
 	_ = s.RemoveClaimHeartbeat(parentID)
+}
+
+// EpicClosureCandidates returns open epic beads whose children have all reached
+// a terminal state (closed or cancelled). Useful for backfill-closing epics that
+// predate auto-close, via ddx bead reap --apply.
+func (s *Store) EpicClosureCandidates(ctx context.Context) ([]Bead, error) {
+	all, err := s.ReadAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	childCount := make(map[string]int)
+	nonTerminalCount := make(map[string]int)
+	for _, b := range all {
+		if b.Parent == "" {
+			continue
+		}
+		childCount[b.Parent]++
+		if b.Status != StatusClosed && b.Status != StatusCancelled {
+			nonTerminalCount[b.Parent]++
+		}
+	}
+	var candidates []Bead
+	for _, b := range all {
+		if b.Status == StatusClosed || b.Status == StatusCancelled {
+			continue
+		}
+		if childCount[b.ID] == 0 {
+			continue
+		}
+		if nonTerminalCount[b.ID] > 0 {
+			continue
+		}
+		if !isEpicBead(b) {
+			continue
+		}
+		candidates = append(candidates, b)
+	}
+	return candidates, nil
 }
 
 // cascadeCloseSuperseeded scans for open beads X where superseded-by==Y,

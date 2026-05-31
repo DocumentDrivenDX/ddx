@@ -728,6 +728,161 @@ func TestClose_WalkUp_SingleHopOnly(t *testing.T) {
 	}
 }
 
+func TestClose_EpicAutoClose_AllChildrenClosed(t *testing.T) {
+	s := newTestStore(t)
+
+	// Epic parent without execution-eligible flag
+	epic := &Bead{
+		Title:     "Epic: all children closed",
+		IssueType: "epic",
+		Status:    StatusOpen,
+	}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	child := &Bead{Title: "Child task", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), child))
+
+	// Closing the last child should auto-close the epic
+	require.NoError(t, s.Close(testCtx(), child.ID))
+
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, epicGot.Status)
+
+	// Verify epic has epic_auto_close event
+	events, err := s.Events(epic.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "epic_auto_close" {
+			assert.Contains(t, e.Body, "all_children_terminal")
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "epic should have epic_auto_close event")
+}
+
+func TestClose_EpicAutoClose_CancelledChildCountsAsTerminal(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{
+		Title:     "Epic: cancelled child",
+		IssueType: "epic",
+		Status:    StatusOpen,
+	}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	// One closed child, one cancelled child
+	c1 := &Bead{Title: "Closed child", Status: StatusOpen, Parent: epic.ID}
+	c2 := &Bead{Title: "Cancelled child", Status: StatusCancelled, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), c1))
+	require.NoError(t, s.Create(testCtx(), c2))
+
+	// Closing c1 (last non-terminal child) should auto-close the epic
+	require.NoError(t, s.Close(testCtx(), c1.ID))
+
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, epicGot.Status, "epic should auto-close when last non-terminal child closes")
+}
+
+func TestClose_EpicAutoClose_MixedOpenClosed_StaysOpen(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{
+		Title:     "Epic: mixed children",
+		IssueType: "epic",
+		Status:    StatusOpen,
+	}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	c1 := &Bead{Title: "Child 1", Status: StatusOpen, Parent: epic.ID}
+	c2 := &Bead{Title: "Child 2", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), c1))
+	require.NoError(t, s.Create(testCtx(), c2))
+
+	// Closing only one child should NOT auto-close the epic
+	require.NoError(t, s.Close(testCtx(), c1.ID))
+
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, epicGot.Status, "epic with an open child should stay open")
+}
+
+func TestClose_EpicAutoClose_NoChildren_StaysOpen(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{
+		Title:     "Epic: no children",
+		IssueType: "epic",
+		Status:    StatusOpen,
+	}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	unrelated := &Bead{Title: "Unrelated task", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), unrelated))
+	require.NoError(t, s.Close(testCtx(), unrelated.ID))
+
+	// Epic with no children should not be affected
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, epicGot.Status, "epic with no children should not be auto-closed")
+}
+
+func TestEpicClosureCandidates(t *testing.T) {
+	s := newTestStore(t)
+
+	// Epic A: all children closed → candidate
+	epicA := &Bead{Title: "Epic A", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epicA))
+	childA := &Bead{Title: "Child A", Status: StatusOpen, Parent: epicA.ID}
+	require.NoError(t, s.Create(testCtx(), childA))
+
+	// Epic B: mixed children → not a candidate
+	epicB := &Bead{Title: "Epic B", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epicB))
+	childB1 := &Bead{Title: "Child B1", Status: StatusOpen, Parent: epicB.ID}
+	childB2 := &Bead{Title: "Child B2", Status: StatusOpen, Parent: epicB.ID}
+	require.NoError(t, s.Create(testCtx(), childB1))
+	require.NoError(t, s.Create(testCtx(), childB2))
+
+	// Epic C: all children terminal (one closed, one cancelled) → candidate
+	epicC := &Bead{Title: "Epic C", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epicC))
+	childC1 := &Bead{Title: "Child C1 (cancelled)", Status: StatusCancelled, Parent: epicC.ID}
+	childC2 := &Bead{Title: "Child C2", Status: StatusOpen, Parent: epicC.ID}
+	require.NoError(t, s.Create(testCtx(), childC1))
+	require.NoError(t, s.Create(testCtx(), childC2))
+
+	// Epic D: no children → not a candidate
+	epicD := &Bead{Title: "Epic D", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epicD))
+
+	// Close childA (now epicA should be a candidate via EpicClosureCandidates)
+	// Note: Close() will auto-close epicA, so we need to bypass auto-close to test the method.
+	// Instead, close childA directly via SetLifecycleStatus to avoid the walk-up.
+	require.NoError(t, s.SetLifecycleStatus(childA.ID, StatusClosed, LifecycleTransitionOptions{ManualClose: true}))
+
+	// Close childB1 (epicB still has open childB2)
+	require.NoError(t, s.SetLifecycleStatus(childB1.ID, StatusClosed, LifecycleTransitionOptions{ManualClose: true}))
+
+	// Close childC2 (epicC now has all-terminal children)
+	require.NoError(t, s.SetLifecycleStatus(childC2.ID, StatusClosed, LifecycleTransitionOptions{ManualClose: true}))
+
+	candidates, err := s.EpicClosureCandidates(testCtx())
+	require.NoError(t, err)
+
+	ids := make(map[string]bool)
+	for _, c := range candidates {
+		ids[c.ID] = true
+	}
+	assert.True(t, ids[epicA.ID], "epicA should be a candidate (all children closed)")
+	assert.False(t, ids[epicB.ID], "epicB should not be a candidate (has open child)")
+	assert.True(t, ids[epicC.ID], "epicC should be a candidate (all children terminal: closed+cancelled)")
+	assert.False(t, ids[epicD.ID], "epicD should not be a candidate (no children)")
+}
+
 func TestListFilters(t *testing.T) {
 	s := newTestStore(t)
 

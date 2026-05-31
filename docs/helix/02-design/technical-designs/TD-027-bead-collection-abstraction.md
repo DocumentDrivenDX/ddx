@@ -849,6 +849,11 @@ Events are append-only entries in `events` (§11.1). The `kind` field uses a clo
 - `auto-recovery-failed`
 - `per-bead-budget-exhausted`
 
+### Parent/epic auto-close events
+
+- `dead_intermediate_close` — parent closed because `execution-eligible=false` and all children reached a terminal state (closed). Emitted by `Store.Close.walkUpClosureCandidate` (RC-3).
+- `epic_auto_close` — epic parent auto-closed because all children reached a terminal state (closed or cancelled). Emitted by `Store.Close.walkUpClosureCandidate` when the closing child's parent is an epic bead. See `ddx bead reap` for backfill-closing epics that predate this behaviour.
+
 ### Push-outcome events
 
 - `push-failed` — commit created, push rejected.
