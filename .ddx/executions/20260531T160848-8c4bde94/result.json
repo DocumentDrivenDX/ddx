@@ -1,0 +1,28 @@
+{
+  "bead_id": "ddx-2a24727c",
+  "attempt_id": "20260531T160848-8c4bde94",
+  "base_rev": "b8cd92721f8b4c4baa7044cfec231778bbcc7cc3",
+  "result_rev": "b8cd92721f8b4c4baa7044cfec231778bbcc7cc3",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/dirty_root_guard_test.go, cli/internal/agent/execute_bead.go, cli/internal/agent/execute_bead_loop.go",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "no_evidence_paths": [
+    "cli/internal/agent/dirty_root_guard_test.go",
+    "cli/internal/agent/execute_bead.go",
+    "cli/internal/agent/execute_bead_loop.go"
+  ],
+  "session_id": "eb-b6e0ad40",
+  "duration_ms": 1839177,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/dirty_root_guard_test.go, cli/internal/agent/execute_bead.go, cli/internal/agent/execute_bead_loop.go",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260531T160848-8c4bde94",
+  "prompt_file": ".ddx/executions/20260531T160848-8c4bde94/prompt.md",
+  "manifest_file": ".ddx/executions/20260531T160848-8c4bde94/manifest.json",
+  "result_file": ".ddx/executions/20260531T160848-8c4bde94/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-31T16:08:56.131481596Z",
+  "finished_at": "2026-05-31T16:39:35.309300511Z"
+}
