@@ -106,6 +106,13 @@ type ExecuteBeadLoopRuntime struct {
 	// with equivalent arguments and this loop should exit before claiming work.
 	// Errors are logged and fail open so update-probing never blocks the queue.
 	BinaryRefreshCheck func(ctx context.Context) (bool, error)
+	// ProjectRootDirtyCheck, when non-nil, is called at the top of each loop
+	// iteration before any bead is claimed. A non-empty return value means the
+	// canonical project root has uncommitted tracked non-.ddx changes. The
+	// worker emits a single loop.operator_attention event and stops instead of
+	// proceeding to claim — preventing a churn loop that repeatedly claims then
+	// fails workspace preparation because the root is dirty.
+	ProjectRootDirtyCheck func(projectRoot string) []string
 	// Mode and IdleInterval are the runtime loop intent. Once and
 	// PollInterval remain for older tests/callers but production entry points
 	// should set Mode and IdleInterval directly.
@@ -1473,6 +1480,31 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			} else if refreshed {
 				setExit("BinaryRefresh", "binary_refresh")
 				emit("loop.binary_refresh", map[string]any{"reason": "installed_binary_changed"})
+				return result, nil
+			}
+		}
+		if runtime.ProjectRootDirtyCheck != nil && runtime.ProjectRoot != "" {
+			if dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot); len(dirtyPaths) > 0 {
+				detail := fmt.Sprintf(
+					"project root has uncommitted tracked changes (%s); resolve before resuming autonomous work",
+					strings.Join(dirtyPaths, ", "),
+				)
+				result.OperatorAttention = &OperatorAttentionStop{
+					Reason:      "dirty_project_root",
+					ProjectRoot: runtime.ProjectRoot,
+					DirtyPaths:  dirtyPaths,
+					Message:     detail,
+				}
+				setExit("OperatorAttention", "operator_attention")
+				emit("loop.operator_attention", map[string]any{
+					"reason":       "dirty_project_root",
+					"project_root": runtime.ProjectRoot,
+					"dirty_paths":  dirtyPaths,
+					"message":      detail,
+				})
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", detail)
+				}
 				return result, nil
 			}
 		}

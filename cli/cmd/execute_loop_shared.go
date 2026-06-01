@@ -586,6 +586,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		CleanupRunner:                cleanupRunner,
 		ResourceChecker:              resourceChecker,
 		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID),
+		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,
 		SessionID:                    loopSessionID,
 		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreClaimIntakeHook:           intakeHook,

@@ -276,6 +276,48 @@ func readWorktreeCommitEvents(wtPath string) []CommitEvent {
 	return ParseHeadReflog(strings.Split(string(out), "\n"))
 }
 
+// CanonicalRootDirtyPaths returns tracked files with uncommitted staged or
+// unstaged modifications in projectRoot, excluding .ddx/ paths (DDx-managed
+// state, not user WIP) and untracked (??) entries. The execute-bead loop calls
+// this before claiming any bead to detect a WIP canonical project root that
+// would cause a churn loop of claim → workspace-prep failure → unclaim → repeat.
+// Returns nil when projectRoot is empty, git is unavailable, or the root is clean.
+func CanonicalRootDirtyPaths(projectRoot string) []string {
+	if projectRoot == "" {
+		return nil
+	}
+	out, err := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain").Output()
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimRight(line, "\r")
+		if len(line) < 4 {
+			continue
+		}
+		code := line[:2]
+		if code == "??" {
+			continue
+		}
+		path := strings.TrimSpace(line[3:])
+		if idx := strings.Index(path, " -> "); idx >= 0 {
+			path = strings.TrimSpace(path[idx+4:])
+		}
+		if path == "" || seen[path] {
+			continue
+		}
+		// Exclude .ddx/ paths — those are DDx-managed files, not user WIP.
+		if strings.HasPrefix(path, ".ddx/") {
+			continue
+		}
+		seen[path] = true
+		paths = append(paths, path)
+	}
+	return paths
+}
+
 // integrityDirtyPaths returns the tracked files that have staged or unstaged
 // modifications in the worktree (porcelain status with a non-space, non-`?`
 // status code). Untracked and ignored files are excluded so harness scratch
