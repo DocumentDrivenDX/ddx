@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260601T015735-161a4aad",
+  "bead_id": "ddx-ec20a019",
+  "base_rev": "3d1443d7cc326d3b454db7a7646343d8059e1351",
+  "created_at": "2026-06-01T01:57:42.463976397Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ec20a019",
+    "title": "ddx work: refuse to claim/drain a dirty or WIP project root (operator-attention, no churn)",
+    "description": "Decomposed from ddx-2a24727c (wedged: too large). SCOPE: ddx work pre-claim must detect a dirty/WIP canonical project root (uncommitted non-.ddx tracked changes, e.g. helix on a WIP docs branch) and emit a SINGLE operator-attention signal + skip, instead of repeatedly claiming-\u003efailing readiness in a churn loop (observed with helix). NON-SCOPE: isolated worktrees / cleanup contract (separate child). Self-contained; do not look for a routing spec.",
+    "acceptance": "1. New test (scoped to internal/agent, bounded, no broad go test ./...): a dirty canonical root yields one operator-attention/skip, not a repeated claim loop. 2. clean root proceeds normally. 3. cd /Users/erik/Projects/ddx/cli \u0026\u0026 go test ./internal/agent/ -run DirtyRoot -count=1 -timeout 120s green. 4. lefthook run pre-commit passes.",
+    "parent": "ddx-2a24727c",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:reliability",
+      "priority:reliability",
+      "phase:0",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260601T015735-161a4aad",
+    "prompt": ".ddx/executions/20260601T015735-161a4aad/prompt.md",
+    "manifest": ".ddx/executions/20260601T015735-161a4aad/manifest.json",
+    "result": ".ddx/executions/20260601T015735-161a4aad/result.json",
+    "checks": ".ddx/executions/20260601T015735-161a4aad/checks.json",
+    "usage": ".ddx/executions/20260601T015735-161a4aad/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ec20a019-20260601T015735-161a4aad"
+  },
+  "prompt_sha": "611d2ac47b3a4d227aa105f9cb11746cc3dabdcbbb189f06db2d867c88081d5a"
+}
