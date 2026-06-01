@@ -1,0 +1,96 @@
+{
+  "attempt_id": "20260601T022411-56ae5981",
+  "bead_id": "ddx-ec20a019",
+  "base_rev": "b0d1f9e969665343f9931c847ae1227c2a2cc567",
+  "created_at": "2026-06-01T02:24:17.925155876Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ec20a019",
+    "title": "ddx work: refuse to claim/drain a dirty or WIP project root (operator-attention, no churn)",
+    "description": "Decomposed from ddx-2a24727c (wedged: too large). SCOPE: ddx work pre-claim must detect a dirty/WIP canonical project root (uncommitted non-.ddx tracked changes, e.g. helix on a WIP docs branch) and emit a SINGLE operator-attention signal + skip, instead of repeatedly claiming-\u003efailing readiness in a churn loop (observed with helix). NON-SCOPE: isolated worktrees / cleanup contract (separate child). Self-contained; do not look for a routing spec.",
+    "acceptance": "1. New test (scoped to internal/agent, bounded, no broad go test ./...): a dirty canonical root yields one operator-attention/skip, not a repeated claim loop. 2. clean root proceeds normally. 3. cd /Users/erik/Projects/ddx/cli \u0026\u0026 go test ./internal/agent/ -run DirtyRoot -count=1 -timeout 120s green. 4. lefthook run pre-commit passes.",
+    "parent": "ddx-2a24727c",
+    "labels": [
+      "area:execute-bead",
+      "area:workers",
+      "kind:reliability",
+      "priority:reliability",
+      "phase:0",
+      "decomposed",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-01T02:06:02.665645431Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260601T015735-161a4aad\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":38,\"output_tokens\":19544,\"total_tokens\":19582,\"cost_usd\":1.9360557,\"duration_ms\":499711,\"exit_code\":0}",
+          "created_at": "2026-06-01T02:06:02.714251837Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=19582 cost_usd=1.9361 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260601T015735-161a4aad\",\"bead_id\":\"ddx-ec20a019\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-01T02:06:04.386891036Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-06-01T02:06:04.48357739Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-06-01T02:06:04.570848213Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\npowerClass=standard\nresult_rev=3d1443d7cc326d3b454db7a7646343d8059e1351\nbase_rev=3d1443d7cc326d3b454db7a7646343d8059e1351\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-06-01T02:06:04.615665831Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"prior no_changes was justified: The bead describes work that is fully present in the codebase. ProjectRootDirtyCheck func is declared at execute_bead_loop.go:115, the detection+emit block is at execute_bead_loop.go:1486-1508, OperatorAttentionStop has DirtyPaths at execute_bead_loop.go:760, and the test file cli/internal/agent/execute_bead_loop_dirty_root_test.go contains TestDirtyRootPreventsClaimLoop and TestDirtyRootCleanRootProceedsNormally matching all AC assertions exactly. The prior no_changes attempt was correct: there was nothing to implement. The triage:no-changes-unjustified label is a misdiagnosis; the implementation predates or was introduced outside this bead's execution cycle. A new agent attempt will correctly produce no_changes again.\",\"fingerprint\":\"01a04f9ee3e35eeb3d1ed942bbca6bb8c427dbc9ab048c7bc5930854f17da67e\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"01a04f9ee3e35eeb3d1ed942bbca6bb8c427dbc9ab048c7bc5930854f17da67e\"}",
+          "created_at": "2026-06-01T02:23:58.903032284Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ],
+      "work-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260601T022411-56ae5981",
+    "prompt": ".ddx/executions/20260601T022411-56ae5981/prompt.md",
+    "manifest": ".ddx/executions/20260601T022411-56ae5981/manifest.json",
+    "result": ".ddx/executions/20260601T022411-56ae5981/result.json",
+    "checks": ".ddx/executions/20260601T022411-56ae5981/checks.json",
+    "usage": ".ddx/executions/20260601T022411-56ae5981/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ec20a019-20260601T022411-56ae5981"
+  },
+  "prompt_sha": "d181d42d9719e0990ce864492b6be6fd25da7d079840af171af6f79491e3c3fe"
+}
