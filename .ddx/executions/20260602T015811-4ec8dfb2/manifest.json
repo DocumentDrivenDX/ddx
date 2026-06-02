@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260602T015811-4ec8dfb2",
+  "bead_id": "ddx-06f820f4",
+  "base_rev": "7503b0e0f51b23087be1f2ae78b21c67807c6f90",
+  "created_at": "2026-06-02T01:58:18.47769851Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-06f820f4",
+    "title": "install/update: add --global flag and dual-location install honoring convention vs in-tree mode",
+    "description": "PROBLEM\n`ddx install` and `ddx update` only ever target the per-project plugin tree. There is no way to install a skill/persona/plugin once per machine, so operators must repeat installs in every project. Three install destinations must be supported: global (XDG), project in-tree (`\u003cproject\u003e/.ddx`), and project convention (XDG projects/...).\n\nROOT CAUSE\n- cli/cmd/install.go:36 `RunE: f.runInstall` and its flag set (install.go:38-39) have no `--global` flag; install always targets the project under `.ddx/plugins/\u003cname\u003e/` (install.go:27-28).\n- cli/cmd/update.go:57 `runUpdate` and update.go:194 `performUpdate` operate only on the working dir's project tree; update.go:112 `enumerateSkillUpdateTargets(workingDir)` is project-scoped.\n- Both route through ddxroot.Path() unconditionally and never reference the global layer.\n\nPROPOSED FIX\n1. Add `--global` bool flag to `ddx install` (cli/cmd/install.go) and `ddx update` (cli/cmd/update.go).\n2. install --global: write content to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` (via `ddxroot.GlobalDir()` from the resolver bead) and create symlinks/copies into agent-tier paths `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` (copy on platforms lacking symlink support).\n3. install (no --global): keep writing to `ddxroot.Path()/plugins/\u003cname\u003e/` and link into `\u003cproject\u003e/.claude/skills/\u003cname\u003e` AND `\u003cproject\u003e/.agents/skills/\u003cname\u003e`. In in-tree mode the target is `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e`; in convention mode it is `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e` and the project agent-tier links point into that XDG path.\n4. update --global updates only the global plugin tree; update (no flag) updates the project install in whichever mode (in-tree vs convention) is active, via `enumerateSkillUpdateTargets`.\n\nNON-SCOPE\n- The plugin resolver/precedence (sibling bead: registry two-layer resolution) — consume `ddxroot.GlobalDir()` from it.\n- `ddx init --global` first-time setup (sibling bead: init topology).\n- `ddx doctor` reporting and spec/doc updates (sibling bead: doctor + specs).\n- Removing per-project install; both modes coexist.\n\nDEPS\nddx-06cbaa90 (ddx home resolution); sibling registry-resolver bead (provides `ddxroot.GlobalDir()` and layer semantics).",
+    "acceptance": "1. `ddx install \u003cname\u003e --global --silent` installs to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates a symlink or copy under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` — TestInstallGlobal_WritesXDGAndAgentTierLinks.\n2. `ddx install \u003cname\u003e` (no --global, in-tree mode) installs to `\u003cproject\u003e/.ddx/plugins/\u003cname\u003e/` and creates project-tier links under `\u003cproject\u003e/.claude/skills/\u003cname\u003e` and `\u003cproject\u003e/.agents/skills/\u003cname\u003e` — TestInstallProject_InTreeLinks.\n3. `ddx install \u003cname\u003e` (no --global, convention mode) installs to `${XDG_DATA_HOME}/ddx/projects/\u003chost\u003e/\u003cowner\u003e/\u003crepo\u003e/plugins/\u003cname\u003e/` and creates project-tier links pointing into that XDG plugins path — TestInstallProject_ConventionLinks.\n4. `ddx update --global` updates only the global plugin tree and leaves the project tree untouched — TestUpdateGlobal_UpdatesGlobalNotProject.\n5. `ddx update` (no flag) updates the project install in whichever mode is active — TestUpdate_RespectsConventionVsInTreeMode.\n6. cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260602T015811-4ec8dfb2",
+    "prompt": ".ddx/executions/20260602T015811-4ec8dfb2/prompt.md",
+    "manifest": ".ddx/executions/20260602T015811-4ec8dfb2/manifest.json",
+    "result": ".ddx/executions/20260602T015811-4ec8dfb2/result.json",
+    "checks": ".ddx/executions/20260602T015811-4ec8dfb2/checks.json",
+    "usage": ".ddx/executions/20260602T015811-4ec8dfb2/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-06f820f4-20260602T015811-4ec8dfb2"
+  },
+  "prompt_sha": "a1330354a669d68f4a6a9254c8f99137736862d7d041e15b82e7c8d8f415420a"
+}
