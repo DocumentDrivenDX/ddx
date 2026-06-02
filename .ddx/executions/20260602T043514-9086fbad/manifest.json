@@ -1,0 +1,75 @@
+{
+  "attempt_id": "20260602T043514-9086fbad",
+  "bead_id": "ddx-07af62e6",
+  "base_rev": "10bddd3ef7e3ba9884c57fe39cac32e0ce48374b",
+  "created_at": "2026-06-02T04:35:21.842489412Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-07af62e6",
+    "title": "init: add global machine setup for ddx init --global",
+    "description": "PROBLEM\nFirst-time per-machine setup has no entry point. The intended model is that `ddx init --global` performs one-time machine setup by installing the default `ddx` plugin into the global layer, creating agent-tier skill links, and writing global convention defaults.\n\nROOT CAUSE\n- cli/cmd/init.go:73 `runInit` has no `--global` mode branch.\n- cli/cmd/init.go:271-284 only performs eager project-local default plugin installation via `registry.InstallPackageFromFS(pkg, defaultplugin.FS(), workingDir)`; there is no path that installs the default plugin to `${XDG_DATA_HOME}/ddx/global/plugins/ddx`.\n- There is no writer for `${XDG_DATA_HOME}/ddx/global/config.yaml`.\n\nPROPOSED FIX\n1. Add a `--global` bool flag to `ddx init` in `cli/cmd/init.go`.\n2. When `--global` is set, install the bundled default `ddx` plugin to `${XDG_DATA_HOME}/ddx/global/plugins/ddx` using the install-global path from the sibling install/update --global bead.\n3. Create agent-tier links `~/.claude/skills/ddx` and `~/.agents/skills/ddx` pointing into `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, reusing the helper from the sibling install/update --global bead.\n4. Write `${XDG_DATA_HOME}/ddx/global/config.yaml` with convention defaults.\n\nNON-SCOPE\n- The resolver precedence itself (sibling bead: registry two-layer resolution).\n- install/update `--global` wiring (sibling bead).\n- `ddx doctor` reporting and spec/doc updates (sibling bead: doctor + specs).\n- Migrating any `~/.config/ddx/` legacy paths.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution).\n- sibling install/update --global bead (reuse its install-global path and agent-tier link helper).\n\nPARENT\n- ddx-937de9fc.",
+    "acceptance": "1. `TestInitGlobal_CreatesAgentTierLinks` verifies that `ddx init --global` creates `~/.claude/skills/ddx` and `~/.agents/skills/ddx` pointing into `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`.\n2. `TestInitGlobal_WritesGlobalConfig` verifies that `ddx init --global` writes `${XDG_DATA_HOME}/ddx/global/config.yaml` with convention defaults.\n3. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestInitGlobal_CreatesAgentTierLinks|TestInitGlobal_WritesGlobalConfig'` passes.\n4. `cd cli \u0026\u0026 go test ./cmd/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-64ecd687",
+    "labels": [
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-06-02T03:54:43.270779099Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"attempt_id\":\"20260602T035443-18b52757\",\"bead_id\":\"ddx-07af62e6\",\"budget\":\"30m0s\",\"diagnosis\":\"phase-empty heartbeats (harness/model/route empty) persisted past the 30m0s budget while phase=\\\"running\\\"; released lease and flagged for operator attention\",\"last_activity_at\":\"2026-06-02T04:25:13Z\",\"reason\":\"progress_watchdog\"}",
+          "created_at": "2026-06-02T04:25:43.368561709Z",
+          "kind": "operator_attention",
+          "source": "ddx work",
+          "summary": "progress_watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-02T04:31:01.700421182Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"blocked\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"cb339c95a179103af663aba6f585e8cebf509fc0841cab87404b3c68bbb127e0\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"cb339c95a179103af663aba6f585e8cebf509fc0841cab87404b3c68bbb127e0\"}",
+          "created_at": "2026-06-02T04:34:59.827183522Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-consecutive-wedges": {
+        "at": "2026-06-02T04:25:43Z",
+        "count": 1,
+        "last_reason": "progress_watchdog"
+      }
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260602T043514-9086fbad",
+    "prompt": ".ddx/executions/20260602T043514-9086fbad/prompt.md",
+    "manifest": ".ddx/executions/20260602T043514-9086fbad/manifest.json",
+    "result": ".ddx/executions/20260602T043514-9086fbad/result.json",
+    "checks": ".ddx/executions/20260602T043514-9086fbad/checks.json",
+    "usage": ".ddx/executions/20260602T043514-9086fbad/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-07af62e6-20260602T043514-9086fbad"
+  },
+  "prompt_sha": "958e9542123b3c23c0c772362a03e3ddb1e267b0b4015ca820199905a5118d6a"
+}
