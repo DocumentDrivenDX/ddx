@@ -38,6 +38,9 @@ func TestRecoverGitIndexLock_StaleByAge(t *testing.T) {
 	prev := gitlock.StaleAge
 	gitlock.StaleAge = 50 * time.Millisecond
 	t.Cleanup(func() { gitlock.StaleAge = prev })
+	prevLsof := gitlock.LsofTimeout
+	gitlock.LsofTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
@@ -71,6 +74,9 @@ func TestRecoverGitIndexLock_FreshUnowned(t *testing.T) {
 	prev := gitlock.StaleAge
 	gitlock.StaleAge = 1 * time.Hour
 	t.Cleanup(func() { gitlock.StaleAge = prev })
+	prevLsof := gitlock.LsofTimeout
+	gitlock.LsofTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {
@@ -100,6 +106,9 @@ func TestRecoverGitIndexLock_DeadOwner(t *testing.T) {
 	if _, err := exec.LookPath("lsof"); err != nil {
 		t.Skip("lsof not available on PATH")
 	}
+	prevLsof := gitlock.LsofTimeout
+	gitlock.LsofTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
 
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, ".git"), 0o755); err != nil {

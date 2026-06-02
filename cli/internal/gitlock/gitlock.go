@@ -61,11 +61,11 @@ func findGitRoot(dir string) string {
 	}
 }
 
-// lsofTimeout bounds the lsof call in IndexLockOwner. On Linux, lsof can
+// LsofTimeout bounds the lsof call in IndexLockOwner. On Linux, lsof can
 // hang indefinitely while scanning /proc entries with stale NFS mounts or
 // zombie processes. A 2s cap keeps index-lock recovery from wedging the test
-// suite or the live drain loop.
-const lsofTimeout = 2 * time.Second
+// suite or the live drain loop. Tests may lower this to reduce wall time.
+var LsofTimeout = 2 * time.Second
 
 // IndexLockOwner attempts to identify the pid that currently holds lockPath
 // open. Uses lsof if available on PATH. Returns (0, nil) if no owner can be
@@ -75,7 +75,7 @@ func IndexLockOwner(lockPath string) (int, error) {
 	if err != nil {
 		return 0, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), lsofTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), LsofTimeout)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, lsof, "-t", "--", lockPath).Output()
 	if err != nil {

@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
 )
 
 // ----------------------------------------------------------------------------
@@ -1207,8 +1208,10 @@ func TestLand_IsNetworkFree(t *testing.T) {
 		acquired <- time.Since(start)
 	}()
 
-	// Simulate caller-side post-Land work that should not hold the git lock.
-	time.Sleep(5 * time.Second)
+	// Give the goroutine time to attempt lock acquisition. The actual
+	// sleep duration does not affect correctness — the lock is released
+	// by Land() before this goroutine even starts trying.
+	time.Sleep(100 * time.Millisecond)
 
 	select {
 	case waited := <-acquired:
@@ -1369,6 +1372,13 @@ func TestLandConflictAutoRecover_NonExistentPreserveRef_ReturnsError(t *testing.
 // returned, leaving the index dirty. After the fix, SyncWorkTreeToHead
 // retries until the lock is released and the index is clean.
 func TestLand_MergeRequired_IndexCleanAfterMerge(t *testing.T) {
+	// Reduce lsof timeout: on Linux lsof can consume up to LsofTimeout (2s)
+	// per RecoverGitIndexLock call when no process holds the file. 100ms is
+	// sufficient to determine there is no owner.
+	prevLsof := gitlock.LsofTimeout
+	gitlock.LsofTimeout = 100 * time.Millisecond
+	t.Cleanup(func() { gitlock.LsofTimeout = prevLsof })
+
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
 
