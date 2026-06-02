@@ -18,9 +18,9 @@ type drainWatchdog struct {
 	// cancel is called when a wedge condition is detected. Must not be nil
 	// when idleTimeout or toolCallTimeout is non-zero.
 	cancel func()
-	// idleTimeout is the window after the last meaningful event (tool_call,
-	// tool_result, final) before the execution is considered wedged. A
-	// stream of text_delta or progress events alone does NOT reset this timer.
+	// idleTimeout is the window of complete event silence before the execution
+	// is considered wedged and cancelled. Any received event resets this timer;
+	// only true silence (no events of any kind) triggers cancellation.
 	idleTimeout time.Duration
 	// toolCallTimeout is a per-tool-call sanity cap: if no tool_result arrives
 	// within this window after a tool_call, the execution is cancelled. This
@@ -235,8 +235,9 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 // aggregated final/routing/progress data. When wd is non-nil it activates
 // three wedge-prevention mechanisms:
 //
-//  1. Meaningful-event idle reset: the idle timer only resets on tool_call,
-//     tool_result, and final events — not on text_delta/progress/other noise.
+//  1. All-event idle reset: any received event resets the idle timer. The
+//     timer fires only on complete silence (no events of any kind) within
+//     the window.
 //  2. Loop detection: identical (call, result) pairs that repeat ≥4 times in
 //     an 8-entry window trigger wd.cancel.
 //  3. Per-tool-call timeout: a tool_call without a matching tool_result within
@@ -358,16 +359,15 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			if err != nil {
 				continue
 			}
+			// Any received event resets the idle timer; only true silence fires it.
+			resetIdle()
 			switch {
 			case decoded.ToolCall != nil:
-				// Meaningful: tool invocation starts. Reset idle, start per-call cap.
-				resetIdle()
 				startToolCallTimer()
 				callCopy := *decoded.ToolCall
 				pendingCall = &callCopy
 
 			case decoded.ToolResult != nil:
-				// Meaningful: tool produced a result. Stop per-call timer.
 				stopToolCallTimer()
 				if pendingCall != nil {
 					key := makeLoopKey(*pendingCall, *decoded.ToolResult)
@@ -380,16 +380,12 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 					}
 					pendingCall = nil
 				}
-				resetIdle()
 
 			case decoded.Final != nil:
-				// Meaningful: execution complete. Stop all timers.
-				resetIdle()
 				stopToolCallTimer()
 				final = decoded.Final
 
 			case decoded.RoutingDecision != nil:
-				// Not a meaningful progress event: routing is a one-time setup event.
 				routing = decoded.RoutingDecision
 				if onRouteResolved != nil {
 					onRouteResolved(routing.Harness, routing.Provider, routing.Model)
@@ -401,8 +397,6 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 				}
 
 			case decoded.Progress != nil:
-				// Not meaningful for idle reset: progress events are emitted for
-				// any tool activity including tight loops that make no real change.
 				progress = append(progress, *decoded.Progress)
 				if w != nil {
 					_, _ = fmt.Fprint(w, renderer.at(ev.Time).FormatServiceProgressEntries([]agentlib.ServiceProgressData{*decoded.Progress}))

@@ -76,43 +76,76 @@ func makeFinalEvent(status string) agentlib.ServiceEvent {
 	}
 }
 
-// TestIdleTimer_ResetsOnlyOnMeaningfulEvents asserts the idle timer does NOT
-// reset when only non-meaningful events (text_delta, progress) are received.
-// The timer should fire and cancel execution even while those events keep
-// arriving.
-func TestIdleTimer_ResetsOnlyOnMeaningfulEvents(t *testing.T) {
+// TestIdleTimer_TrueSilenceFiresTimeout asserts that the idle timer fires when
+// NO events arrive for the idle window — complete silence is the only trigger.
+func TestIdleTimer_TrueSilenceFiresTimeout(t *testing.T) {
 	var cancelCalled atomic.Bool
 	cancel := func() { cancelCalled.Store(true) }
 
-	events := make(chan agentlib.ServiceEvent, 32)
+	events := make(chan agentlib.ServiceEvent, 8)
+	// No events are sent — pure silence.
 
 	wd := &drainWatchdog{
 		cancel:      cancel,
 		idleTimeout: 60 * time.Millisecond,
 	}
 
-	// Feed non-meaningful events (text_delta + progress) into the channel.
-	// These must NOT reset the idle timer, so the timer should fire after
-	// 60 ms regardless of how many arrive.
-	for i := 0; i < 5; i++ {
-		events <- makeTextDeltaEvent("thinking…")
-		events <- makeProgressEvent("tool", "update")
-	}
-
-	// Run drain in a background goroutine; it will block on the channel after
-	// consuming the pre-buffered events.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
 	}()
 
-	// The idle timer must fire (cancel called) well within 500 ms.
 	require.Eventually(t, func() bool {
 		return cancelCalled.Load()
-	}, 500*time.Millisecond, 5*time.Millisecond, "idle timer must fire after non-meaningful events only")
+	}, 500*time.Millisecond, 5*time.Millisecond, "idle timer must fire after complete silence")
 
-	// Unblock the drain goroutine by sending final.
+	close(events)
+	<-done
+}
+
+// TestIdleTimer_ProgressEventsResetTimer asserts that tool_call, tool_result, and
+// progress events each reset the idle timer. A stream of these events running for
+// longer than the idle window must NOT trigger cancellation; only complete silence
+// (no events of any kind) does.
+func TestIdleTimer_ProgressEventsResetTimer(t *testing.T) {
+	var cancelCalled atomic.Bool
+	cancel := func() { cancelCalled.Store(true) }
+
+	const idleTimeout = 80 * time.Millisecond
+	events := make(chan agentlib.ServiceEvent, 64)
+
+	wd := &drainWatchdog{
+		cancel:          cancel,
+		idleTimeout:     idleTimeout,
+		toolCallTimeout: 5 * time.Second, // generous; will not fire during test
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
+	}()
+
+	// Send tool_call/tool_result/progress events for 3× the idle window with
+	// spacing well within the idle window. No "final" event is sent during this
+	// period. If any of these event types fail to reset the idle timer, cancel
+	// would be called within ~80 ms.
+	spacing := idleTimeout / 3
+	for i := 0; i < 9; i++ {
+		time.Sleep(spacing)
+		switch i % 3 {
+		case 0:
+			events <- makeToolCallEvent(fmt.Sprintf("tc%d", i), "Bash", `{"command":"echo ok"}`)
+		case 1:
+			events <- makeToolResultEvent(fmt.Sprintf("tc%d", i), "ok", "")
+		default:
+			events <- makeProgressEvent("work", fmt.Sprintf("step %d", i))
+		}
+	}
+
+	assert.False(t, cancelCalled.Load(), "tool_call/tool_result/progress events must reset the idle timer — no cancellation while events keep arriving")
+
 	events <- makeFinalEvent("success")
 	close(events)
 	<-done
