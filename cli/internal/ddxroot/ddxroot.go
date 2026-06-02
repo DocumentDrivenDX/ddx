@@ -86,6 +86,11 @@ func projectsRoot() string {
 	return filepath.Join(xdgDataHome(), "ddx", "projects")
 }
 
+// GlobalDir returns the DDx global state root: ${XDG_DATA_HOME}/ddx/global.
+func GlobalDir() string {
+	return filepath.Join(xdgDataHome(), "ddx", "global")
+}
+
 func xdgDataHome() string {
 	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
 		return xdg

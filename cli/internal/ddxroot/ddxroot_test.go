@@ -15,6 +15,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGlobalDir_HonorsXDGDataHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	got := GlobalDir()
+	want := filepath.Join(xdg, "ddx", "global")
+	if got != want {
+		t.Fatalf("GlobalDir() = %q, want %q", got, want)
+	}
+}
+
 func TestDDxRoot_InTreeMode(t *testing.T) {
 	projectRoot := t.TempDir()
 	inTree := filepath.Join(projectRoot, ".ddx")
