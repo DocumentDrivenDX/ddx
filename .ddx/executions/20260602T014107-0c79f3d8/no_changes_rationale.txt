@@ -1,0 +1,17 @@
+status: open
+orchestrator_action: decompose
+reason: Bead ddx-937de9fc exceeds the Step 0 size limits — 13 acceptance criteria spanning six unrelated subsystems (registry path resolution, install, update, init, doctor, and spec/docs), mixing design (ADR), implementation across 5+ packages, integration tests, and documentation. It also re-architects against existing invariants (FEAT-015 rejects ~-rooted install targets at cli/internal/registry/installer.go:43,:79,:135; `ddx init` eagerly installs the default plugin at cli/cmd/init.go:284; there is no central runtime plugin resolver). Decomposed into six executable children; no implementation performed in this pass.
+
+decomposed_into:
+  - ddx-18e55cd2: registry — GlobalPluginsDir + ResolvePluginDir project>global>baked-in precedence (foundation; AC 4,5)
+  - ddx-aedb009d: install/update --global writing to XDG global plugins + agent-tier skill links (AC 1,8)
+  - ddx-7c3893ad: project install honors in-tree vs convention mode via ddxroot.Path() (AC 2,3,9)
+  - ddx-c772fdf9: init --global umbrella; plain init stops installing plugins / lazy-resolves (AC 6,7)
+  - ddx-ac6d4c22: doctor reports Global Install and Project Install layers (AC 10)
+  - ddx-406ae97b: docs — ADR skill-install-topology + CLAUDE.md/SKILL.md install precedence (AC 13)
+
+notes:
+  - AC 11 (go test green) and AC 12 (lefthook) are inherited as per-child gates.
+  - Each child copies the parent's labels (initiative:zero-footprint, principle:skills-personas).
+  - Dependency DAG: ddx-18e55cd2 is the foundation; aedb009d/7c3893ad/ac6d4c22 depend on it; c772fdf9 depends on 18e55cd2+aedb009d; 406ae97b (docs) depends on all behavior children so it documents the shipped shape.
+  - This decomposition deliberately reinstates the `ddx install --global` surface that CLAUDE.md currently records as retired. The bead contract explicitly overrides CLAUDE.md and its ROOT CAUSE acknowledges the prior retirement; the docs child (ddx-406ae97b) updates CLAUDE.md/specs to match.
