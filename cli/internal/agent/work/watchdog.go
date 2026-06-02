@@ -28,23 +28,11 @@ type PhaseBudgets struct {
 }
 
 // DefaultPhaseBudgets returns the watchdog's documented default budgets:
-// 5 minutes while resolving a route and 90 minutes once running.
-//
-// INTERIM (FEAT-004 D1d): the Running budget was 30m, but the phase-empty
-// signature stays true for the whole attempt in the recommended no-pin
-// "let fizeau route" mode (the resolved route is never recorded into
-// liveness — see ddx-6190edc6 / D1). That false-killed HEALTHY long attempts
-// at 30m (the model can legitimately run a 28m+ response, and build/test
-// tools run long), which then tripped the consecutive-wedge guard and parked
-// good beads. Until D1 records the resolved route (making phaseEmpty false for
-// healthy attempts), the Running budget is raised to 90m so a true
-// route-resolution hang is still caught in the 5m Resolving phase while
-// healthy long Running attempts are not fabricated into wedges. Revert to 30m
-// once D1 lands.
+// 5 minutes while resolving a route and 30 minutes once running.
 func DefaultPhaseBudgets() PhaseBudgets {
 	return PhaseBudgets{
 		Resolving: 5 * time.Minute,
-		Running:   90 * time.Minute,
+		Running:   30 * time.Minute,
 	}
 }
 

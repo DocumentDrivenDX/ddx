@@ -107,6 +107,45 @@ func TestWorkerLiveness_ServerUnavailableDoesNotBlockWork(t *testing.T) {
 	require.Equal(t, "ddx-2", rec2.CurrentBead)
 }
 
+// TestSidecarLiveness_UpdateRoute verifies AC #1: after SetAttempt with empty
+// route/harness/model, UpdateRoute overwrites only the non-empty fields it
+// receives; a bead ID mismatch is a no-op; empty args do not blank existing values.
+func TestSidecarLiveness_UpdateRoute(t *testing.T) {
+	projectRoot := t.TempDir()
+	rep := work.NewSidecarLivenessReporter(projectRoot, "wkr-route", "sess-route", nil)
+
+	// Establish an attempt with empty route/harness/model (no-pin mode).
+	rep.SetAttempt("ddx-routetest", "att-route-001", "running", "", "", "", "balanced", 0)
+
+	// Snapshot before UpdateRoute: route fields all empty.
+	snap := rep.Snapshot()
+	require.Empty(t, snap.Harness, "harness must be empty before UpdateRoute")
+	require.Empty(t, snap.Model, "model must be empty before UpdateRoute")
+	require.Empty(t, snap.Route, "route must be empty before UpdateRoute")
+
+	// UpdateRoute with the resolved triple.
+	rep.UpdateRoute("ddx-routetest", "fiz", "sonnet-4.6", "anthropic")
+
+	snap = rep.Snapshot()
+	require.Equal(t, "fiz", snap.Harness, "Harness must be updated")
+	require.Equal(t, "sonnet-4.6", snap.Model, "Model must be updated")
+	require.Equal(t, "anthropic", snap.Route, "Route must be updated")
+
+	// Bead ID mismatch: call with a different bead ID must be a no-op.
+	rep.UpdateRoute("ddx-other", "wrong-harness", "wrong-model", "wrong-route")
+	snap = rep.Snapshot()
+	require.Equal(t, "fiz", snap.Harness, "Harness must not change on bead ID mismatch")
+	require.Equal(t, "sonnet-4.6", snap.Model, "Model must not change on bead ID mismatch")
+	require.Equal(t, "anthropic", snap.Route, "Route must not change on bead ID mismatch")
+
+	// Empty args must not blank existing values.
+	rep.UpdateRoute("ddx-routetest", "", "", "")
+	snap = rep.Snapshot()
+	require.Equal(t, "fiz", snap.Harness, "Harness must not be blanked by empty arg")
+	require.Equal(t, "sonnet-4.6", snap.Model, "Model must not be blanked by empty arg")
+	require.Equal(t, "anthropic", snap.Route, "Route must not be blanked by empty arg")
+}
+
 type failingWriter struct{}
 
 func (failingWriter) Write(_ []byte) (int, error) {

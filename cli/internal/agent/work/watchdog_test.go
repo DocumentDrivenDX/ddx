@@ -111,6 +111,26 @@ func TestRunProgressWatchdogFiresOnPhaseEmpty(t *testing.T) {
 	assert.Equal(t, time.Minute, firedBudget)
 }
 
+// TestProgressWatchdog_PopulatedRouteNotWedged verifies AC #3: once the route
+// fields are populated (via UpdateRoute / the onRouteResolved callback),
+// observe returns fired=false even when running well past the Running budget.
+func TestProgressWatchdog_PopulatedRouteNotWedged(t *testing.T) {
+	wd := &progressWatchdog{budgets: PhaseBudgets{Resolving: time.Minute, Running: 30 * time.Minute}}
+	base := time.Date(2026, 5, 26, 12, 0, 0, 0, time.UTC)
+
+	// Arm with phase-empty (route not yet known).
+	fired, _ := wd.observe(base, "running", "", "", "")
+	require.False(t, fired, "within budget: should not fire yet")
+
+	// Route resolves: non-empty route field resets the timer.
+	fired, _ = wd.observe(base.Add(time.Minute), "running", "fiz", "sonnet-4.6", "anthropic")
+	require.False(t, fired, "populated route must reset the phase-empty timer")
+
+	// Well past the Running budget but route is still non-empty: must NOT fire.
+	fired, _ = wd.observe(base.Add(35*time.Minute), "running", "fiz", "sonnet-4.6", "anthropic")
+	require.False(t, fired, "populated route must not be treated as a wedge regardless of elapsed time")
+}
+
 // TestRunExternalCloseWatcherFiresOnClose drives the watcher with a status
 // reader that flips to closed and asserts OnClosed fires once and the watcher
 // returns.

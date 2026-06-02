@@ -67,6 +67,29 @@ func (r *SidecarLivenessReporter) SetAttempt(beadID, attemptID, phase, route, ha
 	r.mu.Unlock()
 }
 
+// UpdateRoute overwrites the in-flight route fields once fizeau resolves them.
+// Guarded on r.rec.CurrentBead == beadID; a mis-matched beadID is a no-op.
+// Empty args do not blank existing values.
+func (r *SidecarLivenessReporter) UpdateRoute(beadID, harness, model, route string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.rec.CurrentBead != beadID {
+		return
+	}
+	if harness != "" {
+		r.rec.Harness = harness
+	}
+	if model != "" {
+		r.rec.Model = model
+	}
+	if route != "" {
+		r.rec.Route = route
+	}
+}
+
 // ClearAttempt drops the in-flight attempt identity once the attempt
 // terminates. The worker_id and project_root remain so an idle drain loop
 // still presents as the same worker between attempts.

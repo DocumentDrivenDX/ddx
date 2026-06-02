@@ -291,7 +291,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
-	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog)
+	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, runtime.OnRouteResolved)
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 

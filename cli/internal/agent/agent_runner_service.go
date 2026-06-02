@@ -147,7 +147,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		idleTimeout:     timeout,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
-	final, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), watchdog)
+	final, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), watchdog, nil)
 	elapsed := time.Since(start)
 
 	result := &Result{
@@ -241,7 +241,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 //     an 8-entry window trigger wd.cancel.
 //  3. Per-tool-call timeout: a tool_call without a matching tool_result within
 //     wd.toolCallTimeout triggers wd.cancel.
-func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Writer, renderer WorkLogRenderer, wd *drainWatchdog) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
+func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Writer, renderer WorkLogRenderer, wd *drainWatchdog, onRouteResolved func(harness, provider, model string)) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
 	var final *agentlib.ServiceFinalData
 	var routing *agentlib.ServiceRoutingDecisionData
 	var progress []agentlib.ServiceProgressData
@@ -256,6 +256,9 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			switch {
 			case decoded.RoutingDecision != nil:
 				routing = decoded.RoutingDecision
+				if onRouteResolved != nil {
+					onRouteResolved(routing.Harness, routing.Provider, routing.Model)
+				}
 				if w != nil {
 					if line := renderer.at(ev.Time).FormatRoutingDecision(decoded.RoutingDecision); line != "" {
 						_, _ = fmt.Fprint(w, line)
@@ -388,6 +391,9 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			case decoded.RoutingDecision != nil:
 				// Not a meaningful progress event: routing is a one-time setup event.
 				routing = decoded.RoutingDecision
+				if onRouteResolved != nil {
+					onRouteResolved(routing.Harness, routing.Provider, routing.Model)
+				}
 				if w != nil {
 					if line := renderer.at(ev.Time).FormatRoutingDecision(decoded.RoutingDecision); line != "" {
 						_, _ = fmt.Fprint(w, line)

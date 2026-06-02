@@ -104,7 +104,7 @@ func TestIdleTimer_ResetsOnlyOnMeaningfulEvents(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd)
+		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
 	}()
 
 	// The idle timer must fire (cancel called) well within 500 ms.
@@ -149,7 +149,7 @@ func TestLoopDetector_FiresAfterRepeatedIdenticalCommands(t *testing.T) {
 
 	close(events)
 
-	drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd)
+	drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
 
 	assert.True(t, cancelCalled.Load(), "loop detector must call cancel after ≥4 identical (command, result) pairs in the window")
 }
@@ -174,7 +174,7 @@ func TestToolCallTimeout_KillsLongHungSubprocess(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd)
+		drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
 	}()
 
 	// The tool-call timeout must fire and cancel within 500 ms.
@@ -220,7 +220,7 @@ func TestWedgeImmune_HardWorkRunsToCompletion(t *testing.T) {
 		close(events)
 	}()
 
-	final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd)
+	final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), wd, nil)
 
 	assert.False(t, cancelCalled.Load(), "hard work with distinct results must NOT trigger any wedge-prevention mechanism")
 	require.NotNil(t, final, "final event must be received when execution completes naturally")

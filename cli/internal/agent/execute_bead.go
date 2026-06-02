@@ -245,6 +245,21 @@ type ExecuteBeadRuntime struct {
 	ACCheckRunner func(ctx context.Context, beadID, attemptID, wtPath string) (*accheck.Output, error)
 }
 
+type onRouteResolvedKeyType struct{}
+
+// contextWithOnRouteResolved stores fn in ctx so execute-bead can retrieve it
+// after the Executor dispatches through agenttry.Attempt.
+func contextWithOnRouteResolved(ctx context.Context, fn func(harness, provider, model string)) context.Context {
+	return context.WithValue(ctx, onRouteResolvedKeyType{}, fn)
+}
+
+// onRouteResolvedFromContext retrieves the callback stored by
+// contextWithOnRouteResolved, or nil if none was stored.
+func onRouteResolvedFromContext(ctx context.Context) func(harness, provider, model string) {
+	fn, _ := ctx.Value(onRouteResolvedKeyType{}).(func(harness, provider, model string))
+	return fn
+}
+
 // GitOps abstracts the git operations required by the worker.
 // Merge is intentionally excluded — that belongs to the parent-side
 // orchestrator (OrchestratorGitOps). UpdateRef/DeleteRef are exposed here
@@ -1682,6 +1697,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Role:                  "implementer",
 		CorrelationID:         beadID + ":" + attemptID,
 		Env:                   gitIsolationEnv,
+		OnRouteResolved:       onRouteResolvedFromContext(ctx),
 	}
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 

@@ -2437,11 +2437,20 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// attempt promptly (ddx-dc23f001).
 		attemptCtx, attemptCancel := context.WithCancel(attemptCtx)
 		if liveness != nil {
-			liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), profile, harness, model, profile, 0)
+			liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), "", harness, model, profile, 0)
 			// Tick once now so the sidecar shows the new attempt before the
 			// first heartbeat fires; long attempts otherwise wait one
 			// heartbeat interval before the sidecar reflects the current bead.
 			liveness.OnTick(now())
+		}
+		// Per-attempt route callback: once fizeau resolves the route
+		// mid-stream, UpdateRoute overwrites the liveness record so the
+		// progress watchdog sees a non-empty route field and does not mistake
+		// a healthy long-running attempt for a wedge (ddx-6190edc6).
+		var onRouteResolved func(harness, provider, model string)
+		if liveness != nil {
+			beadIDForRoute := candidate.ID
+			onRouteResolved = func(h, p, m string) { liveness.UpdateRoute(beadIDForRoute, h, m, p) }
 		}
 		attemptStarted = true
 
@@ -2526,7 +2535,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 					return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 						Bead:                candidate,
-						Executor:            tryExecutor(w.Executor),
+						Executor:            tryExecutor(w.Executor, onRouteResolved),
 						Store:               w.Store,
 						ProjectRoot:         runtime.ProjectRoot,
 						SatisfactionChecker: w.SatisfactionChecker,
@@ -2546,7 +2555,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 				return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 					Bead:                candidate,
-					Executor:            tryExecutor(w.Executor),
+					Executor:            tryExecutor(w.Executor, onRouteResolved),
 					Store:               w.Store,
 					ProjectRoot:         runtime.ProjectRoot,
 					SatisfactionChecker: w.SatisfactionChecker,

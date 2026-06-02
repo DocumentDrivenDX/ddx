@@ -102,6 +102,12 @@ type AgentRunRuntime struct {
 	// calls select their own fizeau profile hints instead of inheriting the
 	// worker attempt's profile.
 	ClearProfile bool
+	// OnRouteResolved, when non-nil, is called once when the upstream service
+	// emits a routing decision. Arguments are the resolved harness, provider,
+	// and model. Used by the execute-bead loop to record the resolved route in
+	// the worker's liveness sidecar so the progress watchdog can distinguish a
+	// healthy long-running attempt from a wedge (ddx-6190edc6).
+	OnRouteResolved func(harness, provider, model string)
 }
 
 const (

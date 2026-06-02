@@ -62,7 +62,7 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	}
 	close(events)
 
-	_, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil)
+	_, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, nil)
 	require.NotNil(t, routing)
 	power, speed, cost, source := selectedRoutingCandidateMetrics(routing)
 	assert.Equal(t, 65, power,
@@ -108,7 +108,7 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	}
 	close(events)
 
-	_, _, progress := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil)
+	_, _, progress := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, nil)
 	require.Len(t, progress, 1)
 	assert.Equal(t, "ddx-1234", progress[0].TaskID)
 	assert.Equal(t, 7, progress[0].TurnIndex)
@@ -138,7 +138,7 @@ func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	close(events)
 
 	var out bytes.Buffer
-	_, routing, progress := drainServiceEventsWithRenderer(events, &out, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil)
+	_, routing, progress := drainServiceEventsWithRenderer(events, &out, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), nil, nil)
 	require.NotNil(t, routing)
 	require.Len(t, progress, 1)
 	assert.Contains(t, out.String(), "12:00:00 do route fiz/gpt-5.4-mini provider=openrouter reason=profile")
