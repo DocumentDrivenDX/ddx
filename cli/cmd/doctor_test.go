@@ -206,6 +206,80 @@ func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
 	}
 }
 
+func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
+	cases := []struct {
+		name              string
+		projectInstalled  bool
+		globalInstalled   bool
+		wantProjectStatus string
+		wantGlobalStatus  string
+	}{
+		{
+			name:              "project install present",
+			projectInstalled:  true,
+			globalInstalled:   false,
+			wantProjectStatus: "ok",
+			wantGlobalStatus:  "missing",
+		},
+		{
+			name:              "project falls through to global",
+			projectInstalled:  false,
+			globalInstalled:   true,
+			wantProjectStatus: "lazy-resolves-to-global",
+			wantGlobalStatus:  "ok",
+		},
+		{
+			name:              "project install missing",
+			projectInstalled:  false,
+			globalInstalled:   false,
+			wantProjectStatus: "missing",
+			wantGlobalStatus:  "missing",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := t.TempDir()
+			homeDir := t.TempDir()
+			xdgDir := filepath.Join(homeDir, "xdg")
+
+			t.Setenv("HOME", homeDir)
+			t.Setenv("XDG_DATA_HOME", xdgDir)
+
+			requireDir := func(path string) {
+				t.Helper()
+				if err := os.MkdirAll(path, 0o755); err != nil {
+					t.Fatalf("mkdir %s: %v", path, err)
+				}
+			}
+
+			requireDir(filepath.Join(workDir, ddxroot.DirName))
+			if tc.projectInstalled {
+				requireDir(filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"))
+			}
+			if tc.globalInstalled {
+				requireDir(filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx"))
+			}
+
+			factory := NewCommandFactory(workDir)
+			output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor")
+			if err != nil {
+				t.Fatalf("doctor returned error: %v\noutput:\n%s", err, output)
+			}
+
+			projectPath := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
+			globalPath := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
+
+			if !strings.Contains(output, "Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
+				t.Fatalf("output missing global install status %q:\n%s", tc.wantGlobalStatus, output)
+			}
+			if !strings.Contains(output, "Project Install ("+projectPath+") — "+tc.wantProjectStatus) {
+				t.Fatalf("output missing project install status %q:\n%s", tc.wantProjectStatus, output)
+			}
+		})
+	}
+}
+
 // TestCheckPackageJSONLocations_NoPkgJSON verifies no issues when no package.json exists.
 func TestCheckPackageJSONLocations_NoPkgJSON(t *testing.T) {
 	workDir := t.TempDir()

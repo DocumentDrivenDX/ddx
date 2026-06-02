@@ -28,6 +28,20 @@ matching reference file from the router table below. The router is
 not optional — your answer must be grounded in the reference file's
 guidance, not this overview alone.**
 
+## Install topology
+
+DDx resolves the default `ddx` package in three layers: project-local
+`.ddx/plugins/ddx/`, then the global fallback at
+`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in package
+embedded in the binary. `ddx doctor` reports the project and global
+layers separately so operators can tell whether the project copy is
+real, missing, or lazily resolving to the global layer.
+
+The agent-facing skill outputs live in the project-local
+`.agents/skills/ddx/` and `.claude/skills/ddx/` surfaces. Home-directory
+skill installs are retired; do not rely on `~/.agents/skills` or
+`~/.claude/skills`.
+
 ## Vocabulary
 
 Single source of truth for DDx terms. Every reference file uses these

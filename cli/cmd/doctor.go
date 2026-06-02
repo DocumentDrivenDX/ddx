@@ -275,7 +275,15 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Check 10: Installed Package Launchers
+	// Check 10: Skill Install Topology
+	fmt.Print("✓ Checking Skill Install Topology... ")
+	projectRoot := resolveProjectRoot("", f.WorkingDir)
+	if projectRoot == "" {
+		projectRoot = f.WorkingDir
+	}
+	reportSkillInstallTopology(projectRoot)
+
+	// Check 11: Installed Package Launchers
 	checkInstalledLaunchers(verbose)
 
 	if auditPlugins {
@@ -305,11 +313,11 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 
 	// Check 12: package.json locations — detect missing/stale node_modules.
 	fmt.Print("✓ Checking Execution Housekeeping... ")
-	projectRoot := resolveProjectRoot("", f.WorkingDir)
-	if projectRoot == "" {
-		projectRoot = f.WorkingDir
+	housekeepingProjectRoot := resolveProjectRoot("", f.WorkingDir)
+	if housekeepingProjectRoot == "" {
+		housekeepingProjectRoot = f.WorkingDir
 	}
-	housekeepingRunner := newStartupHousekeepingRunner(projectRoot)
+	housekeepingRunner := newStartupHousekeepingRunner(housekeepingProjectRoot)
 	housekeepingReport, housekeepingErr := housekeepingRunner.scan(cmd.Context(), applyHousekeeping)
 	if housekeepingErr != nil {
 		fmt.Println("⚠️  Execution housekeeping scan failed")
@@ -402,6 +410,42 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
+}
+
+// reportSkillInstallTopology prints the global and project install layers for
+// the default ddx package so operators can see whether the project copy exists
+// or is falling through to the global layer.
+func reportSkillInstallTopology(projectRoot string) {
+	ctx := context.Background()
+
+	globalPath := filepath.Join(ddxroot.GlobalDir(), "plugins", "ddx")
+	globalStatus := "missing"
+	if info, err := os.Stat(globalPath); err == nil && info.IsDir() {
+		globalStatus = "ok"
+	}
+
+	projectPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx")
+	projectStatus := "missing"
+	if existingRoot, ok := ddxroot.ExistingPath(ctx, projectRoot); ok {
+		projectPath = filepath.Join(existingRoot, "plugins", "ddx")
+		if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
+			switch layer {
+			case "project":
+				projectStatus = "ok"
+			case "global":
+				projectStatus = "lazy-resolves-to-global"
+			case "baked-in":
+				projectStatus = "missing"
+			}
+		} else if globalStatus == "ok" {
+			projectStatus = "lazy-resolves-to-global"
+		}
+	} else if globalStatus == "ok" {
+		projectStatus = "lazy-resolves-to-global"
+	}
+
+	fmt.Printf("   Global Install (%s) — %s\n", globalPath, globalStatus)
+	fmt.Printf("   Project Install (%s) — %s\n", projectPath, projectStatus)
 }
 
 // legacySkillSymlinkDirs returns the relative names of project-local skill
