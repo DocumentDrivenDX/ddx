@@ -415,7 +415,13 @@ const (
 	// agent_runner_service.go) — it catches individually hung subprocesses
 	// (e.g., network deadlock in git push) that would otherwise absorb
 	// unlimited wall-clock without surfacing.
-	ToolCallTimeout = 1800000 // 30 minutes
+	//
+	// INTERIM (FEAT-004 D1d): raised from 30m to 90m. A bare TUI can run a
+	// long build/test tool (or a slow/stalled model turn) and succeed; the 30m
+	// cap was cancelling healthy long attempts and losing completed work.
+	// Until D1d makes this a per-tool config seam, 90m keeps the hung-subprocess
+	// catch while not being tighter than a real build/test.
+	ToolCallTimeout = 5400000 // 90 minutes
 	DefaultLogDir   = ".ddx/agent-logs"
 )
 
