@@ -123,6 +123,7 @@ Examples:
 	cmd.Flags().Bool("check", false, "Check for updates without applying")
 	cmd.Flags().Bool("force", false, "Force update even if already latest")
 	cmd.Flags().Bool("discard-local", false, "Overwrite uncommitted local changes (backs up originals to .ddx/update-backup/)")
+	cmd.Flags().Bool("global", false, "Update only the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
 
 	return cmd
 }

@@ -195,6 +195,9 @@ func TestPluginInstallLocalDoesNotRewriteInstalledState(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
 	statePath := filepath.Join(homeDir, ddxroot.DirName, "installed.yaml")
 	require.NoError(t, os.MkdirAll(filepath.Dir(statePath), 0o755))
 	beforeState := `installed:
@@ -253,6 +256,9 @@ func TestPluginInstallLocalHelixFallbackIgnoresSourceOverlayWithoutScriptAssumpt
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
 	localPlugin := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, ".claude-plugin"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, ".claude-plugin", "plugin.json"), []byte(`{
@@ -291,6 +297,9 @@ func TestPluginInstallLocalUsesPackageManifestSkillSource(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
 
 	localPlugin := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
@@ -337,6 +346,9 @@ func TestPluginInstallLocalDDxLibrarySymlinksSkills(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
 
 	libraryRoot := filepath.Join(workDir, "library")
 	require.NoError(t, os.MkdirAll(libraryRoot, 0o755))
@@ -404,6 +416,9 @@ func TestPluginInstallLocalCopiesScriptOnlyWhenManifestDeclaresIt(t *testing.T) 
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
 	localPlugin := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
 version: local
@@ -438,6 +453,9 @@ func TestPluginInstallLocalMirrorsTopLevelSkillsWithoutPackageManifest(t *testin
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
 
 	localPlugin := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, ".claude-plugin"), 0o755))
@@ -659,28 +677,15 @@ Test body.
 	return buf.Bytes()
 }
 
-func TestInstall_GlobalFlagRemoved(t *testing.T) {
-	// FEAT-015: --global was removed. Cobra rejects the unknown flag.
-	workDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-
-	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "--global")
-	require.Error(t, err, "ddx install --global must fail because the flag was removed")
-	combined := output + err.Error()
-	assert.True(t,
-		strings.Contains(combined, "unknown flag") ||
-			strings.Contains(combined, "global"),
-		"error must reference the unknown --global flag, got: %s", combined)
-}
-
 func TestInstallLocalCreatesDeveloperSymlinks(t *testing.T) {
 	// Local installs are developer overlays: the plugin root and harness skill
 	// surfaces should symlink back to the local checkout.
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
 
 	localPlugin := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: sample-plugin
@@ -730,6 +735,9 @@ func TestInstallLocalSkipsBrokenSymlinksUnderGitignoredPaths(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+
+	// Force in-tree mode so plugin installs to <workDir>/.ddx/plugins/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
 
 	localPlugin := t.TempDir()
 	// Initialize a git repo so `git check-ignore` can consult .gitignore.

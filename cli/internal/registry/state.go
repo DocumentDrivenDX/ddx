@@ -136,3 +136,41 @@ func (s *InstalledState) Remove(name string) bool {
 	}
 	return false
 }
+
+// globalInstalledStatePath returns the path to ${XDG_DATA_HOME}/ddx/global/installed.yaml.
+func globalInstalledStatePath() string {
+	return filepath.Join(ddxroot.GlobalDir(), "installed.yaml")
+}
+
+// LoadGlobalState reads the global installed.yaml, returning an empty state if the file doesn't exist.
+func LoadGlobalState() (*InstalledState, error) {
+	path := globalInstalledStatePath()
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return &InstalledState{}, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading global installed state: %w", err)
+	}
+	var state InstalledState
+	if err := yaml.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("parsing global installed state: %w", err)
+	}
+	return &state, nil
+}
+
+// SaveGlobalState writes the global installed.yaml.
+func SaveGlobalState(state *InstalledState) error {
+	path := globalInstalledStatePath()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating global state directory: %w", err)
+	}
+	data, err := yaml.Marshal(state)
+	if err != nil {
+		return fmt.Errorf("marshaling global state: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		return fmt.Errorf("writing global state: %w", err)
+	}
+	return nil
+}

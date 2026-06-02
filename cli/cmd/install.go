@@ -24,11 +24,20 @@ func (f *CommandFactory) newInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install <name>",
 		Short: "Install a package or resource",
-		Long: `Install a package or resource from the DDx registry into the
-current project under .ddx/plugins/<name>/.
+		Long: `Install a package or resource from the DDx registry.
+
+Without --global, installs into the current project:
+  - In-tree mode (.ddx/ exists): <project>/.ddx/plugins/<name>/
+  - Convention mode (no .ddx/): ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/
+Skill links are created under <project>/.claude/skills/ and <project>/.agents/skills/.
+
+With --global, installs into the machine-wide DDx plugin tree:
+  ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+Skill links are created under ~/.claude/skills/ and ~/.agents/skills/.
 
 Examples:
-  ddx install helix                        # Install HELIX workflow
+  ddx install helix                        # Install HELIX workflow (project-local)
+  ddx install helix --global               # Install HELIX workflow (machine-wide)
   ddx install helix --force                # Reinstall even if already up to date
   ddx plugin install helix --local ../helix --force
   ddx install persona/strict-code-reviewer # Install a single persona`,
@@ -37,12 +46,14 @@ Examples:
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
+	cmd.Flags().Bool("global", false, "Install into the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
 	return cmd
 }
 
 func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
+	global, _ := cmd.Flags().GetBool("global")
 	name := args[0]
 
 	// Ensure install operations resolve relative paths against the project
@@ -59,7 +70,7 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 
 	// Handle --local: install from a local directory instead of registry.
 	if localPath, _ := cmd.Flags().GetString("local"); localPath != "" {
-		return f.installLocal(name, localPath, force, out)
+		return f.installLocal(name, localPath, force, global, out)
 	}
 
 	if registry.IsResourcePath(name) {
@@ -83,7 +94,16 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Package install (e.g. "helix")
+	// Package install (e.g. "helix").
+	// Determine install root and skill directories based on global vs project mode.
+	installRoot, agentSkillsDir, claudeSkillsDir, err := f.resolveInstallDirs(global)
+	if err != nil {
+		return err
+	}
+
+	// Select the correct state file for global vs project installs.
+	loadState, saveState := selectInstallState(global)
+
 	reg := registry.BuiltinRegistry()
 	pkg, err := reg.Find(name)
 	if err != nil {
@@ -96,7 +116,7 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if already installed at the latest version.
-	state, err := registry.LoadState()
+	state, err := loadState()
 	if err == nil {
 		for _, e := range state.Installed {
 			if e.Name == name {
@@ -123,7 +143,9 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(out, "Installing %s %s from %s...\n", pkg.Name, pkg.Version, pkg.Source)
 
-	entry, err := registry.InstallPackage(pkg, f.WorkingDir)
+	// Adjust package targets to use the resolved install root and skill dirs.
+	adjustedPkg := adjustInstallTargets(pkg, name, agentSkillsDir, claudeSkillsDir)
+	entry, err := registry.InstallPackage(adjustedPkg, installRoot)
 	if err != nil {
 		return fmt.Errorf("install package: %w", err)
 	}
@@ -133,21 +155,96 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		fmt.Fprintf(out, "Removed %d stale file(s)\n", removed)
 	}
 
-	state, stateErr := registry.LoadState()
+	state, stateErr := loadState()
 	if stateErr != nil {
 		return fmt.Errorf("loading state: %w", stateErr)
 	}
 	state.AddOrUpdate(entry)
-	if err := registry.SaveState(state); err != nil {
+	if err := saveState(state); err != nil {
 		return fmt.Errorf("saving state: %w", err)
 	}
 
 	fmt.Fprintf(out, "Installed %s %s (%d file(s))\n", pkg.Name, pkg.Version, len(entry.Files))
 
-	// Auto-commit skill symlinks and other trackable changes.
-	commitPluginChanges(name, pkg.Version)
+	// Auto-commit skill links and other trackable project changes (project installs only).
+	if !global {
+		commitPluginChanges(name, pkg.Version)
+	}
 
 	return nil
+}
+
+// resolveInstallDirs returns the install root directory and agent/claude skill
+// directories for either a global or project-local install. For project installs,
+// ddxroot.Path() handles the in-tree vs convention distinction automatically.
+func (f *CommandFactory) resolveInstallDirs(global bool) (installRoot, agentSkillsDir, claudeSkillsDir string, err error) {
+	if global {
+		installRoot = ddxroot.GlobalDir()
+		home, herr := os.UserHomeDir()
+		if herr != nil {
+			return "", "", "", fmt.Errorf("getting home dir: %w", herr)
+		}
+		agentSkillsDir = filepath.Join(home, ".agents", "skills")
+		claudeSkillsDir = filepath.Join(home, ".claude", "skills")
+		return
+	}
+	installRoot = ddxroot.Path(context.Background(), f.WorkingDir)
+	agentSkillsDir = filepath.Join(f.WorkingDir, ".agents", "skills")
+	claudeSkillsDir = filepath.Join(f.WorkingDir, ".claude", "skills")
+	return
+}
+
+// selectInstallState returns load/save functions for the appropriate state file.
+func selectInstallState(global bool) (
+	load func() (*registry.InstalledState, error),
+	save func(*registry.InstalledState) error,
+) {
+	if global {
+		return registry.LoadGlobalState, registry.SaveGlobalState
+	}
+	return registry.LoadState, registry.SaveState
+}
+
+// adjustInstallTargets returns a shallow copy of pkg with Root.Target overridden
+// to "plugins/<name>" (relative to installRoot) and Skills targets remapped to
+// the provided absolute agentSkillsDir/claudeSkillsDir paths.
+func adjustInstallTargets(pkg *registry.Package, name, agentSkillsDir, claudeSkillsDir string) *registry.Package {
+	adjusted := *pkg
+	adjustedInstall := pkg.Install
+
+	src := "."
+	if pkg.Install.Root != nil {
+		src = pkg.Install.Root.Source
+	}
+	adjustedInstall.Root = &registry.InstallMapping{
+		Source: src,
+		Target: filepath.Join("plugins", name),
+	}
+
+	adjustedInstall.Skills = remapSkillTargets(pkg.Install.Skills, agentSkillsDir, claudeSkillsDir)
+	adjusted.Install = adjustedInstall
+	return &adjusted
+}
+
+// remapSkillTargets replaces relative .agents/skills and .claude/skills targets
+// with the provided absolute directory paths.
+func remapSkillTargets(mappings []registry.InstallMapping, agentSkillsDir, claudeSkillsDir string) []registry.InstallMapping {
+	result := make([]registry.InstallMapping, len(mappings))
+	for i, m := range mappings {
+		target := m.Target
+		t := filepath.ToSlash(target)
+		switch {
+		case strings.Contains(t, "agents/skills"):
+			target = strings.TrimRight(agentSkillsDir, "/") + "/"
+		case strings.Contains(t, "claude/skills"):
+			target = strings.TrimRight(claudeSkillsDir, "/") + "/"
+		}
+		result[i] = registry.InstallMapping{
+			Source: m.Source,
+			Target: target,
+		}
+	}
+	return result
 }
 
 func (f *CommandFactory) newPluginCommand() *cobra.Command {
@@ -246,11 +343,15 @@ func prepareSymlinkTarget(target string, force bool) error {
 	return nil
 }
 
-// installLocal installs a plugin from a local directory into the current
-// checkout as a developer overlay. It intentionally does not update installed
-// state and does not auto-commit: the recorded plugin pin remains whatever the
-// project already declares, while this machine can test a local plugin tree.
-func (f *CommandFactory) installLocal(name, localPath string, force bool, out io.Writer) error {
+// installLocal installs a plugin from a local directory as a developer overlay.
+// When global is true, the plugin root is linked into the machine-wide global
+// plugin tree and skills are linked into the home-level harness directories.
+// When global is false, the plugin root and skills land in the project tree
+// (in-tree mode: <project>/.ddx/plugins/<name>; convention mode: XDG project path).
+// Local installs intentionally do not update the recorded installed state and
+// do not auto-commit so the recorded plugin pin remains whatever the project
+// already declares.
+func (f *CommandFactory) installLocal(name, localPath string, force bool, global bool, out io.Writer) error {
 	// Resolve to absolute path.
 	absPath, err := filepath.Abs(localPath)
 	if err != nil {
@@ -335,7 +436,19 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		return fmt.Errorf("validating package structure: %s", registry.JoinValidationIssues(issues))
 	}
 
-	pluginDir := pkg.Install.Root.Target
+	// Determine the actual plugin directory based on global vs project mode.
+	// Global: link into the machine-wide global tree.
+	// Project in-tree: link into <project>/.ddx/plugins/<name>.
+	// Project convention: link into the XDG convention root plugins/<name>.
+	// The FEAT-015 check above already validates that pkg.Install.Root.Target
+	// does not start with "~"; we now override the actual destination path.
+	var pluginDir string
+	if global {
+		pluginDir = filepath.Join(ddxroot.GlobalDir(), "plugins", name)
+	} else {
+		ddxRootDir := ddxroot.Path(context.Background(), f.WorkingDir)
+		pluginDir = filepath.Join(ddxRootDir, "plugins", name)
+	}
 
 	if err := prepareSymlinkTarget(pluginDir, force); err != nil {
 		return err
@@ -357,13 +470,30 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		Type:    pkg.Type,
 		Source:  absPath,
 	}
-	entry.Files = append(entry.Files, pluginDir)
+	// Record entry.Files as project-relative paths when the plugin lives inside
+	// the working directory (in-tree mode). Convention-root and global absolute
+	// paths are recorded as-is. This keeps removeStaleFilesFromInstall
+	// compatible with relative paths recorded by prior runs.
+	fileToRecord := pluginDir
+	if f.WorkingDir != "" {
+		if rel, relErr := filepath.Rel(f.WorkingDir, pluginDir); relErr == nil && !strings.HasPrefix(rel, "..") {
+			fileToRecord = rel
+		}
+	}
+	entry.Files = append(entry.Files, fileToRecord)
 
 	// Install local skills as symlinks into each supported harness surface.
+	// For global installs, skills land in the home directory; for project
+	// installs, they land in the project directory.
 	if len(pkg.Install.Skills) > 0 {
-		absProject := f.WorkingDir
-		if absProject == "" {
-			absProject, _ = os.Getwd()
+		var absProject string
+		if global {
+			absProject, _ = os.UserHomeDir()
+		} else {
+			absProject = f.WorkingDir
+			if absProject == "" {
+				absProject, _ = os.Getwd()
+			}
 		}
 		if !filepath.IsAbs(absProject) {
 			absProject, _ = filepath.Abs(absProject)
@@ -407,10 +537,13 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		fmt.Fprintf(out, "Removed %d stale file(s) from previous install\n", removed)
 	}
 
-	if hidden, err := markLocalInstallOverlay(projectRoot, entry.Name, entry.Files); err != nil {
-		fmt.Fprintf(out, "Warning: local install is active but git overlay hiding failed: %v\n", err)
-	} else if hidden > 0 {
-		fmt.Fprintf(out, "Marked %d tracked local overlay file(s) skip-worktree\n", hidden)
+	// Git overlay hiding only applies to project-local installs (not global).
+	if !global {
+		if hidden, err := markLocalInstallOverlay(projectRoot, entry.Name, entry.Files); err != nil {
+			fmt.Fprintf(out, "Warning: local install is active but git overlay hiding failed: %v\n", err)
+		} else if hidden > 0 {
+			fmt.Fprintf(out, "Marked %d tracked local overlay file(s) skip-worktree\n", hidden)
+		}
 	}
 
 	fmt.Fprintf(out, "Installed %s from local path %s — %d file(s); recorded plugin pin unchanged\n", entry.Name, absPath, len(entry.Files))
