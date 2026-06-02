@@ -376,3 +376,5 @@ TD-027 owns the bead substrate (storage system + lifecycle + data model). This T
 | Module boundary (internal/) | TD-027 §21 |
 
 If you change something in TD-031 that depends on a contract in TD-027 (e.g. adding an outcome that fires a new event kind), update both docs in the same PR.
+
+State paths in this document use `ddxroot.Path()` (shorthand for `ddxroot.Path(ctx, projectRoot)`) per `ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree registry).

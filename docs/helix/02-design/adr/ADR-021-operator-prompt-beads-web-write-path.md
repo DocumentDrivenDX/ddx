@@ -299,3 +299,4 @@ the bead. Mitigations:
 - FEAT-004 — beads (the queue that drains operator-prompt beads)
 - Closed epic `ddx-88e91fdb` — chat interface to project home page
   (origin of the broader feature exploration)
+- `ddx-06cbaa90` — presence-based DDx root resolution (`ddxroot.Path()`); defines the project-state directory used by the write path described here

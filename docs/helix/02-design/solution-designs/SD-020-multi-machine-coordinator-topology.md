@@ -228,3 +228,5 @@ This design should be covered by integration tests that verify:
   clear operator-facing error
 - the losing coordinator's preserved ref contains the exact iteration commit
   and the bead returns to `open` status
+
+State paths in this document use `ddxroot.Path()` (shorthand for `ddxroot.Path(ctx, projectRoot)`) per `ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree registry). The shared-remote model assumes each machine's local bead store lives at its own `ddxroot.Path()/beads.jsonl`, resolved from the same `git remote get-url origin` identity.

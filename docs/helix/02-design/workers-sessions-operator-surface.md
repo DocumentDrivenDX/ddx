@@ -63,3 +63,5 @@ worker lifecycle event with the server's single-operator actor identifier.
 Those events are surfaced on the worker detail page beside the live response
 and log tail, so an operator can see who started or stopped the process and
 when.
+
+Worker and session state paths use `ddxroot.Path()` (shorthand for `ddxroot.Path(ctx, projectRoot)`) per `ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree registry).

@@ -226,3 +226,5 @@ Per FEAT-011's path model: source at `skills/ddx/`, embedded at `cli/internal/sk
 ## Refinement provenance
 
 Refined through 3 rounds of adversarial review (codex via `legacy agent run --harness codex` + fresh-eyes general-purpose subagent in parallel) plus user-resolved questions Q1–Q12. Key user decisions: artifact authority (Q1), FEAT-019 child-of-010 (Q2), reads-matter-writes-case-by-case (Q3), check-in unconditionally (Q4), CONTRACT-003 amendments allowed (Q5), substrate unification (Q6), no run-type catalog (Q7), no v1-gate framing (Q8), FEAT-019 contracts (Q9), generate-artifact split layer-1/layer-2 (Q10), quorum-as-skill (Q11), structural passthrough not per-command (Q12 follow-up).
+
+Run-substrate paths (`ddxroot.Path()/exec-runs/`, `ddxroot.Path()/executions/<attempt-id>/`) use `ddxroot.Path()` per `ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree registry).

@@ -414,3 +414,5 @@ This design should be covered by tests that verify:
   bead store, worktree, or execution artifacts
 
 TP-002 carries the concrete test cases that implement this validation plan.
+
+Project-state paths in this document use `ddxroot.Path()` (shorthand for `ddxroot.Path(ctx, projectRoot)`) per `ddx-06cbaa90` (presence-based DDx root resolution and per-project worktree registry). Project identity (the `<host>/<owner>/<repo>` segment used in convention mode) is derived from `git remote get-url origin` as defined in `ddx-06cbaa90`.
