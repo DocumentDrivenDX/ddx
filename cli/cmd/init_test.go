@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,81 +9,11 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
-
-// TestInitRegistersSkills verifies that ddx init installs the `ddx` skill into
-// the harness-visible skill directories as real files via the embedded package
-// installer.
-func TestInitRegistersSkills(t *testing.T) {
-	te := NewTestEnvironment(t, WithGitInit(false))
-	_, err := te.RunCommand("init", "--no-git")
-	require.NoError(t, err)
-
-	targetDirs := []string{
-		filepath.Join(te.Dir, ".agents", "skills"),
-		filepath.Join(te.Dir, ".claude", "skills"),
-	}
-
-	// The single shipped skill is `ddx/`
-	for _, dir := range targetDirs {
-		skillFile := filepath.Join(dir, "ddx", "SKILL.md")
-		assert.FileExists(t, skillFile, "ddx SKILL.md should exist at %s", skillFile)
-	}
-}
-
-// TestInitInstallsDDxPluginPackage verifies that `ddx init` creates
-// .ddx/plugins/ddx, .agents/skills/ddx, and .claude/skills/ddx through the
-// embedded package installer path (no separate bootstrap skill copier).
-func TestInitInstallsDDxPluginPackage(t *testing.T) {
-	te := NewTestEnvironment(t, WithGitInit(false))
-	_, err := te.RunCommand("init", "--no-git")
-	require.NoError(t, err)
-
-	// Plugin root installed under .ddx/plugins/ddx (root mapping target).
-	assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"),
-		".ddx/plugins/ddx must be created by the embedded package installer")
-	// Package manifest from the embedded library lands under the plugin root.
-	assert.FileExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx", "package.yaml"),
-		".ddx/plugins/ddx/package.yaml must be present after install")
-
-	// Skill outputs installed via install.skills[*] mappings.
-	for _, target := range []string{".agents", ".claude"} {
-		skillDir := filepath.Join(te.Dir, target, "skills", "ddx")
-		assert.DirExists(t, skillDir, "%s/skills/ddx must be created by the package installer", target)
-		assert.FileExists(t, filepath.Join(skillDir, "SKILL.md"),
-			"%s/skills/ddx/SKILL.md must be installed from the embedded package", target)
-	}
-}
-
-// TestInitWorksOfflineWithEmbeddedDefaultPlugin verifies that `ddx init`
-// succeeds without any network access and still installs the default package
-// and its skill. We block network by forcing all HTTP through an unreachable
-// proxy; the embedded path must not depend on it.
-func TestInitWorksOfflineWithEmbeddedDefaultPlugin(t *testing.T) {
-	// Force any outbound HTTP through an unreachable proxy. The embedded
-	// installer materializes from //go:embed and must not require a remote
-	// fetch.
-	t.Setenv("HTTP_PROXY", "http://127.0.0.1:1")
-	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:1")
-	t.Setenv("http_proxy", "http://127.0.0.1:1")
-	t.Setenv("https_proxy", "http://127.0.0.1:1")
-	t.Setenv("NO_PROXY", "")
-	t.Setenv("no_proxy", "")
-
-	te := NewTestEnvironment(t, WithGitInit(false))
-	_, err := te.RunCommand("init", "--no-git")
-	require.NoError(t, err, "ddx init must succeed offline via the embedded default plugin")
-
-	assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"),
-		"embedded package install must produce .ddx/plugins/ddx offline")
-	assert.FileExists(t, filepath.Join(te.Dir, ".agents", "skills", "ddx", "SKILL.md"),
-		"embedded package install must produce .agents/skills/ddx/SKILL.md offline")
-	assert.FileExists(t, filepath.Join(te.Dir, ".claude", "skills", "ddx", "SKILL.md"),
-		"embedded package install must produce .claude/skills/ddx/SKILL.md offline")
-}
 
 // TestInitDoesNotCreateBootstrapDDxSkillMirror verifies the legacy
 // .ddx/skills/ddx bootstrap mirror is no longer created. Skill outputs only
@@ -97,6 +28,51 @@ func TestInitDoesNotCreateBootstrapDDxSkillMirror(t *testing.T) {
 	_, statErr := os.Stat(bootstrapMirror)
 	assert.True(t, os.IsNotExist(statErr),
 		".ddx/skills/ddx must not be created as a separate bootstrap mirror; got stat err=%v", statErr)
+}
+
+// TestInitProject_DoesNotInstallPlugins verifies that plain `ddx init` creates
+// <project>/.ddx/ and the manifest but does not write .ddx/plugins/ddx,
+// .agents/skills/ddx, .claude/skills/ddx, or any project-local plugins/ tree.
+func TestInitProject_DoesNotInstallPlugins(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	// .ddx/ directory and config.yaml must exist.
+	assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName))
+	assert.FileExists(t, filepath.Join(te.Dir, ddxroot.DirName, "config.yaml"))
+
+	// No project-local plugins/ tree must be created.
+	pluginsDir := filepath.Join(te.Dir, ddxroot.DirName, "plugins")
+	_, statErr := os.Stat(pluginsDir)
+	assert.True(t, os.IsNotExist(statErr),
+		".ddx/plugins/ must not be created by plain ddx init; got stat err=%v", statErr)
+
+	// No agent-tier skill links must be installed.
+	for _, surface := range []string{".agents/skills/ddx", ".claude/skills/ddx"} {
+		skillDir := filepath.Join(te.Dir, surface)
+		_, statErr := os.Stat(skillDir)
+		assert.True(t, os.IsNotExist(statErr),
+			"%s must not be created by plain ddx init; got stat err=%v", surface, statErr)
+	}
+}
+
+// TestInitProject_LeavesPluginsForLazyResolution verifies that after plain
+// `ddx init`, registry.ResolvePlugin("ddx") falls through to the baked-in
+// layer because no project-local or global plugin was installed.
+func TestInitProject_LeavesPluginsForLazyResolution(t *testing.T) {
+	// Isolate global DDx dir so a pre-existing global install doesn't interfere.
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--no-git")
+	require.NoError(t, err)
+
+	_, layer, resolveErr := registry.ResolvePlugin(context.Background(), te.Dir, "ddx")
+	require.NoError(t, resolveErr)
+	assert.Equal(t, "baked-in", layer,
+		"ResolvePlugin must fall through to baked-in after plain init (no project-local or global install)")
 }
 
 // TestCleanupBootstrapSkills_RemovesStaleSkills verifies stale ddx-* skills are removed.
@@ -146,60 +122,44 @@ func TestCleanupBootstrapSkills_SkipsDirsWithoutSKILLMD(t *testing.T) {
 	assert.DirExists(t, noSkillDir, "ddx-* dir without SKILL.md should not be removed")
 }
 
-// TestInitRemovesStaleDDXPrefixedSkillsWithoutTouchingThirdPartySkills verifies
-// that stale ddx-* skills from prior DDx versions (pre-consolidation:
-// ddx-bead, ddx-run, etc.) are removed from harness-visible skill targets
-// when `ddx init` runs, while unrelated third-party skills (anything not
-// prefixed `ddx-`) are preserved. Cleanup operates on the package-installer
-// outputs (.agents/skills, .claude/skills) — the bootstrap-only
-// .ddx/skills/ddx mirror is no longer created.
-func TestInitRemovesStaleDDXPrefixedSkillsWithoutTouchingThirdPartySkills(t *testing.T) {
+// TestInitDoesNotTouchProjectSkillDirs verifies that plain `ddx init` does not
+// create, modify, or delete any project-local agent-tier skill directories
+// (.agents/skills/, .claude/skills/). Plugin install is deferred to lazy
+// resolution; init is not allowed to touch the skills surface.
+func TestInitDoesNotTouchProjectSkillDirs(t *testing.T) {
 	te := NewTestEnvironment(t, WithGitInit(false))
 
-	stalePreConsolidationSkills := []string{"ddx-bead", "ddx-run", "ddx-agent", "ddx-review", "ddx-status", "ddx-doctor", "ddx-install", "ddx-release"}
-	thirdPartySkills := []string{"helix-align", "external-tool", "some-skill"}
+	preExistingSkills := []string{"ddx-bead", "helix-align", "some-skill"}
 
 	targetDirs := []string{
 		filepath.Join(te.Dir, ".agents", "skills"),
 		filepath.Join(te.Dir, ".claude", "skills"),
 	}
 	for _, dir := range targetDirs {
-		for _, stale := range stalePreConsolidationSkills {
-			staleDir := filepath.Join(dir, stale)
-			require.NoError(t, os.MkdirAll(staleDir, 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(staleDir, "SKILL.md"), []byte("# Stale"), 0o644))
-		}
-		for _, third := range thirdPartySkills {
-			thirdDir := filepath.Join(dir, third)
-			require.NoError(t, os.MkdirAll(thirdDir, 0o755))
-			require.NoError(t, os.WriteFile(filepath.Join(thirdDir, "SKILL.md"), []byte("# Third party"), 0o644))
+		for _, skill := range preExistingSkills {
+			skillDir := filepath.Join(dir, skill)
+			require.NoError(t, os.MkdirAll(skillDir, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("# "+skill), 0o644))
 		}
 	}
 
 	_, err := te.RunCommand("init", "--no-git")
 	require.NoError(t, err)
 
-	// Stale ddx-* skills must be cleaned up from harness-visible targets.
+	// All pre-existing skills must remain untouched.
 	for _, dir := range targetDirs {
-		for _, stale := range stalePreConsolidationSkills {
-			staleDir := filepath.Join(dir, stale)
-			_, err := os.Stat(staleDir)
-			assert.True(t, os.IsNotExist(err), "stale skill %s should be removed from %s", stale, dir)
+		for _, skill := range preExistingSkills {
+			skillFile := filepath.Join(dir, skill, "SKILL.md")
+			assert.FileExists(t, skillFile, "pre-existing skill %s must not be removed from %s by plain init", skill, dir)
 		}
 	}
 
-	// Third-party skills must be preserved.
+	// The ddx skill must NOT be installed by plain init.
 	for _, dir := range targetDirs {
-		for _, third := range thirdPartySkills {
-			thirdSkill := filepath.Join(dir, third, "SKILL.md")
-			assert.FileExists(t, thirdSkill, "third-party skill %s must be preserved at %s", third, thirdSkill)
-		}
-	}
-
-	// The current shipped skill must be present in harness-visible targets.
-	for _, dir := range targetDirs {
-		skillFile := filepath.Join(dir, "ddx", "SKILL.md")
-		assert.FileExists(t, skillFile, "ddx SKILL.md should exist in %s", skillFile)
+		ddxSkill := filepath.Join(dir, "ddx")
+		_, statErr := os.Stat(ddxSkill)
+		assert.True(t, os.IsNotExist(statErr),
+			"plain init must not install ddx skill at %s (lazy resolution handles this)", ddxSkill)
 	}
 }
 
@@ -635,10 +595,6 @@ library:
 				require.NoError(t, err, "Should be able to check git ls-files")
 
 				assert.Contains(t, string(lsOutput), ".ddx/config.yaml", "Config file should be tracked in git")
-
-				// Verify library directory structure exists (init creates it even if sync fails)
-				assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"), "Library directory should exist")
-				assert.DirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx", "prompts"), "Prompts directory should exist")
 			},
 			expectError: false,
 		},

@@ -259,54 +259,6 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 		}
 	}
 
-	// Create library directory structure (offline-safe — plugin install may fail).
-	libraryPath := filepath.Join(workingDir, localConfig.Library.Path)
-	for _, sub := range []string{"prompts", "personas", "patterns", "templates", "configs"} {
-		_ = os.MkdirAll(filepath.Join(libraryPath, sub), 0755)
-	}
-
-	// Sweep stale pre-consolidation ddx-* skill dirs from harness-visible
-	// targets so leftover skills from older DDx versions don't shadow the
-	// package-installer outputs. The current package installs a single `ddx`
-	// skill into .agents/skills/ and .claude/skills/; unrelated third-party
-	// skills (anything not prefixed `ddx-` or matching the kept name) are
-	// preserved.
-	bootstrapSkillNames := []string{"ddx"}
-	for _, dir := range []string{
-		filepath.Join(workingDir, ".agents", "skills"),
-		filepath.Join(workingDir, ".claude", "skills"),
-	} {
-		_ = os.MkdirAll(dir, 0755)
-		cleanupBootstrapSkills(dir, bootstrapSkillNames)
-	}
-
-	// Install the default ddx plugin through the embedded package installer.
-	// This produces .ddx/plugins/ddx, .agents/skills/ddx, and .claude/skills/ddx
-	// from the //go:embed'd library tree, so init works offline without a
-	// separate bootstrap skill copier or remote tarball download.
-	reg := registry.BuiltinRegistry()
-	if pkg, err := reg.Find("ddx"); err == nil {
-		var oldFiles []string
-		if state, _ := registry.LoadState(); state != nil {
-			if old := state.FindInstalled(pkg.Name); old != nil {
-				oldFiles = append([]string{}, old.Files...)
-			}
-		}
-
-		if entry, installErr := registry.InstallPackageFromFS(pkg, defaultplugin.FS(), workingDir); installErr != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "Warning: could not install default ddx plugin from embedded package: %v\n", installErr)
-		} else {
-			_ = removeStaleFilesFromInstall(oldFiles, entry.Files)
-
-			state, _ := registry.LoadState()
-			if state == nil {
-				state = &registry.InstalledState{}
-			}
-			state.AddOrUpdate(entry)
-			_ = registry.SaveState(state)
-		}
-	}
-
 	// Write .ddx/versions.yaml (system-managed, tracks binary version)
 	writeProjectVersions(workingDir, opts.DDxVersion)
 
