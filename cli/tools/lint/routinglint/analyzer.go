@@ -122,6 +122,7 @@ var allowlistedLiterals = map[string]string{
 var allowedAgentSubpkgLeafs = map[string]bool{
 	"escalation":  true,
 	"executeloop": true,
+	"failclass":   true,
 	"try":         true,
 	"work":        true,
 	"workerprobe": true,

@@ -338,3 +338,169 @@ test('evidence tab: non-whitelisted extension download-only', async ({ page }) =
 	await expect(evidence.locator('[data-evidence-download="src/main.go"]')).toBeVisible();
 	await expect(evidence.locator('[data-evidence-download="module.wasm"]')).toBeVisible();
 });
+
+test('p95 dataset: 200 tool calls and 30 evidence files render interactively', async ({ page }) => {
+	const TOOL_CALL_TOTAL = 200;
+	const TOOL_CALL_PAGE_SIZE = 50;
+	const EVIDENCE_FILE_COUNT = 30;
+
+	// 30 evidence files: 5 named whitelisted files + 25 additional .txt files
+	const evidenceFiles: BundleFileFixture[] = [
+		{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+		{ path: 'prompt.md', size: 512, mimeType: 'text/markdown' },
+		{ path: 'result.json', size: 1024, mimeType: 'application/json' },
+		{ path: 'notes.txt', size: 200, mimeType: 'text/plain' },
+		{ path: 'output.md', size: 400, mimeType: 'text/markdown' },
+		...Array.from({ length: 25 }, (_, i) => ({
+			path: `attachments/file_${String(i + 1).padStart(2, '0')}.txt`,
+			size: 100 + i * 20,
+			mimeType: 'text/plain'
+		}))
+	];
+
+	// Paginated tool call response: 50 per page, cursor-based
+	function makeToolCallPage(afterCursor: string | null) {
+		const offset = afterCursor ? parseInt(afterCursor.replace('cur-', ''), 10) : 0;
+		const start = offset + 1;
+		const end = Math.min(offset + TOOL_CALL_PAGE_SIZE, TOOL_CALL_TOTAL);
+		const edges = Array.from({ length: end - start + 1 }, (_, i) => {
+			const seq = start + i;
+			return {
+				node: {
+					id: `tc-${seq}`,
+					seq,
+					name: `tool_${seq}`,
+					inputs: `{"n":${seq}}`,
+					output: `result_${seq}`,
+					error: null,
+					durationMs: 10 + seq
+				},
+				cursor: `cur-${end}`
+			};
+		});
+		const hasNextPage = end < TOOL_CALL_TOTAL;
+		return {
+			edges,
+			pageInfo: { hasNextPage, endCursor: hasNextPage ? `cur-${end}` : null },
+			totalCount: TOOL_CALL_TOTAL
+		};
+	}
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: { ...baseRun, projectID: PROJECT_ID } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: { id: RUN_ID, bundleFiles: evidenceFiles } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { agentSession: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			const after = (body.variables?.['after'] as string | null | undefined) ?? null;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { runToolCalls: makeToolCallPage(after) } })
+			});
+			return;
+		}
+		if (body.query.includes('RunBundleFileFetch')) {
+			const path = String(body.variables?.['path'] ?? '');
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runBundleFile: {
+							path,
+							content: `content of ${path}`,
+							sizeBytes: 128,
+							truncated: false,
+							mimeType: 'text/plain'
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
+	const detail = page.locator('[data-testid="rundetail"]');
+
+	// All tabs visible immediately — no spinner blocking interaction
+	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="prompt"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="response"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="tools"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
+
+	// Tools tab: first page of 50 out of 200 renders and load-more is available
+	await Promise.all([
+		page.waitForRequest((req) => req.postData()?.includes('RunToolCallsExpand') ?? false),
+		detail.locator('button[data-tab="tools"]').click()
+	]);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
+	const tools = page.locator('[data-testid="rundetail-tools"]');
+	await expect(tools).toContainText('50 of 200 tool calls');
+	await expect(tools.locator('[data-tool-seq="1"]')).toBeVisible();
+	await expect(tools.locator('[data-tool-seq="50"]')).toBeVisible();
+	await expect(tools.getByRole('button', { name: 'Load more' })).toBeVisible();
+
+	// Evidence tab: all 30 files listed
+	await Promise.all([
+		page.waitForRequest((req) => req.postData()?.includes('RunEvidenceFiles') ?? false),
+		detail.locator('button[data-tab="evidence"]').click()
+	]);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
+	const evidence = page.locator('[data-testid="rundetail-evidence"]');
+	for (const f of evidenceFiles) {
+		await expect(evidence.locator(`[data-evidence-path="${f.path}"]`)).toBeVisible();
+	}
+	await expect(evidence.locator('[data-evidence-path]')).toHaveCount(EVIDENCE_FILE_COUNT);
+});
