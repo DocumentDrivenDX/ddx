@@ -71,6 +71,18 @@ type InitResult struct {
 
 // runInit implements the CLI interface layer for the init command
 func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
+	// --global mode: one-time machine setup, bypasses project checks.
+	if globalMode, _ := cmd.Flags().GetBool("global"); globalMode {
+		if err := initGlobal(); err != nil {
+			cmd.SilenceUsage = true
+			return err
+		}
+		if silent, _ := cmd.Flags().GetBool("silent"); !silent {
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), "✅ DDx global machine setup complete.\n")
+		}
+		return nil
+	}
+
 	// Extract flags from cobra.Command
 	initForce, _ := cmd.Flags().GetBool("force")
 	initNoGit, _ := cmd.Flags().GetBool("no-git")
@@ -344,6 +356,63 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	// Configuration already saved above
 
 	return result, nil
+}
+
+// initGlobal performs one-time per-machine DDx setup:
+//  1. Installs the bundled default ddx plugin into ${XDG_DATA_HOME}/ddx/global/plugins/ddx.
+//  2. Creates symlinks ~/.claude/skills/ddx and ~/.agents/skills/ddx pointing into the
+//     global plugin directory so every harness on this machine discovers the skill.
+//  3. Writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults.
+func initGlobal() error {
+	globalDir := ddxroot.GlobalDir()
+	pluginDir := filepath.Join(globalDir, "plugins", "ddx")
+
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		return fmt.Errorf("creating global plugin dir: %w", err)
+	}
+
+	src := defaultplugin.FS()
+	if err := registry.MaterializeFS(src, pluginDir); err != nil {
+		return fmt.Errorf("installing global plugin: %w", err)
+	}
+
+	skillSrc := filepath.Join(pluginDir, "skills", "ddx")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolving home directory: %w", err)
+	}
+	for _, surface := range []string{".claude/skills", ".agents/skills"} {
+		dst := filepath.Join(home, surface, "ddx")
+		if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+			return fmt.Errorf("creating skill surface dir %s: %w", filepath.Dir(dst), err)
+		}
+		if _, err := os.Lstat(dst); err == nil {
+			if err := os.RemoveAll(dst); err != nil {
+				return fmt.Errorf("removing existing %s: %w", dst, err)
+			}
+		}
+		if err := os.Symlink(skillSrc, dst); err != nil {
+			return fmt.Errorf("creating skill link %s -> %s: %w", dst, skillSrc, err)
+		}
+	}
+
+	configPath := filepath.Join(globalDir, "config.yaml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := writeGlobalConfig(configPath); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// writeGlobalConfig writes the global DDx config file with convention defaults.
+func writeGlobalConfig(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("creating global config dir: %w", err)
+	}
+	content := "# DDx global machine configuration — written by ddx init --global\nversion: \"1.0\"\n"
+	return os.WriteFile(path, []byte(content), 0644)
 }
 
 // writeProjectVersions writes .ddx/versions.yaml with the current binary version.

@@ -773,6 +773,54 @@ func TestInitGitignoreRunStateMigration(t *testing.T) {
 	assert.Contains(t, content, ".ddx/run-state/")
 }
 
+// TestInitGlobal_CreatesAgentTierLinks verifies that `ddx init --global` creates
+// ~/.claude/skills/ddx and ~/.agents/skills/ddx symlinks pointing into
+// ${XDG_DATA_HOME}/ddx/global/plugins/ddx/.
+func TestInitGlobal_CreatesAgentTierLinks(t *testing.T) {
+	xdgDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("HOME", homeDir)
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--global")
+	require.NoError(t, err)
+
+	globalPluginDir := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
+	expectedTarget := filepath.Join(globalPluginDir, "skills", "ddx")
+
+	for _, surface := range []string{".claude/skills", ".agents/skills"} {
+		link := filepath.Join(homeDir, surface, "ddx")
+		info, statErr := os.Lstat(link)
+		require.NoError(t, statErr, "skill link %s must exist", link)
+		assert.True(t, info.Mode()&os.ModeSymlink != 0, "%s must be a symlink", link)
+		target, readErr := os.Readlink(link)
+		require.NoError(t, readErr)
+		assert.Equal(t, expectedTarget, target, "%s must point into global plugin dir", link)
+	}
+}
+
+// TestInitGlobal_WritesGlobalConfig verifies that `ddx init --global` writes
+// ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults.
+func TestInitGlobal_WritesGlobalConfig(t *testing.T) {
+	xdgDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("HOME", homeDir)
+
+	te := NewTestEnvironment(t, WithGitInit(false))
+	_, err := te.RunCommand("init", "--global")
+	require.NoError(t, err)
+
+	configPath := filepath.Join(xdgDir, "ddx", "global", "config.yaml")
+	assert.FileExists(t, configPath, "global config.yaml must be written by ddx init --global")
+
+	data, readErr := os.ReadFile(configPath)
+	require.NoError(t, readErr)
+	content := string(data)
+	assert.Contains(t, content, "version:", "global config.yaml must contain version field")
+}
+
 // TestInitCommand_US014_SynchronizationSetup tests US-014 synchronization initialization
 func TestInitCommand_US014_SynchronizationSetup(t *testing.T) {
 	tests := []struct {

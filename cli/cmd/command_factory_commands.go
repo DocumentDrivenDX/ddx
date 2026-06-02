@@ -30,6 +30,7 @@ Examples:
 	cmd.Flags().Bool("skip-claude-injection", false, "Skip injecting meta-prompts into CLAUDE.md")
 	cmd.Flags().String("repository", "", "Library repository URL (default: https://github.com/DocumentDrivenDX/ddx-library)")
 	cmd.Flags().String("branch", "", "Library repository branch (default: main)")
+	cmd.Flags().Bool("global", false, "Perform one-time global machine setup (installs default plugin and agent-tier skill links into the XDG global layer)")
 
 	return cmd
 }

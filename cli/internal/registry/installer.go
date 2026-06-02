@@ -86,7 +86,7 @@ func InstallPackageFromFS(pkg *Package, src iofs.FS, projectRoot string) (Instal
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	if err := materializeFS(src, tmpDir); err != nil {
+	if err := MaterializeFS(src, tmpDir); err != nil {
 		return entry, fmt.Errorf("materializing embedded package: %w", err)
 	}
 
@@ -222,10 +222,10 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 	return entry, nil
 }
 
-// materializeFS writes every regular file in src into destDir, preserving the
+// MaterializeFS writes every regular file in src into destDir, preserving the
 // relative path layout. Symlinks in the source FS (uncommon for embed.FS) are
 // skipped to keep the cross-platform invariant FEAT-015 relies on.
-func materializeFS(src iofs.FS, destDir string) error {
+func MaterializeFS(src iofs.FS, destDir string) error {
 	return iofs.WalkDir(src, ".", func(p string, d iofs.DirEntry, err error) error {
 		if err != nil {
 			return err
