@@ -233,3 +233,111 @@ func TestWedgeMarkerClearedOnParkForOperator(t *testing.T) {
 	}
 	assert.Contains(t, readyIDs, beadID, "reopened bead must be in the ready queue after operator reopen")
 }
+
+// TestWedgeMarkerClearedOnOperatorReopenPreD3 verifies AC #1 (ddx-5c549120):
+// a bead carrying a stale wedge marker (count >= threshold) that was parked
+// BEFORE the D3 fix cleared the marker on park gets the marker erased at the
+// store layer when an operator transitions it back to open. This covers beads
+// parked by the pre-D3 code path (ddx-bd47e2c4) that did not benefit from the
+// on-park deletion.
+func TestWedgeMarkerClearedOnOperatorReopenPreD3(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	beadID := first.ID
+
+	// Inject a wedge marker count >= threshold directly — simulating a bead that
+	// was parked by the old code path before D3 cleared the marker on park.
+	require.NoError(t, store.Update(beadID, func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[executeLoopWedgeMarkerKey] = WedgeMarker{Count: DefaultConsecutiveWedgeThreshold, LastReason: "pre-d3-stale"}
+	}))
+
+	// Park to proposed directly (old-style, without clearing the marker).
+	require.NoError(t, store.TransitionLifecycle(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           "simulated pre-d3 park",
+	}, nil))
+
+	preReopen, err := store.Get(beadID)
+	require.NoError(t, err)
+	require.Equal(t, bead.StatusProposed, preReopen.Status)
+	require.Equal(t, DefaultConsecutiveWedgeThreshold, readWedgeMarker(preReopen.Extra).Count,
+		"marker must still be present before reopen (pre-D3 state)")
+
+	// Operator reopens the bead.
+	require.NoError(t, store.SetLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		ManualReopen: true,
+	}))
+
+	reopened, err := store.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, reopened.Status)
+	clearedMarker := readWedgeMarker(reopened.Extra)
+	assert.Equal(t, 0, clearedMarker.Count, "wedge marker must be cleared by the store on transition to open")
+	assert.False(t, consecutiveWedgeGuardTrips(clearedMarker, DefaultConsecutiveWedgeThreshold),
+		"guard must not trip after operator reopen — bead must be claimable, not instantly re-parked")
+
+	// Bead must appear in the ready queue.
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	var readyIDs []string
+	for _, rb := range ready {
+		readyIDs = append(readyIDs, rb.ID)
+	}
+	assert.Contains(t, readyIDs, beadID, "reopened bead must be in the ready queue")
+}
+
+// TestReopenedBeadNotReparkedByGuard verifies AC #2 (ddx-5c549120): regression
+// for the exact observed sequence — bead parked to proposed with stale wedge
+// marker (pre-D3 state), operator runs "ddx bead update <id> --status open",
+// next drain iteration must claim/attempt the bead rather than instantly
+// re-parking it for operator attention.
+func TestReopenedBeadNotReparkedByGuard(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	beadID := first.ID
+
+	// Reproduce the pre-D3 state: bead is in proposed with a stale wedge marker
+	// count >= threshold. Before ddx-bd47e2c4, flagConsecutiveWedgeForOperator
+	// parked to proposed WITHOUT clearing the marker.
+	require.NoError(t, store.Update(beadID, func(b *bead.Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[executeLoopWedgeMarkerKey] = WedgeMarker{Count: DefaultConsecutiveWedgeThreshold, LastReason: "stall"}
+	}))
+	require.NoError(t, store.TransitionLifecycle(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           "pre-d3 park without marker clear",
+	}, nil))
+
+	// Sanity: bead is proposed with marker intact (the regression state).
+	preReopen, err := store.Get(beadID)
+	require.NoError(t, err)
+	require.Equal(t, bead.StatusProposed, preReopen.Status)
+	require.True(t, consecutiveWedgeGuardTrips(readWedgeMarker(preReopen.Extra), DefaultConsecutiveWedgeThreshold),
+		"marker must still trip the guard in the regression state")
+
+	// Operator runs "ddx bead update <id> --status open" (proposed → open).
+	require.NoError(t, store.SetLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		Reason: "set lifecycle status",
+		Source: "ddx bead update",
+	}))
+
+	// Guard check on the next drain iteration: must NOT trip.
+	afterReopen, err := store.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, afterReopen.Status)
+	guardMarker := readWedgeMarker(afterReopen.Extra)
+	assert.False(t, consecutiveWedgeGuardTrips(guardMarker, DefaultConsecutiveWedgeThreshold),
+		"guard must not trip after operator reopen — bead must be attempted, not instantly re-parked")
+
+	// Bead must be claimable (in ready queue) on the next drain iteration.
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	var readyIDs []string
+	for _, rb := range ready {
+		readyIDs = append(readyIDs, rb.ID)
+	}
+	assert.Contains(t, readyIDs, beadID, "reopened bead must be in the ready queue for the next drain iteration")
+}

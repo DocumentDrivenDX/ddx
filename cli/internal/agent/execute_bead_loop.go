@@ -5777,8 +5777,9 @@ func flagWedgedForOperatorAttention(store ExecuteBeadLoopStore, beadID, assignee
 // route-independent wedge (resolver hang, phase-empty heartbeats) records no
 // failed (provider, model) route, so without this marker a freshly released
 // wedged bead is immediately re-claimed and re-wedged (ddx-9714eaac, parent
-// ddx-8f2e0ebf criterion E).
-const executeLoopWedgeMarkerKey = "work-consecutive-wedges"
+// ddx-8f2e0ebf criterion E). The bead store clears this key on any transition
+// to StatusOpen (ddx-5c549120).
+const executeLoopWedgeMarkerKey = bead.ExtraConsecutiveWedgeMarker
 
 // WedgeMarker is the JSON shape persisted under executeLoopWedgeMarkerKey. Count
 // is the number of consecutive wedges on the bead's most recent claims; it is

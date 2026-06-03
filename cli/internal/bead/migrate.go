@@ -282,7 +282,7 @@ func applyLifecycleMigrationPlan(b *Bead, plan lifecycleMigrationPlan, now time.
 			return err
 		}
 	} else if plan.targetStatus == StatusBlocked {
-		applyLifecycleTransitionMetadata(b, StatusBlocked, opts)
+		applyLifecycleTransitionMetadata(b, StatusBlocked, StatusBlocked, opts)
 	}
 	if fromForTransition == StatusInProgress && b.Status != StatusInProgress {
 		clearClaimMetadata(b)

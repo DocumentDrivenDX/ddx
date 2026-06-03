@@ -760,13 +760,19 @@ func transitionLifecycleInPlace(b *Bead, status string, opts LifecycleTransition
 		return fmt.Errorf("bead: lifecycle transition %s -> %s rejected: %w", from, status, err)
 	}
 	b.Status = status
-	applyLifecycleTransitionMetadata(b, status, opts)
+	applyLifecycleTransitionMetadata(b, from, status, opts)
 	return nil
 }
 
 const ExtraLifecycleExternalBlockerReason = "lifecycle-external-blocker-reason"
 
-func applyLifecycleTransitionMetadata(b *Bead, status string, opts LifecycleTransitionOptions) {
+// ExtraConsecutiveWedgeMarker is the bead Extra key holding the consecutive-wedge
+// count recorded by the execute-bead loop. It is cleared at the store layer on
+// any transition to StatusOpen so that operator-reopened beads get a fresh
+// attempt rather than being instantly re-parked by the guard (ddx-5c549120).
+const ExtraConsecutiveWedgeMarker = "work-consecutive-wedges"
+
+func applyLifecycleTransitionMetadata(b *Bead, from, status string, opts LifecycleTransitionOptions) {
 	if b.Extra == nil {
 		b.Extra = make(map[string]any)
 	}
@@ -776,6 +782,13 @@ func applyLifecycleTransitionMetadata(b *Bead, status string, opts LifecycleTran
 		}
 	} else {
 		delete(b.Extra, ExtraLifecycleExternalBlockerReason)
+	}
+	// Clear stale consecutive-wedge marker on operator reopen (proposed/blocked →
+	// open) so the execute-bead loop gets a fresh attempt rather than re-parking
+	// without trying (ddx-5c549120). Only clears on operator-facing transitions;
+	// internal release (in_progress → open) preserves the count.
+	if status == StatusOpen && (from == StatusProposed || from == StatusBlocked) {
+		delete(b.Extra, ExtraConsecutiveWedgeMarker)
 	}
 }
 
