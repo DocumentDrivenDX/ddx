@@ -1,0 +1,7 @@
+verification_command: cd cli && go test ./internal/agent/... -run "TestPreDispatchCheckpoint_MaterializedSkillSymlinkIsNotDirt|TestPreDispatchCheckpoint_MaterializedSymlinkWithImplementationChanges|TestPreDispatchCheckpointRejectsImplementationDirtyPaths"
+
+All ACs satisfied by prior bead ddx-3885cce5 (commit 6fb188878):
+- AC1: isMaterializedSkillSymlink() in execute_bead.go:919 filters skill symlink dirs out of preDispatchCheckpointDirtyPaths; TestPreDispatchCheckpoint_MaterializedSkillSymlinkIsNotDirt verifies.
+- AC2: Genuine implementation changes still halt the drain; TestPreDispatchCheckpoint_MaterializedSymlinkWithImplementationChanges and TestPreDispatchCheckpointRejectsImplementationDirtyPaths verify.
+- AC3: go test ./internal/agent/... green (all packages pass).
+- AC4: No code changes needed; pre-commit passes on clean tree.
