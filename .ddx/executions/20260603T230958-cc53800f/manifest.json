@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260603T230958-cc53800f",
+  "bead_id": "ddx-fab52595",
+  "base_rev": "536a6eedc66362b35bb320a23b744cd78e21ad19",
+  "created_at": "2026-06-03T23:10:17.934235172Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fab52595",
+    "title": "registry: three-layer plugin lookup precedence (project → global → baked-in)",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nRuntime plugin/persona resolution must consult three layers in priority order so that a project-local install always wins, a machine-wide global install is used when no project copy exists, and the baked-in default ddx plugin is the last resort. Without a single authoritative resolver, the new --global install surface (sibling beads) has nothing to resolve against and project vs global precedence is undefined.\n\nROOT CAUSE\n- cli/internal/registry/resolve.go:29 `ResolvePlugin` is the resolution entry point; cli/internal/registry/resolve.go:15 `GlobalPluginDir` derives the global tier path from ddxroot.GlobalDir(). These must implement and be test-pinned to the precedence order: \u003cproject\u003e/.ddx/plugins/\u003cname\u003e (or ddxroot.Path()/plugins/\u003cname\u003e in convention mode) → ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e → baked-in (defaultplugin.FS(), valid only for name==\"ddx\"). The precedence ordering is currently unverified by test, so a regression that flips global ahead of project would go undetected.\n\nPROPOSED FIX\n1. Ensure ResolvePlugin stats the project path first (via the projectRoot arg, which routes through ddxroot.Path() for in-tree vs convention), returning layer==\"project\" when present.\n2. Fall back to ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e, returning layer==\"global\".\n3. Fall back to baked-in, returning layer==\"baked-in\" with empty path, only for the \"ddx\" plugin; otherwise return a not-found error.\n4. Add focused table tests for the precedence and fallback behavior.\n\nNON-SCOPE\n- The `ddx install`/`ddx update` --global CLI surface (sibling bead: install/update --global).\n- `ddx init` lazy-resolution and umbrella setup (sibling bead: init --global).\n- `ddx doctor` two-layer reporting and spec/docs updates (sibling bead: doctor + docs).\n- Migrating ~/.config/ddx/ legacy paths if any exist (likely none today).\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\nddx-06cbaa90 (ddx home resolution) — project-tier resolution routes through ddxroot.Path() and the global tier through ddxroot.GlobalDir(); both must be agreed-on before this lands.",
+    "acceptance": "1. TestPluginLookup_PrefersProjectOverGlobal asserts that when both the project path and ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e contain the plugin, ResolvePlugin returns the project path with layer==\"project\".\n2. TestPluginLookup_FallsBackToGlobal asserts that when the project copy is absent but the global copy exists, ResolvePlugin returns the global path with layer==\"global\".\n3. cd cli \u0026\u0026 go test ./internal/registry/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T230958-cc53800f",
+    "prompt": ".ddx/executions/20260603T230958-cc53800f/prompt.md",
+    "manifest": ".ddx/executions/20260603T230958-cc53800f/manifest.json",
+    "result": ".ddx/executions/20260603T230958-cc53800f/result.json",
+    "checks": ".ddx/executions/20260603T230958-cc53800f/checks.json",
+    "usage": ".ddx/executions/20260603T230958-cc53800f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-fab52595-20260603T230958-cc53800f"
+  },
+  "prompt_sha": "7f3e96e407bcfefd72ab41ce0f69c1b7296736ea7cdece3d4e1f3df052a85287"
+}
