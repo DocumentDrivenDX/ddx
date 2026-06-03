@@ -102,10 +102,11 @@ exploration loops.
 
 Evaluation records (comparison, replay, benchmark) link to preserved `ddx try`
 and `ddx run` iterations through the shared project-scoped **run-detail surface**
-at `/runs/[runId]`. The review surface does not duplicate the run-detail page;
-instead, drill-down links from comparison, replay, and benchmark views navigate
-to the canonical run-detail page where users can inspect the full prompt,
-response, tool trace, and evidence. The run-detail surface provides:
+at [/runs/[runId]](/runs/[runId]). The review surface does not duplicate the
+run-detail page; instead, drill-down links from comparison, replay, and
+benchmark views navigate to the canonical run-detail page where users can
+inspect the full prompt, response, tool trace, and evidence. The run-detail
+surface provides:
 
 - **Prompt Tab**: Raw prompt body sent to the agent
 - **Response Tab**: Raw response body returned by the agent
