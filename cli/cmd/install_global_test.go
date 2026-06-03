@@ -1,13 +1,19 @@
 package cmd
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -382,4 +388,194 @@ func TestInstallProject_ConventionMode(t *testing.T) {
 	// Home directory must not be polluted.
 	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
 	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for convention install")
+}
+
+// mustBuildValidPluginTarball builds a .tar.gz archive containing a plugin with
+// a valid skill (SKILL.md present). The archive has no package.yaml so the
+// caller's Package struct drives install targets — this is the path used by
+// registry installs where adjustInstallTargets provides absolute skill dirs.
+func mustBuildValidPluginTarball(t *testing.T, rootName, skillName string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+
+	writeDir := func(name string) {
+		t.Helper()
+		if !strings.HasSuffix(name, "/") {
+			name += "/"
+		}
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Mode:     0o755,
+			Typeflag: tar.TypeDir,
+		}))
+	}
+	writeFile := func(name, body string) {
+		t.Helper()
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name:     name,
+			Mode:     0o644,
+			Size:     int64(len(body)),
+			Typeflag: tar.TypeReg,
+		}))
+		_, err := tw.Write([]byte(body))
+		require.NoError(t, err)
+	}
+
+	writeDir(rootName)
+	writeDir(filepath.Join(rootName, "skills"))
+	writeDir(filepath.Join(rootName, "skills", skillName))
+	writeFile(filepath.Join(rootName, "skills", skillName, "SKILL.md"),
+		"---\nname: "+skillName+"\ndescription: Test skill\n---\n\nBody.\n")
+
+	require.NoError(t, tw.Close())
+	require.NoError(t, gz.Close())
+	return buf.Bytes()
+}
+
+// TestInstallGlobal_WritesToGlobalTreeAndAgentLinks verifies AC1:
+// ddx install <name> --global --silent installs to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/,
+// creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>,
+// and records the entry in the global state file only (not the project state).
+func TestInstallGlobal_WritesToGlobalTreeAndAgentLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	const pluginName = "myplugin"
+	const skillName = "myplugin-skill"
+
+	// Build and serve a valid plugin tarball (no package.yaml — fallback pkg used).
+	tarball := mustBuildValidPluginTarball(t, pluginName+"-1.0.0", skillName)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/gzip")
+		_, _ = w.Write(tarball)
+	}))
+	defer server.Close()
+
+	globalDir := ddxroot.GlobalDir()
+	require.NoError(t, os.MkdirAll(globalDir, 0o755), "pre-create globalDir so InstallPackage chdir succeeds")
+	agentSkillsDir := filepath.Join(homeDir, ".agents", "skills")
+	claudeSkillsDir := filepath.Join(homeDir, ".claude", "skills")
+
+	pkg := &registry.Package{
+		Name:    pluginName,
+		Version: "1.0.0",
+		Type:    registry.PackageTypePlugin,
+		Source:  server.URL,
+		Install: registry.PackageInstall{
+			Root: &registry.InstallMapping{Source: ".", Target: filepath.Join("plugins", pluginName)},
+			Skills: []registry.InstallMapping{
+				{Source: "skills/", Target: agentSkillsDir + "/"},
+				{Source: "skills/", Target: claudeSkillsDir + "/"},
+			},
+		},
+	}
+
+	entry, err := registry.InstallPackage(pkg, globalDir)
+	require.NoError(t, err, "global install must succeed")
+
+	// Record the entry in the global state file (as runInstall does for non-local installs).
+	loadState, saveState := selectInstallState(true)
+	state, err := loadState()
+	require.NoError(t, err)
+	state.AddOrUpdate(entry)
+	require.NoError(t, saveState(state))
+
+	// Assert: plugin dir exists in global XDG tree.
+	globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", pluginName)
+	_, statErr := os.Stat(globalPluginDir)
+	require.NoError(t, statErr, "global plugin dir must exist at %s", globalPluginDir)
+
+	// Assert: agent-tier skill outputs exist in home directory.
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillPath := filepath.Join(homeDir, surface, skillName)
+		_, skillErr := os.Lstat(skillPath)
+		require.NoError(t, skillErr, "%s must exist for global install", skillPath)
+	}
+
+	// Assert: entry recorded in global state file only.
+	globalState, err := registry.LoadGlobalState()
+	require.NoError(t, err)
+	assert.NotNil(t, globalState.FindInstalled(pluginName),
+		"global state must contain the installed entry")
+
+	// Assert: entry NOT in project state file.
+	projectState, err := registry.LoadState()
+	require.NoError(t, err)
+	assert.Nil(t, projectState.FindInstalled(pluginName),
+		"project state must not contain entry from global install")
+
+	// Assert: project skill dirs untouched.
+	_, noAgentErr := os.Lstat(filepath.Join(workDir, ".agents", "skills", skillName))
+	assert.True(t, os.IsNotExist(noAgentErr),
+		"project .agents/skills must not be created for global install")
+}
+
+// TestPluginListGlobal_EnumeratesFromGlobalTier verifies AC3:
+// ddx plugin list --global enumerates from the global installed state,
+// while ddx plugin list (no --global) reads the project state.
+func TestPluginListGlobal_EnumeratesFromGlobalTier(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	// Seed global state only.
+	globalState := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{Name: "helix", Version: "1.0.0", Type: registry.PackageTypeWorkflow},
+		},
+	}
+	require.NoError(t, registry.SaveGlobalState(globalState))
+
+	factory := NewCommandFactory(workDir)
+
+	// ddx plugin list --global shows the globally installed entry.
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "list", "--global")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "helix", "global list must show globally installed plugin")
+	assert.Contains(t, output, "1.0.0")
+
+	// ddx plugin list (no --global) reads project state — entry must not appear.
+	output, err = executeCommand(factory.NewRootCommand(), "plugin", "list")
+	require.NoError(t, err, output)
+	assert.NotContains(t, output, "helix",
+		"project list must not show entry that is only in global state")
+}
+
+// TestPluginShowGlobal_ReportsFromGlobalTier verifies AC3:
+// ddx plugin show <name> --global reports from the global installed state,
+// while ddx plugin show <name> (no --global) returns an error when the plugin
+// is only in the global state.
+func TestPluginShowGlobal_ReportsFromGlobalTier(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	// Seed global state only.
+	globalState := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{Name: "helix", Version: "2.0.0", Type: registry.PackageTypeWorkflow, Source: "https://example.com/helix"},
+		},
+	}
+	require.NoError(t, registry.SaveGlobalState(globalState))
+
+	factory := NewCommandFactory(workDir)
+
+	// ddx plugin show helix --global reports the global entry.
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "show", "helix", "--global")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "helix")
+	assert.Contains(t, output, "2.0.0")
+
+	// ddx plugin show helix (no --global) must fail — plugin only in global state.
+	_, err = executeCommand(factory.NewRootCommand(), "plugin", "show", "helix")
+	require.Error(t, err, "show without --global must fail when plugin is only in global state")
 }

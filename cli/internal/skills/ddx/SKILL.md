@@ -43,10 +43,13 @@ embedded in the binary. `ddx doctor` reports the project and global
 layers separately so operators can tell whether the project copy is
 real, missing, or lazily resolving to the global layer.
 
-The agent-facing skill outputs live in the project-local
-`.agents/skills/ddx/` and `.claude/skills/ddx/` surfaces. Home-directory
-skill installs are retired; do not rely on `~/.agents/skills` or
-`~/.claude/skills`.
+For project-local installs, the agent-facing skill outputs live in
+`<project>/.agents/skills/<name>/` and `<project>/.claude/skills/<name>/`.
+For machine-wide installs (`ddx install <name> --global`), the plugin lands
+in `${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and skill links are created
+under `~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. Manual
+home-directory skill placements outside these managed paths are retired; use
+`ddx install --global` instead.
 
 ## Vocabulary
 

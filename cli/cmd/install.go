@@ -261,7 +261,83 @@ func (f *CommandFactory) newPluginCommand() *cobra.Command {
 	installCmd.Use = "install <name>"
 	installCmd.Short = "Install a plugin"
 	cmd.AddCommand(installCmd)
+	cmd.AddCommand(f.newPluginListCommand())
+	cmd.AddCommand(f.newPluginShowCommand())
 	return cmd
+}
+
+func (f *CommandFactory) newPluginListCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List installed plugins",
+		Args:  cobra.NoArgs,
+		RunE:  f.runPluginList,
+	}
+	cmd.Flags().Bool("global", false, "List from the machine-wide global plugin tree")
+	return cmd
+}
+
+func (f *CommandFactory) runPluginList(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+	global, _ := cmd.Flags().GetBool("global")
+
+	loadState, _ := selectInstallState(global)
+	state, err := loadState()
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+
+	if len(state.Installed) == 0 {
+		fmt.Fprintln(out, "No plugins installed.")
+		return nil
+	}
+
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS")
+	for _, e := range state.Installed {
+		status := "ok"
+		if !e.VerifyFiles() {
+			status = "BROKEN"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Version, string(e.Type), status)
+	}
+	return w.Flush()
+}
+
+func (f *CommandFactory) newPluginShowCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "show <name>",
+		Short: "Show details about an installed plugin",
+		Args:  cobra.ExactArgs(1),
+		RunE:  f.runPluginShow,
+	}
+	cmd.Flags().Bool("global", false, "Show from the machine-wide global plugin tree")
+	return cmd
+}
+
+func (f *CommandFactory) runPluginShow(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+	name := args[0]
+	global, _ := cmd.Flags().GetBool("global")
+
+	loadState, _ := selectInstallState(global)
+	state, err := loadState()
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+
+	entry := state.FindInstalled(name)
+	if entry == nil {
+		return fmt.Errorf("plugin %q is not installed", name)
+	}
+
+	fmt.Fprintf(out, "Name:         %s\n", entry.Name)
+	fmt.Fprintf(out, "Version:      %s\n", entry.Version)
+	fmt.Fprintf(out, "Type:         %s\n", string(entry.Type))
+	fmt.Fprintf(out, "Source:       %s\n", entry.Source)
+	fmt.Fprintf(out, "Installed at: %s\n", entry.InstalledAt.Format("2006-01-02"))
+	fmt.Fprintf(out, "Files:        %d\n", len(entry.Files))
+	return nil
 }
 
 func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
