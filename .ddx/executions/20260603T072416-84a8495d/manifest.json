@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260603T072416-84a8495d",
+  "bead_id": "ddx-cc08ed7b",
+  "base_rev": "22df280ba70104844955640d063691e87a8a7692",
+  "created_at": "2026-06-03T07:24:25.445470365Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cc08ed7b",
+    "title": "install/init: `ddx install --global` and `ddx init --global` write global tree and agent-tier links",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\nThe install-to-agent (machine-wide) surface must let an operator install a plugin once per machine so its skills are available across every project. `ddx install \u003cname\u003e --global` writes the plugin under `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and links it into the home agent-tier skill paths (`~/.claude/skills/\u003cname\u003e`, `~/.agents/skills/\u003cname\u003e`). `ddx init --global` is the umbrella first-time-setup command: install the bundled default ddx plugin globally, create the agent-tier links, and write the global config.\n\nROOT CAUSE\n- cli/cmd/install.go:184 `resolveInstallDirs(global)` returns the global install root plus `~/.agents/skills` and `~/.claude/skills` when global==true (install.go:191-192) and routes through `installLocal` (install.go:358) which writes skills into each harness surface (install.go:489-507).\n- cli/cmd/init.go:318 `initGlobal()` installs the bundled default plugin into `${XDG_DATA_HOME}/ddx/global/plugins/ddx` (init.go:320) and cli/cmd/init.go:362 `writeGlobalConfig` writes `${XDG_DATA_HOME}/ddx/global/config.yaml`; init.go:73 `runInit` branches to global mode at init.go:74.\n- These paths need locked-in tests proving the global tree and home-level agent links are produced.\n\nPROPOSED FIX\n- Ensure `ddx install \u003cname\u003e --global --silent` writes plugin content to `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates a symlink (or copy on OSes without symlink support) under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` whose target resolves into the global plugin tree.\n- Ensure `ddx init --global` installs the default `ddx` plugin globally, creates the agent-tier links for it, and writes `${XDG_DATA_HOME}/ddx/global/config.yaml`.\n- Tests use `t.Setenv(\"XDG_DATA_HOME\", ...)` and `t.Setenv(\"HOME\", ...)` (and/or a fake home dir) so home-level writes are sandboxed.\n\nNON-SCOPE\n- Project-tier install behavior and `ddx init` (no flag) — sibling bead.\n- `ddx update --global` — sibling bead.\n- Removing the per-project install (both modes coexist).\n- Migrating legacy ~/.config/ddx paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution) for `ddxroot.GlobalDir()`.\n- Sibling resolver bead (ResolvePlugin precedence) — global installs must be discoverable as the \"global\" layer.",
+    "acceptance": "1. TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier (cli/cmd/install_test.go): `ddx install \u003cname\u003e --global --silent` writes the plugin under `${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/` and creates a symlink-or-copy under `~/.claude/skills/\u003cname\u003e` and `~/.agents/skills/\u003cname\u003e` resolving into the global plugin tree.\n2. TestInitGlobal_CreatesAgentTierLinks (cli/cmd/init_test.go): after `ddx init --global`, `~/.claude/skills/ddx` and `~/.agents/skills/ddx` point into `${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, and `${XDG_DATA_HOME}/ddx/global/config.yaml` exists.\n3. cd cli \u0026\u0026 go test ./cmd/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:plugin",
+      "area:config",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode readiness classification result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\"}",
+          "created_at": "2026-06-03T07:23:59.884050614Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T072416-84a8495d",
+    "prompt": ".ddx/executions/20260603T072416-84a8495d/prompt.md",
+    "manifest": ".ddx/executions/20260603T072416-84a8495d/manifest.json",
+    "result": ".ddx/executions/20260603T072416-84a8495d/result.json",
+    "checks": ".ddx/executions/20260603T072416-84a8495d/checks.json",
+    "usage": ".ddx/executions/20260603T072416-84a8495d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cc08ed7b-20260603T072416-84a8495d"
+  },
+  "prompt_sha": "8365fb117236b69a5614de6be954361eea9fce41a401a0bd3aa95331123f5680"
+}
