@@ -47,6 +47,7 @@ Examples:
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
 	cmd.Flags().Bool("global", false, "Install into the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
+	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
 	return cmd
 }
 
@@ -54,6 +55,9 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
 	global, _ := cmd.Flags().GetBool("global")
+	if silent, _ := cmd.Flags().GetBool("silent"); silent {
+		out = io.Discard
+	}
 	name := args[0]
 
 	// Ensure install operations resolve relative paths against the project
