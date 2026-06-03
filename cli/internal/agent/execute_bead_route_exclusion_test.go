@@ -464,6 +464,8 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.report.Status)
 	assert.Equal(t, FailureModeRouteResolutionTimeout, got.report.OutcomeReason)
 	assert.Equal(t, first.ID, got.report.BeadID)
+	// D1c: report is Disrupted=true so the loop does not apply a no-progress cooldown.
+	assert.True(t, got.report.Disrupted, "route-resolution timeout report must be Disrupted=true (retryable)")
 
 	// The lease was released atomically: status back to open, owner cleared.
 	released, err := store.Get(first.ID)
@@ -471,25 +473,102 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, released.Status, "the held lease must be released to open")
 	assert.Empty(t, released.Owner, "the claim owner must be cleared on release")
 
-	// An operator-attention event was emitted with the required fields.
+	// A route.timeout event was emitted with the required fields (D1c: not operator_attention).
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	var attention *bead.BeadEvent
+	var routeTimeoutEvent *bead.BeadEvent
 	for i := range events {
-		if events[i].Kind == "operator_attention" {
-			attention = &events[i]
+		if events[i].Kind == "route.timeout" {
+			routeTimeoutEvent = &events[i]
 			break
 		}
 	}
-	require.NotNil(t, attention, "an operator_attention event must be emitted on route-resolution timeout")
-	assert.Equal(t, FailureModeRouteResolutionTimeout, attention.Summary)
+	require.NotNil(t, routeTimeoutEvent, "a route.timeout event must be emitted on route-resolution timeout")
+	assert.Equal(t, FailureModeRouteResolutionTimeout, routeTimeoutEvent.Summary)
 
 	var body map[string]any
-	require.NoError(t, json.Unmarshal([]byte(attention.Body), &body))
+	require.NoError(t, json.Unmarshal([]byte(routeTimeoutEvent.Body), &body))
 	assert.Equal(t, first.ID, body["bead_id"])
 	assert.Equal(t, attemptID, body["attempt_id"])
 	assert.Equal(t, frozen.UTC().Format(time.RFC3339), body["last_activity_at"])
 	assert.NotEmpty(t, body["diagnosis"])
+}
+
+// TestPerBeadRouteResolutionTimeoutIsRetryable verifies AC #2 of D1c:
+// a per-bead route-resolution timeout releases the lease, leaves the bead
+// immediately re-claimable (Disrupted=true, no cooldown), and does NOT
+// increment the consecutive-wedge counter.
+func TestPerBeadRouteResolutionTimeoutIsRetryable(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	frozen := time.Date(2026, 6, 3, 10, 0, 0, 0, time.UTC)
+	// staleFor: much older than the timeout — pre-D1c code would have wedged.
+	staleFor := frozen.Add(-10 * time.Minute)
+
+	// Add a recent failed route so the exclusion set is non-empty and
+	// CheckAndApplyRouteExclusions actually calls the resolver.
+	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+		appendFailedRoute(b, FailedRouteEntry{
+			Provider: "bragi", Model: "qwen3-27b",
+			At: frozen.Add(-5 * time.Minute).Format(time.RFC3339),
+		})
+	}))
+	require.NoError(t, store.Claim(first.ID, "worker-a"))
+	claimed, err := store.Get(first.ID)
+	require.NoError(t, err)
+	require.Equal(t, bead.StatusInProgress, claimed.Status)
+
+	// A hanging resolver that ignores context cancellation.
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	hangingResolve := func(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		<-release
+		return nil, fmt.Errorf("never reached")
+	}
+
+	const timeout = 50 * time.Millisecond
+	const attemptID = "20260603T100000-d1c00001"
+
+	type result struct {
+		report ExecuteBeadReport
+		skip   bool
+	}
+	ch := make(chan result, 1)
+	go func() {
+		r, s := CheckAndApplyRouteExclusions(
+			context.Background(), nil, store, first.ID, "worker-a",
+			claimed.Extra, frozen, 50,
+			hangingResolve,
+			func(p int) (int, error) { return p + 10, nil },
+			timeout, attemptID, staleFor,
+		)
+		ch <- result{report: r, skip: s}
+	}()
+
+	var got result
+	select {
+	case got = <-ch:
+	case <-time.After(timeout + 10*time.Second):
+		t.Fatal("CheckAndApplyRouteExclusions did not return within timeout+10s")
+	}
+
+	// Dispatch is skipped and the report carries the route_resolution_timeout reason.
+	require.True(t, got.skip, "a route-resolution timeout must skip dispatch")
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.report.Status)
+	assert.Equal(t, FailureModeRouteResolutionTimeout, got.report.OutcomeReason)
+
+	// AC #2: report is Disrupted=true so the loop skips the no-progress cooldown.
+	assert.True(t, got.report.Disrupted, "per-bead route-resolution timeout must be Disrupted=true (retryable)")
+	assert.Equal(t, FailureModeRouteResolutionTimeout, got.report.DisruptionReason)
+
+	// AC #2: lease released, bead is immediately re-claimable.
+	after, getErr := store.Get(first.ID)
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusOpen, after.Status, "lease must be released to open")
+	assert.Empty(t, after.Owner, "owner must be cleared on release")
+
+	// AC #2: no wedge counter increment, even with a stale lastActivityAt.
+	marker := readWedgeMarker(after.Extra)
+	assert.Equal(t, 0, marker.Count, "per-bead route-resolution timeout must not increment the consecutive-wedge counter (D1c)")
 }
 
 // TestParseProviderConnectivityFacts asserts that the endpoint URL and the

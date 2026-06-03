@@ -1332,38 +1332,23 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return runtime.RoutePreflight(c, harness, model)
 		})
 		if timedOut {
-			detail := fmt.Sprintf("routing preflight timed out after %s (harness=%s model=%s); no lease held at startup",
+			// Slow-but-live resolver: no bead lease is held at startup so there
+			// is nothing to release. Log, emit a non-fatal warning, and continue
+			// into the drain loop — the next claim iteration calls RoutePreflight
+			// again, giving a slow resolver another window to succeed (D1c).
+			detail := fmt.Sprintf("routing preflight timed out after %s (harness=%s model=%s); no lease held — continuing",
 				routeTimeout, harness, model)
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s\n", detail)
 			}
-			emit("loop.operator_attention", map[string]any{
-				"reason":           FailureModeRouteResolutionTimeout,
-				"harness":          harness,
-				"model":            model,
-				"last_activity_at": now().UTC().Format(time.RFC3339),
-				"timeout":          routeTimeout.String(),
-				"diagnosis":        detail,
-				"startup":          true,
+			emit("loop.warn", map[string]any{
+				"reason":  "startup_route_preflight_timeout",
+				"harness": harness,
+				"model":   model,
+				"timeout": routeTimeout.String(),
+				"detail":  detail,
 			})
-			report := ExecuteBeadReport{
-				Status:        ExecuteBeadStatusExecutionFailed,
-				Detail:        detail,
-				Harness:       harness,
-				Model:         model,
-				OutcomeReason: FailureModeRouteResolutionTimeout,
-			}
-			result.OperatorAttention = &OperatorAttentionStop{
-				Reason:  FailureModeRouteResolutionTimeout,
-				Message: detail,
-			}
-			result.Failures++
-			result.LastFailureStatus = report.Status
-			result.Results = append(result.Results, report)
-			setExit("OperatorAttention", "operator_attention")
-			return result, nil
-		}
-		if rerr != nil {
+		} else if rerr != nil {
 			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
 				harness, model, rerr.Error())
 			if runtime.Log != nil {
@@ -5626,27 +5611,19 @@ func runRoutePreflightBounded(ctx context.Context, timeout time.Duration, fn fun
 }
 
 // routeResolutionTimeoutReport atomically releases the bead's lease (via
-// Store.Release when the store supports it), appends a durable
-// operator_attention event carrying bead-id, attempt-id, last_activity_at, and
-// a diagnosis, and returns the execution_failed / route_resolution_timeout
-// report. The report is intentionally NOT marked Disrupted so the loop parks it
-// with a cooldown rather than immediately re-claiming it — route resolution
-// must not auto-retry without operator attention (ddx-d8970a7b).
+// Store.Release when the store supports it), appends a route.timeout event
+// carrying bead-id, attempt-id, last_activity_at, and a diagnosis, and returns
+// the execution_failed / route_resolution_timeout report marked Disrupted=true
+// so the loop does not apply a no-progress cooldown — with fizeau quota
+// fail-open (F1) a slow-but-live resolver is retryable without operator
+// attention (D1c). lastActivityAt is reserved for D3 wedge-counter gating.
 func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now time.Time, timeout time.Duration, lastActivityAt time.Time) ExecuteBeadReport {
 	diagnosis := fmt.Sprintf(
-		"route resolution exceeded %s; released lease and flagged for operator attention (no auto-retry)",
+		"route resolution exceeded %s; released lease (retryable — next claim will re-resolve)",
 		timeout,
 	)
 	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
 		_ = releaser.Release(beadID, assignee, "")
-	}
-	// Only count as a wedge when the heartbeat itself was stale throughout the
-	// resolution window: a zero lastActivityAt (caller lacks a liveness snapshot)
-	// is treated as always stale. A recent lastActivityAt means the worker was
-	// alive during resolution — a slow-but-genuine hang, not a phantom wedge
-	// (ddx-bd47e2c4).
-	if lastActivityAt.IsZero() || now.Sub(lastActivityAt) >= timeout {
-		recordConsecutiveWedge(store, beadID, FailureModeRouteResolutionTimeout, now)
 	}
 	if store != nil && beadID != "" {
 		body, _ := json.Marshal(map[string]any{
@@ -5654,11 +5631,12 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 			"bead_id":          beadID,
 			"attempt_id":       attemptID,
 			"last_activity_at": now.UTC().Format(time.RFC3339),
+			"heartbeat_at":     lastActivityAt.UTC().Format(time.RFC3339),
 			"diagnosis":        diagnosis,
 			"timeout":          timeout.String(),
 		})
 		_ = store.AppendEvent(beadID, bead.BeadEvent{
-			Kind:      "operator_attention",
+			Kind:      "route.timeout",
 			Summary:   FailureModeRouteResolutionTimeout,
 			Body:      string(body),
 			Actor:     assignee,
@@ -5667,10 +5645,12 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 		})
 	}
 	return ExecuteBeadReport{
-		BeadID:        beadID,
-		Status:        ExecuteBeadStatusExecutionFailed,
-		Detail:        diagnosis,
-		OutcomeReason: FailureModeRouteResolutionTimeout,
+		BeadID:           beadID,
+		Status:           ExecuteBeadStatusExecutionFailed,
+		Detail:           diagnosis,
+		OutcomeReason:    FailureModeRouteResolutionTimeout,
+		Disrupted:        true,
+		DisruptionReason: FailureModeRouteResolutionTimeout,
 	}
 }
 

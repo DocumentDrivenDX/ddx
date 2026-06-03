@@ -515,3 +515,62 @@ func runLintWarningProceedTest(t *testing.T, warning string, preClaimTimeout tim
 	require.NotNil(t, lintEvent, "warning lint must append the lint event")
 	assert.Contains(t, lintEvent.Body, warning)
 }
+
+// TestStartupRoutePreflightTimeoutContinuesDrain verifies AC #1 of D1c:
+// a slow-but-live startup route preflight that times out must NOT halt the
+// worker with setExit("OperatorAttention") — the loop continues and claims
+// the next ready bead normally.
+func TestStartupRoutePreflightTimeoutContinuesDrain(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	var execCount int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCount, 1)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-after-timeout",
+				ResultRev: "abc1234",
+			}, nil
+		}),
+	}
+
+	// RoutePreflight hangs until the test cleans up — simulates a slow resolver
+	// that exceeds the timeout. The new behavior must continue the drain loop.
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	preflight := func(ctx context.Context, harness, model string) error {
+		<-release
+		return nil
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "claude", Model: "claude-opus-4-7"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:                   true,
+		RoutePreflight:         preflight,
+		RouteResolutionTimeout: 20 * time.Millisecond, // very short to fire quickly
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// AC #1: startup preflight timeout must NOT halt the worker.
+	assert.NotEqual(t, "OperatorAttention", result.StopCondition,
+		"startup route preflight timeout must not produce an OperatorAttention stop")
+	assert.NotEqual(t, "operator_attention", result.ExitReason,
+		"startup route preflight timeout must not set operator_attention exit reason")
+	assert.Nil(t, result.OperatorAttention,
+		"startup route preflight timeout must not populate result.OperatorAttention")
+
+	// The loop continued and claimed + executed the ready bead.
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls),
+		"Claim must run after a startup preflight timeout — worker continued into drain loop")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCount),
+		"executor must run after a startup preflight timeout")
+	assert.Equal(t, 1, result.Successes, "bead must succeed after the startup preflight timeout")
+	_ = candidate // referenced above via newExecuteLoopTestStore
+}
