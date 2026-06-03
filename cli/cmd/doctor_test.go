@@ -235,6 +235,13 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 			wantProjectStatus: "missing",
 			wantGlobalStatus:  "missing",
 		},
+		{
+			name:              "both project and global present",
+			projectInstalled:  true,
+			globalInstalled:   true,
+			wantProjectStatus: "ok",
+			wantGlobalStatus:  "ok",
+		},
 	}
 
 	for _, tc := range cases {

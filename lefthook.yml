@@ -112,7 +112,12 @@ pre-commit:
         packages=$(echo {staged_files} | xargs -n1 dirname | sort -u | sed 's|^cli/|./|' | grep -v '/testdata/' || true)
         [ -z "$packages" ] && exit 0
         for pkg in $packages; do
-          golangci-lint run --timeout=60s --new-from-rev=HEAD~1 "$pkg"
+          # Unset GIT_DIR so revgrep (used by --new-from-rev) computes the diff
+          # against the actual work tree, not an empty one. Git sets GIT_DIR in
+          # hook context pointing at the worktree's .git subdir; when a subprocess
+          # runs git diff with only GIT_DIR set (no GIT_WORK_TREE), the work tree
+          # appears empty and revgrep panics on function-name contexts in hunks.
+          env -u GIT_DIR -u GIT_INDEX_FILE golangci-lint run --timeout=60s --new-from-rev=HEAD~1 "$pkg"
         done
       skip:
         - merge
