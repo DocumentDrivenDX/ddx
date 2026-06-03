@@ -19,10 +19,15 @@ import (
 // environment variables injected. After execution, the runner reads the
 // expected ${EvidenceDir}/${name}.json file and parses it into a Result.
 //
-// Failure modes that produce status=error:
+// Failure modes that produce status=error (gating):
 //   - Non-zero process exit.
 //   - Result file missing.
 //   - Result file unparseable / unknown status value.
+//
+// Failure modes that produce status=infra (non-gating):
+//   - Context cancelled before or during the check.
+//   - Check command could not be launched (executable not found, etc.).
+//   - A check may also declare status=infra via its result file.
 //
 // Run returns an error only for setup failures (e.g. cannot create
 // EvidenceDir). Per-check failures are reported as Result{Status:error}
@@ -78,12 +83,23 @@ func runOne(ctx context.Context, c Check, ictx InvocationContext) Result {
 	runErr := cmd.Run()
 	exitCode := 0
 	if runErr != nil {
+		// Context cancellation is infrastructure, not a quality gate failure.
+		if ctx.Err() != nil {
+			return Result{
+				Name:     c.Name,
+				Status:   StatusInfra,
+				Message:  fmt.Sprintf("check %q cancelled: %v", c.Name, ctx.Err()),
+				ExitCode: -1,
+				Stderr:   stderr.String(),
+			}
+		}
 		if ee, ok := runErr.(*exec.ExitError); ok {
 			exitCode = ee.ExitCode()
 		} else {
+			// Command could not be launched (executable not found, permission denied, etc.).
 			return Result{
 				Name:     c.Name,
-				Status:   StatusError,
+				Status:   StatusInfra,
 				Message:  fmt.Sprintf("check %q failed to start: %v", c.Name, runErr),
 				ExitCode: -1,
 				Stderr:   stderr.String(),
@@ -126,7 +142,7 @@ func runOne(ctx context.Context, c Check, ictx InvocationContext) Result {
 	parsed.ExitCode = exitCode
 	parsed.Stderr = stderr.String()
 	switch parsed.Status {
-	case StatusPass, StatusBlock, StatusError:
+	case StatusPass, StatusBlock, StatusError, StatusInfra:
 		// ok
 	default:
 		return Result{

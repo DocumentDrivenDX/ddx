@@ -28,13 +28,19 @@
 // an unparseable result file is treated as status=error.
 package checks
 
-// Status enumerates the three possible check outcomes.
+// Status enumerates the possible check outcomes.
 type Status string
 
 const (
 	StatusPass  Status = "pass"
 	StatusBlock Status = "block"
 	StatusError Status = "error"
+	// StatusInfra signals an infrastructure failure (context cancelled, command
+	// could not launch, or an explicit "infra" result from the check script).
+	// StatusInfra is non-gating: it surfaces as an advisory but does not block
+	// the land. A check may declare this only by writing a result file with
+	// status="infra"; crashing without a result file still yields StatusError.
+	StatusInfra Status = "infra"
 )
 
 // HookPreMerge is the only currently supported lifecycle hook.

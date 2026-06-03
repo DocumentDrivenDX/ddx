@@ -186,6 +186,62 @@ func TestChecksRun_ParallelExecution(t *testing.T) {
 	}
 }
 
+func TestRunOne_ContextCancelled_Infra(t *testing.T) {
+	_, ictx := newCtx(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already cancelled
+	c := Check{
+		Name:    "cancelled",
+		When:    HookPreMerge,
+		Command: `sleep 5; printf '{"status":"pass"}' > "$EVIDENCE_DIR/$CHECK_NAME.json"`,
+	}
+	result := runOne(ctx, c, ictx)
+	if result.Status != StatusInfra {
+		t.Fatalf("want StatusInfra on cancelled ctx, got %s (message=%q)", result.Status, result.Message)
+	}
+}
+
+func TestRunOne_FailedToStart_Infra(t *testing.T) {
+	_, ictx := newCtx(t)
+	// Empty PATH so 'sh' cannot be resolved, triggering the failed-to-start branch.
+	t.Setenv("PATH", "")
+	c := Check{
+		Name:    "nostart",
+		When:    HookPreMerge,
+		Command: `anything`,
+	}
+	result := runOne(context.Background(), c, ictx)
+	if result.Status != StatusInfra {
+		t.Fatalf("want StatusInfra when command cannot start, got %s (message=%q)", result.Status, result.Message)
+	}
+}
+
+func TestRunOne_StartedNonZero_StillError(t *testing.T) {
+	_, ictx := newCtx(t)
+	c := Check{
+		Name:    "nonzero",
+		When:    HookPreMerge,
+		Command: `exit 1`,
+	}
+	result := runOne(context.Background(), c, ictx)
+	if result.Status != StatusError {
+		t.Fatalf("want StatusError when check exits non-zero, got %s", result.Status)
+	}
+}
+
+func TestRunOne_NoResultFile_StillError(t *testing.T) {
+	_, ictx := newCtx(t)
+	c := Check{
+		Name:    "noresult",
+		When:    HookPreMerge,
+		Command: `true`, // exits 0 but writes no result file
+	}
+	result := runOne(context.Background(), c, ictx)
+	if result.Status != StatusError {
+		t.Fatalf("want StatusError when no result file written, got %s", result.Status)
+	}
+}
+
 func TestChecksRun_StaleResultFileIsCleaned(t *testing.T) {
 	_, ictx := newCtx(t)
 	if err := os.MkdirAll(ictx.EvidenceDir, 0o755); err != nil {

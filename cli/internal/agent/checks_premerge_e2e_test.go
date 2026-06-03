@@ -504,6 +504,56 @@ func TestSubmitWithPreMergeChecks_BypassMissingReasonRejected(t *testing.T) {
 	}
 }
 
+// TestRunPreMergeChecks_InfraDoesNotBlock verifies that a check returning
+// StatusInfra (via an explicit "infra" result file it writes) is non-gating:
+// it does not set Blocked=true, while a real StatusBlock check still does.
+func TestRunPreMergeChecks_InfraDoesNotBlock(t *testing.T) {
+	r := newPreMergeRepo(t)
+
+	checkDir := filepath.Join(r.dir, ddxroot.DirName, "checks")
+	if err := os.MkdirAll(checkDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	infraYAML := `name: infra-check
+when: pre_merge
+command: |
+  printf '{"status":"infra","message":"network unavailable"}' > "${EVIDENCE_DIR}/${CHECK_NAME}.json"
+`
+	if err := os.WriteFile(filepath.Join(checkDir, "infra-check.yaml"), []byte(infraYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	b := r.makeBead("pmc-infra-001", nil)
+	resultSHA := r.commitNoOp()
+	evidenceDir := filepath.Join(r.dir, ddxroot.DirName, "executions", "infra-test-001")
+
+	outcome, err := RunPreMergeChecks(
+		context.Background(), r.dir, b, r.baseSHA, resultSHA, evidenceDir,
+	)
+	if err != nil {
+		t.Fatalf("RunPreMergeChecks: %v", err)
+	}
+	if outcome.Blocked {
+		t.Fatalf("StatusInfra must not block: Blocked=%v, BlockingNames=%v", outcome.Blocked, outcome.BlockingNames)
+	}
+
+	// Add a blocking check alongside the infra check; the block must still gate.
+	r.writeDummyFailCheck()
+
+	outcome2, err := RunPreMergeChecks(
+		context.Background(), r.dir, b, r.baseSHA, resultSHA, evidenceDir+"-2",
+	)
+	if err != nil {
+		t.Fatalf("RunPreMergeChecks with block: %v", err)
+	}
+	if !outcome2.Blocked {
+		t.Fatalf("StatusBlock must gate: Blocked=false (BlockingNames=%v)", outcome2.BlockingNames)
+	}
+	if !sliceContains(outcome2.BlockingNames, "dummy-fail") {
+		t.Fatalf("BlockingNames must contain dummy-fail; got %v", outcome2.BlockingNames)
+	}
+}
+
 func sliceContains(haystack []string, needle string) bool {
 	for _, s := range haystack {
 		if s == needle {
