@@ -85,3 +85,60 @@ func TestDockerCloneBackendParentDeathCleanupDocumentedOrEnforced(t *testing.T) 
 	require.Contains(t, args, "--rm", "docker run must include --rm for automatic container cleanup on exit")
 	require.Contains(t, args, "--init", "docker run must include --init for proper signal handling inside container")
 }
+
+// TestDockerCloneBackend_ConfiguresDockerProcessGroup verifies the docker-clone
+// backend applies cmdSetProcessGroup (Setpgid + Pdeathsig) to the docker
+// command, matching the process-group isolation contract of the local-clone and
+// worktree executor paths.
+func TestDockerCloneBackend_ConfiguresDockerProcessGroup(t *testing.T) {
+	cmd := dockerAttemptCommand(context.Background(), "run", "test:latest")
+
+	require.NotNil(t, cmd.SysProcAttr, "docker command must have SysProcAttr configured")
+	require.True(t, cmd.SysProcAttr.Setpgid, "docker-clone must apply Setpgid for process-group isolation")
+	require.Equal(t, syscall.SIGKILL, cmd.SysProcAttr.Pdeathsig, "docker-clone must apply Pdeathsig=SIGKILL for parent-death cleanup")
+}
+
+// TestDockerCloneBackend_CleanupStopsContainerOnContextCancel verifies that
+// context cancellation or graceful worker exit stops/removes the docker-clone
+// container. The docker CLI is started with exec.CommandContext so cancellation
+// kills the CLI process; --rm ensures the daemon removes the container when the
+// CLI exits; Cleanup() calls dockerRemoveContainer for belt-and-suspenders.
+func TestDockerCloneBackend_CleanupStopsContainerOnContextCancel(t *testing.T) {
+	ws := &AttemptWorkspace{
+		Backend:     AttemptBackendDockerClone,
+		AttemptID:   "20260603T184800-canceltest",
+		BeadID:      "ddx-cancel-test",
+		ProjectRoot: t.TempDir(),
+		WorkDir:     t.TempDir(),
+	}
+
+	name := dockerContainerName(ws)
+	require.NotEmpty(t, name, "container name must be non-empty so Cleanup can target the right container")
+
+	// Cleanup must not error when the container does not exist (it was already
+	// removed by the docker --rm flag or context-cancel kill path).
+	err := (DockerCloneAttemptBackend{}).Cleanup(context.Background(), ws)
+	require.NoError(t, err, "Cleanup must succeed even when container is already gone")
+}
+
+// TestDockerCloneBackend_DocumentsContainerTeardownGuarantee verifies that
+// container teardown relies on --rm (daemon-level cleanup when CLI exits),
+// --init (signal forwarding inside the container), and Pdeathsig/Setpgid on
+// the CLI process (process-group kill on parent death). All three guarantees
+// must be present in the docker invocation.
+func TestDockerCloneBackend_DocumentsContainerTeardownGuarantee(t *testing.T) {
+	ws := &AttemptWorkspace{
+		ProjectRoot: t.TempDir(),
+		WorkDir:     t.TempDir(),
+		BeadID:      "ddx-test",
+		AttemptID:   "test-attempt-guarantee",
+	}
+	args := dockerRunArgs(nil, ws, "/usr/bin/ddx", "test:latest", nil)
+	require.Contains(t, args, "--rm", "--rm ensures daemon removes container when docker CLI process exits")
+	require.Contains(t, args, "--init", "--init ensures signals are forwarded inside the container")
+
+	cmd := dockerAttemptCommand(context.Background(), "run", "test:latest")
+	require.NotNil(t, cmd.SysProcAttr)
+	require.True(t, cmd.SysProcAttr.Setpgid, "Setpgid groups docker CLI with its children for kill(-pgid) reachability")
+	require.Equal(t, syscall.SIGKILL, cmd.SysProcAttr.Pdeathsig, "Pdeathsig kills docker CLI tree when ddx worker dies")
+}

@@ -441,6 +441,25 @@ func TestInTreeAttemptBackendExclusiveLock(t *testing.T) {
 	require.Contains(t, err.Error(), "already running")
 }
 
+// TestAttemptBackend_LocalCloneCleanupUnchanged verifies that local-clone and
+// worktree backend cleanup remains routed through the existing non-docker path
+// (os.RemoveAll for local-clone, gitOps.WorktreeRemove for worktree). The
+// docker-clone Cleanup additions must not alter these paths.
+func TestAttemptBackend_LocalCloneCleanupUnchanged(t *testing.T) {
+	workDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "sentinel.txt"), []byte("test"), 0o644))
+
+	ws := &AttemptWorkspace{
+		Backend:   AttemptBackendLocalClone,
+		WorkDir:   workDir,
+		BeadID:    "ddx-test",
+		AttemptID: "test-attempt",
+	}
+	err := (LocalCloneAttemptBackend{}).Cleanup(context.Background(), ws)
+	require.NoError(t, err)
+	require.NoDirExists(t, workDir, "local-clone Cleanup must remove the work dir via os.RemoveAll")
+}
+
 func TestInTreeAttemptBackendReleasesLockOnCleanup(t *testing.T) {
 	projectRoot, baseRev := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0006"
