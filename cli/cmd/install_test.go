@@ -13,6 +13,44 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestInstall_InTreeMode_WritesProjectPluginsAndLinks verifies AC1 (bead ddx-747f1b35):
+// With an in-tree <project>/.ddx/, ddx install <name> (no --global) writes to
+// <project>/.ddx/plugins/<name>/ and creates project-tier links under
+// <project>/.claude/skills/<name> and <project>/.agents/skills/<name>.
+func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Plugin must land under <project>/.ddx/plugins/<name>/.
+	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
+	info, statErr := os.Lstat(pluginDir)
+	require.NoError(t, statErr, "project plugin dir must exist at %s", pluginDir)
+	assert.True(t, info.Mode()&os.ModeSymlink != 0, "project plugin dir must be a symlink")
+
+	// Project-tier skill links must be under the project dir.
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillLink := filepath.Join(workDir, surface, "myplugin-skill")
+		_, skillErr := os.Lstat(skillLink)
+		require.NoError(t, skillErr, "%s must exist for in-tree install", skillLink)
+	}
+
+	// Home directory must not be polluted.
+	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for in-tree install")
+	_, noClaudeErr := os.Lstat(filepath.Join(homeDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for in-tree install")
+}
+
 // TestInstall_InTreeWritesProjectTreeAndLinks verifies AC1:
 // With an in-tree <project>/.ddx/, ddx install <name> (no --global) writes to
 // <project>/.ddx/plugins/<name>/ and creates project-tier links under
@@ -127,6 +165,77 @@ func TestInstall_ConventionModeWritesXDGProjectTree(t *testing.T) {
 		target, _ = filepath.Abs(target)
 		assert.True(t, strings.HasPrefix(target, localPlugin),
 			"%s must resolve into the plugin source dir; got %s", skillLink, target)
+	}
+
+	// Home directory must not be polluted.
+	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for convention install")
+	_, noClaudeErr := os.Lstat(filepath.Join(homeDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for convention install")
+}
+
+// TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks verifies AC2 (bead ddx-747f1b35):
+// With no <project>/.ddx/, ddx install <name> (no --global) writes to
+// ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and the project-tier
+// skill links are under the project dir and resolve into the XDG plugins path.
+func TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	cleanEnv := gitpkg.CleanEnv()
+	for _, tc := range []struct {
+		args []string
+	}{
+		{[]string{"git", "init", workDir}},
+		{[]string{"git", "-C", workDir, "config", "user.email", "test@example.com"}},
+		{[]string{"git", "-C", workDir, "config", "user.name", "Test"}},
+		{[]string{"git", "-C", workDir, "remote", "add", "origin", "https://github.com/acme/widgetrepo.git"}},
+	} {
+		cmd := exec.Command(tc.args[0], tc.args[1:]...)
+		cmd.Env = cleanEnv
+		require.NoError(t, cmd.Run(), "setup: %v", tc.args)
+	}
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Plugin must land under the XDG convention path for this project.
+	expectedConventionRoot := filepath.Join(xdgDataHome, "ddx", "projects", "github.com", "acme", "widgetrepo")
+	xdgPluginDir := filepath.Join(expectedConventionRoot, "plugins", "myplugin")
+	pluginInfo, pluginStatErr := os.Lstat(xdgPluginDir)
+	require.NoError(t, pluginStatErr, "XDG convention plugin dir must exist at %s", xdgPluginDir)
+	assert.True(t, pluginInfo.Mode()&os.ModeSymlink != 0, "convention plugin dir must be a symlink")
+
+	// Project-tier skill links must be under the project dir (not in the convention root).
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillLink := filepath.Join(workDir, surface, "myplugin-skill")
+		_, skillErr := os.Lstat(skillLink)
+		require.NoError(t, skillErr, "%s must exist for convention install", skillLink)
+
+		// Skill link must resolve into the XDG plugins path (following the symlink).
+		target, readErr := os.Readlink(skillLink)
+		require.NoError(t, readErr, "%s must be a symlink", skillLink)
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(skillLink), target)
+		}
+		target, _ = filepath.Abs(target)
+		// The XDG plugin dir is a symlink to localPlugin; skill links must resolve into
+		// the same source that the XDG plugin dir points to.
+		xdgTarget, xdgReadErr := os.Readlink(xdgPluginDir)
+		require.NoError(t, xdgReadErr, "XDG plugin dir must be a symlink")
+		if !filepath.IsAbs(xdgTarget) {
+			xdgTarget = filepath.Join(filepath.Dir(xdgPluginDir), xdgTarget)
+		}
+		xdgTarget, _ = filepath.Abs(xdgTarget)
+		assert.True(t, strings.HasPrefix(target, xdgTarget),
+			"%s must resolve into the XDG plugin source (%s); got %s", skillLink, xdgTarget, target)
 	}
 
 	// Home directory must not be polluted.
