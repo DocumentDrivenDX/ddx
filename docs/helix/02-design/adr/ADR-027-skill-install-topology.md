@@ -41,13 +41,28 @@ global layer is a fallback and may be used when the project copy is absent.
 The baked-in layer exists only for the default `ddx` package so the binary
 remains usable offline.
 
-The agent-facing skill outputs are project-local and live in:
+DDx supports two install modes with distinct agent-tier outputs:
 
-- `<project>/.agents/skills/ddx/`
-- `<project>/.claude/skills/ddx/`
+**Project-local (default, `ddx install <name>`):**
+- Plugin content: `<project>/.ddx/plugins/<name>/` (in-tree) or
+  `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` (convention mode)
+- Agent-tier skill outputs: `<project>/.agents/skills/<name>/` and
+  `<project>/.claude/skills/<name>/`
 
-Home-directory skill installs are retired. DDx does not add new state under
-`~/.agents/skills` or `~/.claude/skills`.
+**Global (`ddx install <name> --global`):**
+- Plugin content: `${XDG_DATA_HOME}/ddx/global/plugins/<name>/`
+- Agent-tier skill outputs: `~/.agents/skills/<name>/` and
+  `~/.claude/skills/<name>/`
+
+The `--global` surface enables machine-wide installs so operators can share a
+single skill across every project on the machine without per-project setup.
+State for global installs is recorded in a separate global state file
+(`${XDG_DATA_HOME}/ddx/global/installed.json`) and does not pollute per-project
+state. The `ddx plugin list --global` and `ddx plugin show <name> --global`
+commands enumerate from the global state.
+
+Unmanaged legacy home-directory skill installs (those not created by DDx's
+`--global` surface) are retired and should not be created manually.
 
 ## Consequences
 
@@ -59,4 +74,6 @@ Home-directory skill installs are retired. DDx does not add new state under
   instead of describing competing home-directory and project-directory
   locations.
 - The default package remains available offline through the embedded layer.
+- `ddx install --global` satisfies the common case where an operator wants a
+  skill on every project without repeating the install per repository.
 

@@ -27,10 +27,13 @@ This monorepo produces three artifacts:
   - `main.go` - Application entry point
 - `website/` - Hugo site with Hextra theme
 - `library/` - DDx default plugin source (installed to `.ddx/plugins/ddx/` by `ddx init`).
-  All plugins are project-local: `ddx install <name>` writes only under
-  `<projectRoot>/.ddx/plugins/`, `<projectRoot>/.agents/skills/`, and
-  `<projectRoot>/.claude/skills/`. Home-directory install paths
-  (under `~/`) and the `ddx install --global` surface are retired.
+  `ddx install <name>` supports two install modes:
+  - **Project-local** (default): writes to `<projectRoot>/.ddx/plugins/<name>/` (in-tree) or
+    `${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/` (convention mode); skill links
+    land under `<project>/.agents/skills/` and `<project>/.claude/skills/`.
+  - **Global** (`--global`): writes to `${XDG_DATA_HOME}/ddx/global/plugins/<name>/`; skill
+    links land under `~/.agents/skills/` and `~/.claude/skills/` so the skill is available
+    across every project on the machine without per-project setup.
   - `templates/` - Project templates
   - `patterns/` - Reusable code patterns
   - `prompts/` - AI prompts and instructions
@@ -214,7 +217,7 @@ DDX includes a persona system that provides consistent AI personalities for diff
 
 Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `library/personas/` for available personas and `library/personas/README.md` for detailed documentation.
 
-Plugin and persona lookup follows a three-layer precedence: project-local (`<project>/.ddx/plugins/<name>/`) → global (`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`) → baked-in binary default (only for the `ddx` plugin). The project layer always wins when present. `ddx doctor` reports both the global install layer and the project install layer, including when the project copy is absent and falls through to the global layer (`lazy-resolves-to-global`). See `docs/helix/02-design/adr/ADR-027-skill-install-topology.md` for the full decision record.
+Plugin and persona lookup follows a three-layer precedence: project-local (`<project>/.ddx/plugins/<name>/`) → global (`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`) → baked-in binary default (only for the `ddx` plugin). The project layer always wins when present. `ddx doctor` reports both the global install layer and the project install layer, including when the project copy is absent and falls through to the global layer (`lazy-resolves-to-global`). Use `ddx install <name> --global` to install machine-wide (skills land in `~/.claude/skills/` and `~/.agents/skills/`); omit `--global` for per-project installs. See `docs/helix/02-design/adr/ADR-027-skill-install-topology.md` for the full decision record.
 
 ## When filing beads
 
