@@ -26,10 +26,11 @@ type AttemptRow struct {
 	TSStart       string `json:"ts_start,omitempty"` // RFC3339
 	TSEnd         string `json:"ts_end,omitempty"`   // RFC3339
 
-	Model    string `json:"model,omitempty"`
-	Harness  string `json:"harness,omitempty"`
-	Profile  string `json:"profile,omitempty"`
-	Provider string `json:"provider,omitempty"`
+	Model       string `json:"model,omitempty"`
+	Harness     string `json:"harness,omitempty"`
+	Profile     string `json:"profile,omitempty"`
+	Provider    string `json:"provider,omitempty"`
+	RouteReason string `json:"route_reason,omitempty"`
 
 	// PromptTemplateID and PromptTemplateHash identify the prompt variant used.
 	PromptTemplateID   string `json:"prompt_template_id,omitempty"`
@@ -85,6 +86,7 @@ type costEventBody struct {
 	Harness      string  `json:"harness,omitempty"`
 	Provider     string  `json:"provider,omitempty"`
 	Model        string  `json:"model,omitempty"`
+	RouteReason  string  `json:"route_reason,omitempty"`
 	InputTokens  int     `json:"input_tokens"`
 	OutputTokens int     `json:"output_tokens"`
 	TotalTokens  int     `json:"total_tokens"`
@@ -256,6 +258,7 @@ func extractRowsFromEvents(b BeadAttemptEvents) []AttemptRow {
 			Model:         cost.Model,
 			Harness:       cost.Harness,
 			Provider:      cost.Provider,
+			RouteReason:   cost.RouteReason,
 			Outcome:       outcome,
 			ExitCode:      cost.ExitCode,
 			CostUSD:       cost.CostUSD,

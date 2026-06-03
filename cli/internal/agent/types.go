@@ -340,7 +340,9 @@ type RoutingOutcome struct {
 	Harness         string    `json:"harness"`
 	Surface         string    `json:"surface,omitempty"`
 	CanonicalTarget string    `json:"canonical_target,omitempty"`
+	Provider        string    `json:"provider,omitempty"`
 	Model           string    `json:"model,omitempty"`
+	RouteReason     string    `json:"route_reason,omitempty"`
 	ObservedAt      time.Time `json:"observed_at"`
 	Success         bool      `json:"success"`
 	LatencyMS       int       `json:"latency_ms"`

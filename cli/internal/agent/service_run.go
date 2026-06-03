@@ -308,6 +308,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if routing.Harness != "" {
 			result.Harness = routing.Harness
 		}
+		if routing.Reason != "" {
+			result.RouteReason = routing.Reason
+		}
 		if power, speed, cost, source := selectedRoutingCandidateMetrics(routing); power > 0 || speed > 0 || cost > 0 || source != "" {
 			result.PredictedPower = power
 			result.PredictedSpeedTPS = speed

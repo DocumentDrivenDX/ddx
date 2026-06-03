@@ -324,6 +324,53 @@ func TestMetrics_BackfillMultipleBeads(t *testing.T) {
 	}
 }
 
+// TestBackfill_RouteReasonFromCostEvent asserts that route_reason written into
+// a kind:cost event body is propagated into the AttemptRow.RouteReason field
+// by BackfillFromEvents. This verifies the attemptmetrics half of AC1 for
+// bead ddx-9efc3a7a: resolved routing facts must land in attempt metrics.
+func TestBackfill_RouteReasonFromCostEvent(t *testing.T) {
+	dir := newAttemptMetricsProjectRoot(t)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	costBody := `{"attempt_id":"20260101T120000-route0001","harness":"claude","provider":"anthropic","model":"claude-sonnet-4-6","route_reason":"policy-match","input_tokens":1000,"output_tokens":500,"total_tokens":1500,"cost_usd":0.75,"duration_ms":60000,"exit_code":0}`
+	events := []bead.BeadEvent{
+		{Kind: "cost", Body: costBody, CreatedAt: now},
+		{Kind: "execute-bead", Summary: "task_succeeded", CreatedAt: now.Add(time.Minute)},
+	}
+	beads := []attemptmetrics.BeadAttemptEvents{
+		{BeadID: "ddx-route001", Events: events},
+	}
+
+	added, err := attemptmetrics.BackfillFromEvents(dir, beads)
+	if err != nil {
+		t.Fatalf("BackfillFromEvents: %v", err)
+	}
+	if added != 1 {
+		t.Fatalf("expected 1 row added, got %d", added)
+	}
+
+	rows, err := attemptmetrics.LoadRows(dir)
+	if err != nil {
+		t.Fatalf("LoadRows: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	row := rows[0]
+	if row.Harness != "claude" {
+		t.Errorf("harness=%q, want claude", row.Harness)
+	}
+	if row.Provider != "anthropic" {
+		t.Errorf("provider=%q, want anthropic", row.Provider)
+	}
+	if row.Model != "claude-sonnet-4-6" {
+		t.Errorf("model=%q, want claude-sonnet-4-6", row.Model)
+	}
+	if row.RouteReason != "policy-match" {
+		t.Errorf("route_reason=%q, want policy-match", row.RouteReason)
+	}
+}
+
 func TestAttemptMetricsUseDDxRootPath(t *testing.T) {
 	projectRoot := newAttemptMetricsProjectRoot(t)
 	stateRoot := ddxroot.Path(context.Background(), projectRoot)

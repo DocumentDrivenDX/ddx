@@ -1247,6 +1247,7 @@ type costEventBody struct {
 	Harness      string  `json:"harness,omitempty"`
 	Provider     string  `json:"provider,omitempty"`
 	Model        string  `json:"model,omitempty"`
+	RouteReason  string  `json:"route_reason,omitempty"`
 	InputTokens  int     `json:"input_tokens"`
 	OutputTokens int     `json:"output_tokens"`
 	TotalTokens  int     `json:"total_tokens"`
@@ -2091,6 +2092,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Harness:      resultHarness,
 		Provider:     resultProvider,
 		Model:        resultModel,
+		RouteReason:  routeReason,
 		InputTokens:  inputTokens,
 		OutputTokens: outputTokens,
 		TotalTokens:  tokens,
