@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260603T161606-361a6130",
+  "bead_id": "ddx-67b477d3",
+  "base_rev": "e59e66051d5cb9f093bd9d880e9b5618caaf6ae4",
+  "created_at": "2026-06-03T16:16:13.167052248Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-67b477d3",
+    "title": "init/doctor: `ddx init --global` umbrella setup, `ddx init` lazy (no plugin install), doctor reports both layers",
+    "description": "PROBLEM (epic ddx-602ae31a, Principle 2)\n\nFirst-time machine setup needs a single umbrella command (`ddx init --global`) that installs the default ddx plugin globally, creates the agent-tier links, and writes the global config. A plain `ddx init` must create the project workspace WITHOUT installing plugins (they lazy-resolve from the global/baked-in layers on first use). `ddx doctor` must surface both install layers so operators can see whether a project install exists or is lazy-resolving to global.\n\nROOT CAUSE\n- `ddx init --global` dispatches to `initGlobal()` (cli/cmd/init.go:75,318), which: creates ${XDG_DATA_HOME}/ddx/global/plugins/ddx (init.go:319-323), installs the bundled default plugin there (init.go:328), creates agent-tier links so every harness discovers the skill (init.go:314-316), and writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults via `writeGlobalConfig` (init.go:351-366).\n- Plain `ddx init` (no flag) must create `\u003cproject\u003e/.ddx/` and must NOT write to plugins/ — plugins lazy-resolve via ResolvePlugin (project→global→baked-in).\n- `ddx doctor` topology reporting lives at cli/cmd/doctor.go:415 `reportSkillInstallTopology`, which prints `Global Install (\u003cglobalPath\u003e) — ok|missing` (doctor.go:447) and `Project Install (\u003cprojectPath\u003e) — ok|missing|lazy-resolves-to-global` (doctor.go:448), using `registry.ResolvePlugin` to detect lazy resolution (doctor.go:431-444).\n\nPROPOSED FIX\n1. Verify `ddx init --global` creates ~/.claude/skills/ddx and ~/.agents/skills/ddx pointing into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/ and writes the global config.\n2. Verify plain `ddx init` creates the project workspace and writes nothing under plugins/.\n3. Verify `ddx doctor` renders both the \"Global Install\" and \"Project Install\" lines, including the `lazy-resolves-to-global` project status when no project install exists but the global one does.\n\nNON-SCOPE\n- Runtime lookup precedence implementation (sibling child — ResolvePlugin).\n- The `--global` install/update surface and project install modes (sibling children).\n- Removing the existing per-project install entirely (both modes coexist).\n- Migrating any ~/.config/ddx/ legacy paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution) — initGlobal and doctor topology both route through `ddxroot.GlobalDir()`.",
+    "acceptance": "1. TestInitGlobal_CreatesAgentTierLinks (cli/cmd/init_test.go or init_functional_test.go) asserts `ddx init --global` makes ~/.claude/skills/ddx and ~/.agents/skills/ddx resolve into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/ and writes ${XDG_DATA_HOME}/ddx/global/config.yaml.\n2. TestInitProject_DoesNotInstallPlugins (cli/cmd/init_test.go) asserts plain `ddx init` creates `\u003cproject\u003e/.ddx/` and writes nothing under plugins/.\n3. TestDoctor_ReportsInstallTopology (cli/cmd/doctor_plugins_test.go) asserts `ddx doctor` output contains a \"Global Install (...) — ok|missing\" line and a \"Project Install (...) — ok|missing|lazy-resolves-to-global\" line, and that the project line reads `lazy-resolves-to-global` when only the global install is present.\n4. cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:config",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T161606-361a6130",
+    "prompt": ".ddx/executions/20260603T161606-361a6130/prompt.md",
+    "manifest": ".ddx/executions/20260603T161606-361a6130/manifest.json",
+    "result": ".ddx/executions/20260603T161606-361a6130/result.json",
+    "checks": ".ddx/executions/20260603T161606-361a6130/checks.json",
+    "usage": ".ddx/executions/20260603T161606-361a6130/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67b477d3-20260603T161606-361a6130"
+  },
+  "prompt_sha": "e48b7af8a463d35e68418298efa06dc718ce8e73474ef8b868eca074404ab322"
+}
