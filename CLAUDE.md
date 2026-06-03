@@ -214,6 +214,8 @@ DDX includes a persona system that provides consistent AI personalities for diff
 
 Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `library/personas/` for available personas and `library/personas/README.md` for detailed documentation.
 
+Plugin and persona lookup follows a three-layer precedence: project-local (`<project>/.ddx/plugins/<name>/`) → global (`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`) → baked-in binary default (only for the `ddx` plugin). The project layer always wins when present. See `docs/helix/02-design/adr/ADR-027-skill-install-topology.md` for the full decision record.
+
 ## When filing beads
 
 Bead descriptions + AC must be sufficient context for a sub-agent to execute the work without operator hand-curation (principle P7, `docs/helix/06-iterate/reliability-principles.md`). Before invoking `ddx bead create`, walk the 8-criterion rubric in `docs/helix/06-iterate/bead-authoring-template.md`: title clarity, root cause with file:line, numbered AC with specific test names, wired-in assertion, `cd cli && go test` + lefthook gate, labels with cross-refs, parent + deps, standalone description (no `/tmp/*`, no chat references). Beads scoring < 7/8 will fail in autonomous drain.
