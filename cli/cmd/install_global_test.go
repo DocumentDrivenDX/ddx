@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -383,81 +382,4 @@ func TestInstallProject_ConventionMode(t *testing.T) {
 	// Home directory must not be polluted.
 	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
 	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for convention install")
-}
-
-// TestUpdateGlobal_UpdatesGlobalNotProject verifies AC4:
-// ddx update --global updates only the global plugin tree and leaves the
-// project tree untouched.
-func TestUpdateGlobal_UpdatesGlobalNotProject(t *testing.T) {
-	workDir := t.TempDir()
-	homeDir := t.TempDir()
-	xdgDataHome := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_DATA_HOME", xdgDataHome)
-
-	// Create a sentinel file in the project plugin tree to ensure it's not touched.
-	projectPluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "helix")
-	require.NoError(t, os.MkdirAll(projectPluginDir, 0o755))
-	sentinelPath := filepath.Join(projectPluginDir, "sentinel.txt")
-	require.NoError(t, os.WriteFile(sentinelPath, []byte("project-side"), 0o644))
-
-	// Run ddx update --global with an empty global state — no packages to update.
-	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "update", "--global")
-	require.NoError(t, err, output)
-
-	// Global update must not touch the project plugin tree.
-	data, readErr := os.ReadFile(sentinelPath)
-	require.NoError(t, readErr, "project sentinel file must still exist after global update")
-	assert.Equal(t, "project-side", string(data), "project sentinel must be unchanged")
-
-	// Output must not mention project-level refreshes (shipped skills, etc.).
-	assert.NotContains(t, output, "Shipped skills refreshed")
-}
-
-// TestUpdate_RespectsConventionVsInTreeMode verifies AC5:
-// ddx update (no --global) updates the project install in whichever mode is active.
-// In-tree: refreshes shipped skills to the project.
-// Convention mode: also refreshes shipped skills but the project plugin dir stays
-// at the convention XDG path.
-func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
-	// --- In-tree mode ---
-	t.Run("in-tree", func(t *testing.T) {
-		workDir := t.TempDir()
-		homeDir := t.TempDir()
-		t.Setenv("HOME", homeDir)
-
-		// Force in-tree mode.
-		require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
-
-		// Write fake installed state so performUpdate has something to look at.
-		writeRegistryInstalled(t, []registry.InstalledEntry{})
-
-		factory := NewCommandFactory(workDir)
-		output, err := executeCommand(factory.NewRootCommand(), "update")
-		require.NoError(t, err, output)
-
-		// Shipped skills should be written to the in-tree project.
-		// The ddx skill ships to both .agents/skills/ and .claude/skills/.
-		assert.Contains(t, output, "Shipped skills refreshed")
-	})
-
-	// --- Convention mode ---
-	t.Run("convention", func(t *testing.T) {
-		workDir := t.TempDir()
-		homeDir := t.TempDir()
-		xdgDataHome := t.TempDir()
-		t.Setenv("HOME", homeDir)
-		t.Setenv("XDG_DATA_HOME", xdgDataHome)
-
-		// No .ddx/ — convention mode.
-		writeRegistryInstalled(t, []registry.InstalledEntry{})
-
-		factory := NewCommandFactory(workDir)
-		output, err := executeCommand(factory.NewRootCommand(), "update")
-		require.NoError(t, err, output)
-
-		// Shipped skills should be written to the project dir, same as in-tree.
-		assert.Contains(t, output, "Shipped skills refreshed")
-	})
 }

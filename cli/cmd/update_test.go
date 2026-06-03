@@ -205,6 +205,108 @@ func TestUpdate_DiscardLocalOverwritesDirty(t *testing.T) {
 		"backup should contain the dirty (pre-overwrite) content")
 }
 
+// TestUpdateGlobal_UpdatesGlobalNotProject verifies AC1:
+// ddx update --global modifies only ${XDG_DATA_HOME}/ddx/global/plugins/ and
+// leaves the project plugins/ dir byte-identical.
+func TestUpdateGlobal_UpdatesGlobalNotProject(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	// Seed a sentinel in the project plugin tree to verify it is not modified.
+	projectPluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "helix")
+	require.NoError(t, os.MkdirAll(projectPluginDir, 0o755))
+	projectSentinel := filepath.Join(projectPluginDir, "sentinel.txt")
+	require.NoError(t, os.WriteFile(projectSentinel, []byte("project-side"), 0o644))
+
+	// Seed a sentinel in the global plugin tree.
+	globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", "helix")
+	require.NoError(t, os.MkdirAll(globalPluginDir, 0o755))
+	globalSentinel := filepath.Join(globalPluginDir, "sentinel.txt")
+	require.NoError(t, os.WriteFile(globalSentinel, []byte("global-side"), 0o644))
+
+	// Run ddx update --global with empty global installed state (no packages to update).
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "update", "--global")
+	require.NoError(t, err, output)
+
+	// Project plugin tree must be byte-identical after global update.
+	projectData, readErr := os.ReadFile(projectSentinel)
+	require.NoError(t, readErr, "project sentinel must exist after global update")
+	assert.Equal(t, "project-side", string(projectData), "project sentinel must be byte-identical")
+
+	// Global update must not trigger project-level skill refresh.
+	assert.NotContains(t, output, "Shipped skills refreshed")
+}
+
+// TestUpdate_RespectsConventionVsInTreeMode verifies AC2:
+// ddx update (no --global) updates the project install in the active mode and
+// never touches the global plugin tree.
+func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
+	t.Run("in-tree", func(t *testing.T) {
+		workDir := t.TempDir()
+		homeDir := t.TempDir()
+		xdgDataHome := t.TempDir()
+		t.Setenv("HOME", homeDir)
+		t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+		// Force in-tree mode.
+		require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
+		// Seed a sentinel in the global plugin tree to verify it is not touched.
+		globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", "helix")
+		require.NoError(t, os.MkdirAll(globalPluginDir, 0o755))
+		globalSentinel := filepath.Join(globalPluginDir, "sentinel.txt")
+		require.NoError(t, os.WriteFile(globalSentinel, []byte("global-side"), 0o644))
+
+		writeRegistryInstalled(t, []registry.InstalledEntry{})
+
+		factory := NewCommandFactory(workDir)
+		output, err := executeCommand(factory.NewRootCommand(), "update")
+		require.NoError(t, err, output)
+
+		// Shipped skills should be refreshed in the in-tree project.
+		assert.Contains(t, output, "Shipped skills refreshed")
+
+		// Global tree must be byte-identical after project update.
+		globalData, readErr := os.ReadFile(globalSentinel)
+		require.NoError(t, readErr, "global sentinel must exist after in-tree project update")
+		assert.Equal(t, "global-side", string(globalData), "global sentinel must be byte-identical")
+	})
+
+	t.Run("convention", func(t *testing.T) {
+		workDir := t.TempDir()
+		homeDir := t.TempDir()
+		xdgDataHome := t.TempDir()
+		t.Setenv("HOME", homeDir)
+		t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+		// No .ddx/ in workDir — convention mode.
+
+		// Seed a sentinel in the global plugin tree.
+		globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", "helix")
+		require.NoError(t, os.MkdirAll(globalPluginDir, 0o755))
+		globalSentinel := filepath.Join(globalPluginDir, "sentinel.txt")
+		require.NoError(t, os.WriteFile(globalSentinel, []byte("global-side"), 0o644))
+
+		writeRegistryInstalled(t, []registry.InstalledEntry{})
+
+		factory := NewCommandFactory(workDir)
+		output, err := executeCommand(factory.NewRootCommand(), "update")
+		require.NoError(t, err, output)
+
+		// Shipped skills should be refreshed in the project dir.
+		assert.Contains(t, output, "Shipped skills refreshed")
+
+		// Global tree must be byte-identical after convention-mode project update.
+		globalData, readErr := os.ReadFile(globalSentinel)
+		require.NoError(t, readErr, "global sentinel must exist after convention project update")
+		assert.Equal(t, "global-side", string(globalData), "global sentinel must be byte-identical")
+	})
+}
+
 // TestUpdate_PartialDirtyBatchHaltsCleanly asserts that when multiple
 // registry-installed files are slated for overwrite and even ONE is dirty, the
 // entire update halts before any file is mutated — clean files remain untouched
