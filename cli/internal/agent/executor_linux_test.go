@@ -55,7 +55,10 @@ func executorProcessNotOrphaned(pid int) bool {
 	return ppid != 1
 }
 
-func TestCmdSetProcessGroupLinuxSetsPdeathsigAndSetpgid(t *testing.T) {
+// TestCmdSetProcessGroup_LinuxConfiguresPdeathsigAndSetpgid verifies that
+// cmdSetProcessGroup sets both Setpgid (process-group isolation) and Pdeathsig
+// (kernel parent-death signal) on Linux.
+func TestCmdSetProcessGroup_LinuxConfiguresPdeathsigAndSetpgid(t *testing.T) {
 	cmd := exec.Command("sleep", "60")
 	cmdSetProcessGroup(cmd)
 
@@ -64,7 +67,11 @@ func TestCmdSetProcessGroupLinuxSetsPdeathsigAndSetpgid(t *testing.T) {
 	require.Equal(t, syscall.SIGKILL, cmd.SysProcAttr.Pdeathsig, "expected Linux parent-death signal")
 }
 
-func TestExecutorLinuxPdeathsigKillsHarnessOnParentSIGKILL(t *testing.T) {
+// TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessOnParentSIGKILL starts
+// an execute-bead executor through a helper process, runs a fake long-lived
+// harness, SIGKILLs the helper process, and asserts the direct harness child
+// does not survive as a PID-1 orphan within a bounded grace on Linux.
+func TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessOnParentSIGKILL(t *testing.T) {
 	dir := t.TempDir()
 	childPIDFile := filepath.Join(dir, "child.pid")
 	grandPIDFile := filepath.Join(dir, "grandchild.pid")
@@ -79,7 +86,7 @@ func TestExecutorLinuxPdeathsigKillsHarnessOnParentSIGKILL(t *testing.T) {
 	result, err := executor.ExecuteInDir(
 		ctx,
 		os.Args[0],
-		[]string{"-test.run=^TestExecutorLinuxPdeathsigKillsHarnessHelper$"},
+		[]string{"-test.run=^TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessHelper$"},
 		"",
 		dir,
 	)
@@ -98,7 +105,11 @@ func TestExecutorLinuxPdeathsigKillsHarnessOnParentSIGKILL(t *testing.T) {
 	}, 5*time.Second, 25*time.Millisecond, "grandchild must not stick around as a PID 1 orphan")
 }
 
-func TestExecutorLinuxPdeathsigKillsHarnessHelper(t *testing.T) {
+// TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessHelper is a subprocess
+// helper invoked by TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessOnParentSIGKILL.
+// When DDX_EXECUTOR_PDEATHSIG_HELPER is not set it returns immediately so that
+// normal test runs skip it silently.
+func TestOSExecutorExecuteInDir_LinuxPdeathsigKillsHarnessHelper(t *testing.T) {
 	if os.Getenv(executorPdeathsigHelperEnv) != "1" {
 		return
 	}
@@ -122,7 +133,13 @@ func TestExecutorLinuxPdeathsigKillsHarnessHelper(t *testing.T) {
 	_ = syscall.Kill(os.Getpid(), syscall.SIGKILL)
 }
 
-func TestExecutorStartParentDeathSignalThreadGuard(t *testing.T) {
+// TestOSExecutorExecuteInDir_ParentDeathSignalThreadGuard verifies that
+// executor.go locks the OS thread around cmd.Start() to ensure Pdeathsig is
+// reliably associated with the creating thread. Go's runtime may migrate a
+// goroutine to a different OS thread; LockOSThread prevents that migration
+// during the critical exec window so the child inherits the parent-death signal
+// from the correct thread (golang.org/issue/27505).
+func TestOSExecutorExecuteInDir_ParentDeathSignalThreadGuard(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 
@@ -134,7 +151,10 @@ func TestExecutorStartParentDeathSignalThreadGuard(t *testing.T) {
 	require.Contains(t, src, "cmd.Start()", "start path must still start the child process under the lock")
 }
 
-func TestExecutorGracefulSignalStillTerminatesHarnessTree(t *testing.T) {
+// TestOSExecutorExecuteInDir_GracefulCancellationStillKillsProcessGroup is a
+// regression guard: ctx cancellation or SIGTERM-style graceful shutdown must
+// still terminate the entire harness process group, not just the direct child.
+func TestOSExecutorExecuteInDir_GracefulCancellationStillKillsProcessGroup(t *testing.T) {
 	dir := t.TempDir()
 	childPIDFile := filepath.Join(dir, "child.pid")
 	grandPIDFile := filepath.Join(dir, "grandchild.pid")
