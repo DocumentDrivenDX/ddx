@@ -45,6 +45,13 @@ topology, not home-directory state.
   through to the global layer.
 - Home-directory skill installs are retired; do not add new ones.
 
+Plugin and persona lookup follows a three-layer precedence: project-local
+(`<project>/.ddx/plugins/<name>/`) → global
+(`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`) → baked-in binary default
+(only for the `ddx` plugin). The project layer always wins when present. See
+`docs/helix/02-design/adr/ADR-027-skill-install-topology.md` for the full
+decision record.
+
 <!-- PERSONAS:START -->
 ## Active Personas
 
