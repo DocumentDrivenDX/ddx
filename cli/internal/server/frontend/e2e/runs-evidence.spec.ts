@@ -504,3 +504,154 @@ test('p95 dataset: 200 tool calls and 30 evidence files render interactively', a
 	}
 	await expect(evidence.locator('[data-evidence-path]')).toHaveCount(EVIDENCE_FILE_COUNT);
 });
+
+test('full stack: prompt/response/tool-trace/evidence', async ({ page }) => {
+	const FS_RUN_ID = 'run-fullstack-001';
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							...baseRun,
+							id: FS_RUN_ID,
+							projectID: PROJECT_ID,
+							layer: 'try',
+							prompt: 'full stack prompt content',
+							response: 'full stack response content'
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { agentSession: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runToolCalls: {
+							edges: [
+								{
+									node: {
+										id: 'rtc-fs-0',
+										seq: 0,
+										name: 'Read',
+										inputs: JSON.stringify({ path: 'prompt.md' }),
+										output: 'tool output content',
+										error: null,
+										durationMs: 10
+									},
+									cursor: 'rtc-fs-0'
+								}
+							],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 1
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: FS_RUN_ID,
+							bundleFiles: [
+								{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+								{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+								{ path: 'result.json', size: 140, mimeType: 'application/json' }
+							]
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunBundleFileFetch')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { runBundleFile: null } })
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${FS_RUN_ID}`);
+	const detail = page.locator('[data-testid="rundetail"]');
+	await expect(detail).toBeVisible();
+
+	// Prompt tab: prompt content visible
+	await detail.locator('button[data-tab="prompt"]').click();
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'prompt');
+	await expect(detail.locator('[data-testid="rundetail-prompt-body"]')).toContainText(
+		'full stack prompt content'
+	);
+
+	// Response tab: response content visible
+	await detail.locator('button[data-tab="response"]').click();
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'response');
+	await expect(detail.locator('[data-testid="rundetail-response-body"]')).toContainText(
+		'full stack response content'
+	);
+
+	// Tools tab: tool trace visible with at least one entry
+	await detail.locator('button[data-tab="tools"]').click();
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
+	await expect(detail.locator('[data-tool-seq="0"]')).toBeVisible();
+
+	// Evidence tab: all three evidence files listed
+	await detail.locator('button[data-tab="evidence"]').click();
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
+	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="manifest.json"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="prompt.md"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="result.json"]')).toBeVisible();
+});
