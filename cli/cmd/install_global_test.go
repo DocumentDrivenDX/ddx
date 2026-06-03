@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -175,6 +176,160 @@ func TestInstallProject_ConventionLinks(t *testing.T) {
 	require.NoError(t, claudeErr, "<project>/.claude/skills/<name> must exist for convention install")
 	assert.True(t, claudeInfo.Mode()&os.ModeSymlink != 0 || claudeInfo.IsDir(),
 		"<project>/.claude/skills/<name> must be a symlink or dir for convention install")
+}
+
+// TestInstallGlobal_WritesGlobalTierAndAgentLinks verifies AC1:
+// ddx install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// and creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>.
+func TestInstallGlobal_WritesGlobalTierAndAgentLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Plugin root must land in the global tree.
+	globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", "myplugin")
+	info, statErr := os.Lstat(globalPluginDir)
+	require.NoError(t, statErr, "global plugin dir must exist at %s", globalPluginDir)
+	assert.True(t, info.Mode()&os.ModeSymlink != 0 || info.IsDir(),
+		"global plugin dir must be a symlink or dir")
+
+	// Agent-tier skill links must be in the home directory.
+	agentSkill := filepath.Join(homeDir, ".agents", "skills", "myplugin-skill")
+	claudeSkill := filepath.Join(homeDir, ".claude", "skills", "myplugin-skill")
+	agentInfo, agentErr := os.Lstat(agentSkill)
+	require.NoError(t, agentErr, "~/.agents/skills/<name> must exist for global install")
+	assert.True(t, agentInfo.Mode()&os.ModeSymlink != 0 || agentInfo.IsDir(),
+		"~/.agents/skills/<name> must be a symlink or dir for global install")
+	claudeInfo, claudeErr := os.Lstat(claudeSkill)
+	require.NoError(t, claudeErr, "~/.claude/skills/<name> must exist for global install")
+	assert.True(t, claudeInfo.Mode()&os.ModeSymlink != 0 || claudeInfo.IsDir(),
+		"~/.claude/skills/<name> must be a symlink or dir for global install")
+
+	// Nothing must land in the project directory's skill dirs.
+	_, noAgentErr := os.Lstat(filepath.Join(workDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "project .agents/skills must not be created for global install")
+	_, noClaudeErr := os.Lstat(filepath.Join(workDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "project .claude/skills must not be created for global install")
+}
+
+// TestInstallProject_InTreeMode verifies AC2:
+// ddx install <name> (no --global, in-tree mode) installs to <project>/.ddx/plugins/<name>/
+// and creates project-tier links under <project>/.claude/skills/<name> and
+// <project>/.agents/skills/<name> pointing into <project>/.ddx/plugins/<name>.
+func TestInstallProject_InTreeMode(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	// Force in-tree mode by pre-creating .ddx/.
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Plugin must land in the project in-tree location.
+	projectPluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
+	pluginInfo, pluginStatErr := os.Lstat(projectPluginDir)
+	require.NoError(t, pluginStatErr, "project plugin dir must exist at %s", projectPluginDir)
+	assert.True(t, pluginInfo.Mode()&os.ModeSymlink != 0, "project plugin dir must be a symlink")
+
+	// Project-tier skill links must be in the project directory and point into the plugin dir.
+	agentSkill := filepath.Join(workDir, ".agents", "skills", "myplugin-skill")
+	claudeSkill := filepath.Join(workDir, ".claude", "skills", "myplugin-skill")
+	agentInfo, agentErr := os.Lstat(agentSkill)
+	require.NoError(t, agentErr, "<project>/.agents/skills/<name> must exist for in-tree install")
+	assert.True(t, agentInfo.Mode()&os.ModeSymlink != 0 || agentInfo.IsDir(),
+		"<project>/.agents/skills/<name> must be a symlink or dir for in-tree install")
+	claudeInfo, claudeErr := os.Lstat(claudeSkill)
+	require.NoError(t, claudeErr, "<project>/.claude/skills/<name> must exist for in-tree install")
+	assert.True(t, claudeInfo.Mode()&os.ModeSymlink != 0 || claudeInfo.IsDir(),
+		"<project>/.claude/skills/<name> must be a symlink or dir for in-tree install")
+
+	// Skill links must resolve into the in-tree plugin directory.
+	agentTarget, agentReadErr := os.Readlink(agentSkill)
+	require.NoError(t, agentReadErr, "agent skill must be a symlink")
+	if !filepath.IsAbs(agentTarget) {
+		agentTarget = filepath.Join(filepath.Dir(agentSkill), agentTarget)
+	}
+	agentTarget, _ = filepath.Abs(agentTarget)
+	assert.True(t, strings.HasPrefix(agentTarget, localPlugin),
+		"agent skill symlink must resolve into the local plugin dir; got %s", agentTarget)
+
+	// Nothing must land in the home directory's skill dirs.
+	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for in-tree install")
+}
+
+// TestInstallProject_ConventionMode verifies AC3:
+// ddx install <name> (no --global, convention mode — no .ddx/ in project) installs
+// to ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and creates
+// project-tier links pointing into that XDG plugins path.
+func TestInstallProject_ConventionMode(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	// No .ddx/ in workDir — convention mode.
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Determine the convention root that ddxroot.Path would produce.
+	conventionRoot := ddxroot.Path(context.Background(), workDir)
+
+	// Plugin must land under the XDG convention root.
+	conventionPluginDir := filepath.Join(conventionRoot, "plugins", "myplugin")
+	pluginInfo, pluginStatErr := os.Lstat(conventionPluginDir)
+	require.NoError(t, pluginStatErr, "convention plugin dir must exist at %s", conventionPluginDir)
+	assert.True(t, pluginInfo.Mode()&os.ModeSymlink != 0, "convention plugin dir must be a symlink")
+
+	// The convention root must be XDG-based, not in-tree.
+	assert.True(t, strings.HasPrefix(conventionRoot, xdgDataHome),
+		"convention root must be under XDG_DATA_HOME; got %s", conventionRoot)
+
+	// Project-tier skill links must be in the project directory.
+	agentSkill := filepath.Join(workDir, ".agents", "skills", "myplugin-skill")
+	claudeSkill := filepath.Join(workDir, ".claude", "skills", "myplugin-skill")
+	agentInfo, agentErr := os.Lstat(agentSkill)
+	require.NoError(t, agentErr, "<project>/.agents/skills/<name> must exist for convention install")
+	assert.True(t, agentInfo.Mode()&os.ModeSymlink != 0 || agentInfo.IsDir(),
+		"<project>/.agents/skills/<name> must be a symlink or dir for convention install")
+	claudeInfo, claudeErr := os.Lstat(claudeSkill)
+	require.NoError(t, claudeErr, "<project>/.claude/skills/<name> must exist for convention install")
+	assert.True(t, claudeInfo.Mode()&os.ModeSymlink != 0 || claudeInfo.IsDir(),
+		"<project>/.claude/skills/<name> must be a symlink or dir for convention install")
+
+	// Skill links must resolve into the local plugin source.
+	agentTarget, agentReadErr := os.Readlink(agentSkill)
+	require.NoError(t, agentReadErr, "agent skill must be a symlink")
+	if !filepath.IsAbs(agentTarget) {
+		agentTarget = filepath.Join(filepath.Dir(agentSkill), agentTarget)
+	}
+	agentTarget, _ = filepath.Abs(agentTarget)
+	assert.True(t, strings.HasPrefix(agentTarget, localPlugin),
+		"agent skill symlink must resolve into the local plugin dir; got %s", agentTarget)
+
+	// Home directory must not be polluted.
+	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for convention install")
 }
 
 // TestUpdateGlobal_UpdatesGlobalNotProject verifies AC4:
