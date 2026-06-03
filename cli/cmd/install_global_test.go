@@ -548,6 +548,44 @@ func TestPluginListGlobal_EnumeratesFromGlobalTier(t *testing.T) {
 		"project list must not show entry that is only in global state")
 }
 
+// TestInstallGlobal_WritesGlobalTreeAndAgentLinks verifies AC1 (bead ddx-be724d92):
+// ddx install <name> --global --silent creates ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// and a symlink-or-copy at ~/.claude/skills/<name> and ~/.agents/skills/<name>.
+func TestInstallGlobal_WritesGlobalTreeAndAgentLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Plugin root must land in ${XDG_DATA_HOME}/ddx/global/plugins/<name>/.
+	globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", "myplugin")
+	info, statErr := os.Lstat(globalPluginDir)
+	require.NoError(t, statErr, "global plugin dir must exist at %s", globalPluginDir)
+	assert.True(t, info.Mode()&os.ModeSymlink != 0 || info.IsDir(),
+		"global plugin dir must be a symlink or dir")
+
+	// Agent-tier skill links must exist in the home directory.
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillLink := filepath.Join(homeDir, surface, "myplugin-skill")
+		_, skillErr := os.Lstat(skillLink)
+		require.NoError(t, skillErr, "%s must exist for global install", skillLink)
+	}
+
+	// Nothing must land in the project directory's skill dirs.
+	_, noAgentErr := os.Lstat(filepath.Join(workDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "project .agents/skills must not be created for global install")
+	_, noClaudeErr := os.Lstat(filepath.Join(workDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "project .claude/skills must not be created for global install")
+}
+
 // TestPluginShowGlobal_ReportsFromGlobalTier verifies AC3:
 // ddx plugin show <name> --global reports from the global installed state,
 // while ddx plugin show <name> (no --global) returns an error when the plugin

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -239,6 +240,77 @@ func TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks(t *testing.T) {
 	}
 
 	// Home directory must not be polluted.
+	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for convention install")
+	_, noClaudeErr := os.Lstat(filepath.Join(homeDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for convention install")
+}
+
+// TestInstall_InTreeMode_WritesProjectTreeAndLinks verifies AC2 (bead ddx-be724d92):
+// ddx install <name> with <project>/.ddx/ present writes <project>/.ddx/plugins/<name>/
+// and links <project>/.claude/skills/<name> and <project>/.agents/skills/<name>.
+func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
+	_, statErr := os.Lstat(pluginDir)
+	require.NoError(t, statErr, "in-tree plugin dir must exist at %s", pluginDir)
+
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillLink := filepath.Join(workDir, surface, "myplugin-skill")
+		_, skillErr := os.Lstat(skillLink)
+		require.NoError(t, skillErr, "%s must exist for in-tree install", skillLink)
+	}
+
+	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for in-tree install")
+	_, noClaudeErr := os.Lstat(filepath.Join(homeDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for in-tree install")
+}
+
+// TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks verifies AC3 (bead ddx-be724d92):
+// ddx install <name> with no <project>/.ddx/ writes
+// ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and links
+// the project-tier skill paths into that XDG plugins path.
+func TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	conventionRoot := ddxroot.Path(context.Background(), workDir)
+	assert.True(t, strings.HasPrefix(conventionRoot, xdgDataHome),
+		"convention root must be under XDG_DATA_HOME; got %s", conventionRoot)
+
+	conventionPluginDir := filepath.Join(conventionRoot, "plugins", "myplugin")
+	_, statErr := os.Lstat(conventionPluginDir)
+	require.NoError(t, statErr, "convention plugin dir must exist at %s", conventionPluginDir)
+
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillLink := filepath.Join(workDir, surface, "myplugin-skill")
+		_, skillErr := os.Lstat(skillLink)
+		require.NoError(t, skillErr, "%s must exist for convention install", skillLink)
+	}
+
 	_, noAgentErr := os.Lstat(filepath.Join(homeDir, ".agents", "skills", "myplugin-skill"))
 	assert.True(t, os.IsNotExist(noAgentErr), "home .agents/skills must not be created for convention install")
 	_, noClaudeErr := os.Lstat(filepath.Join(homeDir, ".claude", "skills", "myplugin-skill"))
