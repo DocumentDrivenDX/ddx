@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260603T202554-19d25a4c",
+  "bead_id": "ddx-a2e699ff",
+  "base_rev": "baa890e07aba6360a6d1ad228eda399a872351bc",
+  "created_at": "2026-06-03T20:26:17.045770843Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a2e699ff",
+    "title": "doctor + docs: report both install layers and land skill-topology spec/CLAUDE.md updates",
+    "description": "PROBLEM (Principle 7 of epic ddx-602ae31a)\nOperators need `ddx doctor` to make the two-tier install topology legible — showing the global install layer and the project install layer (including when the project lazy-resolves to global) — and the governing docs (ADR skill-topology + CLAUDE.md Persona System) must record the install precedence so the behavior is discoverable without reading code.\n\nROOT CAUSE\n- cmd/doctor.go:415 `reportSkillInstallTopology` computes globalStatus (doctor.go:421-424) and projectStatus via registry.ResolvePlugin (doctor.go:431-444), then prints two lines: \"Global Install (...) — \u003cstatus\u003e\" (doctor.go:447) and \"Project Install (...) — \u003cstatus\u003e\" (doctor.go:448). Status values must include ok | missing | lazy-resolves-to-global.\n- Docs do not yet fully describe the install precedence: docs/helix/02-design/adr/ADR-027-skill-install-topology.md and CLAUDE.md \"Persona System\" section.\n\nPROPOSED FIX\n1. Confirm `ddx doctor` renders both lines with correct status for: global-only, project-only, and both-present cases (project shows ok; project-missing-but-global-present shows lazy-resolves-to-global).\n2. Land/confirm ADR-027-skill-install-topology.md describing project → global → baked-in precedence and the agent-tier link locations.\n3. Update CLAUDE.md \"Persona System\" section to document the install precedence (it already references ADR-027; ensure the two-tier install + doctor reporting is accurate).\n4. Cover doctor rendering with a named test.\n\nNON-SCOPE\n- Removing the per-project install tier (both tiers coexist).\n- Migrating ~/.config/ddx/ legacy paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n- install/update/init flag wiring and resolver internals (sibling children).\n\nDEPS\nddx-06cbaa90 (ddx home resolution) — doctor reads ddxroot.GlobalDir() and ddxroot.Path().\nSoft-depends on the ResolvePlugin resolver child (doctor calls registry.ResolvePlugin).\n\nGOVERNING ARTIFACTS\n- docs/helix/02-design/adr/ADR-027-skill-install-topology.md.\n- CLAUDE.md \"Persona System\".",
+    "acceptance": "1. TestDoctor_ReportsBothInstallLayers (cmd/doctor_test.go) asserts `ddx doctor` output contains a \"Global Install (...) — \" line and a \"Project Install (...) — \" line with correct status across global-only, project-only, and both-present fixtures (project-missing-but-global-present renders \"lazy-resolves-to-global\").\n2. The test uses an isolated temp HOME/XDG + temp project fixture.\n3. ADR-027-skill-install-topology.md documents the project → global → baked-in precedence and agent-tier link locations.\n4. CLAUDE.md \"Persona System\" section documents the two-tier install precedence consistent with doctor output.\n5. Spec/doc updates (ADR-027 + CLAUDE.md Persona System) are landed in this bead's commit.\n6. cd cli \u0026\u0026 go test ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "area:cli",
+      "kind:feature",
+      "kind:docs",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T202554-19d25a4c",
+    "prompt": ".ddx/executions/20260603T202554-19d25a4c/prompt.md",
+    "manifest": ".ddx/executions/20260603T202554-19d25a4c/manifest.json",
+    "result": ".ddx/executions/20260603T202554-19d25a4c/result.json",
+    "checks": ".ddx/executions/20260603T202554-19d25a4c/checks.json",
+    "usage": ".ddx/executions/20260603T202554-19d25a4c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-a2e699ff-20260603T202554-19d25a4c"
+  },
+  "prompt_sha": "3b3834ff19956ede9fc5883ba573e6945dc204e450e6d1c2ad6a193bea71006f"
+}
