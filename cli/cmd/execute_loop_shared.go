@@ -496,6 +496,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
 						spec.RouteResolutionTimeout.Duration,
 						loopSessionID,
+						time.Time{}, // lastActivityAt: caller lacks liveness snapshot; treat as stale → always count
 					); skip {
 						applyExecutionRoutingIntentReport(&exclusionReport, routingIntent, "", "")
 						return exclusionReport, nil

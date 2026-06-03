@@ -218,7 +218,7 @@ func TestFailedRoutesDoNotWriteNumericRetryFloor(t *testing.T) {
 		context.Background(), nil, store, first.ID, "actor", b.Extra, frozen, 50,
 		noViableRoute,
 		func(p int) (int, error) { return p + 20, nil },
-		0, "",
+		0, "", time.Time{},
 	)
 
 	require.True(t, skip, "dispatch must be skipped when all routes at the requested power class are excluded")
@@ -446,7 +446,7 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 			claimed.Extra, frozen, 50,
 			hangingResolve,
 			func(p int) (int, error) { return p + 10, nil },
-			timeout, attemptID,
+			timeout, attemptID, time.Time{},
 		)
 		resultCh <- outcome{report: report, skip: skip}
 	}()
@@ -731,7 +731,7 @@ func TestCheckAndApplyRouteExclusions_DoesNotExcludeSubscriptionHarness(t *testi
 		context.Background(), svc, store, first.ID, "actor", b.Extra, frozen, 50,
 		resolveRoute,
 		func(p int) (int, error) { return p + 10, nil },
-		0, "",
+		0, "", time.Time{},
 	)
 
 	assert.False(t, skip, "dispatch must proceed: shielded subscription harnesses must not empty the exclusion set")
@@ -783,7 +783,7 @@ func TestCheckAndApplyRouteExclusions_StillExcludesNonSubscriptionAlongsideShiel
 		context.Background(), svc, store, first.ID, "actor", b.Extra, frozen, 50,
 		resolveRoute,
 		func(p int) (int, error) { return p + 10, nil },
-		0, "",
+		0, "", time.Time{},
 	)
 
 	assert.False(t, skip, "a viable candidate remains after excluding only the non-subscription provider")

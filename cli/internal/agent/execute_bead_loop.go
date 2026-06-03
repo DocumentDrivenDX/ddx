@@ -5632,7 +5632,7 @@ func runRoutePreflightBounded(ctx context.Context, timeout time.Duration, fn fun
 // report. The report is intentionally NOT marked Disrupted so the loop parks it
 // with a cooldown rather than immediately re-claiming it — route resolution
 // must not auto-retry without operator attention (ddx-d8970a7b).
-func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now time.Time, timeout time.Duration) ExecuteBeadReport {
+func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, attemptID string, now time.Time, timeout time.Duration, lastActivityAt time.Time) ExecuteBeadReport {
 	diagnosis := fmt.Sprintf(
 		"route resolution exceeded %s; released lease and flagged for operator attention (no auto-retry)",
 		timeout,
@@ -5640,7 +5640,14 @@ func routeResolutionTimeoutReport(store ExecuteBeadLoopStore, beadID, assignee, 
 	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
 		_ = releaser.Release(beadID, assignee, "")
 	}
-	recordConsecutiveWedge(store, beadID, FailureModeRouteResolutionTimeout, now)
+	// Only count as a wedge when the heartbeat itself was stale throughout the
+	// resolution window: a zero lastActivityAt (caller lacks a liveness snapshot)
+	// is treated as always stale. A recent lastActivityAt means the worker was
+	// alive during resolution — a slow-but-genuine hang, not a phantom wedge
+	// (ddx-bd47e2c4).
+	if lastActivityAt.IsZero() || now.Sub(lastActivityAt) >= timeout {
+		recordConsecutiveWedge(store, beadID, FailureModeRouteResolutionTimeout, now)
+	}
 	if store != nil && beadID != "" {
 		body, _ := json.Marshal(map[string]any{
 			"reason":           FailureModeRouteResolutionTimeout,
@@ -5757,7 +5764,13 @@ func flagWedgedForOperatorAttention(store ExecuteBeadLoopStore, beadID, assignee
 	if releaser, ok := store.(leaseReleaser); ok && beadID != "" {
 		_ = releaser.Release(beadID, assignee, "")
 	}
-	recordConsecutiveWedge(store, beadID, FailureModeProgressWatchdog, at)
+	// Only count as a wedge when the heartbeat itself was stale for at least the
+	// phase budget: a phase-empty snapshot whose lastActivityAt is recent indicates
+	// the worker was alive and progressing (e.g. slow route resolution) rather than
+	// truly stuck (ddx-bd47e2c4).
+	if at.Sub(lastActivityAt) >= budget {
+		recordConsecutiveWedge(store, beadID, FailureModeProgressWatchdog, at)
+	}
 	if store != nil && beadID != "" {
 		body, _ := json.Marshal(map[string]any{
 			"reason":           FailureModeProgressWatchdog,
@@ -5888,6 +5901,12 @@ func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assigne
 			SuggestedAction: suggestedAction,
 			Summary:         diagnosis,
 		})
+		// Clear the wedge marker so that when an operator reopens this bead
+		// (sets status back to open), the consecutive-wedge guard does not
+		// immediately re-park it without attempting it (ddx-bd47e2c4 AC #2).
+		if len(b.Extra) > 0 {
+			delete(b.Extra, executeLoopWedgeMarkerKey)
+		}
 	}); err != nil {
 		return err
 	}
@@ -5937,6 +5956,7 @@ func CheckAndApplyRouteExclusions(
 	nextFloorFn func(int) (int, error),
 	timeout time.Duration,
 	attemptID string,
+	lastActivityAt time.Time,
 ) (ExecuteBeadReport, bool) {
 	if resolveRoute == nil {
 		return ExecuteBeadReport{}, false
@@ -5961,7 +5981,7 @@ func CheckAndApplyRouteExclusions(
 	}
 	_, routeErr, timedOut := resolveRouteBounded(ctx, timeout, resolveRoute, req)
 	if timedOut {
-		return routeResolutionTimeoutReport(store, beadID, assignee, attemptID, now, timeout), true
+		return routeResolutionTimeoutReport(store, beadID, assignee, attemptID, now, timeout, lastActivityAt), true
 	}
 	if routeErr == nil {
 		return ExecuteBeadReport{}, false
