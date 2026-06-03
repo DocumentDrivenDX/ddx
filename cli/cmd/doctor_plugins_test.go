@@ -269,6 +269,37 @@ api_version: 1
 	assert.Contains(t, output, "dangling-link")
 }
 
+// TestDoctor_ReportsInstallTopology verifies that `ddx doctor` output contains
+// a "Global Install (...) — ok|missing" line and a "Project Install (...) —
+// ok|missing|lazy-resolves-to-global" line, and that the project line reads
+// "lazy-resolves-to-global" when only the global install is present.
+func TestDoctor_ReportsInstallTopology(t *testing.T) {
+	xdgDir := t.TempDir()
+	homeDir := t.TempDir()
+	workDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("HOME", homeDir)
+
+	// Create the global plugin dir to simulate a global install.
+	globalPluginDir := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
+	require.NoError(t, os.MkdirAll(globalPluginDir, 0o755))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor")
+	require.NoError(t, err)
+
+	// Both topology lines must appear in the output.
+	assert.Contains(t, output, "Global Install (", "Global Install line must appear in doctor output")
+	assert.Contains(t, output, "Project Install (", "Project Install line must appear in doctor output")
+
+	// When only the global install exists, the project line must report lazy resolution.
+	assert.Contains(t, output, "lazy-resolves-to-global",
+		"Project Install line must read lazy-resolves-to-global when global install exists but project install does not")
+
+	// The global install we created must report "ok".
+	assert.Contains(t, output, ") — ok", "Global Install must report ok when global plugin dir exists")
+}
+
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {
 	t.Helper()
 
