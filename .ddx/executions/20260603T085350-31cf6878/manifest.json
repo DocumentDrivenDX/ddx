@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260603T085350-31cf6878",
+  "bead_id": "ddx-03421468",
+  "base_rev": "01badcf588699a6850f68cb96cca38e3d89383b2",
+  "created_at": "2026-06-03T08:53:58.952767805Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-03421468",
+    "title": "doctor + docs: report both install layers and land skill-install-topology spec updates",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n`ddx doctor` must surface both install tiers so operators can see whether a plugin is installed globally, per-project, or lazy-resolving to global. The governing spec/docs must also document the dual install topology and lookup precedence so the behavior is discoverable and durable.\n\nROOT CAUSE\n- cli/cmd/doctor.go:418 `reportSkillInstallTopology(projectRoot)` computes a global path and a project path with statuses (doctor.go:436/441/444 `lazy-resolves-to-global`) and prints two lines at doctor.go:447-448: `Global Install (%s) — %s` and `Project Install (%s) — %s`. These lines lack a regression test.\n- The dual-topology decision and precedence are not yet fully reflected in the spec/docs: ADR-027 (skill-install-topology), library/skills/ddx/SKILL.md \"How this skill works\", and CLAUDE.md \"Persona System\".\n\nPROPOSED FIX\n- Add a test asserting `ddx doctor` output contains both the `Global Install (` and `Project Install (` lines with a correct status (`ok` | `missing` | `lazy-resolves-to-global`) given seeded/absent tiers.\n- Update docs/helix/02-design/adr/ADR-027-skill-install-topology.md to document install-to-agent (global) vs install-in-project (in-tree + convention) and the project→global→baked-in precedence.\n- Update CLAUDE.md \"Persona System\" section to state the install precedence, and library/skills/ddx/SKILL.md \"How this skill works\" to document install locations. Land all spec/doc edits in this bead's commit.\n\nNON-SCOPE\n- Install/init/update behavioral changes — sibling beads (this bead consumes their behavior for the doctor report only).\n- Removing the per-project install (both modes coexist).\n- Migrating legacy ~/.config/ddx paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution).\n- Sibling install/update beads (doctor reports the layers they create); land this bead after they merge so the report reflects real behavior.",
+    "acceptance": "1. TestDoctor_ReportsBothInstallLayers (cli/cmd/doctor_test.go): `ddx doctor` output contains a `Global Install (` line and a `Project Install (` line, each ending with a status of `ok`, `missing`, or `lazy-resolves-to-global`, matching the seeded/absent state of each tier.\n2. Spec updates landed in this commit: docs/helix/02-design/adr/ADR-027-skill-install-topology.md documents global vs project install and project→global→baked-in precedence; CLAUDE.md \"Persona System\" states the install precedence; library/skills/ddx/SKILL.md \"How this skill works\" documents install locations.\n3. cd cli \u0026\u0026 go test ./cmd/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:plugin",
+      "area:docs",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"named test already committed to main — dispatching this bead produces no_changes: All named deliverables are already present in the repository. TestDoctor_ReportsBothInstallLayers was committed at d49da132b under bead ddx-c10d5af2 on 2026-06-01, which also updated ADR-027-skill-install-topology.md, library/skills/ddx/SKILL.md (and copies under cli/internal/skills/ and cli/internal/server/…), and cli/cmd/CLAUDE.md. The root CLAUDE.md Persona System section at line 217 already states the three-layer precedence. Both explicit deps (ddx-06cbaa90 outcome:success) and the sibling install bead (ddx-06f820f4 outcome:success) have merged. The bead text itself is a high-quality, executable spec (8/8 rubric), but dispatching it now would produce no_changes because every AC target already exists.\",\"fingerprint\":\"c5d6f4c4f744896194206920319d82079153b9e8bbd789fb3ad1a01100e9234b\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"c5d6f4c4f744896194206920319d82079153b9e8bbd789fb3ad1a01100e9234b\"}",
+          "created_at": "2026-06-03T08:53:33.786405364Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T085350-31cf6878",
+    "prompt": ".ddx/executions/20260603T085350-31cf6878/prompt.md",
+    "manifest": ".ddx/executions/20260603T085350-31cf6878/manifest.json",
+    "result": ".ddx/executions/20260603T085350-31cf6878/result.json",
+    "checks": ".ddx/executions/20260603T085350-31cf6878/checks.json",
+    "usage": ".ddx/executions/20260603T085350-31cf6878/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-03421468-20260603T085350-31cf6878"
+  },
+  "prompt_sha": "02b2dfd4ef7591afcf77246a27b63770a525fd8f0bbe9e2c605f5c6ba4fce95c"
+}

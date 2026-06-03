@@ -1,0 +1,19 @@
+verification_command: cd cli && go test ./cmd/... -run TestDoctor_ReportsBothInstallLayers -v
+
+All ACs satisfied in the base revision (01badcf58):
+
+AC1: TestDoctor_ReportsBothInstallLayers exists at cli/cmd/doctor_test.go:209 and passes
+     all three sub-cases (project install present / falls-through-to-global / missing).
+
+AC2: Spec updates already landed:
+  - docs/helix/02-design/adr/ADR-027-skill-install-topology.md documents global vs project
+    install and the project→global→baked-in precedence chain.
+  - CLAUDE.md "Persona System" states the three-layer install precedence with XDG_DATA_HOME
+    path and reference to ADR-027.
+  - library/skills/ddx/SKILL.md "How this skill works" + "Install topology" sections
+    document project-local, global, and baked-in install locations.
+
+AC3: cd cli && go test ./cmd/... -run TestDoctor green (passes, confirmed above).
+AC4: No code changes → pre-commit hook has nothing to stage.
+
+No implementation changes required.
