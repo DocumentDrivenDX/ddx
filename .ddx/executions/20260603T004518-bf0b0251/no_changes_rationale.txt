@@ -1,0 +1,4 @@
+orchestrator_action: decompose
+status: open
+reason: bead previously decomposed into 6 child beads (ddx-18e55cd2, ddx-aedb009d, ddx-7c3893ad, ddx-c772fdf9, ddx-ac6d4c22, ddx-406ae97b); core install/update/registry implementation landed via dep ddx-06f820f4; child beads ddx-c772fdf9 (init --global), ddx-ac6d4c22 (doctor two-layer), ddx-406ae97b (docs) still open and pending execution
+child_beads: ddx-18e55cd2, ddx-aedb009d, ddx-7c3893ad, ddx-c772fdf9, ddx-ac6d4c22, ddx-406ae97b
