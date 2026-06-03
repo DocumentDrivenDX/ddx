@@ -161,6 +161,15 @@ for `status=proposed`. Use `system_unready` only when the readiness assessment
 itself cannot run or the provided context proves an infrastructure blocker
 rather than a bead defect.
 
+Stale-blocker precedence: if bead notes or a reopen event since the last
+blocked prior attempt explicitly state that a prior external blocker was
+cleared, resolved, or unblocked, treat that prior-attempt blocker as
+historical context only. Do not classify the bead as `operator_required` or
+blocked based on a stale prior-attempt event alone when newer notes or a
+reopen since that event explicitly cleared it. A newer note or reopen
+supersedes an older blocker prior attempt unless current cheap evidence
+revalidates the blocker.
+
 In `MODE: intake`, emit a `rewrite` object only when the bead is not executable
 as written but can be made executable by a narrow, semantics-preserving
 metadata/AC rewrite. If a bead is executable as written, classify it as `ready`

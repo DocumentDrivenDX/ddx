@@ -24,6 +24,7 @@ type preClaimIntakePromptEnvelope struct {
 	Title         string                  `json:"title"`
 	Description   string                  `json:"description"`
 	Acceptance    string                  `json:"acceptance"`
+	Notes         string                  `json:"notes,omitempty"`
 	Labels        []string                `json:"labels"`
 	PriorAttempts []preClaimIntakeAttempt `json:"prior_attempts"`
 	Depth         int                     `json:"depth"`
@@ -598,6 +599,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 		Title:         strings.TrimSpace(b.Title),
 		Description:   strings.TrimSpace(b.Description),
 		Acceptance:    strings.TrimSpace(b.Acceptance),
+		Notes:         strings.TrimSpace(b.Notes),
 		Labels:        append([]string(nil), b.Labels...),
 		PriorAttempts: []preClaimIntakeAttempt{},
 		Depth:         beadDecompositionDepth(projectRoot, b),
@@ -652,6 +654,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Put prompt-quality improvements in suggested_fixes only; keep operator_required for actual blockers.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
 	sb.WriteString("Classify as operator_required only when ambiguity, missing prerequisites, hidden external blockers, or unsafe scope choices prevent an implementation attempt.\n")
+	sb.WriteString("Stale-blocker precedence: if bead notes or a reopen event since the last blocker prior_attempt explicitly state the blocker was cleared, resolved, or unblocked, treat that prior_attempt blocker as historical context only. Do not classify the bead as operator_required or blocked based on a stale prior_attempt event alone when notes or a reopen since that event explicitly cleared it. A newer note or reopen supersedes an older blocker prior_attempt unless current cheap evidence revalidates the blocker.\n")
 	sb.WriteString("Do not include prose or markdown.\n\n")
 	sb.WriteString("```json\n")
 	sb.Write(body)

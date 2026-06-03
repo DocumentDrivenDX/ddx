@@ -1917,3 +1917,132 @@ func TestIntakeBlockedSetsOperatorOverride(t *testing.T) {
 		assert.True(t, sawBlockedEntry, "must write an intake.blocked entry to the bead event log")
 	})
 }
+
+// TestReadinessStaleExternalBlockerClearedByNotes verifies that when a bead has
+// a prior no_changes_blocked/external-blocker event AND a newer note that says
+// the blocker was cleared, the intake hook does not produce an
+// operator_required decision from the stale event alone. The note supersedes
+// the stale event; readiness must treat the prior blocker as historical context
+// only.
+func TestReadinessStaleExternalBlockerClearedByNotes(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	// Simulate a prior blocked attempt: append a no_changes_blocked event that
+	// describes a hard external blocker (the kind the observed niflheim incident
+	// produced).
+	require.NoError(t, inner.AppendEvent(beadRef.ID, bead.BeadEvent{
+		Kind:    "no_changes_blocked",
+		Summary: "status: blocked",
+		Body:    `{"status":"blocked","reason":"redpanda fails to start: AIO slot exhaustion on WSL2 (external infra blocker)"}`,
+		Actor:   "ddx-work",
+		Source:  "test",
+	}))
+
+	// Operator adds a note clearing the blocker — this is the unblocking signal.
+	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+		b.Notes = "Unblocked 2026-05-18: the prior Redpanda/AIO blocker was stale after commit 90cd8348 bounded Redpanda test storage. The container became ready and was cleaned up."
+	}))
+
+	// The readiness service returns needs_refine (warn-only), NOT operator_required.
+	// This simulates a model that correctly discounts the stale blocker based on
+	// the newer notes.
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"needs_refine","rationale":"minor AC polish; prior blocker note says cleared","readiness_checks":[{"reason":"missing_verification","verdict":"pass","evidence":"AC has go test"}]}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-stale-blocker",
+				ResultRev: "stale-blocker-cleared",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		TargetBeadID:       beadRef.ID,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Readiness was warn-only (needs_refine); bead must still claim and execute.
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "stale-blocker-cleared bead must still claim")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.parkCalls), "stale-blocker-cleared bead must not be parked to operator attention")
+	assert.Equal(t, 1, result.Successes, "stale-blocker-cleared bead must execute successfully")
+
+	got, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status, "stale-blocker-cleared bead must close after successful execution")
+}
+
+// TestReadinessNotesIncludedInPromptPayload verifies that bead notes are
+// included in the readiness prompt payload so the model has the information
+// needed to discount stale external-blocker events that have been explicitly
+// cleared by a newer note.
+func TestReadinessNotesIncludedInPromptPayload(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+
+	clearanceNote := "Unblocked 2026-05-18: prior Redpanda/AIO blocker cleared after commit 90cd8348."
+	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+		b.Notes = clearanceNote
+	}))
+
+	b, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+
+	prompt, err := buildPreClaimIntakePrompt(root, inner, b)
+	require.NoError(t, err)
+
+	assert.Contains(t, prompt, clearanceNote, "notes must appear in the readiness prompt so the model can discount stale blockers")
+	assert.Contains(t, prompt, "Stale-blocker precedence", "readiness prompt must contain the stale-blocker precedence contract")
+}
+
+// TestReadinessUnblockNotesSupersedeStaleBlockerEvents is a more thorough
+// regression for the niflheim incident: prior_attempts include a stale blocked
+// event, but notes say the blocker was cleared; the intake prompt must carry
+// both the old event context AND the unblocked note so the model can resolve
+// the conflict in favour of the note.
+func TestReadinessUnblockNotesSupersedeStaleBlockerEvents(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+
+	// Seed a stale blocked attempt in the event history.
+	require.NoError(t, inner.AppendEvent(beadRef.ID, bead.BeadEvent{
+		Kind:    "execute-bead",
+		Summary: "status: blocked",
+		Body:    `{"status":"blocked","no_changes_rationale":"external infra: AIO slot exhaustion"}`,
+		Actor:   "ddx-work",
+		Source:  "test",
+	}))
+
+	// Operator clears the blocker via notes.
+	unblockNote := "Unblocked 2026-05-18: the prior AIO blocker was stale; container cleaned up after commit 90cd8348."
+	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+		b.Notes = unblockNote
+	}))
+
+	b, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+
+	prompt, err := buildPreClaimIntakePrompt(root, inner, b)
+	require.NoError(t, err)
+
+	// Both the prior blocked event (as prior_attempts context) and the note
+	// clearing it must appear in the prompt so the model can apply the
+	// stale-blocker precedence rule.
+	assert.Contains(t, prompt, "AIO slot exhaustion", "stale prior_attempts context must appear in prompt")
+	assert.Contains(t, prompt, unblockNote, "unblocked note must appear in prompt to supersede stale event")
+	assert.Contains(t, prompt, "Stale-blocker precedence", "stale-blocker contract must be in prompt")
+}

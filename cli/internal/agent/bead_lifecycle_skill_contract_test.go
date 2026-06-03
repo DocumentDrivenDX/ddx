@@ -78,6 +78,8 @@ func TestBeadLifecycleSkillReadinessDocumentsRewriteContract(t *testing.T) {
 			assert.Contains(t, readiness, `"rationale": "brief evidence-grounded explanation"`)
 			assert.Contains(t, readiness, `"changed_fields": ["description", "acceptance"]`)
 			assert.Contains(t, readiness, `"acceptance": "1. TestFoo`)
+			assert.Contains(t, body, "Stale-blocker precedence")
+			assert.Contains(t, body, "supersedes an older blocker prior attempt")
 		})
 	}
 }
