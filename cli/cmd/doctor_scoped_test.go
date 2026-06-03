@@ -78,6 +78,49 @@ func TestDoctorHookPathsDoesNotInvokeFullScope(t *testing.T) {
 	require.NoError(t, err, "hook-style --paths with multiple staged files must not invoke full-scope doctor")
 }
 
+// TestDoctorScopedSkillValidationIgnoresInstallLayer asserts that
+// `ddx doctor --paths <skill-file>` exits 0 regardless of whether the ddx
+// skill is installed globally or project-locally. The ddx-validate pre-commit
+// hook must not run install-layer-sensitive checks when only skill files are
+// staged. [ddx-4c58ea3e AC4]
+func TestDoctorScopedSkillValidationIgnoresInstallLayer(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		globalInstalled bool
+	}{
+		{name: "no_global_install", globalInstalled: false},
+		{name: "global_install", globalInstalled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			workDir := makeWorkDirWithLegacySymlink(t)
+			xdgDir := t.TempDir()
+			t.Setenv("XDG_DATA_HOME", xdgDir)
+
+			if tc.globalInstalled {
+				globalPluginDir := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
+				if err := os.MkdirAll(globalPluginDir, 0o755); err != nil {
+					t.Fatalf("mkdir global plugin dir: %v", err)
+				}
+			}
+
+			for _, stagingPath := range []string{
+				".ddx/plugins/ddx/skills/ddx/SKILL.md",
+				"skills/ddx/SKILL.md",
+			} {
+				t.Run(stagingPath, func(t *testing.T) {
+					factory := NewCommandFactory(workDir)
+					_, err := executeWithStdoutCapture(t, factory.NewRootCommand(),
+						"doctor", "--paths", stagingPath)
+					require.NoError(t, err,
+						"doctor --paths %s must exit 0 regardless of install layer; legacy symlinks must not be checked for skill-file-only staged sets",
+						stagingPath,
+					)
+				})
+			}
+		})
+	}
+}
+
 // TestCategorizeStagedPaths_Config verifies that .ddx.yml paths map to the config category.
 func TestCategorizeStagedPaths_Config(t *testing.T) {
 	cats := categorizeStagedPaths([]string{".ddx.yml"})

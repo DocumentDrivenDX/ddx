@@ -23,6 +23,12 @@ the DDx surface correctly.
 The skill body you're reading is an **overview** plus an **intent
 router**. The real domain guidance lives in `reference/*.md` files.
 
+Install locations: this skill is resolved from the project-local plugin layer
+(`.ddx/plugins/ddx/`), the global machine layer
+(`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`), or the binary's baked-in
+default — see **Install topology** below. `ddx doctor` reports which layer is
+active.
+
 **Directive: before responding to any DDx-related request, read the
 matching reference file from the router table below. The router is
 not optional — your answer must be grounded in the reference file's
