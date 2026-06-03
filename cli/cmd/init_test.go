@@ -33,7 +33,13 @@ func TestInitDoesNotCreateBootstrapDDxSkillMirror(t *testing.T) {
 // TestInitProject_DoesNotInstallPlugins verifies that plain `ddx init` creates
 // <project>/.ddx/ and the manifest but does not write .ddx/plugins/ddx,
 // .agents/skills/ddx, .claude/skills/ddx, or any project-local plugins/ tree.
+// Uses an isolated temp HOME/XDG fixture so the real user home is not touched.
 func TestInitProject_DoesNotInstallPlugins(t *testing.T) {
+	xdgDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("HOME", homeDir)
+
 	te := NewTestEnvironment(t, WithGitInit(false))
 	_, err := te.RunCommand("init", "--no-git")
 	require.NoError(t, err)
@@ -48,12 +54,18 @@ func TestInitProject_DoesNotInstallPlugins(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr),
 		".ddx/plugins/ must not be created by plain ddx init; got stat err=%v", statErr)
 
-	// No agent-tier skill links must be installed.
+	// No global plugins/ tree must be created.
+	globalPluginsDir := filepath.Join(xdgDir, "ddx", "global", "plugins")
+	_, gStatErr := os.Stat(globalPluginsDir)
+	assert.True(t, os.IsNotExist(gStatErr),
+		"global plugins/ must not be created by plain ddx init; got stat err=%v", gStatErr)
+
+	// No agent-tier skill links must be installed in HOME.
 	for _, surface := range []string{".agents/skills/ddx", ".claude/skills/ddx"} {
-		skillDir := filepath.Join(te.Dir, surface)
-		_, statErr := os.Stat(skillDir)
+		skillDir := filepath.Join(homeDir, surface)
+		_, statErr := os.Lstat(skillDir)
 		assert.True(t, os.IsNotExist(statErr),
-			"%s must not be created by plain ddx init; got stat err=%v", surface, statErr)
+			"$HOME/%s must not be created by plain ddx init; got stat err=%v", surface, statErr)
 	}
 }
 
