@@ -729,9 +729,10 @@ func TestInitGitignoreRunStateMigration(t *testing.T) {
 	assert.Contains(t, content, ".ddx/run-state/")
 }
 
-// TestInitGlobal_CreatesAgentTierLinks verifies that `ddx init --global` creates
-// ~/.claude/skills/ddx and ~/.agents/skills/ddx symlinks pointing into
-// ${XDG_DATA_HOME}/ddx/global/plugins/ddx/.
+// TestInitGlobal_CreatesAgentTierLinks verifies that `ddx init --global`:
+//   - installs the default ddx plugin to ${XDG_DATA_HOME}/ddx/global/plugins/ddx
+//   - creates ~/.claude/skills/ddx and ~/.agents/skills/ddx symlinks pointing into it
+//   - writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults
 func TestInitGlobal_CreatesAgentTierLinks(t *testing.T) {
 	xdgDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -745,6 +746,10 @@ func TestInitGlobal_CreatesAgentTierLinks(t *testing.T) {
 	globalPluginDir := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
 	expectedTarget := filepath.Join(globalPluginDir, "skills", "ddx")
 
+	// Plugin must be installed into the global plugin dir.
+	assert.DirExists(t, globalPluginDir, "global plugin dir must be created by ddx init --global")
+
+	// Agent-tier skill links must exist and point into the global plugin dir.
 	for _, surface := range []string{".claude/skills", ".agents/skills"} {
 		link := filepath.Join(homeDir, surface, "ddx")
 		info, statErr := os.Lstat(link)
@@ -754,6 +759,13 @@ func TestInitGlobal_CreatesAgentTierLinks(t *testing.T) {
 		require.NoError(t, readErr)
 		assert.Equal(t, expectedTarget, target, "%s must point into global plugin dir", link)
 	}
+
+	// Global config.yaml must be written with convention defaults.
+	configPath := filepath.Join(xdgDir, "ddx", "global", "config.yaml")
+	assert.FileExists(t, configPath, "global config.yaml must be written by ddx init --global")
+	data, readErr := os.ReadFile(configPath)
+	require.NoError(t, readErr)
+	assert.Contains(t, string(data), "version:", "global config.yaml must contain version field")
 }
 
 // TestInitGlobal_WritesGlobalConfig verifies that `ddx init --global` writes
