@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260603T233632-69427fce",
+  "bead_id": "ddx-c0292631",
+  "base_rev": "2ae0f4759d4b0bd44cb6a3d9dcf81e3a7f9acbf0",
+  "created_at": "2026-06-03T23:36:50.173078888Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c0292631",
+    "title": "cli: `ddx init --global` umbrella setup and `ddx init` lazy plugin resolution",
+    "description": "PROBLEM (Principle 2 of epic ddx-602ae31a)\n\nFirst-time machine setup and project initialization must be separated. `ddx init --global` is the umbrella command that installs the default ddx plugin machine-wide and wires agent-tier links; plain `ddx init` must only create \u003cproject\u003e/.ddx/ and NOT install plugins — plugins lazy-resolve on first use, preferring project over global.\n\nROOT CAUSE\n- cli/cmd/init.go:73 `runInit` branches to cli/cmd/init.go:313 `initGlobal` for --global, and to cli/cmd/init.go:132 `initProject` otherwise. `initGlobal` must install the default ddx plugin to ${XDG_DATA_HOME}/ddx/global/plugins/ddx/, create agent-tier links (~/.claude/skills/ddx, ~/.agents/skills/ddx) pointing into it, and write ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults. `initProject` must create the manifest only and must not write to any plugins/ tree, so first use lazy-resolves from global.\n\nPROPOSED FIX\n1. `ddx init --global`: install default ddx plugin globally, create agent-tier links into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/, write the global config.yaml with convention defaults.\n2. `ddx init` (no flag): create \u003cproject\u003e/.ddx/ and the manifest; do not install plugins; rely on the sibling registry resolver for project→global→baked-in lazy resolution.\n\nNON-SCOPE\n- Runtime lookup precedence implementation (sibling bead: registry three-layer lookup).\n- `ddx install`/`ddx update` --global flags (sibling bead: install/update --global).\n- `ddx doctor` reporting and spec/docs (sibling bead: doctor + docs).\n- Migrating ~/.config/ddx/ legacy paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\nsibling install/update --global bead (reuses its global install + agent-tier link primitives); ddx-06cbaa90 (ddx home resolution).",
+    "acceptance": "1. TestInitGlobal_CreatesAgentTierLinks asserts that after `ddx init --global`, ~/.claude/skills/ddx and ~/.agents/skills/ddx point into ${XDG_DATA_HOME}/ddx/global/plugins/ddx/.\n2. TestInitProject_DoesNotInstallPlugins asserts `ddx init` (in-project) does not write to any plugins/ tree — plugins lazy-resolve from global.\n3. cd cli \u0026\u0026 go test ./cmd/... green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:plugin",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"dep 'sibling install/update --global bead' has no concrete bead id: Both the implementation and both named AC test functions already exist in the codebase. initGlobal() at cli/cmd/init.go:313 already installs the bundled default ddx plugin to ${XDG_DATA_HOME}/ddx/global/plugins/ddx, creates ~/.claude/skills/ddx and ~/.agents/skills/ddx symlinks pointing into it, and writes the global config.yaml — exactly as the bead's PROPOSED FIX specifies. initProject() at cli/cmd/init.go:132 does not touch any plugins/ tree. TestInitGlobal_CreatesAgentTierLinks at cli/cmd/init_test.go:748 and TestInitProject_DoesNotInstallPlugins at cli/cmd/init_test.go:37 both exist and cover the full AC surface. An agent dispatched on this bead would find no work to do. Operator must run the named tests, confirm they pass, and close the bead. The only structural gap is that the dep 'sibling install/update --global bead' is referenced without a concrete ddx-XXXXXXXX ID; since initGlobal() was implemented without delegating to that sibling's primitives, the dep is likely irrelevant.\",\"fingerprint\":\"1699b8c5843adffe206017da53a4bb2d629940c6b95b021569bbb3c7e8a19a1a\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"1699b8c5843adffe206017da53a4bb2d629940c6b95b021569bbb3c7e8a19a1a\"}",
+          "created_at": "2026-06-03T23:35:56.255853014Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T233632-69427fce",
+    "prompt": ".ddx/executions/20260603T233632-69427fce/prompt.md",
+    "manifest": ".ddx/executions/20260603T233632-69427fce/manifest.json",
+    "result": ".ddx/executions/20260603T233632-69427fce/result.json",
+    "checks": ".ddx/executions/20260603T233632-69427fce/checks.json",
+    "usage": ".ddx/executions/20260603T233632-69427fce/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c0292631-20260603T233632-69427fce"
+  },
+  "prompt_sha": "18fcd01d0c0ec70adf3dc7ff8a04a0f0b37c078df840fd8197f2a78fd0164170"
+}
