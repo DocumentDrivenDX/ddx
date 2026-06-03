@@ -1,0 +1,14 @@
+verification_command: cd cli && go test ./internal/registry/... -run "TestPluginLookup_PrefersProjectOverGlobal|TestPluginLookup_FallsBackToGlobal|TestPluginLookup_BakedInDefaultOnly"
+
+All acceptance criteria are satisfied by existing committed code:
+
+AC1: TestPluginLookup_PrefersProjectOverGlobal exists at cli/internal/registry/resolve_test.go:23
+AC2: TestPluginLookup_FallsBackToGlobal exists at cli/internal/registry/resolve_test.go:52
+AC3: TestPluginLookup_BakedInDefaultOnly exists at cli/internal/registry/resolve_test.go:115
+AC4: ADR-027 exists at docs/helix/02-design/adr/ADR-027-skill-install-topology.md documenting
+     project→global→baked-in precedence
+AC5: cd cli && go test ./internal/registry/... passes (PASS, 0.030s)
+AC6: lefthook run pre-commit exits 0
+
+Work was completed in commit 06aa06719 (feat(registry): add GlobalPluginDir and three-tier plugin
+lookup precedence [ddx-d73e4b08]) before this bead was dispatched. No new changes required.
