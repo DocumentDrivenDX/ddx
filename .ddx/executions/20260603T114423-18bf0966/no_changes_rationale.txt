@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./cmd/... -run "TestInstall_InTreeWritesProjectTreeAndLinks|TestInstall_ConventionModeWritesXDGProjectTree|TestUpdate_RespectsConventionVsInTreeMode" -timeout 30s -v
