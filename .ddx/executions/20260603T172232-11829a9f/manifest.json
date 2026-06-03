@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260603T172232-11829a9f",
+  "bead_id": "ddx-3478153c",
+  "base_rev": "13eaa6a7758297f2001118d4533a33c70a272e9d",
+  "created_at": "2026-06-03T17:22:39.813910769Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3478153c",
+    "title": "registry: runtime plugin lookup precedence (project → global → baked-in)",
+    "description": "PROBLEM (Principle 5 of epic ddx-602ae31a)\nPlugin content can live in two tiers — per-project (ddxroot.Path()/plugins/\u003cname\u003e) and machine-wide global (${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e). Runtime resolution must deterministically prefer the project copy when present, fall back to the global copy, and finally to the baked-in default (ddx plugin only). Without a single authoritative resolver, install/update/init/doctor each reinvent path logic and drift.\n\nROOT CAUSE\n- internal/registry/resolve.go:29 `ResolvePlugin(ctx, projectRoot, name)` is the precedence resolver: project path computed at resolve.go:30, global at resolve.go:35, baked-in fallback at resolve.go:44. It must be the only place precedence is decided and must be covered by named tests so install/init/doctor can rely on it.\n- internal/registry/resolve.go:15 `GlobalPluginDir(name)` returns ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e via ddxroot.GlobalDir(); the project path routes through ddxroot.Path() (in-tree vs convention mode handled there).\n\nPROPOSED FIX\n1. Ensure `ResolvePlugin` returns (path, layer, err) with layer ∈ {project, global, baked-in} and the exact precedence project → global → baked-in.\n2. Add table-driven tests in internal/registry/resolve_test.go pinning both the prefers-project and falls-back-to-global behaviors against a temp HOME/XDG fixture.\n3. Do not alter install/update/init/doctor call sites here beyond confirming they call `ResolvePlugin` (those are covered by sibling children).\n\nNON-SCOPE\n- Removing the per-project install tier (both tiers coexist).\n- Migrating ~/.config/ddx/ legacy paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n- install/update/init/doctor wiring (sibling children).\n\nDEPS\nddx-06cbaa90 (ddx home resolution) — ResolvePlugin routes through both ddxroot.Path() and ddxroot.GlobalDir(); both must be agreed-on before this lands.\n\nGOVERNING ARTIFACTS\n- docs/helix/02-design/adr/ADR-027-skill-install-topology.md (precedence decision record).\n- CLAUDE.md \"Persona System\" three-layer precedence note.",
+    "acceptance": "1. TestPluginLookup_PrefersProjectOverGlobal (internal/registry/resolve_test.go) asserts that when both the project plugin dir and the global plugin dir contain \u003cname\u003e, ResolvePlugin returns the project path with layer==\"project\".\n2. TestPluginLookup_FallsBackToGlobal (internal/registry/resolve_test.go) asserts that when the project copy is absent but the global copy exists, ResolvePlugin returns the global path with layer==\"global\".\n3. Both tests use an isolated temp HOME/XDG fixture and do not touch the real user home.\n4. cd cli \u0026\u0026 go test ./internal/registry/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:config",
+      "area:plugin",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"no_op\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"18f1141c39bdc0cb71c38e6329aab5a424e5a969a51ec934b0db351b6a17d07b\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"18f1141c39bdc0cb71c38e6329aab5a424e5a969a51ec934b0db351b6a17d07b\"}",
+          "created_at": "2026-06-03T17:22:16.5750579Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T172232-11829a9f",
+    "prompt": ".ddx/executions/20260603T172232-11829a9f/prompt.md",
+    "manifest": ".ddx/executions/20260603T172232-11829a9f/manifest.json",
+    "result": ".ddx/executions/20260603T172232-11829a9f/result.json",
+    "checks": ".ddx/executions/20260603T172232-11829a9f/checks.json",
+    "usage": ".ddx/executions/20260603T172232-11829a9f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3478153c-20260603T172232-11829a9f"
+  },
+  "prompt_sha": "1dbe7f3342b8dc337f5a99c5db683fefea1866616ddaf33bcb29a5f9eb8b5dac"
+}
