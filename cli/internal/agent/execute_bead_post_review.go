@@ -228,7 +228,10 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				ElapsedMS:   reviewRes.DurationMS,
 			}
 		}
-		if attemptCount >= maxRetries {
+		// reviewer_unavailable is a routing/infra failure, not a quality verdict.
+		// Never terminal-park on it — always hold open so the loop can retry.
+		reviewerUnavailable := class == evidence.OutcomeReviewReviewerUnavailable
+		if attemptCount >= maxRetries && !reviewerUnavailable {
 			body := ReviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
 			if slotScoped {
 				body = ReviewErrorEventBodyForSlot(class, attemptCount, report.ResultRev, reviewerIndex, reviewErr.Error())
@@ -482,9 +485,18 @@ func reducePreCloseReviewGroup(group *ReviewGroupResult) (*ReviewResult, error) 
 	var firstApprove *ReviewResult
 	var firstNonApprove *ReviewResult
 	var firstResult *ReviewResult
+	// Quorum tracking: evidence-less BLOCKs lose to an equal-or-larger approving group.
+	var approveCount int
+	var evidencelessBlockCount int
+	var firstEvidencedBlock *ReviewResult
+	var hasNonBlockDisapproval bool
+	var anySlotError bool
 	for _, slot := range group.Slots {
 		if slot.Result != nil && firstResult == nil {
 			firstResult = slot.Result
+		}
+		if slot.Error != "" {
+			anySlotError = true
 		}
 		if slot.Error != "" && slot.Result == nil {
 			if firstResult != nil {
@@ -507,15 +519,40 @@ func reducePreCloseReviewGroup(group *ReviewGroupResult) (*ReviewResult, error) 
 			if firstApprove == nil {
 				firstApprove = res
 			}
-		case VerdictRequestChanges, VerdictBlock:
+			approveCount++
+		case VerdictBlock:
 			if firstNonApprove == nil {
 				firstNonApprove = res
 			}
+			if len(reviewStructuredEvidence(res)) > 0 {
+				if firstEvidencedBlock == nil {
+					firstEvidencedBlock = res
+				}
+			} else {
+				evidencelessBlockCount++
+			}
+		case VerdictRequestChanges:
+			if firstNonApprove == nil {
+				firstNonApprove = res
+			}
+			hasNonBlockDisapproval = true
 		default:
 			if firstNonApprove == nil {
 				firstNonApprove = res
 			}
+			hasNonBlockDisapproval = true
 		}
+	}
+	// An evidenced BLOCK cites a concrete location/AC and overrides the quorum rule.
+	if firstEvidencedBlock != nil {
+		return firstEvidencedBlock, nil
+	}
+	// Quorum rule: a lone evidence-less BLOCK does not auto-block when approvers
+	// are equal or greater in number. Only applies when all slots completed cleanly
+	// (no slot errors) and no non-BLOCK disapprovals (REQUEST_CHANGES, etc.) exist.
+	if !anySlotError && !hasNonBlockDisapproval && evidencelessBlockCount > 0 &&
+		firstApprove != nil && approveCount >= evidencelessBlockCount {
+		return firstApprove, nil
 	}
 	if firstNonApprove != nil {
 		return firstNonApprove, nil
