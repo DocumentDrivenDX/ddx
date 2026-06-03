@@ -1,0 +1,11 @@
+{
+  "attempt_id": "20260603T231633-28353017",
+  "harness": "claude",
+  "model": "sonnet",
+  "tokens": 6479,
+  "input_tokens": 1176,
+  "cached_tokens": 1086683,
+  "cache_hit_rate": 0.9989189775513186,
+  "output_tokens": 5303,
+  "cost_usd": 0.65113715
+}
