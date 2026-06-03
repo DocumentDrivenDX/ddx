@@ -178,6 +178,59 @@ func TestInstallProject_ConventionLinks(t *testing.T) {
 		"<project>/.claude/skills/<name> must be a symlink or dir for convention install")
 }
 
+// TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier verifies bead AC1:
+// ddx install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// and creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>
+// that resolves into the global plugin tree.
+func TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	xdgDataHome := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+
+	localPlugin := t.TempDir()
+	makeLocalPlugin(t, localPlugin, "myplugin")
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+
+	// Plugin root must land in the global tree.
+	globalPluginDir := filepath.Join(xdgDataHome, "ddx", "global", "plugins", "myplugin")
+	info, statErr := os.Lstat(globalPluginDir)
+	require.NoError(t, statErr, "global plugin dir must exist at %s", globalPluginDir)
+	assert.True(t, info.Mode()&os.ModeSymlink != 0 || info.IsDir(),
+		"global plugin dir must be a symlink or dir")
+
+	// Resolve the global plugin dir to its canonical path so we can verify
+	// that skill links resolve into the same physical tree.
+	realGlobalPlugin, evalErr := filepath.EvalSymlinks(globalPluginDir)
+	require.NoError(t, evalErr, "global plugin dir must be resolvable")
+
+	// Agent-tier skill links must be in the home directory and resolve into
+	// the global plugin tree.
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		skillLink := filepath.Join(homeDir, surface, "myplugin-skill")
+		skillInfo, skillErr := os.Lstat(skillLink)
+		require.NoError(t, skillErr, "%s must exist for global install", skillLink)
+		assert.True(t, skillInfo.Mode()&os.ModeSymlink != 0 || skillInfo.IsDir(),
+			"%s must be a symlink or dir for global install", skillLink)
+
+		// Verify the skill resolves into the global plugin tree.
+		realSkill, skillEvalErr := filepath.EvalSymlinks(skillLink)
+		require.NoError(t, skillEvalErr, "%s must be resolvable", skillLink)
+		assert.True(t, strings.HasPrefix(realSkill, realGlobalPlugin),
+			"%s must resolve into global plugin tree %s; got %s", skillLink, realGlobalPlugin, realSkill)
+	}
+
+	// Nothing must land in the project directory's skill dirs.
+	_, noAgentErr := os.Lstat(filepath.Join(workDir, ".agents", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noAgentErr), "project .agents/skills must not be created for global install")
+	_, noClaudeErr := os.Lstat(filepath.Join(workDir, ".claude", "skills", "myplugin-skill"))
+	assert.True(t, os.IsNotExist(noClaudeErr), "project .claude/skills must not be created for global install")
+}
+
 // TestInstallGlobal_WritesGlobalTierAndAgentLinks verifies AC1:
 // ddx install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
 // and creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>.
