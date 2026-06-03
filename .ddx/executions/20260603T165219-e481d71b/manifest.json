@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260603T165219-e481d71b",
+  "bead_id": "ddx-6931d485",
+  "base_rev": "59e3567760d73a1018f7480d3ede9c36e26221d4",
+  "created_at": "2026-06-03T16:52:26.616824694Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6931d485",
+    "title": "install/update: --global surface installs to XDG global tree + agent-tier skill links",
+    "description": "PROBLEM (epic ddx-602ae31a, Principle 2)\n\nOperators who run one Claude Code/Codex install per machine need a `--global` surface so skills/personas install once into the machine-wide DDx tree and are discoverable from every project without per-project setup. Today the global install and update paths must write to ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ and link into the home-tier agent skill dirs, using a separate global state file so they never touch a project's install.\n\nROOT CAUSE\n- `ddx install` carries the `--global` flag at cli/cmd/install.go:49 and routes through `resolveInstallDirs(global)` (install.go:184) and `selectInstallState(global)` (install.go:202). For global=true, resolveInstallDirs returns installRoot=`ddxroot.GlobalDir()`, agentSkillsDir=`~/.agents/skills`, claudeSkillsDir=`~/.claude/skills` (install.go:185-193); selectInstallState returns `registry.LoadGlobalState`/`SaveGlobalState` (install.go:206-208). Targets are remapped by `adjustInstallTargets`/`remapSkillTargets` (install.go:215,235). Global installs skip the project auto-commit (install.go:174).\n- `ddx update --global` routes through `performGlobalUpdate` (cli/cmd/update.go:300), which operates exclusively on `registry.LoadGlobalState()`/`ddxroot.GlobalDir()` (update.go:301,337,345) and never touches the project tree; the flag is parsed at update.go:395 and dispatched at update.go:66.\n- The `--global` flag must also be present on `ddx plugin list`/`ddx plugin show` so query surfaces can target the global tier.\n\nPROPOSED FIX\n1. Verify `ddx install \u003cname\u003e --global --silent` writes the plugin under ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ and creates a symlink-or-copy under ~/.claude/skills/\u003cname\u003e and ~/.agents/skills/\u003cname\u003e, recording the result in the global state file (not the project state).\n2. Verify `ddx update --global` updates only the global plugin tree and leaves any project install untouched.\n3. Add/confirm `--global` on `ddx plugin list` and `ddx plugin show`.\n4. Document the global install location in library/skills/ddx/SKILL.md \"How this skill works\".\n5. The ddx-validate pre-commit hook (ddx-777f4a09) must continue to scope skill validation to staged skill files regardless of install location.\n\nNON-SCOPE\n- Runtime lookup precedence (sibling child — ResolvePlugin).\n- Project (non-global) install behavior and init/doctor wiring (sibling children).\n- Removing the existing per-project install entirely (both modes coexist).\n- Migrating any ~/.config/ddx/ legacy paths.\n- Agent-harness path discovery beyond Claude Code and Codex.\n\nDEPS\n- ddx-06cbaa90 (ddx home resolution) — global install routes through `ddxroot.GlobalDir()`.",
+    "acceptance": "1. TestInstallGlobal_WritesToGlobalTreeAndAgentLinks (cli/cmd/install_global_test.go) asserts `ddx install \u003cname\u003e --global --silent` installs to ${XDG_DATA_HOME}/ddx/global/plugins/\u003cname\u003e/ and creates a symlink-or-copy under ~/.claude/skills/\u003cname\u003e and ~/.agents/skills/\u003cname\u003e, and records the entry in the global state file only.\n2. TestUpdateGlobal_UpdatesGlobalNotProject (cli/cmd/update_test.go) asserts `ddx update --global` updates only the global plugin tree and does not modify the project install or project state.\n3. A test asserts `ddx plugin list --global` and `ddx plugin show \u003cname\u003e --global` enumerate/report from the global tier.\n4. library/skills/ddx/SKILL.md documents the global install location and agent-tier link paths.\n5. cd cli \u0026\u0026 go test ./cmd/... ./internal/registry/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-937de9fc",
+    "labels": [
+      "area:cli",
+      "area:plugin",
+      "kind:feature",
+      "phase:3",
+      "initiative:zero-footprint",
+      "principle:skills-personas",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"needs_rewrite\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"b6c67967939d932f67ded55cd2a81d08e4b9c9eef1671536d9e4f90147103e1f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"b6c67967939d932f67ded55cd2a81d08e4b9c9eef1671536d9e4f90147103e1f\"}",
+          "created_at": "2026-06-03T12:57:54.852185356Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-03T13:40:38.135863951Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260603T125810-79813104\",\"bead_id\":\"ddx-6931d485\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-03T13:40:40.149506Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-06-03T13:40:40.272291138Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-06-03T13:40:40.382495908Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/cmd/install.go, cli/cmd/install_global_test.go, cli/internal/registry/defaultplugin/library/skills/ddx/SKILL.md, cli/internal/skills/ddx/SKILL.md, library/skills/ddx/SKILL.md\npowerClass=standard\nresult_rev=6eb0c6c2c34be2778f47c8e7da747501f604a221\nbase_rev=6eb0c6c2c34be2778f47c8e7da747501f604a221\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-06-03T13:40:40.436344585Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        }
+      ],
+      "work-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T165219-e481d71b",
+    "prompt": ".ddx/executions/20260603T165219-e481d71b/prompt.md",
+    "manifest": ".ddx/executions/20260603T165219-e481d71b/manifest.json",
+    "result": ".ddx/executions/20260603T165219-e481d71b/result.json",
+    "checks": ".ddx/executions/20260603T165219-e481d71b/checks.json",
+    "usage": ".ddx/executions/20260603T165219-e481d71b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6931d485-20260603T165219-e481d71b"
+  },
+  "prompt_sha": "0175d7f520f5ca269b9f8bc72d395727e204df5da6b204d2d55b2075af0b77e2"
+}
