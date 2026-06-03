@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260603T095427-c25b5bbb",
+  "bead_id": "ddx-371ec7f8",
+  "base_rev": "548ef11a24c4da7cd455d26712d0432884c8b8d3",
+  "created_at": "2026-06-03T09:54:36.221220727Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-371ec7f8",
+    "title": "docs: normalize Story 16 run-detail specs across FEAT-008/010/019",
+    "description": "PROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs lack the documentation sections that make the Story-16 run-detail page, its trust boundary, and its evidence browser official platform behavior. Without these spec updates the run-detail page, the 'anyone with project read access sees raw prompts/responses/stderr/tool args' trust boundary, and the evidence whitelist are undocumented.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-web-ui.md:835-841 has a Run-detail evidence whitelist + run_detail_view stub but no Run-detail-page subsection stating the trust boundary (raw prompts, responses, stderr, tool args visible to project readers) and the evidence whitelist contract (allowed extensions *.txt, *.md, manifest.json, prompt.md, result.json; files \u003c 64KB; no Markdown rendering in the evidence tab).\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:1215-1236 documents a run_detail_view body schema but the Run resolver contract omits prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, and a normalized ToolCallEntry definition populated at drain time.\n- docs/helix/01-frame/features/FEAT-019-agent-evaluation.md:64-83 and :377-383 describe the review surface but do not link it to the /runs/[runId] deep page.\n\nPROPOSED FIX\n- FEAT-008: add a Run-detail-page subsection with the trust-boundary statement and the evidence whitelist (allowed extensions + 64KB cap + no Markdown rendering in evidence tab).\n- FEAT-010: extend the Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) under bundle-root confinement; document ToolCallEntry as the canonical normalized store populated at drain.\n- FEAT-019: update the review surface section to link to /runs/[runId].\n\nNON-SCOPE\n- Frontend implementation (Story 16.1 / 16.2).\n- Server audit-event emission and its test (separate child).\n- New auth or RBAC beyond what the trust-boundary statement documents.\n- Playwright / e2e changes (separate child).",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-008-web-ui.md gains a Run-detail-page subsection containing the trust-boundary statement (project read access sees raw prompts, responses, stderr, tool args) and the evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json; files \u003c 64KB; no Markdown rendering in evidence tab).\n2. docs/helix/01-frame/features/FEAT-010-task-execution.md Run resolver contract section is extended with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, a drain-time persistence note, and a normalized ToolCallEntry definition.\n3. docs/helix/01-frame/features/FEAT-019-agent-evaluation.md review surface section links to the /runs/[runId] deep page.\n4. lefthook run pre-commit passes (covers markdownlint/spec validation on the three edited files).",
+    "parent": "ddx-70a432b5",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "area:docs",
+      "kind:docs"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260603T095427-c25b5bbb",
+    "prompt": ".ddx/executions/20260603T095427-c25b5bbb/prompt.md",
+    "manifest": ".ddx/executions/20260603T095427-c25b5bbb/manifest.json",
+    "result": ".ddx/executions/20260603T095427-c25b5bbb/result.json",
+    "checks": ".ddx/executions/20260603T095427-c25b5bbb/checks.json",
+    "usage": ".ddx/executions/20260603T095427-c25b5bbb/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-371ec7f8-20260603T095427-c25b5bbb"
+  },
+  "prompt_sha": "4ff4a59f44ac9bd2d64d0fe0b1facb14a4173e812f15def0b1b792727cd8e336"
+}
