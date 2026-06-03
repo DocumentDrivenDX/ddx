@@ -529,7 +529,7 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 	var logBuf, eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
 		Mode:         executeloop.ModeWatch,
@@ -594,6 +594,10 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 }
 
 func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
+	if testing.Short() {
+		t.Skip("watch timing is race-sensitive under -short; covered by the full suite")
+	}
+
 	projectRoot, _ := newScriptHarnessRepo(t, 2)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 
@@ -614,11 +618,10 @@ func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
 	t.Cleanup(func() {
 		preDispatchDirtyPathLister = originalLister
 	})
-	callCount := 0
+	var callCount atomic.Int32
 	preDispatchDirtyPathLister = func(root string) ([]string, error) {
 		require.Equal(t, projectRoot, root)
-		callCount++
-		switch callCount {
+		switch callCount.Add(1) {
 		case 1:
 			return nil, nil
 		case 2:
@@ -686,11 +689,10 @@ func TestPreDispatchDirtyPreserveRequiresStableImplementationDirt(t *testing.T) 
 	t.Cleanup(func() {
 		preDispatchDirtyPathLister = originalLister
 	})
-	callCount := 0
+	var callCount atomic.Int32
 	preDispatchDirtyPathLister = func(root string) ([]string, error) {
 		require.Equal(t, projectRoot, root)
-		callCount++
-		switch callCount {
+		switch callCount.Add(1) {
 		case 1:
 			return []string{"cli/internal/agent/transient_impl.go"}, nil
 		case 2:

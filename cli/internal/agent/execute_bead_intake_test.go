@@ -840,7 +840,7 @@ func TestExecuteBeadWorkerStdout_ReadinessMalformedSchemaIsActionable(t *testing
 				Once: true,
 				Log:  &log,
 				PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-					got, err := decodePreClaimIntakePayloadResult(tt.payload)
+					got, err := decodePreClaimIntakePayloadResultWithMode(tt.payload, config.BeadQualityModeWarnOnly)
 					require.NoError(t, err)
 					return got, nil
 				},

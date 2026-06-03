@@ -73,15 +73,15 @@ func NewAutoRecoveryPostLadderExhaustionHook(store ExecuteBeadLoopStore, runner 
 		state := autoRecoveryState{store: store, beadID: beadID, cfg: cfg}
 		switch failureClass {
 		case SpecGap:
-			return state.runReframe(ctx, store, runner, rcfg, projectRoot)
+			return state.runReframe(ctx, store, runner, rcfg, projectRoot, failureClass)
 		case TooLarge:
-			return state.runDecompose(ctx, store, runner, rcfg, projectRoot)
+			return state.runDecompose(ctx, store, runner, rcfg, projectRoot, failureClass)
 		default:
-			reframeResult, err := state.runReframe(ctx, store, runner, rcfg, projectRoot)
+			reframeResult, err := state.runReframe(ctx, store, runner, rcfg, projectRoot, failureClass)
 			if err != nil || (reframeResult != nil && reframeResult.Succeeded) {
 				return reframeResult, err
 			}
-			decomposeResult, err := state.runDecompose(ctx, store, runner, rcfg, projectRoot)
+			decomposeResult, err := state.runDecompose(ctx, store, runner, rcfg, projectRoot, failureClass)
 			if err != nil || (decomposeResult != nil && decomposeResult.Succeeded) {
 				return decomposeResult, err
 			}
@@ -100,14 +100,30 @@ type autoRecoveryState struct {
 	total  float64
 }
 
-func (s *autoRecoveryState) runReframe(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string) (*PostLadderExhaustionResult, error) {
-	result := runReframer(ctx, store, runner, rcfg, projectRoot, s.beadID)
-	return s.recoveryResult(Reframe, result.Failed, result.CostUSD, result.Reason)
+func (s *autoRecoveryState) runReframe(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string, failureClass RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := NewReframePostLadderExhaustionHook(store, runner, rcfg, projectRoot)
+	result, err := hook(ctx, s.beadID, failureClass)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || !result.Attempted {
+		return result, nil
+	}
+	return s.recoveryResult(result.Path, !result.Succeeded, result.CostUSD, result.OutcomeReason)
 }
 
-func (s *autoRecoveryState) runDecompose(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string) (*PostLadderExhaustionResult, error) {
-	result := runDecomposer(ctx, store, runner, rcfg, projectRoot, s.beadID)
-	return s.recoveryResult(Decompose, result.Failed, result.CostUSD, result.Reason)
+func (s *autoRecoveryState) runDecompose(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string, failureClass RecoveryFailureClass) (*PostLadderExhaustionResult, error) {
+	hook := NewDecomposePostLadderExhaustionHook(store, runner, rcfg, projectRoot)
+	// Force the TooLarge branch so the decomposer constructor stays on the live
+	// recovery path even when we are falling back from a reframer failure.
+	result, err := hook(ctx, s.beadID, TooLarge)
+	if err != nil {
+		return nil, err
+	}
+	if result == nil || !result.Attempted {
+		return result, nil
+	}
+	return s.recoveryResult(result.Path, !result.Succeeded, result.CostUSD, result.OutcomeReason)
 }
 
 func (s *autoRecoveryState) recoveryResult(path RecoveryPath, failed bool, costUSD float64, reason string) (*PostLadderExhaustionResult, error) {

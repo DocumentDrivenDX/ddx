@@ -594,7 +594,7 @@ func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodePreClaimIntakePayloadResult(tt.payload)
+			got, err := decodePreClaimIntakePayloadResultWithMode(tt.payload, config.BeadQualityModeWarnOnly)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantOutcome, got.Outcome)
 			assert.Equal(t, tt.wantDetail, got.Detail)
@@ -654,7 +654,7 @@ func TestPreClaimReadiness_DecodesCanonicalReadinessJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := decodePreClaimIntakePayloadResult(tt.payload)
+			got, err := decodePreClaimIntakePayloadResultWithMode(tt.payload, config.BeadQualityModeWarnOnly)
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantOutcome, got.Outcome)
 			assert.Equal(t, tt.wantDetail, got.Detail)
@@ -665,7 +665,7 @@ func TestPreClaimReadiness_DecodesCanonicalReadinessJSON(t *testing.T) {
 		`{"outcome":"ambiguous_needs_human","reason":"unclear scope"}`,
 		`{"outcome":"needs_human","reason":"unclear scope"}`,
 	} {
-		_, err := decodePreClaimIntakePayloadResult(payload)
+		_, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "legacy readiness outcome")
 		assert.Contains(t, err.Error(), string(PreClaimIntakeOperatorRequired))
@@ -673,7 +673,7 @@ func TestPreClaimReadiness_DecodesCanonicalReadinessJSON(t *testing.T) {
 }
 
 func TestPreClaimReadiness_UnknownReasonActionableError(t *testing.T) {
-	_, err := decodePreClaimIntakePayloadResult(`{"outcome":"not_a_real_outcome","reason":"some reason"}`)
+	_, err := decodePreClaimIntakePayloadResultWithMode(`{"outcome":"not_a_real_outcome","reason":"some reason"}`, config.BeadQualityModeWarnOnly)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not_a_real_outcome")
 	assert.Contains(t, err.Error(), "actionable_atomic")
@@ -681,7 +681,7 @@ func TestPreClaimReadiness_UnknownReasonActionableError(t *testing.T) {
 }
 
 func TestPreClaimReadiness_DecodesFractionalScore(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[]}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -727,7 +727,7 @@ func TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent(t *testing.T) {
 				assert.Equal(t, tc.want, classified.ReadinessChecks.Checks[0].Verdict, label)
 
 				// AC3: the full intake decode must not return a type error.
-				_, err := decodePreClaimIntakePayloadResult(payload)
+				_, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 				require.NoError(t, err, label)
 			}
 		})

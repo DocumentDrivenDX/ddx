@@ -431,18 +431,23 @@ func (p preClaimReadinessChecksPayload) Len() int {
 // bead-readiness decisions, so they return intake_error and let the loop use
 // its fail-open readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-	return NewPreClaimIntakeHookWithLog(projectRoot, store, rcfg, svc, runner, nil)
+	return newPreClaimIntakeHook(projectRoot, store, rcfg, svc, runner, nil, false)
 }
 
 // NewPreClaimIntakeHookWithLog constructs the pre-claim intake hook and emits
 // compact prompt metadata plus live service progress to log when provided.
 func NewPreClaimIntakeHookWithLog(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-	return NewPreClaimIntakeHookWithLogVerbose(projectRoot, store, rcfg, svc, runner, log, false)
+	return newPreClaimIntakeHook(projectRoot, store, rcfg, svc, runner, log, false)
 }
 
 // NewPreClaimIntakeHookWithLogVerbose constructs the pre-claim intake hook and
 // prints the full prompt only when promptVerbose is true.
 func NewPreClaimIntakeHookWithLogVerbose(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer, promptVerbose bool) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+	_ = NewPreClaimIntakeHook(projectRoot, store, rcfg, svc, runner)
+	return newPreClaimIntakeHook(projectRoot, store, rcfg, svc, runner, log, promptVerbose)
+}
+
+func newPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner, log io.Writer, promptVerbose bool) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -706,13 +711,6 @@ func normalizePreClaimIntakeRewriteFields(fields []string) []string {
 	return out
 }
 
-// decodePreClaimIntakePayloadResult decodes a JSON payload into a PreClaimIntakeResult.
-// It accepts both the legacy intake schema (classification field) and the canonical
-// readiness schema (outcome field), converting both into the same decision model.
-func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, error) {
-	return decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
-}
-
 func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var probe struct {
 		Classification  string                                 `json:"classification"`
@@ -925,20 +923,6 @@ func normalizeReadinessEstimatedDifficulty(raw string) string {
 		return string(escalation.DifficultyHard)
 	default:
 		return ""
-	}
-}
-
-func resolveReadinessEstimatedDifficulty(b *bead.Bead, readinessEstimate string) escalation.EstimatedDifficulty {
-	if difficulty, ok := escalation.BeadEstimatedDifficulty(b); ok {
-		return difficulty
-	}
-	switch normalizeReadinessEstimatedDifficulty(readinessEstimate) {
-	case string(escalation.DifficultyEasy):
-		return escalation.DifficultyEasy
-	case string(escalation.DifficultyHard):
-		return escalation.DifficultyHard
-	default:
-		return escalation.DifficultyMedium
 	}
 }
 

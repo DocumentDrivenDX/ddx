@@ -13,6 +13,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func resolveReadinessEstimatedDifficultyForTest(b *bead.Bead, readinessEstimate string) escalation.EstimatedDifficulty {
+	if difficulty, ok := escalation.BeadEstimatedDifficulty(b); ok {
+		return difficulty
+	}
+	switch normalizeReadinessEstimatedDifficulty(readinessEstimate) {
+	case string(escalation.DifficultyEasy):
+		return escalation.DifficultyEasy
+	case string(escalation.DifficultyHard):
+		return escalation.DifficultyHard
+	default:
+		return escalation.DifficultyMedium
+	}
+}
+
 func TestReadinessClassification_DoesNotMisclassifyInfrastructureAsBeadDefect(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -160,19 +174,19 @@ func TestReadinessClassification_NormalizesSplitLegacyToNeedsSplit(t *testing.T)
 }
 
 func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
-	system, err := decodePreClaimIntakePayloadResult(`{"classification":"system_unready","rationale":"ResolveRoute: no viable routing candidate"}`)
+	system, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"system_unready","rationale":"ResolveRoute: no viable routing candidate"}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeError, system.Outcome)
 	assert.Equal(t, ReadinessReasonSystemUnready, system.Reason)
 	assert.Equal(t, ReadinessSystemReasonRouting, system.SystemReason)
 
-	split, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_split","rationale":"too broad","readiness_checks":[{"reason":"too_large","verdict":false,"evidence":"AC spans three subsystems"}]}`)
+	split, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_split","rationale":"too broad","readiness_checks":[{"reason":"too_large","verdict":false,"evidence":"AC spans three subsystems"}]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeTooLargeDecomposed, split.Outcome)
 	assert.Equal(t, ReadinessReasonTooLarge, split.Reason)
 	assert.Contains(t, split.Detail, ReadinessReasonTooLarge)
 
-	refine, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":false,"evidence":"AC lacks go test"}]}`)
+	refine, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":false,"evidence":"AC lacks go test"}]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, refine.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, refine.Reason)
@@ -210,14 +224,14 @@ func TestReadinessVerdict_AcceptsBoolStringOrNull(t *testing.T) {
 }
 
 func TestReadinessClassification_DecodesEstimatedDifficulty(t *testing.T) {
-	canonical, err := decodePreClaimIntakePayloadResult(`{"outcome":"actionable_atomic","reason":"ready","difficulty":{"estimated_difficulty":"easy","confidence":0.8,"reason":"mechanical docs edit"}}`)
+	canonical, err := decodePreClaimIntakePayloadResultWithMode(`{"outcome":"actionable_atomic","reason":"ready","difficulty":{"estimated_difficulty":"easy","confidence":0.8,"reason":"mechanical docs edit"}}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, canonical.Outcome)
 	assert.Equal(t, "easy", canonical.EstimatedDifficulty)
 }
 
 func TestReadinessClassification_LegacyDecodesEstimatedDifficulty(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"ready","rationale":"ready","difficulty":{"estimated_difficulty":"hard","confidence":0.74,"reason":"multi-subsystem risk"},"readiness_checks":[]}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"ready","rationale":"ready","difficulty":{"estimated_difficulty":"hard","confidence":0.74,"reason":"multi-subsystem risk"},"readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "hard", got.EstimatedDifficulty)
@@ -230,13 +244,13 @@ func TestReadinessUsesBeadDifficultyPrecedence(t *testing.T) {
 		},
 	}
 
-	got := resolveReadinessEstimatedDifficulty(b, string(escalation.DifficultyHard))
+	got := resolveReadinessEstimatedDifficultyForTest(b, string(escalation.DifficultyHard))
 	assert.Equal(t, escalation.DifficultyEasy, got)
-	assert.Equal(t, escalation.DifficultyMedium, resolveReadinessEstimatedDifficulty(&bead.Bead{}, "bogus"))
+	assert.Equal(t, escalation.DifficultyMedium, resolveReadinessEstimatedDifficultyForTest(&bead.Bead{}, "bogus"))
 }
 
 func TestPreClaimReadiness_AcceptsStringSuggestedFixes(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"prompt polish only","readiness_checks":[{"reason":"missing_verification","verdict":"pass","evidence":"AC names tests"}],"suggested_fixes":["tighten title","add file:line evidence"],"waivers_applied":[]}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"prompt polish only","readiness_checks":[{"reason":"missing_verification","verdict":"pass","evidence":"AC names tests"}],"suggested_fixes":["tighten title","add file:line evidence"],"waivers_applied":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Empty(t, got.SystemReason)
@@ -244,7 +258,7 @@ func TestPreClaimReadiness_AcceptsStringSuggestedFixes(t *testing.T) {
 }
 
 func TestPreClaimReadiness_DecodesAmbiguousClassificationAsOperatorRequired(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"ambiguous","rationale":"scope is unclear","readiness_checks":[]}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"ambiguous","rationale":"scope is unclear","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeOperatorRequired, got.Outcome)
 	assert.Equal(t, ReadinessReasonAmbiguousScope, got.Reason)
@@ -254,7 +268,7 @@ func TestPreClaimReadiness_DecodesAmbiguousClassificationAsOperatorRequired(t *t
 }
 
 func TestPreClaimReadiness_DecodesSafelyRefinableClassificationAsNeedsRefine(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"safely_refinable","rationale":"tighten acceptance","readiness_checks":[]}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"safely_refinable","rationale":"tighten acceptance","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Empty(t, got.SystemReason)
@@ -262,7 +276,7 @@ func TestPreClaimReadiness_DecodesSafelyRefinableClassificationAsNeedsRefine(t *
 }
 
 func TestPreClaimReadiness_DecodesSplitClassificationAsNeedsSplit(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"split","rationale":"multiple independent slices","readiness_checks":[]}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"split","rationale":"multiple independent slices","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeTooLargeDecomposed, got.Outcome)
 	assert.Equal(t, ReadinessReasonTooLarge, got.Reason)
@@ -278,7 +292,7 @@ func TestPreClaimReadiness_DecodesDecimalScoreAsMetadataOnly(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(payload), &out))
 	assert.True(t, out.Score.Present)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -295,7 +309,7 @@ func TestPreClaimReadiness_DecodesScalarWaiversAppliedAsMetadataOnly(t *testing.
 	assert.Empty(t, out.WaiversApplied[0].Criteria)
 	assert.Empty(t, out.WaiversApplied[0].Evidence)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -312,7 +326,7 @@ func TestPreClaimReadiness_DecodesFlatStringWaiversApplied(t *testing.T) {
 	assert.Empty(t, out.WaiversApplied[0].Criteria)
 	assert.Empty(t, out.WaiversApplied[0].Evidence)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -328,7 +342,7 @@ func TestPreClaimReadiness_DecodesWaiversAppliedObjectList(t *testing.T) {
 	assert.Equal(t, []string{"docs-only"}, out.WaiversApplied[0].Criteria)
 	assert.Equal(t, "docs-only bead", out.WaiversApplied[0].Evidence)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -344,7 +358,7 @@ func TestPreClaimReadiness_DecodesWaiversAppliedObjectScalarCriteria(t *testing.
 	assert.Equal(t, []string{"docs-only"}, out.WaiversApplied[0].Criteria)
 	assert.Equal(t, "fixture", out.WaiversApplied[0].Evidence)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -362,7 +376,7 @@ func TestPreClaimReadiness_DecodesSuggestedChildAcceptanceString(t *testing.T) {
 		"2. cd cli && go test ./internal/agent/... green",
 	}, out.SuggestedChildren[0].Acceptance)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
@@ -379,14 +393,14 @@ func TestPreClaimReadiness_DecodesSuggestedChildAcceptanceList(t *testing.T) {
 		"2. cd cli && go test ./internal/agent/... green",
 	}, out.SuggestedChildren[0].Acceptance)
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, "single slice", got.Detail)
 }
 
 func TestPreClaimReadiness_NormalizesSingletonReadinessChecksObject(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, got.Reason)
@@ -396,7 +410,7 @@ func TestPreClaimReadiness_NormalizesSingletonReadinessChecksObject(t *testing.T
 }
 
 func TestPreClaimReadiness_NormalizesScalarReadinessChecksString(t *testing.T) {
-	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":"missing_verification"}`)
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":"missing_verification"}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeError, got.Outcome)
 	assert.Equal(t, ReadinessReasonSystemUnready, got.Reason)

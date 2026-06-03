@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -104,7 +105,7 @@ func TestBeadLifecycleSkillLintDocumentsRationaleShape(t *testing.T) {
 func TestPreClaimReadiness_DecodesDocumentedNeedsRefineRewrite(t *testing.T) {
 	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["description","acceptance"],"description":"PROBLEM\nmissing verification\n\nROOT CAUSE\nno gate\n\nPROPOSED FIX\nadd tests\n\nNON-SCOPE\nrouting\n","acceptance":"1. TestPreClaimReadiness_DecodesDocumentedNeedsRefineRewrite\n2. cd cli && go test ./internal/agent/... -run \"TestPreClaimReadiness_.*|TestLintHook_RejectsMalformedRationaleShape\" -count=1\n3. lefthook run pre-commit"}}`
 
-	got, err := decodePreClaimIntakePayloadResult(payload)
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableButRewritten, got.Outcome)
 	assert.Equal(t, []string{"description", "acceptance"}, got.Rewrite.ChangedFields)
@@ -113,7 +114,7 @@ func TestPreClaimReadiness_DecodesDocumentedNeedsRefineRewrite(t *testing.T) {
 }
 
 func TestPreClaimReadiness_RejectsUnsupportedClassification(t *testing.T) {
-	_, err := decodePreClaimIntakePayloadResult(`{"classification":"totally_new","rationale":"needs rewrite","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`)
+	_, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"totally_new","rationale":"needs rewrite","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`, config.BeadQualityModeWarnOnly)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown classification")
 	for _, want := range []string{
@@ -128,7 +129,7 @@ func TestPreClaimReadiness_RejectsUnsupportedClassification(t *testing.T) {
 }
 
 func TestPreClaimReadiness_RejectsArrayAcceptanceRewrite(t *testing.T) {
-	_, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":["1. TestFoo"]}}`)
+	_, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":["1. TestFoo"]}}`, config.BeadQualityModeWarnOnly)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rewrite.acceptance")
 	assert.Contains(t, err.Error(), "cannot unmarshal array")
