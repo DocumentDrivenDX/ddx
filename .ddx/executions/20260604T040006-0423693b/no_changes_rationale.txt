@@ -1,0 +1,7 @@
+verification_command: cd cli && go test ./internal/registry/... -run "TestPluginLookup_PrefersProjectOverGlobal|TestPluginLookup_FallsBackToGlobal|TestGlobalPluginDir_HonorsXDGDataHome|TestPluginLookup_BakedInDefaultOnly"
+
+All four acceptance criteria are already satisfied in the codebase at base rev 15f418c5e:
+- cli/internal/registry/resolve.go implements three-layer precedence (project → global → baked-in)
+- cli/internal/registry/resolve_test.go contains TestPluginLookup_PrefersProjectOverGlobal (AC1) and TestPluginLookup_FallsBackToGlobal (AC2)
+- All tests pass: go test ./internal/registry/... exits 0
+- No source changes were needed; the bead was already implemented before this execution.
