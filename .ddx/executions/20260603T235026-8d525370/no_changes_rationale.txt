@@ -1,0 +1,22 @@
+verification_command: bash -c 'set -e; cd cli && go test ./cmd/... -run TestDoctor_ReportsBothInstallLayers; cd ..; grep -q "Install topology" library/skills/ddx/SKILL.md; grep -q "lazy-resolves-to-global" CLAUDE.md; grep -q "Install topology" library/skills/ddx/reference/agents.md; grep -q "three-layer precedence" CLAUDE.md'
+
+All four ACs are already satisfied by prior bead executions on this branch:
+
+AC1: reportSkillInstallTopology in cli/cmd/doctor.go (lines 418-448) renders both
+"Global Install" and "Project Install" lines with correct status values
+(ok | missing | lazy-resolves-to-global). Landed in ddx-4c58ea3e and ddx-a2e699ff.
+
+AC2: Spec updates are present:
+- ADR-027 (docs/helix/02-design/adr/ADR-027-skill-install-topology.md): full
+  three-layer topology, project-local vs --global modes, ddx doctor reporting —
+  updated by ddx-6a23cbd3.
+- library/skills/ddx/SKILL.md: "Install topology" section (lines 38-52) with
+  project-local, global, and baked-in paths — added by ddx-6931d485.
+- library/skills/ddx/reference/agents.md: "Install topology" section (lines 143-155)
+  — added by ddx-c10d5af2.
+- CLAUDE.md Persona System section: three-layer precedence note with
+  lazy-resolves-to-global and ADR-027 pointer — updated by ddx-6a23cbd3.
+
+AC3: cd cli && go test ./cmd/... exits 0 (confirmed in this execution run, 486s).
+
+AC4: No code changes were made so lefthook pre-commit is not applicable.
