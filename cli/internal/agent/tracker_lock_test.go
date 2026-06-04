@@ -572,11 +572,20 @@ func TestTrackerLock_RecordsRetryCount(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(lockDir, "acquired_at"),
 		[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
 
-	// Release the lock after 30ms to allow at least a few retry iterations.
-	go func() {
-		time.Sleep(30 * time.Millisecond)
-		_ = os.RemoveAll(lockDir)
-	}()
+	// Deterministic contention: release the held lock from the retry
+	// loop's contended-attempt hook on the first failed Mkdir. This
+	// guarantees Retries >= 1 regardless of scheduler load (a previous
+	// time.Sleep(30ms) based release was flaky under parallel-package
+	// load when the releaser goroutine ran before withTrackerLockPolicy
+	// even reached its Mkdir call).
+	var releaseOnce sync.Once
+	prevHook := trackerLockContendedAttemptHook
+	trackerLockContendedAttemptHook = func(int) {
+		releaseOnce.Do(func() {
+			_ = os.RemoveAll(lockDir)
+		})
+	}
+	defer func() { trackerLockContendedAttemptHook = prevHook }()
 
 	policy := LockRetryPolicy{
 		InitialBackoff: 5 * time.Millisecond,

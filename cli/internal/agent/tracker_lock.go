@@ -160,6 +160,17 @@ type TrackerLockSample struct {
 // this to capture metrics.
 var TrackerLockMetricsSink func(TrackerLockSample)
 
+// trackerLockContendedAttemptHook is a test-only hook fired after each
+// failed acquire attempt that has been classified as real lock contention
+// (a directory exists at lockDir and the stale-owner path did not reclaim
+// it). It is invoked just before the retry sleep with the zero-based
+// attempt index. The zero value (nil) is a no-op.
+//
+// Tests use this hook to deterministically synchronise with the retry
+// loop — e.g. release the held lock from the hook so the next attempt
+// observes a non-zero retry count without relying on time.Sleep races.
+var trackerLockContendedAttemptHook func(attempt int)
+
 // withTrackerLockPolicy is the policy-parameterised form of
 // withTrackerLock; exposed at package scope so tests can pin a specific
 // curve.
@@ -206,6 +217,9 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 				return lockTimeoutError(lockDir, "max elapsed")
 			}
 			retries++
+			if hook := trackerLockContendedAttemptHook; hook != nil {
+				hook(attempt)
+			}
 			time.Sleep(policy.step(attempt))
 
 		case info.Mode().IsRegular():

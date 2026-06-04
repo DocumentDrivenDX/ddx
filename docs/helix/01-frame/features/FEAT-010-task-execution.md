@@ -166,6 +166,32 @@ mapping in [`TD-031 §2`](../../02-design/technical-designs/TD-031-bead-state-ma
 when that evidence requires durable bead action such as close-as-already-satisfied,
 human triage, blocked, retry cooldown, or stale no_changes metadata cleanup.
 
+#### Worktree Resource Expectations
+
+Layer 2 creates a fresh git worktree for each `ddx try` attempt. That worktree
+does not, by default, share native toolchain build caches with the parent
+checkout or with sibling attempts. A Rust `target/` directory, Gradle build
+output, Go build cache, JVM artifact cache, Node package cache, Python wheel
+cache, or equivalent project-local build output created inside the attempt is
+ordinary worktree-local state unless the operator or project explicitly routes
+the toolchain elsewhere.
+
+DDx's responsibility is to pass the caller's environment through unchanged to
+the agent process that runs inside the attempt worktree. DDx must not invent
+toolchain-specific cache knobs, set or rewrite variables such as
+`CARGO_TARGET_DIR`, `GRADLE_USER_HOME`, `GOPATH`, `GOMODCACHE`,
+`npm_config_cache`, or `PIP_CACHE_DIR`, or choose a build-cache policy on
+behalf of the project. Operators and projects own that policy through ordinary
+environment variables, project configuration, wrapper scripts, or checked-in
+toolchain configuration.
+
+`ddx work` also makes no concurrency guarantee for native build steps inside
+attempts. Multiple workers may run cold or partially warm toolchain builds at
+the same time and may contend for CPU, disk bandwidth, inode pressure, package
+manager locks, or external artifact caches. Operators who run concurrent
+workers on build-heavy repositories are responsible for setting appropriate
+worker counts and shared-cache policies.
+
 ### Quality hooks
 
 ADR-023 defines two lifecycle quality hooks owned by the layer-2 and layer-3

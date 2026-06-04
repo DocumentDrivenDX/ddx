@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-2189a07f",
+  "attempt_id": "20260531T025451-f081c8ab",
+  "base_rev": "d9684c2ba3f2f2a8652a0a0d2b389b7b64edec61",
+  "result_rev": "d9684c2ba3f2f2a8652a0a0d2b389b7b64edec61",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "ResolveRoute: no viable routing candidate: 16 candidates rejected",
+  "session_id": "eb-b44a5c1c",
+  "duration_ms": 374105,
+  "exit_code": 1,
+  "error": "ResolveRoute: no viable routing candidate: 16 candidates rejected",
+  "project_root": "/home/erik/Projects/ddx",
+  "failure_mode": "no_viable_provider",
+  "execution_dir": ".ddx/executions/20260531T025451-f081c8ab",
+  "prompt_file": ".ddx/executions/20260531T025451-f081c8ab/prompt.md",
+  "manifest_file": ".ddx/executions/20260531T025451-f081c8ab/manifest.json",
+  "result_file": ".ddx/executions/20260531T025451-f081c8ab/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-05-31T02:54:59.322317479Z",
+  "finished_at": "2026-05-31T03:01:13.42776391Z"
+}

@@ -1,0 +1,190 @@
+{
+  "attempt_id": "20260531T033137-6d2bcb70",
+  "bead_id": "ddx-2189a07f",
+  "base_rev": "bd023cf812721a43bde059fa6b962d871218ef63",
+  "created_at": "2026-05-31T03:31:44.576764491Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2189a07f",
+    "title": "execute-bead: treat 'tracker lock timeout' as transient git contention (currently misclassifies concurrent-worker lock race as operator_attention and exits)",
+    "description": "PROBLEM: When two or more `ddx work` workers run concurrently against the\nsame project and worker B reaches `FinalizeDurableAudit` at the same moment\nthat worker A holds the tracker lock, worker B times out, and the loop\nclassifies the timeout as `operator_attention` and exits — even though\nnothing requires operator action. The other worker just needs to finish.\n\nOBSERVED 2026-05-28 in niflheim drain with two concurrent workers:\n- Worker1 (pid 424293) was committing tracker state for niflheim-996afcc8.\n- Worker2 (pid 681801), simultaneously finalizing niflheim-e43f04bb (an\n  ADR-051 cold-tier PUT concurrency implementation that had already run to\n  completion — 66091 tokens, 32m8.5s), hit `tracker lock timeout (max\n  elapsed, lock: /home/erik/Projects/niflheim/.ddx/.git-tracker.lock,\n  owner pid: 424293)` while trying to commit durable audit outputs.\n- Worker2 exited with `operator attention required`, releasing\n  niflheim-e43f04bb back to `open` without committing the audit trail,\n  and leaving these paths dirty: `.ddx/beads.jsonl`,\n  `.ddx/beads-archive.jsonl`, `.ddx/metrics/attempts.jsonl`,\n  `.ddx/attachments`.\n\nThe work was successful — 32 minutes of agent time produced a clean\nimplementation and commit. The lock race nuked the audit attribution and\nforced the worker to stop. Re-running it would either repeat the agent run\n(burning more tokens) or hit `already_satisfied` (with the worktree-leak\ndocumented in `ddx-274943fc`).\n\nROOT CAUSE: `cli/internal/agent/execute_bead_loop.go:1262-1309`\n(`finalizeDurableAuditOrStop`) calls `runtime.FinalizeDurableAudit` and\nbranches on `isTransientGitContention(err.Error())` to decide retry vs\noperator-attention. The matcher at\n`cli/internal/agent/execute_bead_loop.go:1019-1034` covers `.git/index.lock`\n(via `gitlock.IsIndexLockError`) and the strings \"unable to write new index\nfile\", \"cannot lock ref\", \"unable to update the ref\" — but **does not cover\nthe DDx-specific tracker-lock error format** emitted by\n`cli/internal/agent/tracker_lock.go:243`:\n\n  \"tracker lock timeout (%s, lock: %s, owner pid: %s)\"\n\nThe tracker lock is a DDx-internal ordering lock around tracker writes\n(`.ddx/.git-tracker.lock`), held briefly during tracker-state mutations.\nConcurrent worker contention on this lock is structurally identical to\nthe `.git/index.lock` case the existing matcher handles, and the comment\non `isTransientGitContention` explicitly states the design intent:\n\n  \"A persistent cause (e.g. ENOSPC) simply keeps releasing+retrying the\n   bead, which is still preferable to halting the whole unattended drain.\"\n\nPROPOSED FIX: Extend `isTransientGitContention` to recognise the DDx\ntracker-lock-timeout string class. Recommended implementation:\n\n  1. Export a stable marker constant (or recogniser) from\n     `cli/internal/agent/tracker_lock.go` rather than string-matching\n     across packages. Suggested: a sentinel error type\n     `TrackerLockTimeoutError` wrapping the existing fields (lockDir,\n     ownerPID), with an `Is(err)` helper.\n  2. Update `FinalizeDurableAudit` and its callers to wrap the timeout\n     error with this sentinel, so callers can use `errors.Is` instead of\n     substring matching.\n  3. In `isTransientGitContention` at `execute_bead_loop.go:1019`, add a\n     branch that returns true for `errors.Is(err, TrackerLockTimeoutErr)`.\n     Keep the existing substring fallbacks for defense in depth.\n  4. Confirm via test that worker2 in the observed scenario survives the\n     lock timeout, re-enters the loop, and successfully commits on a\n     subsequent iteration when the lock releases.\n\nNON-SCOPE:\n- Changing the tracker-lock retry policy itself (timeout duration, backoff\n  curve) — only changing how the loop classifies the lock-timeout outcome.\n- Changing concurrent-worker safety guarantees on tracker writes.\n- Adding queue-level fairness or worker coordination (out of scope for\n  this bead).\n- Fixing the orphan-worktree leak that compounds this issue — tracked\n  separately in `ddx-274943fc`.\n\nIN-SCOPE FILES:\n- cli/internal/agent/tracker_lock.go (export sentinel error type)\n- cli/internal/agent/durable_audit.go (wrap timeout with sentinel where\n  it bubbles up — verify by reading line 41 and 127)\n- cli/internal/agent/execute_bead_loop.go (extend `isTransientGitContention`)\n- cli/internal/agent/execute_bead_loop_test.go (new test for tracker-lock\n  classification)\n\nOUT-OF-SCOPE FILES:\n- gitlock package (already correct for .git/index.lock; do not modify)\n- cli/cmd/work.go (exit-reason rendering unchanged)\n- Any other isTransientGitContention call sites — only the durable-audit\n  branch matters for this bug.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestIsTransientGitContention|TestFinalizeDurableAudit.*TrackerLock' -count=1` passes.\n2. A unit test asserts `isTransientGitContention` returns true for an error wrapping `TrackerLockTimeoutError`.\n3. A unit test asserts `isTransientGitContention` returns true for the literal substring \"tracker lock timeout\" as a defense-in-depth fallback.\n4. A unit test of `finalizeDurableAuditOrStop` injects a tracker-lock-timeout error and asserts: (a) `result.OperatorAttention` is NOT set, (b) the durable_audit_transient event is emitted, (c) the function returns false (don't stop).\n5. `cd cli \u0026\u0026 go test ./... -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "area:bead",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-2189a07f)\",\"fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\"}",
+          "created_at": "2026-05-29T05:38:01.66554458Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"route unavailable: no viable routing candidate satisfies requested MinPower 0: no viable routing floor for inferred powerClass standard\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-29T05:38:25.863288481Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-2189a07f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-29T05:38:25.950907259Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "route unavailable: no viable routing candidate satisfies requested MinPower 0: no viable routing floor for inferred powerClass standard\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-29T05:38:26.071235839Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"route unavailable: no viable routing candidate satisfies requested MinPower 0: no viable routing floor for inferred powerClass standard\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-29T06:02:31.443908164Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-2189a07f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-29T06:02:31.52649589Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "route unavailable: no viable routing candidate satisfies requested MinPower 0: no viable routing floor for inferred powerClass standard\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-29T06:02:31.625241614Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-2189a07f)\",\"fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\"}",
+          "created_at": "2026-05-31T02:18:01.001522846Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-31T02:24:37.511898023Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: 16 candidates rejected\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-31T02:24:38.655521982Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260531T021815-0ae58938\",\"bead_id\":\"ddx-2189a07f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-31T02:24:38.710063875Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: 16 candidates rejected\npowerClass=standard\nresult_rev=d3ff3aa10cc1342045df428788db6ba867782a69\nbase_rev=d3ff3aa10cc1342045df428788db6ba867782a69\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-31T02:24:38.762981903Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-2189a07f)\",\"fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\"}",
+          "created_at": "2026-05-31T02:54:34.596350117Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-31T03:01:14.112916059Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: 16 candidates rejected\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-31T03:01:15.322802948Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260531T025451-f081c8ab\",\"bead_id\":\"ddx-2189a07f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-05-31T03:01:15.421619013Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: 16 candidates rejected\npowerClass=standard\nresult_rev=d9684c2ba3f2f2a8652a0a0d2b389b7b64edec61\nbase_rev=d9684c2ba3f2f2a8652a0a0d2b389b7b64edec61\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-31T03:01:15.486835892Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-2189a07f)\",\"fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"11db2da34ac3c60241ff07c4ac2aaf1a82a1b2aa129590ed7c51de8b4b696bca\"}",
+          "created_at": "2026-05-31T03:31:20.008815745Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260531T033137-6d2bcb70",
+    "prompt": ".ddx/executions/20260531T033137-6d2bcb70/prompt.md",
+    "manifest": ".ddx/executions/20260531T033137-6d2bcb70/manifest.json",
+    "result": ".ddx/executions/20260531T033137-6d2bcb70/result.json",
+    "checks": ".ddx/executions/20260531T033137-6d2bcb70/checks.json",
+    "usage": ".ddx/executions/20260531T033137-6d2bcb70/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-2189a07f-20260531T033137-6d2bcb70"
+  },
+  "prompt_sha": "6736115ae8750b9baf93597786fdd58c5294ebac9f52dae4f29de672f8594f03"
+}

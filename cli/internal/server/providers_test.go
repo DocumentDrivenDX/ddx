@@ -38,11 +38,16 @@ func TestListProviders(t *testing.T) {
 	}
 
 	// Verify required fields are present and not fabricated as "ok"/"0" when unknown.
-	svc, err := agent.NewServiceFromWorkDir(dir)
+	// Use the ctx-scoped constructor with t.Cleanup-bound cancel so the
+	// fizeau background probe / aliveness goroutines terminate when this
+	// test ends instead of leaking until the test binary exits.
+	listCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	svc, err := agent.NewServiceFromWorkDirCtx(listCtx, dir)
 	if err != nil {
-		t.Fatalf("NewServiceFromWorkDir: %v", err)
+		t.Fatalf("NewServiceFromWorkDirCtx: %v", err)
 	}
-	infos, err := svc.ListHarnesses(context.Background())
+	infos, err := svc.ListHarnesses(listCtx)
 	if err != nil {
 		t.Fatalf("ListHarnesses: %v", err)
 	}
