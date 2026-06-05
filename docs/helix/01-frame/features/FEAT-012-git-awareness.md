@@ -413,7 +413,8 @@ agents and developers
 - Given an iteration is merge-eligible, when DDx prepares a fast-forward landing, then the only rebase performed is a rebase of the execution branch onto the latest target branch tip — `git log --merges` shows no merge commit; history remains linear.
 - Given an iteration is not merged (required execution failed, ratchet regression, or `--no-merge` set), when DDx preserves the iteration, then a ref matching `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` is created and the target branch is not updated.
 - Given `ddx try` left an orphan worktree due to a crash, when the next `ddx try` invocation starts, then DDx detects and removes orphaned worktrees matching the attempt path pattern before proceeding.
-- Given two `ddx try` invocations on the same bead run concurrently or in rapid succession from the same base, then each produces a distinct hidden ref because the `YYYYMMDDTHHMMSSZ-<12charsha>` combination is unique per invocation; DDx does not serialize or lock across concurrent invocations.
+- Given two `ddx try` invocations run concurrently or in rapid succession from the same base, then DDx may serialize only the short parent-repo mutation windows (tracker commit, dirty checkpoint, base resolution, attempt workspace creation, durable audit, landing, preserve-ref creation, and main-worktree index sync); the harness wait and agent work inside the isolated attempt worktree are never serialized by DDx's main-git lock.
+- Given two non-landed `ddx try` invocations preserve iterations from the same base within the same second, then each produces a distinct hidden ref because the `YYYYMMDDTHHMMSSZ-<12charsha>` combination is unique per invocation.
 
 ## Dependencies
 
