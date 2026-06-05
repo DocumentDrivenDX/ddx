@@ -131,9 +131,21 @@ queue-drain contract as ordinary executable task/bug/chore beads.
   Layer 3 — Idle-Path Diagnosis and Auto-Remediation), which classifies each
   ready epic by its open/closed child counts, parent/dep state, and operator
   override labels, then fires exactly one of these auto-actions per loop pass:
-  - **Closure cascade** when all children are closed (`openChildCount == 0 &&
-    totalChildCount > 0`): the epic is treated as a closure candidate and the
-    existing closure-evaluation path auto-closes it.
+  - **Closure cascade** when all children are **terminal** — `closed` or
+    `cancelled` (`nonTerminalChildCount == 0 && totalChildCount > 0`): the
+    epic is auto-closed via the closure-evaluation path. `cancelled` counts
+    as terminal because a cancelled child is deliberately abandoned and "will
+    not run" (status semantics, TD-027 §1) — it must not hold its epic open
+    forever. If **every** child is `cancelled` (none `closed`), the epic is
+    itself set to `cancelled` rather than `closed`, since no work actually
+    completed. The cascade fires from **both** the child-close path
+    (immediately when the last child closes — via `Close()` *and*
+    `CloseWithEvidence`, so autonomous worker drains settle the epic without
+    waiting for an idle pass) **and** the idle-path remediator (for children
+    closed outside the worker — imports, manual edits, federation sync). It
+    **recurses the full parent chain**: closing the last leaf of a nested
+    epic-of-epics settles every ancestor epic in one operation, bounded by a
+    visited-set cycle guard.
   - **Supersession cascade** when an open child carries `superseded-by:<Y>`
     and Y is closed, with no other reason for the child to stay open: the
     child auto-closes via a one-hop cascade inside `Close()`.

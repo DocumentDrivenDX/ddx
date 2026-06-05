@@ -350,11 +350,15 @@ operator surface with an exhausted-auto-remediation marker.
 
 - `superseded_pending_close` — bead has `superseded-by:<Y>`, Y is closed.
   Drives a one-hop cascade close inside `Close(Y)`.
-- `closure_candidate_misclassified` — epic with `openChildCount == 0 &&
-  totalChildCount > 0` mistakenly in the epic-container bucket. Drives a
-  classifier-correction reroute into the existing closure-evaluation path.
+- `closure_candidate_misclassified` — epic with `nonTerminalChildCount == 0 &&
+  totalChildCount > 0` (children all terminal — `closed` or `cancelled`, per
+  the FEAT-004 closure cascade) mistakenly in the epic-container bucket. Drives
+  a classifier-correction reroute into the closure-evaluation path, which fires
+  on both the child-close path (`Close()`/`CloseWithEvidence`) and the idle
+  path, and recurses the full ancestor chain.
 - `dead_intermediate_all_children_closed` — `execution-eligible == false`,
-  all children closed. Drives the same closure path.
+  all children terminal (`closed` or `cancelled`; code name retained for enum
+  stability). Drives the same closure path.
 - `dead_intermediate_open_children_pending` — `execution-eligible == false`
   with open children that have their own auto-remediation. Skip; recursion
   via the children resolves the parent.
