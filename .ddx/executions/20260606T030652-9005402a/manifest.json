@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260606T030652-9005402a",
+  "bead_id": "ddx-ef86a116",
+  "base_rev": "8e3cfb284094e8d3697764e531e51e0f8bd3c5fa",
+  "created_at": "2026-06-06T03:07:02.564159634Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 7
+  },
+  "bead": {
+    "id": "ddx-ef86a116",
+    "title": "execute-bead: narrow main-git lock surface — exclude worktree creation in pre-dispatch and merge work in Land from the critical section",
+    "description": "PROBLEM: The DDx main-git lock (`.ddx/.git-tracker.lock`,\n`cli/internal/agent/tracker_lock.go`) is held across operations that do\nnot require atomic serialization. The two worst offenders are\npre-dispatch (`execute_bead.go:1493-1524`) and Land\n(`execute_bead_land.go:1210-1216`). On a niflheim-sized repo under disk\ncontention, the held region can exceed the 30s\n`MaxElapsed` lock-wait budget, causing sibling workers to time out at\n`withTrackerLockPolicy` line 205 (\"max elapsed\") and the loop to\nmisclassify the timeout (sibling bead ddx-2189a07f).\n\nROOT CAUSE: Two regions hold the lock around work that is sequencing,\nnot critical section:\n\n  Pre-dispatch at `execute_bead.go:1493-1524`:\n  - commitTrackerLocked(projectRoot)             — needs lock (writes .ddx/beads.jsonl + commits)\n  - checkpointPreDispatchDirt(projectRoot, ...)   — needs lock (commits on branch)\n  - resolveBase(gitOps, projectRoot, ...)         — read-only ref resolve; reads must observe the commits above\n  - attemptBackend.Prepare(...)                   — creates worktree via `git worktree add --detach \u003cwt\u003e \u003cbaseRev\u003e`; writes per-worktree state under .git/worktrees/\u003cid\u003e/ — NO shared-state conflict with sibling workers' Prepare()\n\n  Land at `execute_bead_land.go:1208-1216` calls `landLocked` which\n  performs (per `:1218-1259` and beyond):\n  - resolve target branch, target ref, current tip                 — read-only\n  - countContributingCommits / preserveIfLargeDeletion              — read-only / preservation stash\n  - ensureLandingWorktreeReady                                       — sets up a temp worktree\n  - the actual fast-forward / merge commit on target branch         — needs lock (ref update)\n  - dirty-path sync to operator checkout                             — outside merge correctness\n\n  In both cases the ONLY operations that race with sibling workers are\n  the ref/tracker writes. Reads can be ordered by re-resolving after\n  reacquiring the lock if the write decision depends on them.\n\nThe conservative lock placement appears to be defensive rather than\ncorrectness-required. There is no comment at either call site explaining\nwhy worktree creation or merge prep must be inside the lock, only the\nsingle-line claim at `execute_bead.go:1489-1490` that the lock is \"held\nonly across the brief pre-dispatch sequence (~1-2s)\" — which the\nobserved 30s timeout disproves.\n\nPROPOSED FIX:\n\nA) Pre-dispatch (`execute_bead.go:1493`):\n   1. Keep `commitTrackerLocked` and `checkpointPreDispatchDirt` inside\n      the lock (they write).\n   2. Move `resolveBase` to immediately after lock release (it's a\n      read; if the resolution must observe the writes above, the\n      release+resolve sequence guarantees that on POSIX FS — git's own\n      ref reads see the latest committed refs without a lock).\n   3. Move `attemptBackend.Prepare(...)` entirely outside the lock.\n      Workers will race their `git worktree add` calls; git's per-\n      worktree locks (`.git/worktrees/\u003cid\u003e/HEAD.lock`) handle the\n      brief internal contention safely.\n\nB) Land (`execute_bead_land.go:1210`):\n   1. Split `landLocked` into a read-prep phase (resolve target,\n      currentTip, contribCount, preserveIfLargeDeletion,\n      ensureLandingWorktreeReady) that runs OUTSIDE the lock and a\n      ref-update phase (the actual fast-forward or merge commit) that\n      runs INSIDE the lock.\n   2. Inside the lock, re-resolve `currentTip` and verify the prep-phase\n      decision is still valid (target branch hasn't moved). If it has\n      moved, release and retry the prep phase. This is the classic\n      optimistic-locking shape.\n   3. The dirty-path-sync to operator checkout at end of `landLocked`\n      runs outside the lock; it touches the operator's working tree,\n      not shared refs.\n\nC) Ancestry checks (`execute_bead_land.go:839`, `857`):\n   - `FetchOriginAncestryCheck` does network I/O under the lock. The\n     comment says it is reserved for `ddx sync` and not called from\n     drains — verify and, if confirmed, leave as-is (sync is operator-\n     driven and contention there is acceptable). If the call site is\n     reached from drains, remove the network I/O from the locked\n     region.\n   - `LocalAncestryCheck` is read-only; remove the lock entirely or\n     keep only for read-after-write ordering with adjacent writes.\n\nD) Section labels:\n   - This bead depends on ddx-69a9ecd3 (lock observability), which adds\n     a `section` parameter to `withMainGitLock`. After that lands, the\n     narrower critical sections should use distinct sections\n     (\"pre_dispatch_commits\", \"land_ref_update\") so the metric reflects\n     the change.\n\nNON-SCOPE:\n- Changing the lock retry policy.\n- Changing tracker-write semantics or .ddx/beads.jsonl layout.\n- Cross-process IPC for coordination beyond the file-based lock.\n- Eliminating the lock entirely (the writes still need serialization).\n- Concurrent worktree-creation perf — git handles that.\n\nIN-SCOPE FILES:\n- cli/internal/agent/execute_bead.go (lines 1485-1530 region)\n- cli/internal/agent/execute_bead_land.go (lines 1200-1340 region; the\n  function `landLocked` and its callers)\n- cli/internal/agent/execute_bead_land.go (lines 839, 857; ancestry\n  call sites — verify drain-loop call paths first)\n- cli/internal/agent/execute_bead_test.go and\n  cli/internal/agent/execute_bead_land_test.go (tests for the\n  narrowed-lock contract)\n\nOUT-OF-SCOPE FILES:\n- tracker_lock.go (no change required; the API supports a narrower\n  region without code change)\n- durable_audit.go (already minimal — only commit ops; do not touch)\n- preservePreDispatchDirtyPathsLocked at execute_bead.go:694 (already\n  minimal — stash ops only; do not touch)\n- cmd/* (no change to CLI surface)",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestPreDispatch.*LockSurface|TestLand.*LockSurface|TestConcurrentPrepareNoLock|TestConcurrentLandRefRace' -count=1` passes.\n2. A unit test asserts attemptBackend.Prepare runs without holding withMainGitLock (the test injects a sentinel that fails if called inside the locked region).\n3. A unit test asserts landLocked's read-prep phase (resolveRef, countCommits) runs without holding the lock; the ref-update phase still does.\n4. A concurrent test launches two synthetic workers that exercise pre-dispatch + Land in parallel and asserts neither times out on a 5s MaxElapsed budget (proves the narrowed lock holds ≪5s).\n5. A unit test asserts the optimistic-retry path in landLocked: when currentTip changes between read-prep and re-resolve, the prep phase is re-run rather than returning a stale-ref error.\n6. `cd cli \u0026\u0026 go test ./... -count=1` passes (full suite — landing is core).\n7. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:execution",
+      "kind:perf",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "closing_commit_sha": "a23eec067c34d244f38e8ee5fc6c8cc3e9263c82",
+      "events_attachment": "ddx-ef86a116/events.jsonl",
+      "session_id": "eb-90d5a9d1",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T030652-9005402a",
+    "prompt": ".ddx/executions/20260606T030652-9005402a/prompt.md",
+    "manifest": ".ddx/executions/20260606T030652-9005402a/manifest.json",
+    "result": ".ddx/executions/20260606T030652-9005402a/result.json",
+    "checks": ".ddx/executions/20260606T030652-9005402a/checks.json",
+    "usage": ".ddx/executions/20260606T030652-9005402a/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ef86a116-20260606T030652-9005402a"
+  },
+  "prompt_sha": "3bbedd1b94e75d55ec3f81e39d0bbffe1ffd52451bc03c771ca7db87b98e047a"
+}
