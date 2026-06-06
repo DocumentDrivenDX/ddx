@@ -43,7 +43,7 @@ func TestLockMetrics_VisibleInDdxLogs(t *testing.T) {
 			sawRelease = true
 			assert.NotEmpty(t, ev.ReleasedAt, "release event must carry released_at")
 			assert.Equal(t, os.Getpid(), ev.HolderPID)
-			assert.Equal(t, "tracker.commit", ev.Operation)
+			assert.Equal(t, "durable_audit", ev.Operation)
 		}
 	}
 	assert.True(t, sawAcquire, "tracker.lock acquire event must be visible via the accessor")

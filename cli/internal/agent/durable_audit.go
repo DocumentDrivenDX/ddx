@@ -47,7 +47,7 @@ func FinalizeDurableAttemptAudit(projectRoot string, store durableAuditBeadReade
 // paths when they are dirty. The commit is serialized through the main git lock
 // so concurrent workers cannot interleave tracker and audit commits.
 func CommitDurableAuditOutputs(projectRoot, attemptID string) error {
-	return withTrackerLock(projectRoot, func() error {
+	return withTrackerLock(projectRoot, "durable_audit", func() error {
 		return commitDurableAuditOutputsLocked(projectRoot, attemptID)
 	})
 }

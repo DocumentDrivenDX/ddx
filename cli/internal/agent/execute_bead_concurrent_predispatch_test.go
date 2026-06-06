@@ -158,7 +158,7 @@ func TestRun_LockScopeIncludesSynthesizeCommit(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			errs[i] = withTrackerLock(projectRoot, func() error {
+			errs[i] = withTrackerLock(projectRoot, "test", func() error {
 				if err := commitTrackerLocked(projectRoot); err != nil {
 					return err
 				}

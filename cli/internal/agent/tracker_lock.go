@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -121,44 +122,61 @@ func sharedMainGitLockRoot(projectRoot string) string {
 // directory created via os.Mkdir (atomic across processes on POSIX and
 // Windows) following the same pattern as cli/internal/bead/lock.go.
 //
+// section identifies the call site (e.g. "durable_audit", "pre_dispatch",
+// "land") and is surfaced in TrackerLockSample.Section and in the lockmetrics
+// operation label so slow holds can be attributed without reading source.
+//
 // Contention is handled per LockRetryPolicy: exponential backoff up to a
 // bounded budget. Per TD-031 §8.5 the contention itself does not change
 // bead status; on budget exhaustion the caller surfaces an ordinary
 // execution_failed and triage decides next steps.
-func withMainGitLock(projectRoot string, fn func() error) error {
+func withMainGitLock(projectRoot, section string, fn func() error) error {
 	if projectRoot == "" {
 		return fn()
 	}
-	return withTrackerLockPolicy(projectRoot, trackerLockPolicy, fn)
+	return withTrackerLockPolicy(projectRoot, section, trackerLockPolicy, fn)
 }
 
 // WithMainGitLock exposes the process-shared main-git lock to sibling
 // packages that need the same serialized add/commit boundary as execute-bead
 // landing and pre-dispatch checkpointing.
-func WithMainGitLock(projectRoot string, fn func() error) error {
-	return withMainGitLock(projectRoot, fn)
+func WithMainGitLock(projectRoot, section string, fn func() error) error {
+	return withMainGitLock(projectRoot, section, fn)
 }
 
 // withTrackerLock is retained for existing tracker/pre-dispatch call sites. It
 // uses the same process-shared lock as landing so separate ddx work processes
 // cannot interleave commits, ref updates, and checkout sync in the main tree.
-func withTrackerLock(projectRoot string, fn func() error) error {
-	return withMainGitLock(projectRoot, fn)
+func withTrackerLock(projectRoot, section string, fn func() error) error {
+	return withMainGitLock(projectRoot, section, fn)
 }
 
 // TrackerLockSample carries timing and contention metrics for one
 // withTrackerLock / withMainGitLock acquire+release cycle.
 type TrackerLockSample struct {
 	LockDir string
+	Section string        // call-site identifier, e.g. "durable_audit", "pre_dispatch", "land"
 	Wait    time.Duration // time from entry to lock acquisition
 	Hold    time.Duration // time the callback held the lock
 	Retries int           // number of sleep-and-retry iterations (0 = acquired on first try)
 }
 
-// TrackerLockMetricsSink is called after each successful tracker-lock
-// acquire+release cycle. The zero value (nil) is a no-op. Tests may swap
-// this to capture metrics.
-var TrackerLockMetricsSink func(TrackerLockSample)
+var (
+	trackerLockSinkMu sync.RWMutex
+	trackerLockSinkFn func(TrackerLockSample)
+)
+
+// SetTrackerLockMetricsSink atomically installs a new tracker-lock
+// metrics sink and returns the previous one. Passing nil disables
+// emission. Safe for concurrent use; two workers in the same process
+// will not race on the sink variable.
+func SetTrackerLockMetricsSink(fn func(TrackerLockSample)) func(TrackerLockSample) {
+	trackerLockSinkMu.Lock()
+	prev := trackerLockSinkFn
+	trackerLockSinkFn = fn
+	trackerLockSinkMu.Unlock()
+	return prev
+}
 
 // trackerLockContendedAttemptHook is a test-only hook fired after each
 // failed acquire attempt that has been classified as real lock contention
@@ -173,8 +191,9 @@ var trackerLockContendedAttemptHook func(attempt int)
 
 // withTrackerLockPolicy is the policy-parameterised form of
 // withTrackerLock; exposed at package scope so tests can pin a specific
-// curve.
-func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func() error) error {
+// curve. section is the call-site identifier forwarded to TrackerLockSample
+// and the lockmetrics operation label.
+func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, fn func() error) error {
 	lockDir := trackerLockPath(projectRoot)
 	if err := os.MkdirAll(filepath.Dir(lockDir), 0o755); err != nil {
 		return fmt.Errorf("tracker lock dir: %w", err)
@@ -242,9 +261,16 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 	waitDur := time.Since(start)
 	holdStart := time.Now()
 	defer os.RemoveAll(lockDir)
-	fnErr := lockmetrics.Instrument("tracker.lock", "tracker.commit", fn)
-	if sink := TrackerLockMetricsSink; sink != nil {
-		sink(TrackerLockSample{LockDir: lockDir, Wait: waitDur, Hold: time.Since(holdStart), Retries: retries})
+	op := section
+	if op == "" {
+		op = "tracker.commit"
+	}
+	fnErr := lockmetrics.Instrument("tracker.lock", op, fn)
+	trackerLockSinkMu.RLock()
+	sink := trackerLockSinkFn
+	trackerLockSinkMu.RUnlock()
+	if sink != nil {
+		sink(TrackerLockSample{LockDir: lockDir, Section: section, Wait: waitDur, Hold: time.Since(holdStart), Retries: retries})
 	}
 	return fnErr
 }

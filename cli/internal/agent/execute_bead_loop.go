@@ -1121,6 +1121,25 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
+
+	// Wire the tracker-lock metrics sink so every acquire+release cycle is
+	// visible in the loop event stream and the terminal log. SetTrackerLockMetricsSink
+	// is safe for concurrent workers (mutex-protected); restored on Run exit.
+	workerLog := runtime.Log
+	prevTrackerSink := SetTrackerLockMetricsSink(func(s TrackerLockSample) {
+		emit("loop.tracker_lock", map[string]any{
+			"section": s.Section,
+			"wait_ms": s.Wait.Milliseconds(),
+			"hold_ms": s.Hold.Milliseconds(),
+			"retries": s.Retries,
+		})
+		if workerLog != nil {
+			_, _ = fmt.Fprintf(workerLog, "tracker_lock section=%s wait=%s hold=%s retries=%d\n",
+				s.Section, s.Wait.Round(time.Millisecond), s.Hold.Round(time.Millisecond), s.Retries)
+		}
+	})
+	defer func() { SetTrackerLockMetricsSink(prevTrackerSink) }()
+
 	claimSuccessRateWindowSize := runtime.effectiveClaimSuccessRateWindow()
 	claimSuccessRateThreshold := runtime.effectiveClaimSuccessRateThreshold()
 	claimSuccessRateWindow := make([]bool, 0, claimSuccessRateWindowSize)

@@ -16,7 +16,7 @@ import (
 )
 
 func commitTrackerForTest(projectRoot string) error {
-	return withTrackerLock(projectRoot, func() error {
+	return withTrackerLock(projectRoot, "tracker_commit", func() error {
 		return commitTrackerLocked(projectRoot)
 	})
 }
@@ -201,7 +201,7 @@ func TestTrackerLock_SharedAcrossLinkedWorktrees(t *testing.T) {
 	done := make(chan error, 2)
 
 	go func() {
-		done <- withTrackerLock(root, func() error {
+		done <- withTrackerLock(root, "test", func() error {
 			acquired <- "root"
 			<-release
 			return nil
@@ -216,7 +216,7 @@ func TestTrackerLock_SharedAcrossLinkedWorktrees(t *testing.T) {
 	}
 
 	go func() {
-		done <- withTrackerLock(linked, func() error {
+		done <- withTrackerLock(linked, "test", func() error {
 			acquired <- "linked"
 			return nil
 		})
@@ -295,7 +295,7 @@ func TestTrackerCommit_MalformedFreshRegularFileFailsFast(t *testing.T) {
 	}
 
 	start := time.Now()
-	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	err := withTrackerLockPolicy(root, "test", policy, func() error { return nil })
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -340,7 +340,7 @@ func TestTrackerCommit_MalformedSymlinkLockFailsFast(t *testing.T) {
 	}
 
 	start := time.Now()
-	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	err := withTrackerLockPolicy(root, "test", policy, func() error { return nil })
 	elapsed := time.Since(start)
 
 	if err == nil {
@@ -384,7 +384,7 @@ func TestTrackerCommit_MissingOwnerDoesNotReportUnknown(t *testing.T) {
 		MaxRetries:     1,
 	}
 
-	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	err := withTrackerLockPolicy(root, "test", policy, func() error { return nil })
 	if err == nil {
 		t.Fatalf("expected lock timeout error, got nil")
 	}
@@ -508,7 +508,7 @@ func TestTrackerCommit_RetryBackoffPolicy(t *testing.T) {
 		}
 
 		called := false
-		err := withTrackerLockPolicy(root, policy, func() error {
+		err := withTrackerLockPolicy(root, "test", policy, func() error {
 			called = true
 			return nil
 		})
@@ -555,13 +555,12 @@ func TestTrackerLock_RecordsRetryCount(t *testing.T) {
 
 	var mu sync.Mutex
 	var captured []TrackerLockSample
-	prev := TrackerLockMetricsSink
-	TrackerLockMetricsSink = func(s TrackerLockSample) {
+	prev := SetTrackerLockMetricsSink(func(s TrackerLockSample) {
 		mu.Lock()
 		captured = append(captured, s)
 		mu.Unlock()
-	}
-	defer func() { TrackerLockMetricsSink = prev }()
+	})
+	defer func() { SetTrackerLockMetricsSink(prev) }()
 
 	// Pre-acquire the lock with the current PID so breakStaleTrackerLock
 	// cannot reclaim it.
@@ -594,7 +593,7 @@ func TestTrackerLock_RecordsRetryCount(t *testing.T) {
 		MaxRetries:     200,
 		MaxElapsed:     5 * time.Second,
 	}
-	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	err := withTrackerLockPolicy(root, "test", policy, func() error { return nil })
 	require.NoError(t, err)
 
 	mu.Lock()
@@ -634,7 +633,7 @@ func TestTrackerLock_StaleLockAfterPartialLocalLand(t *testing.T) {
 	lockAcquired := make(chan struct{})
 
 	go func() {
-		_ = withMainGitLock(r.dir, func() error {
+		_ = withMainGitLock(r.dir, "test", func() error {
 			close(lockAcquired)
 
 			// Worker acquired the lock. Perform UpdateRefTo to advance main
@@ -695,7 +694,7 @@ func TestTrackerLock_StaleLockAfterPartialLocalLand(t *testing.T) {
 	// observe the stale lock, break it, and proceed with its work.
 	secondWorkerErr := make(chan error, 1)
 	go func() {
-		secondWorkerErr <- withMainGitLock(r.dir, func() error {
+		secondWorkerErr <- withMainGitLock(r.dir, "test", func() error {
 			// Verify that we can see the local-ahead state (main is already at landSHA).
 			tip, err := ops.ResolveRef(r.dir, "refs/heads/main")
 			if err != nil {
@@ -720,4 +719,73 @@ func TestTrackerLock_StaleLockAfterPartialLocalLand(t *testing.T) {
 	if _, err := os.Stat(lockDir); !os.IsNotExist(err) {
 		t.Fatalf("lock dir should be cleaned up after second worker: stat err = %v", err)
 	}
+}
+
+// TestTrackerLock_SectionField asserts that withMainGitLock with a given section
+// string propagates that section into TrackerLockSample.Section.
+func TestTrackerLock_SectionField(t *testing.T) {
+	root := initTrackerRepo(t)
+
+	var got TrackerLockSample
+	prev := SetTrackerLockMetricsSink(func(s TrackerLockSample) { got = s })
+	defer func() { SetTrackerLockMetricsSink(prev) }()
+
+	err := withMainGitLock(root, "durable_audit", func() error { return nil })
+	require.NoError(t, err)
+	require.Equal(t, "durable_audit", got.Section)
+}
+
+// TestTrackerLock_SinkWorkerInstall asserts that the worker-style sink
+// (the same closure installed by ExecuteBeadWorker.Run) emits both a
+// loop.tracker_lock event and a plain log line with all four fields
+// (section, wait, hold, retries) on each acquire/release cycle.
+func TestTrackerLock_SinkWorkerInstall(t *testing.T) {
+	root := initTrackerRepo(t)
+
+	type emittedEvent struct {
+		kind string
+		data map[string]any
+	}
+	var events []emittedEvent
+	var evMu sync.Mutex
+	fakeEmit := func(kind string, data map[string]any) {
+		evMu.Lock()
+		events = append(events, emittedEvent{kind: kind, data: data})
+		evMu.Unlock()
+	}
+
+	var logBuf strings.Builder
+
+	prev := SetTrackerLockMetricsSink(func(s TrackerLockSample) {
+		fakeEmit("loop.tracker_lock", map[string]any{
+			"section": s.Section,
+			"wait_ms": s.Wait.Milliseconds(),
+			"hold_ms": s.Hold.Milliseconds(),
+			"retries": s.Retries,
+		})
+		_, _ = fmt.Fprintf(&logBuf, "tracker_lock section=%s wait=%s hold=%s retries=%d\n",
+			s.Section, s.Wait.Round(time.Millisecond), s.Hold.Round(time.Millisecond), s.Retries)
+	})
+	defer func() { SetTrackerLockMetricsSink(prev) }()
+
+	err := withMainGitLock(root, "durable_audit", func() error { return nil })
+	require.NoError(t, err)
+
+	evMu.Lock()
+	got := append([]emittedEvent(nil), events...)
+	evMu.Unlock()
+
+	require.Len(t, got, 1, "expected exactly one loop.tracker_lock event")
+	require.Equal(t, "loop.tracker_lock", got[0].kind)
+	require.Equal(t, "durable_audit", got[0].data["section"])
+	require.Contains(t, got[0].data, "wait_ms")
+	require.Contains(t, got[0].data, "hold_ms")
+	require.Contains(t, got[0].data, "retries")
+
+	logOutput := logBuf.String()
+	require.Contains(t, logOutput, "tracker_lock")
+	require.Contains(t, logOutput, "section=durable_audit")
+	require.Contains(t, logOutput, "wait=")
+	require.Contains(t, logOutput, "hold=")
+	require.Contains(t, logOutput, "retries=")
 }

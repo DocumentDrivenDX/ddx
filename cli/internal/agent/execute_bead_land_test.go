@@ -1201,7 +1201,7 @@ func TestLand_IsNetworkFree(t *testing.T) {
 	acquired := make(chan time.Duration, 1)
 	go func() {
 		start := time.Now()
-		if err := withMainGitLock(r.dir, func() error { return nil }); err != nil {
+		if err := withMainGitLock(r.dir, "test", func() error { return nil }); err != nil {
 			t.Errorf("withMainGitLock after Land: %v", err)
 			return
 		}
