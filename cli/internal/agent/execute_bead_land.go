@@ -39,7 +39,8 @@ package agent
 // also takes the process-shared main-git lock so separate `ddx work` processes
 // Land narrows the process-shared main-git lock to the shared-ref update
 // boundary so separate `ddx work` processes cannot interleave target-ref
-// writes while read-only prep and checkout sync stay outside the lock.
+// writes while read-only prep stays outside the lock and post-land checkout
+// sync runs under the same lock acquisition.
 
 import (
 	"bytes"
@@ -1390,13 +1391,13 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 				if syncFromRev == "" {
 					syncFromRev = req.ResultRev
 				}
+				if result != nil && syncOperatorAfterLand && syncFromRev != "" {
+					syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
+				}
 				return nil
 			})
 			if err != nil {
 				return nil, err
-			}
-			if result != nil && syncOperatorAfterLand && syncFromRev != "" {
-				syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
 			}
 			return result, nil
 		}
@@ -1426,13 +1427,13 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 				cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
 			}
 			syncFromRev = prep.currentTip
+			if result != nil && syncOperatorAfterLand && syncFromRev != "" {
+				syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
+			}
 			return nil
 		})
 		if err != nil {
 			return nil, err
-		}
-		if result != nil && syncOperatorAfterLand && syncFromRev != "" {
-			syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
 		}
 		return result, nil
 	}

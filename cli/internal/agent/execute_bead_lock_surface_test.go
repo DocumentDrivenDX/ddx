@@ -179,6 +179,83 @@ func (g *lockSurfaceLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string
 	return g.real.DiffNameOnly(dir, base, tip)
 }
 
+type lockSurfaceCheckoutSyncGitOps struct {
+	real RealLandingGitOps
+
+	mu                    sync.Mutex
+	syncProbeBlocked      bool
+	syncProbeUnexpectedOK bool
+}
+
+var _ LandingGitOps = (*lockSurfaceCheckoutSyncGitOps)(nil)
+
+func (g *lockSurfaceCheckoutSyncGitOps) CurrentBranch(dir string) (string, error) {
+	return g.real.CurrentBranch(dir)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) ResolveRef(dir, ref string) (string, error) {
+	return g.real.ResolveRef(dir, ref)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
+	return g.real.UpdateRefTo(dir, ref, sha, oldSHA)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	err := withMainGitLock(dir, "land_sync_probe", func() error { return nil })
+	g.mu.Lock()
+	if err != nil {
+		g.syncProbeBlocked = true
+	} else {
+		g.syncProbeUnexpectedOK = true
+	}
+	g.mu.Unlock()
+	if err == nil {
+		return fmt.Errorf("checkout sync unexpectedly acquired the main-git lock")
+	}
+	return g.real.SyncWorkTreeToHead(dir, fromRev)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) AddWorktree(dir, path, rev string) error {
+	return g.real.AddWorktree(dir, path, rev)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) AddBranchWorktree(dir, path, branch string) error {
+	return g.real.AddBranchWorktree(dir, path, branch)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) RemoveWorktree(dir, path string) error {
+	return g.real.RemoveWorktree(dir, path)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) MergeInto(wtDir, srcRev, msg string) error {
+	return g.real.MergeInto(wtDir, srcRev, msg)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) HeadRevAt(dir string) (string, error) {
+	return g.real.HeadRevAt(dir)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) CountCommits(dir, base, tip string) int {
+	return g.real.CountCommits(dir, base, tip)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) StageDir(dir, relPath string) error {
+	return g.real.StageDir(dir, relPath)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) CommitStaged(dir, msg string) (string, error) {
+	return g.real.CommitStaged(dir, msg)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) DiffNumstat(dir, base, tip string) (string, error) {
+	return g.real.DiffNumstat(dir, base, tip)
+}
+
+func (g *lockSurfaceCheckoutSyncGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
+	return g.real.DiffNameOnly(dir, base, tip)
+}
+
 type sleepLandingGitOps struct {
 	real  RealLandingGitOps
 	delay time.Duration
@@ -314,6 +391,42 @@ func TestLandLockSurface_ReadPrepRunsOutsideMainGitLock(t *testing.T) {
 	require.True(t, countOK, "CountCommits should run without holding the main-git lock")
 	require.True(t, updateBlocked, "UpdateRefTo should be inside the main-git lock")
 	require.False(t, updateUnexpected, "UpdateRefTo unexpectedly acquired the lock from inside the ref-update phase")
+}
+
+func TestLandLockSurface_CheckoutSyncRunsInsideMainGitLock(t *testing.T) {
+	repo := newLandTestRepo(t)
+	workerSHA := repo.commitOn(repo.baseSHA, "feature.txt", "feature\n", "feat: worker")
+
+	prevPolicy := trackerLockPolicy
+	trackerLockPolicy = LockRetryPolicy{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     20 * time.Millisecond,
+		Multiplier:     2.0,
+		MaxRetries:     50,
+		MaxElapsed:     200 * time.Millisecond,
+	}
+	t.Cleanup(func() { trackerLockPolicy = prevPolicy })
+
+	ops := &lockSurfaceCheckoutSyncGitOps{real: RealLandingGitOps{}}
+	land, err := Land(repo.dir, LandRequest{
+		WorktreeDir:  repo.dir,
+		BaseRev:      repo.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-sync-surface",
+		AttemptID:    "20260606T000001-sync-surface",
+		TargetBranch: "main",
+	}, ops)
+	require.NoError(t, err)
+	require.NotNil(t, land)
+	require.Equal(t, "landed", land.Status)
+
+	ops.mu.Lock()
+	syncBlocked := ops.syncProbeBlocked
+	syncUnexpected := ops.syncProbeUnexpectedOK
+	ops.mu.Unlock()
+
+	require.True(t, syncBlocked, "SyncWorkTreeToHead should run with the main-git lock held")
+	require.False(t, syncUnexpected, "SyncWorkTreeToHead unexpectedly acquired the main-git lock from inside the sync window")
 }
 
 func TestConcurrentPrepareNoLock(t *testing.T) {
