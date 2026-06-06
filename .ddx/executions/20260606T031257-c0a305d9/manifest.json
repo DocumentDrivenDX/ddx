@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260606T031257-c0a305d9",
+  "bead_id": "ddx-693d504f",
+  "base_rev": "7cf438a543edfa147366923fc18237b58ac57fc2",
+  "created_at": "2026-06-06T03:13:09.480401154Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-693d504f",
+    "title": "docs: align multi-worker claim and landing contracts",
+    "description": "PROBLEM\nThe governing docs still disagree on parts of multi-worker execution. SD-013 describes concurrent claims as serialized with \"last writer wins\", while TP-021 requires one claim to win and losing concurrent `ddx try` attempts to exit without terminal-looking evidence. API-001 and FEAT-012 still describe rebase+fast-forward landing, while repository merge policy forbids history rewriting on execute-bead branches.\n\nROOT CAUSE\n- docs/helix/02-design/solution-designs/SD-013-multi-agent-coordination.md:49 uses stale claim-race language.\n- docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md:223-239 describes rebase+fast-forward and push behavior that conflicts with current no-history-rewrite policy.\n- docs/helix/01-frame/features/FEAT-012-git-awareness.md:224-239 and :410-416 need to align with the bounded mutation-window contract introduced by TP-021.\n\nPROPOSED FIX\n- Amend SD-013 to say concurrent claim attempts are atomic and at most one runner owns the bead.\n- Amend API-001/FEAT-012 landing language to distinguish local merge/preserve semantics from any future multi-machine coordination, and remove stale rebase-as-normal wording where it conflicts with no-history-rewrite policy.\n- Update reliability-principle references that still say there are 7 principles when the doc now defines P1-P10.\n\nNON-SCOPE\n- Do not change code behavior in this docs-only bead.\n- Do not redesign multi-machine coordination; file separate beads if SD-020 needs implementation changes.",
+    "acceptance": "1. docs/helix/02-design/solution-designs/SD-013-multi-agent-coordination.md states one-claim-wins semantics and losing concurrent attempts do not create terminal evidence.\n2. docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md and docs/helix/01-frame/features/FEAT-012-git-awareness.md no longer contradict the no-history-rewrite merge policy for execute-bead branches.\n3. Any \"7 reliability principles\" reference in repo guidance/docs is updated to P1-P10 or otherwise made accurate.\n4. `rg -n \"last writer wins|7 reliability principles|rebase.*fast-forward\" docs AGENTS.md` has no stale contradictory hit, or each remaining hit is explicitly scoped as historical/future-only.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:docs",
+      "area:agent",
+      "kind:spec",
+      "spec:TP-021",
+      "reliability",
+      "concurrency"
+    ],
+    "metadata": {
+      "spec-id": "TP-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-021",
+      "path": "docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md",
+      "title": "Test Plan: Multi-Worker `ddx try` Reliability"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T031257-c0a305d9",
+    "prompt": ".ddx/executions/20260606T031257-c0a305d9/prompt.md",
+    "manifest": ".ddx/executions/20260606T031257-c0a305d9/manifest.json",
+    "result": ".ddx/executions/20260606T031257-c0a305d9/result.json",
+    "checks": ".ddx/executions/20260606T031257-c0a305d9/checks.json",
+    "usage": ".ddx/executions/20260606T031257-c0a305d9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-693d504f-20260606T031257-c0a305d9"
+  },
+  "prompt_sha": "ed0d9cb811ed110d78b95e2c82099e5a805edcce488d27da18febaa3b62bd579"
+}
