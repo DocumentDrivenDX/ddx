@@ -3,8 +3,12 @@ package agent
 import (
 	"bytes"
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -14,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -2695,6 +2700,18 @@ func loopEventDataByType(events []loopEvent, typ string) []map[string]any {
 	return out
 }
 
+func claimHeartbeatPathForTest(store *bead.Store, beadID string) string {
+	root := filepath.Clean(filepath.Dir(store.Dir))
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	sum := sha1.Sum([]byte(root))
+	return filepath.Join(os.TempDir(), "ddx-claim-heartbeats", hex.EncodeToString(sum[:]), beadID+".json")
+}
+
 // errorInjectingStore wraps a real ExecuteBeadLoopStore and allows individual
 // methods to be overridden to return injected errors. Used in tests that verify
 // the loop continues on transient Store.* failures instead of terminating.
@@ -2748,6 +2765,41 @@ func (s *errorInjectingStore) AppendEvent(id string, event bead.BeadEvent) error
 		return s.onAppendEvent(id, event)
 	}
 	return s.ExecuteBeadLoopStore.AppendEvent(id, event)
+}
+
+func TestWorkerFailurePathsReleaseClaimAtomically(t *testing.T) {
+	dir := t.TempDir()
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{ID: "ddx-worker-release-atomic", Title: "worker claim release", Status: bead.StatusOpen}
+	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Claim(b.ID, "worker-a"))
+
+	leasePath := claimHeartbeatPathForTest(store, b.ID)
+	leaseDir := filepath.Dir(leasePath)
+	originalMode := os.FileMode(0o755)
+	if info, err := os.Stat(leaseDir); err == nil {
+		originalMode = info.Mode().Perm()
+	}
+	require.NoError(t, os.Chmod(leaseDir, 0o200))
+	t.Cleanup(func() {
+		_ = os.Chmod(leaseDir, originalMode)
+		_ = os.RemoveAll(leaseDir)
+	})
+
+	err := releaseWorkerClaim(store, b.ID, "worker-a")
+	require.Error(t, err)
+
+	got, err := store.Get(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID)
 }
 
 // TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable verifies that

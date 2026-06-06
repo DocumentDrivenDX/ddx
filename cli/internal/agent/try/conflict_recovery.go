@@ -41,6 +41,19 @@ type ConflictRecoveryOutput struct {
 	StoreErr    error
 }
 
+func releaseWorkerClaim(store Store, beadID, assignee string) error {
+	if store == nil || beadID == "" {
+		return nil
+	}
+	type releaser interface {
+		Release(id, assignee, targetStatus string) error
+	}
+	if r, ok := store.(releaser); ok {
+		return r.Release(beadID, assignee, bead.StatusOpen)
+	}
+	return store.Unclaim(beadID)
+}
+
 func ConflictRecoveryOutcome(ctx context.Context, in ConflictRecoveryInput) Outcome {
 	out := RunConflictRecovery(ctx, in)
 	disposition := OutcomePark
@@ -159,7 +172,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 	report.Detail = landConflictRescueDetail(report.Status, report.PreserveRef)
 
 	if report.Status == StatusLandConflictOperatorRequired {
-		if err := in.Store.Unclaim(in.Bead.ID); err != nil {
+		if err := releaseWorkerClaim(in.Store, in.Bead.ID, in.Assignee); err != nil {
 			out.StoreErrOp = "Unclaim"
 			out.StoreErr = err
 			out.Report = report
@@ -194,7 +207,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		return out
 	}
 
-	if err := in.Store.Unclaim(in.Bead.ID); err != nil {
+	if err := releaseWorkerClaim(in.Store, in.Bead.ID, in.Assignee); err != nil {
 		out.StoreErrOp = "Unclaim"
 		out.StoreErr = err
 		out.Report = report

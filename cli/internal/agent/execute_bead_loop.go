@@ -666,6 +666,19 @@ type ExecuteBeadLoopStore interface {
 	ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail string, body map[string]any, at time.Time, mutate func(*bead.Bead)) error
 }
 
+// releaseWorkerClaim atomically releases a worker-owned claim when the store
+// supports the atomic Release path. Older test doubles fall back to Unclaim so
+// they keep compiling, but production stores use the atomic release.
+func releaseWorkerClaim(store ExecuteBeadLoopStore, beadID, assignee string) error {
+	if store == nil || beadID == "" {
+		return nil
+	}
+	if releaser, ok := store.(leaseReleaser); ok {
+		return releaser.Release(beadID, assignee, bead.StatusOpen)
+	}
+	return store.Unclaim(beadID)
+}
+
 // readyDiagnoser is the optional interface the work loop uses to explain an
 // empty execution queue. bead.Store satisfies it via ReadyExecutionBreakdown.
 type readyDiagnoser interface {
@@ -1891,7 +1904,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 					} else if parked {
-						_ = w.Store.Unclaim(candidate.ID)
+						_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 						if stopAfterNonAttemptSkip() {
 							applyStop(work.StopInput{Once: true})
 							return result, nil
@@ -2018,7 +2031,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							_, _ = fmt.Fprintf(runtime.Log, "readiness timeout parked bead %s for operator review\n", candidate.ID)
 						}
 					}
-					_ = w.Store.Unclaim(candidate.ID)
+					_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 					if stopAfterNonAttemptSkip() {
 						applyStop(work.StopInput{Once: true})
 						return result, nil
@@ -2207,7 +2220,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
 							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 						} else if parked {
-							_ = w.Store.Unclaim(candidate.ID)
+							_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 							if stopAfterNonAttemptSkip() {
 								applyStop(work.StopInput{Once: true})
 								return result, nil
@@ -2245,7 +2258,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
 							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 						} else if parked {
-							_ = w.Store.Unclaim(candidate.ID)
+							_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 							if stopAfterNonAttemptSkip() {
 								applyStop(work.StopInput{Once: true})
 								return result, nil
@@ -2268,7 +2281,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 				// Parent stays open (not proposed) — it is now dependency-blocked on
 				// children and will re-enter the queue only after they close.
-				_ = w.Store.Unclaim(candidate.ID)
+				_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 				if stopAfterNonAttemptSkip() {
 					applyStop(work.StopInput{Once: true})
 					return result, nil
@@ -2305,7 +2318,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 					} else if parked {
-						_ = w.Store.Unclaim(candidate.ID)
+						_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 						if stopAfterNonAttemptSkip() {
 							applyStop(work.StopInput{Once: true})
 							return result, nil
@@ -2379,7 +2392,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"waivers_applied":  lintResult.WaiversApplied,
 				})
 				if strictIntakeBlocking() {
-					_ = w.Store.Unclaim(candidate.ID)
+					_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 					if stopAfterNonAttemptSkip() {
 						applyStop(work.StopInput{Once: true})
 						return result, nil
@@ -2393,7 +2406,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 		freshCandidate, staleSkip, refreshErr = w.refreshClaimedCandidateBeforeAttempt(ctx, candidate)
 		if refreshErr != nil {
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
+			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
@@ -2405,7 +2418,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, refreshErr
 		}
 		if staleSkip != nil {
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
+			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
@@ -2628,7 +2641,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 		classifyLoopReportFailure(&report)
 		if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
-			if unclaimErr := w.Store.Unclaim(candidate.ID); unclaimErr != nil {
+			if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
 				})
@@ -2692,7 +2705,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		if IsResourceExhaustedStatus(report.Status) {
 			result.Attempts++
 			setExit("ResourceExhausted", "resource_exhausted")
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
+			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
@@ -2759,7 +2772,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			report.OutcomeReason = FailureModeNoViableProvider
 			report.Disrupted = true
 			report.DisruptionReason = "routing"
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
+			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
@@ -2843,7 +2856,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// threshold is exceeded. No cooldown is set per ADR-024 Per-Bead Budget.
 		if isPerBeadBudgetExhaustedReport(report) {
 			result.Attempts++
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
+			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
@@ -2932,7 +2945,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.Results = append(result.Results, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
-			if unclaimErr := w.Store.Unclaim(candidate.ID); unclaimErr != nil && runtime.Log != nil {
+			if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil && runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt cleanup error (Unclaim %s): %v\n", candidate.ID, unclaimErr)
 			}
 			if finalizeDurableAuditOrStop(candidate.ID, report) {
@@ -2963,7 +2976,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		if parking := attemptOut.Parking; parking != nil {
 			if parking.Unclaim {
-				if err := w.Store.Unclaim(candidate.ID); err != nil {
+				if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("Unclaim", assignee, result, err)
 					})
@@ -3102,7 +3115,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.LastFailureStatus = report.Status
 		} else if attemptOut.NoChanges != nil {
 			noChanges := attemptOut.NoChanges
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
+			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
@@ -3272,7 +3285,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		} else {
 			if attemptOut.Parking == nil && attemptOut.Disposition != agenttry.OutcomePark {
-				if err := w.Store.Unclaim(candidate.ID); err != nil {
+				if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("Unclaim", assignee, result, err)
 					})
@@ -4719,8 +4732,9 @@ func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore,
 
 // parkBeadPostIntakeRejection moves the bead to proposed and appends an
 // intake.blocked event so the bead is filtered from ReadyExecution until an
-// operator reviews the intake decision. It does not unclaim — the caller must
-// call Unclaim after this returns (whether or not parking succeeds).
+// operator reviews the intake decision. It does not release the worker-owned
+// claim — the caller must release it after this returns (whether or not
+// parking succeeds).
 func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bead, actor string, outcome PreClaimIntakeOutcome, reason, detail string, at time.Time) (bool, error) {
 	if candidate == nil {
 		return false, fmt.Errorf("pre-claim intake park requires a bead candidate")
