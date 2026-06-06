@@ -32,6 +32,24 @@ func (f satisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID stri
 	return f(ctx, beadID, noChangesCount)
 }
 
+type backEdgeDecompositionStore struct {
+	*bead.Store
+	parentID string
+}
+
+func (s *backEdgeDecompositionStore) Create(ctx context.Context, b *bead.Bead) error {
+	base := s.Store
+	if err := base.Create(ctx, b); err != nil {
+		return err
+	}
+	if b.Parent != s.parentID {
+		return nil
+	}
+	return base.Update(ctx, b.ID, func(child *bead.Bead) {
+		child.AddDep(s.parentID, "blocks")
+	})
+}
+
 func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	report := ExecuteBeadReport{
 		BeadID:                      "ddx-test",
@@ -332,6 +350,114 @@ func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
 		ResultRev:     "result",
 		OutcomeReason: "tests_red",
 	}))
+}
+
+func TestWorkHaltsOnParentBackEdge(t *testing.T) {
+	inner := bead.NewStore(t.TempDir())
+	require.NoError(t, inner.Init(context.Background()))
+
+	parent := &bead.Bead{
+		ID:         "ddx-parent-back-edge",
+		Title:      "Parent bead with a child back-edge",
+		Acceptance: "1. split into children without wiring them back to the parent",
+	}
+	require.NoError(t, inner.Create(context.Background(), parent))
+
+	store := &backEdgeDecompositionStore{
+		Store:    inner,
+		parentID: parent.ID,
+	}
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "split the parent into one child for the regression",
+		Children: []PreClaimDecompositionChild{
+			{Title: "Child A", Description: "child should not depend on the parent", Acceptance: "1. do child work"},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. split into children without wiring them back to the parent", Coverage: "covered by Child A"},
+		},
+	}
+
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				Detail:             mixedCommitAndNoChangesRationaleReason,
+				BaseRev:            "feedface00112233",
+				ResultRev:          "feedface00112234",
+				SessionID:          "sess-parent-back-edge",
+				AttemptID:          "attempt-parent-back-edge",
+				WorkerID:           "worker",
+				NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: the work split needs orchestration",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", MaxDecompositionDepth: 3}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: parent.ID,
+		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+			return decomp, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Failures)
+
+	gotParent, err := inner.Get(parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, gotParent.Status, "parent must be parked after the back-edge is detected")
+
+	events, err := inner.Events(parent.ID)
+	require.NoError(t, err)
+	var sawOperatorAttention bool
+	for _, ev := range events {
+		if ev.Kind != "operator_attention" {
+			continue
+		}
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		if body["reason"] != "parent_back_edge" {
+			continue
+		}
+		sawOperatorAttention = true
+		childIDs, ok := body["child_ids"].([]any)
+		require.True(t, ok, "operator_attention body must include child_ids")
+		require.Len(t, childIDs, 1)
+		assert.Equal(t, parent.ID, body["bead_id"])
+		break
+	}
+	assert.True(t, sawOperatorAttention, "operator_attention event must be written for the back-edge")
+
+	children, err := inner.ReadAll()
+	require.NoError(t, err)
+	var backEdgeChild *bead.Bead
+	for i := range children {
+		if children[i].Parent == parent.ID {
+			backEdgeChild = &children[i]
+			break
+		}
+	}
+	require.NotNil(t, backEdgeChild, "the orchestrator split must create a child bead")
+	assert.Contains(t, backEdgeChild.DepIDs(), parent.ID, "fresh child must still depend on the attempted parent")
+
+	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: parent.ID,
+		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+			return decomp, nil
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "parent must not be re-claimed after parking to proposed")
 }
 
 func TestExecuteLoop_WorktreeLostDoesNotCountNoProgress(t *testing.T) {

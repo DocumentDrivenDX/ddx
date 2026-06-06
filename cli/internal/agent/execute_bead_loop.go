@@ -387,8 +387,9 @@ func SubmitWithPreMergeChecks(
 // no_changes attempt signals orchestrator_action: decompose. It checks the
 // queue-level max_decomposition_depth (not the implementation prompt cap),
 // validates the AC map for completeness, and either creates children+deps or
-// parks the parent for operator review if the split is lossy or depth-capped.
-// The bead must already be unclaimed before this is called.
+// parks the parent for operator review if the split is lossy, depth-capped, or
+// introduces a parent back-edge. The bead must already be unclaimed before
+// this is called.
 func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) {
 	emit := func(kind string, body map[string]any) {
 		if runtime.EventSink == nil {
@@ -459,6 +460,77 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	emit("post_attempt_decomposition.applied", map[string]any{
 		"bead_id":   candidate.ID,
 		"child_ids": childIDs,
+	})
+
+	backEdgeChildIDs, err := detectPostAttemptDecompositionBackEdge(ctx, w.Store, candidate.ID, childIDs)
+	if err != nil {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge check failed: %v\n", err)
+		}
+		return
+	}
+	if len(backEdgeChildIDs) == 0 {
+		return
+	}
+	if runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge: bead %s children %s still depend on the parent\n", candidate.ID, strings.Join(backEdgeChildIDs, ", "))
+	}
+	emit("post_attempt_decomposition.parent_back_edge", map[string]any{
+		"bead_id":   candidate.ID,
+		"child_ids": backEdgeChildIDs,
+	})
+	if parkErr := parkParentBackEdgeForOperator(w.Store, candidate.ID, assignee, backEdgeChildIDs, at); parkErr != nil && runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition parent back-edge park error: %v\n", parkErr)
+	}
+}
+
+func detectPostAttemptDecompositionBackEdge(ctx context.Context, store ExecuteBeadLoopStore, parentID string, childIDs []string) ([]string, error) {
+	if store == nil || parentID == "" || len(childIDs) == 0 {
+		return nil, nil
+	}
+	var backEdgeChildIDs []string
+	for _, childID := range childIDs {
+		child, err := store.Get(ctx, childID)
+		if err != nil {
+			return nil, err
+		}
+		if child == nil || child.Parent != parentID {
+			continue
+		}
+		if child.HasDep(parentID) {
+			backEdgeChildIDs = append(backEdgeChildIDs, childID)
+		}
+	}
+	return backEdgeChildIDs, nil
+}
+
+func parkParentBackEdgeForOperator(store ExecuteBeadLoopStore, beadID, actor string, childIDs []string, at time.Time) error {
+	diagnosis := fmt.Sprintf(
+		"fresh child beads still depend on the attempted parent bead %s; re-claiming the parent would keep the child split blocked",
+		beadID,
+	)
+	if err := parkToProposedWithOperatorMeta(store, beadID, bead.ParkNoChangesOperatorRequired, ParkToProposedOpts{
+		Reason:          "parent_back_edge",
+		Summary:         "child split still depends on the parent bead",
+		SuggestedAction: "remove the parent back-edge from the child split and retry once the children are independent",
+		Since:           at,
+		CleanupLabels:   false,
+	}); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"reason":    "parent_back_edge",
+		"bead_id":   beadID,
+		"child_ids": append([]string(nil), childIDs...),
+		"diagnosis": diagnosis,
+	})
+	return store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   "parent_back_edge",
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
 	})
 }
 
