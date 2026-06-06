@@ -2,6 +2,7 @@ package graphql_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -41,7 +42,7 @@ func setupSecurityHarness(t *testing.T, capBytes int) (http.Handler, *bead.Store
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

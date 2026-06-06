@@ -113,7 +113,7 @@ func runInterruptedAttemptInGitRepo(t *testing.T, trackDirtyRunState bool) inter
 	projectRoot := newDurableAuditProject(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{ID: "ddx-interrupted-attempt", Title: "Interrupted attempt", Priority: 0}
 	require.NoError(t, store.Create(candidate))

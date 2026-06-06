@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,7 @@ import (
 func seedQueueBeads(t *testing.T, workingDir string, beads []bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(workingDir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.WriteAll(beads))
 }
 

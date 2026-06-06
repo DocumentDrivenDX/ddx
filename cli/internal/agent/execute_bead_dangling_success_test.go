@@ -160,7 +160,7 @@ func TestLatestTaskSucceededResult_ReturnsMostRecent(t *testing.T) {
 func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-test", Title: "test bead", IssueType: "task"}))
 	require.NoError(t, store.Claim("ddx-test", "worker"))
 
@@ -652,7 +652,7 @@ func newExecuteLoopProjectRoot(t *testing.T) (projectRoot string, beadID string)
 
 	ddxDir := filepath.Join(root, ddxroot.DirName)
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	const id = "ddx-recovery-0001"
 	require.NoError(t, store.Create(&bead.Bead{ID: id, Title: "recovery test bead", IssueType: "task"}))

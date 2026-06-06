@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -25,7 +26,7 @@ func TestBeadsByProject_UpdateVisibleOnNextRequest(t *testing.T) {
 
 	projectPath := filepath.Join(t.TempDir(), "project")
 	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -107,7 +108,7 @@ func TestBeadsByProject_ConcurrentQueriesAndUpdates(t *testing.T) {
 
 	projectPath := filepath.Join(t.TempDir(), "project")
 	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

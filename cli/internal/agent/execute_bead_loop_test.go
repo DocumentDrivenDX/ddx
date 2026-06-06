@@ -938,7 +938,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 // is the correct gate; SetExecutionCooldown would park the bead unnecessarily.
 func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-pc-nocool", Title: "Provider connectivity test"}
 	require.NoError(t, store.Create(target))
 
@@ -978,7 +978,7 @@ func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
 // the same (provider, model) from being re-selected by Fizeau routing.
 func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-pc-excl", Title: "Route exclusion regression"}
 	require.NoError(t, store.Create(target))
 
@@ -1059,7 +1059,7 @@ func TestNoViableProvider_TransitionsToPausedInfra(t *testing.T) {
 // worker emits loop.paused-infra instead of the normal loop.idle/NoReadyWork path.
 func TestWorkerIdle_AllInfraCooledDown_EntersPausedInfra(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b1 := &bead.Bead{ID: "ddx-ic-1", Title: "Infra cooled 1"}
 	b2 := &bead.Bead{ID: "ddx-ic-2", Title: "Infra cooled 2"}
@@ -1144,7 +1144,7 @@ func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.
 
 func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{
 		ID:       "ddx-smart-retry",
 		Title:    "Smart retry",
@@ -1190,7 +1190,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1213,7 +1213,7 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 // containers unless a dedicated epic-worker path owns them.
 func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	epic := &bead.Bead{ID: "ddx-epic-001", Title: "Epic container", IssueType: "epic", Priority: 1}
 	require.NoError(t, store.Create(epic))
@@ -1255,7 +1255,7 @@ func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 
 func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	completedEpic := &bead.Bead{ID: "ddx-epic-closed", Title: "Completed epic", IssueType: "epic", Priority: 0}
 	activeEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Active epic", IssueType: "epic", Priority: 1}
@@ -1294,7 +1294,7 @@ func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 
 func TestExecuteBeadLoopResult_IncludesQueueSnapshotAfterSuccessfulDrain(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	runnable := &bead.Bead{ID: "ddx-runnable", Title: "Runnable", Priority: 0}
 	proposed := &bead.Bead{ID: "ddx-proposed", Title: "Proposed", Status: bead.StatusProposed, Priority: 1}
@@ -1377,7 +1377,7 @@ func TestNoReadyWorkDetail_DoesNotExposeNeedsInvestigation(t *testing.T) {
 
 func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	only := &bead.Bead{ID: "ddx-race-1", Title: "Only ready bead", Priority: 0}
 	require.NoError(t, store.Create(only))
@@ -1523,7 +1523,7 @@ func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testi
 
 func TestReadyExecutionExcludesEpics(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	task := &bead.Bead{ID: "ddx-task01", Title: "Task work", IssueType: "task", Priority: 1}
 	epic := &bead.Bead{ID: "ddx-epic01", Title: "Epic container", IssueType: "epic", Priority: 0}
@@ -1656,7 +1656,7 @@ func TestExecuteBeadWorkerEmitsStructuredProgressEvents(t *testing.T) {
 
 func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1698,7 +1698,7 @@ func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 // contract — only structured rationales close the bead.
 func TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-nc01", Title: "Always no-changes"}
 	require.NoError(t, store.Create(b))
@@ -1745,7 +1745,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel(t *testing.T) {
 // no_changes result without waiting for the count threshold.
 func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-sat01", Title: "Already done"}
 	require.NoError(t, store.Create(b))
@@ -1805,7 +1805,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 // satisfied, the bead remains open without default retry cooldown.
 func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-unr01", Title: "Not yet done"}
 	require.NoError(t, store.Create(b))
@@ -1853,7 +1853,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 // label removes the bead from future execution-ready scans.
 func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Three beads: one that returns no_changes, two that succeed. Not supplying
 	// BaseRev/ResultRev means shouldSuppressNoProgress returns false, so no
@@ -1938,7 +1938,7 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 // the first attempt and emits a no_changes_verified event.
 func TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-sha01", Title: "Already in prior commit"}
 	require.NoError(t, store.Create(b))
@@ -1998,7 +1998,7 @@ func TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately(t *testing.T) {
 // triage:no-changes-unverified label and a no_changes_unverified event.
 func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-unv01", Title: "Bead whose verification fails"}
 	require.NoError(t, store.Create(b))
@@ -2043,7 +2043,7 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 
 func TestNoChangesRetryDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-open01", Title: "Bead that needs a stronger retry"}
 	require.NoError(t, store.Create(b))
@@ -2098,7 +2098,7 @@ func TestNoChangesRetryDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 // the bead is parked to status=proposed rather than retried.
 func TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-toptier", Title: "Top powerClass exhausted bead"}
 	require.NoError(t, store.Create(b))
@@ -2134,7 +2134,7 @@ func TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed(t *testing.T)
 
 func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-prop01", Title: "Bead requiring operator choice"}
 	require.NoError(t, store.Create(b))
@@ -2186,7 +2186,7 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 
 func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-legacy01", Title: "Bead with legacy no_changes output"}
 	require.NoError(t, store.Create(b))
@@ -2234,7 +2234,7 @@ func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
 
 func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-unj01", Title: "Bead with absent no_changes rationale"}
 	require.NoError(t, store.Create(b))
@@ -2285,7 +2285,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *te
 
 func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:    "ddx-stale01",
@@ -2341,7 +2341,7 @@ func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 // Regression coverage for ddx-fba752b9.
 func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-decomp01", Title: "Routing point release (epic)"}
 	require.NoError(t, store.Create(b))
@@ -2420,7 +2420,7 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoChanges(t *testing.T) {
 	t.Run("watch_mode_does_not_retry_same_parent", func(t *testing.T) {
 		store := bead.NewStore(t.TempDir())
-		require.NoError(t, store.Init())
+		require.NoError(t, store.Init(context.Background()))
 
 		parent := &bead.Bead{ID: "ddx-watch-decomp", Title: "Watch-mode decomposition parent"}
 		require.NoError(t, store.Create(parent))
@@ -2506,7 +2506,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 
 	t.Run("stale_snapshot_selects_next_ready_bead", func(t *testing.T) {
 		baseStore := bead.NewStore(t.TempDir())
-		require.NoError(t, baseStore.Init())
+		require.NoError(t, baseStore.Init(context.Background()))
 
 		parent := &bead.Bead{
 			ID:       "ddx-stale-parent",
@@ -2571,7 +2571,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 
 	t.Run("stale_snapshot_idles_with_skip_event", func(t *testing.T) {
 		baseStore := bead.NewStore(t.TempDir())
-		require.NoError(t, baseStore.Init())
+		require.NoError(t, baseStore.Init(context.Background()))
 
 		parent := &bead.Bead{
 			ID:       "ddx-stale-idle",
@@ -2627,7 +2627,7 @@ func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead)
 	t.Helper()
 
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	first := &bead.Bead{ID: "ddx-0001", Title: "First ready", Priority: 0}
 	second := &bead.Bead{ID: "ddx-0002", Title: "Second ready", Priority: 1}
@@ -2816,7 +2816,7 @@ func TestWorkerFailurePathsReleaseClaimAtomically(t *testing.T) {
 // same-run retry test below.
 func TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-hook-always-fail", Title: "Bead with persistent hook failure"}
 	require.NoError(t, store.Create(b))
@@ -2859,7 +2859,7 @@ func TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable(t *testing.
 // This covers the direct reproduce scenario from the bead description (runs 3/4).
 func TestExecuteBeadWorkerPreClaimHookFailureRetriesOnNextIteration(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Only one ready bead in the queue.
 	b := &bead.Bead{ID: "ddx-hook-same-run", Title: "Bead retried in same run"}
@@ -2986,7 +2986,7 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			realStore := bead.NewStore(t.TempDir())
-			require.NoError(t, realStore.Init())
+			require.NoError(t, realStore.Init(context.Background()))
 
 			// Two beads: first gets the error injection, second should still be processed.
 			first := &bead.Bead{ID: "ddx-err-first", Title: "First bead"}
@@ -3068,7 +3068,7 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 // Unclaim to be the first store call and the loop exited on any transient path.
 func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	a := &bead.Bead{ID: "ddx-e2e-a", Title: "Bead A — no_changes", Priority: 0}
 	b := &bead.Bead{ID: "ddx-e2e-b", Title: "Bead B — success", Priority: 1}

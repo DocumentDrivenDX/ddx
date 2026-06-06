@@ -54,7 +54,7 @@ func (s *claimSuccessRateWarningStore) claim(id, assignee, session, worktree str
 // sleep, then poll again. Cancelling the context is the only way out.
 func TestLoop_StaysAliveWithEmptyQueue(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -193,7 +193,7 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 // remaining ready queue untouched.
 func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	beadIDs := []string{
 		"ddx-preclaim-warn-1",
 		"ddx-preclaim-warn-2",
@@ -416,7 +416,7 @@ func TestWorkWatch_PreClaimIdleEscalatesAfterRepeatedSameDetail(t *testing.T) {
 // clears the warned state, and the next below-threshold crossing warns again.
 func TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	for i := 1; i <= 3; i++ {
 		require.NoError(t, store.Create(&bead.Bead{
 			ID:       fmt.Sprintf("ddx-claim-rate-%d", i),
@@ -489,7 +489,7 @@ func TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold(t *testing.T) {
 
 func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	first := &bead.Bead{ID: "ddx-preserve-0001", Title: "Preserve dirty root", IssueType: "task"}
 	require.NoError(t, store.Create(first))
 
@@ -963,7 +963,7 @@ func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
 
 func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	seedWatchIdleQueue(t, store)
 
 	worker := &ExecuteBeadWorker{
@@ -1033,7 +1033,7 @@ func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
 
 func TestWorkWatchIdleStdout_RepeatedPollKeepsCompactQueueStatus(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	seedWatchIdleQueue(t, store)
 
 	worker := &ExecuteBeadWorker{
@@ -1095,7 +1095,7 @@ func TestWorkWatchIdleStdout_RepeatedPollKeepsCompactQueueStatus(t *testing.T) {
 
 func TestWorkWatchStdout_PrintsNextReadyTransitionAfterIdle(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	worker := &ExecuteBeadWorker{
@@ -1282,7 +1282,7 @@ func TestLoop_OnceFlagStillExits(t *testing.T) {
 // is terminal unless watch mode is selected.
 func TestLoop_ExplicitDrainExits(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,

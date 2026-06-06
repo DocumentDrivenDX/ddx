@@ -19,7 +19,7 @@ import (
 // and that the PostLadderExhaustionHook fires when the counter reaches threshold 2.
 func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-hook-threshold", Title: "hook threshold test"}
 	require.NoError(t, store.Create(b))
@@ -83,7 +83,7 @@ func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 // PostLadderExhaustionHook when the exhaustion threshold is reached.
 func TestRecoveryManualLabel_SkipsAutoRecovery(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:     "ddx-manual-recovery",

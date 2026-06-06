@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -109,7 +110,7 @@ func TestGetBeadSnapshots_PushdownFiltersStatusAtStoreLayer(t *testing.T) {
 	root := t.TempDir()
 	projectPath := filepath.Join(root, "project-mixed")
 	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -155,7 +156,7 @@ func TestGetBeadSnapshots_PushdownFiltersStatusAtStoreLayer(t *testing.T) {
 func seedScopeTestBeads(t *testing.T, projectPath string, projectIdx, n int) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

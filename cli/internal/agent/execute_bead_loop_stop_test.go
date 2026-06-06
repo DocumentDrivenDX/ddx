@@ -22,7 +22,7 @@ import (
 func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 	t.Run("drained", func(t *testing.T) {
 		store := bead.NewStore(t.TempDir())
-		require.NoError(t, store.Init())
+		require.NoError(t, store.Init(context.Background()))
 
 		worker := &ExecuteBeadWorker{
 			Store: store,
@@ -68,7 +68,7 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 
 	t.Run("signal canceled", func(t *testing.T) {
 		store := bead.NewStore(t.TempDir())
-		require.NoError(t, store.Init())
+		require.NoError(t, store.Init(context.Background()))
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -173,7 +173,7 @@ func TestStopCondition_BudgetAfterImplementerCostStopsBeforeNextClaim(t *testing
 
 func TestExecuteBeadLoopResult_IncludesStopReasonOnDrainExit(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -203,7 +203,7 @@ func (s *fatalReadyStore) ReadyExecution() ([]bead.Bead, error) {
 
 func TestExecuteBeadLoopResult_IncludesStopReasonOnFatalConfigExit(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	fatalErr := errors.New("ready execution unavailable")
 
 	worker := &ExecuteBeadWorker{
@@ -225,7 +225,7 @@ func TestExecuteBeadLoopResult_IncludesStopReasonOnFatalConfigExit(t *testing.T)
 
 func TestExecuteBeadLoopResult_PreservesLoopEndExitReason(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,

@@ -15,7 +15,7 @@ import (
 
 func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{
 		ID:         "ddx-decomp-parent",
@@ -105,7 +105,7 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 
 func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{
 		ID:          "ddx-decomp-hook-parent",
@@ -175,7 +175,7 @@ func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing
 
 func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{
 		ID:         "ddx-acmap-event",
@@ -246,7 +246,7 @@ func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {
 
 func TestIntake_DecompositionACMapRejectsDroppedAC(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{
 		ID:         "ddx-lossy-intake",
@@ -311,7 +311,7 @@ func TestIntake_DecompositionACMapRejectsDroppedAC(t *testing.T) {
 
 func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Create a hierarchy with two consecutive decomposed child layers. Ordinary
 	// epic ancestry does not count toward the cap, but decomposed descendants do.
@@ -382,7 +382,7 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 
 func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{
 		ID:         "ddx-postdecomp-01",
@@ -464,7 +464,7 @@ func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
 // still be split even if the rationale mentions the implementation depth cap.
 func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Create bead at depth 1: child of a closed root bead.
 	root := &bead.Bead{ID: "ddx-qdepth-root", Title: "Root bead", Status: bead.StatusClosed}
@@ -539,7 +539,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 
 func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{
 		ID:         "ddx-lossy-postdecomp",

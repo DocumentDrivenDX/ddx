@@ -18,7 +18,7 @@ import (
 // floor.
 func TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-rce01", Title: "Repair cycle exhausted escalation"}
 	require.NoError(t, store.Create(b))
@@ -57,7 +57,7 @@ func TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata(t *testin
 // the bead is parked to proposed for operator review.
 func TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-rce02", Title: "Repair cycle exhausted at top powerClass"}
 	require.NoError(t, store.Create(b))

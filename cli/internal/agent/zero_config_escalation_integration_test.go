@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -96,7 +97,7 @@ func TestZeroConfigRetryEscalationPolicy(t *testing.T) {
 // retry/escalation policy.
 func TestZeroConfigEscalationSummaryEventBody(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-zero-config-002", Title: "standard-default ladder", Priority: 0}
 	require.NoError(t, store.Create(target))
 

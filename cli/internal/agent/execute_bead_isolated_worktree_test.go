@@ -49,7 +49,7 @@ func (g *isolatedWorktreeGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 		return err
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		return err
 	}
 	return store.Create(&bead.Bead{ID: g.beadID, Title: "Isolated worktree test"})

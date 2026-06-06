@@ -24,7 +24,7 @@ func newRecoveryTestBead(t *testing.T, store *bead.Store, id string) {
 
 func TestReframeFailure_FallsBackToDecompose(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	newRecoveryTestBead(t, store, "ddx-recovery-fallback")
 
 	var promptSources []string
@@ -55,7 +55,7 @@ func TestReframeFailure_FallsBackToDecompose(t *testing.T) {
 
 func TestBothFail_ParkProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	newRecoveryTestBead(t, store, "ddx-recovery-both-fail")
 
 	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
@@ -82,7 +82,7 @@ func TestBothFail_ParkProposed(t *testing.T) {
 
 func TestRecoveryCircuitBreaker_AbortsAtCostCap(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	newRecoveryTestBead(t, store, "ddx-recovery-cost-cap")
 
 	costs := []float64{1.50, 0.60}
@@ -111,7 +111,7 @@ func TestRecoveryCircuitBreaker_AbortsAtCostCap(t *testing.T) {
 
 func TestPerBeadBudgetExhausted_TriggersAutoRecovery(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	newRecoveryTestBead(t, store, "ddx-recovery-per-bead-budget")
 
 	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {

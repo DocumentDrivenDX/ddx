@@ -368,7 +368,7 @@ func TestExecuteOnService_RecordsFailedRouteAttempt(t *testing.T) {
 func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "seed-route-001", Title: "seed route"}))
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
 	require.NoError(t, store.AppendEvent("seed-route-001", bead.BeadEvent{
@@ -391,7 +391,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing
 func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    "seed-extra-001",
@@ -427,7 +427,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T)
 func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "seed-sub-001", Title: "seed subscription"}))
 	now := time.Date(2026, 5, 29, 8, 55, 0, 0, time.UTC)
 
@@ -478,7 +478,7 @@ func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
 
 	now := time.Now().UTC()
@@ -547,7 +547,7 @@ func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 func TestRecordRouteAttemptRouteHealthGatesPolicyExecute(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    "hardgate-001",
 		Title: "hard-gate via failed-route extra",

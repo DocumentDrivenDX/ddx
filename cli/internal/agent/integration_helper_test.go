@@ -91,7 +91,7 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	for i := 0; i < beadCount; i++ {
 		id := fmt.Sprintf("ddx-int-%04d", i+1)

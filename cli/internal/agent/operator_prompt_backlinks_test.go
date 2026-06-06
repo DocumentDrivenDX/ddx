@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -117,7 +118,7 @@ func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *t
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	originator := bead.NewOperatorPromptBead("test prompt", bead.DefaultPriority)
@@ -182,7 +183,7 @@ func TestRecordOperatorPromptBacklinks_EmptyAffectedNoEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	originator := bead.NewOperatorPromptBead("noop prompt", bead.DefaultPriority)

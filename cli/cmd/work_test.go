@@ -113,7 +113,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 func TestWork_IgnoreCooldownDrainsCooledQueue(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	future := time.Now().UTC().Add(6 * time.Hour)
 	for _, tc := range []struct {
@@ -320,7 +320,7 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-powerClass-standard",
 		Title:     "Work with inferred standard routing powerClass",
@@ -376,7 +376,7 @@ func TestWorkZeroConfigStandardPolicyDoesNotDowngradeToCheapPolicy(t *testing.T)
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:          "ddx-zero-config-work-standard-no-cheap",
 		Title:       "Work with standard powerClass and stale medium model snapshot",
@@ -541,7 +541,7 @@ func TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor(t *testing.T) {
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-powerClass-retry",
 		Title:     "Work retries semantic failures at the next viable MinPower",
@@ -597,7 +597,7 @@ func TestWorkZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testin
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-provider-connectivity-retry",
 		Title:     "Work routes around failed provider connectivity",
@@ -669,7 +669,7 @@ func TestWorkProviderConnectivityCommitsEvidence(t *testing.T) {
 	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	beadID := "ddx-provider-connectivity-evidence"
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        beadID,

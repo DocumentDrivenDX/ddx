@@ -80,7 +80,7 @@ func setupArtifactTestWorktree(t *testing.T, wtPath, beadID, specID string, with
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	b := &bead.Bead{

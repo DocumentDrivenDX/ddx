@@ -15,7 +15,7 @@ func TestCommitOutcome_StoreErrorContinuesLoop(t *testing.T) {
 	injectedErr := errors.New("transient storage failure")
 
 	realStore := bead.NewStore(t.TempDir())
-	require.NoError(t, realStore.Init())
+	require.NoError(t, realStore.Init(context.Background()))
 
 	first := &bead.Bead{ID: "ddx-commit-first", Title: "First bead"}
 	second := &bead.Bead{ID: "ddx-commit-second", Title: "Second bead"}

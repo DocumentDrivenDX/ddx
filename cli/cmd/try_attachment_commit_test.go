@@ -92,7 +92,7 @@ func seedTryAttachmentCommitRepo(t *testing.T) (*TestEnvironment, string, string
 	require.NoError(t, os.WriteFile(filepath.Join(env.Dir, "README.md"), []byte("# try attachments\n"), 0o644))
 
 	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	beadID := "ddx-try-attachments-001"
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    beadID,

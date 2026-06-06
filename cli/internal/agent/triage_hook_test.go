@@ -50,7 +50,7 @@ func newTriageHookTestRoot(t *testing.T) string {
 func newTriageHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	b := &bead.Bead{
 		ID:          "ddx-triage-1",
 		Title:       "agent: invoke runner-backed post-attempt triage hook",
@@ -464,7 +464,7 @@ func TestPostAttemptTriageHook_EmptyOutputRecordsWarningEvent(t *testing.T) {
 	root := newTriageHookTestRoot(t)
 
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	candidate := &bead.Bead{ID: "ddx-triage-empty", Title: "empty output triage", Priority: 0}
 	require.NoError(t, store.Create(candidate))
 
@@ -670,7 +670,7 @@ func TestSomeChanges_StillInvokesReviewer(t *testing.T) {
 // the bead routes to proposed status without reviewer gating.
 func TestNoChangesWithReviewSpecGapClassification_RoutesToProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-specgap1", Title: "Spec gap bead"}
 	require.NoError(t, store.Create(b))

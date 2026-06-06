@@ -25,7 +25,7 @@ func (a *previewStoreAdapter) ReadyExecution() ([]bead.Bead, error) {
 func newPreviewTestStore(t *testing.T) (*bead.Store, PreviewQueueStore) {
 	t.Helper()
 	s := bead.NewStore(t.TempDir())
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(context.Background()))
 	return s, &previewStoreAdapter{s: s}
 }
 
@@ -230,7 +230,7 @@ func TestPreviewQueue_DeterministicAcrossRuns(t *testing.T) {
 // ranked bead when the lowest-ranked candidate is already attempted.
 func TestPicker_QueueRankOrdering(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Create two same-priority beads with different queue-rank values.
 	rankNine := &bead.Bead{ID: "ddx-rank-9", Title: "Rank 9", Priority: 0, Extra: map[string]any{"queue-rank": 9}}

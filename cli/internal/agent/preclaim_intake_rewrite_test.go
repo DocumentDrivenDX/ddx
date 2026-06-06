@@ -147,7 +147,7 @@ func TestPreClaimIntakeRewrite_RejectsDeletedCommitment(t *testing.T) {
 func TestPreClaimIntakeRewrite_RecordsReplacementEvidence(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	oldDesc := "PROBLEM\nstale chat noise from RFC-47\n\n" +
 		"ROOT CAUSE\ncli/internal/agent/preclaim_intake_rewrite.go:119 enforces append-only\n\n" +
@@ -316,7 +316,7 @@ func TestAcceptancePreservesCriteria_StrongBead_AxonFixture(t *testing.T) {
 func TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Strong bead fixture derived from axon-11508cde: 7 numbered ACs with
 	// cargo tree flags, file paths, and a rollback plan.
@@ -360,7 +360,7 @@ func TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired(t *testing.T) {
 func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	strongBead := &bead.Bead{
 		ID:        "ddx-strongbead2",
@@ -399,7 +399,7 @@ func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
 func TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Weak bead fixture derived from axon-044a5b5b (pre-refinement): vague AC.
 	weakBead := &bead.Bead{

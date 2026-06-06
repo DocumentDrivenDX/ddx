@@ -13,6 +13,7 @@
 package perf
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -177,7 +178,7 @@ func BuildBeadFixture(tb testing.TB, spec BeadFixtureSpec) *BeadFixture {
 func seedProjectBeads(tb testing.TB, projectPath string, projectIdx int, spec BeadFixtureSpec) []bead.Bead {
 	tb.Helper()
 	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		tb.Fatalf("perf: init bead store: %v", err)
 	}
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

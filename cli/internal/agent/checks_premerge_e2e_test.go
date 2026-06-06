@@ -52,7 +52,7 @@ func newPreMergeRepo(t *testing.T) *preMergeRepo {
 	r.baseSHA = strings.TrimSpace(r.runGit("rev-parse", "HEAD"))
 
 	r.store = bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	if err := r.store.Init(); err != nil {
+	if err := r.store.Init(context.Background()); err != nil {
 		t.Fatalf("store init: %v", err)
 	}
 	return r

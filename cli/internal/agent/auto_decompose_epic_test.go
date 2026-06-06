@@ -16,7 +16,7 @@ import (
 // with a valid description and labels is dispatched to the preclaim decomposer.
 func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-auto-decompose-happy",
@@ -244,7 +244,7 @@ func TestAutoDecomposeEpic_PreconditionGates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			store := bead.NewStore(t.TempDir())
-			require.NoError(t, store.Init())
+			require.NoError(t, store.Init(context.Background()))
 
 			b := tt.makeBead()
 			require.NoError(t, store.Create(b))
@@ -289,7 +289,7 @@ func TestAutoDecomposeEpic_PreconditionGates(t *testing.T) {
 // so we can't easily test decomposer failures without invalid preconditions.
 func TestAutoDecomposeEpic_FallbackDecompositionWorks(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-fallback-test",
@@ -341,7 +341,7 @@ func TestAutoDecomposeEpic_FallbackDecompositionWorks(t *testing.T) {
 // TestAutoDecomposeEpic_AttemptCapGate validates that the attempt cap is enforced.
 func TestAutoDecomposeEpic_AttemptCapGate(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-attempt-cap",
@@ -385,7 +385,7 @@ func TestAutoDecomposeEpic_AttemptCapGate(t *testing.T) {
 // the decomposer from being dispatched.
 func TestAutoDecomposeEpic_ActiveCooldownGate(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-active-cooldown",

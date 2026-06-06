@@ -29,7 +29,7 @@ func TestEvidenceAssemblyTelemetry(t *testing.T) {
 		require.NoError(t, err, string(out))
 
 		store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-		require.NoError(t, store.Init())
+		require.NoError(t, store.Init(context.Background()))
 		// Write a governing doc whose body is large enough to be clamped
 		// under the small caps used below (forces truncation_reason).
 		docRel := "docs/big.md"
@@ -177,7 +177,7 @@ func assertSummaryFields(t *testing.T, body string, s EventBodySummary) {
 func TestReviewEventBodyCap(t *testing.T) {
 	storeDir := t.TempDir()
 	store := bead.NewStore(storeDir)
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-cap-1", Title: "cap test"}))
 
 	// Build maximum-sized summary fields. Harness/Model strings of 100KB each
@@ -217,7 +217,7 @@ func TestReviewPromptTelemetryIncludesSectionBytes(t *testing.T) {
 	require.NoError(t, err, string(out))
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:          "ddx-telemetry-bytes",
 		Title:       "telemetry bytes",

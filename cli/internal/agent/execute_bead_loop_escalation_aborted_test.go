@@ -21,7 +21,7 @@ var errLadderExhaustedTest = fmt.Errorf("ladder exhausted")
 // power level. Power escalation only occurs when Fizeau reports no_viable_provider.
 func TestApplyProviderConnectivityRouteExclusion_DoesNotEscalatePower(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc01", Title: "connectivity fallback to alternate provider"}
 	require.NoError(t, store.Create(b))
@@ -64,7 +64,7 @@ func TestApplyProviderConnectivityRouteExclusion_DoesNotEscalatePower(t *testing
 // since power escalation is deferred to no_viable_provider handling.
 func TestApplyProviderConnectivityRouteExclusion_NoEscalationMetadata(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc02", Title: "connectivity defers escalation"}
 	require.NoError(t, store.Create(b))
@@ -92,7 +92,7 @@ func TestApplyProviderConnectivityRouteExclusion_NoEscalationMetadata(t *testing
 // operator attention.
 func TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc03", Title: "repeated connectivity failure escalation"}
 	require.NoError(t, store.Create(b))
@@ -147,7 +147,7 @@ func TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry(t *test
 
 func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	retryable := &bead.Bead{
 		ID:     "ddx-eabc-retry",
@@ -222,7 +222,7 @@ func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
 // kind=execution-escalation-aborted event before parking the bead.
 func TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc04", Title: "no-changes smart retry ladder exhausted event"}
 	require.NoError(t, store.Create(b))
@@ -255,7 +255,7 @@ func TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent(t *testing.T) {
 // emits a kind=execution-escalation-aborted event before parking the bead.
 func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc05", Title: "repair cycle exhausted event"}
 	require.NoError(t, store.Create(b))
@@ -287,7 +287,7 @@ func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testin
 // without operator intervention.
 func TestProviderConnectivityFailure_RetriesOnAlternateProviderAtSamePower(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:    "ddx-ac1test",

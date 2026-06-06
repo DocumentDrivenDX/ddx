@@ -32,7 +32,7 @@ import (
 // regression that quietly breaks it.
 func TestExecuteLoop_ClaimsHighestPriorityFirst(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	// Insert in REVERSE priority order so a naive picker that returned
 	// "first ready" would pick P2 first. ReadyExecution must sort.
@@ -86,7 +86,7 @@ func TestExecuteLoop_ClaimsHighestPriorityFirst(t *testing.T) {
 // still ready — and must pick that second P0 next.
 func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	for _, b := range []*bead.Bead{
 		{ID: "ddx-p0-a", Title: "P0 first", Priority: 0},
@@ -214,7 +214,7 @@ func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
 // starvation regressions would be invisible to operators.
 func TestPickerPrioritySkip_IncludesQueueRank(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:       "ddx-p0-skipped",

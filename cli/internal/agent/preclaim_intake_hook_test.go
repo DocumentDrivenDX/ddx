@@ -121,7 +121,7 @@ func newPreClaimIntakeHookTestRoot(t *testing.T) string {
 func newPreClaimIntakeHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	b := &bead.Bead{
 		ID:          "ddx-intake-1",
 		Title:       "work: wire strong-model intake decomposition into ddx work",

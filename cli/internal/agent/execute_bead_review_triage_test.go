@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -57,7 +58,7 @@ func triageDecisionBody(t *testing.T, ev *bead.BeadEvent) map[string]any {
 func newTriageTestStore(t *testing.T) (*bead.Store, *bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	b := &bead.Bead{ID: "ddx-triage-1", Title: "triage decision target"}
 	require.NoError(t, store.Create(b))
 	return store, b

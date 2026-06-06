@@ -116,7 +116,7 @@ review_max_retries: 5
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfgYAML), 0o644))
 
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "server e2e review-retry threshold", Priority: 0}))
 
 	runner := &reviewFailureRunner{

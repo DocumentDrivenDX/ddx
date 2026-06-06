@@ -32,7 +32,7 @@ func TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome(t *testing.T)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-liveness-1", Title: "Liveness sidecar bead"}
 	require.NoError(t, store.Create(target))
 

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -85,7 +86,7 @@ func TestReplay_OverridesAppliedToDispatch(t *testing.T) {
 
 	// Seed bead tracker.
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Test bead", Status: bead.StatusOpen,
 	}))
@@ -151,7 +152,7 @@ func TestReplay_DoesNotCountTowardBeadAttemptHistory(t *testing.T) {
 	writeReplayManifest(t, dir, attemptID, beadID, "sha1", "claude", "sonnet", "test prompt")
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "History bead", Status: bead.StatusOpen,
 	}))
@@ -193,7 +194,7 @@ func TestReplay_AppendsMetricsRowWithReplayOf(t *testing.T) {
 	writeReplayManifest(t, dir, attemptID, beadID, "sha2", "claude", "sonnet", "metrics test")
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Metrics bead", Status: bead.StatusOpen,
 	}))
@@ -250,7 +251,7 @@ func TestReplay_PrintsComparison(t *testing.T) {
 	writeReplayManifest(t, dir, attemptID, beadID, "sha3", "claude", "sonnet", "compare test")
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Compare bead", Status: bead.StatusOpen,
 	}))
@@ -301,7 +302,7 @@ func TestReplayBench_MultipleVariantsInParallel(t *testing.T) {
 	writeReplayManifest(t, dir, attemptID, beadID, "sha4", "claude", "sonnet", "bench prompt")
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID: beadID, Title: "Bench bead", Status: bead.StatusOpen,
 	}))

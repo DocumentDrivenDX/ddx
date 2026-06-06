@@ -18,7 +18,7 @@ import (
 func TestAttemptMetricsAppendLeavesNoDirtyTrackedFile(t *testing.T) {
 	projectRoot := initDurableAuditRepo(t)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-metrics-clean", Title: "Metrics clean"}))
 	runGitAttemptMetrics(t, projectRoot, "add", ".")
 	runGitAttemptMetrics(t, projectRoot, "commit", "-m", "chore: seed tracker")
