@@ -239,6 +239,10 @@ type ExecuteBeadRuntime struct {
 	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
 	// rate-limit responses fall through to the standard execution_failed path.
 	RateLimitMaxWait time.Duration
+	// PreserveAttemptWorktree keeps the attempt worktree on disk after the
+	// attempt finishes. It is used by inspection-oriented runs such as
+	// `ddx try --no-merge`.
+	PreserveAttemptWorktree bool
 	// ACCheckRunner, when non-nil, runs ddx bead ac-check for the given bead
 	// and attempt after the agent commits, writing ac-check.json to the
 	// attempt dir under wtPath. When nil, ac-check is skipped.
@@ -1580,7 +1584,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
 	}
+	var res *ExecuteBeadResult
 	defer func() {
+		preserveAttemptWorktree := runtime.PreserveAttemptWorktree && attemptBackend.Name() == AttemptBackendWorktree
+		if preserveAttemptWorktree {
+			return
+		}
+		if res != nil && attemptBackend.Name() == AttemptBackendWorktree {
+			if cleanupAttemptWorktree(gitOps, projectRoot, wtPath, res.Outcome, false) {
+				return
+			}
+		}
 		_ = attemptBackend.Cleanup(ctx, workspace)
 	}()
 
@@ -1607,8 +1621,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	// Publish the live run-state so operators and HELIX can observe what is
 	// executing without polling the bead tracker (CONTRACT-001 §5). The file
-	// is removed on completion; a crashed worker leaves a stale file that
-	// RecoverOrphans sweeps before the next attempt.
+	// is removed on completion; a crashed worker still leaves a stale file that
+	// RecoverOrphans can sweep later as a backstop.
 	runState := RunState{
 		BeadID:       beadID,
 		AttemptID:    attemptID,
@@ -1945,7 +1959,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 	}
 
-	res := &ExecuteBeadResult{
+	res = &ExecuteBeadResult{
 		BeadID:                      beadID,
 		AttemptID:                   attemptID,
 		WorkerID:                    runtime.WorkerID,
@@ -2172,6 +2186,20 @@ func populateWorkerStatus(res *ExecuteBeadResult) {
 		res.Status = ExecuteBeadStatusExecutionFailed
 	}
 	res.Detail = ExecuteBeadStatusDetail(res.Status, "", res.Error)
+}
+
+// cleanupAttemptWorktree removes the per-attempt execute-bead worktree for
+// non-success outcomes unless the caller explicitly asked to preserve the
+// worktree for inspection. It returns true when it performed the removal.
+func cleanupAttemptWorktree(gitOps GitOps, workDir, wtPath, outcome string, preserveFlag bool) bool {
+	if preserveFlag || outcome == ExecuteBeadOutcomeTaskSucceeded {
+		return false
+	}
+	if gitOps == nil || workDir == "" || wtPath == "" {
+		return false
+	}
+	_ = gitOps.WorktreeRemove(workDir, wtPath)
+	return true
 }
 
 // commitTrackerLocked commits beads.jsonl if it has uncommitted changes.

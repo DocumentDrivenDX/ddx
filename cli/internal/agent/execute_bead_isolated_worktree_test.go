@@ -218,3 +218,36 @@ func TestIsolatedWorktree_RetryStartsFromCleanWorktree(t *testing.T) {
 		t.Errorf("second worktree %s still exists after retry", secondWtPath)
 	}
 }
+
+// TestIsolatedWorktree_PreserveAttemptWorktree keeps the attempt worktree on
+// disk when the caller explicitly opts in to inspection preservation. This
+// mirrors the `ddx try --no-merge` preserve path.
+func TestIsolatedWorktree_PreserveAttemptWorktree(t *testing.T) {
+	setExecutionWorktreeRootForTest(t)
+	projectRoot := setupArtifactTestProjectRoot(t)
+	gitOps := newIsolatedWorktreeGitOps()
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{Harness: "test-harness"})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, isolatedWtBeadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner:             fixedExitCodeRunner{exitCode: 1},
+		PreserveAttemptWorktree: true,
+	}, gitOps)
+	if err != nil {
+		t.Fatalf("unexpected error from preserved attempt: %v", err)
+	}
+	if res == nil {
+		t.Fatal("nil result from preserved attempt")
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+		t.Fatalf("outcome = %q, want %q", res.Outcome, ExecuteBeadOutcomeTaskFailed)
+	}
+	if len(gitOps.addedPaths) != 1 {
+		t.Fatalf("WorktreeAdd calls = %d, want 1", len(gitOps.addedPaths))
+	}
+	if len(gitOps.removedPaths) != 0 {
+		t.Fatalf("WorktreeRemove calls = %v, want none for preserved attempt", gitOps.removedPaths)
+	}
+	if _, statErr := os.Stat(gitOps.addedPaths[0]); statErr != nil {
+		t.Fatalf("preserved worktree %s should remain on disk: %v", gitOps.addedPaths[0], statErr)
+	}
+}
