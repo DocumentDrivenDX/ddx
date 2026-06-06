@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260606T043443-a2011d72",
+  "bead_id": "ddx-0b659710",
+  "base_rev": "a344e982d49611295c8a53db8c0134cb418cedf4",
+  "created_at": "2026-06-06T04:34:58.407430375Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0b659710",
+    "title": "agent: release worker claims atomically on failure paths",
+    "description": "PROBLEM\nSome worker failure paths still call `Store.Unclaim`, which updates the bead row and then removes the claim heartbeat outside the same critical section. If heartbeat removal fails, `ReadyExecution` can keep excluding an open bead until the sidecar lease TTL expires, reducing multi-worker throughput and making failures look like queue starvation.\n\nROOT CAUSE\n- cli/internal/bead/store.go:1081-1100 implements `Unclaim` as row update followed by separate heartbeat removal.\n- cli/internal/bead/store.go:1103-1130 implements `Release`, which atomically updates the row and clears the heartbeat under one lock.\n- cli/internal/agent/execute_bead_loop.go:2365-2368 still uses `w.Store.Unclaim(candidate.ID)` on a worker refresh failure path; other worker paths should be audited for the same pattern.\n\nPROPOSED FIX\n- Audit worker-owned failure/unclaim paths and replace them with `Release` where the current worker owns the claim.\n- Add a fault-injection test that makes heartbeat removal fail and proves the bead is not left with a fresh sidecar lease after a worker failure path releases it.\n- Preserve CLI/operator `ddx bead update --unclaim` semantics where direct `Unclaim` is still appropriate.\n\nNON-SCOPE\n- Do not change claim ownership rules or sidecar lease TTLs in this bead.\n- Do not close beads on failure; failed attempts must remain open/unclaimed unless existing outcome policy says otherwise.",
+    "acceptance": "1. Worker-owned failure paths in `cli/internal/agent/execute_bead_loop.go` use `Store.Release` or an equivalent atomic release when they own the claim.\n2. `TestWorkerFailurePathsReleaseClaimAtomically` injects heartbeat-removal failure and proves the open bead is immediately visible to `ReadyExecution` or otherwise not hidden by a fresh sidecar lease.\n3. Existing `TestStoreReleaseClearsClaimAtomically`, `TestReadyExecutionExcludesFreshSidecarLease`, and `TestReadyExecutionReclaimsStaleSidecarLease` still pass.\n4. `cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... -run 'TestWorkerFailurePathsReleaseClaimAtomically|TestStoreReleaseClearsClaimAtomically|TestReadyExecutionExcludesFreshSidecarLease|TestReadyExecutionReclaimsStaleSidecarLease'` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:bead",
+      "kind:bug",
+      "spec:TP-021",
+      "reliability",
+      "concurrency"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-06-06T04:33:13.769801474Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e050f98fd02ceb82376ad67098871ad3c20e9b729038d4a1358c77a0d9132996\"}",
+          "created_at": "2026-06-06T04:34:09.990978034Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "TP-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-021",
+      "path": "docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md",
+      "title": "Test Plan: Multi-Worker `ddx try` Reliability"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T043443-a2011d72",
+    "prompt": ".ddx/executions/20260606T043443-a2011d72/prompt.md",
+    "manifest": ".ddx/executions/20260606T043443-a2011d72/manifest.json",
+    "result": ".ddx/executions/20260606T043443-a2011d72/result.json",
+    "checks": ".ddx/executions/20260606T043443-a2011d72/checks.json",
+    "usage": ".ddx/executions/20260606T043443-a2011d72/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0b659710-20260606T043443-a2011d72"
+  },
+  "prompt_sha": "35ea494b86210569f5bed0d063d121902747d0aec8a790468affa44ad090a6ed"
+}
