@@ -3370,6 +3370,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						}
 						report.RetryAfter = retryAfter.Format(time.RFC3339)
 					}
+					if report.Detail == mixedCommitAndNoChangesRationaleReason &&
+						countRecentMixedCommitEvents(w.Store, candidate.ID, mixedCommitCooldownWindow, now().UTC()) >= 1 {
+						if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkNoChangesOperatorRequired,
+							"circuit-breaker: "+mixedCommitAndNoChangesRationaleReason+" repeated within 24h; operator review required",
+							now().UTC()); parkErr != nil && runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "mixed_commit circuit-breaker park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+						}
+					}
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
@@ -5301,6 +5309,29 @@ func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
 		return false
 	}
 	return report.BaseRev == report.ResultRev
+}
+
+// mixedCommitCooldownWindow is the lookback period for the mixed_commit circuit-breaker.
+const mixedCommitCooldownWindow = 24 * time.Hour
+
+// countRecentMixedCommitEvents returns the number of execute-bead events in the
+// store for beadID within window of now that carry the
+// mixed_commit_and_no_changes_rationale marker. Used by the circuit-breaker to
+// detect a repeated-contradiction loop before the current attempt is appended.
+func countRecentMixedCommitEvents(store ExecuteBeadLoopStore, beadID string, window time.Duration, now time.Time) int {
+	events, err := store.Events(beadID)
+	if err != nil {
+		return 0
+	}
+	cutoff := now.Add(-window)
+	count := 0
+	for _, ev := range events {
+		if ev.Kind == "execute-bead" && ev.CreatedAt.After(cutoff) &&
+			strings.Contains(ev.Body, mixedCommitAndNoChangesRationaleReason) {
+			count++
+		}
+	}
+	return count
 }
 
 func isTransientOutcomeReason(reason string) bool {
