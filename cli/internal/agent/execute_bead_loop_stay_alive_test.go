@@ -1022,7 +1022,9 @@ func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
 	assert.Contains(t, out, "execution-ineligible=1")
 	assert.Contains(t, out, "superseded=1")
 	assert.Contains(t, out, "epics=1")
-	assert.Contains(t, out, "epic-closure-candidates=1")
+	// The closure cascade auto-closes the completed epic before the idle log line,
+	// so the candidate count is 0 when the snapshot is printed.
+	assert.Contains(t, out, "epic-closure-candidates=0")
 	assert.Contains(t, out, "30 beads blocked behind 3 needs-human blockers")
 	assert.Contains(t, out, "1. ddx-human-1 Needs human 1 (10 downstream)")
 	assert.Contains(t, out, "2. ddx-human-2 Needs human 2 (10 downstream)")

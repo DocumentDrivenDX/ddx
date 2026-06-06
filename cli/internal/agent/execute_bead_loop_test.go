@@ -1281,8 +1281,15 @@ func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork)
 	assert.Empty(t, result.Results)
+	// The idle-path closure cascade auto-closes the completed epic before reporting
+	// NoReadyWork, so it no longer appears as a candidate in the final snapshot.
 	assert.Equal(t, []string{"ddx-epic-open"}, result.NoReadyWorkDetail.Epics)
-	assert.Equal(t, []string{"ddx-epic-closed"}, result.NoReadyWorkDetail.EpicClosureCandidates)
+	assert.Empty(t, result.NoReadyWorkDetail.EpicClosureCandidates)
+
+	// The completed epic must be closed by the cascade.
+	got, err := store.Get(completedEpic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
 func TestExecuteBeadLoopResult_IncludesQueueSnapshotAfterSuccessfulDrain(t *testing.T) {

@@ -685,6 +685,14 @@ type readyDiagnoser interface {
 	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
 }
 
+// epicCloser is the optional interface the work loop uses for idle-path closure
+// cascade: closing epics whose children have all reached a terminal state.
+// bead.Store satisfies both methods.
+type epicCloser interface {
+	EpicClosureCandidates(ctx context.Context) ([]bead.Bead, error)
+	Close(args ...any) error
+}
+
 type proposedOperatorAttentionStore interface {
 	ProposedOperatorAttention() ([]bead.Bead, error)
 }
@@ -1662,6 +1670,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						continue
 					}
 				}
+			}
+
+			// Idle-path closure cascade (FEAT-004 §Queue Semantics For Epics):
+			// before declaring no ready work, close any epics whose children have
+			// all reached a terminal state. If any were closed, loop again —
+			// those closures may unblock downstream work.
+			if closed, _ := w.runEpicClosureCascade(ctx, emit); closed > 0 {
+				continue
 			}
 
 			result.NoReadyWork = true
@@ -3472,6 +3488,31 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, nil
 		}
 	}
+}
+
+// runEpicClosureCascade closes any epics whose children have all reached a
+// terminal state (FEAT-004 §Queue Semantics For Epics). Returns the count of
+// epics closed. Idempotent: a second call closes nothing new.
+func (w *ExecuteBeadWorker) runEpicClosureCascade(ctx context.Context, emit func(string, map[string]any)) (int, error) {
+	closer, ok := w.Store.(epicCloser)
+	if !ok {
+		return 0, nil
+	}
+	candidates, err := closer.EpicClosureCandidates(ctx)
+	if err != nil || len(candidates) == 0 {
+		return 0, err
+	}
+	closed := 0
+	for _, epic := range candidates {
+		if err := closer.Close(ctx, epic.ID); err == nil {
+			closed++
+			emit("loop.epic_auto_closed", map[string]any{
+				"bead_id": epic.ID,
+				"title":   epic.Title,
+			})
+		}
+	}
+	return closed, nil
 }
 
 func noReadyWorkBreakdownFromLifecycle(b bead.ReadyExecutionBreakdown) NoReadyWorkBreakdown {
