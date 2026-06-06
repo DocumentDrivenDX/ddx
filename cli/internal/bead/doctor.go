@@ -12,14 +12,22 @@ import (
 	"time"
 )
 
-// DoctorFinding reports a single field that exceeds MaxFieldBytes on a single
-// bead row. One bead can produce multiple findings (description + acceptance
-// + event bodies, etc.).
+const (
+	doctorFindingFieldOverflow      = "field_overflow"
+	doctorFindingLineUnparseable    = "line_unparseable"
+	doctorFindingParentAncestorDeps = "parent_ancestor_in_deps"
+)
+
+// DoctorFinding reports a single doctor finding on a single bead row. A bead
+// can produce multiple findings (description + acceptance + event bodies +
+// back-edge dependencies, etc.).
 type DoctorFinding struct {
-	BeadID     string
-	FieldPath  string // "description", "acceptance", "notes", "events[N].body", "events[N].summary"
-	SizeBytes  int
-	SampleHead string // first 80 bytes for visual identification
+	Code       string `json:"code,omitempty"`
+	BeadID     string `json:"bead_id,omitempty"`
+	FieldPath  string `json:"field_path,omitempty"` // "description", "acceptance", "notes", "events[N].body", "events[N].summary", "dependencies[N].depends_on_id"
+	DepIndex   int    `json:"dep_index,omitempty"`
+	SizeBytes  int    `json:"size_bytes,omitempty"`
+	SampleHead string `json:"sample_head,omitempty"` // first 80 bytes for visual identification
 }
 
 // DoctorReport is the output of BeadDoctor — an ordered list of findings.
@@ -31,20 +39,44 @@ type DoctorReport struct {
 // Clean is true when there are no findings (i.e. all bead fields fit).
 func (r DoctorReport) Clean() bool { return len(r.Findings) == 0 }
 
+type doctorRow struct {
+	LineNo       int
+	Raw          map[string]any
+	BeadID       string
+	Parent       string
+	Dependencies []doctorDependency
+}
+
+type doctorDependency struct {
+	Index       int
+	DependsOnID string
+}
+
 // BeadDoctor scans a beads.jsonl file and returns every field that exceeds
-// MaxFieldBytes. Parses each line best-effort; lines that fail to parse are
-// reported as a single finding with FieldPath="line" and the raw line as the
-// sample.
+// MaxFieldBytes, plus any dependency edge that points at the bead's parent
+// chain. Parses each line best-effort; lines that fail to parse are reported
+// as a single finding with FieldPath="line" and the raw line as the sample.
 func BeadDoctor(path string) (DoctorReport, error) {
+	rows, report, err := loadDoctorRows(path)
+	if err != nil {
+		return report, err
+	}
+	report.Findings = append(report.Findings, detectDoctorFindings(rows)...)
+	sortDoctorFindings(report.Findings)
+	return report, nil
+}
+
+func loadDoctorRows(path string) ([]doctorRow, DoctorReport, error) {
 	report := DoctorReport{Path: path}
 	f, err := os.Open(path)
 	if err != nil {
-		return report, err
+		return nil, report, err
 	}
 	defer f.Close()
 
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+	rows := make([]doctorRow, 0, 64)
 	lineNo := 0
 	for scanner.Scan() {
 		lineNo++
@@ -55,6 +87,7 @@ func BeadDoctor(path string) (DoctorReport, error) {
 		var raw map[string]any
 		if err := json.Unmarshal(line, &raw); err != nil {
 			report.Findings = append(report.Findings, DoctorFinding{
+				Code:       doctorFindingLineUnparseable,
 				BeadID:     fmt.Sprintf("line %d (unparseable)", lineNo),
 				FieldPath:  "line",
 				SizeBytes:  len(line),
@@ -62,18 +95,58 @@ func BeadDoctor(path string) (DoctorReport, error) {
 			})
 			continue
 		}
-		id, _ := raw["id"].(string)
+		row := doctorRow{LineNo: lineNo, Raw: raw}
+		row.BeadID, _ = raw["id"].(string)
+		row.Parent, _ = raw["parent"].(string)
+		if deps, ok := raw["dependencies"].([]any); ok {
+			row.Dependencies = make([]doctorDependency, 0, len(deps))
+			for i, depRaw := range deps {
+				dep, _ := depRaw.(map[string]any)
+				if dep == nil {
+					continue
+				}
+				target, _ := dep["depends_on_id"].(string)
+				if target == "" {
+					continue
+				}
+				row.Dependencies = append(row.Dependencies, doctorDependency{
+					Index:       i,
+					DependsOnID: target,
+				})
+			}
+		}
+		rows = append(rows, row)
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, report, fmt.Errorf("bead doctor: scanner: %w", err)
+	}
+	return rows, report, nil
+}
+
+func detectDoctorFindings(rows []doctorRow) []DoctorFinding {
+	byID := make(map[string]*Bead, len(rows))
+	for i := range rows {
+		row := &rows[i]
+		byID[row.BeadID] = &Bead{
+			ID:     row.BeadID,
+			Parent: row.Parent,
+		}
+	}
+
+	findings := make([]DoctorFinding, 0, len(rows))
+	for _, row := range rows {
 		for _, field := range []string{"description", "acceptance", "notes"} {
-			if s, ok := raw[field].(string); ok && len(s) > MaxFieldBytes {
-				report.Findings = append(report.Findings, DoctorFinding{
-					BeadID:     id,
+			if s, ok := row.Raw[field].(string); ok && len(s) > MaxFieldBytes {
+				findings = append(findings, DoctorFinding{
+					Code:       doctorFindingFieldOverflow,
+					BeadID:     row.BeadID,
 					FieldPath:  field,
 					SizeBytes:  len(s),
 					SampleHead: firstN(s, 80),
 				})
 			}
 		}
-		if events, ok := raw["events"].([]any); ok {
+		if events, ok := row.Raw["events"].([]any); ok {
 			for i, evRaw := range events {
 				ev, _ := evRaw.(map[string]any)
 				if ev == nil {
@@ -81,8 +154,9 @@ func BeadDoctor(path string) (DoctorReport, error) {
 				}
 				for _, field := range []string{"body", "summary"} {
 					if s, ok := ev[field].(string); ok && len(s) > MaxFieldBytes {
-						report.Findings = append(report.Findings, DoctorFinding{
-							BeadID:     id,
+						findings = append(findings, DoctorFinding{
+							Code:       doctorFindingFieldOverflow,
+							BeadID:     row.BeadID,
 							FieldPath:  fmt.Sprintf("events[%d].%s", i, field),
 							SizeBytes:  len(s),
 							SampleHead: firstN(s, 80),
@@ -91,17 +165,45 @@ func BeadDoctor(path string) (DoctorReport, error) {
 				}
 			}
 		}
-	}
-	if err := scanner.Err(); err != nil {
-		return report, fmt.Errorf("bead doctor: scanner: %w", err)
-	}
-	sort.SliceStable(report.Findings, func(i, j int) bool {
-		if report.Findings[i].BeadID == report.Findings[j].BeadID {
-			return report.Findings[i].FieldPath < report.Findings[j].FieldPath
+		parentChain, err := beadParentChain(byID, row.Parent)
+		if err != nil && len(parentChain) == 0 {
+			continue
 		}
-		return report.Findings[i].BeadID < report.Findings[j].BeadID
+		for _, dep := range row.Dependencies {
+			if containsStringDoctor(parentChain, dep.DependsOnID) {
+				findings = append(findings, DoctorFinding{
+					Code:       doctorFindingParentAncestorDeps,
+					BeadID:     row.BeadID,
+					FieldPath:  fmt.Sprintf("dependencies[%d].depends_on_id", dep.Index),
+					DepIndex:   dep.Index,
+					SizeBytes:  len(dep.DependsOnID),
+					SampleHead: firstN(dep.DependsOnID, 80),
+				})
+			}
+		}
+	}
+	return findings
+}
+
+func sortDoctorFindings(findings []DoctorFinding) {
+	sort.SliceStable(findings, func(i, j int) bool {
+		if findings[i].BeadID != findings[j].BeadID {
+			return findings[i].BeadID < findings[j].BeadID
+		}
+		if findings[i].Code != findings[j].Code {
+			return findings[i].Code < findings[j].Code
+		}
+		if findings[i].DepIndex != findings[j].DepIndex && findings[i].DepIndex >= 0 && findings[j].DepIndex >= 0 {
+			return findings[i].DepIndex < findings[j].DepIndex
+		}
+		if findings[i].FieldPath != findings[j].FieldPath {
+			return findings[i].FieldPath < findings[j].FieldPath
+		}
+		if findings[i].SizeBytes != findings[j].SizeBytes {
+			return findings[i].SizeBytes < findings[j].SizeBytes
+		}
+		return findings[i].SampleHead < findings[j].SampleHead
 	})
-	return report, nil
 }
 
 // BeadDoctorFix rewrites oversized fields on disk. Behavior:
@@ -114,9 +216,10 @@ func BeadDoctor(path string) (DoctorReport, error) {
 //     writes full overflow content to
 //     .ddx/executions/<bead-id>/repair-<timestamp>/<field>.log so the
 //     original payload remains auditable.
-//  4. Appends a repair event to each rewritten bead (kind="repair", actor=
+//  4. Removes dependency edges whose target is the bead's parent chain.
+//  5. Appends a repair event to each rewritten bead (kind="repair", actor=
 //     "ddx bead doctor").
-//  5. Returns the report of findings that were remediated.
+//  6. Returns the report of findings that were remediated.
 //
 // Idempotent: a second call finds no offending fields and returns a clean
 // report without writing anything.
@@ -204,26 +307,40 @@ func BeadDoctorFix(path string, now func() time.Time) (DoctorReport, error) {
 	return report, nil
 }
 
-// repairBead applies per-field truncation + artifact sidecar writes. Updates
+// repairBead applies per-field truncation + dependency edge removal. Updates
 // raw in place and returns it for convenience.
 func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir string, ts time.Time) map[string]any {
-	artifactRefs := make([]string, 0, len(findings))
+	repairRefs := make([]string, 0, len(findings))
+	hasDepRepair := false
 	for _, f := range findings {
-		ref := applyFieldRepair(raw, f, repairDir, ddxDir)
-		if ref != "" {
-			artifactRefs = append(artifactRefs, f.FieldPath+"→"+ref)
+		switch f.Code {
+		case doctorFindingParentAncestorDeps:
+			hasDepRepair = true
+		case doctorFindingFieldOverflow, doctorFindingLineUnparseable, "":
+			if ref := applyFieldRepair(raw, f, repairDir, ddxDir); ref != "" {
+				repairRefs = append(repairRefs, f.FieldPath+"→"+ref)
+			}
+		default:
+			if ref := applyFieldRepair(raw, f, repairDir, ddxDir); ref != "" {
+				repairRefs = append(repairRefs, f.FieldPath+"→"+ref)
+			}
+		}
+	}
+	if hasDepRepair {
+		if refs := applyDependencyRepairs(raw, findings); len(refs) > 0 {
+			repairRefs = append(repairRefs, refs...)
 		}
 	}
 
-	if len(artifactRefs) == 0 {
+	if len(repairRefs) == 0 {
 		return raw
 	}
 
 	events, _ := raw["events"].([]any)
 	events = append(events, map[string]any{
 		"kind":       "repair",
-		"summary":    fmt.Sprintf("field cap (%d bytes) enforced: %d field(s) truncated", MaxFieldBytes, len(artifactRefs)),
-		"body":       strings.Join(artifactRefs, "\n"),
+		"summary":    fmt.Sprintf("doctor repair applied: %d finding(s) remediated", len(repairRefs)),
+		"body":       strings.Join(repairRefs, "\n"),
 		"actor":      "ddx bead doctor",
 		"source":     "ddx bead doctor --fix",
 		"created_at": ts.Format(time.RFC3339Nano),
@@ -258,6 +375,40 @@ func applyFieldRepair(raw map[string]any, f DoctorFinding, repairDir, ddxDir str
 	// records the field→artifact mapping for audit.
 	setField(raw, f.FieldPath, capFieldBytes(original))
 	return rel
+}
+
+// applyDependencyRepairs removes dependency edges identified by the supplied
+// findings. The original ordering of the remaining edges is preserved.
+func applyDependencyRepairs(raw map[string]any, findings []DoctorFinding) []string {
+	deps, ok := raw["dependencies"].([]any)
+	if !ok || len(deps) == 0 {
+		return nil
+	}
+
+	remove := make(map[int]DoctorFinding)
+	for _, f := range findings {
+		if f.Code != doctorFindingParentAncestorDeps {
+			continue
+		}
+		if idx, ok := dependencyIndexFromFieldPath(f.FieldPath); ok && idx >= 0 && idx < len(deps) {
+			remove[idx] = f
+		}
+	}
+	if len(remove) == 0 {
+		return nil
+	}
+
+	newDeps := make([]any, 0, len(deps)-len(remove))
+	refs := make([]string, 0, len(remove))
+	for i, dep := range deps {
+		if f, ok := remove[i]; ok {
+			refs = append(refs, f.FieldPath+"→removed("+f.SampleHead+")")
+			continue
+		}
+		newDeps = append(newDeps, dep)
+	}
+	raw["dependencies"] = newDeps
+	return refs
 }
 
 // pickField reads raw[path] where path is either a flat key or
@@ -317,6 +468,31 @@ func setField(raw map[string]any, path string, value string) {
 	ev[field] = value
 	events[n] = ev
 	raw["events"] = events
+}
+
+func dependencyIndexFromFieldPath(path string) (int, bool) {
+	if !strings.HasPrefix(path, "dependencies[") {
+		return 0, false
+	}
+	openIdx := strings.Index(path, "[")
+	closeIdx := strings.Index(path, "]")
+	if openIdx < 0 || closeIdx < 0 {
+		return 0, false
+	}
+	var n int
+	if _, err := fmt.Sscanf(path[openIdx+1:closeIdx], "%d", &n); err != nil {
+		return 0, false
+	}
+	return n, true
+}
+
+func containsStringDoctor(values []string, want string) bool {
+	for _, v := range values {
+		if v == want {
+			return true
+		}
+	}
+	return false
 }
 
 func firstN(s string, n int) string {
