@@ -1644,11 +1644,14 @@ func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited
 
 	// Count children; closed AND cancelled both count as terminal.
 	nonTerminalChildCount := 0
+	closedChildCount := 0
 	totalChildCount := 0
 	for _, b := range allBeads {
 		if b.Parent == parentID {
 			totalChildCount++
-			if b.Status != StatusClosed && b.Status != StatusCancelled {
+			if b.Status == StatusClosed {
+				closedChildCount++
+			} else if b.Status != StatusCancelled {
 				nonTerminalChildCount++
 			}
 		}
@@ -1667,11 +1670,19 @@ func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited
 	}
 
 	var eventKind, reason, summary, body string
+	targetStatus := StatusClosed
 	if isDeadIntermediate {
 		reason = "auto-close dead-intermediate (all children closed, not execution-eligible)"
 		eventKind = "dead_intermediate_close"
 		summary = "closed as dead-intermediate bead (all children closed, execution-eligible=false)"
 		body = fmt.Sprintf("closed_because: all_children_closed\nexecution_eligible: false\ntotal_children: %d", totalChildCount)
+	} else if closedChildCount == 0 {
+		// All children are cancelled — no work actually completed; cancel the epic.
+		targetStatus = StatusCancelled
+		reason = "auto-cancel epic: all children cancelled, no work completed"
+		eventKind = "epic_auto_close"
+		summary = "auto-cancelled: all children cancelled, no work completed"
+		body = fmt.Sprintf("closed_because: all_children_cancelled\ntotal_children: %d", totalChildCount)
 	} else {
 		reason = "auto-close epic: all children reached terminal state"
 		eventKind = "epic_auto_close"
@@ -1680,7 +1691,7 @@ func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited
 	}
 
 	visited[parentID] = true
-	_ = s.SetLifecycleStatus(parentID, StatusClosed, LifecycleTransitionOptions{
+	_ = s.SetLifecycleStatus(parentID, targetStatus, LifecycleTransitionOptions{
 		ManualClose: true,
 		Reason:      reason,
 		Source:      "Store.Close.walkUpClosureCandidate",
@@ -1946,6 +1957,10 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 		if err := s.externalizeEvents(id); err != nil {
 			return err
 		}
+		// Walk up one hop to auto-close parent epics and dead-intermediates,
+		// matching the cascade that Store.Close runs.
+		visited := map[string]bool{id: true}
+		_ = s.cascadeAndWalkUp(id, visited)
 	}
 	_ = s.RemoveClaimHeartbeat(id)
 	s.maybeOpportunisticMaintenance()

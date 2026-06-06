@@ -883,6 +883,145 @@ func TestEpicClosureCandidates(t *testing.T) {
 	assert.False(t, ids[epicD.ID], "epicD should not be a candidate (no children)")
 }
 
+// closeWithEvidenceHelper appends an execute-bead event and calls CloseWithEvidence
+// with a non-empty commitSHA so the ClosureGate passes.
+func closeWithEvidenceHelper(t *testing.T, s *Store, id string) {
+	t.Helper()
+	require.NoError(t, s.AppendEvent(id, BeadEvent{
+		Kind:    "execute-bead",
+		Summary: "success",
+	}))
+	require.NoError(t, s.CloseWithEvidence(id, "session-test", "abc123"))
+}
+
+func TestCloseWithEvidence_AutoClosesParentEpicWhenLastChildCloses(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{Title: "Epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	childA := &Bead{Title: "Child A", Status: StatusOpen, Parent: epic.ID}
+	childB := &Bead{Title: "Child B", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), childA))
+	require.NoError(t, s.Create(testCtx(), childB))
+
+	// Close child A — epic still has open child B, should stay open.
+	closeWithEvidenceHelper(t, s, childA.ID)
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, epicGot.Status, "epic should stay open while child B is open")
+
+	// Close child B — now all children are terminal; epic should auto-close.
+	closeWithEvidenceHelper(t, s, childB.ID)
+	epicGot, err = s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, epicGot.Status, "epic should auto-close when last child closes")
+
+	events, err := s.Events(epic.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "epic_auto_close" {
+			assert.Contains(t, e.Body, "all_children_terminal")
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "epic should have epic_auto_close event")
+}
+
+func TestCloseWithEvidence_DoesNotCloseEpicWithOpenChildren(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{Title: "Epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	childA := &Bead{Title: "Child A", Status: StatusOpen, Parent: epic.ID}
+	childB := &Bead{Title: "Child B", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), childA))
+	require.NoError(t, s.Create(testCtx(), childB))
+
+	// Close only one child — epic should remain open.
+	closeWithEvidenceHelper(t, s, childA.ID)
+
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, epicGot.Status, "epic should stay open while child B is still open")
+}
+
+func TestCloseWithEvidence_RejectedCloseDoesNotWalkUp(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{Title: "Epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	child := &Bead{Title: "Child", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), child))
+
+	// Call CloseWithEvidence with no evidence — ClosureGate should reject it.
+	// Empty sessionID and empty commitSHA with no prior events triggers the gate.
+	err := s.CloseWithEvidence(child.ID, "", "")
+	// The call itself does not return an error; the gate records a rejection note.
+	require.NoError(t, err)
+
+	// Child must still be open (gate rejected the close).
+	childGot, err := s.Get(testCtx(), child.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, childGot.Status, "child should remain open when gate rejects")
+
+	// Epic must not have been walked up.
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, epicGot.Status, "epic should not change when child's close is rejected")
+}
+
+func TestCloseWithEvidence_CancelledChildCountsTerminal(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{Title: "Epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	// One closed child, one cancelled child — epic should auto-close.
+	childClosed := &Bead{Title: "Closed child", Status: StatusOpen, Parent: epic.ID}
+	childCancelled := &Bead{Title: "Cancelled child", Status: StatusCancelled, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), childClosed))
+	require.NoError(t, s.Create(testCtx(), childCancelled))
+
+	closeWithEvidenceHelper(t, s, childClosed.ID)
+
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, epicGot.Status, "epic should auto-close: one closed + one cancelled = all terminal")
+}
+
+func TestCloseWithEvidence_AllCancelledChildrenCancelsEpic(t *testing.T) {
+	// walkUpClosureCandidate (invoked by cascadeAndWalkUp, which CloseWithEvidence now
+	// calls) must set the epic to cancelled — not closed — when every child is cancelled
+	// and none reached closed. This tests the code path directly.
+	s := newTestStore(t)
+
+	epic := &Bead{Title: "Epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), epic))
+
+	ca := &Bead{Title: "CA", Status: StatusCancelled, Parent: epic.ID}
+	cb := &Bead{Title: "CB", Status: StatusCancelled, Parent: epic.ID}
+	cc := &Bead{Title: "CC", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), ca))
+	require.NoError(t, s.Create(testCtx(), cb))
+	require.NoError(t, s.Create(testCtx(), cc))
+
+	// Cancel the last open child, then fire the walk-up directly as cascadeAndWalkUp does.
+	require.NoError(t, s.SetLifecycleStatus(cc.ID, StatusCancelled, LifecycleTransitionOptions{ManualClose: true}))
+	all, err := s.ReadAll(testCtx())
+	require.NoError(t, err)
+	visited := map[string]bool{cc.ID: true}
+	s.walkUpClosureCandidate(epic.ID, all, visited)
+
+	epicGot, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusCancelled, epicGot.Status, "epic should be cancelled when all children are cancelled")
+}
+
 func TestListFilters(t *testing.T) {
 	s := newTestStore(t)
 
