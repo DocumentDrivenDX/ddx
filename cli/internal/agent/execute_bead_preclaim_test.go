@@ -3,8 +3,12 @@ package agent
 import (
 	"context"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -41,6 +45,108 @@ func setupBareOrigin(t *testing.T) (workDir, originDir, initialSHA string) {
 
 	initialSHA = runGitInteg(t, workDir, "rev-parse", "HEAD")
 	return workDir, originDir, initialSHA
+}
+
+func agentRepoRoot(t *testing.T) string {
+	t.Helper()
+
+	_, file, _, ok := runtime.Caller(0)
+	require.True(t, ok, "runtime.Caller(0) must resolve the test file")
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+}
+
+func parseGoFile(t *testing.T, relPath string) *ast.File {
+	t.Helper()
+
+	absPath := filepath.Join(agentRepoRoot(t), relPath)
+	src, err := os.ReadFile(absPath)
+	require.NoError(t, err, "read %s", relPath)
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, absPath, src, 0)
+	require.NoError(t, err, "parse %s", relPath)
+	return file
+}
+
+func callName(expr ast.Expr) string {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return ""
+	}
+	switch fun := call.Fun.(type) {
+	case *ast.Ident:
+		return fun.Name
+	case *ast.SelectorExpr:
+		return fun.Sel.Name
+	default:
+		return ""
+	}
+}
+
+func funcCallCounts(fn *ast.FuncDecl) map[string]int {
+	counts := map[string]int{}
+	if fn == nil || fn.Body == nil {
+		return counts
+	}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		switch fun := call.Fun.(type) {
+		case *ast.Ident:
+			counts[fun.Name]++
+		case *ast.SelectorExpr:
+			counts[fun.Sel.Name]++
+		}
+		return true
+	})
+	return counts
+}
+
+func functionByName(t *testing.T, file *ast.File, name string) *ast.FuncDecl {
+	t.Helper()
+
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if ok && fn.Name.Name == name {
+			return fn
+		}
+	}
+	require.FailNowf(t, "missing function", "could not find %s", name)
+	return nil
+}
+
+func assertPreClaimHookWiring(t *testing.T, relPath, wantBuilder string) {
+	t.Helper()
+
+	file := parseGoFile(t, relPath)
+	found := false
+	ast.Inspect(file, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "PreClaimHook" {
+			return true
+		}
+		found = true
+		require.Equal(t, wantBuilder, callName(kv.Value), "unexpected PreClaimHook wiring in %s", relPath)
+		return true
+	})
+	require.True(t, found, "no PreClaimHook wiring found in %s", relPath)
+}
+
+func assertFunctionUsesLocalAncestryOnly(t *testing.T, relPath, funcName string) {
+	t.Helper()
+
+	file := parseGoFile(t, relPath)
+	fn := functionByName(t, file, funcName)
+	calls := funcCallCounts(fn)
+
+	require.GreaterOrEqual(t, calls["LocalAncestryCheck"], 1, "%s must call LocalAncestryCheck", funcName)
+	assert.Zero(t, calls["FetchOriginAncestryCheck"], "%s must not call FetchOriginAncestryCheck", funcName)
 }
 
 // TestPreClaimNoOriginSkip verifies that FetchOriginAncestryCheck returns
@@ -181,6 +287,18 @@ func TestPreClaimDivergedError(t *testing.T) {
 
 	// Local branch must be unchanged.
 	assert.Equal(t, localSHA, runGitInteg(t, workDir, "rev-parse", "refs/heads/main"))
+}
+
+func TestWorkerPathDoesNotUseFetchOriginAncestryCheck(t *testing.T) {
+	t.Run("cli worker path uses local ancestry", func(t *testing.T) {
+		assertPreClaimHookWiring(t, "cmd/execute_loop_shared.go", "buildCLIPreClaimHook")
+		assertFunctionUsesLocalAncestryOnly(t, "cmd/shared_helpers.go", "buildCLIPreClaimHook")
+	})
+
+	t.Run("server worker path uses local ancestry", func(t *testing.T) {
+		assertPreClaimHookWiring(t, "internal/server/workers.go", "buildPreClaimHook")
+		assertFunctionUsesLocalAncestryOnly(t, "internal/server/workers.go", "buildPreClaimHook")
+	})
 }
 
 // TestLocalAncestryCheckNoOriginSkip verifies that the network-free check
