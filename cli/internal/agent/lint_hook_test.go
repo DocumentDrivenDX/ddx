@@ -45,7 +45,7 @@ func newLintHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 	t.Helper()
 
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	dep := &bead.Bead{
 		ID:        "ddx-lint-dep",

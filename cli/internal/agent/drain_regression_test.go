@@ -64,7 +64,7 @@ agent:
 	// 3. Single ready bead in a fresh store. We use one bead so that
 	//    Once:true draining ends after exactly one queue pass.
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-drain-regression", Title: "Drain regression bead", Priority: 0}
 	require.NoError(t, store.Create(target))
 

@@ -127,7 +127,7 @@ func setupGateTestWorktree(t *testing.T, wtPath, beadID, specID string, withGate
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	b := &bead.Bead{
@@ -353,7 +353,7 @@ func TestExecuteBead_NoChangesRationalePopulated(t *testing.T) {
 				t.Fatal(err)
 			}
 			store := bead.NewStore(ddxDir)
-			if err := store.Init(); err != nil {
+			if err := store.Init(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			b := &bead.Bead{ID: beadID, Title: "Rationale test bead"}
@@ -399,7 +399,7 @@ func TestExecuteBead_MixedCommitAndBlockedNoChangesRationalePreservesEvidence(t 
 				t.Fatal(err)
 			}
 			store := bead.NewStore(ddxDir)
-			if err := store.Init(); err != nil {
+			if err := store.Init(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			b := &bead.Bead{ID: beadID, Title: "Mixed rationale bead"}
@@ -471,7 +471,7 @@ func TestExecuteBead_NoEvidenceProducedWhenRationaleAbsent(t *testing.T) {
 				t.Fatal(err)
 			}
 			store := bead.NewStore(ddxDir)
-			if err := store.Init(); err != nil {
+			if err := store.Init(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			b := &bead.Bead{ID: beadID, Title: "No rationale bead"}
@@ -519,7 +519,7 @@ func TestExecuteBead_ServiceErrorWithZeroExitIsExecutionFailed(t *testing.T) {
 				t.Fatal(err)
 			}
 			store := bead.NewStore(ddxDir)
-			if err := store.Init(); err != nil {
+			if err := store.Init(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			b := &bead.Bead{ID: beadID, Title: "Service error bead"}

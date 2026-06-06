@@ -55,7 +55,7 @@ func TestNoChangesBadAttempt_EscalatesNextAttemptPower(t *testing.T) {
 	assert.Equal(t, agenttry.NoChangesActionBadAttemptNoCooldown, out.NoChanges.Action)
 
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-bead-1", Title: "bad-attempt escalation"}))
 
 	require.NoError(t, applyNoChangesBadAttemptEscalation(store, "ddx-bead-1", "worker", out.NoChanges, out.Report.ActualPower, func(actualPower int) (int, error) {
@@ -77,7 +77,7 @@ func TestNoEvidenceProduced_EscalatesImmediately(t *testing.T) {
 	assert.Equal(t, agenttry.NoChangesActionBadAttemptNoCooldown, out.NoChanges.Action)
 
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-bead-2", Title: "no-evidence escalation"}))
 
 	require.NoError(t, applyNoChangesBadAttemptEscalation(store, "ddx-bead-2", "worker", out.NoChanges, out.Report.ActualPower, func(actualPower int) (int, error) {
@@ -93,7 +93,7 @@ func TestNoEvidenceProduced_EscalatesImmediately(t *testing.T) {
 
 func TestNoChangesEscalation_BoundedByLadderCap(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-bead-3", Title: "ladder cap escalation"}))
 
 	noChanges := &agenttry.NoChangesOutcome{

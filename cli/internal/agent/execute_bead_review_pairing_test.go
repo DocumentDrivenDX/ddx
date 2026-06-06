@@ -80,7 +80,7 @@ func reviewPairingTestSetup(t *testing.T) (projectRoot, head string, store *bead
 	out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
 	require.NoError(t, err, string(out))
 	store = bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:         "ddx-pairing",
 		Title:      "Pairing test",

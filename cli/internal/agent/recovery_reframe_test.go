@@ -25,7 +25,7 @@ func (f reframeRunnerFunc) Run(opts RunArgs) (*Result, error) { return f(opts) }
 // status=open with a reframe-applied event emitted.
 func TestPostLadderExhaustion_TriggersReframe(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	const origDesc = "PROBLEM\nOriginal description with ADR-024 reference.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42 has a bug.\n"
 	const origAcc = "1. TestPostLadderExhaustion_TriggersReframe passes\n2. cd cli && go test ./internal/agent/... green\n"
@@ -111,7 +111,7 @@ func TestPostLadderExhaustion_TriggersReframe(t *testing.T) {
 // the context deadline returns ReframeResult{Failed:true, Reason:"timeout"}.
 func TestReframerTimeout_CountsAsFailure(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-reframe-timeout",
@@ -142,7 +142,7 @@ func TestReframerTimeout_CountsAsFailure(t *testing.T) {
 // unchanged description and acceptance yields ReframeResult{Failed:true, Reason:"noop_edits"}.
 func TestReframerNoOpEdits_CountsAsFailure(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	const desc = "PROBLEM\nOriginal description."
 	const acc = "1. TestReframerNoOpEdits_CountsAsFailure\n"

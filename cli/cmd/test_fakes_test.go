@@ -259,7 +259,7 @@ func parseExecuteBeadJSON(t *testing.T, out string) agent.ExecuteBeadResult {
 func seedExecuteBead(t *testing.T, workDir string, b *bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(workDir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	if _, err := store.Get(b.ID); err == nil {
 		return
 	}

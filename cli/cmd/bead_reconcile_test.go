@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 func TestBeadReconcileCommandDryRunDoesNotMutate(t *testing.T) {
 	dir := t.TempDir()
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	b := &bead.Bead{
 		ID:     "ddx-stale",
 		Title:  "stale",
@@ -38,7 +39,7 @@ func TestBeadReconcileCommandDryRunDoesNotMutate(t *testing.T) {
 func TestBeadReconcileCommandApplyMutatesThroughStore(t *testing.T) {
 	dir := t.TempDir()
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	b := &bead.Bead{
 		ID:     "ddx-stale",
 		Title:  "stale",

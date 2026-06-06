@@ -22,7 +22,7 @@ func setupWorkPlanEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 	t.Helper()
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))
 	}
@@ -33,7 +33,7 @@ func setupConventionWorkPlanProject(t *testing.T, beads ...*bead.Bead) string {
 	t.Helper()
 	projectRoot := minimalProjectDir(t)
 	store := bead.NewStore(ddxroot.Path(context.Background(), projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))
 	}

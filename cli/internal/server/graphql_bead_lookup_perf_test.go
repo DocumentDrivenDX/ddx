@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -120,7 +121,7 @@ func setupBeadLookupFixture(tb testing.TB) *beadLookupFixture {
 func seedBeadLookupProject(tb testing.TB, projectPath string, projectIdx, beadCount int) []bead.Bead {
 	tb.Helper()
 	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		tb.Fatalf("init bead store: %v", err)
 	}
 	baseTime := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)

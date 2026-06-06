@@ -25,7 +25,7 @@ import (
 func TestTry_ReviewVerdict_ApproveRoundTrips(t *testing.T) {
 	projectRoot := t.TempDir()
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	targetBead := &bead.Bead{
 		ID:         "ddx-try-review-approve",

@@ -93,6 +93,24 @@ func TestInitUsesCollectionFile(t *testing.T) {
 	assert.NoError(t, err, "collection file should exist after init")
 }
 
+func TestStoreInit_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
+	err := s.Init(ctx)
+	require.Error(t, err, "Init must return an error when context is already canceled")
+}
+
+func TestStoreGenID_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
+	_, err := s.GenID(ctx)
+	require.Error(t, err, "GenID must return an error when context is already canceled")
+}
+
 func TestNewStore_DefaultsToJSONL(t *testing.T) {
 	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
 	assert.Nil(t, s.backend)

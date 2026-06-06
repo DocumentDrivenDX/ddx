@@ -135,7 +135,7 @@ func TestBeadReviewCommandWiring(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("store init: %v", err)
 	}
 	b := &bead.Bead{
@@ -225,7 +225,7 @@ func TestBeadReviewCommandWithProseIncludesAdvisoryFindings(t *testing.T) {
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("store init: %v", err)
 	}
 	proseInput, err := os.ReadFile(filepath.Join("..", "internal", "docprose", "testdata", "fixtures", "technical", "generic-ai", "input.md"))

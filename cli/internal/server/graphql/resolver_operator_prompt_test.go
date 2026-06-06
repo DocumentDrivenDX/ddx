@@ -2,6 +2,7 @@ package graphql_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -42,7 +43,7 @@ func setupOperatorPromptHarness(t *testing.T) (http.Handler, *bead.Store, string
 		t.Fatal(err)
 	}
 	store := bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 

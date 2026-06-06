@@ -17,7 +17,7 @@ import (
 func newEpicClosureStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead) {
 	t.Helper()
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	epic := &bead.Bead{ID: "ddx-epic-1", Title: "Epic rollup", IssueType: "epic"}
 	require.NoError(t, store.Create(context.Background(), epic))

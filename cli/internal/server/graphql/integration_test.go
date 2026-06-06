@@ -91,7 +91,7 @@ func setupIntegrationDir(t *testing.T) (workDir string, store *bead.Store) {
 
 	// Real bead store.
 	store = bead.NewStore(ddxDir)
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	return workDir, store

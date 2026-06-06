@@ -22,7 +22,7 @@ import (
 // creates child beads and sets parent execution-eligible=false.
 func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-decompose-toolarge",
@@ -121,7 +121,7 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
 
 func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	projectRoot := t.TempDir()
 
 	b := &bead.Bead{
@@ -201,7 +201,7 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 // Reason:"invalid_count"}.
 func TestDecomposerInvalidChildren_CountsAsFailure(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-decompose-invalid",
@@ -240,7 +240,7 @@ func TestDecomposerInvalidChildren_CountsAsFailure(t *testing.T) {
 
 func TestPreClaimDecompositionHook_ParsesAgentSplit(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-preclaim-decompose",
@@ -291,7 +291,7 @@ func TestPreClaimDecompositionHook_ParsesAgentSplit(t *testing.T) {
 
 func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	projectRoot := t.TempDir()
 
 	b := &bead.Bead{
@@ -347,7 +347,7 @@ func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 
 func TestPreClaimDecompositionHook_FallsBackWhenAgentOutputEmpty(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{
 		ID:          "ddx-preclaim-fallback",

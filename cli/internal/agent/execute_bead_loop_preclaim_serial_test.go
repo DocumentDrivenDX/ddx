@@ -24,7 +24,7 @@ import (
 // Claim (picker.claim_race), never reaches intake, and moves on.
 func TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	only := &bead.Bead{ID: "ddx-concurrent-intake", Title: "concurrent intake", Priority: 0}
 	require.NoError(t, store.Create(only))
 
@@ -99,7 +99,7 @@ func TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead(t *testing.T) 
 // appends the lint event; the loser never reaches the lint gate.
 func TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents(t *testing.T) {
 	inner := bead.NewStore(t.TempDir())
-	require.NoError(t, inner.Init())
+	require.NoError(t, inner.Init(context.Background()))
 	only := &bead.Bead{ID: "ddx-concurrent-lint", Title: "concurrent lint", Priority: 0}
 	require.NoError(t, inner.Create(only))
 
@@ -175,7 +175,7 @@ func TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents(t *tes
 // or append conflicting events because they never reach applyPreClaimIntakeRewrite.
 func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
 	inner := bead.NewStore(t.TempDir())
-	require.NoError(t, inner.Init())
+	require.NoError(t, inner.Init(context.Background()))
 
 	original := &bead.Bead{
 		ID:          "ddx-rewrite-concurrent",

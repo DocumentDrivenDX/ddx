@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -15,7 +16,7 @@ import (
 // reaches the threshold the hook fires.
 func TestPerBeadCostTracker_ChainsIntoAutoRecovery(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-chain-test", Title: "chain test bead"}
 	require.NoError(t, store.Create(b))

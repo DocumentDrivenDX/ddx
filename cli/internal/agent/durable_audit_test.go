@@ -171,7 +171,7 @@ func TestCommitDurableAuditOutputs_ResumesAfterPartialKill(t *testing.T) {
 func TestCommitOutcomeDurableMutationUsesAuditCommit(t *testing.T) {
 	projectRoot := newDurableAuditProject(t)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	candidate := &bead.Bead{ID: "ddx-audit-outcome", Title: "Outcome audit", Priority: 0}
 	require.NoError(t, store.Create(candidate))
 	runGitInteg(t, projectRoot, "add", ".")
@@ -248,7 +248,7 @@ func runAuditWithFinalizeErr(t *testing.T, finalizeErr error) *ExecuteBeadLoopRe
 	t.Helper()
 	projectRoot := newDurableAuditProject(t)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	candidate := &bead.Bead{ID: "ddx-audit-lock", Title: "lock", Priority: 0}
 	require.NoError(t, store.Create(candidate))
 	runGitInteg(t, projectRoot, "add", ".")
@@ -314,7 +314,7 @@ func TestWork_NonLockAuditCommitFailureStillStopsWorker(t *testing.T) {
 func TestFinalizeDurableAuditOrStop_TrackerLockTimeoutDoesNotStopWorker(t *testing.T) {
 	projectRoot := newDurableAuditProject(t)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	candidate := &bead.Bead{ID: "ddx-audit-tracker-lock", Title: "Tracker lock", Priority: 0}
 	require.NoError(t, store.Create(candidate))
 	runGitInteg(t, projectRoot, "add", ".")

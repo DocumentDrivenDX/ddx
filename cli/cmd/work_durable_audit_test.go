@@ -170,7 +170,7 @@ func newWorkAuditRepo(t *testing.T, beadCount int) (string, *bead.Store, []strin
 	runGitWorkAudit(t, projectRoot, "config", "user.name", "DDx Test")
 
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	var beadIDs []string
 	for i := 0; i < beadCount; i++ {

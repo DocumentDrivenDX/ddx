@@ -32,7 +32,7 @@ func proseStubReadFile(content string) func(string, string, string) ([]byte, err
 func newTryProseTestBead(t *testing.T, env *TestEnvironment, id string) *bead.Store {
 	t.Helper()
 	store := bead.NewStore(env.Dir + "/.ddx")
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:    id,
 		Title: "docs-changing attempt",

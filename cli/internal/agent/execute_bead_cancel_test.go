@@ -21,7 +21,7 @@ import (
 func newCancelTestBeadStore(t *testing.T, projectRoot, beadID string) *bead.Store {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	if err := store.Init(); err != nil {
+	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Create(&bead.Bead{ID: beadID, Title: "cancel integration bead", Status: bead.StatusInProgress}); err != nil {

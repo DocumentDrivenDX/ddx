@@ -146,8 +146,8 @@ func NewStoreWithCollection(dir, collection string) *Store {
 }
 
 // Init creates the storage directory and file.
-func (s *Store) Init(args ...any) error {
-	if err := storeCallContext(args).Err(); err != nil {
+func (s *Store) Init(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if s.backend != nil {
@@ -164,8 +164,7 @@ func (s *Store) Init(args ...any) error {
 }
 
 // GenID generates a unique bead ID with the configured prefix.
-func (s *Store) GenID(args ...any) (string, error) {
-	ctx := storeCallContext(args)
+func (s *Store) GenID(ctx context.Context) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

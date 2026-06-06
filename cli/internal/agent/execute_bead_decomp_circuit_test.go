@@ -33,7 +33,7 @@ func TestDecompositionDepDirection(t *testing.T) {
 // proposed after 2 mixed_commit_and_no_changes_rationale outcomes within 24h.
 func TestMixedCommitCooldown(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-mixed-cb", Title: "Mixed commit circuit breaker test"}
 	require.NoError(t, store.Create(b))
@@ -83,7 +83,7 @@ func TestMixedCommitCooldown(t *testing.T) {
 // mixed_commit outcome (no prior events) does NOT park the bead.
 func TestMixedCommitCooldown_FirstOccurrenceDoesNotPark(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-mixed-first", Title: "First mixed commit; must not park"}
 	require.NoError(t, store.Create(b))
@@ -123,7 +123,7 @@ func TestMixedCommitCooldown_FirstOccurrenceDoesNotPark(t *testing.T) {
 // mixed_commit event older than 24h does not trigger the circuit-breaker.
 func TestMixedCommitCooldown_OutsideWindowDoesNotPark(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-mixed-old", Title: "Old mixed commit; must not park"}
 	require.NoError(t, store.Create(b))

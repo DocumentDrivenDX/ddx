@@ -34,7 +34,7 @@ type RawBackend interface {
 // interface so additional backends can be exercised by the same tests.
 type Backend interface {
 	// Foundational
-	Init(args ...any) error
+	Init(ctx context.Context) error
 	ReadAll(args ...any) ([]Bead, error)
 
 	// CRUD
@@ -74,7 +74,7 @@ type Backend interface {
 // TD-027 foundation interfaces. These are additive and intentionally do not
 // change the legacy Store-backed interface above in this bead slice.
 type BeadInitializer interface {
-	Init(args ...any) error
+	Init(ctx context.Context) error
 }
 
 type BeadReader interface {

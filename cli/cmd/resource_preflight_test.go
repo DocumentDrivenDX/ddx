@@ -39,7 +39,7 @@ func (f *fakeCleanupRunner) Cleanup(ctx context.Context) (agent.ExecutionCleanup
 func seedOpenBead(t *testing.T, root, beadID string) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "resource preflight bead"}))
 }
 

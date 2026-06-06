@@ -15,7 +15,7 @@ import (
 
 func TestExecuteBeadWorkerNoChangesVerifiedLongCommandCloses(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-longverify", Title: "Verification gate needs time"}
 	require.NoError(t, store.Create(b))
@@ -73,7 +73,7 @@ func TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps(t *testi
 	}
 
 	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-timeoutverify", Title: "Verification tree must be reaped"}
 	require.NoError(t, store.Create(b))

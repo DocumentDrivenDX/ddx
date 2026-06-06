@@ -388,7 +388,7 @@ func TestDeclinedNeedsDecomposition_NotEligible(t *testing.T) {
 func TestDeclinedNeedsDecomposition_NotInReady(t *testing.T) {
 	dir := t.TempDir()
 	s := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(context.Background()))
 
 	b := &bead.Bead{Title: "too-big bead", IssueType: "task", Priority: 1}
 	require.NoError(t, s.Create(b))

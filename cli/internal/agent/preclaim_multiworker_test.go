@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +37,7 @@ func TestPreClaim_MultiWorkerParallelClaimUnderTrackerChurn(t *testing.T) {
 	runGit("config", "user.email", "test@test.local")
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	const nBeads = 6
 	for i := 0; i < nBeads; i++ {

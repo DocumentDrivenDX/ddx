@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -17,7 +18,7 @@ func setupBeadHumanEnv(t *testing.T, beads ...*bead.Bead) (string, *CommandFacto
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
 	store := bead.NewStore(filepath.Join(workingDir, ddxroot.DirName))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
 		require.NoError(t, store.Create(b))
 	}

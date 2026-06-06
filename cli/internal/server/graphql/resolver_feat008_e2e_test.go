@@ -154,7 +154,7 @@ review_max_retries: 5
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfgYAML), 0o644))
 
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "graphql e2e review-retry threshold", Priority: 0}))
 
 	// Half 1: drive the GraphQL resolver and assert it flowed through
