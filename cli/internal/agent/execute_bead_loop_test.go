@@ -362,6 +362,22 @@ func TestClassifyLoopReportFailure_LockContentionIsActionable(t *testing.T) {
 	}))
 }
 
+func TestIsTransientGitContention_TrackerLockTimeoutError(t *testing.T) {
+	err := fmt.Errorf("commit durable audit outputs: %w", &TrackerLockTimeoutError{
+		Why:      "max elapsed",
+		LockDir:  "/repo/.ddx/.git-tracker.lock",
+		OwnerPID: "424293",
+	})
+
+	assert.True(t, isTransientGitContention(err))
+}
+
+func TestIsTransientGitContention_TrackerLockTimeoutSubstringFallback(t *testing.T) {
+	err := fmt.Errorf("commit durable audit outputs: tracker lock timeout (max elapsed, lock: /repo/.ddx/.git-tracker.lock, owner pid: 424293)")
+
+	assert.True(t, isTransientGitContention(err))
+}
+
 func TestFormatLoopResult_NoEvidenceShowsContractFailure(t *testing.T) {
 	report := ExecuteBeadReport{
 		Status: ExecuteBeadStatusNoEvidenceProduced,

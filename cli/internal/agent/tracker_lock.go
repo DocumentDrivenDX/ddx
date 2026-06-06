@@ -166,6 +166,42 @@ var (
 	trackerLockSinkFn func(TrackerLockSample)
 )
 
+// TrackerLockTimeoutError marks a tracker-lock acquisition timeout so callers
+// can classify it with errors.Is even when the error is wrapped several times.
+type TrackerLockTimeoutError struct {
+	Why      string
+	LockDir  string
+	OwnerPID string
+}
+
+// TrackerLockTimeoutErr is the sentinel used by errors.Is for transient
+// tracker-lock contention.
+var TrackerLockTimeoutErr = &TrackerLockTimeoutError{}
+
+func (e *TrackerLockTimeoutError) Error() string {
+	if e == nil {
+		return "tracker lock timeout"
+	}
+	why := strings.TrimSpace(e.Why)
+	if why == "" {
+		why = "unknown"
+	}
+	lockDir := strings.TrimSpace(e.LockDir)
+	if lockDir == "" {
+		lockDir = "unknown"
+	}
+	owner := strings.TrimSpace(e.OwnerPID)
+	if owner == "" {
+		owner = "missing"
+	}
+	return fmt.Sprintf("tracker lock timeout (%s, lock: %s, owner pid: %s)", why, lockDir, owner)
+}
+
+func (e *TrackerLockTimeoutError) Is(target error) bool {
+	_, ok := target.(*TrackerLockTimeoutError)
+	return ok
+}
+
 // SetTrackerLockMetricsSink atomically installs a new tracker-lock
 // metrics sink and returns the previous one. Passing nil disables
 // emission. Safe for concurrent use; two workers in the same process
@@ -280,7 +316,11 @@ func lockTimeoutError(lockDir, why string) error {
 	if pidData, perr := os.ReadFile(filepath.Join(lockDir, "pid")); perr == nil && len(pidData) > 0 {
 		owner = strings.TrimSpace(string(pidData))
 	}
-	return fmt.Errorf("tracker lock timeout (%s, lock: %s, owner pid: %s)", why, lockDir, owner)
+	return &TrackerLockTimeoutError{
+		Why:      why,
+		LockDir:  lockDir,
+		OwnerPID: owner,
+	}
 }
 
 // breakStaleTrackerLock removes lockDir if its owner process is dead or the

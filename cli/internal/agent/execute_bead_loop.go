@@ -1019,11 +1019,19 @@ func parsePreExecuteCheckpointDirtyPaths(detail string) []string {
 // isTransientGitContention reports git index/ref contention errors that are
 // transient under concurrent workers and must be retried rather than treated
 // as a worker-stopping failure (ddx-23ac2796 and its sibling variants). It
-// covers .git/index.lock conflicts plus the "unable to write new index file"
-// and "cannot lock ref" forms git emits when a concurrent process holds the
-// index/ref. A persistent cause (e.g. ENOSPC) simply keeps releasing+retrying
-// the bead, which is still preferable to halting the whole unattended drain.
-func isTransientGitContention(msg string) bool {
+// covers .git/index.lock conflicts plus the DDx tracker-lock timeout sentinel
+// and the "unable to write new index file" / "cannot lock ref" forms git emits
+// when a concurrent process holds the index/ref. A persistent cause (e.g.
+// ENOSPC) simply keeps releasing+retrying the bead, which is still preferable
+// to halting the whole unattended drain.
+func isTransientGitContention(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, TrackerLockTimeoutErr) {
+		return true
+	}
+	msg := err.Error()
 	if gitlock.IsIndexLockError(msg) {
 		return true
 	}
@@ -1032,6 +1040,7 @@ func isTransientGitContention(msg string) bool {
 		"unable to write new index file",
 		"cannot lock ref",
 		"unable to update the ref",
+		"tracker lock timeout",
 	} {
 		if strings.Contains(lower, marker) {
 			return true
@@ -1295,14 +1304,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			// changes remain staged and are committed on a later iteration, so
 			// treat lock contention as retryable rather than operator attention —
 			// a transient lock conflict must never halt an unattended worker.
-			if isTransientGitContention(err.Error()) {
+			if isTransientGitContention(err) {
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log,
-						"transient git index/ref contention committing durable audit outputs for %s; not stopping (will retry next iteration): %v\n",
+						"transient git/tracker contention committing durable audit outputs for %s; not stopping (will retry next iteration): %v\n",
 						candidateID, err)
 				}
 				emit("loop.durable_audit_transient", map[string]any{
-					"reason":  "git_index_contention",
+					"reason":  "git_tracker_contention",
 					"bead_id": candidateID,
 					"detail":  strings.TrimSpace(err.Error()),
 				})
