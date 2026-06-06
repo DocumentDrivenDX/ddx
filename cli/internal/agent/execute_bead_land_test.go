@@ -1074,6 +1074,99 @@ func TestLand_PostLandGatePassLeavesTargetAdvanced(t *testing.T) {
 	}
 }
 
+func TestChaos_PostLandCommandDoesNotHoldMainGitLock(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	markerDir := t.TempDir()
+	startedMarker := filepath.Join(markerDir, "started")
+	releaseMarker := filepath.Join(markerDir, "release")
+	req := LandRequest{
+		WorktreeDir:     r.dir,
+		BaseRev:         r.baseSHA,
+		ResultRev:       workerSHA,
+		BeadID:          "ddx-land-post-gate-lock-surface",
+		AttemptID:       "20260430T120202-post-gate-lock-surface",
+		TargetBranch:    "main",
+		PostLandCommand: []string{"sh", "-c", "echo started > \"$1\"; while [ ! -f \"$2\" ]; do sleep 0.05; done", "sh", startedMarker, releaseMarker},
+	}
+
+	type landOutcome struct {
+		land *LandResult
+		err  error
+	}
+
+	landCh := make(chan landOutcome, 1)
+	go func() {
+		land, err := Land(r.dir, req, ops)
+		landCh <- landOutcome{land: land, err: err}
+	}()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		if _, err := os.Stat(startedMarker); err == nil {
+			break
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("reading post-land start marker: %v", err)
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for post-land command to start")
+		default:
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	acquired := make(chan time.Duration, 1)
+	go func() {
+		start := time.Now()
+		if err := withMainGitLock(r.dir, "test", func() error { return nil }); err != nil {
+			t.Errorf("withMainGitLock during blocked post-land command: %v", err)
+			return
+		}
+		acquired <- time.Since(start)
+	}()
+
+	select {
+	case waited := <-acquired:
+		if waited > time.Second {
+			t.Fatalf("main-git lock was held for %s while post-land command was blocked", waited)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for concurrent main-git lock acquisition")
+	}
+
+	select {
+	case out := <-landCh:
+		t.Fatalf("Land finished before the blocking post-land command was released: %+v", out)
+	default:
+	}
+
+	if err := os.WriteFile(releaseMarker, []byte("release\n"), 0o644); err != nil {
+		t.Fatalf("releasing post-land command: %v", err)
+	}
+
+	var out landOutcome
+	select {
+	case out = <-landCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Land to finish after release")
+	}
+	if out.err != nil {
+		t.Fatalf("Land: %v", out.err)
+	}
+	if out.land == nil || out.land.Status != "landed" {
+		t.Fatalf("expected landed outcome after blocked command release, got %+v", out.land)
+	}
+	if out.land.NewTip != workerSHA {
+		t.Fatalf("new tip = %s, want %s", out.land.NewTip, workerSHA)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
+		t.Fatalf("main tip = %s, want %s", got, workerSHA)
+	}
+}
+
 // TestLand_ConcurrentSubmissions_Serialized spawns N concurrent Land() calls
 // through a single coordinator-like serialization (sync.Mutex) and asserts
 // that (a) all N worker commits are reachable from main, (b) each non-first

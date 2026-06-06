@@ -1283,7 +1283,10 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 
 		var result *LandResult
 		var syncFromRev string
-		retry := false
+		var finalWD string
+		var cleanup func()
+		var retry bool
+
 		err = withMainGitLock(projectRoot, "land_ref_update", func() error {
 			lockedTip, err := gitOps.ResolveRef(wd, prep.targetRef)
 			if err != nil {
@@ -1310,40 +1313,10 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 					Merged:            false,
 					MergedCommitCount: prep.contribCount,
 				}
-				finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, prep.targetBranch, gitOps)
+				finalWD, cleanup, err = landingFinalizationWorktree(projectRoot, wd, prep.targetBranch, gitOps)
 				if err != nil {
 					return err
 				}
-				defer cleanup()
-				if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil); err != nil {
-					return err
-				} else if preserved != nil {
-					result = preserved
-					syncFromRev = result.NewTip
-					if syncFromRev == "" {
-						syncFromRev = req.ResultRev
-					}
-					return nil
-				}
-				if req.EvidenceDir != "" {
-					if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
-						return fmt.Errorf("copying evidence into landing worktree: %w", err)
-					}
-					if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
-						return fmt.Errorf("rewriting final result artifact: %w", err)
-					}
-					if err := landEvidence(finalWD, prep.targetBranch, req, gitOps, result); err != nil {
-						preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, err)
-						if preserveErr != nil {
-							return preserveErr
-						}
-						result = preserved
-						syncFromRev = result.NewTip
-						return nil
-					}
-					cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
-				}
-				syncFromRev = prep.currentTip
 				return nil
 			}
 
@@ -1398,21 +1371,60 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 				Merged:            true,
 				MergedCommitCount: prep.contribCount,
 			}
-			finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, prep.targetBranch, gitOps)
+			finalWD, cleanup, err = landingFinalizationWorktree(projectRoot, wd, prep.targetBranch, gitOps)
 			if err != nil {
 				return err
 			}
-			defer cleanup()
-			if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil); err != nil {
-				return err
-			} else if preserved != nil {
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if retry {
+			continue
+		}
+		if result != nil && result.Status == "preserved" {
+			return result, nil
+		}
+		if result == nil {
+			return nil, fmt.Errorf("landing completed without a result")
+		}
+
+		postLandOutput, postLandErr := runPostLandCommand(finalWD, req.PostLandCommand)
+		if postLandErr != nil {
+			err = withMainGitLock(projectRoot, "land_post_land_failure", func() error {
+				defer func() {
+					if cleanup != nil {
+						cleanup()
+					}
+				}()
+				var preserved *LandResult
+				preserved, err = preserveIfPostLandGateFailsLocked(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, postLandOutput, postLandErr)
+				if err != nil {
+					return err
+				}
 				result = preserved
 				syncFromRev = result.NewTip
 				if syncFromRev == "" {
-					syncFromRev = mergeSHA
+					syncFromRev = req.ResultRev
 				}
 				return nil
+			})
+			if err != nil {
+				return nil, err
 			}
+			if result != nil && syncOperatorAfterLand && syncFromRev != "" {
+				syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
+			}
+			return result, nil
+		}
+
+		err = withMainGitLock(projectRoot, "land_post_land_finalize", func() error {
+			defer func() {
+				if cleanup != nil {
+					cleanup()
+				}
+			}()
 			if req.EvidenceDir != "" {
 				if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
 					return fmt.Errorf("copying evidence into landing worktree: %w", err)
@@ -1437,9 +1449,6 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		if err != nil {
 			return nil, err
 		}
-		if retry {
-			continue
-		}
 		if result != nil && syncOperatorAfterLand && syncFromRev != "" {
 			syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
 		}
@@ -1447,15 +1456,10 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 	}
 }
 
-func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, dirtyBefore []string) (*LandResult, error) {
+func preserveIfPostLandGateFailsLocked(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, output string, gateErr error) (*LandResult, error) {
 	if len(req.PostLandCommand) == 0 {
 		return nil, nil
 	}
-	output, err := runPostLandCommand(wd, req.PostLandCommand)
-	if err == nil {
-		return nil, nil
-	}
-
 	preserveRef := landIterationRef(req.BeadID, req.AttemptID, preLandTip)
 	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
 		return nil, fmt.Errorf("preserving %s after post-land gate: %w", preserveRef, upErr)
@@ -1464,7 +1468,7 @@ func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOp
 		return nil, fmt.Errorf("restoring %s to %s after post-land gate failed: %w", targetRef, preLandTip, revertErr)
 	}
 
-	reason := fmt.Sprintf("post-land gate failed: %s: %v", strings.Join(req.PostLandCommand, " "), err)
+	reason := fmt.Sprintf("post-land gate failed: %s: %v", strings.Join(req.PostLandCommand, " "), gateErr)
 	if trimmed := strings.TrimSpace(output); trimmed != "" {
 		reason += ": " + truncatePostLandGateOutput(trimmed)
 	}
