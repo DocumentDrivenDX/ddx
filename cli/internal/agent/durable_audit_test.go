@@ -7,12 +7,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,6 +58,114 @@ func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *
 	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
 	assert.Contains(t, show, ".ddx/beads.jsonl")
 	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
+}
+
+func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
+	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
+	projectRoot := testutils.NewFixtureRepo(t, "standard")
+	attemptID := "20260606T081500-audit-lock-recover"
+	dirtyPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dirtyPath), 0o755))
+	require.NoError(t, os.WriteFile(dirtyPath, []byte("dirty\n"), 0o644))
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	origTimeout := durableAuditGitTimeout
+	origContextFactory := durableAuditCommandContext
+	t.Cleanup(func() {
+		durableAuditGitTimeout = origTimeout
+		durableAuditCommandContext = origContextFactory
+	})
+
+	durableAuditGitTimeout = 100 * time.Millisecond
+	var ctxMu sync.Mutex
+	var firstContextAt time.Time
+	durableAuditCommandContext = func() (context.Context, context.CancelFunc) {
+		ctxMu.Lock()
+		if firstContextAt.IsZero() {
+			firstContextAt = time.Now()
+		}
+		ctxMu.Unlock()
+		return context.WithTimeout(context.Background(), durableAuditGitTimeout)
+	}
+
+	locked := make(chan struct{})
+	release := make(chan struct{})
+	lockErrCh := make(chan error, 1)
+	go func() {
+		lockErrCh <- withTrackerLock(projectRoot, "durable_audit_test", func() error {
+			close(locked)
+			<-release
+			return nil
+		})
+	}()
+
+	<-locked
+	time.Sleep(3 * durableAuditGitTimeout)
+
+	commitErrCh := make(chan error, 1)
+	go func() {
+		commitErrCh <- CommitDurableAuditOutputs(projectRoot, attemptID)
+	}()
+
+	releaseAt := time.Now()
+	close(release)
+	require.NoError(t, <-lockErrCh)
+
+	firstErr := <-commitErrCh
+	if firstErr != nil {
+		require.True(t, isTransientGitContention(firstErr), "expected transient contention error after lock contention, got %v", firstErr)
+	}
+
+	ctxMu.Lock()
+	require.False(t, firstContextAt.IsZero(), "expected a git subprocess deadline context to be created")
+	assert.False(t, firstContextAt.Before(releaseAt), "git subprocess deadline budget started before the tracker lock was released")
+	ctxMu.Unlock()
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
+
+	statusArgs := append([]string{"status", "--short", "--"}, trackerpaths.ManagedPathspecs()...)
+	assert.Empty(t, runGitInteg(t, projectRoot, statusArgs...))
+	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	assert.NotEqual(t, headBefore, headAfter)
+}
+
+func TestCommitDurableAuditOutputs_ResumesAfterPartialKill(t *testing.T) {
+	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
+	projectRoot := testutils.NewFixtureRepo(t, "standard")
+	attemptID := "20260606T081600-audit-partial-kill"
+	dirtyPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	require.NoError(t, os.MkdirAll(filepath.Dir(dirtyPath), 0o755))
+	require.NoError(t, os.WriteFile(dirtyPath, []byte("dirty\n"), 0o644))
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() {
+		durableAuditGitRunner = origRunner
+	})
+
+	var commitAttempts int32
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "commit" && atomic.AddInt32(&commitAttempts, 1) == 1 {
+			return []byte("signal: killed"), errors.New("signal: killed")
+		}
+		return origRunner(ctx, gitDir, args...)
+	}
+
+	firstErr := CommitDurableAuditOutputs(projectRoot, attemptID)
+	require.Error(t, firstErr)
+	require.True(t, isTransientGitContention(firstErr), "first killed commit should be treated as transient contention")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"), "partial kill must not move HEAD")
+	statusArgs := append([]string{"status", "--short", "--"}, trackerpaths.ManagedPathspecs()...)
+	assert.NotEmpty(t, runGitInteg(t, projectRoot, statusArgs...))
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
+	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	assert.NotEqual(t, headBefore, headAfter)
+	assert.Empty(t, runGitInteg(t, projectRoot, statusArgs...))
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
+	assert.Equal(t, headAfter, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+	assert.Empty(t, runGitInteg(t, projectRoot, statusArgs...))
 }
 
 func TestCommitOutcomeDurableMutationUsesAuditCommit(t *testing.T) {

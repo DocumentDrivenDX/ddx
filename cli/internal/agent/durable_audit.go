@@ -9,7 +9,19 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
+)
+
+var (
+	durableAuditGitTimeout = 30 * time.Second
+	durableAuditGitRunner  = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		return internalgit.Command(ctx, gitDir, args...).CombinedOutput()
+	}
+	durableAuditCommandContext = func() (context.Context, context.CancelFunc) {
+		return context.WithTimeout(context.Background(), durableAuditGitTimeout)
+	}
 )
 
 type durableAuditBeadReader interface {
@@ -79,19 +91,16 @@ func buildAttemptMetricsRow(store durableAuditBeadReader, report ExecuteBeadRepo
 }
 
 func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
 	gitDir, managedPathspecs := ddxStateGitScope(projectRoot, trackerpaths.ManagedPathspecs()...)
 
-	out, err := internalgit.Command(ctx, gitDir, "rev-parse", "--is-inside-work-tree").Output()
+	out, err := runDurableAuditGit(gitDir, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		return nil
 	}
 
 	statusArgs := []string{"status", "--short", "--untracked-files=all", "--"}
 	statusArgs = append(statusArgs, managedPathspecs...)
-	statusOut, err := internalgit.Command(ctx, gitDir, statusArgs...).Output()
+	statusOut, err := runDurableAuditGit(gitDir, statusArgs...)
 	if err != nil {
 		return fmt.Errorf("checking durable audit status: %w", err)
 	}
@@ -102,25 +111,66 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 
 	addArgs := []string{"add", "-A", "--"}
 	addArgs = append(addArgs, dirtyPaths...)
-	addOut, err := runGitWithIndexLockRecovery(ctx, gitDir, addArgs...)
+	addOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, addArgs...)
 	if err != nil {
 		return fmt.Errorf("staging durable audit outputs: %s: %w", strings.TrimSpace(string(addOut)), err)
 	}
 
 	cachedArgs := []string{"diff", "--cached", "--"}
 	cachedArgs = append(cachedArgs, dirtyPaths...)
-	if cached, err := internalgit.Command(ctx, gitDir, cachedArgs...).Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
+	if cached, err := runDurableAuditGit(gitDir, cachedArgs...); err == nil && strings.TrimSpace(string(cached)) == "" {
 		return nil
 	}
 
 	commitArgs := []string{"commit", "--no-verify", "--only", "-m", durableAuditCommitMessage(attemptID), "--"}
 	commitArgs = append(commitArgs, dirtyPaths...)
 	commitArgs = ddxStateCommitArgs(projectRoot, gitDir, commitArgs...)
-	commitOut, err := runGitWithIndexLockRecovery(ctx, gitDir, commitArgs...)
+	commitOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, commitArgs...)
 	if err != nil {
 		return fmt.Errorf("committing durable audit outputs: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
 	return nil
+}
+
+func runDurableAuditGit(gitDir string, args ...string) ([]byte, error) {
+	ctx, cancel := durableAuditCommandContext()
+	defer cancel()
+	return durableAuditGitRunner(ctx, gitDir, args...)
+}
+
+func runDurableAuditGitWithIndexLockRecovery(gitDir string, args ...string) ([]byte, error) {
+	var out []byte
+	op := durableAuditIndexOperation(args)
+	err := lockmetrics.Instrument("index.lock", op, func() error {
+		var lastErr error
+		var lastDiag string
+		for attempt := 0; attempt < gitlock.RecoveryAttempts; attempt++ {
+			out, lastErr = runDurableAuditGit(gitDir, args...)
+			if lastErr == nil {
+				return nil
+			}
+			if !gitlock.IsIndexLockError(string(out)) {
+				return lastErr
+			}
+			result, recErr := gitlock.RecoverGitIndexLock(gitDir)
+			if recErr != nil {
+				return fmt.Errorf("%s; index-lock recovery failed: %w", strings.TrimSpace(string(out)), recErr)
+			}
+			lastDiag = result.Reason
+			if !result.Removed {
+				time.Sleep(gitlock.LiveOwnerWait)
+			}
+		}
+		return fmt.Errorf("%s; index-lock recovery exhausted after %d attempts: %s", strings.TrimSpace(string(out)), gitlock.RecoveryAttempts, lastDiag)
+	})
+	return out, err
+}
+
+func durableAuditIndexOperation(args []string) string {
+	if len(args) == 0 {
+		return "index"
+	}
+	return "index." + args[0]
 }
 
 func dirtyDurableAuditPaths(statusOutput string) []string {
