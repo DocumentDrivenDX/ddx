@@ -37,7 +37,9 @@ package agent
 //
 // The in-process coordinator serializes submissions inside one process. Land()
 // also takes the process-shared main-git lock so separate `ddx work` processes
-// cannot interleave target-ref updates, evidence commits, or checkout sync.
+// Land narrows the process-shared main-git lock to the shared-ref update
+// boundary so separate `ddx work` processes cannot interleave target-ref
+// writes while read-only prep and checkout sync stay outside the lock.
 
 import (
 	"bytes"
@@ -853,13 +855,7 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 // configured, or no remote-tracking ref has been observed yet, the check
 // fails open (Action=="no-origin") rather than wedging the queue.
 func (RealLandingGitOps) LocalAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
-	var result PreClaimResult
-	err := withMainGitLock(dir, "ancestry_local", func() error {
-		var checkErr error
-		result, checkErr = localAncestryCheckLocked(dir, targetBranch)
-		return checkErr
-	})
-	return result, err
+	return localAncestryCheckLocked(dir, targetBranch)
 }
 
 func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
@@ -1197,22 +1193,63 @@ func sameFilesystemPath(a, b string) bool {
 }
 
 // Land performs the local land flow for a single submission.
-// It serializes primary-checkout git operations with the process-shared
+// It serializes only the shared-ref update boundary with the process-shared
 // main-git lock so separate ddx work processes cannot interleave landing with
-// tracker commits or pre-dispatch checkpoint/ref updates.
+// other target-ref writes.
 //
 // projectRoot is the directory containing the project's .git. req.WorktreeDir,
 // when non-empty, is used as the git working directory for all commands; when
 // empty, projectRoot is used. Both usually refer to the same dir — the field
 // is kept for forward compatibility with multi-clone topologies.
 func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResult, error) {
-	var result *LandResult
-	err := withMainGitLock(projectRoot, "land", func() error {
-		var landErr error
-		result, landErr = landLocked(projectRoot, req, gitOps)
-		return landErr
-	})
-	return result, err
+	return landLocked(projectRoot, req, gitOps)
+}
+
+type landPreparedState struct {
+	targetBranch string
+	targetRef    string
+	currentTip   string
+	contribCount int
+}
+
+func prepareLandTarget(projectRoot, wd string, req LandRequest, gitOps LandingGitOps) (*landPreparedState, *LandResult, error) {
+	targetBranch := req.TargetBranch
+	if targetBranch == "" {
+		br, err := gitOps.CurrentBranch(wd)
+		if err != nil {
+			return nil, nil, fmt.Errorf("resolving target branch: %w", err)
+		}
+		targetBranch = br
+	}
+	req.TargetBranch = targetBranch
+	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
+		return nil, nil, err
+	}
+	targetRef := "refs/heads/" + targetBranch
+
+	currentTip, err := gitOps.ResolveRef(wd, targetRef)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolving target tip %s: %w", targetRef, err)
+	}
+	contribCount := gitOps.CountCommits(wd, req.BaseRev, req.ResultRev)
+
+	if preserved, err := preserveIfLargeDeletion(wd, req, gitOps, currentTip, contribCount); err != nil {
+		return nil, nil, err
+	} else if preserved != nil {
+		return nil, preserved, nil
+	}
+	if preserved, err := preserveIfSyntaxSanityFails(wd, req, gitOps, currentTip, contribCount); err != nil {
+		return nil, nil, err
+	} else if preserved != nil {
+		return nil, preserved, nil
+	}
+
+	return &landPreparedState{
+		targetBranch: targetBranch,
+		targetRef:    targetRef,
+		currentTip:   currentTip,
+		contribCount: contribCount,
+	}, nil, nil
 }
 
 func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResult, error) {
@@ -1234,159 +1271,180 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		operatorDirtyBeforeLand = dirtyWorktreePaths(wd)
 	}
 
-	// Resolve target branch (default to project HEAD).
-	targetBranch := req.TargetBranch
-	if targetBranch == "" {
-		br, err := gitOps.CurrentBranch(wd)
-		if err != nil {
-			return nil, fmt.Errorf("resolving target branch: %w", err)
-		}
-		targetBranch = br
-	}
-	req.TargetBranch = targetBranch
-	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
-		return nil, err
-	}
-	targetRef := "refs/heads/" + targetBranch
-
-	currentTip, err := gitOps.ResolveRef(wd, targetRef)
-	if err != nil {
-		return nil, fmt.Errorf("resolving target tip %s: %w", targetRef, err)
-	}
-
-	contribCount := gitOps.CountCommits(wd, req.BaseRev, req.ResultRev)
-
-	if preserved, err := preserveIfLargeDeletion(wd, req, gitOps, currentTip, contribCount); err != nil {
-		return nil, err
-	} else if preserved != nil {
-		return preserved, nil
-	}
-	if preserved, err := preserveIfSyntaxSanityFails(wd, req, gitOps, currentTip, contribCount); err != nil {
-		return nil, err
-	} else if preserved != nil {
-		return preserved, nil
-	}
-
-	// Fast path: no sibling advanced the target branch → straight ff via
-	// update-ref. The worker's commit becomes the new tip unchanged; its
-	// parent is still BaseRev, so replay sees the same inputs the worker
-	// saw. No merge commit is created.
-	if currentTip == req.BaseRev {
-		if err := gitOps.UpdateRefTo(wd, targetRef, req.ResultRev, currentTip); err != nil {
-			return nil, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, req.ResultRev, err)
-		}
-		result := &LandResult{
-			Status:            "landed",
-			NewTip:            req.ResultRev,
-			LandedTip:         req.ResultRev,
-			TargetBranch:      targetBranch,
-			Merged:            false,
-			MergedCommitCount: contribCount,
-		}
-		finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, targetBranch, gitOps)
+	for {
+		prep, preserved, err := prepareLandTarget(projectRoot, wd, req, gitOps)
 		if err != nil {
 			return nil, err
 		}
-		defer cleanup()
-		if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil); err != nil {
-			return nil, err
-		} else if preserved != nil {
+		if preserved != nil {
 			return preserved, nil
 		}
-		if req.EvidenceDir != "" {
-			if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
-				return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
+		req.TargetBranch = prep.targetBranch
+
+		var result *LandResult
+		var syncFromRev string
+		retry := false
+		err = withMainGitLock(projectRoot, "land_ref_update", func() error {
+			lockedTip, err := gitOps.ResolveRef(wd, prep.targetRef)
+			if err != nil {
+				return fmt.Errorf("re-resolving target tip %s: %w", prep.targetRef, err)
 			}
-			if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
-				return nil, fmt.Errorf("rewriting final result artifact: %w", err)
+			if lockedTip != prep.currentTip {
+				retry = true
+				return nil
 			}
-			if err := landEvidence(finalWD, targetBranch, req, gitOps, result); err != nil {
-				return preserveAfterEvidenceFailure(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil, err)
+
+			// Fast path: no sibling advanced the target branch → straight ff via
+			// update-ref. The worker's commit becomes the new tip unchanged; its
+			// parent is still BaseRev, so replay sees the same inputs the worker
+			// saw. No merge commit is created.
+			if prep.currentTip == req.BaseRev {
+				if err := gitOps.UpdateRefTo(wd, prep.targetRef, req.ResultRev, prep.currentTip); err != nil {
+					return fmt.Errorf("fast-forwarding %s to %s: %w", prep.targetRef, req.ResultRev, err)
+				}
+				result = &LandResult{
+					Status:            "landed",
+					NewTip:            req.ResultRev,
+					LandedTip:         req.ResultRev,
+					TargetBranch:      prep.targetBranch,
+					Merged:            false,
+					MergedCommitCount: prep.contribCount,
+				}
+				finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, prep.targetBranch, gitOps)
+				if err != nil {
+					return err
+				}
+				defer cleanup()
+				if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil); err != nil {
+					return err
+				} else if preserved != nil {
+					result = preserved
+					syncFromRev = result.NewTip
+					if syncFromRev == "" {
+						syncFromRev = req.ResultRev
+					}
+					return nil
+				}
+				if req.EvidenceDir != "" {
+					if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
+						return fmt.Errorf("copying evidence into landing worktree: %w", err)
+					}
+					if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
+						return fmt.Errorf("rewriting final result artifact: %w", err)
+					}
+					if err := landEvidence(finalWD, prep.targetBranch, req, gitOps, result); err != nil {
+						preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, err)
+						if preserveErr != nil {
+							return preserveErr
+						}
+						result = preserved
+						syncFromRev = result.NewTip
+						return nil
+					}
+					cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+				}
+				syncFromRev = prep.currentTip
+				return nil
 			}
-			cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+
+			// Merge path: the target has advanced since the worker started. Create
+			// a temp detached worktree at currentTip and run `git merge --no-ff
+			// ResultRev` inside it. The result is a merge commit whose parents are
+			// [currentTip, ResultRev]. Crucially, ResultRev itself is NOT rewritten:
+			// its parent is still BaseRev, so replay observes the original inputs.
+			tempWT, tempWtErr := config.MkdirExecutionScratch(projectRoot, "ddx-land-wt-*")
+			if tempWtErr != nil {
+				return fmt.Errorf("creating temp worktree dir: %w", tempWtErr)
+			}
+			// os.MkdirTemp creates the dir, but git worktree add refuses to run if
+			// the target already exists. Remove it first so git can recreate it.
+			_ = os.RemoveAll(tempWT)
+			if err := gitOps.AddWorktree(wd, tempWT, lockedTip); err != nil {
+				return fmt.Errorf("adding temp worktree at %s: %w", lockedTip, err)
+			}
+			defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
+
+			mergeMsg := fmt.Sprintf("Merge bead %s attempt %s into %s", req.BeadID, shortAttempt(req.AttemptID), prep.targetBranch)
+			if err := gitOps.MergeInto(tempWT, req.ResultRev, mergeMsg); err != nil {
+				// Merge conflict: preserve the original ResultRev and return.
+				preserveRef := landIterationRef(req.BeadID, req.AttemptID, lockedTip)
+				if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
+					return fmt.Errorf("preserving %s after merge conflict: %w", preserveRef, upErr)
+				}
+				result = &LandResult{
+					Status:            "preserved",
+					PreserveRef:       preserveRef,
+					Reason:            "merge conflict",
+					TargetBranch:      prep.targetBranch,
+					MergedCommitCount: prep.contribCount,
+				}
+				return nil
+			}
+
+			// Merge clean: read the merge commit SHA from the temp worktree's HEAD
+			// and fast-forward the target branch to it.
+			mergeSHA, err := gitOps.HeadRevAt(tempWT)
+			if err != nil {
+				return fmt.Errorf("reading merge HEAD: %w", err)
+			}
+			if err := gitOps.UpdateRefTo(wd, prep.targetRef, mergeSHA, lockedTip); err != nil {
+				return fmt.Errorf("fast-forwarding %s to merge commit %s: %w", prep.targetRef, mergeSHA, err)
+			}
+			result = &LandResult{
+				Status:            "landed",
+				NewTip:            mergeSHA,
+				LandedTip:         mergeSHA,
+				TargetBranch:      prep.targetBranch,
+				Merged:            true,
+				MergedCommitCount: prep.contribCount,
+			}
+			finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, prep.targetBranch, gitOps)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+			if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil); err != nil {
+				return err
+			} else if preserved != nil {
+				result = preserved
+				syncFromRev = result.NewTip
+				if syncFromRev == "" {
+					syncFromRev = mergeSHA
+				}
+				return nil
+			}
+			if req.EvidenceDir != "" {
+				if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
+					return fmt.Errorf("copying evidence into landing worktree: %w", err)
+				}
+				if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
+					return fmt.Errorf("rewriting final result artifact: %w", err)
+				}
+				if err := landEvidence(finalWD, prep.targetBranch, req, gitOps, result); err != nil {
+					preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, err)
+					if preserveErr != nil {
+						return preserveErr
+					}
+					result = preserved
+					syncFromRev = result.NewTip
+					return nil
+				}
+				cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+			}
+			syncFromRev = prep.currentTip
+			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-		if syncOperatorAfterLand {
-			syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, operatorDirtyBeforeLand, result)
+		if retry {
+			continue
+		}
+		if result != nil && syncOperatorAfterLand && syncFromRev != "" {
+			syncWorkTreeToHeadGuarded(gitOps, wd, syncFromRev, operatorDirtyBeforeLand, result)
 		}
 		return result, nil
 	}
-
-	// Merge path: the target has advanced since the worker started. Create
-	// a temp detached worktree at currentTip and run `git merge --no-ff
-	// ResultRev` inside it. The result is a merge commit whose parents are
-	// [currentTip, ResultRev]. Crucially, ResultRev itself is NOT rewritten:
-	// its parent is still BaseRev, so replay observes the original inputs.
-	tempWT, tempWtErr := config.MkdirExecutionScratch(projectRoot, "ddx-land-wt-*")
-	if tempWtErr != nil {
-		return nil, fmt.Errorf("creating temp worktree dir: %w", tempWtErr)
-	}
-	// os.MkdirTemp creates the dir, but git worktree add refuses to run if
-	// the target already exists. Remove it first so git can recreate it.
-	_ = os.RemoveAll(tempWT)
-	if err := gitOps.AddWorktree(wd, tempWT, currentTip); err != nil {
-		return nil, fmt.Errorf("adding temp worktree at %s: %w", currentTip, err)
-	}
-	defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
-
-	mergeMsg := fmt.Sprintf("Merge bead %s attempt %s into %s", req.BeadID, shortAttempt(req.AttemptID), targetBranch)
-	if err := gitOps.MergeInto(tempWT, req.ResultRev, mergeMsg); err != nil {
-		// Merge conflict: preserve the original ResultRev and return.
-		preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
-		if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
-			return nil, fmt.Errorf("preserving %s after merge conflict: %w", preserveRef, upErr)
-		}
-		return &LandResult{
-			Status:            "preserved",
-			PreserveRef:       preserveRef,
-			Reason:            "merge conflict",
-			TargetBranch:      targetBranch,
-			MergedCommitCount: contribCount,
-		}, nil
-	}
-
-	// Merge clean: read the merge commit SHA from the temp worktree's HEAD
-	// and fast-forward the target branch to it.
-	mergeSHA, err := gitOps.HeadRevAt(tempWT)
-	if err != nil {
-		return nil, fmt.Errorf("reading merge HEAD: %w", err)
-	}
-	if err := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, currentTip); err != nil {
-		return nil, fmt.Errorf("fast-forwarding %s to merge commit %s: %w", targetRef, mergeSHA, err)
-	}
-	result := &LandResult{
-		Status:            "landed",
-		NewTip:            mergeSHA,
-		LandedTip:         mergeSHA,
-		TargetBranch:      targetBranch,
-		Merged:            true,
-		MergedCommitCount: contribCount,
-	}
-	finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, targetBranch, gitOps)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
-	if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil); err != nil {
-		return nil, err
-	} else if preserved != nil {
-		return preserved, nil
-	}
-	if req.EvidenceDir != "" {
-		if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
-			return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
-		}
-		if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
-			return nil, fmt.Errorf("rewriting final result artifact: %w", err)
-		}
-		if err := landEvidence(finalWD, targetBranch, req, gitOps, result); err != nil {
-			return preserveAfterEvidenceFailure(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil, err)
-		}
-		cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
-	}
-	if syncOperatorAfterLand {
-		syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, operatorDirtyBeforeLand, result)
-	}
-	return result, nil
 }
 
 func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, dirtyBefore []string) (*LandResult, error) {
@@ -1417,7 +1475,6 @@ func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOp
 		TargetBranch:      req.TargetBranch,
 		MergedCommitCount: contribCount,
 	}
-	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)
 	return result, nil
 }
 
@@ -1438,7 +1495,6 @@ func preserveAfterEvidenceFailure(wd string, req LandRequest, gitOps LandingGitO
 		TargetBranch:      req.TargetBranch,
 		MergedCommitCount: contribCount,
 	}
-	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)
 	return result, nil
 }
 

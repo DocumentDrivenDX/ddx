@@ -1500,17 +1500,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	attemptID := GenerateAttemptID()
 
-	// Serialize the parent-repo mutating pre-dispatch sequence (tracker
-	// commit, caller-dirt checkpoint, base resolution, workspace creation)
-	// under the tracker lock. Without this, concurrent workers race on the
-	// parent's HEAD ref between unlocked CommitTracker and SynthesizeCommit
-	// and surface as "cannot lock ref 'HEAD': is at X but expected Y" CAS
-	// failures (regression: concurrent `ddx work` against the same project).
-	// The lock is held only across the brief pre-dispatch sequence (~1-2s);
-	// agent execution that follows is fully parallel.
+	// Serialize only the parent-repo writes in pre-dispatch (tracker commit
+	// plus the caller-dirt checkpoint) under the main-git lock. Base
+	// resolution and isolated worktree creation are read-only / per-worktree
+	// operations and can proceed after the lock is released.
 	var baseRev string
 	var workspace *AttemptWorkspace
-	if err := withTrackerLock(projectRoot, "pre_dispatch", func() error {
+	if err := withTrackerLock(projectRoot, "pre_dispatch_commits", func() error {
 		// Commit beads.jsonl before spawning the attempt workspace so its snapshot
 		// includes any bead metadata updates (e.g. spec-id).
 		if err := commitTrackerLocked(projectRoot); err != nil {
@@ -1523,23 +1519,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if _, err := checkpointPreDispatchDirt(projectRoot, attemptID); err != nil {
 			return fmt.Errorf("pre-execute-bead checkpoint: %w", err)
 		}
-		// Resolve base revision after the tracker + checkpoint commits.
-		rev, err := resolveBase(gitOps, projectRoot, runtime.FromRev)
-		if err != nil {
-			return err
-		}
-		baseRev = rev
-		ws, err := attemptBackend.Prepare(ctx, AttemptBackendPrepareRequest{
-			ProjectRoot: projectRoot,
-			BeadID:      beadID,
-			AttemptID:   attemptID,
-			BaseRev:     baseRev,
-			GitOps:      gitOps,
-		})
-		if err != nil {
-			return err
-		}
-		workspace = ws
 		return nil
 	}); err != nil {
 		// A disk/resource-exhaustion failure during the pre-dispatch sequence
@@ -1565,6 +1544,46 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 		return nil, err
 	}
+	// Re-resolve after the tracker/checkpoint commits so the worker's base
+	// sees the committed parent-repo state without holding the lock across
+	// the read.
+	rev, err := resolveBase(gitOps, projectRoot, runtime.FromRev)
+	if err != nil {
+		return nil, err
+	}
+	baseRev = rev
+	ws, err := attemptBackend.Prepare(ctx, AttemptBackendPrepareRequest{
+		ProjectRoot: projectRoot,
+		BeadID:      beadID,
+		AttemptID:   attemptID,
+		BaseRev:     baseRev,
+		GitOps:      gitOps,
+	})
+	if err != nil {
+		// A disk/resource-exhaustion failure during the pre-dispatch sequence
+		// (most commonly `git worktree add` running out of space while checking
+		// out the isolated worktree) must surface as a resource_exhausted
+		// outcome, not a raw error. The execute-loop releases the claim for a
+		// resource_exhausted report (parity with the pre-execution resource
+		// check above); a raw error leaves the bead claimed-but-open and
+		// execution-ineligible until a manual --unclaim (ddx-f677a50b).
+		if classifyReadinessSystemReason(err.Error(), nil) == ReadinessSystemReasonResourceExhausted {
+			res := &ExecuteBeadResult{
+				BeadID:      beadID,
+				WorkerID:    runtime.WorkerID,
+				ExitCode:    1,
+				Error:       err.Error(),
+				Reason:      err.Error(),
+				Outcome:     ExecuteBeadOutcomeTaskFailed,
+				Status:      ExecuteBeadStatusResourceExhausted,
+				ProjectRoot: projectRoot,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
+		}
+		return nil, err
+	}
+	workspace = ws
 	if workspace == nil || strings.TrimSpace(workspace.WorkDir) == "" {
 		return nil, fmt.Errorf("attempt backend %s did not return a workspace", attemptBackend.Name())
 	}
