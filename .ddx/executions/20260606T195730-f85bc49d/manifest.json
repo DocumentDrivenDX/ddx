@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260606T195730-f85bc49d",
+  "bead_id": "ddx-1bcb9827",
+  "base_rev": "88f907695ca317b15ca3049184b31819f8fb0aa4",
+  "created_at": "2026-06-06T19:57:40.077431375Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1bcb9827",
+    "title": "Remove parent dependency edges from decomposition",
+    "description": "PROBLEM\nThe decomposition path that fans a too-large bead into executable children still wires the parent into the child dependency set. That recreates the exact back-edge this parent bead is about.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead_loop.go:4675-4701` currently creates each child with `Parent: parent.ID` and then explicitly adds dependency edges from the parent to every child. The static prompt text in `cli/internal/agent/execute_bead.go:2490-2577` and the guardrail snapshots in `cli/internal/agent/execute_bead_guardrails_test.go` still teach the decomposition flow to use the parent as a dependency edge, so the bug survives both the runtime path and the emitted instructions.\n\nPROPOSED FIX\nChange the programmatic decomposition path and the tracked prompt/guardrail text so generated children never add the parent to their deps. Keep only legitimate child-to-child or sibling/replacement edges. Add a golden e2e test named `decompose_does_not_self_dep` that creates a parent with N children and asserts every child's deps set excludes the parent.\n\nNON-SCOPE\nDo not touch bead store validation, doctor repair, work-loop back-edge remediation, or lifecycle docs in this bead.\n\nIn-scope files:\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/execute_bead.go\n- cli/internal/agent/execute_bead_guardrails_test.go\n- cli/internal/agent/execute_bead_intake_decompose_test.go\n- cli/internal/agent/execute_bead_loop_test.go (if needed for the golden e2e assertion)\n\nOut-of-scope:\n- cli/internal/bead/store.go\n- cli/cmd/bead.go\n- cli/internal/bead/doctor.go\n- cli/internal/agent/lifecycle_dispatch.go",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... -run TestDecomposeDoesNotSelfDep` passes.\n2. `cd cli \u0026\u0026 go test ./internal/agent/... -run TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation` passes.\n3. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n4. `cd cli \u0026\u0026 lefthook run pre-commit` passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 1993005)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T15:47:40Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T195730-f85bc49d",
+    "prompt": ".ddx/executions/20260606T195730-f85bc49d/prompt.md",
+    "manifest": ".ddx/executions/20260606T195730-f85bc49d/manifest.json",
+    "result": ".ddx/executions/20260606T195730-f85bc49d/result.json",
+    "checks": ".ddx/executions/20260606T195730-f85bc49d/checks.json",
+    "usage": ".ddx/executions/20260606T195730-f85bc49d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-1bcb9827-20260606T195730-f85bc49d"
+  },
+  "prompt_sha": "46112836e65ce6b670938aa4c647b06cfcdaa3e3db262fc9cb958def0f28e830"
+}
