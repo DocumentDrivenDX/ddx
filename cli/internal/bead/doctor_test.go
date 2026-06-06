@@ -1,7 +1,6 @@
 package bead
 
 import (
-	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -13,125 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// TestBeadDoctorDetectsAndRepairsBackEdge covers the parent-ancestor dep
-// regression requested for the bead doctor: detect any dependency whose
-// target is the bead's parent chain and remove only those edges under
-// --fix. This guards both the scan and the repair path on a realistic
-// parent/grandparent chain with one valid dependency that must remain.
-func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
-	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	path := filepath.Join(ddxDir, "beads.jsonl")
-
-	corpus := []map[string]any{
-		{
-			"id":         "ddx-root",
-			"title":      "root",
-			"type":       "task",
-			"status":     "open",
-			"priority":   2,
-			"labels":     []string{},
-			"deps":       []string{},
-			"created_at": "2026-01-01T00:00:00Z",
-			"updated_at": "2026-01-01T00:00:00Z",
-		},
-		{
-			"id":         "ddx-parent",
-			"title":      "parent",
-			"type":       "task",
-			"status":     "open",
-			"priority":   2,
-			"parent":     "ddx-root",
-			"labels":     []string{},
-			"deps":       []string{},
-			"created_at": "2026-01-01T00:00:00Z",
-			"updated_at": "2026-01-01T00:00:00Z",
-		},
-		{
-			"id":       "ddx-child",
-			"title":    "child",
-			"type":     "task",
-			"status":   "open",
-			"priority": 2,
-			"parent":   "ddx-parent",
-			"labels":   []string{},
-			"dependencies": []any{
-				map[string]any{"issue_id": "ddx-child", "depends_on_id": "ddx-parent", "type": "blocks"},
-				map[string]any{"issue_id": "ddx-child", "depends_on_id": "ddx-root", "type": "blocks"},
-				map[string]any{"issue_id": "ddx-child", "depends_on_id": "ddx-allowed", "type": "blocks"},
-			},
-			"created_at": "2026-01-01T00:00:00Z",
-			"updated_at": "2026-01-01T00:00:00Z",
-		},
-		{
-			"id":         "ddx-allowed",
-			"title":      "allowed",
-			"type":       "task",
-			"status":     "open",
-			"priority":   2,
-			"labels":     []string{},
-			"deps":       []string{},
-			"created_at": "2026-01-01T00:00:00Z",
-			"updated_at": "2026-01-01T00:00:00Z",
-		},
-	}
-
-	var lines [][]byte
-	for _, row := range corpus {
-		encoded, err := json.Marshal(row)
-		require.NoError(t, err)
-		lines = append(lines, encoded)
-	}
-	require.NoError(t, os.WriteFile(path, append(bytes.Join(lines, []byte{'\n'}), '\n'), 0o644))
-
-	report, err := BeadDoctor(path)
-	require.NoError(t, err)
-	require.Len(t, report.Findings, 2)
-	for _, finding := range report.Findings {
-		assert.Equal(t, doctorFindingParentAncestorDeps, finding.Code)
-		assert.Equal(t, "ddx-child", finding.BeadID)
-	}
-	assert.Equal(t, "dependencies[0].depends_on_id", report.Findings[0].FieldPath)
-	assert.Equal(t, "dependencies[1].depends_on_id", report.Findings[1].FieldPath)
-	assert.Equal(t, "ddx-parent", report.Findings[0].SampleHead)
-	assert.Equal(t, "ddx-root", report.Findings[1].SampleHead)
-
-	fixedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
-	fixedReport, err := BeadDoctorFix(path, func() time.Time { return fixedAt })
-	require.NoError(t, err)
-	require.False(t, fixedReport.Clean(), "first fix must report the repaired back-edge findings")
-	require.Len(t, fixedReport.Findings, 2)
-
-	repaired, err := BeadDoctor(path)
-	require.NoError(t, err)
-	assert.True(t, repaired.Clean(), "repair must remove only the offending parent-ancestor dependency edges")
-
-	contents, err := os.ReadFile(path)
-	require.NoError(t, err)
-	var rows []map[string]any
-	for _, line := range strings.Split(strings.TrimSpace(string(contents)), "\n") {
-		var row map[string]any
-		require.NoError(t, json.Unmarshal([]byte(line), &row))
-		rows = append(rows, row)
-	}
-	require.Len(t, rows, 4)
-	child := rows[2]
-	deps, ok := child["dependencies"].([]any)
-	require.True(t, ok)
-	require.Len(t, deps, 1, "only the non-ancestor dependency must survive the repair")
-	dep := deps[0].(map[string]any)
-	assert.Equal(t, "ddx-allowed", dep["depends_on_id"])
-
-	events, ok := child["events"].([]any)
-	require.True(t, ok, "repair must append an audit event")
-	require.Len(t, events, 1)
-	event := events[0].(map[string]any)
-	assert.Equal(t, "repair", event["kind"])
-	assert.Contains(t, event["body"], "dependencies[0].depends_on_id")
-	assert.Contains(t, event["body"], "dependencies[1].depends_on_id")
-}
 
 // TestBeadDoctor_CleanFileReportsNothing covers ddx-b695e162 AC #1: a
 // beads.jsonl whose fields all fit under MaxFieldBytes produces a clean

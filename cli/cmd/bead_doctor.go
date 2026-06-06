@@ -136,19 +136,15 @@ For each finding, reports whether result_rev is reachable from HEAD:
 
 			out := cmd.OutOrStdout()
 			if report.Clean() {
-				fmt.Fprintf(out, "bead doctor: %s — clean (no findings)\n", path)
+				fmt.Fprintf(out, "bead doctor: %s — clean (no fields exceed %d bytes)\n", path, bead.MaxFieldBytes)
 				return nil
 			}
-			fmt.Fprintf(out, "bead doctor: %s — %d finding(s):\n", path, len(report.Findings))
+			fmt.Fprintf(out, "bead doctor: %s — %d finding(s) exceeding %d-byte cap:\n", path, len(report.Findings), bead.MaxFieldBytes)
 			for _, f := range report.Findings {
-				code := f.Code
-				if code == "" {
-					code = "field_overflow"
-				}
-				fmt.Fprintf(out, "  %s  %s  %s  size=%d  head=%q\n", f.BeadID, code, f.FieldPath, f.SizeBytes, f.SampleHead)
+				fmt.Fprintf(out, "  %s  %s  %d bytes  head=%q\n", f.BeadID, f.FieldPath, f.SizeBytes, f.SampleHead)
 			}
 			if doFix {
-				fmt.Fprintf(out, "\nrepair complete. backup written to %s/backups/. artifact sidecars and dependency removals under %s/executions/<bead>/repair-*/\n", filepath.Dir(path), filepath.Dir(path))
+				fmt.Fprintf(out, "\nrepair complete. backup written to %s/backups/. artifact sidecars under %s/executions/<bead>/repair-*/\n", filepath.Dir(path), filepath.Dir(path))
 				return nil
 			}
 			// Non-fix scan: non-zero exit via cobra error so CI can catch it.
