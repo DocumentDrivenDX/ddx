@@ -2548,11 +2548,11 @@ Too big if any holds:
 If too big, decompose:
 
 1. ` + "`ddx bead create`" + ` for each child (copy parent's labels and spec-id).
-2. ` + "`ddx bead dep add <parent-id> <child-id>`" + ` to record edges.
+2. ` + "`ddx bead dep add`" + ` only for legitimate child-to-child or sibling/replacement edges; never the parent.
 3. ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 4. Write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path with child IDs, then stop.
 
-Decomposition alone is success. Do not mix it with implementation.`
+Decomposition alone is success. Don't mix it with implementation.`
 
 // instrNoChangesContract is the shared NoChangesContract (TD-031 §8.1) rule.
 const instrNoChangesContract = `
@@ -2627,12 +2627,12 @@ const executeBeadInstructionsClaudeText = `You are executing one bead in an isol
 - Read first. If the bead names files, specs, or prior beads, read them before editing — do not guess.
 - Cross-reference each AC to concrete evidence (test, file, function) before committing. If you cannot point at it, it is not done.
 - Run the project's test and lint commands before committing. **Do not commit red code** — fix failures first.
-- Run git/index mutations sequentially; do not use parallel tool calls for ` + "`git add`" + `, ` + "`git commit`" + `, or other staging/commit commands.
+- Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + ` (the worktree may have unrelated WIP).
 - If ` + "`lefthook run pre-commit`" + ` depends on staged files, rerun it after staging the exact commit set. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
-- Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Stop after the commit.
+- Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `. Stop after the commit.
 - Do not modify files outside the bead's scope.
-- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 still allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + `, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
+- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit or rationale ⇒ DDx records ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +
@@ -2662,13 +2662,13 @@ The bead's <description> and <acceptance> are the contract. Every AC must be sat
 - Read first. Read the files the bead names before editing — do not guess.
 - Use ` + "`edit`" + `, ` + "`write`" + `, ` + "`read`" + `, ` + "`grep`" + `, and ` + "`ls`" + `; never the bash equivalents.
 - Run the project's test and lint commands before committing. **Do not commit red code**.
-- Run git/index mutations sequentially; do not use parallel tool calls for ` + "`git add`" + `, ` + "`git commit`" + `, or other staging/commit commands.
+- Run git/index mutations sequentially; don't parallelize ` + "`git add`" + `, ` + "`git commit`" + `, or staging/commit commands.
 - Stage with ` + "`git add <specific-paths>`" + `; never ` + "`git add -A`" + `.
 - If ` + "`lefthook run pre-commit`" + ` depends on staged files, rerun it after staging the exact commit set. A ` + "`no-staged-files`" + ` run is not acceptance evidence.
-- Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `.
+- Commit exactly once when green; subject ends with ` + "`[<bead-id>]`" + `.
 - Stop immediately after the commit succeeds. Do not keep reading or testing.
 - Do not modify files outside the bead's scope.
-- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 still allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + `, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
+- Current-bead lifecycle is orchestrator-owned. Do not run ` + "`ddx bead update <bead-id> --claim`" + `, ` + "`ddx bead update <bead-id> --status <status>`" + `, ` + "`ddx bead update <bead-id> --unclaim`" + `, or ` + "`ddx bead close <bead-id>`" + `. Step 0 allows ` + "`ddx bead create`" + `, ` + "`ddx bead dep add`" + ` for child-to-child or sibling/replacement edges, and ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 - If you cannot finish, write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path before exiting. No commit or rationale ⇒ ` + "`no_evidence_produced`" + `.` +
 	instrNoChangesContract +
 	instrInvestigationReports +

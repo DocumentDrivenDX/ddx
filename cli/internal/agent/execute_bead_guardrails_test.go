@@ -81,6 +81,7 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "step0_depth_cap", any: []string{"Auto-decomposition is capped at depth 2", "third-level split"}},
 		{name: "decompose_bead_create", any: []string{"ddx bead create"}},
 		{name: "decompose_bead_dep_add", any: []string{"ddx bead dep add"}},
+		{name: "decompose_dep_edges_are_child_specific", any: []string{"legitimate child-to-child or sibling/replacement edges", "never the parent"}},
 		{name: "decompose_bead_update", any: []string{"ddx bead update"}},
 		{name: "current_bead_lifecycle_orchestrator_owned", any: []string{"Current-bead lifecycle is orchestrator-owned"}},
 		{name: "review_is_a_gate", any: []string{"review is a gate", "review is a gate, not an escape hatch"}},
@@ -191,7 +192,11 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 	allowed := []string{
 		"ddx bead create",
 		"ddx bead dep add",
+		"child-to-child or sibling/replacement edges",
 		"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
+	}
+	mustNotContain := []string{
+		"ddx bead dep add <parent-id> <child-id>",
 	}
 	for _, c := range cases {
 		c := c
@@ -207,6 +212,11 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 					t.Errorf("rendered %s prompt missing decomposition allowance substring %q", c.variant, sub)
 				}
 			}
+			for _, sub := range mustNotContain {
+				if strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt unexpectedly still contains deprecated lifecycle substring %q", c.variant, sub)
+				}
+			}
 		})
 	}
 }
@@ -218,7 +228,7 @@ func TestExecuteBeadInstructions_SerializesGitOperations(t *testing.T) {
 	}
 	required := []string{
 		"Run git/index mutations sequentially",
-		"do not use parallel tool calls for `git add`, `git commit`, or other staging/commit commands",
+		"don't parallelize `git add`, `git commit`, or staging/commit commands",
 		"git add <specific-paths>",
 		"Commit exactly once when green",
 	}

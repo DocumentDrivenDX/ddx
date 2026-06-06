@@ -2305,8 +2305,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"bead_id":   candidate.ID,
 					"child_ids": childIDs,
 				})
-				// Parent stays open (not proposed) — it is now dependency-blocked on
-				// children and will re-enter the queue only after they close.
+				// Parent stays open (not proposed) — it is now execution-ineligible
+				// and will close once the decomposed children reach terminal state.
 				_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 				if stopAfterNonAttemptSkip() {
 					applyStop(work.StopInput{Once: true})
@@ -4758,9 +4758,10 @@ func storeBeadDepth(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bea
 	return depth
 }
 
-// applyPreClaimDecomposition creates child beads, wires parent→child dependency
-// edges, and appends a triage-decomposed event to the parent. It returns the
-// IDs of the created children so the caller can log or record them.
+// applyPreClaimDecomposition creates child beads, parks the parent as
+// execution-ineligible, and appends a triage-decomposed event to the parent.
+// It returns the IDs of the created children so the caller can log or record
+// them.
 func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
 	childIDs := make([]string, 0, len(decomp.Children))
 	for _, child := range decomp.Children {
@@ -4777,14 +4778,13 @@ func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore,
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	// Wire parent → children dependency edges so the parent is blocked until
-	// all children close.
+	// Park the parent so it does not re-enter execution while the generated
+	// children are outstanding.
 	if err := store.Update(ctx, parent.ID, func(b *bead.Bead) {
-		for _, childID := range childIDs {
-			b.AddDep(childID, "depends_on")
-		}
+		ensureBeadExtra(b)
+		b.Extra[bead.ExtraExecutionElig] = false
 	}); err != nil {
-		return childIDs, fmt.Errorf("decompose: wire deps on parent %s: %w", parent.ID, err)
+		return childIDs, fmt.Errorf("decompose: park parent %s after decomposition: %w", parent.ID, err)
 	}
 
 	body, _ := json.Marshal(map[string]any{
