@@ -563,8 +563,11 @@ func (s *Store) Create(ctx context.Context, b *Bead) error {
 		if err != nil {
 			return err
 		}
+		byID := make(map[string]*Bead, len(beads))
 		// Reject duplicate IDs
-		for _, e := range beads {
+		for i := range beads {
+			e := &beads[i]
+			byID[e.ID] = e
 			if e.ID == b.ID {
 				return fmt.Errorf("bead: duplicate id: %s", b.ID)
 			}
@@ -580,6 +583,15 @@ func (s *Store) Create(ctx context.Context, b *Bead) error {
 				if !existing[dep] {
 					return fmt.Errorf("bead: dependency not found: %s", dep)
 				}
+			}
+		}
+		parentChain, err := beadParentChain(byID, b.Parent)
+		if err != nil {
+			return err
+		}
+		for _, depID := range depIDs {
+			if err := rejectAncestorDependency(b.ID, depID, parentChain); err != nil {
+				return err
 			}
 		}
 		beads = append(beads, *b)
@@ -2837,13 +2849,16 @@ func (s *Store) DepAdd(id, depID string) error {
 		if err != nil {
 			return err
 		}
+		byID := make(map[string]*Bead, len(beads))
 		var target *Bead
 		depExists := false
 		for i := range beads {
-			if beads[i].ID == id {
-				target = &beads[i]
+			e := &beads[i]
+			byID[e.ID] = e
+			if e.ID == id {
+				target = e
 			}
-			if beads[i].ID == depID {
+			if e.ID == depID {
 				depExists = true
 			}
 		}
@@ -2858,6 +2873,13 @@ func (s *Store) DepAdd(id, depID string) error {
 		}
 		if target.HasDep(depID) {
 			return nil // already exists
+		}
+		parentChain, err := beadParentChain(byID, target.Parent)
+		if err != nil {
+			return err
+		}
+		if err := rejectAncestorDependency(id, depID, parentChain); err != nil {
+			return err
 		}
 
 		// Check for circular dependency
@@ -3003,6 +3025,43 @@ func (s *Store) depChainUp(byID map[string]*Bead, id string) []string {
 		return nil
 	}
 	return b.DepIDs()
+}
+
+// beadParentChain returns the chain of parent IDs starting at parentID and
+// walking upward through stored parent links. The returned chain excludes the
+// child bead itself and includes the offending ancestor if one is found.
+func beadParentChain(byID map[string]*Bead, parentID string) ([]string, error) {
+	if parentID == "" {
+		return nil, nil
+	}
+	chain := make([]string, 0, 4)
+	seen := make(map[string]bool)
+	current := parentID
+	for current != "" {
+		if seen[current] {
+			chain = append(chain, current)
+			return chain, fmt.Errorf("bead: parent cycle detected: %s", strings.Join(chain, " -> "))
+		}
+		seen[current] = true
+		chain = append(chain, current)
+		next, ok := byID[current]
+		if !ok || next.Parent == "" {
+			break
+		}
+		current = next.Parent
+	}
+	return chain, nil
+}
+
+// rejectAncestorDependency rejects dependency edges that point at a bead in
+// the supplied parent chain.
+func rejectAncestorDependency(childID, depID string, parentChain []string) error {
+	for _, ancestorID := range parentChain {
+		if ancestorID == depID {
+			return fmt.Errorf("bead: dependency %s is an ancestor in the parent chain for %s: %s", depID, childID, strings.Join(parentChain, " -> "))
+		}
+	}
+	return nil
 }
 
 // validateBead checks core invariants that must hold for any bead (create or update).

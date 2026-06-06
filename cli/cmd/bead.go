@@ -355,6 +355,26 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			if v, _ := cmd.Flags().GetString("parent"); v != "" {
 				b.Parent = v
 			}
+			if dependsOn, _ := cmd.Flags().GetStringSlice("depends-on"); len(dependsOn) > 0 {
+				normalized := make([]string, 0, len(dependsOn))
+				for _, depID := range dependsOn {
+					if depID = strings.TrimSpace(depID); depID != "" {
+						normalized = append(normalized, depID)
+					}
+				}
+				if len(normalized) > 0 {
+					if b.ID == "" {
+						id, err := s.GenID(context.Background())
+						if err != nil {
+							return err
+						}
+						b.ID = id
+					}
+					for _, depID := range normalized {
+						b.AddDep(depID, "blocks")
+					}
+				}
+			}
 			if setFlags, _ := cmd.Flags().GetStringArray("set"); len(setFlags) > 0 {
 				if b.Extra == nil {
 					b.Extra = make(map[string]any)
@@ -402,6 +422,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 	cmd.Flags().String("acceptance", "", "Acceptance criteria")
 	cmd.Flags().String("description", "", "Description")
 	cmd.Flags().String("parent", "", "Parent bead ID")
+	cmd.Flags().StringSlice("depends-on", nil, "Dependency bead ID (comma-separated or repeated)")
 	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
 
 	return cmd
