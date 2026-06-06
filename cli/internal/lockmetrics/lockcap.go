@@ -1,6 +1,7 @@
 package lockmetrics
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // Default hold-time caps. A worker that holds one of the named locks past its
@@ -212,13 +214,32 @@ func resolveCapConfig(lockName string) CapConfig {
 	}
 }
 
+// SharedMainGitLockRoot resolves the DDx state root that should own the
+// process-shared main-git lock. Linked worktrees converge on the primary
+// workspace when one is available; otherwise the caller falls back to the
+// standard project-scoped DDx path.
+func SharedMainGitLockRoot(projectRoot string) string {
+	if workspace := gitpkg.FindNearestDDxWorkspace(projectRoot); workspace != "" {
+		if info, err := os.Stat(filepath.Join(workspace, ddxroot.DirName)); err == nil && info.IsDir() {
+			return workspace
+		}
+	}
+	return ddxroot.Path(context.Background(), projectRoot)
+}
+
+// SharedTrackerLockPath resolves the process-shared tracker lock used by
+// withMainGitLock and cap enforcement.
+func SharedTrackerLockPath(projectRoot string) string {
+	return filepath.Join(SharedMainGitLockRoot(projectRoot), ddxroot.DirName, ".git-tracker.lock")
+}
+
 // lockPathFor resolves the on-disk path of a named lock under projectRoot.
 func lockPathFor(projectRoot, lockName string) string {
 	switch lockName {
 	case "index.lock":
 		return filepath.Join(projectRoot, ".git", "index.lock")
 	case "tracker.lock":
-		return ddxroot.JoinProject(projectRoot, ".git-tracker.lock")
+		return SharedTrackerLockPath(projectRoot)
 	default:
 		return ""
 	}

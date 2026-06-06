@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,8 +9,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 )
 
@@ -100,21 +97,7 @@ var trackerLockPolicy = DefaultLockRetryPolicy()
 // we prefer the primary DDx workspace when one exists instead of the caller's
 // checkout-local .ddx directory.
 func trackerLockPath(projectRoot string) string {
-	return filepath.Join(sharedMainGitLockRoot(projectRoot), ddxroot.DirName, ".git-tracker.lock")
-}
-
-// sharedMainGitLockRoot resolves the DDx state root that should own the
-// process-shared main-git lock. Linked worktrees should converge on the same
-// primary workspace when one is available; otherwise we fall back to the
-// normal project-scoped DDx path so convention-root projects keep their
-// existing behavior.
-func sharedMainGitLockRoot(projectRoot string) string {
-	if workspace := gitpkg.FindNearestDDxWorkspace(projectRoot); workspace != "" {
-		if info, err := os.Stat(filepath.Join(workspace, ddxroot.DirName)); err == nil && info.IsDir() {
-			return workspace
-		}
-	}
-	return ddxroot.Path(context.Background(), projectRoot)
+	return lockmetrics.SharedTrackerLockPath(projectRoot)
 }
 
 // withMainGitLock acquires the process-shared main-git lock for the
