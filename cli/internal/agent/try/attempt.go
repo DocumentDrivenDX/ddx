@@ -301,6 +301,7 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 		if countErr != nil {
 			return Outcome{Report: report, StoreErrOp: "IncrNoChangesCount", StoreErr: countErr}, nil
 		}
+		report.EscalationCount = noChangesCount
 		noChangesOut, adjudicatedReport, adjErr := adjudicateNoChangesContract(ctx, beadID, report, opts.ProjectRoot, noChangesCount, opts.SatisfactionChecker, opts.VerificationRunner)
 		if adjErr != nil {
 			return Outcome{Report: report, StoreErrOp: "adjudicateNoChanges", StoreErr: adjErr}, nil

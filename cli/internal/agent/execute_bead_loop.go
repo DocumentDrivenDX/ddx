@@ -3235,6 +3235,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
+			case agenttry.NoChangesActionBadAttemptNoCooldown:
+				emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
+				if err := applyNoChangesBadAttemptEscalation(w.Store, candidate.ID, assignee, noChanges, report.ActualPower, w.EscalationNextFloor); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("applyNoChangesBadAttemptEscalation", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			case agenttry.NoChangesActionOperatorRequired:
 				if err := applyNoChangesOperatorRequired(w.Store, candidate.ID, assignee, noChanges, now().UTC()); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
@@ -4972,6 +4985,7 @@ const (
 	executeLoopSmartRetryReasonKey          = "work-smart-retry-reason"
 	executeLoopSmartRetrySuggestedActionKey = "work-smart-retry-suggested-action"
 	executeLoopSuggestedActionKey           = "work-suggested-action"
+	executeLoopNoChangesNextMinPowerKey     = "work-no-changes-next-min-power"
 )
 
 func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome, actualPower int, nextFloorFn func(int) (int, error)) error {
@@ -4983,14 +4997,19 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	if suggestedAction == "" {
 		suggestedAction = "retry with a smart agent"
 	}
+	nextFloor := 0
+	if nextFloorFn != nil {
+		var err error
+		nextFloor, err = nextFloorFn(actualPower)
+		if err != nil {
+			emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, time.Now().UTC())
+			return applyNoChangesOperatorRequired(store, beadID, actor, noChanges, time.Now().UTC())
+		}
+	}
 
 	// When a ladder is available, advance by one step. If the ladder is
 	// exhausted (already at top powerClass), the work requires human input.
 	if nextFloorFn != nil {
-		if _, err := nextFloorFn(actualPower); err != nil {
-			emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, time.Now().UTC())
-			return applyNoChangesOperatorRequired(store, beadID, actor, noChanges, time.Now().UTC())
-		}
 		return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 			Reason: reason,
 			Actor:  actor,
@@ -5003,6 +5022,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 			b.Extra[executeLoopSmartRetryKey] = true
 			b.Extra[executeLoopSmartRetryReasonKey] = reason
 			b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
+			setNoChangesNextMinPower(b, nextFloor)
 			return nil
 		})
 	}
@@ -5019,6 +5039,42 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 		b.Extra[executeLoopSmartRetryKey] = true
 		b.Extra[executeLoopSmartRetryReasonKey] = reason
 		b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
+		setNoChangesNextMinPower(b, nextFloor)
+		return nil
+	})
+}
+
+func applyNoChangesBadAttemptEscalation(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome, actualPower int, nextFloorFn func(int) (int, error)) error {
+	reason := strings.TrimSpace(noChanges.Reason)
+	if reason == "" {
+		reason = "operator review required before another automated attempt"
+	}
+
+	if nextFloorFn != nil {
+		nextFloor, err := nextFloorFn(actualPower)
+		if err != nil {
+			emitEscalationAbortedEvent(store, beadID, actor, "", "", actualPower, time.Now().UTC())
+			return applyNoChangesOperatorRequired(store, beadID, actor, noChanges, time.Now().UTC())
+		}
+		return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: reason,
+			Actor:  actor,
+			Source: "ddx work",
+		}, func(b *bead.Bead) error {
+			ensureBeadExtra(b)
+			clearSmartRetryMetadata(b)
+			setNoChangesNextMinPower(b, nextFloor)
+			return nil
+		})
+	}
+
+	return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		Reason: reason,
+		Actor:  actor,
+		Source: "ddx work",
+	}, func(b *bead.Bead) error {
+		ensureBeadExtra(b)
+		clearSmartRetryMetadata(b)
 		return nil
 	})
 }
@@ -5068,6 +5124,7 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 			ensureBeadExtra(b)
 			clearNoChangesLifecycleLabels(b)
 			clearSmartRetryMetadata(b)
+			clearNoChangesNextMinPower(b)
 			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
 		},
 	})
@@ -5091,6 +5148,7 @@ func applyNoChangesBlockedExternal(store ExecuteBeadLoopStore, beadID, actor str
 		ensureBeadExtra(b)
 		clearNoChangesLifecycleLabels(b)
 		clearSmartRetryMetadata(b)
+		clearNoChangesNextMinPower(b)
 		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
 		return nil
 	})
@@ -5147,6 +5205,21 @@ func clearSmartRetryMetadata(b *bead.Bead) {
 	delete(b.Extra, executeLoopSmartRetrySuggestedActionKey)
 }
 
+func setNoChangesNextMinPower(b *bead.Bead, minPower int) {
+	if minPower <= 0 {
+		return
+	}
+	ensureBeadExtra(b)
+	b.Extra[executeLoopNoChangesNextMinPowerKey] = minPower
+}
+
+func clearNoChangesNextMinPower(b *bead.Bead) {
+	if b.Extra == nil {
+		return
+	}
+	delete(b.Extra, executeLoopNoChangesNextMinPowerKey)
+}
+
 func setOrDeleteBeadExtra(extra map[string]any, key, value string) {
 	if value == "" {
 		delete(extra, key)
@@ -5165,6 +5238,7 @@ func clearExecuteLoopNoChangesMetadata(ctx context.Context, store ExecuteBeadLoo
 		delete(b.Extra, "work-last-status")
 		delete(b.Extra, "work-last-detail")
 		delete(b.Extra, executeLoopSuggestedActionKey)
+		delete(b.Extra, executeLoopNoChangesNextMinPowerKey)
 		clearSmartRetryMetadata(b)
 	})
 }
