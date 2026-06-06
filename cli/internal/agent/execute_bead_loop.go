@@ -1043,14 +1043,22 @@ func parsePreExecuteCheckpointDirtyPaths(detail string) []string {
 // as a worker-stopping failure (ddx-23ac2796 and its sibling variants). It
 // covers .git/index.lock conflicts plus the DDx tracker-lock timeout sentinel
 // and the "unable to write new index file" / "cannot lock ref" forms git emits
-// when a concurrent process holds the index/ref. A persistent cause (e.g.
-// ENOSPC) simply keeps releasing+retrying the bead, which is still preferable
-// to halting the whole unattended drain.
+// when a concurrent process holds the index/ref. It also covers SIGKILL /
+// context-deadline errors: when the 30s durable-audit timeout fires while git
+// is blocked behind a concurrent lock, Go sends SIGKILL and exec.CommandContext
+// returns "signal: killed"; context.DeadlineExceeded may or may not be
+// unwrappable from the ExitError, so both the sentinel and the string forms are
+// matched. The audit commit is idempotent on re-entry, so retrying is safe.
+// A persistent cause (e.g. ENOSPC) simply keeps releasing+retrying the bead,
+// which is still preferable to halting the whole unattended drain.
 func isTransientGitContention(err error) bool {
 	if err == nil {
 		return false
 	}
 	if errors.Is(err, TrackerLockTimeoutErr) {
+		return true
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
 	msg := err.Error()
@@ -1063,6 +1071,8 @@ func isTransientGitContention(err error) bool {
 		"cannot lock ref",
 		"unable to update the ref",
 		"tracker lock timeout",
+		"signal: killed",
+		"context deadline exceeded",
 	} {
 		if strings.Contains(lower, marker) {
 			return true

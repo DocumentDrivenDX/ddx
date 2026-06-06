@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -177,6 +178,8 @@ func TestWork_IndexLockContentionDuringAuditCommitIsTransientNotFatal(t *testing
 		"index_lock_file_exists":    "staging tracker: fatal: Unable to create '/x/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository: exit status 128",
 		"unable_to_write_new_index": "committing durable audit outputs: fatal: unable to write new index file: exit status 128",
 		"cannot_lock_ref":           "committing durable audit outputs: error: cannot lock ref 'refs/heads/main': exit status 128",
+		"signal_killed_deadline":    "commit durable audit outputs: committing durable audit outputs: : signal: killed",
+		"tracker_lock_timeout":      "commit durable audit outputs: tracker lock timeout (max elapsed, lock: .ddx/.git-tracker.lock, owner: 424293)",
 	} {
 		t.Run(name, func(t *testing.T) {
 			result := runAuditWithFinalizeErr(t, fmt.Errorf("%s", errMsg))
@@ -252,4 +255,35 @@ func TestFinalizeDurableAuditOrStop_TrackerLockTimeoutDoesNotStopWorker(t *testi
 		assert.Contains(t, fmt.Sprint(ev.Data["detail"]), "tracker lock timeout")
 	}
 	assert.True(t, sawTransient, "loop.durable_audit_transient event must be emitted")
+}
+
+// TestIsTransientGitContention_SignalKilledAndDeadline asserts that the
+// SIGKILL / context-deadline class and the tracker-lock-timeout string are
+// each classified as transient (ddx-83361480).
+func TestIsTransientGitContention_SignalKilledAndDeadline(t *testing.T) {
+	trueFor := []struct {
+		name string
+		err  error
+	}{
+		{"signal_killed_in_message", fmt.Errorf("commit durable audit outputs: committing durable audit outputs: : signal: killed")},
+		{"context_deadline_exceeded_string", fmt.Errorf("context deadline exceeded")},
+		{"tracker_lock_timeout_string", fmt.Errorf("tracker lock timeout (max elapsed, lock: .ddx/.git-tracker.lock, owner: 99)")},
+		{"context_deadline_exceeded_sentinel", context.DeadlineExceeded},
+		{"context_deadline_exceeded_wrapped", fmt.Errorf("commit durable audit: %w", context.DeadlineExceeded)},
+	}
+	for _, tc := range trueFor {
+		t.Run(tc.name, func(t *testing.T) {
+			require.True(t, isTransientGitContention(tc.err), "must be classified as transient")
+		})
+	}
+
+	// Regression: genuine non-transient errors must not be misclassified.
+	falseFor := []error{
+		fmt.Errorf("committing durable audit outputs: fatal: insufficient permission for adding an object to repository database .git/objects: exit status 128"),
+		errors.New("disk full"),
+		context.Canceled,
+	}
+	for _, err := range falseFor {
+		require.False(t, isTransientGitContention(err), "must NOT be classified as transient: %v", err)
+	}
 }
