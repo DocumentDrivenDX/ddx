@@ -202,7 +202,7 @@ func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 		"ddx-preclaim-warn-5",
 	}
 	for i, beadID := range beadIDs {
-		require.NoError(t, store.Create(&bead.Bead{
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
 			ID:       beadID,
 			Title:    "warn bead " + beadID,
 			Priority: i,
@@ -418,7 +418,7 @@ func TestExecuteBeadLoop_ClaimSuccessRateWarnsBelowThreshold(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	for i := 1; i <= 3; i++ {
-		require.NoError(t, store.Create(&bead.Bead{
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
 			ID:       fmt.Sprintf("ddx-claim-rate-%d", i),
 			Title:    fmt.Sprintf("claim rate bead %d", i),
 			Priority: i,
@@ -491,7 +491,7 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	first := &bead.Bead{ID: "ddx-preserve-0001", Title: "Preserve dirty root", IssueType: "task"}
-	require.NoError(t, store.Create(first))
+	require.NoError(t, store.Create(context.Background(), first))
 
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	dirtyRel := filepath.Join("cli", "internal", "agent", "dirty_impl.go")
@@ -1151,7 +1151,7 @@ func TestWorkWatchStdout_PrintsNextReadyTransitionAfterIdle(t *testing.T) {
 			case "loop.idle":
 				if !idleHandled {
 					idleHandled = true
-					beadCreateErr = store.Create(&bead.Bead{
+					beadCreateErr = store.Create(context.Background(), &bead.Bead{
 						ID:       "ddx-ready-after-idle",
 						Title:    "spec: define full DDx temp cleanup in work cycle",
 						Priority: 0,
@@ -1322,7 +1322,7 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 	t.Helper()
 
 	upstream := &bead.Bead{ID: "ddx-upstream", Title: "External blocker", Priority: 0}
-	require.NoError(t, store.Create(upstream))
+	require.NoError(t, store.Create(context.Background(), upstream))
 	require.NoError(t, store.UpdateWithLifecycleStatus(upstream.ID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
 		ExternalBlockerReason: "waiting for upstream",
 		Reason:                "test fixture",
@@ -1336,7 +1336,7 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 			Priority: i,
 		}
 		blocker.AddDep(upstream.ID, "blocks")
-		require.NoError(t, store.Create(blocker))
+		require.NoError(t, store.Create(context.Background(), blocker))
 		require.NoError(t, store.UpdateWithLifecycleStatus(blocker.ID, bead.StatusProposed, bead.LifecycleTransitionOptions{
 			OperatorRequired: true,
 			Reason:           "test fixture: operator attention required",
@@ -1351,24 +1351,24 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 				Priority: 4,
 			}
 			downstream.AddDep(prevID, "blocks")
-			require.NoError(t, store.Create(downstream))
+			require.NoError(t, store.Create(context.Background(), downstream))
 			prevID = downstream.ID
 		}
 	}
 
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:       "ddx-proposed",
 		Title:    "Proposed operator attention",
 		Status:   bead.StatusProposed,
 		Priority: 3,
 	}))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:       "ddx-not-eligible",
 		Title:    "Execution ineligible",
 		Priority: 4,
 		Extra:    map[string]any{bead.ExtraExecutionElig: false},
 	}))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:       "ddx-superseded",
 		Title:    "Superseded",
 		Priority: 4,
@@ -1376,16 +1376,18 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 	}))
 
 	cooldown := &bead.Bead{ID: "ddx-cooldown", Title: "Retry later", Priority: 4}
-	require.NoError(t, store.Create(cooldown))
+	require.NoError(t, store.Create(context.Background(
 	// Use time.Now().Add so the cooldown is always in the future regardless of when
 	// the test runs relative to fixedWatchStdoutTime (which is a fixed past date).
+	), cooldown))
+
 	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().Add(24*time.Hour), ExecuteBeadStatusNoChanges, "retry later", ""))
 
 	ordinaryEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Open epic", IssueType: "epic", Priority: 4}
 	ordinaryEpicChild := &bead.Bead{ID: "ddx-epic-open-child", Title: "Open epic child", Parent: ordinaryEpic.ID, Priority: 4}
 	ordinaryEpicChild.AddDep(upstream.ID, "blocks")
-	require.NoError(t, store.Create(ordinaryEpic))
-	require.NoError(t, store.Create(ordinaryEpicChild))
+	require.NoError(t, store.Create(context.Background(), ordinaryEpic))
+	require.NoError(t, store.Create(context.Background(), ordinaryEpicChild))
 
 	closureEpic := &bead.Bead{ID: "ddx-epic-closure", Title: "Closure epic", IssueType: "epic", Priority: 4}
 	closedChild := &bead.Bead{
@@ -1395,6 +1397,6 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 		Parent:   closureEpic.ID,
 		Priority: 4,
 	}
-	require.NoError(t, store.Create(closureEpic))
-	require.NoError(t, store.Create(closedChild))
+	require.NoError(t, store.Create(context.Background(), closureEpic))
+	require.NoError(t, store.Create(context.Background(), closedChild))
 }

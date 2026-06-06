@@ -243,7 +243,7 @@ func newReviewArtifactsFixture(t *testing.T) (projectRoot, head string, store *b
 	store = bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# review test\n"), 0o644))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:          "ddx-review-happy",
 		Title:       "Review JSON contract test",
 		Description: "Ensure the JSON contract is enforced.",

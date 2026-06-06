@@ -48,7 +48,7 @@ workers:
 
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "no-progress cooldown e2e", Priority: 0}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "no-progress cooldown e2e", Priority: 0}))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -123,7 +123,7 @@ workers:
 
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "max no_changes before close e2e", Priority: 0}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "max no_changes before close e2e", Priority: 0}))
 
 	var execCalls atomic.Int32
 	worker := &ExecuteBeadWorker{

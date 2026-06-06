@@ -2,6 +2,7 @@ package graphql_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,7 @@ func TestGraphQLBeadsReadyAndBlockedUseLifecycleBuckets(t *testing.T) {
 	proposed := &bead.Bead{Title: "Operator attention", Status: bead.StatusProposed}
 	extBlocked := &bead.Bead{Title: "Externally blocked", Status: bead.StatusOpen}
 	for _, b := range []*bead.Bead{ready, dep, waiting, proposed, extBlocked} {
-		if err := store.Create(b); err != nil {
+		if err := store.Create(context.Background(), b); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -122,7 +123,7 @@ func TestGraphQLBeadStatusCountsLifecycleStates(t *testing.T) {
 	cancelledBead := &bead.Bead{Title: "Cancelled bead", Status: bead.StatusOpen}
 
 	for _, b := range []*bead.Bead{openBead, inProgressBead, proposedBead, blockedBead, depBead, waitingBead, closedBead, cancelledBead} {
-		if err := store.Create(b); err != nil {
+		if err := store.Create(context.Background(), b); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -143,7 +144,7 @@ func TestGraphQLBeadStatusCountsLifecycleStates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Close closedBead
-	if err := store.Close(closedBead.ID); err != nil {
+	if err := store.Close(context.Background(), closedBead.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Cancel cancelledBead
@@ -227,7 +228,7 @@ func TestGraphQLBeadProposedApprove(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	proposed := &bead.Bead{Title: "Proposed bead", Status: bead.StatusProposed}
-	if err := store.Create(proposed); err != nil {
+	if err := store.Create(context.Background(), proposed); err != nil {
 		t.Fatal(err)
 	}
 
@@ -276,7 +277,7 @@ func TestGraphQLBeadProposedApproveRejectsEmptyNote(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	proposed := &bead.Bead{Title: "Proposed bead", Status: bead.StatusProposed}
-	if err := store.Create(proposed); err != nil {
+	if err := store.Create(context.Background(), proposed); err != nil {
 		t.Fatal(err)
 	}
 
@@ -310,7 +311,7 @@ func TestGraphQLBeadCancelTerminal(t *testing.T) {
 	openBead := &bead.Bead{Title: "Open bead to cancel", Status: bead.StatusOpen}
 	dependent := &bead.Bead{Title: "Dependent bead", Status: bead.StatusOpen}
 	for _, b := range []*bead.Bead{openBead, dependent} {
-		if err := store.Create(b); err != nil {
+		if err := store.Create(context.Background(), b); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -362,7 +363,7 @@ func TestGraphQLBeadBlockExternal(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	openBead := &bead.Bead{Title: "Open bead to block", Status: bead.StatusOpen}
-	if err := store.Create(openBead); err != nil {
+	if err := store.Create(context.Background(), openBead); err != nil {
 		t.Fatal(err)
 	}
 
@@ -444,7 +445,7 @@ func TestGraphQLBeadBlockRequiresReason(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	openBead := &bead.Bead{Title: "Open bead", Status: bead.StatusOpen}
-	if err := store.Create(openBead); err != nil {
+	if err := store.Create(context.Background(), openBead); err != nil {
 		t.Fatal(err)
 	}
 

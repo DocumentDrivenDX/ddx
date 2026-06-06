@@ -391,7 +391,7 @@ func TestDeclinedNeedsDecomposition_NotInReady(t *testing.T) {
 	require.NoError(t, s.Init(context.Background()))
 
 	b := &bead.Bead{Title: "too-big bead", IssueType: "task", Priority: 1}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(context.Background(), b))
 
 	adapter := &beadStoreAdapter{s: s}
 	_, err := Attempt(context.Background(), adapter, b.ID, AttemptOpts{

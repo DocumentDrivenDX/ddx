@@ -47,7 +47,7 @@ func (g *worktreeLostGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 	if err := store.Init(context.Background()); err != nil {
 		return err
 	}
-	return store.Create(&bead.Bead{ID: "ddx-worktree-lost", Title: "Worktree lost"})
+	return store.Create(context.Background(), &bead.Bead{ID: "ddx-worktree-lost", Title: "Worktree lost"})
 }
 
 func (g *worktreeLostGitOps) WorktreeRemove(dir, wtPath string) error { return nil }

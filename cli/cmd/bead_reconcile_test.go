@@ -26,7 +26,7 @@ func TestBeadReconcileCommandDryRunDoesNotMutate(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(), "bead", "reconcile", "--dry-run")
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestBeadReconcileCommandApplyMutatesThroughStore(t *testing.T) {
 			},
 		},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(), "bead", "reconcile", "--apply")
 	require.NoError(t, err)

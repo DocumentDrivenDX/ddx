@@ -176,7 +176,7 @@ func newWorkAuditRepo(t *testing.T, beadCount int) (string, *bead.Store, []strin
 	for i := 0; i < beadCount; i++ {
 		id := beadIDForIndex(i)
 		beadIDs = append(beadIDs, id)
-		require.NoError(t, store.Create(&bead.Bead{
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
 			ID:       id,
 			Title:    "Audit bead " + id,
 			Priority: i,

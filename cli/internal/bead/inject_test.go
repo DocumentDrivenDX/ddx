@@ -20,7 +20,7 @@ func TestBeadKindRegistration(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.Create(parent); err != nil {
+	if err := store.Create(testCtx(), parent); err != nil {
 		t.Fatalf("Create parent: %v", err)
 	}
 
@@ -108,7 +108,7 @@ func TestInjectQueueBeadIdempotent(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.Create(parent); err != nil {
+	if err := store.Create(testCtx(), parent); err != nil {
 		t.Fatalf("Create parent: %v", err)
 	}
 
@@ -207,7 +207,7 @@ func TestExecuteLoopDispatchBeadKindMatching(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.Create(parent); err != nil {
+	if err := store.Create(testCtx(), parent); err != nil {
 		t.Fatalf("Create parent: %v", err)
 	}
 
@@ -330,7 +330,7 @@ func TestInjectPayloadStorage(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.Create(parent); err != nil {
+	if err := store.Create(testCtx(), parent); err != nil {
 		t.Fatalf("Create parent: %v", err)
 	}
 
@@ -399,7 +399,7 @@ func TestInjectReviewFindingFullLifecycle(t *testing.T) {
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := store.Create(parent); err != nil {
+	if err := store.Create(testCtx(), parent); err != nil {
 		t.Fatalf("Create parent: %v", err)
 	}
 

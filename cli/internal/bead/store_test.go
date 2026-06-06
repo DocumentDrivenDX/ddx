@@ -111,6 +111,33 @@ func TestStoreGenID_RejectsCanceledContext(t *testing.T) {
 	require.Error(t, err, "GenID must return an error when context is already canceled")
 }
 
+func TestStoreCreate_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := newTestStore(t)
+	err := s.Create(ctx, &Bead{Title: "canceled create"})
+	require.Error(t, err, "Create must return an error when context is already canceled")
+}
+
+func TestStoreUpdate_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := newTestStore(t)
+	err := s.Update(ctx, "missing", func(*Bead) {})
+	require.Error(t, err, "Update must return an error when context is already canceled")
+}
+
+func TestStoreClose_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	s := newTestStore(t)
+	err := s.Close(ctx, "missing")
+	require.Error(t, err, "Close must return an error when context is already canceled")
+}
+
 func TestNewStore_DefaultsToJSONL(t *testing.T) {
 	s := NewStore(filepath.Join(t.TempDir(), ddxroot.DirName))
 	assert.Nil(t, s.backend)

@@ -26,7 +26,7 @@ func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
 		Acceptance:  "1. Children are created with proper structure\n2. cd cli && go test ./internal/agent/... green\n",
 		Labels:      []string{"spec:FEAT-010", "phase:2"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -247,16 +247,18 @@ func TestAutoDecomposeEpic_PreconditionGates(t *testing.T) {
 			require.NoError(t, store.Init(context.Background()))
 
 			b := tt.makeBead()
-			require.NoError(t, store.Create(b))
+			require.NoError(t, store.Create(context.Background(
 
 			// If this is the has_children test, create a child
+			), b))
+
 			if tt.name == "has_children" {
 				child := &bead.Bead{
 					ID:     "ddx-gate-child",
 					Parent: b.ID,
 					Title:  "child",
 				}
-				require.NoError(t, store.Create(child))
+				require.NoError(t, store.Create(context.Background(), child))
 			}
 
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -299,7 +301,7 @@ func TestAutoDecomposeEpic_FallbackDecompositionWorks(t *testing.T) {
 		Acceptance:  "1. First AC\n2. Second AC\n3. Third AC\n",
 		Labels:      []string{"spec:FEAT-010"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -351,9 +353,11 @@ func TestAutoDecomposeEpic_AttemptCapGate(t *testing.T) {
 		Acceptance:  "1. Test passes\n",
 		Labels:      []string{"spec:FEAT-010"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Seed 3 prior attempts (at the cap)
+		// Seed 3 prior attempts (at the cap)
+		Background(), b))
+
 	for i := 0; i < 3; i++ {
 		_ = store.AppendEvent(b.ID, bead.BeadEvent{
 			Kind:      "auto_decompose_attempt_gate_failed",
@@ -395,9 +399,11 @@ func TestAutoDecomposeEpic_ActiveCooldownGate(t *testing.T) {
 		Acceptance:  "1. Test passes\n",
 		Labels:      []string{"spec:FEAT-010"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Set an active cooldown
+		// Set an active cooldown
+		Background(), b))
+
 	_ = store.SetExecutionCooldown(
 		b.ID,
 		time.Now().UTC().Add(5*time.Minute),

@@ -62,7 +62,7 @@ func newTriageHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead)
 		Acceptance:  "1. TestTriageHook_UsesRunnerLibrary\n2. cd cli && go test ./internal/agent/... green\n3. lefthook run pre-commit passes",
 		Notes:       "triage hook fixture",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 	return store, b
 }
 
@@ -466,7 +466,7 @@ func TestPostAttemptTriageHook_EmptyOutputRecordsWarningEvent(t *testing.T) {
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	candidate := &bead.Bead{ID: "ddx-triage-empty", Title: "empty output triage", Priority: 0}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	runner := &triageHookRunnerStub{
 		run: func(_ RunArgs) (*Result, error) {
@@ -673,7 +673,7 @@ func TestNoChangesWithReviewSpecGapClassification_RoutesToProposed(t *testing.T)
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-specgap1", Title: "Spec gap bead"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	reviewerCalled := false
 	worker := &ExecuteBeadWorker{

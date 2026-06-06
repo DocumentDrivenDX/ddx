@@ -60,7 +60,7 @@ func newTriageTestStore(t *testing.T) (*bead.Store, *bead.Bead) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	b := &bead.Bead{ID: "ddx-triage-1", Title: "triage decision target"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 	return store, b
 }
 

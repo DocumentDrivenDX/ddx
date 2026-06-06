@@ -36,9 +36,11 @@ func TestPostLadderExhaustion_TriggersReframe(t *testing.T) {
 		Description: origDesc,
 		Acceptance:  origAcc,
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		Background(), b))
+
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -119,7 +121,7 @@ func TestReframerTimeout_CountsAsFailure(t *testing.T) {
 		Description: "PROBLEM\nTimeout test.",
 		Acceptance:  "1. TestReframerTimeout_CountsAsFailure\n",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	blockingRunner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
 		<-opts.Context.Done()
@@ -153,9 +155,11 @@ func TestReframerNoOpEdits_CountsAsFailure(t *testing.T) {
 		Description: desc,
 		Acceptance:  acc,
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Runner returns the same text as the current bead — no actual change.
+		// Runner returns the same text as the current bead — no actual change.
+		Background(), b))
+
 	noopRunner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
 		out, _ := json.Marshal(map[string]interface{}{
 			"description": desc,

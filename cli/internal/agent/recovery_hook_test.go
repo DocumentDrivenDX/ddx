@@ -22,9 +22,11 @@ func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-hook-threshold", Title: "hook threshold test"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		Background(), b))
+
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
@@ -90,9 +92,11 @@ func TestRecoveryManualLabel_SkipsAutoRecovery(t *testing.T) {
 		Title:  "manual recovery test",
 		Labels: []string{"recovery:manual"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		Background(), b))
+
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
 
 	var hookCalled bool

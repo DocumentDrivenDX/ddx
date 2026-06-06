@@ -19,9 +19,11 @@ func TestPerBeadCostTracker_ChainsIntoAutoRecovery(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-chain-test", Title: "chain test bead"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Counter starts at zero (key absent).
+		// Counter starts at zero (key absent).
+		Background(), b))
+
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got.Extra[consecutiveLadderExhaustionsKey], "counter should be absent before any exhaustion")

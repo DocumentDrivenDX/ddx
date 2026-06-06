@@ -38,10 +38,10 @@ type Backend interface {
 	ReadAll(args ...any) ([]Bead, error)
 
 	// CRUD
-	Create(args ...any) error
+	Create(ctx context.Context, b *Bead) error
 	Get(args ...any) (*Bead, error)
-	Update(args ...any) error
-	Close(args ...any) error
+	Update(ctx context.Context, id string, mutate func(*Bead)) error
+	Close(ctx context.Context, id string) error
 
 	// Claim
 	Claim(id, assignee string) error
@@ -84,7 +84,7 @@ type BeadReader interface {
 }
 
 type BeadLifecycle interface {
-	Create(args ...any) error
+	Create(ctx context.Context, b *Bead) error
 	Apply(ctx context.Context, id string, op Operation) error
 }
 

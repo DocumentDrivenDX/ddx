@@ -41,7 +41,7 @@ func TestExecuteLoop_ClaimsHighestPriorityFirst(t *testing.T) {
 		{ID: "ddx-mid", Title: "mid priority", Priority: 1},
 		{ID: "ddx-top", Title: "top priority", Priority: 0},
 	} {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 
 	var claimed []string
@@ -96,7 +96,7 @@ func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
 		{ID: "ddx-p2-c", Title: "P2 c", Priority: 2},
 		{ID: "ddx-p2-d", Title: "P2 d", Priority: 2},
 	} {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 
 	var (
@@ -216,13 +216,13 @@ func TestPickerPrioritySkip_IncludesQueueRank(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:       "ddx-p0-skipped",
 		Title:    "P0 will fail preflight",
 		Priority: 0,
 		Extra:    map[string]any{"queue-rank": 7},
 	}))
-	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-p2-claimed", Title: "P2 fallback", Priority: 2}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "ddx-p2-claimed", Title: "P2 fallback", Priority: 2}))
 
 	// Preflight returns nil for the P2 but a non-nil error for the P0.
 	// The current loop responds to preflight rejection by returning early —

@@ -30,9 +30,11 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
 		Description: "PROBLEM\nThis bead is too large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42 does too much.\n",
 		Acceptance:  "1. TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge passes\n2. cd cli && go test ./internal/agent/... green\n",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+		Background(), b))
+
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -130,7 +132,7 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
 		Acceptance:  "1. TestPostLadderDecomposerDispatchesOutsideProjectRoot\n2. cd cli && go test ./internal/agent/...",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	children := []map[string]any{
 		{
@@ -209,9 +211,11 @@ func TestDecomposerInvalidChildren_CountsAsFailure(t *testing.T) {
 		Description: "PROBLEM\nInvalid count test.",
 		Acceptance:  "1. TestDecomposerInvalidChildren_CountsAsFailure\n",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Return 6 children — exceeds max of 5.
+		// Return 6 children — exceeds max of 5.
+		Background(), b))
+
 	tooManyChildren := make([]map[string]interface{}, 6)
 	for i := range tooManyChildren {
 		tooManyChildren[i] = map[string]interface{}{
@@ -249,7 +253,7 @@ func TestPreClaimDecompositionHook_ParsesAgentSplit(t *testing.T) {
 		Acceptance:  "1. TestPreClaimDecompositionHook_ParsesAgentSplit\n2. cd cli && go test ./internal/agent/...",
 		Labels:      []string{"phase:iterate", "area:agent"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	payload := map[string]any{
 		"children": []map[string]any{
@@ -301,7 +305,7 @@ func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 		Acceptance:  "1. TestPreClaimDecomposerDispatchesOutsideProjectRoot\n2. cd cli && go test ./internal/agent/...",
 		Labels:      []string{"phase:iterate", "area:agent"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	payload := map[string]any{
 		"children": []map[string]any{
@@ -363,7 +367,7 @@ func TestPreClaimDecompositionHook_FallsBackWhenAgentOutputEmpty(t *testing.T) {
 		}, "\n"),
 		Labels: []string{"phase:iterate", "area:agent"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
 		return &Result{ExitCode: 0, Output: ""}, nil

@@ -37,7 +37,7 @@ func TestEvidenceAssemblyTelemetry(t *testing.T) {
 		require.NoError(t, os.MkdirAll(filepath.Dir(docAbs), 0o755))
 		require.NoError(t, os.WriteFile(docAbs, []byte(strings.Repeat("X", 8*1024)), 0o644))
 
-		require.NoError(t, store.Create(&bead.Bead{
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
 			ID:          "ddx-evid-telem",
 			Title:       "evidence telemetry review fixture",
 			Description: "exercise governing doc clamp + diff section",
@@ -178,7 +178,7 @@ func TestReviewEventBodyCap(t *testing.T) {
 	storeDir := t.TempDir()
 	store := bead.NewStore(storeDir)
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-cap-1", Title: "cap test"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "ddx-cap-1", Title: "cap test"}))
 
 	// Build maximum-sized summary fields. Harness/Model strings of 100KB each
 	// alone overshoot the 65,535-byte cap; the cap path inside AppendEvent
@@ -218,7 +218,7 @@ func TestReviewPromptTelemetryIncludesSectionBytes(t *testing.T) {
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:          "ddx-telemetry-bytes",
 		Title:       "telemetry bytes",
 		Description: "exercise section accounting",

@@ -161,7 +161,7 @@ func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-test", Title: "test bead", IssueType: "task"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "ddx-test", Title: "test bead", IssueType: "task"}))
 	require.NoError(t, store.Claim("ddx-test", "worker"))
 
 	// No result.json at all.
@@ -261,7 +261,7 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 	// Remove the external liveness file AND backdate the tracker field so the
 	// bead looks stale to both staleness checks.
 	require.NoError(t, store.RemoveClaimHeartbeat(beadID))
-	require.NoError(t, store.Update(beadID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -412,7 +412,7 @@ func TestDanglingSuccess_AC1_NormalRetryWhenNoPriorSuccess(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker"))
 	// Remove external liveness file and backdate tracker field to simulate staleness.
 	require.NoError(t, store.RemoveClaimHeartbeat(beadID))
-	require.NoError(t, store.Update(beadID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -655,7 +655,7 @@ func newExecuteLoopProjectRoot(t *testing.T) (projectRoot string, beadID string)
 	require.NoError(t, store.Init(context.Background()))
 
 	const id = "ddx-recovery-0001"
-	require.NoError(t, store.Create(&bead.Bead{ID: id, Title: "recovery test bead", IssueType: "task"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: id, Title: "recovery test bead", IssueType: "task"}))
 	runGitInteg(t, root, "add", ".ddx/beads.jsonl")
 	runGitInteg(t, root, "commit", "-m", "chore: seed beads")
 

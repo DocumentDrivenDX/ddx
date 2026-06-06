@@ -36,7 +36,7 @@ type ACQualityResult struct {
 // BeadACQualityStore is the minimal store interface required by the AC quality gate.
 type BeadACQualityStore interface {
 	Get(args ...any) (*bead.Bead, error)
-	Update(args ...any) error
+	Update(ctx context.Context, id string, mutate func(*bead.Bead)) error
 	AppendEvent(id string, event bead.BeadEvent) error
 }
 

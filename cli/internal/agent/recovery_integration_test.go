@@ -14,7 +14,7 @@ import (
 
 func newRecoveryTestBead(t *testing.T, store *bead.Store, id string) {
 	t.Helper()
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:          id,
 		Title:       "auto recovery test",
 		Description: "PROBLEM\nNeeds recovery.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",

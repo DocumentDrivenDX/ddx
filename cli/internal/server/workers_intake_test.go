@@ -146,7 +146,7 @@ bead-quality:
 	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "ddx-worker-intake",
 		Title: "worker intake wiring test bead",
 	}))

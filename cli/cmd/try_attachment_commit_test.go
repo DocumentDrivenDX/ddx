@@ -94,7 +94,7 @@ func seedTryAttachmentCommitRepo(t *testing.T) (*TestEnvironment, string, string
 	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	beadID := "ddx-try-attachments-001"
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    beadID,
 		Title: "Try attachment commit bead",
 	}))

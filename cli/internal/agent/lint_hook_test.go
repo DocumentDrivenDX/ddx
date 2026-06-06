@@ -54,7 +54,7 @@ func newLintHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 		Status:    bead.StatusOpen,
 		Priority:  2,
 	}
-	require.NoError(t, store.Create(dep))
+	require.NoError(t, store.Create(context.Background(), dep))
 
 	b := &bead.Bead{
 		ID:        "ddx-lint-001",
@@ -75,7 +75,7 @@ func newLintHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 			"execution-eligible": true,
 		},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 	return store, b
 }
 
@@ -156,7 +156,7 @@ func TestLintHook_PromptIncludesStandaloneBead(t *testing.T) {
 func TestLintHook_PromptOmitsVolatileExecutionFields(t *testing.T) {
 	root := newLintHookTestRoot(t)
 	store, b := newLintHookTestStore(t, root)
-	require.NoError(t, store.Update(b.ID, func(bb *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), b.ID, func(bb *bead.Bead) {
 		bb.Extra["events"] = []map[string]any{
 			{"kind": "execute-bead", "body": strings.Repeat("large runtime event", 1000)},
 		}

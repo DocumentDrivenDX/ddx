@@ -87,7 +87,7 @@ func TestReplay_OverridesAppliedToDispatch(t *testing.T) {
 	// Seed bead tracker.
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID: beadID, Title: "Test bead", Status: bead.StatusOpen,
 	}))
 
@@ -153,7 +153,7 @@ func TestReplay_DoesNotCountTowardBeadAttemptHistory(t *testing.T) {
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID: beadID, Title: "History bead", Status: bead.StatusOpen,
 	}))
 
@@ -195,7 +195,7 @@ func TestReplay_AppendsMetricsRowWithReplayOf(t *testing.T) {
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID: beadID, Title: "Metrics bead", Status: bead.StatusOpen,
 	}))
 
@@ -252,7 +252,7 @@ func TestReplay_PrintsComparison(t *testing.T) {
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID: beadID, Title: "Compare bead", Status: bead.StatusOpen,
 	}))
 
@@ -303,7 +303,7 @@ func TestReplayBench_MultipleVariantsInParallel(t *testing.T) {
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID: beadID, Title: "Bench bead", Status: bead.StatusOpen,
 	}))
 

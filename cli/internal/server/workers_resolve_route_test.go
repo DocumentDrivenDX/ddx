@@ -156,7 +156,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 	root := setupWorkerResolveRouteRepo(t)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "ddx-worker-resolve-route-test",
 		Title: "worker resolve-route regression bead",
 	}))

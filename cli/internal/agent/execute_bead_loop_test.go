@@ -503,7 +503,7 @@ func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 
 func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = map[string]any{}
 		}
@@ -559,7 +559,7 @@ func TestTryRecordsEstimatedDifficultyRoutingIntent(t *testing.T) {
 
 func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
-	require.NoError(t, store.Update(second.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), second.ID, func(b *bead.Bead) {
 		b.Labels = []string{"ui"}
 	}))
 
@@ -940,7 +940,7 @@ func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-pc-nocool", Title: "Provider connectivity test"}
-	require.NoError(t, store.Create(target))
+	require.NoError(t, store.Create(context.Background(), target))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -980,7 +980,7 @@ func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-pc-excl", Title: "Route exclusion regression"}
-	require.NoError(t, store.Create(target))
+	require.NoError(t, store.Create(context.Background(), target))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1063,8 +1063,8 @@ func TestWorkerIdle_AllInfraCooledDown_EntersPausedInfra(t *testing.T) {
 
 	b1 := &bead.Bead{ID: "ddx-ic-1", Title: "Infra cooled 1"}
 	b2 := &bead.Bead{ID: "ddx-ic-2", Title: "Infra cooled 2"}
-	require.NoError(t, store.Create(b1))
-	require.NoError(t, store.Create(b2))
+	require.NoError(t, store.Create(context.Background(), b1))
+	require.NoError(t, store.Create(context.Background(), b2))
 
 	until := time.Now().UTC().Add(2 * time.Minute)
 	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, FailureModeProviderConnectivity, "dial tcp: connection refused", ""))
@@ -1150,7 +1150,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 		Title:    "Smart retry",
 		Priority: 0,
 	}
-	require.NoError(t, store.Create(target))
+	require.NoError(t, store.Create(context.Background(), target))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1216,16 +1216,16 @@ func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	epic := &bead.Bead{ID: "ddx-epic-001", Title: "Epic container", IssueType: "epic", Priority: 1}
-	require.NoError(t, store.Create(epic))
+	require.NoError(t, store.Create(context.Background(), epic))
 	epicChild := &bead.Bead{ID: "ddx-epic-001-child", Title: "Child of epic", Parent: epic.ID, Status: bead.StatusBlocked, Priority: 2}
-	require.NoError(t, store.Create(epicChild))
+	require.NoError(t, store.Create(context.Background(), epicChild))
 
 	cooldownTask := &bead.Bead{ID: "ddx-task-002", Title: "Cooldown task", IssueType: "task", Priority: 1,
 		Extra: map[string]any{
 			"work-retry-after": time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
 		},
 	}
-	require.NoError(t, store.Create(cooldownTask))
+	require.NoError(t, store.Create(context.Background(), cooldownTask))
 
 	var executed []string
 	worker := &ExecuteBeadWorker{
@@ -1261,10 +1261,10 @@ func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 	activeEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Active epic", IssueType: "epic", Priority: 1}
 	closedChild := &bead.Bead{ID: "ddx-epic-closed-child", Title: "Closed child", Parent: completedEpic.ID, Status: bead.StatusClosed}
 	openChild := &bead.Bead{ID: "ddx-epic-open-child", Title: "Open child", Parent: activeEpic.ID, Status: bead.StatusBlocked}
-	require.NoError(t, store.Create(completedEpic))
-	require.NoError(t, store.Create(activeEpic))
-	require.NoError(t, store.Create(closedChild))
-	require.NoError(t, store.Create(openChild))
+	require.NoError(t, store.Create(context.Background(), completedEpic))
+	require.NoError(t, store.Create(context.Background(), activeEpic))
+	require.NoError(t, store.Create(context.Background(), closedChild))
+	require.NoError(t, store.Create(context.Background(), openChild))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1303,16 +1303,16 @@ func TestExecuteBeadLoopResult_IncludesQueueSnapshotAfterSuccessfulDrain(t *test
 	dependencyWaiting.AddDep(externalBlocked.ID, "blocks")
 	cooldown := &bead.Bead{ID: "ddx-cooldown", Title: "Retry later", Priority: 4}
 
-	require.NoError(t, store.Create(runnable))
-	require.NoError(t, store.Create(proposed))
-	require.NoError(t, store.Create(externalBlocked))
+	require.NoError(t, store.Create(context.Background(), runnable))
+	require.NoError(t, store.Create(context.Background(), proposed))
+	require.NoError(t, store.Create(context.Background(), externalBlocked))
 	require.NoError(t, store.UpdateWithLifecycleStatus(externalBlocked.ID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
 		ExternalBlockerReason: "waiting for upstream release",
 		Reason:                "test external blocker",
 		Source:                "test",
 	}, nil))
-	require.NoError(t, store.Create(dependencyWaiting))
-	require.NoError(t, store.Create(cooldown))
+	require.NoError(t, store.Create(context.Background(), dependencyWaiting))
+	require.NoError(t, store.Create(context.Background(), cooldown))
 	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), ExecuteBeadStatusNoChanges, "retry later", ""))
 
 	var executed []string
@@ -1380,7 +1380,7 @@ func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing
 	require.NoError(t, store.Init(context.Background()))
 
 	only := &bead.Bead{ID: "ddx-race-1", Title: "Only ready bead", Priority: 0}
-	require.NoError(t, store.Create(only))
+	require.NoError(t, store.Create(context.Background(), only))
 
 	var execCalls atomic.Int32
 	started := make(chan struct{}, 1)
@@ -1528,9 +1528,9 @@ func TestReadyExecutionExcludesEpics(t *testing.T) {
 	task := &bead.Bead{ID: "ddx-task01", Title: "Task work", IssueType: "task", Priority: 1}
 	epic := &bead.Bead{ID: "ddx-epic01", Title: "Epic container", IssueType: "epic", Priority: 0}
 	epicChild := &bead.Bead{ID: "ddx-epic01-child", Title: "Epic child task", Parent: epic.ID, Status: bead.StatusBlocked, Priority: 2}
-	require.NoError(t, store.Create(task))
-	require.NoError(t, store.Create(epic))
-	require.NoError(t, store.Create(epicChild))
+	require.NoError(t, store.Create(context.Background(), task))
+	require.NoError(t, store.Create(context.Background(), epic))
+	require.NoError(t, store.Create(context.Background(), epicChild))
 
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
@@ -1701,7 +1701,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-nc01", Title: "Always no-changes"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1748,7 +1748,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-sat01", Title: "Already done"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	checkerCalled := false
 	worker := &ExecuteBeadWorker{
@@ -1808,7 +1808,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-unr01", Title: "Not yet done"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	now := time.Now().UTC().Truncate(time.Second)
 	worker := &ExecuteBeadWorker{
@@ -1862,9 +1862,9 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	ncBead := &bead.Bead{ID: "ddx-nc10", Title: "Always no-changes", Priority: 0}
 	work1 := &bead.Bead{ID: "ddx-wk11", Title: "Work bead 1", Priority: 1}
 	work2 := &bead.Bead{ID: "ddx-wk12", Title: "Work bead 2", Priority: 2}
-	require.NoError(t, store.Create(ncBead))
-	require.NoError(t, store.Create(work1))
-	require.NoError(t, store.Create(work2))
+	require.NoError(t, store.Create(context.Background(), ncBead))
+	require.NoError(t, store.Create(context.Background(), work1))
+	require.NoError(t, store.Create(context.Background(), work2))
 
 	var mu sync.Mutex
 	executed := []string{}
@@ -1941,7 +1941,7 @@ func TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-sha01", Title: "Already in prior commit"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	const rationale = "verification_command: true\noutput: passes"
 
@@ -2001,7 +2001,7 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-unv01", Title: "Bead whose verification fails"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2046,7 +2046,7 @@ func TestNoChangesRetryDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-open01", Title: "Bead that needs a stronger retry"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2101,7 +2101,7 @@ func TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed(t *testing.T)
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-toptier", Title: "Top powerClass exhausted bead"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2137,7 +2137,7 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-prop01", Title: "Bead requiring operator choice"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2189,7 +2189,7 @@ func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-legacy01", Title: "Bead with legacy no_changes output"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2237,7 +2237,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *te
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-unj01", Title: "Bead with absent no_changes rationale"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2296,7 +2296,7 @@ func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 			"work-last-detail": "agent made no commits",
 		},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -2344,7 +2344,7 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-decomp01", Title: "Routing point release (epic)"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	recommended := []string{
 		"split: cost-aware routing tiebreak",
@@ -2423,7 +2423,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 		require.NoError(t, store.Init(context.Background()))
 
 		parent := &bead.Bead{ID: "ddx-watch-decomp", Title: "Watch-mode decomposition parent"}
-		require.NoError(t, store.Create(parent))
+		require.NoError(t, store.Create(context.Background(), parent))
 
 		decomp := &PreClaimDecomposition{
 			Rationale: "split preserved parent",
@@ -2468,7 +2468,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 			IdleInterval: time.Millisecond,
 			EventSink:    sink,
 			PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
-				err := store.Update(beadID, func(b *bead.Bead) {
+				err := store.Update(context.Background(), beadID, func(b *bead.Bead) {
 					if b.Extra == nil {
 						b.Extra = make(map[string]any)
 					}
@@ -2516,8 +2516,8 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 			Extra:    map[string]any{bead.ExtraExecutionElig: false},
 		}
 		next := &bead.Bead{ID: "ddx-stale-next", Title: "Next ready bead", Priority: 1}
-		require.NoError(t, baseStore.Create(parent))
-		require.NoError(t, baseStore.Create(next))
+		require.NoError(t, baseStore.Create(context.Background(), parent))
+		require.NoError(t, baseStore.Create(context.Background(), next))
 
 		staleParent := *parent
 		staleParent.Extra = map[string]any{}
@@ -2580,7 +2580,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 			Labels:   []string{"decomposed"},
 			Extra:    map[string]any{bead.ExtraExecutionElig: false},
 		}
-		require.NoError(t, baseStore.Create(parent))
+		require.NoError(t, baseStore.Create(context.Background(), parent))
 
 		staleParent := *parent
 		staleParent.Extra = map[string]any{}
@@ -2631,8 +2631,8 @@ func newExecuteLoopTestStore(t *testing.T) (*bead.Store, *bead.Bead, *bead.Bead)
 
 	first := &bead.Bead{ID: "ddx-0001", Title: "First ready", Priority: 0}
 	second := &bead.Bead{ID: "ddx-0002", Title: "Second ready", Priority: 1}
-	require.NoError(t, store.Create(first))
-	require.NoError(t, store.Create(second))
+	require.NoError(t, store.Create(context.Background(), first))
+	require.NoError(t, store.Create(context.Background(), second))
 
 	return store, first, second
 }
@@ -2780,7 +2780,7 @@ func TestWorkerFailurePathsReleaseClaimAtomically(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-worker-release-atomic", Title: "worker claim release", Status: bead.StatusOpen}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 	require.NoError(t, store.Claim(b.ID, "worker-a"))
 
 	leasePath := claimHeartbeatPathForTest(store, b.ID)
@@ -2819,7 +2819,7 @@ func TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable(t *testing.
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-hook-always-fail", Title: "Bead with persistent hook failure"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	var executedIDs []string
 	worker := &ExecuteBeadWorker{
@@ -2863,9 +2863,11 @@ func TestExecuteBeadWorkerPreClaimHookFailureRetriesOnNextIteration(t *testing.T
 
 	// Only one ready bead in the queue.
 	b := &bead.Bead{ID: "ddx-hook-same-run", Title: "Bead retried in same run"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Hook fails on first call, passes on second.
+		// Hook fails on first call, passes on second.
+		Background(), b))
+
 	hookCalls := 0
 	var executedIDs []string
 
@@ -2991,8 +2993,8 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 			// Two beads: first gets the error injection, second should still be processed.
 			first := &bead.Bead{ID: "ddx-err-first", Title: "First bead"}
 			second := &bead.Bead{ID: "ddx-err-second", Title: "Second bead"}
-			require.NoError(t, realStore.Create(first))
-			require.NoError(t, realStore.Create(second))
+			require.NoError(t, realStore.Create(context.Background(), first))
+			require.NoError(t, realStore.Create(context.Background(), second))
 
 			store := &errorInjectingStore{ExecuteBeadLoopStore: realStore}
 			if tc.injectErr != nil {
@@ -3073,9 +3075,9 @@ func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
 	a := &bead.Bead{ID: "ddx-e2e-a", Title: "Bead A — no_changes", Priority: 0}
 	b := &bead.Bead{ID: "ddx-e2e-b", Title: "Bead B — success", Priority: 1}
 	c := &bead.Bead{ID: "ddx-e2e-c", Title: "Bead C — already_satisfied", Priority: 2}
-	require.NoError(t, store.Create(a))
-	require.NoError(t, store.Create(b))
-	require.NoError(t, store.Create(c))
+	require.NoError(t, store.Create(context.Background(), a))
+	require.NoError(t, store.Create(context.Background(), b))
+	require.NoError(t, store.Create(context.Background(), c))
 
 	var executedIDs []string
 	worker := &ExecuteBeadWorker{

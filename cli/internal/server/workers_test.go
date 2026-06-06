@@ -354,7 +354,7 @@ func setupBeadStoreWithReadyBead(t *testing.T, root string) {
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	store := bead.NewStore(ddxDir)
-	err := store.Create(&bead.Bead{
+	err := store.Create(context.Background(), &bead.Bead{
 		ID:         "ddx-testbead",
 		Title:      "Test bead",
 		Status:     bead.StatusOpen,
@@ -785,7 +785,7 @@ func TestWorkerLiveCounters(t *testing.T) {
 	// Create 3 ready beads.
 	store := bead.NewStore(ddxDir)
 	for i := 1; i <= 3; i++ {
-		err := store.Create(&bead.Bead{
+		err := store.Create(context.Background(), &bead.Bead{
 			ID:        fmt.Sprintf("ddx-live%02d", i),
 			Title:     fmt.Sprintf("Live counter test bead %d", i),
 			Status:    bead.StatusOpen,
@@ -886,7 +886,7 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:         "ddx-integration-01",
 		Title:      "integration test bead",
 		Status:     bead.StatusOpen,
@@ -1005,7 +1005,7 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        "ddx-evidence-integ",
 		Title:     "evidence integration test",
 		Status:    bead.StatusOpen,

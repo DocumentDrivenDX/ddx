@@ -58,7 +58,7 @@ func seedClaimedBead(t *testing.T, root string, beadID string) *bead.Store {
 	ddx := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddx, 0o755))
 	store := bead.NewStore(ddx)
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        beadID,
 		Title:     "watchdog test bead",
 		Status:    bead.StatusOpen,

@@ -101,7 +101,7 @@ func runInterruptedTryCommand(t *testing.T) (*bead.Store, string, error) {
 	env.CreateDefaultConfig()
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "try-interrupt-001",
 		Title: "Interrupted try bead",
 	}))
@@ -184,7 +184,7 @@ func TestTry_BeadClosed(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:     "closed-bead-001",
 		Title:  "A closed bead",
 		Status: bead.StatusOpen,
@@ -203,7 +203,7 @@ func TestTry_BeadCancelledNotClaimable(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:     "cancelled-bead-001",
 		Title:  "A cancelled bead",
 		Status: bead.StatusOpen,
@@ -225,12 +225,12 @@ func TestTry_BeadUnmetDeps(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	// Create the dependency first (store validates dep references exist).
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:     "dep-bead-001",
 		Title:  "Dependency bead (still open)",
 		Status: bead.StatusOpen,
 	}))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:           "target-bead-001",
 		Title:        "Target bead with dep",
 		Dependencies: []bead.Dependency{{IssueID: "target-bead-001", DependsOnID: "dep-bead-001", Type: "blocks"}},
@@ -294,7 +294,7 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "happy-bead-001",
 		Title: "Happy path bead",
 	}))
@@ -329,7 +329,7 @@ func TestTry_ForceClaimBypassesCooldown(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "cooldown-bead-001",
 		Title: "Cooldown bead",
 	}))
@@ -383,7 +383,7 @@ func TestTry_ForceClaimRequiresReason(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "cooldown-bead-need-reason",
 		Title: "Cooldown bead",
 	}))
@@ -403,7 +403,7 @@ func TestTry_ForceClaimEmitsAuditEvent(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "cooldown-bead-audit",
 		Title: "Cooldown bead audit",
 	}))
@@ -459,7 +459,7 @@ func TestForceClaim_PreservesCooldownFieldOnFailure(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "cooldown-bead-preserve",
 		Title: "Cooldown preserve bead",
 	}))
@@ -514,7 +514,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "hint-bead-001",
 		Title: "Hinted bead",
 		Extra: map[string]any{policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyHard)},
@@ -580,7 +580,7 @@ func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *t
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        "ddx-zero-config-try-powerClass-standard",
 		Title:     "Try with inferred standard routing powerClass",
 		IssueType: "bug",
@@ -640,7 +640,7 @@ func TestTryZeroConfigProviderConnectivityRetryAddsExactMinPowerFloor(t *testing
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        "ddx-zero-config-try-provider-connectivity-retry",
 		Title:     "Try routes around failed provider connectivity",
 		IssueType: "bug",
@@ -679,7 +679,7 @@ func TestTryZeroConfigCheapHintSkipsRequirementProfile(t *testing.T) {
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "ddx-zero-config-try-powerClass-cheap",
 		Title: "Try with explicit cheap routing powerClass",
 		Extra: map[string]any{policyescalation.BeadEstimatedDifficultyKey: string(policyescalation.DifficultyEasy)},
@@ -719,7 +719,7 @@ func TestTryIgnoresNumericLegacyRetryFloor(t *testing.T) {
 	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "ddx-zero-config-ignore-numeric-hint",
 		Title: "Try ignores numeric bead retry hint",
 		Extra: map[string]any{
@@ -795,7 +795,7 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "flag-bead-001",
 		Title: "Flag plumbing bead",
 	}))
@@ -854,7 +854,7 @@ bead-quality:
   lint:
     block_threshold_score: 1
 `), 0o644))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "hook-bead-001",
 		Title: "Hook wiring bead",
 	}))
@@ -905,7 +905,7 @@ func TestTry_NoReviewRequiresAckFlag(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "guardrail-bead-001",
 		Title: "Guardrail bead",
 	}))
@@ -946,7 +946,7 @@ func TestTry_RecoversOrphanedWorktreesBeforeSpawn(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "recover-bead-001",
 		Title: "Recover orphaned worktrees",
 	}))

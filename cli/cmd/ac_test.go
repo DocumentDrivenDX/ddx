@@ -36,7 +36,7 @@ func initRepoWithBead(t *testing.T, beadID string, labels []string, checkYAML st
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "ac test", Labels: labels}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "ac test", Labels: labels}))
 
 	if checkYAML != "" {
 		checksDir := filepath.Join(ddxDir, "checks")

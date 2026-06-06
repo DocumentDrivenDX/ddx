@@ -19,8 +19,8 @@ func TestCommitOutcome_StoreErrorContinuesLoop(t *testing.T) {
 
 	first := &bead.Bead{ID: "ddx-commit-first", Title: "First bead"}
 	second := &bead.Bead{ID: "ddx-commit-second", Title: "Second bead"}
-	require.NoError(t, realStore.Create(first))
-	require.NoError(t, realStore.Create(second))
+	require.NoError(t, realStore.Create(context.Background(), first))
+	require.NoError(t, realStore.Create(context.Background(), second))
 
 	store := &errorInjectingStore{ExecuteBeadLoopStore: realStore}
 	store.onUnclaim = func(id string) error {

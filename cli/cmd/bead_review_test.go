@@ -145,11 +145,11 @@ func TestBeadReviewCommandWiring(t *testing.T) {
 		Acceptance:  "AC#1 <ok>",
 		Extra:       map[string]any{"closing_commit_sha": sha},
 	}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("store create: %v", err)
 	}
 	// Persist closing_commit_sha through Update so it round-trips via Extra.
-	if err := store.Update("ddx-wire", func(bd *bead.Bead) {
+	if err := store.Update(context.Background(), "ddx-wire", func(bd *bead.Bead) {
 		if bd.Extra == nil {
 			bd.Extra = map[string]any{}
 		}
@@ -239,10 +239,10 @@ func TestBeadReviewCommandWithProseIncludesAdvisoryFindings(t *testing.T) {
 		Acceptance:  "AC#1 tighten the prose",
 		Extra:       map[string]any{"closing_commit_sha": sha},
 	}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("store create: %v", err)
 	}
-	if err := store.Update("ddx-prose", func(bd *bead.Bead) {
+	if err := store.Update(context.Background(), "ddx-prose", func(bd *bead.Bead) {
 		if bd.Extra == nil {
 			bd.Extra = map[string]any{}
 		}

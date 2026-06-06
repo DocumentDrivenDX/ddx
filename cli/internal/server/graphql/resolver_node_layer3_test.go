@@ -25,7 +25,7 @@ func seedBeadProject(t *testing.T, root, beadID, title string) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	b := &bead.Bead{ID: beadID, Title: title, Status: bead.StatusOpen}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("create bead in %s: %v", root, err)
 	}
 }

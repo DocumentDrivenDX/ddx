@@ -26,7 +26,7 @@ func TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead(t *testing.T) 
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	only := &bead.Bead{ID: "ddx-concurrent-intake", Title: "concurrent intake", Priority: 0}
-	require.NoError(t, store.Create(only))
+	require.NoError(t, store.Create(context.Background(), only))
 
 	var intakeCalls atomic.Int32
 
@@ -101,9 +101,11 @@ func TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents(t *tes
 	inner := bead.NewStore(t.TempDir())
 	require.NoError(t, inner.Init(context.Background()))
 	only := &bead.Bead{ID: "ddx-concurrent-lint", Title: "concurrent lint", Priority: 0}
-	require.NoError(t, inner.Create(only))
+	require.NoError(t, inner.Create(context.Background(
 
 	// Lint hook blocks to widen the concurrency window.
+	), only))
+
 	lintStarted := make(chan struct{}, 1)
 	lintRelease := make(chan struct{})
 
@@ -184,7 +186,7 @@ func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
 		Description: "PROBLEM\noriginal problem\n\nROOT CAUSE\noriginal cause\n\nPROPOSED FIX\noriginal fix\n",
 		Acceptance:  "1. original criterion\n2. name the test",
 	}
-	require.NoError(t, inner.Create(original))
+	require.NoError(t, inner.Create(context.Background(), original))
 
 	var rewriteCalls atomic.Int32
 	rewriteStarted := make(chan struct{}, 1)

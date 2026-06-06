@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -211,18 +212,9 @@ func (s *acQualityTestStore) Get(args ...any) (*bead.Bead, error) {
 	return &cp, nil
 }
 
-func (s *acQualityTestStore) Update(args ...any) error {
-	var id string
-	var mutate func(*bead.Bead)
-	for _, arg := range args {
-		switch v := arg.(type) {
-		case string:
-			if id == "" {
-				id = v
-			}
-		case func(*bead.Bead):
-			mutate = v
-		}
+func (s *acQualityTestStore) Update(ctx context.Context, id string, mutate func(*bead.Bead)) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if s.b == nil || s.b.ID != id {
 		return fmt.Errorf("bead %s not found", id)

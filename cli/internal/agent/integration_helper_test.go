@@ -101,10 +101,12 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 			IssueType: "task",
 			Priority:  i,
 		}
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(
+
+		// Commit beads.jsonl so the initial worktree contains it.
+		), b))
 	}
 
-	// Commit beads.jsonl so the initial worktree contains it.
 	runGitInteg(t, root, "add", ".ddx/beads.jsonl")
 	runGitInteg(t, root, "commit", "-m", "chore: seed beads")
 

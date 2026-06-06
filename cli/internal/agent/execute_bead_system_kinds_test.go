@@ -33,7 +33,7 @@ func (m *mockBeadEventAppender) Get(args ...any) (*bead.Bead, error) {
 	return nil, nil
 }
 
-func (m *mockBeadEventAppender) Create(args ...any) error {
+func (m *mockBeadEventAppender) Create(context.Context, *bead.Bead) error {
 	return nil
 }
 
@@ -73,7 +73,7 @@ func (m *mockBeadEventAppender) Reopen(id, reason, notes string) error {
 	return nil
 }
 
-func (m *mockBeadEventAppender) Update(args ...any) error {
+func (m *mockBeadEventAppender) Update(context.Context, string, func(*bead.Bead)) error {
 	return nil
 }
 

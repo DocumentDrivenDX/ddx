@@ -32,9 +32,11 @@ func TestTry_ReviewVerdict_ApproveRoundTrips(t *testing.T) {
 		Title:      "Try bead with approval",
 		Acceptance: "1. PASS_MARKER found in diff\n2. lefthook run pre-commit passes",
 	}
-	require.NoError(t, store.Create(targetBead))
+	require.NoError(t, store.Create(context.Background(
 
 	// Stub executor that returns success.
+	), targetBead))
+
 	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 		return ExecuteBeadReport{
 			BeadID:     beadID,

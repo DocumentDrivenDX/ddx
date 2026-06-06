@@ -633,7 +633,7 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# review test\n"), 0o644))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:          "ddx-review-artifacts",
 		Title:       "Review bundle test",
 		Description: "Ensure review evidence is persisted.",
@@ -729,7 +729,7 @@ func TestExecuteBeadWorkerReviewSkipLabelWithReasonSkipsReviewer(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	labeled := &bead.Bead{ID: "ddx-skip-1", Title: "Skip review", Labels: []string{"review:skip", "review:skip-reason:doc-only"}}
-	require.NoError(t, store.Create(labeled))
+	require.NoError(t, store.Create(context.Background(), labeled))
 
 	reviewerCalled := false
 	worker := &ExecuteBeadWorker{
@@ -762,7 +762,7 @@ func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	labeled := &bead.Bead{ID: "ddx-skip-2", Title: "Skip review", Labels: []string{"review:skip"}}
-	require.NoError(t, store.Create(labeled))
+	require.NoError(t, store.Create(context.Background(), labeled))
 
 	reviewerCalled := false
 	reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
@@ -830,7 +830,7 @@ func TestExecuteBeadWorkerReviewBypassesRetiredPostLandPath(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	only := &bead.Bead{ID: "ddx-bound-1", Title: "Impossible AC"}
-	require.NoError(t, store.Create(only))
+	require.NoError(t, store.Create(context.Background(), only))
 
 	executorCalls := 0
 	reviewerCalls := 0

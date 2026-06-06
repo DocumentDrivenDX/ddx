@@ -25,7 +25,7 @@ func TestEfficacyRowsReadsSessionIndexAsStrictSupersetOfLegacyEvidence(t *testin
 	workDir := t.TempDir()
 	store := bead.NewStore(filepath.Join(workDir, ddxroot.DirName))
 	closed := &bead.Bead{Title: "closed legacy evidence", Status: bead.StatusOpen}
-	if err := store.Create(closed); err != nil {
+	if err := store.Create(context.Background(), closed); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AppendEvent(closed.ID, bead.BeadEvent{Kind: "routing", Body: `{"harness":"codex","resolved_provider":"openai","resolved_model":"gpt-5"}`}); err != nil {
@@ -34,11 +34,11 @@ func TestEfficacyRowsReadsSessionIndexAsStrictSupersetOfLegacyEvidence(t *testin
 	if err := store.AppendEvent(closed.ID, bead.BeadEvent{Kind: "cost", Body: `{"harness":"codex","provider":"openai","model":"gpt-5","input_tokens":100,"output_tokens":50,"duration_ms":1000,"cost_usd":0.01,"exit_code":0}`}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Close(closed.ID); err != nil {
+	if err := store.Close(context.Background(), closed.ID); err != nil {
 		t.Fatal(err)
 	}
 	open := &bead.Bead{Title: "open bead session", Status: bead.StatusOpen}
-	if err := store.Create(open); err != nil {
+	if err := store.Create(context.Background(), open); err != nil {
 		t.Fatal(err)
 	}
 

@@ -66,11 +66,13 @@ agent:
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-drain-regression", Title: "Drain regression bead", Priority: 0}
-	require.NoError(t, store.Create(target))
+	require.NoError(t, store.Create(context.Background(
 
 	// 4. Counting executor stub. Returns success on the first call so the
 	//    loop closes the bead cleanly. Any reintroduction of powerClass-ladder
 	//    fan-out into the default loop would drive >1 invocation here.
+	), target))
+
 	var execCount int32
 	worker := &ExecuteBeadWorker{
 		Store: store,

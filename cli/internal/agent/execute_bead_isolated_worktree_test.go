@@ -52,7 +52,7 @@ func (g *isolatedWorktreeGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 	if err := store.Init(context.Background()); err != nil {
 		return err
 	}
-	return store.Create(&bead.Bead{ID: g.beadID, Title: "Isolated worktree test"})
+	return store.Create(context.Background(), &bead.Bead{ID: g.beadID, Title: "Isolated worktree test"})
 }
 
 func (g *isolatedWorktreeGitOps) WorktreeRemove(dir, wtPath string) error {

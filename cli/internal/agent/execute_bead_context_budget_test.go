@@ -352,7 +352,7 @@ func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testi
 		Labels: []string{"decomposed"},
 	}
 	for _, b := range []*bead.Bead{rootBead, childBead, grandchildBead, epicChildBead, decomposedUnderEpicBead} {
-		if err := store.Create(b); err != nil {
+		if err := store.Create(context.Background(), b); err != nil {
 			t.Fatalf("store.Create(%s): %v", b.ID, err)
 		}
 	}

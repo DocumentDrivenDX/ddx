@@ -22,7 +22,7 @@ func setupWorkFocusEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 	return env
 }

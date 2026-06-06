@@ -41,7 +41,7 @@ func TestPreviewQueue_PrioritySort(t *testing.T) {
 	b0 := &bead.Bead{ID: "ddx-p0", Title: "P0 bead", Priority: 0, CreatedAt: now.Add(time.Second)}
 	b1 := &bead.Bead{ID: "ddx-p1", Title: "P1 bead", Priority: 1, CreatedAt: now.Add(2 * time.Second)}
 	for _, b := range []*bead.Bead{b2, b0, b1} {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 
 	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
@@ -66,7 +66,7 @@ func TestPreviewQueue_QueueRankSort(t *testing.T) {
 	rankOne := &bead.Bead{ID: "ddx-rank-1", Title: "Rank 1", Priority: 1, CreatedAt: now.Add(time.Second), Extra: map[string]any{"queue-rank": 1}}
 	unranked := &bead.Bead{ID: "ddx-unranked", Title: "Unranked", Priority: 1, CreatedAt: now.Add(2 * time.Second)}
 	for _, b := range []*bead.Bead{rankNine, rankOne, unranked} {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 
 	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
@@ -92,8 +92,8 @@ func TestPreviewQueue_QueueRankJSONOmit(t *testing.T) {
 
 	ranked := &bead.Bead{ID: "ddx-ranked", Title: "Ranked", Priority: 0, Extra: map[string]any{"queue-rank": 4}}
 	unranked := &bead.Bead{ID: "ddx-unranked", Title: "Unranked", Priority: 0}
-	require.NoError(t, store.Create(ranked))
-	require.NoError(t, store.Create(unranked))
+	require.NoError(t, store.Create(context.Background(), ranked))
+	require.NoError(t, store.Create(context.Background(), unranked))
 
 	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
 	require.NoError(t, err)
@@ -115,8 +115,8 @@ func TestPreviewQueue_LabelFilter(t *testing.T) {
 
 	bMatch := &bead.Bead{ID: "ddx-match", Title: "Matching bead", Priority: 0, Labels: []string{"area:agent", "phase:2"}}
 	bNoMatch := &bead.Bead{ID: "ddx-nomatch", Title: "Non-matching bead", Priority: 0, Labels: []string{"area:cli"}}
-	require.NoError(t, store.Create(bMatch))
-	require.NoError(t, store.Create(bNoMatch))
+	require.NoError(t, store.Create(context.Background(), bMatch))
+	require.NoError(t, store.Create(context.Background(), bNoMatch))
 
 	entries, err := PreviewQueue(qs, PickerFilters{LabelFilter: "area:agent"}, 0)
 	require.NoError(t, err)
@@ -155,8 +155,8 @@ func TestPreviewQueue_CooldownSkip(t *testing.T) {
 		Extra: map[string]any{"work-retry-after": future},
 	}
 	eligible := &bead.Bead{ID: "ddx-eligible", Title: "Eligible bead"}
-	require.NoError(t, store.Create(onCooldown))
-	require.NoError(t, store.Create(eligible))
+	require.NoError(t, store.Create(context.Background(), onCooldown))
+	require.NoError(t, store.Create(context.Background(), eligible))
 
 	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
 	require.NoError(t, err)
@@ -175,14 +175,14 @@ func TestPreviewQueue_DepsBlocked(t *testing.T) {
 	store, qs := newPreviewTestStore(t)
 
 	blocker := &bead.Bead{ID: "ddx-blocker", Title: "Blocker bead (open)"}
-	require.NoError(t, store.Create(blocker))
+	require.NoError(t, store.Create(context.Background(), blocker))
 
 	dependent := &bead.Bead{ID: "ddx-dependent", Title: "Depends on blocker"}
 	dependent.AddDep(blocker.ID, "blocks")
-	require.NoError(t, store.Create(dependent))
+	require.NoError(t, store.Create(context.Background(), dependent))
 
 	independent := &bead.Bead{ID: "ddx-independent", Title: "No deps"}
-	require.NoError(t, store.Create(independent))
+	require.NoError(t, store.Create(context.Background(), independent))
 
 	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
 	require.NoError(t, err)
@@ -210,7 +210,7 @@ func TestPreviewQueue_DeterministicAcrossRuns(t *testing.T) {
 			// Alternate priorities to exercise sort determinism.
 			Priority: i % 3,
 		}
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 
 	first, err := PreviewQueue(qs, PickerFilters{}, 0)
@@ -235,8 +235,8 @@ func TestPicker_QueueRankOrdering(t *testing.T) {
 	// Create two same-priority beads with different queue-rank values.
 	rankNine := &bead.Bead{ID: "ddx-rank-9", Title: "Rank 9", Priority: 0, Extra: map[string]any{"queue-rank": 9}}
 	rankOne := &bead.Bead{ID: "ddx-rank-1", Title: "Rank 1", Priority: 0, Extra: map[string]any{"queue-rank": 1}}
-	require.NoError(t, store.Create(rankNine))
-	require.NoError(t, store.Create(rankOne))
+	require.NoError(t, store.Create(context.Background(), rankNine))
+	require.NoError(t, store.Create(context.Background(), rankOne))
 
 	worker := &ExecuteBeadWorker{Store: store}
 

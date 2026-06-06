@@ -132,7 +132,7 @@ func newPreClaimIntakeHookTestStore(t *testing.T, root string) (*bead.Store, *be
 		Acceptance:  "1. TestDecompositionHook_UsesStrongMinPower\n2. cd cli && go test ./internal/agent/... green\n3. lefthook run pre-commit passes",
 		Labels:      []string{"phase:2", "area:agent", "kind:feature"},
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 	return store, b
 }
 

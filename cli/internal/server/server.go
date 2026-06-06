@@ -1858,7 +1858,7 @@ func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1893,7 +1893,7 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 			Source: "rest:beadUpdate",
 		}, mutate)
 	} else {
-		err = store.Update(id, func(b *bead.Bead) {
+		err = store.Update(context.Background(), id, func(b *bead.Bead) {
 			_ = mutate(b)
 		})
 	}
@@ -4649,7 +4649,7 @@ func (s *Server) mcpBeadCreate(workingDir string, req BeadCreateRequest) mcpTool
 			IsError: true,
 		}
 	}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(err.Error())},
 			IsError: true,
@@ -4677,7 +4677,7 @@ func (s *Server) mcpBeadUpdate(workingDir, id string, req BeadUpdateRequest) mcp
 			Source: "mcp:ddx_bead_update",
 		}, mutate)
 	} else {
-		err = store.Update(id, func(b *bead.Bead) {
+		err = store.Update(context.Background(), id, func(b *bead.Bead) {
 			_ = mutate(b)
 		})
 	}

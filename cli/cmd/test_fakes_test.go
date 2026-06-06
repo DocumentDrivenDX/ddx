@@ -263,7 +263,7 @@ func seedExecuteBead(t *testing.T, workDir string, b *bead.Bead) {
 	if _, err := store.Get(b.ID); err == nil {
 		return
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 }
 
 func seedDefaultExecuteBeads(t *testing.T, workDir string) {
