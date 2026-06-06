@@ -1193,6 +1193,40 @@ func TestDepAddValidation(t *testing.T) {
 	require.NoError(t, s.DepAdd(b.ID, a.ID)) // no error on duplicate
 }
 
+func TestBeadDepAddRejectsParentAncestor(t *testing.T) {
+	s := newTestStore(t)
+
+	root := &Bead{Title: "Root"}
+	parent := &Bead{Title: "Parent"}
+	child := &Bead{Title: "Child"}
+	require.NoError(t, s.Create(testCtx(), root))
+	require.NoError(t, s.Create(testCtx(), parent))
+	require.NoError(t, s.Create(testCtx(), child))
+
+	require.NoError(t, s.Update(testCtx(), parent.ID, func(b *Bead) {
+		b.Parent = root.ID
+	}))
+	require.NoError(t, s.Update(testCtx(), child.ID, func(b *Bead) {
+		b.Parent = parent.ID
+	}))
+
+	t.Run("direct-parent", func(t *testing.T) {
+		err := s.DepAdd(child.ID, parent.ID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ancestor in the parent chain")
+		assert.Contains(t, err.Error(), parent.ID)
+		assert.Contains(t, err.Error(), parent.ID+" -> "+root.ID)
+	})
+
+	t.Run("grandparent-ancestor", func(t *testing.T) {
+		err := s.DepAdd(child.ID, root.ID)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "ancestor in the parent chain")
+		assert.Contains(t, err.Error(), root.ID)
+		assert.Contains(t, err.Error(), parent.ID+" -> "+root.ID)
+	})
+}
+
 func TestDepRemove(t *testing.T) {
 	s := newTestStore(t)
 
