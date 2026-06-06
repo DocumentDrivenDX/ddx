@@ -2548,7 +2548,7 @@ Too big if any holds:
 If too big, decompose:
 
 1. ` + "`ddx bead create`" + ` for each child (copy parent's labels and spec-id).
-2. ` + "`ddx bead dep add <child-id> <parent-id>`" + ` to record edges.
+2. ` + "`ddx bead dep add <parent-id> <child-id>`" + ` to record edges.
 3. ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
 4. Write ` + "`no_changes_rationale.txt`" + ` under the bead metadata ` + "`bundle`" + ` path with child IDs, then stop.
 
