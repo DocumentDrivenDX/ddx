@@ -1,0 +1,128 @@
+{
+  "attempt_id": "20260606T174246-97e4fd58",
+  "bead_id": "ddx-cc298105",
+  "base_rev": "c5800f26ff7090cfa547b7edce398debf7df0887",
+  "created_at": "2026-06-06T17:42:58.325953974Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cc298105",
+    "title": "bead store: migrate read APIs to ctx-first signatures",
+    "description": "PROBLEM\nTD-027 requires the foundational bead Store read surface to be typed and ctx-first, but the read methods still accept untyped variadic arguments. This keeps the local bead package API ambiguous and makes the ddx-464feba2 caller sweep too large to execute as one bead.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/backend.go:80-84 declares BeadReader with ReadAll(args ...any), ReadAllFiltered(args ...any), and Get(args ...any).\n- cli/internal/bead/store.go:181-240 exposes Store.ReadAll(args ...any) and Store.ReadAllFiltered(args ...any), using storeCallContext from cli/internal/bead/store.go:134-141.\n- cli/internal/bead/store.go:599-625 exposes Store.Get(args ...any), using argument scanning for the bead ID.\n- cli/internal/bead/archive.go:158-174 exposes Store.GetWithArchive(id string) and currently supplies context.Background() internally instead of accepting caller context.\n\nPROPOSED FIX\nChange only the read-side Store methods to typed ctx-first signatures: ReadAll(ctx context.Context), ReadAllFiltered(ctx context.Context, pred func(Bead) bool), Get(ctx context.Context, id string), and GetWithArchive(ctx context.Context, id string). Update BeadReader in cli/internal/bead/backend.go. Migrate only read-method callsites across the repo to pass context explicitly. Add deterministic bead package tests that prove canceled contexts are honored and GetWithArchive forwards the supplied context instead of creating a background context.\n\nNON-SCOPE\n- Init and GenID signature migration.\n- Mutation APIs: Create, Update, and Close.\n- Event method ctx threading: AppendEvent, Events, and EventsByKind.\n- Removing workflow helper methods beyond the foundational signatures this bead changes.\n- Caller migration unrelated to ReadAll, ReadAllFiltered, Get, and GetWithArchive.\n\nGOVERNING ARTIFACT\n- TD-027.\n\nPARENT/DEPS\n- Parent/split source: ddx-464feba2.\n- Deps: no additional deps; this child can land independently of the setup/id and mutation signature children.",
+    "acceptance": "1. cli/internal/bead/store.go exposes ReadAll(ctx context.Context), ReadAllFiltered(ctx context.Context, pred func(Bead) bool), and Get(ctx context.Context, id string) with typed parameters and no variadic argument parsing for those methods.\n2. cli/internal/bead/archive.go exposes GetWithArchive(ctx context.Context, id string) and passes ctx through to both active and archive lookups.\n3. cli/internal/bead/backend.go exposes BeadReader methods with the same ctx-first typed read signatures.\n4. All Go callsites for Store.ReadAll, Store.ReadAllFiltered, Store.Get, and Store.GetWithArchive pass an explicit context and typed arguments.\n5. Add or update deterministic tests named TestStoreReadAll_RejectsCanceledContext, TestStoreReadAllFiltered_RejectsCanceledContext, TestStoreGet_RejectsCanceledContext, and TestStoreGetWithArchive_UsesSuppliedContext.\n6. cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestStore(ReadAll|ReadAllFiltered|Get|GetWithArchive)_' passes.\n7. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-3fd19af1",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"cli/internal/bead/store.go:134\\\"\",\"fingerprint\":\"716d046668d73169c9e2e85166d08c5057036cdcf971ba75568e820f0926c1c9\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"716d046668d73169c9e2e85166d08c5057036cdcf971ba75568e820f0926c1c9\"}",
+          "created_at": "2026-06-06T08:23:58.493848735Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T09:28:53.635875744Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T082428-e5ac4f62\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":33731927,\"output_tokens\":81143,\"total_tokens\":33813070,\"cost_usd\":0,\"duration_ms\":3852529,\"exit_code\":0}",
+          "created_at": "2026-06-06T09:28:53.737765968Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=33813070 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "",
+          "body": "{\"candidate_ref\":\"refs/ddx/iterations/20260606T082428-e5ac4f62/0\",\"cycle_index\":0,\"attempt_id\":\"20260606T082428-e5ac4f62\",\"base_rev\":\"59e036221a7357130ea3e1ca08fed6e5ff8fd695\",\"result_rev\":\"287210fab403d5d9363a3c2d41e2dc7e6e907bb4\"}",
+          "created_at": "2026-06-06T09:28:53.841609986Z",
+          "kind": "candidate_cycle_pinned",
+          "source": "",
+          "summary": ""
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-06-06T09:29:29.242319062Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-cc298105\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-06T09:29:29.325806518Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-06-06T09:29:29.514636077Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T17:35:47.221697491Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-cc298105\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-06T17:36:08.6113909Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-06T17:37:12.962307426Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128",
+          "created_at": "2026-06-06T17:37:13.092369269Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 2983171)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T15:43:50Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260606T174246-97e4fd58",
+    "prompt": ".ddx/executions/20260606T174246-97e4fd58/prompt.md",
+    "manifest": ".ddx/executions/20260606T174246-97e4fd58/manifest.json",
+    "result": ".ddx/executions/20260606T174246-97e4fd58/result.json",
+    "checks": ".ddx/executions/20260606T174246-97e4fd58/checks.json",
+    "usage": ".ddx/executions/20260606T174246-97e4fd58/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cc298105-20260606T174246-97e4fd58"
+  },
+  "prompt_sha": "854c7ac58bde13cc8998d806fb0a10e68c4e1a2a857bf3ca4660c2f8ac9c7751"
+}
