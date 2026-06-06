@@ -1,0 +1,10 @@
+{
+  "ran": true,
+  "changed_docs": [
+    "docs/helix/01-frame/features/FEAT-012-git-awareness.md",
+    "docs/helix/02-design/contracts/API-001-execute-bead-supervisor-contract.md",
+    "docs/helix/02-design/solution-designs/SD-012-git-awareness.md",
+    "docs/helix/02-design/solution-designs/SD-013-multi-agent-coordination.md",
+    "docs/helix/06-iterate/alignment-reviews/AR-2026-04-10-repo.md"
+  ]
+}
