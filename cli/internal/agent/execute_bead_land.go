@@ -836,7 +836,7 @@ func (RealLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
 // reserved for the operator-driven refresh path (FEAT-023 `ddx sync`).
 func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
 	var result PreClaimResult
-	err := withMainGitLock(dir, func() error {
+	err := withMainGitLock(dir, "ancestry_fetch", func() error {
 		var checkErr error
 		result, checkErr = fetchOriginAncestryCheckLocked(dir, targetBranch)
 		return checkErr
@@ -854,7 +854,7 @@ func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (Pre
 // fails open (Action=="no-origin") rather than wedging the queue.
 func (RealLandingGitOps) LocalAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
 	var result PreClaimResult
-	err := withMainGitLock(dir, func() error {
+	err := withMainGitLock(dir, "ancestry_local", func() error {
 		var checkErr error
 		result, checkErr = localAncestryCheckLocked(dir, targetBranch)
 		return checkErr
@@ -1207,7 +1207,7 @@ func sameFilesystemPath(a, b string) bool {
 // is kept for forward compatibility with multi-clone topologies.
 func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResult, error) {
 	var result *LandResult
-	err := withMainGitLock(projectRoot, func() error {
+	err := withMainGitLock(projectRoot, "land", func() error {
 		var landErr error
 		result, landErr = landLocked(projectRoot, req, gitOps)
 		return landErr

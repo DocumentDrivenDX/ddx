@@ -137,9 +137,8 @@ func runLockScopeProbe(t *testing.T) (*lockScopeProbeRunner, *lockSampleRecorder
 	require.NoError(t, os.WriteFile(metricsPath, []byte(`{"seed":"lock-scope"}`+"\n"), 0o644))
 
 	rec := &lockSampleRecorder{}
-	prevSink := TrackerLockMetricsSink
-	TrackerLockMetricsSink = rec.record
-	t.Cleanup(func() { TrackerLockMetricsSink = prevSink })
+	prevSink := SetTrackerLockMetricsSink(rec.record)
+	t.Cleanup(func() { SetTrackerLockMetricsSink(prevSink) })
 
 	runner := &lockScopeProbeRunner{projectRoot: projectRoot, pollWindow: 200 * time.Millisecond}
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})

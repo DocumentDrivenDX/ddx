@@ -706,7 +706,7 @@ func preservePreDispatchDirtyPaths(projectRoot string, dirtyPaths []string) (*Pr
 	}
 
 	var preserved *PreDispatchDirtyPreservation
-	if err := withTrackerLock(projectRoot, func() error {
+	if err := withTrackerLock(projectRoot, "preserve_dirt", func() error {
 		var err error
 		preserved, err = preservePreDispatchDirtyPathsLocked(projectRoot, normalized)
 		return err
@@ -1506,7 +1506,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// agent execution that follows is fully parallel.
 	var baseRev string
 	var workspace *AttemptWorkspace
-	if err := withTrackerLock(projectRoot, func() error {
+	if err := withTrackerLock(projectRoot, "pre_dispatch", func() error {
 		// Commit beads.jsonl before spawning the attempt workspace so its snapshot
 		// includes any bead metadata updates (e.g. spec-id).
 		if err := commitTrackerLocked(projectRoot); err != nil {

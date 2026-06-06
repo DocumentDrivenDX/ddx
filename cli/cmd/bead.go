@@ -165,7 +165,7 @@ func (f *CommandFactory) withBeadTrackerWriteLock(fn func() error) error {
 	if workspaceRoot == "" {
 		workspaceRoot = f.WorkingDir
 	}
-	return agentpkg.WithMainGitLock(workspaceRoot, fn)
+	return agentpkg.WithMainGitLock(workspaceRoot, "cmd_bead_write", fn)
 }
 
 func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
