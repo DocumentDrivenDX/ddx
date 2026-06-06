@@ -12,7 +12,7 @@ ddx:
 
 **Status:** Accepted
 **Date:** 2026-05-02
-**Authors:** Story 15 planning (`/tmp/story-15-final.md`)
+**Authors:** Story 15 planning
 
 ## Context
 
@@ -179,11 +179,12 @@ Prompts arriving via `operatorPromptSubmit` are untrusted *content* from a
 trusted *peer*. The threats and mitigations:
 
 - **Hostile prompt content (injection, jailbreak, prompt smuggling).**
-  Mitigation: `requireTrusted` plus the per-project allowlist limit the
-  attack surface to peers we already trust to run beads. No additional
-  content sanitation is performed — the prompt becomes a bead description
-  like any other, and the harness, worktree isolation, and land-coordinator
-  safeguards apply unchanged.
+  Mitigation: `requireTrusted` limits the write surface to localhost and
+  ts-net peers we already trust to run beads, while the identity envelope makes
+  provenance auditable and future policy possible. No additional content
+  sanitation is performed — the prompt becomes a bead description like any
+  other, and the harness, worktree isolation, and land-coordinator safeguards
+  apply unchanged.
 - **Pasted hostile content masquerading as instructions.** Mitigation: the
   UI shows a "this is what we will send" preview before approval, so the
   operator has the chance to notice unexpected content before queuing work.
@@ -292,8 +293,6 @@ the bead. Mitigations:
 
 ## References
 
-- `/tmp/story-15-final.md` — Story 15 plan (diagnosis, alternatives,
-  acceptance criteria, codex-review security controls)
 - ADR-006 — ts-net authentication (the underlying trust model)
 - ADR-007 — federation topology (multi-node delegation context)
 - ADR-004 — bead-backed runtime storage (the audit substrate)

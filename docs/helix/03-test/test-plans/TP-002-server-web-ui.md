@@ -6,13 +6,18 @@ ddx:
     - FEAT-008
     - FEAT-020
     - FEAT-021
+    - FEAT-026
+    - FEAT-029
     - SD-019
+    - ADR-006
+    - ADR-028
 ---
 # Test Plan: DDx Server and Web UI
 
 **ID:** TP-002
 **Features:** FEAT-002 (Server), FEAT-008 (Web UI), FEAT-020 (Node State),
-FEAT-021 (Dashboard UI), SD-019 (Host+User Multi-Project Topology)
+FEAT-021 (Dashboard UI), FEAT-026 (Federation), FEAT-029 (Managed-Node Remote
+Control), SD-019 (Host+User Multi-Project Topology)
 
 > **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
 **Status:** Active
@@ -25,7 +30,12 @@ holding its state at `~/.local/share/ddx/server-state.json` — with real
 project data (documents, beads, personas, execution definitions) from one or
 more project roots. Coverage includes host+user isolation across registered
 projects, concurrent project access, and work worker lifecycle
-supervised by the in-process `WorkerManager`.
+reported through autonomous worker probes and server-derived worker views.
+
+The remote-access trust boundary is ADR-006: localhost and ts-net peers are
+trusted for v1, and write-capable paths carry the identity envelope required
+for future identity policy. Federation and managed-node coverage must verify
+the envelope and provenance, not merely HTTP success.
 
 ## Test Infrastructure
 
@@ -263,9 +273,9 @@ contract, not a UI surface.
 
 ### TC-013: Execute-Loop Worker Lifecycle
 
-Verifies that the in-process `WorkerManager` supervises work workers
-as goroutines scoped to one project, per FEAT-002 and SD-019. These cases are
-owned by `cli/internal/server/workers_test.go`.
+Verifies that worker state is surfaced through autonomous worker reports and
+server-derived views, per ADR-022. Any local supervisor used to start work is
+an implementation detail; the bead store remains the claim authority.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
@@ -276,9 +286,61 @@ owned by `cli/internal/server/workers_test.go`.
 | TC-013.5 | Replay-backed attempts | Runtime metrics (harness, model, tokens, cost, base_rev, result_rev) are persisted into the project's `.ddx/executions/<attempt-id>/` bundle per FEAT-014 | Planned |
 | TC-013.6 | Concurrent workers | Workers for two different registered projects run in parallel without cross-project filesystem writes | Implemented |
 
+### TC-014: ts-net Identity Envelope
+
+Verifies ADR-006 identity capture for localhost, ts-net, forwarded, and
+managed-node commands.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-014.1 | Localhost envelope | A localhost write records `immediate_actor_kind=localhost`, origin actor, node id, project id, and request id | Planned |
+| TC-014.2 | ts-net envelope | A ts-net write records Tailscale user/node identity without requiring an API key | Planned |
+| TC-014.3 | Forwarded provenance | A hub-forwarded write preserves origin actor and forwarding path through to the owning node's audit event | Planned |
+| TC-014.4 | Future policy seam | GraphQL/REST write handlers accept and expose envelope fields without changing command payload shapes | Planned |
+
+### TC-015: Read Federation
+
+Verifies FEAT-026 hub/spoke pull aggregation.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-015.1 | Hub with no spokes | `/federation` renders hub status and an empty spoke list | Planned |
+| TC-015.2 | Spoke registration | A spoke registers and heartbeats to the hub with version/capability metadata | Planned |
+| TC-015.3 | Federated reads | Hub combined bead/run/project views merge local and spoke rows with node/project badges | Planned |
+| TC-015.4 | Stale/offline/degraded | Slow, unreachable, stale, and version-skewed spokes produce partial results and visible status badges | Planned |
+
+### TC-016: Managed-Node Remote Control
+
+Verifies FEAT-029 / ADR-028 outbound managed-node behavior. The fixture must
+start the managed node without an inbound ts-net listener; all hub visibility
+comes from the outbound channel and pushed state.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-016.1 | Outbound registration | A managed node dials the hub by DNS/MagicDNS name and registers node/project/capability metadata | Planned |
+| TC-016.2 | Derived state | Hub UI renders managed-node projects, beads, workers, runs, and logs from snapshots/events/backfill | Planned |
+| TC-016.3 | Remote worker start | Hub command starts a local autonomous worker on the managed node and progress appears in the hub UI | Planned |
+| TC-016.4 | Remote worker stop/cancel | Hub command requests local stop/cancel; managed node records the command and worker honors it at a safe point | Planned |
+| TC-016.5 | Operator prompt write-through | Hub submit/approve/cancel for an operator prompt persists on the managed node with origin/forwarding audit | Planned |
+| TC-016.6 | Idempotency | Retrying a mutating command with the same request id returns the original result without duplicate state | Planned |
+| TC-016.7 | Conflict rejection | A command targeting stale or changed local state is rejected and the rejection is shown in the hub UI | Planned |
+| TC-016.8 | Offline refusal | Hub refuses new commands for an offline managed node and renders stale derived state clearly | Planned |
+
+### TC-017: Hermetic E2E Gate
+
+Verifies that server/web/federation e2e tests are suitable as reliability
+gates.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-017.1 | Fixture isolation | E2E tests run against temp projects and isolated `XDG_DATA_HOME`, not the developer's live DDx state | Planned |
+| TC-017.2 | No tracked dirtiness | Running the e2e suite leaves `git status --short` clean except for pre-existing unrelated changes | Planned |
+| TC-017.3 | Quarantined known failures | Not-yet-implemented UI features are skipped or isolated, not part of the reliability gate | Planned |
+| TC-017.4 | Screenshot determinism | Visual baselines are pinned or regenerated only by an explicit update flow | Planned |
+
 ## Out of Scope
 
 - MCP transport-level testing (covered by Go unit tests)
-- Authentication (not yet implemented)
+- Identity policy beyond ADR-006's trusted localhost/ts-net v1 boundary
 - General performance benchmarks outside the artifact-listing measurement contract
 - Mobile/responsive layout testing

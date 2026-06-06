@@ -48,11 +48,23 @@ FEAT-028 defines **five storage abstractions** that cover everything ddx persist
 | 2 | **BlobStore** | execution evidence (per-attempt files), externalized bead attachments, library packages, large agent outputs | `cli/internal/bead/attachments.go`, `.ddx/executions/<run-id>/` writers in `cli/internal/agent/execute_bead*.go`, `cli/internal/registry/`, `cli/internal/evidence/` | UC Volumes |
 | 3 | **StreamStore** | agent session logs, metrics streams, server logs, **append-only mirror writers** (`executions_mirror.go`, `routing_metrics.go`) | `cli/internal/agentmetrics/`, `cli/internal/processmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/agent/executions_mirror.go`, `.ddx/agent-logs/` writers | Databricks Jobs / Volumes append targets |
 | 4 | **ConfigStore** | project config, user config, persona bindings, harness routing | `cli/internal/config/` | Workspace settings (per-tenant) |
-| 5 | **(no interface — local FS / in-memory only)** | worker working trees, execution sandboxes, in-flight git worktrees, **worker disk projections** (`.ddx/workers/<id>/{spec,status}.json`, `worker.log`, `worker-events.jsonl`) | `cli/internal/agent/execute_bead*`, `cli/internal/server/workers.go` | n/a — authoritative state lives in server-process memory; on-disk projections are diagnostic readback for other clients only |
+| 5 | **(no interface — local FS / process-local only)** | worker working trees, execution sandboxes, in-flight git worktrees, **worker disk projections** (`.ddx/workers/<id>/{spec,status}.json`, `worker.log`, `worker-events.jsonl`) | `cli/internal/agent/execute_bead*`, worker probe/reporting paths | n/a — authoritative worker execution state lives in the autonomous worker process and bead store; on-disk projections are diagnostic readback only |
 
-**On row 5 (workers):** the server runs workers as in-process goroutines (`cli/internal/server/workers.go:191`); authoritative worker state lives in `workerHandle` structs in memory. The `.ddx/workers/<id>/` directory is **diagnostic projection** of that in-memory state for other clients to read; the server never reads it back into its own state machine. Worker disk projections therefore stay local-FS — they are ephemeral with the process and meaningless on a different host.
+**On row 5 (workers):** ADR-022 makes workers autonomous. Authoritative worker
+execution state lives in the worker process plus the bead store; the server and
+hub consume derived reports. The `.ddx/workers/<id>/` directory is a
+**diagnostic projection** for other clients to read, not a portable
+cross-node authority record. Worker disk projections therefore stay local-FS:
+they are ephemeral with the process and meaningful only as local diagnostics or
+as source material for best-effort reporting.
 
-**On row 5 (execution out-of-process):** the spec presumes a future model in which `ddx-server` deployed as a Databricks App dispatches `ExecuteBead` work to a separate Databricks Job rather than running it as an in-process goroutine. **That model does not exist today** — today's server invokes `agent.ExecuteBeadWithConfig` in-process at `cli/internal/server/workers.go:748,783`. Until that out-of-process execution feature lands (tracked separately, blocks Databricks-App deployment of execution), in-process worktrees under `.ddx/executions/<id>/work/` survive into any server deployment. This is acceptable for single-machine `ddx-server` (today's deployment) but is a hard blocker for Databricks-App execution and must be resolved before that ships. FEAT-028 does not introduce or fix this — it only declines to abstract the worktrees, leaving the question for the deployment-model feature.
+**On row 5 (execution out-of-process):** managed nodes (ADR-028 / FEAT-029) do
+not make worktrees portable. A hub command may ask a managed node to start or
+stop local work, but execution still happens on that node with local worktrees.
+Any future Databricks-App or remote-execution deployment must specify how
+worktrees and sandboxes are created on the execution host. FEAT-028 does not
+introduce or fix that deployment model; it only declines to abstract worktrees
+as general durable storage.
 
 ## Scope
 
