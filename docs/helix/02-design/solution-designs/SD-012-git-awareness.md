@@ -154,7 +154,7 @@ The following git operations are explicitly permitted within this workflow only:
 |-----------|---------|
 | Checkpoint commit on dirty worktree | Preserve caller state before execution begins |
 | `git worktree add` | Create isolated execution environment |
-| `git rebase <base>` | Prepare a fast-forward landing only — not for history rewriting |
+| `git rebase <base>` | Prepare a landing only — not for history rewriting |
 | Fast-forward branch update | Land a successful, merge-eligible iteration |
 | `git update-ref refs/ddx/...` | Preserve a non-landed iteration under a hidden ref |
 | `git worktree remove` | Clean up after the workflow (always runs) |
