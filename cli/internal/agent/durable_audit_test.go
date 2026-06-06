@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -192,4 +193,63 @@ func TestWork_NonLockAuditCommitFailureStillStopsWorker(t *testing.T) {
 	result := runAuditWithFinalizeErr(t, fmt.Errorf("committing durable audit outputs: fatal: insufficient permission for adding an object to repository database .git/objects: exit status 128"))
 	require.NotNil(t, result.OperatorAttention, "a genuine audit-commit failure must still surface operator attention")
 	require.Equal(t, "durable_audit_commit_failed", result.OperatorAttention.Reason)
+}
+
+func TestFinalizeDurableAuditOrStop_TrackerLockTimeoutDoesNotStopWorker(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	require.NoError(t, store.Init())
+	candidate := &bead.Bead{ID: "ddx-audit-tracker-lock", Title: "Tracker lock", Priority: 0}
+	require.NoError(t, store.Create(candidate))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
+	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	var sink bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				AttemptID:   "20260527T060100-audit-lock",
+				Status:      ExecuteBeadStatusExecutionFailed,
+				Detail:      "implementation failed",
+				BaseRev:     head,
+				ResultRev:   head,
+				SessionID:   "sess-audit-lock",
+				ProjectRoot: projectRoot,
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	finalizeErr := fmt.Errorf("commit durable audit outputs: %w", &TrackerLockTimeoutError{
+		Why:      "max elapsed",
+		LockDir:  trackerLockPath(projectRoot),
+		OwnerPID: "424293",
+	})
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:                 true,
+		ProjectRoot:          projectRoot,
+		EventSink:            &sink,
+		FinalizeDurableAudit: func(report ExecuteBeadReport) error { return finalizeErr },
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Nil(t, result.OperatorAttention, "tracker lock timeout must remain transient")
+	assert.Equal(t, "once_complete", result.ExitReason)
+
+	events := parseLoopEvents(t, sink.String())
+	var sawTransient bool
+	for _, ev := range events {
+		if ev.Type != "loop.durable_audit_transient" {
+			continue
+		}
+		sawTransient = true
+		assert.Equal(t, candidate.ID, ev.Data["bead_id"])
+		assert.Equal(t, "git_tracker_contention", ev.Data["reason"])
+		assert.Contains(t, fmt.Sprint(ev.Data["detail"]), "tracker lock timeout")
+	}
+	assert.True(t, sawTransient, "loop.durable_audit_transient event must be emitted")
 }
