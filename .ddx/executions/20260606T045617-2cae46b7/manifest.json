@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260606T045617-2cae46b7",
+  "bead_id": "ddx-b889308d",
+  "base_rev": "9b000ec55e2c3a62ff736a77aa34c612f00fd79e",
+  "created_at": "2026-06-06T04:56:26.748091825Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b889308d",
+    "title": "bead: add store lock performance guard for concurrent workers",
+    "description": "PROBLEM\nThe tracker JSONL store has chaos tests for correctness, but multi-worker reliability also needs a cheap performance guard for lock wait/hold under a realistic open-bead corpus. Coarse load-mutate-save locking can still become the throughput bottleneck before it corrupts data.\n\nROOT CAUSE\n- cli/internal/bead/lock.go:29-80 implements `Store.WithLock` as a spin-wait lock around the whole callback.\n- cli/internal/bead/store.go:881-932 claim paths read and write the corpus and update external heartbeat state while holding the store lock.\n- Existing chaos tests such as `TestChaos_ConcurrentAppendSafety` and `TestConcurrentUpdates_DifferentBeads` assert correctness but do not set p95/p99 wait/hold budgets for claim/ready/heartbeat/event mixes.\n\nPROPOSED FIX\n- Add a deterministic local performance/chaos test with a generated JSONL corpus and concurrent `Claim`, `ReadyExecution`, `Heartbeat`, and `AppendEvent` operations.\n- Capture `LockMetricsSink` wait/hold samples and assert p95/p99 budgets appropriate for the small fixture.\n- Keep the test fast enough for the normal package test path; leave large-repo stress as optional benchmark only.\n\nNON-SCOPE\n- Do not replace the JSONL backend or implement Axon migration in this bead.\n- Do not add sleep-heavy or network-dependent tests.",
+    "acceptance": "1. `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` generates a deterministic corpus and runs concurrent `Claim`, `ReadyExecution`, `Heartbeat`, and `AppendEvent` operations.\n2. The test captures `LockMetricsSink` samples and asserts non-vacuous p95/p99 wait/hold budgets for the fixture.\n3. Existing `TestChaos_ConcurrentAppendSafety`, `TestChaos_ConcurrentCloseNotLost`, and `TestConcurrentUpdates_DifferentBeads` still pass.\n4. `cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget|TestChaos_ConcurrentAppendSafety|TestChaos_ConcurrentCloseNotLost|TestConcurrentUpdates_DifferentBeads'` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:test",
+      "kind:test",
+      "spec:TP-021",
+      "reliability",
+      "concurrency",
+      "performance"
+    ],
+    "metadata": {
+      "spec-id": "TP-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-021",
+      "path": "docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md",
+      "title": "Test Plan: Multi-Worker `ddx try` Reliability"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T045617-2cae46b7",
+    "prompt": ".ddx/executions/20260606T045617-2cae46b7/prompt.md",
+    "manifest": ".ddx/executions/20260606T045617-2cae46b7/manifest.json",
+    "result": ".ddx/executions/20260606T045617-2cae46b7/result.json",
+    "checks": ".ddx/executions/20260606T045617-2cae46b7/checks.json",
+    "usage": ".ddx/executions/20260606T045617-2cae46b7/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b889308d-20260606T045617-2cae46b7"
+  },
+  "prompt_sha": "f83e90e09859bb5eea68fc907b540a8125f4507ec12bd6603806578d6155c445"
+}
