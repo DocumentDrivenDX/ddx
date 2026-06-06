@@ -1,0 +1,2 @@
+status: open
+reason: upstream typed Store signature migration is still pending in the parent bead; current cli/internal/bead/store.go remains variadic for ReadAll, ReadAllFiltered, Get, and Apply, so the requested compile-time proof would not compile yet. Retry after ddx-3fd19af1 and its signature-slice children land.
