@@ -3,13 +3,54 @@ package lockmetrics
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func scrubbedGitEnv() []string {
+	env := os.Environ()
+	out := make([]string, 0, len(env)+1)
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "GIT_") {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, "GIT_CONFIG_NOSYSTEM=1")
+}
+
+func initTrackerLockRepo(t *testing.T) string {
+	t.Helper()
+
+	root := t.TempDir()
+	run := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		cmd.Env = scrubbedGitEnv()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	run("init", "-b", "main")
+	run("config", "user.email", "test@ddx.test")
+	run("config", "user.name", "DDx Test")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("seed\n"), 0o644))
+	run("add", "seed.txt")
+	run("commit", "-m", "chore: initial seed")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
+	return root
+}
 
 // TestLockCap_DefaultIndexLockCap10s asserts the default cap for
 // .git/index.lock is 10s and is overridable via DDX_LOCK_CAP_INDEX_MS.
@@ -152,5 +193,35 @@ func TestLockCap_EnforcementResolvesLockPaths(t *testing.T) {
 
 	trk := resolveCapConfig("tracker.lock")
 	assert.Contains(t, trk.LockPath, ".git-tracker.lock")
+	assert.Greater(t, trk.Cap, time.Duration(0))
+}
+
+// TestLockCap_TrackerLockPathUsesSharedMainGitRoot asserts that tracker.lock
+// cap enforcement resolves through the shared main-worktree DDx root when the
+// request originates from a linked worktree.
+func TestLockCap_TrackerLockPathUsesSharedMainGitRoot(t *testing.T) {
+	root := initTrackerLockRepo(t)
+	linked := filepath.Join(t.TempDir(), "linked")
+	runGit := func(args ...string) {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		cmd.Env = scrubbedGitEnv()
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+
+	runGit("worktree", "add", "--detach", linked)
+	t.Cleanup(func() { runGit("worktree", "remove", "--force", linked) })
+	t.Cleanup(func() { SetCapEnforcement("", "") })
+
+	SetCapEnforcement(linked, filepath.Join(linked, "evidence"))
+
+	trk := resolveCapConfig("tracker.lock")
+	wantRoot := SharedMainGitLockRoot(linked)
+	assert.Equal(t, root, wantRoot, "linked worktrees must resolve tracker caps through the primary workspace")
+	assert.Equal(t, filepath.Join(root, ddxroot.DirName, ".git-tracker.lock"), trk.LockPath)
+	assert.Equal(t, filepath.Join(wantRoot, ddxroot.DirName, ".git-tracker.lock"), trk.LockPath)
 	assert.Greater(t, trk.Cap, time.Duration(0))
 }
