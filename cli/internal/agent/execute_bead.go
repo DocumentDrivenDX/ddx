@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -1660,7 +1661,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	_ = materializeWorktreeSkills(wtPath)
 
 	// Prepare artifacts (context load, prompt generation).
-	artifacts, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
+	artifacts, beadCtx, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
 	if err != nil {
 		res := &ExecuteBeadResult{
 			BeadID:      beadID,
@@ -1712,6 +1713,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	runState.SessionID = sessionID
 	_ = WriteRunState(projectRoot, runState)
 
+	minPowerOverride := noChangesMinPowerOverride(beadCtx, rcfg.MinPower())
 	runRuntime := AgentRunRuntime{
 		PromptFile: artifacts.PromptAbs,
 		Output:     runtime.Output,
@@ -1732,6 +1734,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		CorrelationID:         beadID + ":" + attemptID,
 		Env:                   gitIsolationEnv,
 		OnRouteResolved:       onRouteResolvedFromContext(ctx),
+	}
+	if minPowerOverride > 0 {
+		runRuntime.MinPowerOverride = minPowerOverride
 	}
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 
@@ -2298,22 +2303,22 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 	return rev, nil
 }
 
-func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, error) {
+func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, *bead.Bead, error) {
 	b, refs, err := loadBeadContext(wtPath, beadID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	artifacts, err := createArtifactBundle(projectRoot, wtPath, attemptID)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.Harness(), rcfg.ContextBudget())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := os.WriteFile(artifacts.PromptAbs, promptContent, 0o644); err != nil {
-		return nil, fmt.Errorf("writing execute-bead prompt artifact: %w", err)
+		return nil, nil, fmt.Errorf("writing execute-bead prompt artifact: %w", err)
 	}
 
 	manifest := executeBeadManifest{
@@ -2353,10 +2358,10 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		PromptSHA: promptSHA(promptContent),
 	}
 	if err := writeArtifactJSON(artifacts.ManifestAbs, manifest); err != nil {
-		return nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
+		return nil, nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
 	}
 	artifacts.PromptSHA = manifest.PromptSHA
-	return artifacts, nil
+	return artifacts, b, nil
 }
 
 func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
@@ -2366,6 +2371,59 @@ func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningR
 		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
 	}
 	return b, ResolveGoverningRefs(wtPath, b), nil
+}
+
+func noChangesMinPowerOverride(b *bead.Bead, currentMinPower int) int {
+	if b == nil || b.Extra == nil {
+		return 0
+	}
+	raw, ok := b.Extra[executeLoopNoChangesNextMinPowerKey]
+	if !ok {
+		return 0
+	}
+	next, ok := beadExtraMinPower(raw)
+	if !ok || next <= currentMinPower {
+		return 0
+	}
+	return next
+}
+
+func beadExtraMinPower(value any) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, v > 0
+	case int8:
+		return int(v), v > 0
+	case int16:
+		return int(v), v > 0
+	case int32:
+		return int(v), v > 0
+	case int64:
+		return int(v), v > 0
+	case uint:
+		return int(v), v > 0
+	case uint8:
+		return int(v), v > 0
+	case uint16:
+		return int(v), v > 0
+	case uint32:
+		return int(v), v > 0
+	case uint64:
+		if v > uint64(^uint(0)>>1) {
+			return 0, false
+		}
+		return int(v), v > 0
+	case float64:
+		return int(v), v > 0
+	case json.Number:
+		i, err := v.Int64()
+		return int(i), err == nil && i > 0
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(v))
+		return i, err == nil && i > 0
+	default:
+		return 0, false
+	}
 }
 
 func ResolveGoverningRefs(root string, b *bead.Bead) []executeBeadGoverningRef {
