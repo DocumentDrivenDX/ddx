@@ -1,0 +1,87 @@
+{
+  "attempt_id": "20260606T054500-a5495e23",
+  "bead_id": "ddx-122e0ec5",
+  "base_rev": "88955c3f2bb49ddeefa28b15f70c3512d58fd786",
+  "created_at": "2026-06-06T05:45:12.825694202Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-122e0ec5",
+    "title": "integration: add concurrent ddx try subprocess reliability tests",
+    "description": "PROBLEM\nExisting heavy integration coverage proves 5 workers can overlap with operator bead commands, but TP-021 also needs focused `ddx try` subprocess tests for distinct beads, same-bead claim races, and preserve-ref uniqueness. Without those tests, regressions can still break targeted `ddx try` concurrency while the broader `ddx work --watch` scenario remains green or skipped under `go test -short`.\n\nROOT CAUSE\n- cli/internal/integration/lock_contention_test.go:76-85 skips the subprocess-heavy scenario under `go test -short` and focuses on `ddx work --watch` plus operator commands.\n- docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md:82-96 requires explicit concurrent `ddx try` integration cases.\n\nPROPOSED FIX\n- Add local-only subprocess integration tests using `testutils.BuildDDxBinary`, fixture repositories, isolated `HOME`/`XDG_DATA_HOME`, minimal `PATH`, and the deterministic `script` harness.\n- Cover distinct bead concurrency, same-bead one-claim-wins behavior, and preserve-ref uniqueness under same-second attempts.\n- Keep the required path free of network, hosted remotes, external providers, Docker pulls, and developer-specific agent CLIs.\n\nNON-SCOPE\n- Do not add a new worker scheduler or `ddx work --parallel` flag.\n- Do not make the test depend on real Claude/Codex/Gemini CLIs.",
+    "acceptance": "1. `TestIntegration_ConcurrentTryDistinctBeads_LocalClone` runs 4 concurrent `ddx try \u003cid\u003e` subprocesses against 8 independent beads with `--attempt-backend local-clone` and the `script` harness; attempts land or preserve cleanly with unique attempt IDs and no lingering attempt directories.\n2. `TestIntegration_ConcurrentTrySameBead_OneClaimWins` runs 3 concurrent `ddx try \u003csame-id\u003e` subprocesses and proves at most one attempt claims/runs while losers exit through the not-claimable path without terminal-looking evidence bundles.\n3. `TestIntegration_ConcurrentTryPreserveRefsUnique` forces non-landed attempts and proves hidden refs under `refs/ddx/iterations/\u003cbead-id\u003e/` are unique when attempts start within the same second.\n4. `cd cli \u0026\u0026 go test ./internal/integration/... -run 'TestIntegration_ConcurrentTryDistinctBeads_LocalClone|TestIntegration_ConcurrentTrySameBead_OneClaimWins|TestIntegration_ConcurrentTryPreserveRefsUnique'` passes without network access.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:test",
+      "kind:test",
+      "spec:TP-021",
+      "reliability",
+      "concurrency"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T05:29:11.430963229Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260606T045149-9d48126e\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":25471343,\"output_tokens\":134496,\"total_tokens\":25605839,\"cost_usd\":0,\"duration_ms\":2226332,\"exit_code\":0}",
+          "created_at": "2026-06-06T05:29:11.562717113Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=25605839 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-122e0ec5\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-06T05:29:33.866477871Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"Attempt execution appears to have completed at the harness level (exit_code=0), but DDx failed during the post-attempt tracker commit with git error `fatal: unable to write new index file`. The skill contract treats git index/write failures as recoverable infrastructure failures unless evidence proves a deterministic repository defect.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-06T05:30:39.125531413Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-06-06T05:30:39.241722769Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ],
+      "spec-id": "TP-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "TP-021",
+      "path": "docs/helix/03-test/test-plans/TP-021-multi-worker-try-reliability.md",
+      "title": "Test Plan: Multi-Worker `ddx try` Reliability"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260606T054500-a5495e23",
+    "prompt": ".ddx/executions/20260606T054500-a5495e23/prompt.md",
+    "manifest": ".ddx/executions/20260606T054500-a5495e23/manifest.json",
+    "result": ".ddx/executions/20260606T054500-a5495e23/result.json",
+    "checks": ".ddx/executions/20260606T054500-a5495e23/checks.json",
+    "usage": ".ddx/executions/20260606T054500-a5495e23/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-122e0ec5-20260606T054500-a5495e23"
+  },
+  "prompt_sha": "98fa768990d06b60c831e06ffb0935d2521adb51cbeebf72e3252ee7d8238043"
+}
