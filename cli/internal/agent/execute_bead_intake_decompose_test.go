@@ -74,6 +74,7 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	got, err := store.Get("ddx-decomp-parent")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "parent must remain open after successful decomposition")
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent must be marked execution-ineligible after successful decomposition")
 
 	// Two children must exist with Parent == candidate.ID.
 	all, err := store.ReadAll()
@@ -86,10 +87,10 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	}
 	assert.Len(t, children, 2, "two children must be created")
 
-	// Parent must have dep edges wired to both children.
+	// Parent must not gain dependency edges to its children.
 	got, err = store.Get("ddx-decomp-parent")
 	require.NoError(t, err)
-	assert.Len(t, got.DepIDs(), 2, "parent must have dep edges to both children")
+	assert.Empty(t, got.DepIDs(), "parent must not depend on its decomposed children")
 
 	// triage-decomposed event must be appended to parent.
 	events, err := store.Events("ddx-decomp-parent")
@@ -101,6 +102,78 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 		}
 	}
 	assert.True(t, foundDecomp, "triage-decomposed event must be appended to parent")
+}
+
+func TestDecomposeDoesNotSelfDep(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	candidate := &bead.Bead{
+		ID:         "ddx-decomp-no-self-dep",
+		Title:      "Parent bead for self-dep regression",
+		Acceptance: "1. decompose into children\n2. keep parent out of deps",
+	}
+	require.NoError(t, store.Create(context.Background(), candidate))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Error("executor must not run after too_large_decomposed intake")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "split without wiring parent as a dependency",
+		Children: []PreClaimDecompositionChild{
+			{Title: "Child 1", Description: "first child", Acceptance: "1. first child"},
+			{Title: "Child 2", Description: "second child", Acceptance: "1. second child"},
+			{Title: "Child 3", Description: "third child", Acceptance: "1. third child"},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. decompose into children", Coverage: "covered by Child 1, Child 2, and Child 3"},
+			{ParentAC: "2. keep parent out of deps", Coverage: "covered by all children remaining independent of the parent"},
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:              "worker",
+		MaxDecompositionDepth: 3,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: candidate.ID,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome:       PreClaimIntakeTooLargeDecomposed,
+				Detail:        "bead is too large for a single implementation attempt",
+				Decomposition: decomp,
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	got, err := store.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent must be parked as execution-ineligible")
+	assert.Empty(t, got.DepIDs(), "parent must not depend on its children")
+
+	all, err := store.ReadAll()
+	require.NoError(t, err)
+	var children []bead.Bead
+	for _, b := range all {
+		if b.Parent == candidate.ID {
+			children = append(children, b)
+		}
+	}
+	require.Len(t, children, 3, "three children must be created")
+	for _, child := range children {
+		assert.NotContains(t, child.DepIDs(), candidate.ID, "child %s must not depend on the parent", child.ID)
+	}
 }
 
 func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing.T) {
@@ -170,7 +243,8 @@ func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing
 	parent, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, parent.Status)
-	assert.Equal(t, []string{children[0].ID}, parent.DepIDs())
+	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig], "parent must be marked execution-ineligible after hook decomposition")
+	assert.Empty(t, parent.DepIDs(), "parent must not depend on its decomposed child")
 }
 
 func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {

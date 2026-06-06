@@ -13,19 +13,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDecompositionDepDirection verifies that instrStep0SizeCheck instructs the
-// agent to add a parent→child dep (parent depends on children), not the reverse.
+// TestDecompositionDepDirection verifies that instrStep0SizeCheck no longer
+// instructs the agent to wire the parent into the dependency graph. The
+// decomposition flow may still add legitimate child-to-child or sibling /
+// replacement edges, but the parent itself must not be a dependency target.
 func TestDecompositionDepDirection(t *testing.T) {
-	correct := "ddx bead dep add <parent-id> <child-id>"
-	wrong := "ddx bead dep add <child-id> <parent-id>"
+	correct := "legitimate child-to-child or sibling/replacement edges"
+	wrong := "ddx bead dep add <parent-id> <child-id>"
 
 	assert.True(t,
 		strings.Contains(instrStep0SizeCheck, correct),
-		"instrStep0SizeCheck must instruct agent to run %q so the parent waits for children", correct,
+		"instrStep0SizeCheck must describe legitimate child-specific dependency edges", correct,
 	)
 	assert.False(t,
 		strings.Contains(instrStep0SizeCheck, wrong),
-		"instrStep0SizeCheck must not contain %q (backwards dep direction that leaves parent execution-ready)", wrong,
+		"instrStep0SizeCheck must not contain %q (parent-as-dependency back-edge)", wrong,
 	)
 }
 
