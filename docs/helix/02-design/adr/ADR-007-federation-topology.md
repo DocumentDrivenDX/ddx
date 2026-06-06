@@ -142,6 +142,27 @@ mutation to the owning spoke based on this metadata, but it must **never
 broadcast** writes. ADR-007 documents the contract; Story 15's design
 references it.
 
+### Relationship To Managed Nodes
+
+This ADR governs **read-federation spokes**: full DDx servers with inbound
+GraphQL/UI surfaces that the hub can query. It does not define the outbound
+managed-node control plane.
+
+ADR-028 defines **managed nodes**: machines that dial the hub over ts-net,
+push snapshots/events, and receive commands over that outbound connection
+without exposing their own ts-net listener. A machine may be both a
+read-federation spoke and a managed node, but the two connection modes stay
+distinct:
+
+| Mode | Connection direction | Hub read model | Write/control path |
+|---|---|---|---|
+| Read-federation spoke | hub → spoke `/graphql` | fan-out pull | owner-targeted forwarding only |
+| Managed node | managed node → hub control channel | pushed/materialized state | bounded hub command requests, executed locally |
+
+Writes are still never broadcast. ADR-028 permits scoped command forwarding to
+one managed node at a time; the target node remains authoritative and may reject
+the command.
+
 ## Version Handshake
 
 Spokes send a version block on `POST /api/federation/register`:
@@ -204,8 +225,9 @@ ADR-007 is implemented across three feature specs:
 - **Plain-HTTP escape valve is documented and noisy:** the dangerous mode is
   explicit, log-loud, and gated behind both `--hub-mode` and a separate flag.
 - **Future write path is preserved:** routing metadata fields are part of
-  every federated row, so Story 15 can layer write forwarding without a v2
-  schema migration.
+  every federated row, so owner-targeted forwarding can be layered without a
+  v2 schema migration. Managed-node remote control is specified separately in
+  ADR-028 and FEAT-029.
 - **Naming discipline:** `coordinator`, `primary`, `replica`, `leader` are
   reserved/avoided so the federation vocabulary does not collide with
   pre-existing per-project subsystems.

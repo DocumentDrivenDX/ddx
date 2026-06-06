@@ -34,8 +34,12 @@ landings without any machine-to-machine coordination protocol.
 Out of scope:
 
 - Cross-machine `beads.jsonl` replication (see ddx-e2f497c3 for framing)
-- Cross-machine worker supervision or bead-claim visibility
-- Cross-machine observability aggregation (see ddx-e2f497c3)
+- Cross-machine worker supervision or bead-claim visibility through the git
+  land coordinator. Remote worker control is now specified separately by
+  ADR-028 / FEAT-029 as the managed-node control plane; it does not change this
+  document's git-remote landing contract.
+- Cross-machine observability aggregation through the land coordinator
+  (read federation is FEAT-026; managed-node derived views are FEAT-029)
 - Cross-machine beads.jsonl concurrency (see ddx-2791dc4f)
 
 ## Topology Model

@@ -21,6 +21,12 @@ Use **Tailscale's tsnet library** (`tailscale.com/tsnet`) to provide
 authenticated network access to the DDx server. No custom API key management,
 no token rotation, no auth middleware.
 
+DDx treats ts-net identity and localhost as the v1 trust boundary. Any trusted
+localhost process or ts-net peer that can reach the server has full operator
+control unless a later identity-policy layer narrows that access. This is an
+intentional product posture for a local-first, personal-tailnet developer tool,
+not an omission.
+
 ### Why ts-net
 
 | Approach | Verdict | Reason |
@@ -74,6 +80,34 @@ DDx logs the caller identity for audit purposes. No additional authorization
 layer is needed for v1 — all tailnet members who can reach the DDx node have
 full access. Access control via Tailscale ACLs is a future refinement.
 
+#### Identity Envelope
+
+Even though v1 authorization is broad, every write-capable server path should
+carry a structured identity envelope so future authorization can be additive
+instead of a wire-contract rewrite.
+
+| Field | Purpose |
+|---|---|
+| `immediate_actor_kind` | `localhost`, `tsnet`, `federation-forwarded`, or `hub-forwarded` |
+| `immediate_actor_id` | peer identity observed on the current transport hop (`localhost:<addr>`, Tailscale user/node, or managed-node id) |
+| `origin_actor_id` | human or local process that initiated the action before any forwarding |
+| `forwarding_path` | ordered node/coordinator ids that relayed the action |
+| `node_id` | DDx node executing or receiving the action |
+| `project_id` | project target, when project-scoped |
+| `request_id` | idempotency and audit correlation key |
+
+For direct localhost and direct ts-net requests, `origin_actor_id` equals the
+immediate actor and `forwarding_path` is empty. For federation-forwarded writes
+and managed-node commands, the immediate peer is the forwarding hub while the
+origin actor is preserved from the first trusted request.
+
+#### ts-net Dialer Mode
+
+ADR-006 covers both inbound listeners and outbound clients. A managed node
+(ADR-028) may decline to expose its own ts-net listener and instead dial a hub
+over MagicDNS. The connection still relies on ts-net mutual identity; only the
+direction of connection establishment changes.
+
 ### Integration Pattern
 
 ```go
@@ -119,6 +153,8 @@ accept ts-net-identified requests.
 - The MCP bead write tools (ddx_bead_create, ddx_bead_update, ddx_bead_claim)
   previously flagged as needing "optional API key auth" now get auth from
   ts-net instead.
+- Identity policy is future work over the identity envelope, not a replacement
+  for the current ts-net/localhost trust boundary.
 
 ## Consequences
 

@@ -8,6 +8,7 @@ ddx:
     - ADR-006
     - ADR-007
     - ADR-021
+    - ADR-028
 ---
 # ADR-022: Worker Client–Server Architecture
 
@@ -411,6 +412,31 @@ Once the server has a derived view of who's reporting:
   worker observes on next iteration of its loop and aborts the attempt
   at the next safe point.
 
+### Managed-node control mode
+
+ADR-028 adds a managed-node topology without changing the worker authority
+model in this ADR. In managed-node mode, the machine running DDx dials the hub
+over ts-net and receives remote-control commands over the outbound channel. The
+execution process is still a **worker**; the machine is a **managed node**.
+
+Remote hub commands are requests to the managed node, not central claim
+authority:
+
+- **Start worker:** managed node starts the same autonomous `ddx work` loop it
+  would start from localhost, scoped to the selected project.
+- **Stop/cancel worker:** managed node writes the same local cancellation or
+  interruption marker a localhost server request would write; the worker honors
+  it at the next safe point.
+- **Queue edits and operator prompts:** managed node applies ADR-021 and local
+  bead-store rules. The hub does not mutate the bead store directly.
+- **Progress/logs:** managed node reports worker events, logs, and backfill to
+  the hub's derived view.
+
+Every command carries the ADR-006 identity envelope and a request ID. Replays
+with the same request ID are idempotent. If local state has changed, the managed
+node rejects the command with a structured reason and the hub surfaces that
+rejection to the operator.
+
 ### What the server explicitly does NOT do
 
 - It does not assign beads to workers (workers pick from the bead store
@@ -422,6 +448,8 @@ Once the server has a derived view of who's reporting:
 - It does not need to survive worker death gracefully (workers are
   independent; server's derived view is replayable from the bead
   stores at any time).
+- In managed-node mode, the hub does not become an authoritative worker
+  scheduler. It sends commands to the managed node; local authority still wins.
 
 ### Server crash / restart behavior
 

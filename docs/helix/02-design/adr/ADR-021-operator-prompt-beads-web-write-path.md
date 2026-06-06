@@ -108,14 +108,15 @@ Prompt-driven mutation endpoints add the following on top of
   CSRF token issued by the served HTML.
 - **Idempotency key.** `operatorPromptSubmit` accepts a client-generated
   UUID; the server dedupes. Prevents duplicate destructive work on retries.
-- **Per-project authorization.** Tailnet identity is not authorization. Add
-  `web.operator_prompt.allow_identities`, a project-scoped ts-net identity
-  allowlist. Default empty → localhost-only writes; ts-net peers see
-  read-only UI until added.
+- **Identity envelope.** Tailnet identity and localhost are trusted for v1
+  remote control per ADR-006. Operator-prompt writes carry the ADR-006
+  identity envelope so future per-actor policy can be layered without changing
+  the mutation shape. There is no default ts-net read-only mode.
 - **Identity-bound audit.** Submitter identity is recorded as a structured
   field on the immutable first bead event (not just labels), including:
-  peer identity (loopback or ts-net WhoIs), origin node ID, build SHA,
-  config-approval-mode at submit time, request ID, and prompt SHA-256.
+  immediate peer identity, origin actor identity, forwarding path, origin node
+  ID, build SHA, config-approval-mode at submit time, request ID, and prompt
+  SHA-256.
 - **UI escaping.** Operator prompts and assistant outputs render through
   strict escaping; XSS coverage in the Playwright suite. Pasted-content
   prompt-injection is mitigated by a visible "this is what we will send"
@@ -159,18 +160,18 @@ the project's queue, not on the coordinator. The submission flow:
 1. The operator's browser submits to whichever node it is connected to.
 2. If that node owns the project's queue, it persists the bead locally and
    wakes the local work.
-3. If the receiving node is a coordinator that does not own the queue, it
-   forwards the submission to the owning client node, **carrying the
-   originating trust attestation unchanged** (peer identity, request ID,
-   prompt SHA-256, CSRF result).
-4. The owning node verifies the originating identity against its own
-   `web.operator_prompt.allow_identities` allowlist before persisting the
-   bead.
+3. If the receiving node is a hub that does not own the queue, it forwards the
+   submission to the owning spoke or managed node, **carrying the originating
+   trust attestation unchanged** (origin actor, immediate peer, forwarding path,
+   request ID, prompt SHA-256, CSRF result).
+4. The owning node validates the request envelope, dedupes by request ID, and
+   persists or rejects the bead using the same local rules it applies to a
+   localhost request.
 
 The trust model is uniform across read and write: "localhost OR ts-net
-`WhoIs` identity." Any future coordinator-relay path MUST NOT lose the
-originating attestation. Coordinator-relay without attestation forwarding
-is a regression of this ADR.
+`WhoIs` identity" for v1, with the identity envelope preserved for future
+policy. Any future hub-relay path MUST NOT lose the originating attestation.
+Relay without attestation forwarding is a regression of this ADR.
 
 ## Prompt-injection threat model
 
@@ -242,15 +243,16 @@ This scope is deliberately narrow:
 
 ## Approval flow
 
-Default ON for ts-net peers, OFF (auto-approve) for localhost.
+Default ON for all remote peers, OFF (auto-approve) for localhost.
 
 - Submitted beads land in `proposed` status.
 - The UI shows them with an "Approve & queue" button that transitions to
   `ready`.
 - `web.operator_prompt.auto_approve` flips to skip-for-trusted-localhost.
-- Auto-approve fires only for configured localhost identities, NEVER for
-  ts-net peers by default. A ts-net peer must be explicitly listed in both
-  the per-project allowlist and an auto-approve allowlist to skip review.
+- Auto-approve fires only for configured localhost identities by default.
+  Remote ts-net peers and hub-forwarded actors may submit, approve, and cancel
+  prompts, but they do not skip the proposed-state review unless future
+  identity policy explicitly grants that behavior.
 
 ## Latency mitigation
 
@@ -283,9 +285,10 @@ the bead. Mitigations:
   structural AC check because the AC template is auto-generated. Review
   reviewer is expected to catch garbage. This is documented as a known
   tradeoff, not hidden.
-- **Ts-net peers are read-only by default.** They must be added to a
-  per-project allowlist before any prompt they submit will be persisted.
-  Localhost remains the path of least resistance, matching ADR-006.
+- **Trusted remote peers have full v1 control.** Ts-net peers and
+  hub-forwarded managed-node commands may submit, approve, and cancel
+  operator prompts. The identity envelope makes future narrowing possible
+  without changing the prompt mutation or audit shape.
 
 ## References
 

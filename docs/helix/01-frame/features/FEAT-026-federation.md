@@ -5,8 +5,10 @@ ddx:
     - helix.prd
     - FEAT-020
     - FEAT-021
+    - FEAT-029
     - ADR-006
     - ADR-007
+    - ADR-028
 ---
 # Feature: Federation / Hub-Spoke Coordinator
 
@@ -23,6 +25,11 @@ its own. One node runs as the **hub**; the others run as **spokes** that
 register and heartbeat to the hub. The hub aggregates reads by fanning out to
 spokes' existing GraphQL APIs over ts-net; writes are never broadcast and may
 be forwarded to the owning spoke in a future iteration (Story 15).
+
+This feature covers **read-federation spokes**: nodes with inbound DDx server
+surfaces that the hub can query. FEAT-029 / ADR-028 cover **managed nodes**:
+machines that do not expose a ts-net listener and instead dial the hub over an
+outbound control channel for full remote control.
 
 ADR-007 captures the topology, authority model, ts-net policy, plain-HTTP
 opt-out, and write-routing contract. ADR-006 supplies the transport-layer
@@ -280,6 +287,7 @@ follow-up).
 ## Out of Scope
 
 - Federation write fan-out / broadcast (writes are read-only-aggregated in v1).
+- Managed-node outbound control channels and full remote control (FEAT-029).
 - Hub failover / hot standby.
 - Auto-discovery of spokes (mDNS, Tailscale tag-based discovery).
 - `.ddx.yml` static configuration of `--hub` / `--hub-mode` (follow-up).
@@ -292,6 +300,8 @@ follow-up).
 
 - ADR-006 (ts-net authentication)
 - ADR-007 (federation topology — this feature's design contract)
+- ADR-028 / FEAT-029 (managed-node outbound control plane and full remote
+  control; distinct from this read-federation feature)
 - FEAT-020 (server node state and project registry — extended with
   `federation_role` and federation flags)
 - FEAT-021 (multi-node dashboard UI — extended with `/federation` route and
@@ -301,8 +311,8 @@ follow-up).
 
 ## References
 
-- `/tmp/story-14-final.md` — story plan and bead breakdown
 - ADR-007 — federation topology decision and compatibility matrix
+- ADR-028 / FEAT-029 — managed-node control plane
 - FEAT-020 amendment — `federation-state.json` schema, federation flags,
   `node.federation_role`
 - FEAT-021 amendment — `/federation` overview, hub-resolved routes,
