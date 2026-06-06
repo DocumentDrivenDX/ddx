@@ -48,8 +48,9 @@ this bead?" without polling external state.
 
 **Concurrency safety:** The existing atomic temp-file swap and directory lock
 (SD-004) already serialize concurrent writers. No changes to the write path are
-required. Multiple agents racing to claim the same bead will serialize; the
-last writer wins, which is the current behavior.
+required. Claim attempts are atomic: at most one runner owns the bead, and
+losing contenders exit on the not-claimable path without creating terminal-
+looking evidence bundles.
 
 ## MCP Supervisor Surface
 

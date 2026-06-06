@@ -199,9 +199,9 @@ Structural validation happens before any irreversible execution step.
 - If post-run required checks fail, `execute-bead` preserves the iteration
   under a hidden ref, sets the documented failure `status`, and the supervisor
   records that result `status`.
-- If a rebase or fast-forward land fails after a successful run, `execute-bead`
-  preserves the iteration and the preserved iteration remains the canonical
-  evidence for that attempt.
+- If landing fails after a successful run, `execute-bead` preserves the
+  iteration and the preserved iteration remains the canonical evidence for
+  that attempt.
 
 Retry surface:
 
@@ -220,16 +220,15 @@ prior attempt.
 > local-only; the fetch+push lifecycle described below applies only when
 > multi-machine coordination is active.
 
-Success is only complete after the result is landed by rebase plus
-fast-forward.
+Success is only complete after the result is landed through the mode-appropriate
+history-preserving flow.
 
-- fetch origin before the rebase step so the local target tip reflects the
-  latest remote state
-- rebase the execution branch onto the latest target tip
-- push `--ff-only` to origin; the remote's atomic ref-update is the
-  serialization point for concurrent coordinators on other machines
-- fast-forward the local target branch to match after a successful push
-- reset the worker worktree to the updated branch tip after a successful land
+- execute-bead keeps landing local: when the target is unchanged, it updates
+  the target with `update-ref`; when the target has advanced, it records a
+  `--no-ff` merge commit so the execution branch is not rewritten
+- future multi-machine coordination, if enabled elsewhere, is governed by
+  SD-020; this supervisor observes landed or preserved state rather than
+  performing remote coordination itself
 - preserve the iteration under a hidden ref when the result cannot be landed or
   `--no-merge` semantics apply
 
@@ -290,7 +289,7 @@ At minimum, the loop should expose:
   lifecycle remains inside `execute-bead`.
 - Non-landed attempts are preserved by `execute-bead`, not rewritten by the
   supervisor.
-- Successful attempts land by rebase plus fast-forward inside `execute-bead`
-  and then reset the worker worktree to the new tip.
+- Successful attempts land inside `execute-bead` via the mode-appropriate
+  history-preserving flow and then reset the worker worktree to the new tip.
 - The contract remains valid when later `ddx server` work uses project-scoped
   worker pools.

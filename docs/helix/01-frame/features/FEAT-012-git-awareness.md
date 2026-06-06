@@ -262,8 +262,8 @@ bead-attempt workflow:
     (landed or preserved) carries the canonical Git trailer set defined in
     FEAT-006 §"Canonical Git trailers": `Ddx-Attempt-Id`, `Ddx-Worker-Id`,
     `Ddx-Harness`, `Ddx-Model`, and `Ddx-Result-Status`. The git layer must
-    preserve these trailers verbatim on rebase+fast-forward landing and on
-    hidden-ref preservation; it must not rewrite, strip, or reorder them.
+    preserve these trailers verbatim on landing and on hidden-ref
+    preservation; it must not rewrite, strip, or reorder them.
     Consumers of commit history rely on these trailer names as the stable
     provenance surface.
 
@@ -410,7 +410,7 @@ agents and developers
 **Acceptance Criteria:**
 - Given the caller's working tree has uncommitted changes when `ddx try` starts, when the workflow begins, then DDx creates a checkpoint commit from those changes and uses it as the effective base revision — the caller's staged and unstaged changes are not discarded or reset.
 - Given `ddx try` runs, when it begins, then DDx creates a managed isolated worktree; when execution completes (success, failure, or crash recovery), then no worktree created by that attempt remains in the filesystem.
-- Given an iteration is merge-eligible, when DDx prepares a fast-forward landing, then the only rebase performed is a rebase of the execution branch onto the latest target branch tip — `git log --merges` shows no merge commit; history remains linear.
+- Given an iteration is merge-eligible, when DDx lands it, then DDx updates the target branch with a fast-forward when possible or a merge commit when the target has advanced; the execution branch is not rebased or rewritten.
 - Given an iteration is not merged (required execution failed, ratchet regression, or `--no-merge` set), when DDx preserves the iteration, then a ref matching `refs/ddx/iterations/<bead-id>/<timestamp>-<base-shortsha>` is created and the target branch is not updated.
 - Given `ddx try` left an orphan worktree due to a crash, when the next `ddx try` invocation starts, then DDx detects and removes orphaned worktrees matching the attempt path pattern before proceeding.
 - Given two `ddx try` invocations run concurrently or in rapid succession from the same base, then DDx may serialize only the short parent-repo mutation windows (tracker commit, dirty checkpoint, base resolution, attempt workspace creation, durable audit, landing, preserve-ref creation, and main-worktree index sync); the harness wait and agent work inside the isolated attempt worktree are never serialized by DDx's main-git lock.
