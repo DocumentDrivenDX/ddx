@@ -46,6 +46,26 @@ func (g *worktreeAddFailGitOps) SynthesizeCommit(dir, msg string) (bool, error) 
 func (g *worktreeAddFailGitOps) UpdateRef(dir, ref, sha string) error { return nil }
 func (g *worktreeAddFailGitOps) DeleteRef(dir, ref string) error      { return nil }
 
+type cleanupAttemptWorktreeGitOps struct {
+	removedPaths []string
+}
+
+func (g *cleanupAttemptWorktreeGitOps) HeadRev(string) (string, error)            { return "", nil }
+func (g *cleanupAttemptWorktreeGitOps) ResolveRev(string, string) (string, error) { return "", nil }
+func (g *cleanupAttemptWorktreeGitOps) WorktreeAdd(string, string, string) error  { return nil }
+func (g *cleanupAttemptWorktreeGitOps) WorktreeRemove(_ string, wtPath string) error {
+	g.removedPaths = append(g.removedPaths, wtPath)
+	return nil
+}
+func (g *cleanupAttemptWorktreeGitOps) WorktreeList(string) ([]string, error) { return nil, nil }
+func (g *cleanupAttemptWorktreeGitOps) WorktreePrune(string) error            { return nil }
+func (g *cleanupAttemptWorktreeGitOps) IsDirty(string) (bool, error)          { return false, nil }
+func (g *cleanupAttemptWorktreeGitOps) SynthesizeCommit(string, string) (bool, error) {
+	return false, nil
+}
+func (g *cleanupAttemptWorktreeGitOps) UpdateRef(string, string, string) error { return nil }
+func (g *cleanupAttemptWorktreeGitOps) DeleteRef(string, string) error         { return nil }
+
 func TestExecuteBeadWorktreeAddFailure_RemovesPartialDir(t *testing.T) {
 	projectRoot := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
@@ -68,4 +88,41 @@ func TestExecuteBeadWorktreeAddFailure_RemovesPartialDir(t *testing.T) {
 	assert.NotEmpty(t, gitOps.addedPath)
 	assert.Empty(t, gitOps.removedPath)
 	assert.NoFileExists(t, gitOps.addedPath)
+}
+
+func TestCleanupAttemptWorktree_RemovesForNonSuccessOutcomes(t *testing.T) {
+	cases := []struct {
+		name    string
+		outcome string
+	}{
+		{name: "provider_connectivity", outcome: "provider_connectivity"},
+		{name: "no_evidence_produced", outcome: ExecuteBeadOutcomeTaskNoEvidence},
+		{name: "execution_failed", outcome: ExecuteBeadOutcomeTaskFailed},
+		{name: "structural_validation_failed", outcome: "structural_validation_failed"},
+		{name: "land_conflict", outcome: "land_conflict"},
+		{name: "post_run_check_failed", outcome: "post_run_check_failed"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gitOps := &cleanupAttemptWorktreeGitOps{}
+			got := cleanupAttemptWorktree(gitOps, "/project/root", "/project/root/.execute-bead-wt-test", tc.outcome, false)
+			require.True(t, got)
+			require.Equal(t, []string{"/project/root/.execute-bead-wt-test"}, gitOps.removedPaths)
+		})
+	}
+}
+
+func TestCleanupAttemptWorktree_SuccessSkipsRemoval(t *testing.T) {
+	gitOps := &cleanupAttemptWorktreeGitOps{}
+	got := cleanupAttemptWorktree(gitOps, "/project/root", "/project/root/.execute-bead-wt-test", ExecuteBeadOutcomeTaskSucceeded, false)
+	require.False(t, got)
+	require.Empty(t, gitOps.removedPaths)
+}
+
+func TestCleanupAttemptWorktree_PreserveFlagSkipsRemoval(t *testing.T) {
+	gitOps := &cleanupAttemptWorktreeGitOps{}
+	got := cleanupAttemptWorktree(gitOps, "/project/root", "/project/root/.execute-bead-wt-test", ExecuteBeadOutcomeTaskFailed, true)
+	require.False(t, got)
+	require.Empty(t, gitOps.removedPaths)
 }

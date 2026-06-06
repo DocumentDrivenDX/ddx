@@ -391,8 +391,9 @@ func ExtractGoverningIDsFromManifest(manifestAbs string) []string {
 }
 
 // RecoverOrphans removes orphaned execute-bead worktrees for a given bead ID.
-// This is the parent's responsibility — call it before spawning new workers
-// so stale worktrees from crashed previous attempts do not accumulate.
+// This is a belt-and-suspenders sweep for crashed or otherwise unreached
+// attempts; the worker now performs the normal post-attempt cleanup on its
+// own before the next spawn.
 func RecoverOrphans(gitOps GitOps, workDir, beadID string) {
 	paths, err := gitOps.WorktreeList(workDir)
 	if err != nil {
