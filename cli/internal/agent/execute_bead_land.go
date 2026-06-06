@@ -57,6 +57,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 )
 
 const defaultLargeDeletionLineThreshold = 200
@@ -594,31 +595,12 @@ func blockingStagedPaths(dir string) (blocking []string, ok bool) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		p := strings.TrimSpace(line)
-		if p == "" || isDDxManagedTrackerPath(p) {
+		if p == "" || trackerpaths.IsManagedTrackerPath(p) {
 			continue
 		}
 		blocking = append(blocking, p)
 	}
 	return blocking, true
-}
-
-// isDDxManagedTrackerPath reports whether a repo-relative path is one of the
-// DDx-managed tracker/metadata files that workers rewrite continuously
-// (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, .ddx/attachments/, …). These
-// are append-mostly metadata, not code, so they must not block pre-claim
-// (ddx-df77e668). The managed set is the same one durable-audit commits own.
-func isDDxManagedTrackerPath(path string) bool {
-	clean := strings.TrimSpace(filepath.ToSlash(path))
-	if clean == "" {
-		return false
-	}
-	for _, managed := range durableAuditManagedPathspecs {
-		m := strings.TrimSuffix(filepath.ToSlash(managed), "/")
-		if clean == m || strings.HasPrefix(clean, m+"/") {
-			return true
-		}
-	}
-	return false
 }
 
 // indexMatchesRecentAncestorTree reports whether the current index's tree

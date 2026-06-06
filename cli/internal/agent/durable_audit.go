@@ -9,14 +9,8 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 )
-
-var durableAuditManagedPathspecs = []string{
-	".ddx/beads.jsonl",
-	".ddx/beads-archive.jsonl",
-	".ddx/metrics/attempts.jsonl",
-	".ddx/attachments",
-}
 
 type durableAuditBeadReader interface {
 	Get(args ...any) (*bead.Bead, error)
@@ -88,7 +82,7 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	gitDir, managedPathspecs := ddxStateGitScope(projectRoot, durableAuditManagedPathspecs...)
+	gitDir, managedPathspecs := ddxStateGitScope(projectRoot, trackerpaths.ManagedPathspecs()...)
 
 	out, err := internalgit.Command(ctx, gitDir, "rev-parse", "--is-inside-work-tree").Output()
 	if err != nil || strings.TrimSpace(string(out)) != "true" {

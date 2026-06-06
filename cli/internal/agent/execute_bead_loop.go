@@ -22,6 +22,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
+	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
@@ -1318,7 +1319,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				return false
 			}
 			projectRoot := strings.TrimSpace(firstNonEmpty(report.ProjectRoot, runtime.ProjectRoot))
-			dirtyPaths := append([]string(nil), durableAuditManagedPathspecs...)
+			dirtyPaths := append([]string(nil), trackerpaths.ManagedPathspecs()...)
 			result.OperatorAttention = &OperatorAttentionStop{
 				Reason:      "durable_audit_commit_failed",
 				BeadID:      candidateID,

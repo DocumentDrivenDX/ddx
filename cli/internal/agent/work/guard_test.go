@@ -101,32 +101,43 @@ func TestGuard_PreClaimTimeoutReturnsPromptly(t *testing.T) {
 	}
 }
 
-// TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown: ddx-df77e668 AC #2 — when
-// the only blocking pre-claim condition is DDx-managed tracker files being
-// staged (a transient multi-worker tracker race), the guard must classify it as
-// tracker contention — a distinct reason code from systemic — and skip without
-// writing a per-bead cooldown.
-func TestPreClaimStagedBeadsJsonl_SkipsWithoutCooldown(t *testing.T) {
-	store := &stubCooldownStore{}
-	errMsg := "landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/metrics/attempts.jsonl"
-	guard := NewPreClaimGuard(func(ctx context.Context) error {
-		return errors.New(errMsg)
-	}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
+// TestPreClaimStagedManagedTrackerPaths_SkipWithoutCooldown: ddx-df77e668 AC #2
+// — when the only blocking pre-claim condition is a DDx-managed tracker file
+// being staged (a transient multi-worker tracker race), the guard must
+// classify it as tracker contention — a distinct reason code from systemic —
+// and skip without writing a per-bead cooldown.
+func TestPreClaimStagedManagedTrackerPaths_SkipWithoutCooldown(t *testing.T) {
+	cases := []string{
+		".ddx/beads.jsonl",
+		".ddx/beads-archive.jsonl",
+		".ddx/metrics/attempts.jsonl",
+		".ddx/attachments/example",
+	}
 
-	allowed1, reason1 := guard.Allow(context.Background(), "ddx-staged-1")
-	allowed2, reason2 := guard.Allow(context.Background(), "ddx-staged-2")
+	for _, path := range cases {
+		t.Run(path, func(t *testing.T) {
+			store := &stubCooldownStore{}
+			errMsg := "landing worktree has staged changes after waiting 2s:\nM\t" + path
+			guard := NewPreClaimGuard(func(ctx context.Context) error {
+				return errors.New(errMsg)
+			}, store, nil, func() time.Time { return time.Unix(0, 0) }, 30*time.Second, 30*time.Second)
 
-	if allowed1 || allowed2 {
-		t.Fatalf("staged tracker files must skip beads")
-	}
-	if !IsTrackerContentionPreClaimSkipReason(reason1) || !IsTrackerContentionPreClaimSkipReason(reason2) {
-		t.Fatalf("staged tracker files must produce tracker-contention reason prefix: %q / %q", reason1, reason2)
-	}
-	if IsSystemicPreClaimSkipReason(reason1) || IsSystemicPreClaimSkipReason(reason2) {
-		t.Fatalf("tracker contention must be distinct from systemic: %q / %q", reason1, reason2)
-	}
-	if store.calls != 0 {
-		t.Fatalf("staged tracker files must not write bead cooldowns, got %d", store.calls)
+			allowed1, reason1 := guard.Allow(context.Background(), "ddx-staged-1")
+			allowed2, reason2 := guard.Allow(context.Background(), "ddx-staged-2")
+
+			if allowed1 || allowed2 {
+				t.Fatalf("staged tracker files must skip beads")
+			}
+			if !IsTrackerContentionPreClaimSkipReason(reason1) || !IsTrackerContentionPreClaimSkipReason(reason2) {
+				t.Fatalf("staged tracker files must produce tracker-contention reason prefix: %q / %q", reason1, reason2)
+			}
+			if IsSystemicPreClaimSkipReason(reason1) || IsSystemicPreClaimSkipReason(reason2) {
+				t.Fatalf("tracker contention must be distinct from systemic: %q / %q", reason1, reason2)
+			}
+			if store.calls != 0 {
+				t.Fatalf("staged tracker files must not write bead cooldowns, got %d", store.calls)
+			}
+		})
 	}
 }
 

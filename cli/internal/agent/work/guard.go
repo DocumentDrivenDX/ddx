@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 )
 
 // DefaultPreClaimTimeout bounds pre-claim readiness hooks when callers do not
@@ -34,20 +36,6 @@ const (
 	preClaimClassSystemic
 	preClaimClassTrackerContention
 )
-
-// trackerMetadataPaths are the DDx-managed metadata files that concurrent
-// workers rewrite continuously. They are append-mostly metadata, not code, so
-// a staged-changes pre-claim error that mentions only these paths is transient
-// multi-worker contention — not a systemic repo-config problem (ddx-df77e668).
-// Kept in sync with agent.durableAuditManagedPathspecs; duplicated here because
-// the agent package imports this one, so the dependency cannot run the other
-// way.
-var trackerMetadataPaths = []string{
-	".ddx/beads.jsonl",
-	".ddx/beads-archive.jsonl",
-	".ddx/metrics/attempts.jsonl",
-	".ddx/attachments",
-}
 
 // Guard decides whether a bead may proceed. Callers use the returned reason
 // for skip telemetry and logs.
@@ -181,6 +169,12 @@ func IsTrackerContentionPreClaimSkipReason(reason string) bool {
 	return strings.HasPrefix(reason, TrackerContentionPreClaimReasonPrefix)
 }
 
+// IsManagedTrackerPath reports whether path is one of the DDx-managed tracker
+// or durable-audit files that workers rewrite continuously.
+func IsManagedTrackerPath(path string) bool {
+	return trackerpaths.IsManagedTrackerPath(path)
+}
+
 func TrackerContentionPreClaimDetail(reason string) string {
 	return strings.TrimPrefix(reason, TrackerContentionPreClaimReasonPrefix)
 }
@@ -273,19 +267,9 @@ func stagedPathsFromError(msg string) []string {
 }
 
 // isTrackerMetadataPath reports whether a repo-relative path is one of the
-// DDx-managed tracker/metadata files (see trackerMetadataPaths).
+// DDx-managed tracker/metadata files.
 func isTrackerMetadataPath(path string) bool {
-	clean := strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
-	if clean == "" {
-		return false
-	}
-	for _, managed := range trackerMetadataPaths {
-		m := strings.TrimSuffix(managed, "/")
-		if clean == m || strings.HasPrefix(clean, m+"/") {
-			return true
-		}
-	}
-	return false
+	return trackerpaths.IsManagedTrackerPath(path)
 }
 
 type preClaimHookCallResult struct {
