@@ -142,6 +142,47 @@ func (r *landTestRepo) commitOn(baseSHA, path, content, msg string) string {
 	return sha
 }
 
+func (r *landTestRepo) commitOnFiles(baseSHA, msg string, files map[string]string) string {
+	r.t.Helper()
+	wt, err := os.MkdirTemp("", "land-test-wt-*")
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	_ = os.RemoveAll(wt)
+	r.runGit("worktree", "add", "--detach", wt, baseSHA)
+	defer func() {
+		r.runGit("worktree", "remove", "--force", wt)
+		_ = os.RemoveAll(wt)
+	}()
+
+	for path, content := range files {
+		full := filepath.Join(wt, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			r.t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			r.t.Fatal(err)
+		}
+	}
+	cmd := exec.Command("git", "-C", wt, "add", "-A")
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("git add: %s: %v", string(out), err)
+	}
+	cmd = exec.Command("git", "-C", wt, "-c", "user.name=Test", "-c", "user.email=test@test.local", "commit", "-m", msg)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		r.t.Fatalf("git commit: %s: %v", string(out), err)
+	}
+	cmd = exec.Command("git", "-C", wt, "rev-parse", "HEAD")
+	out, err := cmd.Output()
+	if err != nil {
+		r.t.Fatalf("git rev-parse HEAD: %v", err)
+	}
+	sha := strings.TrimSpace(string(out))
+	ref := fmt.Sprintf("refs/ddx/test-pins/%s", sha[:12])
+	r.runGit("update-ref", ref, sha)
+	return sha
+}
+
 func (r *landTestRepo) commitDeleteOn(baseSHA, path, msg string) string {
 	r.t.Helper()
 	wt, err := os.MkdirTemp("", "land-test-wt-*")
@@ -1263,6 +1304,215 @@ func TestLand_ConcurrentSubmissions_Serialized(t *testing.T) {
 	if n := r.mergeCommitCount("refs/heads/main"); n != N-1 {
 		t.Errorf("expected %d merge commits on main, got %d", N-1, n)
 	}
+}
+
+func TestChaos_ConcurrentLandCheckoutSyncDoesNotDirtyMainCheckout(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := &interleavedCheckoutSyncLandingGitOps{
+		real:           RealLandingGitOps{},
+		firstDiffReady: make(chan struct{}),
+		firstSyncDone:  make(chan struct{}),
+	}
+
+	prevPolicy := trackerLockPolicy
+	trackerLockPolicy = LockRetryPolicy{
+		InitialBackoff: 10 * time.Millisecond,
+		MaxBackoff:     20 * time.Millisecond,
+		Multiplier:     2.0,
+		MaxRetries:     200,
+		MaxElapsed:     5 * time.Second,
+	}
+	t.Cleanup(func() { trackerLockPolicy = prevPolicy })
+
+	workerOneSHA := r.commitOnFiles(r.baseSHA, "feat: worker one", map[string]string{
+		"shared/worker-a.txt": "worker-a\n",
+	})
+	workerTwoSHA := r.commitOnFiles(r.baseSHA, "feat: worker two", map[string]string{
+		"shared/worker-b.txt": "worker-b\n",
+	})
+
+	reqs := []LandRequest{
+		{
+			WorktreeDir:  r.dir,
+			BaseRev:      r.baseSHA,
+			ResultRev:    workerOneSHA,
+			BeadID:       "ddx-chaos-land-1",
+			AttemptID:    "20260606T000010-chaos-1",
+			TargetBranch: "main",
+		},
+		{
+			WorktreeDir:  r.dir,
+			BaseRev:      r.baseSHA,
+			ResultRev:    workerTwoSHA,
+			BeadID:       "ddx-chaos-land-2",
+			AttemptID:    "20260606T000011-chaos-2",
+			TargetBranch: "main",
+		},
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, len(reqs))
+	results := make([]*LandResult, len(reqs))
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results[0], errs[0] = landLocked(r.dir, reqs[0], ops)
+	}()
+
+	<-ops.firstDiffReady
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		results[1], errs[1] = landLocked(r.dir, reqs[1], ops)
+	}()
+
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("land %d: %v", i, err)
+		}
+		if results[i] == nil || results[i].Status != "landed" {
+			t.Fatalf("land %d: expected landed result, got %+v", i, results[i])
+		}
+	}
+
+	if status := r.runGit("status", "--porcelain"); status != "" {
+		t.Fatalf("main checkout dirty after concurrent land sync:\n%s", status)
+	}
+}
+
+type interleavedCheckoutSyncLandingGitOps struct {
+	real RealLandingGitOps
+
+	mu             sync.Mutex
+	syncCalls      int
+	firstDiffReady chan struct{}
+	firstSyncDone  chan struct{}
+}
+
+var _ LandingGitOps = (*interleavedCheckoutSyncLandingGitOps)(nil)
+
+func (g *interleavedCheckoutSyncLandingGitOps) CurrentBranch(dir string) (string, error) {
+	return g.real.CurrentBranch(dir)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) ResolveRef(dir, ref string) (string, error) {
+	return g.real.ResolveRef(dir, ref)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
+	return g.real.UpdateRefTo(dir, ref, sha, oldSHA)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	g.mu.Lock()
+	g.syncCalls++
+	callNum := g.syncCalls
+	g.mu.Unlock()
+
+	if callNum == 1 {
+		defer close(g.firstSyncDone)
+
+		runGit := func(args ...string) ([]byte, error) {
+			cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+			return cmd.CombinedOutput()
+		}
+
+		out, err := runGit("read-tree", "HEAD")
+		if err != nil {
+			return fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+		diffOut, diffErr := runGit("diff", "--name-only", fromRev, "HEAD")
+		if diffErr != nil {
+			return nil
+		}
+		changed := strings.Fields(strings.TrimSpace(string(diffOut)))
+		if g.firstDiffReady != nil {
+			close(g.firstDiffReady)
+		}
+		time.Sleep(500 * time.Millisecond)
+		if len(changed) == 0 {
+			return nil
+		}
+
+		var indexFiles []string
+		var removedFiles []string
+		for _, f := range changed {
+			probe := exec.Command("git", "-C", dir, "ls-files", "--error-unmatch", "--", f)
+			if probe.Run() == nil {
+				indexFiles = append(indexFiles, f)
+			} else {
+				removedFiles = append(removedFiles, f)
+			}
+		}
+
+		if len(indexFiles) > 0 {
+			for _, f := range indexFiles {
+				if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, f)), 0o755); err != nil {
+					return fmt.Errorf("creating checkout parent for %s: %w", f, err)
+				}
+			}
+			out2, err2 := runGit(append([]string{"checkout-index", "-f", "--"}, indexFiles...)...)
+			if err2 != nil {
+				return fmt.Errorf("git checkout-index -f: %s: %w", strings.TrimSpace(string(out2)), err2)
+			}
+		}
+
+		for _, f := range removedFiles {
+			_ = os.Remove(filepath.Join(dir, f))
+		}
+		return nil
+	}
+
+	select {
+	case <-g.firstSyncDone:
+		return g.real.SyncWorkTreeToHead(dir, fromRev)
+	default:
+		return nil
+	}
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) AddWorktree(dir, path, rev string) error {
+	return g.real.AddWorktree(dir, path, rev)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) AddBranchWorktree(dir, path, branch string) error {
+	return g.real.AddBranchWorktree(dir, path, branch)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) RemoveWorktree(dir, path string) error {
+	return g.real.RemoveWorktree(dir, path)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) MergeInto(wtDir, srcRev, msg string) error {
+	return g.real.MergeInto(wtDir, srcRev, msg)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) HeadRevAt(dir string) (string, error) {
+	return g.real.HeadRevAt(dir)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) CountCommits(dir, base, tip string) int {
+	return g.real.CountCommits(dir, base, tip)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) StageDir(dir, relPath string) error {
+	return g.real.StageDir(dir, relPath)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) CommitStaged(dir, msg string) (string, error) {
+	return g.real.CommitStaged(dir, msg)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) DiffNumstat(dir, base, tip string) (string, error) {
+	return g.real.DiffNumstat(dir, base, tip)
+}
+
+func (g *interleavedCheckoutSyncLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
+	return g.real.DiffNameOnly(dir, base, tip)
 }
 
 // TestLand_IsNetworkFree verifies that Land() no longer performs remote fetch
