@@ -2,8 +2,10 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 	"time"
@@ -91,7 +93,7 @@ func (r *lockScopeProbeRunner) Run(opts RunArgs) (*Result, error) {
 // TrackerLockMetricsSink seam, with the wall-clock release time so tests can
 // place the acquisition relative to the subprocess window.
 type lockSample struct {
-	hold       time.Duration
+	sample     TrackerLockSample
 	releasedAt time.Time
 }
 
@@ -103,7 +105,7 @@ type lockSampleRecorder struct {
 func (rec *lockSampleRecorder) record(s TrackerLockSample) {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
-	rec.samples = append(rec.samples, lockSample{hold: s.Hold, releasedAt: time.Now()})
+	rec.samples = append(rec.samples, lockSample{sample: s, releasedAt: time.Now()})
 }
 
 func (rec *lockSampleRecorder) snapshot() []lockSample {
@@ -214,7 +216,7 @@ func TestExecuteBead_LocksReacquiredForMutation(t *testing.T) {
 
 	postSubprocess := 0
 	for i, s := range samples {
-		acquiredAt := s.releasedAt.Add(-s.hold)
+		acquiredAt := s.releasedAt.Add(-s.sample.Hold)
 		// No acquisition may straddle the subprocess wait: the lock is released
 		// before the subprocess starts and (re)acquired only after it returns.
 		spans := !acquiredAt.After(subStart) && !s.releasedAt.Before(subEnd)
@@ -227,4 +229,181 @@ func TestExecuteBead_LocksReacquiredForMutation(t *testing.T) {
 	}
 	assert.Positive(t, postSubprocess,
 		"expected at least one tracker-lock acquisition for the post-subprocess mutation")
+}
+
+type signalPrepareBackend struct {
+	inner   AttemptBackend
+	started chan struct{}
+	release <-chan struct{}
+	once    sync.Once
+}
+
+func (b *signalPrepareBackend) Name() string { return b.inner.Name() }
+
+func (b *signalPrepareBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	if b.started != nil {
+		b.once.Do(func() { close(b.started) })
+	}
+	if b.release != nil {
+		<-b.release
+	}
+	return b.inner.Prepare(ctx, req)
+}
+
+func (b *signalPrepareBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	return b.inner.Run(ctx, req)
+}
+
+func (b *signalPrepareBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.PublishResult(ctx, ws, res)
+}
+
+func (b *signalPrepareBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.Cleanup(ctx, ws)
+}
+
+type delayPrepareBackend struct {
+	inner AttemptBackend
+	delay time.Duration
+}
+
+func (b delayPrepareBackend) Name() string { return b.inner.Name() }
+
+func (b delayPrepareBackend) Prepare(ctx context.Context, req AttemptBackendPrepareRequest) (*AttemptWorkspace, error) {
+	if b.delay > 0 {
+		time.Sleep(b.delay)
+	}
+	return b.inner.Prepare(ctx, req)
+}
+
+func (b delayPrepareBackend) Run(ctx context.Context, req AttemptBackendRunRequest) (*Result, error) {
+	return b.inner.Run(ctx, req)
+}
+
+func (b delayPrepareBackend) PublishResult(ctx context.Context, ws *AttemptWorkspace, res *ExecuteBeadResult) error {
+	return b.inner.PublishResult(ctx, ws, res)
+}
+
+func (b delayPrepareBackend) Cleanup(ctx context.Context, ws *AttemptWorkspace) error {
+	return b.inner.Cleanup(ctx, ws)
+}
+
+func trackerLockDurations(samples []lockSample, section string) []time.Duration {
+	durations := make([]time.Duration, 0, len(samples))
+	for _, s := range samples {
+		if section != "" && s.sample.Section != section {
+			continue
+		}
+		durations = append(durations, s.sample.Hold)
+	}
+	return durations
+}
+
+func percentileDuration(values []time.Duration, pct float64) time.Duration {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]time.Duration(nil), values...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	if pct <= 0 {
+		return sorted[0]
+	}
+	if pct >= 1 {
+		return sorted[len(sorted)-1]
+	}
+	rank := int(pct*float64(len(sorted)-1) + 0.999999999)
+	if rank < 0 {
+		rank = 0
+	}
+	if rank >= len(sorted) {
+		rank = len(sorted) - 1
+	}
+	return sorted[rank]
+}
+
+func TestChaos_AttemptPrepareDoesNotHoldMainGitLockForSlowClone(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	runGitInteg(t, projectRoot, "config", "extensions.worktreeConfig", "true")
+
+	prepareStarted := make(chan struct{})
+	releasePrepare := make(chan struct{})
+	backend := &signalPrepareBackend{
+		inner:   WorktreeAttemptBackend{},
+		started: prepareStarted,
+		release: releasePrepare,
+	}
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	runErr := make(chan error, 1)
+	go func() {
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
+			AgentRunner:    writeFileAgentRunner{},
+			AttemptBackend: backend,
+		}, &RealGitOps{})
+		if err == nil && res == nil {
+			err = fmt.Errorf("ExecuteBeadWithConfig returned nil result")
+		}
+		runErr <- err
+	}()
+
+	select {
+	case <-prepareStarted:
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for Prepare to begin")
+	}
+
+	lockAcquired := make(chan error, 1)
+	go func() {
+		lockAcquired <- withMainGitLock(projectRoot, "chaos_prepare_probe", func() error { return nil })
+	}()
+
+	select {
+	case err := <-lockAcquired:
+		require.NoError(t, err, "main-git lock acquisition should not be blocked by Prepare")
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for another goroutine to acquire the main-git lock")
+	}
+
+	close(releasePrepare)
+	require.NoError(t, <-runErr)
+}
+
+func TestPerformance_PreDispatchMutationWindowP95UnderBudget(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	runGitInteg(t, projectRoot, "config", "extensions.worktreeConfig", "true")
+
+	rec := &lockSampleRecorder{}
+	prevSink := SetTrackerLockMetricsSink(rec.record)
+	t.Cleanup(func() { SetTrackerLockMetricsSink(prevSink) })
+
+	const runs = 3
+	backend := delayPrepareBackend{
+		inner: WorktreeAttemptBackend{},
+		delay: 2500 * time.Millisecond,
+	}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	const beadID = "ddx-int-0001"
+
+	metricsPath := filepath.Join(projectRoot, ddxroot.DirName, "metrics", "attempts.jsonl")
+	for i := 0; i < runs; i++ {
+		require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+		require.NoError(t, os.WriteFile(metricsPath, []byte(fmt.Sprintf(`{"seed":"pre-dispatch-%d"}`+"\n", i)), 0o644))
+
+		res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+			AgentRunner:    writeFileAgentRunner{},
+			AttemptBackend: backend,
+		}, &RealGitOps{})
+		require.NoErrorf(t, err, "run %d should complete successfully", i)
+		require.NotNilf(t, res, "run %d should produce a result", i)
+		require.NotEmptyf(t, res.ResultRev, "run %d should advance the worktree HEAD", i)
+	}
+
+	durations := trackerLockDurations(rec.snapshot(), "pre_dispatch_commits")
+	require.NotEmpty(t, durations, "pre-dispatch tracker lock samples were not recorded")
+
+	p95 := percentileDuration(durations, 0.95)
+	max := percentileDuration(durations, 1.0)
+	t.Logf("pre-dispatch tracker lock hold times: samples=%d p95=%s max=%s", len(durations), p95, max)
+	require.Less(t, p95, 2*time.Second, "p95 tracker-lock hold time regressed")
+	require.Less(t, max, 5*time.Second, "max tracker-lock hold time regressed")
 }
