@@ -26,7 +26,7 @@ func newRunRequeueResolver(t *testing.T, runs []*ddxgraphql.Run) (*ddxgraphql.Re
 func seedClosedBead(t *testing.T, store *bead.Store, title string) string {
 	t.Helper()
 	b := &bead.Bead{Title: title, Status: bead.StatusOpen}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
 	if err := store.UpdateWithLifecycleStatus(b.ID, bead.StatusClosed, bead.LifecycleTransitionOptions{

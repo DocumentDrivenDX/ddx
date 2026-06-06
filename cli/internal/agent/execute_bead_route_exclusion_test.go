@@ -197,7 +197,7 @@ func TestFailedRoutesDoNotWriteNumericRetryFloor(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 14, 10, 0, 0, 0, time.UTC)
 
-	_ = store.Update(first.ID, func(b *bead.Bead) {
+	_ = store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		appendFailedRoute(b, FailedRouteEntry{
 			Provider: "bragi", Model: "qwen3.5-27b", ActualPower: 50,
 			Reason: FailureModeProviderConnectivity,
@@ -291,7 +291,7 @@ func TestFailedRoutes_ExclusionWindowFiltersOldEntriesFromRouteRequest(t *testin
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 14, 12, 0, 0, 0, time.UTC)
 
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		b.Extra[executeLoopFailedRoutesKey] = []FailedRouteEntry{
 			{Provider: "bragi", Model: "qwen3-27b", Count: 1,
@@ -322,7 +322,7 @@ func TestFailedRoutes_StoreGetCollapsesLegacyDuplicates(t *testing.T) {
 
 	// Write legacy duplicate entries directly, bypassing appendFailedRoute,
 	// simulating a bead that accumulated duplicates before this fix.
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		b.Extra[executeLoopFailedRoutesKey] = []map[string]any{
 			{"provider": "bragi", "model": "qwen3-27b", "at": t1.Format(time.RFC3339)},
@@ -408,7 +408,7 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 
 	// A recent failed route makes the exclusion set non-empty so the viability
 	// check actually invokes resolveRoute.
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		appendFailedRoute(b, FailedRouteEntry{
 			Provider: "bragi", Model: "qwen3-27b",
 			At: frozen.Add(-5 * time.Minute).Format(time.RFC3339),
@@ -506,7 +506,7 @@ func TestPerBeadRouteResolutionTimeoutIsRetryable(t *testing.T) {
 
 	// Add a recent failed route so the exclusion set is non-empty and
 	// CheckAndApplyRouteExclusions actually calls the resolver.
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		appendFailedRoute(b, FailedRouteEntry{
 			Provider: "bragi", Model: "qwen3-27b",
 			At: frozen.Add(-5 * time.Minute).Format(time.RFC3339),
@@ -775,7 +775,7 @@ func TestCheckAndApplyRouteExclusions_DoesNotExcludeSubscriptionHarness(t *testi
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 29, 9, 0, 0, 0, time.UTC)
 
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		appendFailedRoute(b, FailedRouteEntry{
 			Provider: "claude", Model: "claude-sonnet-4",
 			Reason: FailureModeProviderConnectivity,
@@ -826,7 +826,7 @@ func TestCheckAndApplyRouteExclusions_StillExcludesNonSubscriptionAlongsideShiel
 	store, first, _ := newExecuteLoopTestStore(t)
 	frozen := time.Date(2026, 5, 29, 9, 0, 0, 0, time.UTC)
 
-	require.NoError(t, store.Update(first.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		appendFailedRoute(b, FailedRouteEntry{
 			Provider: "claude", Model: "claude-sonnet-4",
 			Reason: FailureModeProviderConnectivity,

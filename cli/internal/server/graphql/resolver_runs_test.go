@@ -1,6 +1,7 @@
 package graphql_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -112,7 +113,7 @@ func TestIntegration_Query_Runs(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 	base := newTestStateProvider(workDir, store)
 	projID := base.projects[0].ID
-	if err := store.Create(&bead.Bead{ID: "ddx-001", Title: "Run detail audit target", Status: bead.StatusOpen}); err != nil {
+	if err := store.Create(context.Background(), &bead.Bead{ID: "ddx-001", Title: "Run detail audit target", Status: bead.StatusOpen}); err != nil {
 		t.Fatalf("seed audit bead: %v", err)
 	}
 
@@ -383,7 +384,7 @@ func TestAuditEvent_RawTranscriptViewed(t *testing.T) {
 	base := newTestStateProvider(workDir, store)
 	projID := base.projects[0].ID
 	beadID := "ddx-raw-transcript"
-	if err := store.Create(&bead.Bead{ID: beadID, Title: "Raw transcript audit target", Status: bead.StatusOpen}); err != nil {
+	if err := store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "Raw transcript audit target", Status: bead.StatusOpen}); err != nil {
 		t.Fatalf("seed audit bead: %v", err)
 	}
 

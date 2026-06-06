@@ -18,7 +18,7 @@ func TestExecuteBeadWorkerNoChangesVerifiedLongCommandCloses(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-longverify", Title: "Verification gate needs time"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -76,7 +76,7 @@ func TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps(t *testi
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-timeoutverify", Title: "Verification tree must be reaped"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	projectRoot := t.TempDir()
 	shellPIDFile := filepath.Join(projectRoot, "inner-shell.pid")

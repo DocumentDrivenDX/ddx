@@ -35,10 +35,10 @@ func TestRecordOperatorPromptBacklinks_ConcurrentTargetSameBead(t *testing.T) {
 
 	originatorA := bead.NewOperatorPromptBead("prompt A", bead.DefaultPriority)
 	originatorB := bead.NewOperatorPromptBead("prompt B", bead.DefaultPriority)
-	if err := store.Create(originatorA); err != nil {
+	if err := store.Create(context.Background(), originatorA); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Create(originatorB); err != nil {
+	if err := store.Create(context.Background(), originatorB); err != nil {
 		t.Fatal(err)
 	}
 	target := &bead.Bead{
@@ -47,7 +47,7 @@ func TestRecordOperatorPromptBacklinks_ConcurrentTargetSameBead(t *testing.T) {
 		Status:    bead.StatusOpen,
 		IssueType: "task",
 	}
-	if err := store.Create(target); err != nil {
+	if err := store.Create(context.Background(), target); err != nil {
 		t.Fatal(err)
 	}
 

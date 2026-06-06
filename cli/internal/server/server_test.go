@@ -680,7 +680,7 @@ func seedBeadEvidence(t *testing.T, dir string) {
 	}); err != nil {
 		t.Fatalf("AppendEvent routing: %v", err)
 	}
-	if err := store.Update("bx-001", func(b *bead.Bead) {
+	if err := store.Update(context.Background(), "bx-001", func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = map[string]any{}
 		}

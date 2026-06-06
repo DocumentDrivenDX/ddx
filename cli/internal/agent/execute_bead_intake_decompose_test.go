@@ -22,7 +22,7 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 		Title:      "Parent bead to decompose",
 		Acceptance: "1. do the thing\n2. run tests",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	var execCalls int32
 	worker := &ExecuteBeadWorker{
@@ -113,7 +113,7 @@ func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing
 		Acceptance:  "1. TestHookSplit covers split\n2. cd cli && go test ./internal/agent/... green",
 		Description: "PROBLEM\nToo broad.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42 does too much.\n",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -182,7 +182,7 @@ func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {
 		Title:      "ACMap event body test",
 		Acceptance: "1. do stuff\n2. run tests",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -253,7 +253,7 @@ func TestIntake_DecompositionACMapRejectsDroppedAC(t *testing.T) {
 		Title:      "Lossy decomposition test",
 		Acceptance: "1. do the thing\n2. run tests",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -316,10 +316,10 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	// Create a hierarchy with two consecutive decomposed child layers. Ordinary
 	// epic ancestry does not count toward the cap, but decomposed descendants do.
 	root := &bead.Bead{ID: "ddx-dc-root", Title: "Root bead", Status: bead.StatusClosed}
-	require.NoError(t, store.Create(root))
+	require.NoError(t, store.Create(context.Background(), root))
 
 	child := &bead.Bead{ID: "ddx-dc-child", Title: "Child bead", Parent: "ddx-dc-root", Status: bead.StatusClosed, Labels: []string{"decomposed"}}
-	require.NoError(t, store.Create(child))
+	require.NoError(t, store.Create(context.Background(), child))
 
 	grandchild := &bead.Bead{
 		ID:     "ddx-dc-grand",
@@ -327,7 +327,7 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 		Parent: "ddx-dc-child",
 		Labels: []string{"decomposed"},
 	}
-	require.NoError(t, store.Create(grandchild))
+	require.NoError(t, store.Create(context.Background(), grandchild))
 
 	var intakeCalls int32
 	worker := &ExecuteBeadWorker{
@@ -389,7 +389,7 @@ func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
 		Title:      "Post-attempt decomp test",
 		Acceptance: "1. do stuff\n2. run tests",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	decomp := &PreClaimDecomposition{
 		Rationale: "post-attempt split",
@@ -468,7 +468,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 
 	// Create bead at depth 1: child of a closed root bead.
 	root := &bead.Bead{ID: "ddx-qdepth-root", Title: "Root bead", Status: bead.StatusClosed}
-	require.NoError(t, store.Create(root))
+	require.NoError(t, store.Create(context.Background(), root))
 
 	candidate := &bead.Bead{
 		ID:         "ddx-qdepth-child",
@@ -476,7 +476,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 		Parent:     "ddx-qdepth-root",
 		Acceptance: "1. do the work",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	var hookCalls int32
 	decomp := &PreClaimDecomposition{
@@ -546,9 +546,11 @@ func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {
 		Title:      "Lossy post-attempt decomp",
 		Acceptance: "1. do stuff\n2. run tests",
 	}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(
 
 	// Lossy ACMap: empty Coverage for AC 2.
+	), candidate))
+
 	lossyDecomp := &PreClaimDecomposition{
 		Rationale: "incomplete split",
 		Children: []PreClaimDecompositionChild{

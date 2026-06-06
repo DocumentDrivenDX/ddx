@@ -40,7 +40,7 @@ func seedOpenBead(t *testing.T, root, beadID string) {
 	t.Helper()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "resource preflight bead"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "resource preflight bead"}))
 }
 
 func TestTryResourcePreflight_FailsBeforeClaim(t *testing.T) {

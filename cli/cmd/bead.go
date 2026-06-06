@@ -1429,7 +1429,7 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 			if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
 				return err
 			}
-			if err := s.Close(id); err != nil {
+			if err := s.Close(context.Background(), id); err != nil {
 				return err
 			}
 		case "defer":

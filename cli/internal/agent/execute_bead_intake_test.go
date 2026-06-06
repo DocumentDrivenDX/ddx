@@ -331,7 +331,7 @@ func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
 
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Acceptance = "1. Improve clarity\n2. Better error messages\n"
 	}))
 
@@ -522,7 +522,7 @@ func TestPreClaimIntakeChangedBeadInvalidatesOverride(t *testing.T) {
 		Source: "test",
 	}))
 
-	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), beadRef.ID, func(b *bead.Bead) {
 		b.Acceptance += "\n3. require an explicit operator acknowledgement"
 		b.Description += "\n\nAdditional prompt-relevant detail."
 	}))
@@ -864,7 +864,7 @@ func TestExecuteBeadWorkerStdout_ReadinessMalformedSchemaIsActionable(t *testing
 
 func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n\nNON-SCOPE\nchange no product semantics\n"
 		b.Acceptance = "1. preserve the original intent\n2. name the verification command"
 	}))
@@ -951,7 +951,7 @@ func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 
 func TestIntake_UnsafeRewriteWarnsAndExecutesOriginal(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n"
 		b.Acceptance = "1. preserve the original intent\n2. name the verification command"
 	}))
@@ -1029,7 +1029,7 @@ func TestIntake_UnsafeRewriteWarnsAndExecutesOriginal(t *testing.T) {
 
 func TestIntake_UnsafeRewriteDoesNotParkOrRemoveFromExecution(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
 		b.Acceptance = "1. verify something\n2. run tests"
 	}))
@@ -1078,7 +1078,7 @@ func TestIntake_UnsafeRewriteDoesNotParkOrRemoveFromExecution(t *testing.T) {
 
 func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal problem text\n\nROOT CAUSE\ncli/internal/agent/preclaim.go:42\n\nNON-SCOPE\nDo not touch acceptance criteria\n"
 		b.Acceptance = "1. check the output\n2. run lefthook"
 	}))
@@ -1149,7 +1149,7 @@ func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 
 func TestReadinessWarningEvidenceIncludesStructuredDecisionFields(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
 		b.Acceptance = "1. verify something\n2. run tests"
 	}))
@@ -1258,7 +1258,7 @@ func TestReadinessHookEmptyOutput_DeduplicatesPrefix(t *testing.T) {
 func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 	t.Run("actionable_but_rewritten_stores_intake_rewritten_event", func(t *testing.T) {
 		inner, candidate, _ := newExecuteLoopTestStore(t)
-		require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 			b.Description = "PROBLEM\nsome issue\n\nROOT CAUSE\nroot cause\n\nPROPOSED FIX\nfix it\n\nNON-SCOPE\nno regressions\n"
 		}))
 		worker := &ExecuteBeadWorker{
@@ -1410,7 +1410,7 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 // for concurrency safety; the rewrite is applied between claim and dispatch.)
 func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
-	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal vague bead\n\nROOT CAUSE\nunknown\n\nPROPOSED FIX\nfix it\n"
 		b.Acceptance = "1. something passes"
 	}))
@@ -1941,7 +1941,7 @@ func TestReadinessStaleExternalBlockerClearedByNotes(t *testing.T) {
 	}))
 
 	// Operator adds a note clearing the blocker — this is the unblocking signal.
-	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), beadRef.ID, func(b *bead.Bead) {
 		b.Notes = "Unblocked 2026-05-18: the prior Redpanda/AIO blocker was stale after commit 90cd8348 bounded Redpanda test storage. The container became ready and was cleaned up."
 	}))
 
@@ -1995,7 +1995,7 @@ func TestReadinessNotesIncludedInPromptPayload(t *testing.T) {
 	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
 
 	clearanceNote := "Unblocked 2026-05-18: prior Redpanda/AIO blocker cleared after commit 90cd8348."
-	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), beadRef.ID, func(b *bead.Bead) {
 		b.Notes = clearanceNote
 	}))
 
@@ -2029,7 +2029,7 @@ func TestReadinessUnblockNotesSupersedeStaleBlockerEvents(t *testing.T) {
 
 	// Operator clears the blocker via notes.
 	unblockNote := "Unblocked 2026-05-18: the prior AIO blocker was stale; container cleaned up after commit 90cd8348."
-	require.NoError(t, inner.Update(beadRef.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), beadRef.ID, func(b *bead.Bead) {
 		b.Notes = unblockNote
 	}))
 

@@ -514,17 +514,9 @@ func (s *Store) WriteAll(beads []Bead) error {
 }
 
 // Create adds a new bead. Assigns defaults, validates, then persists.
-func (s *Store) Create(args ...any) error {
-	ctx := storeCallContext(args)
+func (s *Store) Create(ctx context.Context, b *Bead) error {
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	var b *Bead
-	for _, arg := range args {
-		if bead, ok := arg.(*Bead); ok {
-			b = bead
-			break
-		}
 	}
 	if b == nil {
 		return fmt.Errorf("bead: create requires bead")
@@ -625,22 +617,9 @@ func (s *Store) Get(args ...any) (*Bead, error) {
 
 // Update modifies a bead by ID. The mutate function receives a pointer to
 // modify, but persisted lifecycle status changes must use TransitionLifecycle.
-func (s *Store) Update(args ...any) error {
-	ctx := storeCallContext(args)
+func (s *Store) Update(ctx context.Context, id string, mutate func(*Bead)) error {
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	var id string
-	var mutate func(*Bead)
-	for _, arg := range args {
-		switch v := arg.(type) {
-		case string:
-			if id == "" {
-				id = v
-			}
-		case func(*Bead):
-			mutate = v
-		}
 	}
 	if id == "" {
 		return fmt.Errorf("bead: update requires bead id")
@@ -1499,17 +1478,9 @@ func lastReviewVerdictFromEvents(events []BeadEvent) string {
 // carries an inline event history, those events are moved to a sidecar
 // attachment under .ddx/attachments/<id>/events.jsonl so the active row stays
 // small (per ADR-004's attachment model and TD-027 §c).
-func (s *Store) Close(args ...any) error {
-	ctx := storeCallContext(args)
+func (s *Store) Close(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
-	}
-	var id string
-	for _, arg := range args {
-		if s, ok := arg.(string); ok {
-			id = s
-			break
-		}
 	}
 	if id == "" {
 		return fmt.Errorf("bead: close requires bead id")

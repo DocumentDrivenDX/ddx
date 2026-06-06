@@ -20,7 +20,7 @@ func setupBeadHumanEnv(t *testing.T, beads ...*bead.Bead) (string, *CommandFacto
 	store := bead.NewStore(filepath.Join(workingDir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 	return workingDir, factory, store
 }
@@ -42,7 +42,7 @@ func TestBeadNeedsHumanCommand_JSON(t *testing.T) {
 	}
 	plain := &bead.Bead{ID: "ddx-plain-json", Title: "Plain"}
 	_, factory, store := setupBeadHumanEnv(t, nh, plain)
-	require.NoError(t, store.Update(nh.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), nh.ID, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, meta)
 	}))
 
@@ -71,7 +71,7 @@ func TestBeadNeedsHumanCommand_Text(t *testing.T) {
 		Status:   bead.StatusProposed,
 	}
 	_, factory, store := setupBeadHumanEnv(t, nh)
-	require.NoError(t, store.Update(nh.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), nh.ID, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{Reason: "operator decision required"})
 	}))
 
@@ -152,7 +152,7 @@ func TestBeadHumanResolveRetryRequiresNote(t *testing.T) {
 		Status: bead.StatusProposed,
 	}
 	_, factory, store := setupBeadHumanEnv(t, nh)
-	require.NoError(t, store.Update(nh.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), nh.ID, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{Reason: "blocked"})
 	}))
 

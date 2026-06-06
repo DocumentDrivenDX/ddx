@@ -34,7 +34,7 @@ func TestWorkLoop_ClaimAndHeartbeatDoNotMutateTrackerBeforeOutcome(t *testing.T)
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-liveness-1", Title: "Liveness sidecar bead"}
-	require.NoError(t, store.Create(target))
+	require.NoError(t, store.Create(context.Background(), target))
 
 	beadsPath := filepath.Join(ddxDir, "beads.jsonl")
 	beforeClaimSnapshot, err := os.ReadFile(beadsPath)

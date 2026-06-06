@@ -99,7 +99,7 @@ func TestZeroConfigEscalationSummaryEventBody(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 	target := &bead.Bead{ID: "ddx-zero-config-002", Title: "standard-default ladder", Priority: 0}
-	require.NoError(t, store.Create(target))
+	require.NoError(t, store.Create(context.Background(), target))
 
 	attempts := []escalation.PowerAttemptRecord{
 		{PowerClass: string(escalation.PowerStandard), Status: ExecuteBeadStatusExecutionFailed, CostUSD: 0.10, DurationMS: 2000},

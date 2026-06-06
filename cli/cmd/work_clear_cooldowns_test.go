@@ -20,7 +20,7 @@ func setupCooldownEnv(t *testing.T, beads ...*bead.Bead) (*TestEnvironment, *bea
 	store := bead.NewStore(filepath.Join(env.Dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 	return env, store
 }
@@ -31,7 +31,7 @@ func setupConventionCooldownProject(t *testing.T, beads ...*bead.Bead) (string, 
 	store := bead.NewStore(ddxroot.Path(context.Background(), projectRoot))
 	require.NoError(t, store.Init(context.Background()))
 	for _, b := range beads {
-		require.NoError(t, store.Create(b))
+		require.NoError(t, store.Create(context.Background(), b))
 	}
 	return projectRoot, store
 }

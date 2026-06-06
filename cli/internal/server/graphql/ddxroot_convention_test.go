@@ -47,7 +47,7 @@ func setupConventionRootGraphQLProject(t *testing.T) (string, *bead.Store) {
 	require.NoError(t, os.WriteFile(filepath.Join(stateRoot, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"it\"\n"), 0o644))
 
 	store := bead.NewStore(stateRoot)
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:         "ddx-root-gql",
 		Title:      "GraphQL DDx root coverage",
 		Status:     bead.StatusOpen,

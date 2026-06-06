@@ -166,7 +166,7 @@ func TestPreClaimIntakeRewrite_RecordsReplacementEvidence(t *testing.T) {
 		Description: oldDesc,
 		Acceptance:  "1. TestPreClaimIntakeRewrite_RecordsReplacementEvidence\n",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	intake := PreClaimIntakeResult{
 		Outcome: PreClaimIntakeActionableButRewritten,
@@ -338,9 +338,11 @@ func TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired(t *testing.T) {
 			"In-scope files:\n  - crates/axon-cypher/src/storage_adapter_store.rs (moved)\n  - crates/axon-storage/src/lib.rs\n\n" +
 			"Rollback: revert all six file changes atomically.",
 	}
-	require.NoError(t, store.Create(strongBead))
+	require.NoError(t, store.Create(context.Background(
 
 	// The LLM returns actionable_atomic for this well-formed bead.
+	), strongBead))
+
 	svc := &preClaimIntakeHookServiceStub{
 		finalText: `{"classification":"atomic","confidence":0.97,"reasoning":"7 numbered ACs with cargo tree flags and rollback; single-slice refactor"}`,
 	}
@@ -373,9 +375,11 @@ func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
 			"AC3. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes.",
 		Description: "Move StorageAdapterQueryStore from axon-storage to axon-cypher.",
 	}
-	require.NoError(t, store.Create(strongBead))
+	require.NoError(t, store.Create(context.Background(
 
 	// LLM rewrites the AC field: same assertions, plain 1./2./3. numbering.
+	), strongBead))
+
 	rewrittenAC := "1. crates/axon-cypher/src/storage_adapter_store.rs exists; crates/axon-storage/src/storage_adapter_store.rs does not.\n" +
 		"2. cargo tree -p axon-storage -e normal does not list axon-cypher.\n" +
 		"3. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes."
@@ -412,9 +416,11 @@ func TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes(t *testing.T)
 			"and leaks no commercial values into the DOM. Covered by intent-audit-lineage.spec.ts.",
 		Description: "Ensure contractor audit lineage metadata fields are redacted before display.",
 	}
-	require.NoError(t, store.Create(weakBead))
+	require.NoError(t, store.Create(context.Background(
 
 	// LLM returns a rewrite with expanded numbered ACs (the ideal case).
+	), weakBead))
+
 	refinedAC := "1. Lineage metadata fields rendered at audit/+page.svelte pass through redactValue().\n" +
 		"2. Restricted values render as \"[redacted]\" for contractor policy users.\n" +
 		"3. cd ui && pnpm test:e2e intent-audit-lineage passes."

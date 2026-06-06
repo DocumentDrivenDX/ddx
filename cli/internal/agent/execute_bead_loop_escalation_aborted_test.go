@@ -24,7 +24,7 @@ func TestApplyProviderConnectivityRouteExclusion_DoesNotEscalatePower(t *testing
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc01", Title: "connectivity fallback to alternate provider"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	report := ExecuteBeadReport{
 		Provider:    "lm-studio",
@@ -67,7 +67,7 @@ func TestApplyProviderConnectivityRouteExclusion_NoEscalationMetadata(t *testing
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc02", Title: "connectivity defers escalation"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	const actualPower = 30
 	report := ExecuteBeadReport{
@@ -95,7 +95,7 @@ func TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry(t *test
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc03", Title: "repeated connectivity failure escalation"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	report := ExecuteBeadReport{
 		Provider:    "grendel",
@@ -155,8 +155,8 @@ func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
 		Status: bead.StatusProposed,
 		Labels: []string{bead.LabelNeedsHuman, "area:agent"},
 	}
-	require.NoError(t, store.Create(retryable))
-	require.NoError(t, store.Update(retryable.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Create(context.Background(), retryable))
+	require.NoError(t, store.Update(context.Background(), retryable.ID, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          "provider grendel / model qwen3.5-27b unreachable on 2+ attempts; check ddx config or provider health",
 			Source:          "ddx work",
@@ -171,8 +171,8 @@ func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
 		Status: bead.StatusProposed,
 		Labels: []string{bead.LabelNeedsHuman},
 	}
-	require.NoError(t, store.Create(manual))
-	require.NoError(t, store.Update(manual.ID, func(b *bead.Bead) {
+	require.NoError(t, store.Create(context.Background(), manual))
+	require.NoError(t, store.Update(context.Background(), manual.ID, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          "scope is ambiguous and requires product judgment",
 			Source:          "ddx work",
@@ -225,7 +225,7 @@ func TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc04", Title: "no-changes smart retry ladder exhausted event"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	noChanges := &agenttry.NoChangesOutcome{
 		Reason:          "agent cannot proceed further",
@@ -258,7 +258,7 @@ func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testin
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-eabc05", Title: "repair cycle exhausted event"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.Background(), b))
 
 	exhaustedFn := func(int) (int, error) { return 0, errLadderExhaustedTest }
 	at := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
@@ -293,9 +293,11 @@ func TestProviderConnectivityFailure_RetriesOnAlternateProviderAtSamePower(t *te
 		ID:    "ddx-ac1test",
 		Title: "provider connectivity retry on alternate",
 	}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// First failure: bragi at power 5
+		// First failure: bragi at power 5
+		Background(), b))
+
 	report1 := ExecuteBeadReport{
 		Provider:    "bragi",
 		Model:       "qwen3.6-27b",

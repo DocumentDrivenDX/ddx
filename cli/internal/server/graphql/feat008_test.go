@@ -1,6 +1,7 @@
 package graphql_test
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -60,29 +61,29 @@ install:
 	}
 
 	ready := &bead.Bead{Title: "Palette ready bead", Status: bead.StatusOpen}
-	if err := store.Create(ready); err != nil {
+	if err := store.Create(context.Background(), ready); err != nil {
 		t.Fatal(err)
 	}
 	dep := &bead.Bead{Title: "Blocking prerequisite", Status: bead.StatusOpen}
-	if err := store.Create(dep); err != nil {
+	if err := store.Create(context.Background(), dep); err != nil {
 		t.Fatal(err)
 	}
 	blocked := &bead.Bead{Title: "Palette blocked bead", Status: bead.StatusOpen}
-	if err := store.Create(blocked); err != nil {
+	if err := store.Create(context.Background(), blocked); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.DepAdd(blocked.ID, dep.ID); err != nil {
 		t.Fatal(err)
 	}
 	inProgress := &bead.Bead{Title: "Running bead", Status: bead.StatusOpen}
-	if err := store.Create(inProgress); err != nil {
+	if err := store.Create(context.Background(), inProgress); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.Claim(inProgress.ID, "agent-01"); err != nil {
 		t.Fatal(err)
 	}
 	closed := &bead.Bead{Title: "Closed evidence bead", Status: bead.StatusOpen}
-	if err := store.Create(closed); err != nil {
+	if err := store.Create(context.Background(), closed); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.AppendEvent(closed.ID, bead.BeadEvent{
@@ -97,7 +98,7 @@ install:
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Close(closed.ID); err != nil {
+	if err := store.Close(context.Background(), closed.ID); err != nil {
 		t.Fatal(err)
 	}
 	started := time.Date(2026, 4, 22, 14, 0, 0, 0, time.UTC)

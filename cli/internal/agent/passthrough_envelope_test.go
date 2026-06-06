@@ -369,7 +369,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: "seed-route-001", Title: "seed route"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-route-001", Title: "seed route"}))
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
 	require.NoError(t, store.AppendEvent("seed-route-001", bead.BeadEvent{
 		Kind:      "route-failure",
@@ -393,7 +393,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "seed-extra-001",
 		Title: "seed extra",
 		Extra: map[string]any{
@@ -428,7 +428,7 @@ func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: "seed-sub-001", Title: "seed subscription"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-sub-001", Title: "seed subscription"}))
 	now := time.Date(2026, 5, 29, 8, 55, 0, 0, time.UTC)
 
 	// Transient connectivity blip on an available subscription harness (claude).
@@ -479,7 +479,7 @@ func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
 
 	now := time.Now().UTC()
 	// 5 minutes old: well inside DDx's 15-min replay window but well outside
@@ -548,7 +548,7 @@ func TestRecordRouteAttemptRouteHealthGatesPolicyExecute(t *testing.T) {
 	root := t.TempDir()
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    "hardgate-001",
 		Title: "hard-gate via failed-route extra",
 		Extra: map[string]any{

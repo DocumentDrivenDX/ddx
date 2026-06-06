@@ -26,7 +26,7 @@ func setupConventionRootWorkerProject(t *testing.T, projectRoot string) *bead.St
 	require.NoError(t, os.WriteFile(filepath.Join(stateRoot, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"wt\"\n"), 0o644))
 
 	store := bead.NewStore(stateRoot)
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:         "ddx-root-worker",
 		Title:      "Worker DDx root coverage",
 		Status:     bead.StatusOpen,

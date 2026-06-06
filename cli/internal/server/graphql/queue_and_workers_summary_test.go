@@ -1,6 +1,7 @@
 package graphql_test
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 
@@ -18,19 +19,19 @@ func TestGraphQLQueueAndWorkersSummary(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	ready := &bead.Bead{Title: "ready bead", Status: bead.StatusOpen}
-	if err := store.Create(ready); err != nil {
+	if err := store.Create(context.Background(), ready); err != nil {
 		t.Fatal(err)
 	}
 	second := &bead.Bead{Title: "also ready", Status: bead.StatusOpen}
-	if err := store.Create(second); err != nil {
+	if err := store.Create(context.Background(), second); err != nil {
 		t.Fatal(err)
 	}
 	dep := &bead.Bead{Title: "dep", Status: bead.StatusOpen}
-	if err := store.Create(dep); err != nil {
+	if err := store.Create(context.Background(), dep); err != nil {
 		t.Fatal(err)
 	}
 	blocked := &bead.Bead{Title: "blocked", Status: bead.StatusOpen}
-	if err := store.Create(blocked); err != nil {
+	if err := store.Create(context.Background(), blocked); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.DepAdd(blocked.ID, dep.ID); err != nil {

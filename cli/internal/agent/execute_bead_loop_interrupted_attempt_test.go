@@ -116,7 +116,7 @@ func runInterruptedAttemptInGitRepo(t *testing.T, trackDirtyRunState bool) inter
 	require.NoError(t, store.Init(context.Background()))
 
 	candidate := &bead.Bead{ID: "ddx-interrupted-attempt", Title: "Interrupted attempt", Priority: 0}
-	require.NoError(t, store.Create(candidate))
+	require.NoError(t, store.Create(context.Background(), candidate))
 
 	attemptID := "20260515T160340-interrupted"
 	runStateRootRel := filepath.ToSlash(filepath.Join(ddxroot.DirName, RunStateFileName))

@@ -52,19 +52,19 @@ func newWorkLoopOperatorOverrideFixture(t *testing.T) (*bead.Store, *bead.Bead, 
 	root := newPreClaimIntakeHookTestRoot(t)
 	inner, target := newPreClaimIntakeHookTestStore(t, root)
 
-	require.NoError(t, inner.Create(&bead.Bead{
+	require.NoError(t, inner.Create(context.Background(), &bead.Bead{
 		ID:       "ddx-override-parent",
 		Title:    "epic: operator override regression parent",
 		Status:   bead.StatusClosed,
 		Priority: 1,
 	}))
-	require.NoError(t, inner.Create(&bead.Bead{
+	require.NoError(t, inner.Create(context.Background(), &bead.Bead{
 		ID:       "ddx-override-dep",
 		Title:    "dependency: operator override regression prerequisite",
 		Status:   bead.StatusClosed,
 		Priority: 1,
 	}))
-	require.NoError(t, inner.Update(target.ID, func(b *bead.Bead) {
+	require.NoError(t, inner.Update(context.Background(), target.ID, func(b *bead.Bead) {
 		b.Title = "work: preserve operator-promoted readiness commitments"
 		b.Description = "PROBLEM\nA promoted bead must not be downgraded again when the same readiness finding reappears.\n\nROOT CAUSE\ncli/internal/agent/execute_bead_loop.go:1031-1309 still owns claim-time readiness and parking.\ncli/internal/agent/execute_bead_loop.go:2903-3118 implements the park-to-proposed bridge.\ncli/internal/bead/store.go:667-676 records operator acceptance when proposed becomes open.\n\nPROPOSED FIX\nExercise the real worker loop, promote proposed back to open through Store.SetLifecycleStatus, and prove later passes stay non-proposed.\n\nNON-SCOPE\nDo not add new production policy or bypass the readiness hook.\n"
 		b.Acceptance = "1. TestWorkLoopOperatorPromotedOpenDoesNotDowngradeAgain\n2. TestWorkLoopOperatorOverridePreservesCommitmentText\n3. TestWorkLoopHardManualRequiredStillParks\n4. cd cli && go test ./internal/agent/... ./cmd/... -run \"TestWorkLoop(OperatorPromotedOpenDoesNotDowngradeAgain|OperatorOverridePreservesCommitmentText|HardManualRequiredStillParks)\" passes\n5. cd cli && go test ./internal/agent/... ./internal/bead/... ./cmd/... passes\n6. lefthook run pre-commit passes"

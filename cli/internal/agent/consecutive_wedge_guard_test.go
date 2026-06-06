@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -246,7 +247,7 @@ func TestWedgeMarkerClearedOnOperatorReopenPreD3(t *testing.T) {
 
 	// Inject a wedge marker count >= threshold directly — simulating a bead that
 	// was parked by the old code path before D3 cleared the marker on park.
-	require.NoError(t, store.Update(beadID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -300,7 +301,7 @@ func TestReopenedBeadNotReparkedByGuard(t *testing.T) {
 	// Reproduce the pre-D3 state: bead is in proposed with a stale wedge marker
 	// count >= threshold. Before ddx-bd47e2c4, flagConsecutiveWedgeForOperator
 	// parked to proposed WITHOUT clearing the marker.
-	require.NoError(t, store.Update(beadID, func(b *bead.Bead) {
+	require.NoError(t, store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}

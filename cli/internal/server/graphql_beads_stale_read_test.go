@@ -62,7 +62,7 @@ func TestBeadsByProject_UpdateVisibleOnNextRequest(t *testing.T) {
 	// Update one bead on disk via the bead.Store — this is the same write
 	// path `ddx bead update` uses.
 	updatedTitle := "mutated via store.Update"
-	if err := store.Update("ddx-stale-017", func(b *bead.Bead) {
+	if err := store.Update(context.Background(), "ddx-stale-017", func(b *bead.Bead) {
 		b.Title = updatedTitle
 	}); err != nil {
 		t.Fatalf("update: %v", err)
@@ -148,7 +148,7 @@ func TestBeadsByProject_ConcurrentQueriesAndUpdates(t *testing.T) {
 			defer wg.Done()
 			for i := 0; i < iterations; i++ {
 				title := fmt.Sprintf("w%02d-i%03d", w, i)
-				if err := store.Update("ddx-concur-000", func(b *bead.Bead) {
+				if err := store.Update(context.Background(), "ddx-concur-000", func(b *bead.Bead) {
 					b.Title = title
 				}); err != nil {
 					errs <- fmt.Errorf("writer %d iter %d: %w", w, i, err)

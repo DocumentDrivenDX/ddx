@@ -122,7 +122,7 @@ func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *t
 		t.Fatal(err)
 	}
 	originator := bead.NewOperatorPromptBead("test prompt", bead.DefaultPriority)
-	if err := store.Create(originator); err != nil {
+	if err := store.Create(context.Background(), originator); err != nil {
 		t.Fatal(err)
 	}
 	affected := &bead.Bead{
@@ -131,7 +131,7 @@ func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *t
 		Status:    bead.StatusOpen,
 		IssueType: "task",
 	}
-	if err := store.Create(affected); err != nil {
+	if err := store.Create(context.Background(), affected); err != nil {
 		t.Fatal(err)
 	}
 
@@ -187,7 +187,7 @@ func TestRecordOperatorPromptBacklinks_EmptyAffectedNoEvents(t *testing.T) {
 		t.Fatal(err)
 	}
 	originator := bead.NewOperatorPromptBead("noop prompt", bead.DefaultPriority)
-	if err := store.Create(originator); err != nil {
+	if err := store.Create(context.Background(), originator); err != nil {
 		t.Fatal(err)
 	}
 	if err := recordOperatorPromptBacklinks(store, originator.ID, operatorPromptAffected{}, "test", time.Now().UTC()); err != nil {

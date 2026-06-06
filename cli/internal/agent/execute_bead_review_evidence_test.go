@@ -241,7 +241,7 @@ func TestReviewContextOverflow(t *testing.T) {
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# x\n"), 0o644))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:          "ddx-overflow",
 		Title:       "context overflow",
 		Description: strings.Repeat("D", 4000),

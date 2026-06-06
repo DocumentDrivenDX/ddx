@@ -475,7 +475,7 @@ func TestIntegration_Query_Beads(t *testing.T) {
 	// Create 3 beads in the real store before constructing the state provider.
 	for _, title := range []string{"Alpha", "Beta", "Gamma"} {
 		b := &bead.Bead{Title: title, IssueType: "task", Priority: 1}
-		if err := store.Create(b); err != nil {
+		if err := store.Create(context.Background(), b); err != nil {
 			t.Fatalf("create bead %q: %v", title, err)
 		}
 	}
@@ -526,7 +526,7 @@ func TestIntegration_Query_BeadsByProject(t *testing.T) {
 
 	for _, title := range []string{"P1", "P2"} {
 		b := &bead.Bead{Title: title, IssueType: "task"}
-		if err := store.Create(b); err != nil {
+		if err := store.Create(context.Background(), b); err != nil {
 			t.Fatalf("create bead %q: %v", title, err)
 		}
 	}
@@ -634,7 +634,7 @@ func TestIntegration_Mutation_BeadUpdate(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	orig := &bead.Bead{Title: "Original title", IssueType: "task", Priority: 1}
-	if err := store.Create(orig); err != nil {
+	if err := store.Create(context.Background(), orig); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
 
@@ -682,7 +682,7 @@ func TestIntegration_Mutation_BeadClaim(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	b := &bead.Bead{Title: "Claimable bead", IssueType: "task"}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
 
@@ -719,7 +719,7 @@ func TestIntegration_Mutation_BeadUnclaim(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	b := &bead.Bead{Title: "To be unclaimed", IssueType: "task"}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
 
@@ -758,7 +758,7 @@ func TestIntegration_Mutation_BeadReopen(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
 	b := &bead.Bead{Title: "Will be closed then reopened", IssueType: "task"}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
 	if err := store.SetLifecycleStatus(b.ID, bead.StatusClosed, bead.LifecycleTransitionOptions{ManualClose: true}); err != nil {

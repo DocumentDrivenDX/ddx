@@ -643,7 +643,7 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 	Get(args ...any) (*bead.Bead, error)
-	Create(args ...any) error
+	Create(ctx context.Context, b *bead.Bead) error
 	Claim(id, assignee string) error
 	Unclaim(id string) error
 	TouchClaimHeartbeat(id string) error
@@ -660,7 +660,7 @@ type ExecuteBeadLoopStore interface {
 	// Update mutates a bead in place. Used by the post-merge triage step to
 	// add metadata hints (e.g. powerClass-pin) when the triage policy escalates after
 	// repeated review BLOCKs.
-	Update(args ...any) error
+	Update(ctx context.Context, id string, mutate func(*bead.Bead)) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 	ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error
 	ParkToProposedWithIntakeEvent(id, actor, outcome, reason, detail string, body map[string]any, at time.Time, mutate func(*bead.Bead)) error
@@ -690,7 +690,7 @@ type readyDiagnoser interface {
 // bead.Store satisfies both methods.
 type epicCloser interface {
 	EpicClosureCandidates(ctx context.Context) ([]bead.Bead, error)
-	Close(args ...any) error
+	Close(ctx context.Context, id string) error
 }
 
 type proposedOperatorAttentionStore interface {
@@ -6020,7 +6020,7 @@ func recordConsecutiveWedge(store ExecuteBeadLoopStore, beadID, reason string, a
 	if store == nil || beadID == "" {
 		return
 	}
-	_ = store.Update(beadID, func(b *bead.Bead) {
+	_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		m := readWedgeMarker(b.Extra)
 		m.Count++
@@ -6038,7 +6038,7 @@ func clearConsecutiveWedge(store ExecuteBeadLoopStore, beadID string) {
 	if store == nil || beadID == "" {
 		return
 	}
-	_ = store.Update(beadID, func(b *bead.Bead) {
+	_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if len(b.Extra) == 0 {
 			return
 		}
@@ -6221,7 +6221,7 @@ func applyProviderConnectivityRouteExclusion(
 		repeatCount   int
 	)
 	endpoint, timeoutClass := parseProviderConnectivityFacts(report)
-	if err := store.Update(beadID, func(b *bead.Bead) {
+	if err := store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		existing := readFailedRoutes(b.Extra)
 		for _, e := range existing {
 			if e.Provider == report.Provider && e.Model == report.Model {

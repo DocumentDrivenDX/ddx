@@ -33,7 +33,7 @@ func newTryProseTestBead(t *testing.T, env *TestEnvironment, id string) *bead.St
 	t.Helper()
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(&bead.Bead{
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:    id,
 		Title: "docs-changing attempt",
 	}))

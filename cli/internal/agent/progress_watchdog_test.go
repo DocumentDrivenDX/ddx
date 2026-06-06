@@ -132,7 +132,7 @@ func TestAttemptTerminatesWhenBeadClosedExternally(t *testing.T) {
 	}
 
 	// A parallel attempt closes the same bead.
-	require.NoError(t, store.Close(beadID))
+	require.NoError(t, store.Close(context.Background(), beadID))
 
 	select {
 	case <-done:

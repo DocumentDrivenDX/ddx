@@ -147,7 +147,7 @@ func (r *preMergeRepo) makeBead(id string, extra map[string]any) *bead.Bead {
 		Labels: []string{"phase:2", "area:checks"},
 		Extra:  extra,
 	}
-	if err := r.store.Create(b); err != nil {
+	if err := r.store.Create(context.Background(), b); err != nil {
 		r.t.Fatalf("create bead: %v", err)
 	}
 	got, err := r.store.Get(id)

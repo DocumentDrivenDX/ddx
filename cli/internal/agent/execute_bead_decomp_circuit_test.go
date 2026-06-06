@@ -36,9 +36,11 @@ func TestMixedCommitCooldown(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-mixed-cb", Title: "Mixed commit circuit breaker test"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Append a prior mixed_commit execute-bead event (the 1st occurrence).
+		// Append a prior mixed_commit execute-bead event (the 1st occurrence).
+		Background(), b))
+
 	require.NoError(t, store.AppendEvent("ddx-mixed-cb", bead.BeadEvent{
 		Kind:      "execute-bead",
 		Summary:   ExecuteBeadStatusExecutionFailed,
@@ -86,9 +88,11 @@ func TestMixedCommitCooldown_FirstOccurrenceDoesNotPark(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-mixed-first", Title: "First mixed commit; must not park"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// No prior events — this is the first occurrence.
+		// No prior events — this is the first occurrence.
+		Background(), b))
+
 	var callCount int32
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -126,9 +130,11 @@ func TestMixedCommitCooldown_OutsideWindowDoesNotPark(t *testing.T) {
 	require.NoError(t, store.Init(context.Background()))
 
 	b := &bead.Bead{ID: "ddx-mixed-old", Title: "Old mixed commit; must not park"}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(context.
 
-	// Prior event is older than the 24h window.
+		// Prior event is older than the 24h window.
+		Background(), b))
+
 	require.NoError(t, store.AppendEvent("ddx-mixed-old", bead.BeadEvent{
 		Kind:      "execute-bead",
 		Summary:   ExecuteBeadStatusExecutionFailed,

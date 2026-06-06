@@ -41,7 +41,7 @@ func TestPreClaim_MultiWorkerParallelClaimUnderTrackerChurn(t *testing.T) {
 
 	const nBeads = 6
 	for i := 0; i < nBeads; i++ {
-		require.NoError(t, store.Create(&bead.Bead{
+		require.NoError(t, store.Create(context.Background(), &bead.Bead{
 			ID:       fmt.Sprintf("ddx-mw-%02d", i),
 			Title:    fmt.Sprintf("multiworker bead %02d", i),
 			Priority: 0,

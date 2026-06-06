@@ -91,7 +91,7 @@ func setupArtifactTestWorktree(t *testing.T, wtPath, beadID, specID string, with
 		b.Extra = map[string]any{"spec-id": specID}
 		writeArtifactDoc(t, wtPath, specID)
 	}
-	if err := store.Create(b); err != nil {
+	if err := store.Create(context.Background(), b); err != nil {
 		t.Fatal(err)
 	}
 	if withGate {
