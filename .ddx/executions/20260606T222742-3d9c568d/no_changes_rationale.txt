@@ -1,0 +1,2 @@
+status: open
+reason: retryable - `go test ./internal/bead/...` fails reproducibly in `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait above the 1000ms budget in this environment; the doctor regression itself is green, but the broader package gate is still red.
