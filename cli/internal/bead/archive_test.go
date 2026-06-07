@@ -198,18 +198,58 @@ func TestArchiveGetWithArchiveFallsBack(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestStoreGetWithArchive_UsesSuppliedContext(t *testing.T) {
+func testStoreGetWithArchiveHonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 	s, _ := archiveTestStore(t)
 	require.NoError(t, s.WriteAll([]Bead{
+		{
+			ID:        "ddx-active",
+			Title:     "active",
+			Status:    StatusOpen,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: time.Now().UTC().Add(-time.Hour),
+			UpdatedAt: time.Now().UTC(),
+		},
 		closedBeadAt("ddx-archived", "archived", time.Now().UTC().Add(-60*24*time.Hour)),
 	}))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := s.GetWithArchive(ctx, "ddx-archived")
+	_, err := s.GetWithArchive(ctx, "ddx-active")
 	require.Error(t, err)
+}
+
+func testStoreGetWithArchiveForwardsCallerContext(t *testing.T) {
+	s, _ := archiveTestStore(t)
+	require.NoError(t, s.WriteAll([]Bead{
+		closedBeadAt("ddx-archived", "archived", time.Now().UTC().Add(-60*24*time.Hour)),
+	}))
+
+	policy := defaultArchivePolicy()
+	policy.MinActiveCount = 0
+	_, err := s.Archive(policy)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err = s.GetWithArchive(ctx, "ddx-archived")
+	require.Error(t, err)
+}
+
+func TestStoreGetWithArchiveHonorsCanceledContext(t *testing.T) {
+	testStoreGetWithArchiveHonorsCanceledContext(t)
+}
+
+func TestStoreGetWithArchiveForwardsCallerContext(t *testing.T) {
+	testStoreGetWithArchiveForwardsCallerContext(t)
+}
+
+func TestStoreGetWithArchive_(t *testing.T) {
+	t.Run("HonorsCanceledContext", testStoreGetWithArchiveHonorsCanceledContext)
+	t.Run("ForwardsCallerContext", testStoreGetWithArchiveForwardsCallerContext)
 }
 
 func TestArchiveReadyAndBlockedQueryActiveOnly(t *testing.T) {
