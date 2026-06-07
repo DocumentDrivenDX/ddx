@@ -1,0 +1,43 @@
+{
+  "bead_id": "ddx-658cb394",
+  "attempt_id": "20260607T082129-7daa40f2",
+  "base_rev": "9f0133e3de703678486bf5caf721001f87b45551",
+  "result_rev": "dfcfd20746248a07bd78a93f40659012f9de3ab9",
+  "implementation_rev": "31a3ead7e448c2a1e0180dc0cfff76e35bcba238",
+  "landed_rev": "dfcfd20746248a07bd78a93f40659012f9de3ab9",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "merged onto current tip",
+  "orchestrator_status": "success",
+  "reason": "merged onto current tip",
+  "candidate_ref": "refs/ddx/iterations/20260607T082129-7daa40f2/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260607T082129-7daa40f2",
+      "result_rev": "31a3ead7e448c2a1e0180dc0cfff76e35bcba238",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-072824dd",
+  "duration_ms": 2943564,
+  "tokens": 20735193,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260607T082129-7daa40f2",
+  "prompt_file": ".ddx/executions/20260607T082129-7daa40f2/prompt.md",
+  "manifest_file": ".ddx/executions/20260607T082129-7daa40f2/manifest.json",
+  "result_file": ".ddx/executions/20260607T082129-7daa40f2/result.json",
+  "usage_file": ".ddx/executions/20260607T082129-7daa40f2/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-07T08:21:44.088435489Z",
+  "finished_at": "2026-06-07T09:10:47.653407279Z"
+}
