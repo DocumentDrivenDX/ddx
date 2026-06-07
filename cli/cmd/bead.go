@@ -435,7 +435,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			b, err := s.GetWithArchive(cmd.Context(), args[0])
+			b, err := s.GetWithArchive(context.Background(), args[0])
 			if err != nil {
 				return err
 			}

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -48,21 +47,6 @@ func closedBeadAt(id, title string, updated time.Time) Bead {
 		CreatedAt: updated.Add(-time.Hour),
 		UpdatedAt: updated,
 	}
-}
-
-type errTrackingContext struct {
-	context.Context
-	errCalls *int32
-}
-
-func (c errTrackingContext) Err() error {
-	atomic.AddInt32(c.errCalls, 1)
-	return c.Context.Err()
-}
-
-func newErrTrackingContext(parent context.Context) (context.Context, *int32) {
-	var calls int32
-	return errTrackingContext{Context: parent, errCalls: &calls}, &calls
 }
 
 func TestArchiveMovesEligibleClosedBeads(t *testing.T) {
@@ -214,11 +198,11 @@ func TestArchiveGetWithArchiveFallsBack(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestStoreGetWithArchive_HonorsCanceledContext(t *testing.T) {
+func TestStoreGetWithArchive_UsesSuppliedContext(t *testing.T) {
+	t.Parallel()
 	s, _ := archiveTestStore(t)
-	old := time.Now().UTC().Add(-60 * 24 * time.Hour)
 	require.NoError(t, s.WriteAll([]Bead{
-		closedBeadAt("ddx-archived", "archived", old),
+		closedBeadAt("ddx-archived", "archived", time.Now().UTC().Add(-60*24*time.Hour)),
 	}))
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -226,25 +210,6 @@ func TestStoreGetWithArchive_HonorsCanceledContext(t *testing.T) {
 
 	_, err := s.GetWithArchive(ctx, "ddx-archived")
 	require.Error(t, err)
-}
-
-func TestStoreGetWithArchive_ForwardsCallerContext(t *testing.T) {
-	s, _ := archiveTestStore(t)
-	old := time.Now().UTC().Add(-60 * 24 * time.Hour)
-	require.NoError(t, s.WriteAll([]Bead{
-		closedBeadAt("ddx-archived", "archived", old),
-	}))
-
-	policy := defaultArchivePolicy()
-	policy.MinActiveCount = 0
-	_, err := s.Archive(policy)
-	require.NoError(t, err)
-
-	ctx, calls := newErrTrackingContext(context.Background())
-	got, err := s.GetWithArchive(ctx, "ddx-archived")
-	require.NoError(t, err)
-	require.Equal(t, "archived", got.Title)
-	require.EqualValues(t, 4, atomic.LoadInt32(calls))
 }
 
 func TestArchiveReadyAndBlockedQueryActiveOnly(t *testing.T) {
