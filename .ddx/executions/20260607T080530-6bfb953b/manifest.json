@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260607T080530-6bfb953b",
+  "bead_id": "ddx-d93e463a",
+  "base_rev": "ebf02fa5b3547abc8d899e1ecf415f7e172c1848",
+  "created_at": "2026-06-07T08:06:07.597812514Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-d93e463a",
+    "title": "bead store: make Get read API ctx-first",
+    "description": "PROBLEM\nTD-027 requires the foundational bead Store read surface to be typed and ctx-first, but Store.Get still accepts untyped variadic arguments. This keeps the bead lookup API ambiguous and forces callers through argument scanning for both context and bead ID.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/backend.go:80-84 declares BeadReader with Get(args ...any).\n- cli/internal/bead/store.go:599-625 exposes Store.Get(args ...any), using argument scanning for the bead ID and storeCallContext from cli/internal/bead/store.go:134-141.\n\nPROPOSED FIX\nChange only Store.Get to the typed ctx-first signature Get(ctx context.Context, id string). Update the corresponding BeadReader interface method in cli/internal/bead/backend.go. Migrate only Get callsites across the repo to pass context and id explicitly. Add deterministic bead package tests proving canceled contexts are honored and the id is supplied through the typed parameter rather than variadic scanning.\n\nNON-SCOPE\n- Init and GenID signature migration.\n- Mutation APIs: Create, Update, and Close.\n- Event method ctx threading: AppendEvent, Events, and EventsByKind.\n- Removing workflow helper methods beyond the foundational signatures this bead changes.\n- Caller migration unrelated to Get.\n- ReadAll, ReadAllFiltered, and GetWithArchive signature migration; those are assigned to sibling children.\n- Do not implement parent acceptance criteria assigned to sibling child beads.\n\nGOVERNING ARTIFACT\n- TD-027.\n\nPARENT/DEPS\n- Parent/split source: ddx-464feba2.\n- Immediate parent bead: ddx-cc298105.\n- Deps: no additional deps; this child can land independently of the setup/id, mutation signature, list read, and GetWithArchive children.",
+    "acceptance": "1. TestStoreGetHonorsCanceledContext and TestStoreGetUsesTypedIDArgument are added or updated under cli/internal/bead and pass with cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestStoreGet_'.\n2. All Get callsites compile without variadic context or id arguments, and cd cli \u0026\u0026 go test ./internal/bead/... passes.\n3. lefthook run pre-commit passes.",
+    "parent": "ddx-0d3912d8",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "spec:TD-027",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-d93e463a\",\"fingerprint\":\"23dc93fca372251ff625d7ea7a9459c81bda2a83f9d8d69627cb01719482ff63\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"23dc93fca372251ff625d7ea7a9459c81bda2a83f9d8d69627cb01719482ff63\"}",
+          "created_at": "2026-06-07T08:03:00.235389542Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T080530-6bfb953b",
+    "prompt": ".ddx/executions/20260607T080530-6bfb953b/prompt.md",
+    "manifest": ".ddx/executions/20260607T080530-6bfb953b/manifest.json",
+    "result": ".ddx/executions/20260607T080530-6bfb953b/result.json",
+    "checks": ".ddx/executions/20260607T080530-6bfb953b/checks.json",
+    "usage": ".ddx/executions/20260607T080530-6bfb953b/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d93e463a-20260607T080530-6bfb953b"
+  },
+  "prompt_sha": "6ede4d00759a64fbea10f82c05dc734aec45e34d5dccb9615fd3d605d6a8edd1"
+}
