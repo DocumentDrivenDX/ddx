@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260607T033203-c97f1a7e",
+  "bead_id": "ddx-5255a25c",
+  "base_rev": "335d37bfbcb9dda64e8f43e57b551d7897cc3084",
+  "created_at": "2026-06-07T03:32:17.935034014Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-5255a25c",
+    "title": "Detect and repair parent ancestor deps in bead doctor",
+    "description": "PROBLEM: Existing trackers can already contain `child -\u003e parent` or `child -\u003e ancestor` dependency edges. Without a diagnostic and repair path, those trackers remain wedged even after future writers stop producing bad edges.\n\nROOT CAUSE WITH FILE:LINE: `ddx bead doctor` is wired in `cli/cmd/bead_doctor.go:31` and delegates normal scan/fix to `bead.BeadDoctor` / `bead.BeadDoctorFix` at `cli/cmd/bead_doctor.go:110`, but `cli/internal/bead/doctor.go:34` only scans oversized fields. It never builds a parent graph or reports dependency edges that intersect the parent chain.\n\nPROPOSED FIX: Extend bead doctor with a `parent_ancestor_in_deps` check that scans all bead rows, walks each bead's parent chain, and reports any dependency target that equals the direct parent or any ancestor. JSON output must be stable and scriptable. `--fix` must remove only offending dependency edges, preserve unrelated deps and events, and remain idempotent. Keep existing oversized-field and dangling-success behavior intact.\n\nNON-SCOPE: Do not modify decomposition prompts. Do not change `ddx work` retry behavior. Do not manually edit tracker storage outside the doctor implementation. Do not remove valid `parent -\u003e child` dependencies.\n\nGOVERNING ARTIFACTS: `docs/triage/decomposition.md:75` makes AC mapping load-bearing; this diagnostic preserves existing child work without lossy tracker rewrites.\n\nINHERITED DEPENDENCIES: none specified by the parent bead.",
+    "acceptance": "1. `ddx bead doctor --json` reports `parent_ancestor_in_deps` findings with stable fields for bead id, offending dependency id, offending ancestor id, and parent chain. Test: TestBeadDoctorDetectsParentAncestorBackEdge.\n\n2. `ddx bead doctor --fix` removes only dependency edges that point to the bead's parent or ancestor, leaves sibling and external deps intact, writes stable output, and is idempotent on a second run. Test: TestBeadDoctorRepairsParentAncestorBackEdge.\n\n3. A fixture representing an existing valid tracker graph passes `ddx bead doctor` without `--fix` and without regression findings. Test: TestBeadDoctorValidGraphSnapshotClean.\n\n4. Verification gate passes: `cd cli \u0026\u0026 go test ./cmd/... ./internal/bead/... -run 'TestBeadDoctorDetectsParentAncestorBackEdge|TestBeadDoctorRepairsParentAncestorBackEdge|TestBeadDoctorValidGraphSnapshotClean' -count=1`.\n\n5. Repository gate passes: `lefthook run pre-commit`.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-07T03:31:58.878174556Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        }
+      ],
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 1993005)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T15:41:25Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T033203-c97f1a7e",
+    "prompt": ".ddx/executions/20260607T033203-c97f1a7e/prompt.md",
+    "manifest": ".ddx/executions/20260607T033203-c97f1a7e/manifest.json",
+    "result": ".ddx/executions/20260607T033203-c97f1a7e/result.json",
+    "checks": ".ddx/executions/20260607T033203-c97f1a7e/checks.json",
+    "usage": ".ddx/executions/20260607T033203-c97f1a7e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-5255a25c-20260607T033203-c97f1a7e"
+  },
+  "prompt_sha": "57d9375ec66e719d8a8496e921e5af890d768c9de82c99157a738a83afd31db8"
+}
