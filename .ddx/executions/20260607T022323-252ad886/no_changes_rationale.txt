@@ -1,0 +1,2 @@
+status: open
+reason: retryable repo-wide gate failure. `cd cli && go test ./...` fails on pre-existing unrelated tests in `internal/agent`, `internal/bead`, `internal/server`, and `internal/server/graphql`; the bead-scoped regression test for the back-edge path passes, but the acceptance gate cannot be satisfied until the baseline failures are fixed.
