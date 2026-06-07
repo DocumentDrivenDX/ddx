@@ -254,7 +254,7 @@ func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
 
 	// The description must be rewritten exactly once: contains the added
 	// text but does not contain it twice (no double-rewrite).
-	got, err := inner.Get(original.ID)
+	got, err := inner.Get(context.Background(), original.ID)
 	require.NoError(t, err)
 	count := strings.Count(got.Description, "Add explicit validation step.")
 	assert.Equal(t, 1, count,
@@ -309,7 +309,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, int32(1), execCalled.Load(), "infra error must fail open and proceed to execution")
 		assert.Equal(t, 1, result.Successes)
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status, "bead must be closed after successful execution")
 	})
@@ -348,7 +348,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, 1, result.Attempts)
 		assert.Equal(t, 1, result.Successes)
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status, "successful best-effort attempt should close normally")
 		assert.NotContains(t, got.Labels, bead.LabelNeedsHuman,
@@ -407,7 +407,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 
 		assert.Equal(t, 0, result.Attempts, "targeted terminal intake outcome must not count as an attempt")
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusProposed, got.Status, "targeted execution may park for operator attention")
 		assert.Empty(t, got.Owner, "bead must be unclaimed after targeted terminal intake")
@@ -470,7 +470,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, 1, result.Successes)
 		assert.Equal(t, 1, result.Attempts)
 
-		gotFirst, err := store.Get(first.ID)
+		gotFirst, err := store.Get(context.Background(), first.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, gotFirst.Status, "successful best-effort attempt should close normally")
 		assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
@@ -508,7 +508,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, 1, result.Attempts)
 		assert.Equal(t, 1, result.Successes)
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status, "successful best-effort attempt should close normally")
 
@@ -551,7 +551,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, 1, result.Attempts)
 		assert.Equal(t, 1, result.Successes)
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status)
 		assert.Contains(t, eventSink.String(), "pre_dispatch_lint.warn")
@@ -587,7 +587,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 
 		assert.Equal(t, 0, result.Attempts, "targeted lint block must not count as an attempt")
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusOpen, got.Status, "targeted lint block should unclaim without parking")
 
@@ -619,7 +619,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, int32(1), execCalled.Load(), "actionable_atomic must proceed to implementation")
 		assert.Equal(t, 1, result.Successes)
 
-		got, err := store.Get(candidate.ID)
+		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status)
 	})
@@ -744,7 +744,7 @@ func TestExecuteBeadWorker_ClaimLeaseStaysFreshDuringPreClaimIntake(t *testing.T
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "bead must be claimed once")
 	assert.Equal(t, int32(1), attemptCount.Load(), "exactly one attempt should run")
-	got, err := inner.Get(beadID)
+	got, err := inner.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -870,7 +870,7 @@ func TestExecuteBeadWorker_StaggeredSecondWorkerCannotReclaimDuringIntake(t *tes
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "worker B must not reclaim the bead")
 	assert.Equal(t, int32(1), workerAAttempts.Load(), "worker A must complete one attempt")
 	assert.Equal(t, int32(0), workerBAttempts.Load(), "worker B must not start an attempt while the lease is fresh")
-	got, err := inner.Get(beadID)
+	got, err := inner.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }

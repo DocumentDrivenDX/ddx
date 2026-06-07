@@ -28,7 +28,7 @@ func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 		Background(), b))
 
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, got.Extra[consecutiveLadderExhaustionsKey])
 
@@ -74,7 +74,7 @@ func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 	assert.Equal(t, b.ID, hookBeadID)
 	assert.Equal(t, PersistentExecutionFailed, hookClass)
 
-	updated, err := store.Get(b.ID)
+	updated, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, consecutiveLadderExhaustionsValue(updated.Extra[consecutiveLadderExhaustionsKey]), 2,
 		"counter must be >= 2 after threshold reached")
@@ -131,7 +131,7 @@ func TestRecoveryManualLabel_SkipsAutoRecovery(t *testing.T) {
 
 	assert.False(t, hookCalled, "hook must not be invoked when recovery:manual label is set")
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "bead must be parked to proposed")
 }

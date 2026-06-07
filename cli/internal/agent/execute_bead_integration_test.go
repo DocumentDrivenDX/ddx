@@ -76,7 +76,7 @@ func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 
 	// Bead must be closed.
 	beadStore := bead.NewStore(ddxDir)
-	got, err := beadStore.Get(beadID)
+	got, err := beadStore.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status, "bead should be closed after successful merge")
 	assert.NotEmpty(t, got.Extra["closing_commit_sha"], "closing_commit_sha must be recorded")
@@ -136,7 +136,7 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 
 	// Bead must still be open.
 	beadStore := bead.NewStore(ddxDir)
-	got, err := beadStore.Get(beadID)
+	got, err := beadStore.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead should remain open on first no_changes")
 
@@ -290,7 +290,7 @@ func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
 
 	// Bead must be closed.
 	beadStore := bead.NewStore(ddxDir)
-	got, err := beadStore.Get(beadID)
+	got, err := beadStore.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -342,7 +342,7 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 
 	// Bead stays open.
 	beadStore := bead.NewStore(ddxDir)
-	got, err := beadStore.Get(beadID)
+	got, err := beadStore.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead should remain open after failed-exit preservation")
 
@@ -506,7 +506,7 @@ func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) 
 
 	// Bead must be closed exactly once.
 	beadStore := bead.NewStore(ddxDir)
-	got, err := beadStore.Get(beadID)
+	got, err := beadStore.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -576,11 +576,11 @@ func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) 
 
 	// First bead must be closed; second must remain open.
 	beadStore := bead.NewStore(ddxDir)
-	first, err := beadStore.Get("ddx-int-0001")
+	first, err := beadStore.Get(context.Background(), "ddx-int-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, first.Status, "first bead must be closed")
 
-	second, err := beadStore.Get("ddx-int-0002")
+	second, err := beadStore.Get(context.Background(), "ddx-int-0002")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, second.Status, "second bead must remain open after context cancel")
 }
@@ -639,7 +639,7 @@ func TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast(t *testing.
 	assert.Equal(t, 1, result.Successes, "specific-rationale no_changes should count as success (already_satisfied)")
 
 	beadStore := bead.NewStore(ddxDir)
-	got, err := beadStore.Get(beadID)
+	got, err := beadStore.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status,
 		"bead must be closed as already_satisfied when rationale cites a commit SHA")

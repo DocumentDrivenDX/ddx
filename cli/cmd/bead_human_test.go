@@ -163,7 +163,7 @@ func TestBeadHumanResolveRetryRequiresNote(t *testing.T) {
 	_, err = executeCommand(factory.NewRootCommand(), "bead", "human", "resolve", nh.ID, "--action", "retry", "--note", "operator approved retry")
 	require.NoError(t, err)
 
-	got, err := store.Get(nh.ID)
+	got, err := store.Get(context.Background(), nh.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.False(t, hasTestLabel(got.Labels, bead.LabelNeedsHuman))
@@ -190,7 +190,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 		_, err = executeCommand(factory.NewRootCommand(), "bead", "human", "resolve", parent.ID, "--action", "split", "--children", child.ID, "--note", "split manually")
 		require.NoError(t, err)
 
-		got, err := store.Get(parent.ID)
+		got, err := store.Get(context.Background(), parent.ID)
 		require.NoError(t, err)
 		assert.False(t, hasTestLabel(got.Labels, bead.LabelNeedsHuman))
 		assert.Contains(t, got.DepIDs(), child.ID)
@@ -203,7 +203,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 		_, err := executeCommand(factory.NewRootCommand(), "bead", "human", "resolve", nh.ID, "--action", "obsolete", "--note", "superseded")
 		require.NoError(t, err)
 
-		got, err := store.Get(nh.ID)
+		got, err := store.Get(context.Background(), nh.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status)
 		events, err := store.Events(nh.ID)
@@ -220,7 +220,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 		_, err := executeCommand(factory.NewRootCommand(), "bead", "human", "resolve", nh.ID, "--action", "defer", "--note", "wait for operator window")
 		require.NoError(t, err)
 
-		got, err := store.Get(nh.ID)
+		got, err := store.Get(context.Background(), nh.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusProposed, got.Status)
 		assert.False(t, hasTestLabel(got.Labels, bead.LabelNeedsHuman))

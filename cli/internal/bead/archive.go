@@ -159,15 +159,15 @@ func (s *Store) Archive(policy ArchivePolicy) ([]string, error) {
 // archive partner, with active-wins precedence. This is the lookup the
 // `ddx bead show` command uses so a closed-and-archived bead remains
 // addressable by ID.
-func (s *Store) GetWithArchive(id string) (*Bead, error) {
-	if b, err := s.Get(context.Background(), id); err == nil {
+func (s *Store) GetWithArchive(ctx context.Context, id string) (*Bead, error) {
+	if b, err := s.Get(ctx, id); err == nil {
 		return b, nil
 	}
 	if s.Collection != DefaultCollection {
 		return nil, fmt.Errorf("bead: not found: %s", id)
 	}
 	archive := s.archivePartner()
-	b, err := archive.Get(context.Background(), id)
+	b, err := archive.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("bead: not found: %s", id)
 	}

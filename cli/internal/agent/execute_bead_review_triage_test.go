@@ -75,7 +75,7 @@ func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 
 	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Second), ""))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	if got.Extra != nil {
@@ -93,7 +93,7 @@ func TestApplyTriageActionDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 
 	require.NoError(t, applyTriageAction(store, b.ID, "ddx", now, triage.ActionEscalatePower, string(escalation.PowerStandard), false))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
 		_, hasHint := got.Extra[legacyRetryFloorKey]
@@ -115,7 +115,7 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 
 	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.PowerStandard)))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
 	if got.Extra != nil {
@@ -142,7 +142,7 @@ func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 
 	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.PowerSmart)))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
@@ -187,7 +187,7 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 
 	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.PowerStandard)))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
 		_, hasHint := got.Extra[legacyRetryFloorKey]

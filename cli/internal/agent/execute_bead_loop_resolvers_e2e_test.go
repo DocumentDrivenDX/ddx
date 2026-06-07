@@ -81,7 +81,7 @@ workers:
 	require.Empty(t, retryStr,
 		"loop must not record RetryAfter on unjustified no_changes by default")
 
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 	_, hasRetry := got.Extra["work-retry-after"]
@@ -157,7 +157,7 @@ workers:
 	require.Equal(t, 1, res1.Attempts, "iteration 1 must run exactly once")
 	require.Equal(t, 1, res1.Successes, "verified rationale closes on the first attempt")
 
-	final, err := store.Get(beadID)
+	final, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", final.Status, "bead must be closed under NoChangesContract verified path")
 

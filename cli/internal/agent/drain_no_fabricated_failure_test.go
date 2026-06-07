@@ -394,7 +394,7 @@ func TestDrain_NoFabricatedFailureSignatures(t *testing.T) {
 		drainReplayDisagreeBeadID,
 		drainReplayLongToolBeadID,
 	} {
-		got, err := store.Get(beadID)
+		got, err := store.Get(context.Background(), beadID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status, "bead %s should merge", beadID)
 		assert.NotEmpty(t, got.Extra["closing_commit_sha"], "bead %s should record a closing commit SHA", beadID)

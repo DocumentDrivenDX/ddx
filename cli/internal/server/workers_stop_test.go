@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -129,7 +130,7 @@ func TestWorkerManagerStopReleasesBeadClaim(t *testing.T) {
 	assert.True(t, cancelled.Load(), "Stop must invoke cancel() so in-process code exits")
 
 	// Bead claim must be released back to open.
-	b, err := store.Get("ddx-stop-claim")
+	b, err := store.Get(context.Background(), "ddx-stop-claim")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"bead must return to open after Stop releases the claim")

@@ -320,7 +320,7 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	assert.True(t, executorCalled, "executor must have been called")
 
 	// Verify the bead was claimed (status should be closed after success).
-	b, storeErr := store.Get("happy-bead-001")
+	b, storeErr := store.Get(context.Background(), "happy-bead-001")
 	require.NoError(t, storeErr)
 	assert.Equal(t, bead.StatusClosed, b.Status, "bead must be closed after successful execution")
 }
@@ -374,7 +374,7 @@ func TestTry_ForceClaimBypassesCooldown(t *testing.T) {
 	require.NoError(t, err, "ddx try --force-claim must execute cooled bead: %s", out)
 	assert.Equal(t, 1, calls, "executor must run once when cooldown is explicitly bypassed")
 
-	got, getErr := store.Get("cooldown-bead-001")
+	got, getErr := store.Get(context.Background(), "cooldown-bead-001")
 	require.NoError(t, getErr)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -495,7 +495,7 @@ func TestForceClaim_PreservesCooldownFieldOnFailure(t *testing.T) {
 	)
 	require.Error(t, err, "forced failure must still exit non-zero: %s", out)
 
-	got, getErr := store.Get("cooldown-bead-preserve")
+	got, getErr := store.Get(context.Background(), "cooldown-bead-preserve")
 	require.NoError(t, getErr)
 	assert.Equal(t, retryAfter, got.Extra[bead.ExtraRetryAfter])
 	assert.Equal(t, "base-rev-1", got.Extra[bead.ExtraCooldownBaseRev])
@@ -756,7 +756,7 @@ func TestTryInterrupt_InFlightAttemptUnclaimsTarget(t *testing.T) {
 	assert.Contains(t, strings.ToLower(out+err.Error()), "context canceled", "try should surface the interrupted outcome")
 	assert.Contains(t, out, "context canceled", "interrupted try should surface the interrupted outcome")
 
-	got, storeErr := store.Get("try-interrupt-001")
+	got, storeErr := store.Get(context.Background(), "try-interrupt-001")
 	require.NoError(t, storeErr)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -777,7 +777,7 @@ func TestTryInterrupt_DoesNotReportOperatorCancel(t *testing.T) {
 	assert.Contains(t, strings.ToLower(out+err.Error()), "context canceled", "try should surface the interrupted outcome")
 	assert.NotContains(t, out, agent.OperatorCancelReason, "plain cancellation must not report operator_cancel")
 
-	got, storeErr := store.Get("try-interrupt-001")
+	got, storeErr := store.Get(context.Background(), "try-interrupt-001")
 	require.NoError(t, storeErr)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)

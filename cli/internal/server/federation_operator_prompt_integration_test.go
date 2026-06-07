@@ -205,7 +205,7 @@ func TestFederation_OperatorPromptSubmit_CoordinatorToSpoke_IdentityUnchanged(t 
 	}
 
 	spokeStore := bead.NewStore(filepath.Join(spokeDir, ddxroot.DirName))
-	persisted, err := spokeStore.Get(out.Data.OperatorPromptSubmit.Bead.ID)
+	persisted, err := spokeStore.Get(context.Background(), out.Data.OperatorPromptSubmit.Bead.ID)
 	if err != nil {
 		t.Fatalf("read spoke bead: %v", err)
 	}

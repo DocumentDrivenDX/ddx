@@ -144,7 +144,7 @@ func TestMigratePreservesData(t *testing.T) {
 
 	// AC4: show works for archived beads.
 	for _, want := range []string{"ddx-c1", "ddx-c2", "ddx-open"} {
-		got, err := s.GetWithArchive(want)
+		got, err := s.GetWithArchive(testCtx(), want)
 		require.NoError(t, err, "GetWithArchive(%s)", want)
 		require.NotNil(t, got)
 		assert.Equal(t, want, got.ID)

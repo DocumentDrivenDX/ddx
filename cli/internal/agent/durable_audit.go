@@ -25,7 +25,7 @@ var (
 )
 
 type durableAuditBeadReader interface {
-	Get(args ...any) (*bead.Bead, error)
+	Get(ctx context.Context, id string) (*bead.Bead, error)
 }
 
 // FinalizeDurableAttemptAudit appends the per-attempt metrics row, when the

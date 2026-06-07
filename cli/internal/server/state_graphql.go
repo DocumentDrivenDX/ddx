@@ -108,7 +108,7 @@ func (s *ServerState) beadSnapshotsForProjectEntry(proj ProjectEntry, pred func(
 		beadStoreOpenHook(proj.Path)
 	}
 	store := bead.NewStore(ddxroot.JoinProject(proj.Path))
-	beads, err := store.ReadAllFiltered(pred)
+	beads, err := store.ReadAllFiltered(context.Background(), pred)
 	if err != nil {
 		return nil
 	}

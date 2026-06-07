@@ -254,7 +254,7 @@ review_max_retries: 5
 	assert.Equal(t, 0, manualRequiredCount,
 		"work must not emit legacy post-land review-manual-required events")
 
-	gotBead, err := store.Get(beadID)
+	gotBead, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", gotBead.Status,
 		"successful work attempt must close directly after candidate-cycle approval")

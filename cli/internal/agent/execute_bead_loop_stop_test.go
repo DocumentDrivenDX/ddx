@@ -274,7 +274,7 @@ func TestStopCondition_BudgetAfterReviewCostPreventsClose(t *testing.T) {
 	require.False(t, out.Approved, "APPROVE whose reviewer cost trips the budget cap must not close the bead")
 	require.NoError(t, out.StoreErr)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	require.NotEqual(t, bead.StatusClosed, got.Status, "bead must remain open when budget is exceeded by reviewer cost")
 

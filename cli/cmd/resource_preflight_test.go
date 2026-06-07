@@ -80,7 +80,7 @@ func TestTryResourcePreflight_FailsBeforeClaim(t *testing.T) {
 	assert.Equal(t, 1, cleanup.calls)
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
@@ -105,7 +105,7 @@ func TestWorkResourcePreflight_FailsBeforeClaim(t *testing.T) {
 	assert.Equal(t, 1, checker.calls)
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
@@ -149,7 +149,7 @@ func TestTryResourceExhaustionEndToEnd_Reclaimable(t *testing.T) {
 	assert.Equal(t, 1, checker.calls)
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)

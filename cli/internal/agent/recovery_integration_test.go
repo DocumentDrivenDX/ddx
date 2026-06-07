@@ -71,7 +71,7 @@ func TestBothFail_ParkProposed(t *testing.T) {
 	assert.False(t, result.Succeeded)
 	assert.Equal(t, "both_failed", result.OutcomeReason)
 
-	got, err := store.Get("ddx-recovery-both-fail")
+	got, err := store.Get(context.Background(), "ddx-recovery-both-fail")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 
@@ -102,7 +102,7 @@ func TestRecoveryCircuitBreaker_AbortsAtCostCap(t *testing.T) {
 	assert.Equal(t, "circuit-breaker", result.OutcomeReason)
 	assert.InDelta(t, 2.10, result.CostUSD, 0.001)
 
-	got, err := store.Get("ddx-recovery-cost-cap")
+	got, err := store.Get(context.Background(), "ddx-recovery-cost-cap")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	body := autoRecoveryFailedBody(t, store, got.ID)
@@ -126,7 +126,7 @@ func TestPerBeadBudgetExhausted_TriggersAutoRecovery(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, escalation.PerBeadBudgetExhaustedReason, result.OutcomeReason)
 
-	got, err := store.Get("ddx-recovery-per-bead-budget")
+	got, err := store.Get(context.Background(), "ddx-recovery-per-bead-budget")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	events, err := store.Events(got.ID)

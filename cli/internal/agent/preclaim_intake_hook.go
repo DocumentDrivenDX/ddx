@@ -464,7 +464,7 @@ func newPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: bead reader required")
 		}
 
-		b, err := store.Get(beadID)
+		b, err := store.Get(ctx, beadID)
 		if err != nil {
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: load bead %s: %w", beadID, err)
 		}

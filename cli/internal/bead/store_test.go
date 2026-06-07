@@ -310,6 +310,36 @@ func TestCreateAndGet(t *testing.T) {
 	assert.Equal(t, b.IssueType, got.IssueType)
 }
 
+func TestStoreReadAll_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := s.ReadAll(ctx)
+	require.Error(t, err)
+}
+
+func TestStoreReadAllFiltered_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := s.ReadAllFiltered(ctx, func(Bead) bool { return true })
+	require.Error(t, err)
+}
+
+func TestStoreGet_RejectsCanceledContext(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := s.Get(ctx, "ddx-missing")
+	require.Error(t, err)
+}
+
 func TestCreateUsesConfiguredPrefix(t *testing.T) {
 	t.Setenv("DDX_BEAD_PREFIX", "")
 	tempDir := t.TempDir()

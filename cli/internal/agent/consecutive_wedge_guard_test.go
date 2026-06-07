@@ -31,7 +31,7 @@ func TestSameBeadTwiceWedgeGuardStopsClaiming(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-1", string(work.PhaseRunning), stale, time.Minute, frozen)
 
-	afterFirst, err := store.Get(beadID)
+	afterFirst, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, afterFirst.Status, "a single wedge releases the bead back to open (re-claimable)")
 	require.Empty(t, afterFirst.Owner, "the wedged lease owner must be cleared")
@@ -44,7 +44,7 @@ func TestSameBeadTwiceWedgeGuardStopsClaiming(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-2", string(work.PhaseRunning), stale, time.Minute, frozen)
 
-	afterSecond, err := store.Get(beadID)
+	afterSecond, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	marker2 := readWedgeMarker(afterSecond.Extra)
 	assert.Equal(t, 2, marker2.Count)
@@ -54,7 +54,7 @@ func TestSameBeadTwiceWedgeGuardStopsClaiming(t *testing.T) {
 	// consecutive_wedge operator-attention event.
 	require.NoError(t, flagConsecutiveWedgeForOperator(store, beadID, "worker-a", marker2, DefaultConsecutiveWedgeThreshold, frozen))
 
-	parked, err := store.Get(beadID)
+	parked, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, parked.Status, "a twice-wedged bead must be parked to proposed for operator attention")
 	assert.Empty(t, parked.Owner, "the parked bead must not be claimed")
@@ -100,14 +100,14 @@ func TestWedgeMarkerResetsOnProgress(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-1", string(work.PhaseRunning), stale, time.Minute, frozen)
 
-	afterWedge, err := store.Get(beadID)
+	afterWedge, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, readWedgeMarker(afterWedge.Extra).Count)
 
 	// Real progress (a resolved route / LLM call / commit) clears the marker.
 	clearConsecutiveWedge(store, beadID)
 
-	afterProgress, err := store.Get(beadID)
+	afterProgress, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	cleared := readWedgeMarker(afterProgress.Extra)
 	assert.Equal(t, 0, cleared.Count, "real progress must reset the consecutive-wedge marker")
@@ -118,7 +118,7 @@ func TestWedgeMarkerResetsOnProgress(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-2", string(work.PhaseRunning), stale, time.Minute, frozen)
 
-	afterSecond, err := store.Get(beadID)
+	afterSecond, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	marker := readWedgeMarker(afterSecond.Extra)
 	assert.Equal(t, 1, marker.Count, "the post-progress wedge must restart the streak at one")
@@ -142,7 +142,7 @@ func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-1", string(work.PhaseRunning), recent, budget, frozen)
 
-	afterRecent, err := store.Get(beadID)
+	afterRecent, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, 0, readWedgeMarker(afterRecent.Extra).Count,
 		"flagWedgedForOperatorAttention must not increment when lastActivityAt is within the budget window")
@@ -153,7 +153,7 @@ func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	recentForRoute := frozen.Add(-30 * time.Second)
 	routeResolutionTimeoutReport(store, beadID, "worker-a", "attempt-2", frozen, timeout, recentForRoute)
 
-	afterRouteRecent, err := store.Get(beadID)
+	afterRouteRecent, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, 0, readWedgeMarker(afterRouteRecent.Extra).Count,
 		"routeResolutionTimeoutReport must not increment when lastActivityAt is within the timeout window")
@@ -163,7 +163,7 @@ func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-3", string(work.PhaseRunning), stale, budget, frozen)
 
-	afterStale, err := store.Get(beadID)
+	afterStale, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, readWedgeMarker(afterStale.Extra).Count,
 		"flagWedgedForOperatorAttention must increment when lastActivityAt is stale (>= budget)")
@@ -174,7 +174,7 @@ func TestWedgeNotRecordedWhenHeartbeatIsRecent(t *testing.T) {
 	staleForRoute := frozen.Add(-2 * timeout)
 	routeResolutionTimeoutReport(store, beadID, "worker-a", "attempt-4", frozen, timeout, staleForRoute)
 
-	afterRouteStale, err := store.Get(beadID)
+	afterRouteStale, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, 1, readWedgeMarker(afterRouteStale.Extra).Count,
 		"routeResolutionTimeoutReport must NOT increment the wedge counter (retryable, D1c)")
@@ -197,7 +197,7 @@ func TestWedgeMarkerClearedOnParkForOperator(t *testing.T) {
 	require.NoError(t, store.Claim(beadID, "worker-a"))
 	flagWedgedForOperatorAttention(store, beadID, "worker-a", "attempt-2", string(work.PhaseRunning), stale, time.Minute, frozen)
 
-	b, err := store.Get(beadID)
+	b, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	marker := readWedgeMarker(b.Extra)
 	require.Equal(t, 2, marker.Count)
@@ -206,7 +206,7 @@ func TestWedgeMarkerClearedOnParkForOperator(t *testing.T) {
 	// Guard's terminal action: park to proposed, which must also clear the marker.
 	require.NoError(t, flagConsecutiveWedgeForOperator(store, beadID, "worker-a", marker, DefaultConsecutiveWedgeThreshold, frozen))
 
-	parked, err := store.Get(beadID)
+	parked, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusProposed, parked.Status, "bead must be parked to proposed")
 	clearedMarker := readWedgeMarker(parked.Extra)
@@ -219,7 +219,7 @@ func TestWedgeMarkerClearedOnParkForOperator(t *testing.T) {
 		ManualReopen: true,
 	}))
 
-	reopened, err := store.Get(beadID)
+	reopened, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, reopened.Status, "bead must be open after operator reopen")
 	assert.False(t, consecutiveWedgeGuardTrips(readWedgeMarker(reopened.Extra), DefaultConsecutiveWedgeThreshold),
@@ -260,7 +260,7 @@ func TestWedgeMarkerClearedOnOperatorReopenPreD3(t *testing.T) {
 		Reason:           "simulated pre-d3 park",
 	}, nil))
 
-	preReopen, err := store.Get(beadID)
+	preReopen, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusProposed, preReopen.Status)
 	require.Equal(t, DefaultConsecutiveWedgeThreshold, readWedgeMarker(preReopen.Extra).Count,
@@ -271,7 +271,7 @@ func TestWedgeMarkerClearedOnOperatorReopenPreD3(t *testing.T) {
 		ManualReopen: true,
 	}))
 
-	reopened, err := store.Get(beadID)
+	reopened, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, reopened.Status)
 	clearedMarker := readWedgeMarker(reopened.Extra)
@@ -313,7 +313,7 @@ func TestReopenedBeadNotReparkedByGuard(t *testing.T) {
 	}, nil))
 
 	// Sanity: bead is proposed with marker intact (the regression state).
-	preReopen, err := store.Get(beadID)
+	preReopen, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusProposed, preReopen.Status)
 	require.True(t, consecutiveWedgeGuardTrips(readWedgeMarker(preReopen.Extra), DefaultConsecutiveWedgeThreshold),
@@ -326,7 +326,7 @@ func TestReopenedBeadNotReparkedByGuard(t *testing.T) {
 	}))
 
 	// Guard check on the next drain iteration: must NOT trip.
-	afterReopen, err := store.Get(beadID)
+	afterReopen, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, afterReopen.Status)
 	guardMarker := readWedgeMarker(afterReopen.Extra)

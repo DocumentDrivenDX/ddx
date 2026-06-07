@@ -88,7 +88,7 @@ func TestPreCloseReviewFixableGap_PreventsCloseAndSchedulesRepair(t *testing.T) 
 	assert.Contains(t, fixableEv.Body, "result_rev="+resultRev)
 
 	// Bead must remain open.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status, "bead must not be closed on review_fixable_gap")
 }

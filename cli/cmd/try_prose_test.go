@@ -152,7 +152,7 @@ func TestTryProseFindings_AdvisoryByDefault(t *testing.T) {
 	out, err := executeCommand(root, "try", "advisory-bead-001", "--no-review", "--no-review-i-know-what-im-doing")
 	require.NoError(t, err, "ddx try with advisory prose findings must still exit zero: %s", out)
 
-	b, err := store.Get("advisory-bead-001")
+	b, err := store.Get(context.Background(), "advisory-bead-001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, b.Status,
 		"prose findings must not block closure; bead must be closed after successful attempt")
@@ -179,7 +179,7 @@ func TestTryProseFindings_FedBackBeforeFinalization(t *testing.T) {
 		mu.Lock()
 		defer mu.Unlock()
 		hookFired = true
-		if b, err := store.Get(beadID); err == nil {
+		if b, err := store.Get(context.Background(), beadID); err == nil {
 			statusAtHook = b.Status
 		}
 		return nil
@@ -196,7 +196,7 @@ func TestTryProseFindings_FedBackBeforeFinalization(t *testing.T) {
 		"prose hook must run before CloseWithEvidence while the live worker claim still lives only in the sidecar lease")
 
 	// Sanity: after the loop completes the bead must be closed.
-	b, err := store.Get("timing-bead-001")
+	b, err := store.Get(context.Background(), "timing-bead-001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, b.Status)
 }

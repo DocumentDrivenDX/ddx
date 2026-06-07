@@ -511,7 +511,7 @@ func graphqlPOSTForTestReturningBody(t *testing.T, h http.Handler, query string)
 func legacyEfficacyRowKeysForTest(t *testing.T, store *bead.Store) map[string]struct{} {
 	t.Helper()
 	out := map[string]struct{}{}
-	beads, err := store.ReadAll()
+	beads, err := store.ReadAll(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -129,7 +129,7 @@ func TestInjectQueueBeadIdempotent(t *testing.T) {
 	}
 
 	// Verify the bead was created with status=open.
-	bead1, err := store.Get(id1)
+	bead1, err := store.Get(testCtx(), id1)
 	if err != nil {
 		t.Fatalf("Get bead: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestExecuteLoopDispatchBeadKindMatching(t *testing.T) {
 	}
 
 	// Verify beads are retrievable and have correct kinds.
-	review, err := store.Get(reviewID)
+	review, err := store.Get(testCtx(), reviewID)
 	if err != nil {
 		t.Fatalf("Get review bead: %v", err)
 	}
@@ -249,7 +249,7 @@ func TestExecuteLoopDispatchBeadKindMatching(t *testing.T) {
 		t.Errorf("expected review bead kind=%s, got %s", IssueTypeReviewFinding, review.IssueType)
 	}
 
-	align, err := store.Get(alignID)
+	align, err := store.Get(testCtx(), alignID)
 	if err != nil {
 		t.Fatalf("Get align bead: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestInjectPayloadStorage(t *testing.T) {
 		t.Fatalf("Inject: %v", err)
 	}
 
-	bead, err := store.Get(id)
+	bead, err := store.Get(testCtx(), id)
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -425,7 +425,7 @@ func TestInjectReviewFindingFullLifecycle(t *testing.T) {
 	}
 
 	// Retrieve the injected bead and verify its properties.
-	bead, err := store.Get(reviewID)
+	bead, err := store.Get(testCtx(), reviewID)
 	if err != nil {
 		t.Fatalf("Get injected bead: %v", err)
 	}

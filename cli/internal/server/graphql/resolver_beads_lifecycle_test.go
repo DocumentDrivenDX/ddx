@@ -349,7 +349,7 @@ func TestGraphQLBeadCancelTerminal(t *testing.T) {
 	}
 
 	// Verify dependent is NOT automatically closed
-	dep, err := store.Get(dependent.ID)
+	dep, err := store.Get(context.Background(), dependent.ID)
 	if err != nil {
 		t.Fatalf("store.Get dependent: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestGraphQLBeadBlockExternal(t *testing.T) {
 	}
 
 	// Verify ExternalBlockerReason was persisted
-	b, err := store.Get(openBead.ID)
+	b, err := store.Get(context.Background(), openBead.ID)
 	if err != nil {
 		t.Fatalf("store.Get: %v", err)
 	}

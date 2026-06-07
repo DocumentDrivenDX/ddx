@@ -8,6 +8,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -68,7 +69,7 @@ func TestBeadCreateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 		}
 		// Extra is json:"-" on Bead so it is not in the REST response; read from store.
 		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-		b, err := store.Get(got.ID)
+		b, err := store.Get(context.Background(), got.ID)
 		if err != nil {
 			t.Fatalf("store.Get: %v", err)
 		}
@@ -140,7 +141,7 @@ func TestBeadCreateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 			t.Fatalf("parse bead JSON: %v", err)
 		}
 		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-		b, err := store.Get(got.ID)
+		b, err := store.Get(context.Background(), got.ID)
 		if err != nil {
 			t.Fatalf("store.Get: %v", err)
 		}
@@ -246,7 +247,7 @@ func TestBeadUpdateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 		}
 
 		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-		b, err := store.Get("bx-001")
+		b, err := store.Get(context.Background(), "bx-001")
 		if err != nil {
 			t.Fatalf("store.Get after set: %v", err)
 		}
@@ -265,7 +266,7 @@ func TestBeadUpdateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 			t.Fatalf("unset: expected 200, got %d: %s", w2.Code, w2.Body.String())
 		}
 
-		b2, err := store.Get("bx-001")
+		b2, err := store.Get(context.Background(), "bx-001")
 		if err != nil {
 			t.Fatalf("store.Get after unset: %v", err)
 		}
@@ -403,7 +404,7 @@ func TestBeadUpdateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 		}
 
 		store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-		b, err := store.Get("bx-001")
+		b, err := store.Get(context.Background(), "bx-001")
 		if err != nil {
 			t.Fatalf("store.Get after MCP set: %v", err)
 		}
@@ -418,7 +419,7 @@ func TestBeadUpdateMutationSpec_ParityAcrossCLIRESTMCP(t *testing.T) {
 			t.Fatalf("unset: expected 200, got %d", w2.Code)
 		}
 
-		b2, err := store.Get("bx-001")
+		b2, err := store.Get(context.Background(), "bx-001")
 		if err != nil {
 			t.Fatalf("store.Get after MCP unset: %v", err)
 		}
@@ -464,7 +465,7 @@ func TestBeadClaimUnclaimAreDedicatedEndpoints(t *testing.T) {
 	}
 	// Verify no claimed-at Extra key was set (claim flow is dedicated, not generic).
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	b, err := store.Get("bx-001")
+	b, err := store.Get(context.Background(), "bx-001")
 	if err != nil {
 		t.Fatalf("store.Get: %v", err)
 	}

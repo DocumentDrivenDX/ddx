@@ -417,7 +417,7 @@ func TestPreClaimHookDivergedSkipsBead(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 
 	// Bead must still be open (not claimed).
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, "claimed", got.Status, "bead should not have been claimed")
 }

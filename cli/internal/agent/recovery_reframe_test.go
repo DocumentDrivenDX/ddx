@@ -90,7 +90,7 @@ func TestPostLadderExhaustion_TriggersReframe(t *testing.T) {
 
 	assert.True(t, reframeDispatched, "reframer must be dispatched for SpecGap class")
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must be open after successful reframe")
 	assert.Equal(t, strings.TrimSpace(newDesc), strings.TrimSpace(got.Description), "description must be updated")

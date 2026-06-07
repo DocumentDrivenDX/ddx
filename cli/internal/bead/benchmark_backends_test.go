@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -55,7 +56,7 @@ func benchmarkShow(b *testing.B, makeStore benchStoreMaker) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		id := fmt.Sprintf("bench-%04d", i%benchFixtureSize)
-		if _, err := s.GetWithArchive(id); err != nil {
+		if _, err := s.GetWithArchive(context.Background(), id); err != nil {
 			b.Fatal(err)
 		}
 	}

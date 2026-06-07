@@ -22,7 +22,7 @@ func TestWatchdogFiresOnPhaseEmptyHeartbeats(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	beadID := first.ID
 	require.NoError(t, store.Claim(beadID, "worker-a"))
-	claimed, err := store.Get(beadID)
+	claimed, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusInProgress, claimed.Status)
 
@@ -65,7 +65,7 @@ func TestWatchdogFiresOnPhaseEmptyHeartbeats(t *testing.T) {
 	}
 
 	// The lease was released atomically: status back to open, owner cleared.
-	released, err := store.Get(beadID)
+	released, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, released.Status, "the wedged lease must be released to open")
 	assert.Empty(t, released.Owner, "the claim owner must be cleared on release")
@@ -100,7 +100,7 @@ func TestAttemptTerminatesWhenBeadClosedExternally(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	beadID := first.ID
 	require.NoError(t, store.Claim(beadID, "worker-a"))
-	claimed, err := store.Get(beadID)
+	claimed, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusInProgress, claimed.Status)
 	require.Equal(t, "worker-a", claimed.Owner)
@@ -149,7 +149,7 @@ func TestAttemptTerminatesWhenBeadClosedExternally(t *testing.T) {
 
 	// The lease was released (owner cleared) and the bead stays closed — the
 	// work is done, so the attempt is not reopened or marked failed.
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status, "an externally-closed bead must stay closed")
 	assert.Empty(t, got.Owner, "the lease owner must be cleared on release")

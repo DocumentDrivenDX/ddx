@@ -29,7 +29,7 @@ func (m *mockBeadEventAppender) ReadyExecution() ([]bead.Bead, error) {
 	return nil, nil
 }
 
-func (m *mockBeadEventAppender) Get(args ...any) (*bead.Bead, error) {
+func (m *mockBeadEventAppender) Get(context.Context, string) (*bead.Bead, error) {
 	return nil, nil
 }
 

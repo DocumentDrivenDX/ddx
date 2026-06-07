@@ -101,7 +101,7 @@ func TestWatchdogSweepReapsStalledWorker(t *testing.T) {
 	assert.True(t, cancelled.Load(), "watchdog must invoke cancel() for in-process workers")
 
 	// AC: bead claim must be released back to open.
-	b, err := store.Get("ddx-wd-01")
+	b, err := store.Get(context.Background(), "ddx-wd-01")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"bead must return to open after watchdog releases the claim")

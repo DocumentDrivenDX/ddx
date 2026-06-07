@@ -181,7 +181,7 @@ func newTestStateProvider(workDir string, store *bead.Store) *testStateProvider 
 	now := time.Now()
 	projID := "proj-integration-" + filepath.Base(workDir)
 
-	allBeads, _ := store.ReadAll()
+	allBeads, _ := store.ReadAll(context.Background())
 	snaps := make([]ddxgraphql.BeadSnapshot, 0, len(allBeads))
 	for _, b := range allBeads {
 		snaps = append(snaps, ddxgraphql.BeadSnapshot{
@@ -633,7 +633,7 @@ func TestIntegration_Mutation_BeadCreate(t *testing.T) {
 	}
 
 	// Verify the bead is persisted to the real store on disk.
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	if err != nil {
 		t.Fatalf("store.Get after create: %v", err)
 	}

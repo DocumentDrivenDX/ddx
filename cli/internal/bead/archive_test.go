@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -185,16 +186,30 @@ func TestArchiveGetWithArchiveFallsBack(t *testing.T) {
 	require.Equal(t, []string{"ddx-archived"}, moved)
 
 	// AC2: show resolves IDs from either collection.
-	b, err := s.GetWithArchive("ddx-archived")
+	b, err := s.GetWithArchive(testCtx(), "ddx-archived")
 	require.NoError(t, err)
 	assert.Equal(t, "to be archived", b.Title)
 
-	b, err = s.GetWithArchive("ddx-active")
+	b, err = s.GetWithArchive(testCtx(), "ddx-active")
 	require.NoError(t, err)
 	assert.Equal(t, "still active", b.Title)
 
-	_, err = s.GetWithArchive("ddx-missing")
+	_, err = s.GetWithArchive(testCtx(), "ddx-missing")
 	assert.Error(t, err)
+}
+
+func TestStoreGetWithArchive_UsesSuppliedContext(t *testing.T) {
+	t.Parallel()
+	s, _ := archiveTestStore(t)
+	require.NoError(t, s.WriteAll([]Bead{
+		closedBeadAt("ddx-archived", "archived", time.Now().UTC().Add(-60*24*time.Hour)),
+	}))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := s.GetWithArchive(ctx, "ddx-archived")
+	require.Error(t, err)
 }
 
 func TestArchiveReadyAndBlockedQueryActiveOnly(t *testing.T) {
@@ -293,7 +308,7 @@ func TestArchiveOpportunisticTriggerOnClose(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, active, "close-time maintenance should drain eligible closed rows once the active file crosses the size threshold")
 
-	target, err := s.GetWithArchive("ddx-target")
+	target, err := s.GetWithArchive(testCtx(), "ddx-target")
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, target.Status)
 }

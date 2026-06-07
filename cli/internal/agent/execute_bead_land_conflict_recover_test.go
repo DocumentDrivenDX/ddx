@@ -57,7 +57,7 @@ func TestExecuteBeadLoopLandConflict_AutoRecoverySucceeds_BeadCloses(t *testing.
 	assert.Equal(t, 1, result.Successes, "auto-recovered bead must count as a success")
 	assert.Equal(t, 0, result.Failures)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status, "auto-recovered bead must be closed")
 	assert.Equal(t, "recovereddeadbeef1234", got.Extra["closing_commit_sha"],
@@ -122,7 +122,7 @@ func TestExecuteBeadLoopLandConflict_AutoRecoverFails_EscalatesResolver(t *testi
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, 0, result.Successes)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status,
 		"land_conflict_unresolvable must NOT close the bead")
@@ -222,7 +222,7 @@ func TestExecuteBeadLoopLandConflict_BlockingResolver_Proposed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, ExecuteBeadStatusLandConflictOperatorRequired, result.LastFailureStatus)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "blocking resolver must move bead to proposed")
 	assert.Empty(t, got.Owner, "bead must be unclaimed")
@@ -285,7 +285,7 @@ func TestExecuteBeadLoopExecutionFailed_WithPreservedCommit_AttemptsRecovery(t *
 	assert.Equal(t, ExecuteBeadStatusLandConflictUnresolvable, result.LastFailureStatus,
 		"after recovery failure the bead must park as land_conflict_unresolvable")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must stay open")
 	assert.Empty(t, got.Owner, "bead must be unclaimed")
@@ -332,7 +332,7 @@ func TestExecuteBeadLoopExecutionFailed_NoPreserveRef_SkipsRecovery(t *testing.T
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.LastFailureStatus,
 		"status must remain execution_failed when recovery is skipped")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
@@ -376,7 +376,7 @@ func TestExecuteBeadLoopLandConflict_EmptyProjectRoot_SkipsRecovery(t *testing.T
 	assert.Equal(t, ExecuteBeadStatusLandConflict, result.LastFailureStatus,
 		"status must remain land_conflict when recovery is bypassed")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)

@@ -74,7 +74,7 @@ func TestCommitOutcome_StoreError_SchedulesCooldown_NotExit(t *testing.T) {
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, "loop-error", result.LastFailureStatus)
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 	assert.Equal(t, "loop-error", got.Extra["work-last-status"])

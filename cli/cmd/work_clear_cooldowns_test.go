@@ -52,17 +52,17 @@ func TestClearCooldowns_All(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "cleared 2 cooldown(s)")
 
-	got1, err := store.Get(b1.ID)
+	got1, err := store.Get(context.Background(), b1.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got1.Extra[bead.ExtraRetryAfter], "retry-after should be cleared on b1")
 	assert.Empty(t, got1.Extra[bead.ExtraLastStatus], "last-status should be cleared on b1")
 	assert.Empty(t, got1.Extra[bead.ExtraLastDetail], "last-detail should be cleared on b1")
 
-	got2, err := store.Get(b2.ID)
+	got2, err := store.Get(context.Background(), b2.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got2.Extra[bead.ExtraRetryAfter], "retry-after should be cleared on b2")
 
-	got3, err := store.Get(b3.ID)
+	got3, err := store.Get(context.Background(), b3.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got3.Extra[bead.ExtraRetryAfter], "b3 had no cooldown; still empty")
 }
@@ -84,15 +84,15 @@ func TestClearCooldowns_ByStatus(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "cleared 2 cooldown(s)")
 
-	got1, err := store.Get(b1.ID)
+	got1, err := store.Get(context.Background(), b1.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got1.Extra[bead.ExtraRetryAfter], "b1 push_failed cooldown should be cleared")
 
-	got2, err := store.Get(b2.ID)
+	got2, err := store.Get(context.Background(), b2.ID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, got2.Extra[bead.ExtraRetryAfter], "b2 no_changes cooldown should remain")
 
-	got3, err := store.Get(b3.ID)
+	got3, err := store.Get(context.Background(), b3.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got3.Extra[bead.ExtraRetryAfter], "b3 push_failed cooldown should be cleared")
 }
@@ -113,11 +113,11 @@ func TestClearCooldowns_DryRun(t *testing.T) {
 	assert.Contains(t, out, "would clear 2 cooldown(s)")
 
 	// Verify no mutation occurred
-	got1, err := store.Get(b1.ID)
+	got1, err := store.Get(context.Background(), b1.ID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, got1.Extra[bead.ExtraRetryAfter], "b1 cooldown must not be cleared in dry-run")
 
-	got2, err := store.Get(b2.ID)
+	got2, err := store.Get(context.Background(), b2.ID)
 	require.NoError(t, err)
 	assert.NotEmpty(t, got2.Extra[bead.ExtraRetryAfter], "b2 cooldown must not be cleared in dry-run")
 
@@ -141,7 +141,7 @@ func TestWorkClearCooldownsUsesDDxRootPath(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, out, "cleared 1 cooldown(s)")
 
-	got, err := store.Get(beadWithCooldown.ID)
+	got, err := store.Get(context.Background(), beadWithCooldown.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Extra[bead.ExtraRetryAfter])
 }
