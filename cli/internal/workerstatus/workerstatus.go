@@ -28,6 +28,7 @@ type LiveWorker struct {
 	BeadID            string    `json:"bead_id,omitempty"`
 	AttemptID         string    `json:"attempt_id,omitempty"`
 	Phase             string    `json:"phase,omitempty"`
+	Message           string    `json:"message,omitempty"`
 	ChildPID          int       `json:"child_pid,omitempty"`
 	LastActivityAt    time.Time `json:"last_activity_at,omitempty"`
 	ExecutionWorktree string    `json:"execution_worktree,omitempty"`

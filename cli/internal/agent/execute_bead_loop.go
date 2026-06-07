@@ -26,6 +26,9 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
+const serverUnavailableLogMessage = "server unreachable: holding queue until /api/health returns"
+const serverUnavailableStatePhase = "server.unavailable"
+
 // ExecuteBeadLoopRuntime carries the non-serializable plumbing and
 // per-invocation runtime intent for an execute-bead loop run. Durable knobs
 // (assignee, retry caps, harness/model, powerClass bounds, etc.) live on
@@ -114,6 +117,23 @@ type ExecuteBeadLoopRuntime struct {
 	// proceeding to claim — preventing a churn loop that repeatedly claims then
 	// fails workspace preparation because the root is dirty.
 	ProjectRootDirtyCheck func(projectRoot string) []string
+	// ServerHealthProbe, when non-nil, is used while the worker is in
+	// server-unavailable backoff. Healthy should return true only after /api/health
+	// succeeds and the lightweight smoke path is confirmed usable again.
+	ServerHealthProbe func(ctx context.Context) (bool, error)
+	// ServerFailureWindow bounds the distinct-bead lookback used to detect
+	// repeated no_viable_provider outcomes that should be treated as a server-level
+	// outage rather than a bead-level failure. Zero means use the documented
+	// 10-minute default.
+	ServerFailureWindow time.Duration
+	// ServerFailureThreshold is the number of distinct beads that must report
+	// no_viable_provider inside ServerFailureWindow before the worker enters the
+	// server-unavailable probe-and-resume state. Zero means use the documented
+	// default of 3.
+	ServerFailureThreshold int
+	// ServerHealthProbeInterval is the cadence used while the worker is in the
+	// server-unavailable state. Zero means use the documented 30s default.
+	ServerHealthProbeInterval time.Duration
 	// Mode and IdleInterval are the runtime loop intent. Once and
 	// PollInterval remain for older tests/callers but production entry points
 	// should set Mode and IdleInterval directly.
@@ -233,6 +253,40 @@ func (r ExecuteBeadLoopRuntime) effectiveClaimSuccessRateThreshold() float64 {
 		return r.ClaimSuccessRateThreshold
 	}
 	return DefaultClaimSuccessRateThreshold
+}
+
+// DefaultServerFailureWindow is the lookback window used to classify repeated
+// no_viable_provider outcomes as a worker-level server outage.
+const DefaultServerFailureWindow = 10 * time.Minute
+
+// DefaultServerFailureThreshold is the number of distinct beads that must hit
+// no_viable_provider inside the lookback window before the worker enters
+// server-unavailable mode.
+const DefaultServerFailureThreshold = 3
+
+// DefaultServerHealthProbeInterval is the cadence used while the worker is in
+// server-unavailable mode.
+const DefaultServerHealthProbeInterval = 30 * time.Second
+
+func (r ExecuteBeadLoopRuntime) effectiveServerFailureWindow() time.Duration {
+	if r.ServerFailureWindow > 0 {
+		return r.ServerFailureWindow
+	}
+	return DefaultServerFailureWindow
+}
+
+func (r ExecuteBeadLoopRuntime) effectiveServerFailureThreshold() int {
+	if r.ServerFailureThreshold > 0 {
+		return r.ServerFailureThreshold
+	}
+	return DefaultServerFailureThreshold
+}
+
+func (r ExecuteBeadLoopRuntime) effectiveServerHealthProbeInterval() time.Duration {
+	if r.ServerHealthProbeInterval > 0 {
+		return r.ServerHealthProbeInterval
+	}
+	return DefaultServerHealthProbeInterval
 }
 
 // DefaultPreClaimWarnRepeatThreshold is the number of consecutive identical
@@ -1207,6 +1261,26 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	if runtime.ProjectRoot != "" && runtime.SessionID != "" {
 		liveness = work.NewSidecarLivenessReporter(runtime.ProjectRoot, runtime.SessionID, runtime.SessionID, runtime.EventSink)
 	}
+	serverOutage := newServerOutageTracker(
+		runtime.effectiveServerFailureWindow(),
+		runtime.effectiveServerFailureThreshold(),
+		runtime.effectiveServerHealthProbeInterval(),
+	)
+	serverUnavailableLogged := false
+	setServerUnavailableState := func(at time.Time) {
+		if liveness == nil {
+			return
+		}
+		liveness.SetWorkerState(serverUnavailableStatePhase, serverUnavailableLogMessage)
+		liveness.OnTick(at)
+	}
+	clearServerUnavailableState := func(at time.Time) {
+		if liveness == nil {
+			return
+		}
+		liveness.SetWorkerState("", "")
+		liveness.OnTick(at)
+	}
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
@@ -1508,6 +1582,52 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				applyStop(work.StopInput{ContextErr: err})
 			}
 			return result, err
+		}
+		if loopMode == executeloop.ModeWatch && serverOutage.Active() {
+			if !serverUnavailableLogged && runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, serverUnavailableLogMessage)
+				serverUnavailableLogged = true
+			}
+			setServerUnavailableState(now().UTC())
+			for serverOutage.Active() {
+				delay := time.Until(serverOutage.NextProbeAt())
+				if delay < 0 {
+					delay = 0
+				}
+				if err := sleepOrWake(ctx, delay, runtime.WakeCh); err != nil {
+					if exitReason == "" {
+						applyStop(work.StopInput{ContextErr: err})
+					}
+					return result, err
+				}
+				probeAt := now().UTC()
+				setServerUnavailableState(probeAt)
+				healthy := false
+				var probeErr error
+				if runtime.ServerHealthProbe != nil {
+					healthy, probeErr = runtime.ServerHealthProbe(ctx)
+					if probeErr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "server health probe failed: %v (retrying)\n", probeErr)
+					}
+				}
+				serverOutage.MarkProbeAttempt(probeAt)
+				if healthy {
+					reason := serverOutage.Reason()
+					serverOutage.Clear()
+					clearServerUnavailableState(now().UTC())
+					serverUnavailableLogged = false
+					emit("loop.server_recovered", map[string]any{
+						"reason": reason,
+					})
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintln(runtime.Log, "server reachable: resuming queue")
+					}
+					break
+				}
+			}
+			if serverOutage.Active() {
+				continue
+			}
 		}
 		if runtime.BudgetStop != nil {
 			if budgetDecision, budgetReport, stopped := runtime.BudgetStop(); stopped {
@@ -2888,6 +3008,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			report.OutcomeReason = FailureModeNoViableProvider
 			report.Disrupted = true
 			report.DisruptionReason = "routing"
+			serverOutageActivated := false
+			if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
+				serverOutageActivated = true
+				pausedInfraUntil = time.Time{}
+			}
 			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
@@ -2959,7 +3084,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			// fresh retry. Once and drain modes retain the existing
 			// stop-on-routing-failure contract.
 			if loopMode == executeloop.ModeWatch {
-				transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
+				if !serverOutageActivated {
+					transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
+				}
 				continue
 			}
 			setExit("RoutingUnavailable", "routing_unavailable")
@@ -3469,31 +3596,50 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					report.OutcomeReason = FailureModeNoViableProvider
 					report.Disrupted = true
 					report.DisruptionReason = "no_viable_provider"
-					// Transition the worker to paused-infra: leave every bead
-					// immediately reclaimable, pause this worker for PausedInfraInterval,
-					// then re-evaluate the full queue (P6 + ADR-024 §Infra Fallback).
-					pausedInfraUntil = now().UTC().Add(PausedInfraInterval)
-				} else {
-					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-					if shouldSuppressNoProgress(report) {
-						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-						if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
-							_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-								return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-							})
-							if ctx.Err() != nil {
-								return result, ctx.Err()
-							}
-							continue
-						}
-						report.RetryAfter = retryAfter.Format(time.RFC3339)
+					serverOutageActivated := false
+					if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
+						serverOutageActivated = true
+						pausedInfraUntil = time.Time{}
+					} else {
+						// Transition the worker to paused-infra: leave every bead
+						// immediately reclaimable, pause this worker for PausedInfraInterval,
+						// then re-evaluate the full queue (P6 + ADR-024 §Infra Fallback).
+						pausedInfraUntil = now().UTC().Add(PausedInfraInterval)
 					}
-					if report.Detail == mixedCommitAndNoChangesRationaleReason &&
-						countRecentMixedCommitEvents(w.Store, candidate.ID, mixedCommitCooldownWindow, now().UTC()) >= 1 {
-						if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkNoChangesOperatorRequired,
-							"circuit-breaker: "+mixedCommitAndNoChangesRationaleReason+" repeated within 24h; operator review required",
-							now().UTC()); parkErr != nil && runtime.Log != nil {
-							_, _ = fmt.Fprintf(runtime.Log, "mixed_commit circuit-breaker park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+					if loopMode == executeloop.ModeWatch {
+						if !serverOutageActivated {
+							transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
+						}
+						continue
+					}
+				} else {
+					serverOutageActivated := false
+					if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
+						serverOutageActivated = true
+						pausedInfraUntil = time.Time{}
+					}
+					if !serverOutageActivated {
+						report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+						if shouldSuppressNoProgress(report) {
+							retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
+							if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
+								_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+									return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+								})
+								if ctx.Err() != nil {
+									return result, ctx.Err()
+								}
+								continue
+							}
+							report.RetryAfter = retryAfter.Format(time.RFC3339)
+						}
+						if report.Detail == mixedCommitAndNoChangesRationaleReason &&
+							countRecentMixedCommitEvents(w.Store, candidate.ID, mixedCommitCooldownWindow, now().UTC()) >= 1 {
+							if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkNoChangesOperatorRequired,
+								"circuit-breaker: "+mixedCommitAndNoChangesRationaleReason+" repeated within 24h; operator review required",
+								now().UTC()); parkErr != nil && runtime.Log != nil {
+								_, _ = fmt.Fprintf(runtime.Log, "mixed_commit circuit-breaker park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+							}
 						}
 					}
 				}
@@ -5510,6 +5656,7 @@ func isTransientOutcomeReason(reason string) bool {
 		ReadinessSystemReasonRepoConcurrency,
 		FailureModeLockContention,
 		FailureModeNoViableProvider,
+		FailureModeServerUnavailable,
 		FailureModeWorktreeLost:
 		return true
 	default:

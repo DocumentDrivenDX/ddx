@@ -221,7 +221,14 @@ func writeWorkStatusText(out io.Writer, report WorkStatusReport) {
 		if worktree == "" {
 			worktree = "-"
 		}
-		fmt.Fprintf(out, "  pid=%d age=%s project=%s bead=%s attempt=%s worktree=%s\n    %s\n",
-			w.PID, w.Age, w.ProjectRoot, bead, attempt, worktree, w.Command)
+		line := fmt.Sprintf("  pid=%d age=%s project=%s bead=%s attempt=%s worktree=%s",
+			w.PID, w.Age, w.ProjectRoot, bead, attempt, worktree)
+		if w.Phase != "" {
+			line += fmt.Sprintf(" phase=%s", w.Phase)
+		}
+		if w.Message != "" {
+			line += fmt.Sprintf(" message=%q", w.Message)
+		}
+		fmt.Fprintf(out, "%s\n    %s\n", line, w.Command)
 	}
 }
