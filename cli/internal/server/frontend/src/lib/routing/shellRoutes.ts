@@ -37,8 +37,10 @@ export type ProjectShellSection =
 	| 'personas'
 	| 'plugins';
 
+type ProjectShellRoute = ProjectShellSection | 'runs';
+
 export async function resolveDefaultProjectRoute(
-	section: ProjectShellSection,
+	section: ProjectShellRoute,
 	fetchFn: typeof globalThis.fetch
 ): Promise<string> {
 	const client = createClient(fetchFn);
@@ -48,6 +50,10 @@ export async function resolveDefaultProjectRoute(
 
 	if (!projectId) {
 		return `/nodes/${nodeId}`;
+	}
+
+	if (section === 'runs') {
+		return `/nodes/${nodeId}/projects/${projectId}/runs?layer=run`;
 	}
 
 	return `/nodes/${nodeId}/projects/${projectId}/${section}`;

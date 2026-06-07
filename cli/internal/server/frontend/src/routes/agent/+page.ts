@@ -5,6 +5,6 @@ import { resolveDefaultProjectRoute } from '$lib/routing/shellRoutes';
 export const load: PageLoad = async ({ fetch }) => {
 	throw redirect(
 		307,
-		await resolveDefaultProjectRoute('sessions', fetch as unknown as typeof globalThis.fetch)
+		await resolveDefaultProjectRoute('runs', fetch as unknown as typeof globalThis.fetch)
 	);
 };
