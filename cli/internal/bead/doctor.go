@@ -21,12 +21,15 @@ const (
 // field values, dependency edges that point back into the bead's parent chain,
 // and line-level parse failures.
 type DoctorFinding struct {
-	Kind       string `json:"kind,omitempty"`
-	BeadID     string `json:"bead_id"`
-	FieldPath  string `json:"field_path"`
-	TargetID   string `json:"target_id,omitempty"`
-	SizeBytes  int    `json:"size_bytes,omitempty"`
-	SampleHead string `json:"sample_head,omitempty"`
+	Kind         string   `json:"kind,omitempty"`
+	BeadID       string   `json:"bead_id"`
+	FieldPath    string   `json:"field_path"`
+	TargetID     string   `json:"target_id,omitempty"`
+	DependencyID string   `json:"dependency_id,omitempty"`
+	AncestorID   string   `json:"ancestor_id,omitempty"`
+	ParentChain  []string `json:"parent_chain,omitempty"`
+	SizeBytes    int      `json:"size_bytes,omitempty"`
+	SampleHead   string   `json:"sample_head,omitempty"`
 }
 
 // DoctorReport is the output of BeadDoctor — an ordered list of findings.
@@ -196,11 +199,14 @@ func parentAncestorDepFindings(b *Bead, byID map[string]*Bead) []DoctorFinding {
 			continue
 		}
 		findings = append(findings, DoctorFinding{
-			Kind:       doctorFindingKindParentAncestorInDeps,
-			BeadID:     b.ID,
-			FieldPath:  fmt.Sprintf("dependencies[%d].depends_on_id", i),
-			TargetID:   dep.DependsOnID,
-			SampleHead: strings.Join(chain, " -> "),
+			Kind:         doctorFindingKindParentAncestorInDeps,
+			BeadID:       b.ID,
+			FieldPath:    fmt.Sprintf("dependencies[%d].depends_on_id", i),
+			TargetID:     dep.DependsOnID,
+			DependencyID: dep.DependsOnID,
+			AncestorID:   dep.DependsOnID,
+			ParentChain:  append([]string(nil), chain...),
+			SampleHead:   strings.Join(chain, " -> "),
 		})
 	}
 	return findings
@@ -213,6 +219,12 @@ func sortDoctorFindings(findings []DoctorFinding) {
 		}
 		if doctorFindingKindRank(findings[i].Kind) != doctorFindingKindRank(findings[j].Kind) {
 			return doctorFindingKindRank(findings[i].Kind) < doctorFindingKindRank(findings[j].Kind)
+		}
+		if findings[i].AncestorID != findings[j].AncestorID {
+			return findings[i].AncestorID < findings[j].AncestorID
+		}
+		if findings[i].DependencyID != findings[j].DependencyID {
+			return findings[i].DependencyID < findings[j].DependencyID
 		}
 		if findings[i].FieldPath != findings[j].FieldPath {
 			return findings[i].FieldPath < findings[j].FieldPath
