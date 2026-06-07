@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // writeRun seeds one FEAT-010 run-store record under workingDir.
@@ -29,6 +30,7 @@ func writeRun(t *testing.T, workingDir, name, body string) {
 func fixtureWorkingDir(t *testing.T) string {
 	t.Helper()
 	wd := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, wd)
 	now := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
 	end := time.Now().UTC().Format(time.RFC3339)
 	writeRun(t, wd, "a.json", `{
@@ -225,6 +227,7 @@ func TestAgentMetrics_GroupByRoute(t *testing.T) {
 func TestAgentMetrics_WindowExcludesOldAttempts(t *testing.T) {
 	resetAgentMetricsCache()
 	wd := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, wd)
 	old := time.Now().UTC().Add(-48 * time.Hour).Format(time.RFC3339)
 	recent := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
 	writeRun(t, wd, "old.json", `{
@@ -303,9 +306,6 @@ func TestAgentMetrics_RevisionSurvivesArchiveMove(t *testing.T) {
 		t.Fatalf("first: %v", err)
 	}
 	// Materialize an archive file — this is the ADR-004 archive surface.
-	if err := os.MkdirAll(filepath.Join(wd, ddxroot.DirName), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	if err := os.WriteFile(filepath.Join(wd, ddxroot.DirName, "beads-archive.jsonl"), []byte(`{"id":"x"}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

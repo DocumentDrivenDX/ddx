@@ -9,12 +9,16 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // writeFile materialises a path under workingDir, creating directories as
 // needed. Test helper.
 func writeFile(t *testing.T, workingDir, rel, body string) {
 	t.Helper()
+	if strings.HasPrefix(filepath.ToSlash(rel), ".ddx/") {
+		testutils.MakeInitializedDDxRoot(t, workingDir)
+	}
 	full := filepath.Join(workingDir, rel)
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)

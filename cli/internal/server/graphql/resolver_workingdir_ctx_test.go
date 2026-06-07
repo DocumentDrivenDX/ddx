@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // seedDocsRoot creates a minimal DDx-tracked project at root with one
@@ -21,9 +22,7 @@ import (
 // repo-relative path.
 func seedDocsRoot(t *testing.T, root, docID, title string) string {
 	t.Helper()
-	if err := os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testutils.MakeInitializedDDxRoot(t, root)
 	cfg := `version: "1.0"
 library:
   path: ".ddx/plugins/ddx"

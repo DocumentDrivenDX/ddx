@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,6 +64,7 @@ func TestVocabConsistency_AttemptIDOnly(t *testing.T) {
 func TestExecutionDirs_AcceptBothNames(t *testing.T) {
 	t.Parallel()
 	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 
 	// one dir named in the old "run-id" convention, one in the new "attempt-id" convention
 	legacyName := "20260101T120000-aabb1122"

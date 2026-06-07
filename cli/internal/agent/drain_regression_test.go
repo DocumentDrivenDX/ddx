@@ -10,6 +10,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -26,7 +27,7 @@ import (
 // boundary so no harness binary is ever shelled out.
 func TestDrainQueueHistoricalConfigDoesNotFanOut(t *testing.T) {
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, root)
 	cfgYAML := `version: "1.0"
 library:
   path: ".ddx/plugins/ddx"

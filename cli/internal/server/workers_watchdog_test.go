@@ -15,6 +15,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,8 +56,7 @@ func newIdleHandle(t *testing.T, m *WorkerManager, id string, beadID string, sta
 // to do. Returns the bead store.
 func seedClaimedBead(t *testing.T, root string, beadID string) *bead.Store {
 	t.Helper()
-	ddx := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddx, 0o755))
+	ddx := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddx)
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        beadID,

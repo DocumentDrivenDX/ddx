@@ -19,6 +19,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -367,6 +368,7 @@ func TestExecuteOnService_RecordsFailedRouteAttempt(t *testing.T) {
 
 func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing.T) {
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-route-001", Title: "seed route"}))
@@ -390,6 +392,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysConnectivityFailure(t *testing
 
 func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T) {
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	now := time.Date(2026, 5, 14, 8, 55, 0, 0, time.UTC)
@@ -426,6 +429,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T)
 // harness's blip.
 func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-sub-001", Title: "seed subscription"}))
@@ -477,6 +481,7 @@ func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 // keep selecting the failed provider.
 func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-policy-001", Title: "seed policy"}))
@@ -546,6 +551,7 @@ func TestExecutePolicySeedsRouteHealthFromTracker(t *testing.T) {
 // Execute requires only that DDx populate the store before each dispatch.
 func TestRecordRouteAttemptRouteHealthGatesPolicyExecute(t *testing.T) {
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{

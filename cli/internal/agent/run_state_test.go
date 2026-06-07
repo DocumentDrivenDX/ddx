@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 func newRunStateProjectRoot(t *testing.T) string {
@@ -178,10 +179,7 @@ func TestRunState_CandidateCycleFieldsRoundTrip(t *testing.T) {
 
 func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
 	projectRoot := newRunStateProjectRoot(t)
-	requireDir := ddxroot.InTree(projectRoot)
-	if err := os.MkdirAll(requireDir, 0o755); err != nil {
-		t.Fatalf("mkdir .ddx: %v", err)
-	}
+	requireDir := testutils.MakeInitializedDDxRoot(t, projectRoot)
 	raw := `{"bead_id":"ddx-old","attempt_id":"attempt-old","started_at":"2026-05-09T03:15:00Z","worktree_path":"/tmp/ddx-old-wt"}` + "\n"
 	if err := os.WriteFile(filepath.Join(requireDir, "run-state.json"), []byte(raw), 0o644); err != nil {
 		t.Fatalf("write legacy run-state: %v", err)

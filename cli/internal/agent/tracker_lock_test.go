@@ -14,6 +14,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,10 +49,9 @@ func initTrackerRepo(t *testing.T) string {
 	run("add", "seed.txt")
 	run("commit", "-m", "chore: initial seed")
 
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
-	run("add", ".ddx/beads.jsonl")
+	run("add", ".ddx/beads.jsonl", ".ddx/config.yaml")
 	run("commit", "-m", "chore: seed tracker")
 
 	return root

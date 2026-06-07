@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // TestBeadsByProject_OpensOnlyTargetProjectStore covers ddx-9ce6842a AC §3:
@@ -109,7 +109,8 @@ func TestGetBeadSnapshots_PushdownFiltersStatusAtStoreLayer(t *testing.T) {
 
 	root := t.TempDir()
 	projectPath := filepath.Join(root, "project-mixed")
-	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, projectPath)
+	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -155,7 +156,8 @@ func TestGetBeadSnapshots_PushdownFiltersStatusAtStoreLayer(t *testing.T) {
 
 func seedScopeTestBeads(t *testing.T, projectPath string, projectIdx, n int) {
 	t.Helper()
-	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, projectPath)
+	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}

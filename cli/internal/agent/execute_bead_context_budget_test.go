@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // TestExecuteBead_ContextBudgetMinimal verifies that when ContextBudget is
@@ -315,10 +315,7 @@ func TestExecuteBead_LargeDescriptionGetsStep0Hint(t *testing.T) {
 func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testing.T) {
 	root := t.TempDir()
 	wt := t.TempDir()
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)
@@ -381,7 +378,7 @@ func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testi
 				t.Fatalf("buildPrompt: %v", err)
 			}
 			s := string(prompt)
-			gotCap := strings.Contains(s, "Decomposition depth cap")
+			gotCap := strings.Contains(s, "already at decomposition depth")
 			if gotCap != tc.wantCap {
 				t.Fatalf("cap hint presence = %v, want %v; prompt=%s", gotCap, tc.wantCap, s)
 			}

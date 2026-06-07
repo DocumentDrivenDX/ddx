@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -33,7 +34,7 @@ func TestNewServiceFromWorkDirPassesUnreachableEndpointsToService(t *testing.T) 
 	t.Cleanup(live.Close)
 
 	workDir := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, workDir)
 	require.NoError(t, os.WriteFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"), []byte(fmt.Sprintf(`version: "1.0"
 library:
   path: .ddx/plugins/ddx

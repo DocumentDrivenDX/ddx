@@ -237,6 +237,7 @@ func newDurableAuditProject(t *testing.T) string {
 	runGitInteg(t, root, "init", "-b", "main")
 	runGitInteg(t, root, "config", "user.email", "test@ddx.test")
 	runGitInteg(t, root, "config", "user.name", "DDx Test")
+	testutils.MakeInitializedDDxRoot(t, root)
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# audit\n"), 0o644))
 	return root
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -419,6 +420,7 @@ func TestDefinitionRoundTrips(t *testing.T) {
 
 func TestListDefinitionsFallsBackToLegacyExecDirectory(t *testing.T) {
 	wd := newExecTestWorkingDir(t)
+	testutils.MakeInitializedDDxRoot(t, wd)
 	legacyDir := filepath.Join(wd, ddxroot.DirName, "exec", "definitions")
 	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
 	legacyDef := Definition{
@@ -444,6 +446,7 @@ func TestListDefinitionsFallsBackToLegacyExecDirectory(t *testing.T) {
 
 func TestHistoryFallsBackToLegacyExecBundle(t *testing.T) {
 	wd := newExecTestWorkingDir(t)
+	testutils.MakeInitializedDDxRoot(t, wd)
 	legacyRunDir := filepath.Join(wd, ddxroot.DirName, "exec", "runs", "exec-metric-startup-time@legacy")
 	require.NoError(t, os.MkdirAll(legacyRunDir, 0o755))
 	manifest := RunManifest{
