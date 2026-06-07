@@ -1568,7 +1568,8 @@ func (s *Store) cascadeAndWalkUp(closedID string, visited map[string]bool) error
 		_ = s.RemoveClaimHeartbeat(x.ID)
 	}
 
-	// RC-3: Walk up one hop to close dead-intermediate (execution-eligible==false) beads
+	// RC-3: Walk up the parent chain to close dead-intermediate
+	// (execution-eligible==false) beads and nested epic ancestors.
 	closedBead := findBeadByID(all, closedID)
 	if closedBead != nil && closedBead.Parent != "" {
 		if !visited[closedBead.Parent] {
@@ -1587,7 +1588,6 @@ func (s *Store) cascadeAndWalkUp(closedID string, visited map[string]bool) error
 //     closed or cancelled (both count as terminal).
 //
 // Cancelled children are treated as terminal for both paths.
-// Single-hop only; does not chase the grandparent.
 func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited map[string]bool) {
 	parent := findBeadByID(allBeads, parentID)
 	if parent == nil {
@@ -1657,6 +1657,14 @@ func (s *Store) walkUpClosureCandidate(parentID string, allBeads []Bead, visited
 		CreatedAt: time.Now().UTC(),
 	})
 	_ = s.RemoveClaimHeartbeat(parentID)
+
+	if updated := findBeadByID(allBeads, parentID); updated != nil {
+		updated.Status = targetStatus
+	}
+
+	if parent.Parent != "" && !visited[parent.Parent] {
+		s.walkUpClosureCandidate(parent.Parent, allBeads, visited)
+	}
 }
 
 // EpicClosureCandidates returns open epic beads whose children have all reached
