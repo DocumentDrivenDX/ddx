@@ -1,0 +1,2 @@
+status: open
+reason: `go test -short ./internal/server/...` and `lefthook run pre-commit` fail because the existing server/graphql test suite is red outside this bead's scope (for example bead lookup, project scoping, and worker-state tests report zero rows / stale claims). The new orphan-state warning tests pass in isolation, but the repo-level gate is not green enough to commit this bead safely yet.
