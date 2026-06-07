@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260607T152155-136c2523",
+  "bead_id": "ddx-73d2279d",
+  "base_rev": "d04c2365ef630648df27b4e859aec1574b817528",
+  "created_at": "2026-06-07T15:22:09.834541229Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-73d2279d",
+    "title": "code-health: deduplicate rate-limit-retry policy shared by agent and agent/try (try reimplements it)",
+    "description": "PROBLEM/ROOT CAUSE: cli/internal/agent/try/attempt.go reimplements, body-identical, code already in cli/internal/agent/ratelimit_retry.go: ParseRetryAfter (ratelimit_retry.go:190 vs try/attempt.go:594), ExtractRetryAfterFromStderr (:227 vs :618), IsRateLimit*/IsRateLimitReport/IsRateLimitResult (:129 vs :553), rateLimitBackoffSchedule (:37 vs :434, 5 identical entries), and types RateLimitWaitDecision/RateLimitRetryInfo/RateLimitRetryConfig + consts RateLimitRetryDefaultBudget/PerWaitCap/BudgetExhaustedReason. Cause: try imports only internal/bead, not internal/agent, so it cloned rather than imported.\n\nPROPOSED FIX: Create a leaf package internal/ratelimitpolicy holding the schedule, the three types, the consts, and the pure parse/classify funcs. Both internal/agent and internal/agent/try import it; keep the Report/Result-typed wrappers (IsRateLimitReport vs IsRateLimitResult) as thin adapters in each caller.\n\nNON-SCOPE: no change to retry budgets/schedule values. Behavior-preserving.",
+    "acceptance": "1. rateLimitBackoffSchedule defined exactly once.\n2. try/ no longer defines ParseRetryAfter/ExtractRetryAfterFromStderr (grep 0 in try/).\n3. Existing rate-limit tests in internal/agent AND internal/agent/try pass unchanged.\n4. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/agent/try/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "area:agent",
+      "kind:refactor",
+      "code-health",
+      "phase:iterate"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T152155-136c2523",
+    "prompt": ".ddx/executions/20260607T152155-136c2523/prompt.md",
+    "manifest": ".ddx/executions/20260607T152155-136c2523/manifest.json",
+    "result": ".ddx/executions/20260607T152155-136c2523/result.json",
+    "checks": ".ddx/executions/20260607T152155-136c2523/checks.json",
+    "usage": ".ddx/executions/20260607T152155-136c2523/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-73d2279d-20260607T152155-136c2523"
+  },
+  "prompt_sha": "7584c8a952f2b82329e85b0f63121d0d0119cc88da1a93e7930c73626ff6dee2"
+}
