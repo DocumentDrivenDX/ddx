@@ -129,6 +129,18 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	return spec, executeloop.DispatchOptions{Local: local, JSON: dispatchJSON}, nil
 }
 
+func workSelfRefreshEnabled(cmd *cobra.Command) bool {
+	watch, _ := cmd.Flags().GetBool("watch")
+	if !watch {
+		return false
+	}
+	if !cmd.Flags().Changed("self-refresh") {
+		return true
+	}
+	enabled, _ := cmd.Flags().GetBool("self-refresh")
+	return enabled
+}
+
 func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker) agent.ExecuteBeadRuntime {
 	return agent.ExecuteBeadRuntime{
 		FromRev:          spec.FromRev,
@@ -590,7 +602,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		ProjectRoot:                  projectRoot,
 		CleanupRunner:                cleanupRunner,
 		ResourceChecker:              resourceChecker,
-		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID),
+		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
 		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,
 		SessionID:                    loopSessionID,
 		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),

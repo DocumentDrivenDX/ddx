@@ -86,6 +86,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("reason", "", "Operator reason required by --ignore-cooldown")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")
+	cmd.Flags().Bool("self-refresh", false, "Re-exec onto a newer installed ddx binary between watch iterations (defaults on in watch mode)")
 	cmd.Flags().Duration("idle-interval", 30*time.Second, "Sleep duration between empty-queue scans in watch mode")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")

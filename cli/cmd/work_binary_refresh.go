@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -15,32 +16,19 @@ import (
 
 var versionCommitPattern = regexp.MustCompile(`(?m)^Commit:\s*(\S+)\s*$`)
 
-func (f *CommandFactory) buildWorkBinaryRefreshCheck(cmd *cobra.Command, projectRoot, targetBeadID string) func(context.Context) (bool, error) {
+func (f *CommandFactory) buildWorkBinaryRefreshCheck(cmd *cobra.Command, projectRoot, targetBeadID string, enabled bool) func(context.Context) (bool, error) {
 	if targetBeadID != "" {
 		return nil
 	}
-	if !workBinaryRefreshEnabled(os.Args) {
+	if !enabled {
 		return nil
 	}
 	currentCommit := normalizeVersionCommit(f.Commit)
 	if currentCommit == "" {
 		return nil
 	}
-	exe := resolveReplacementDDXPath()
-	baseline, haveBaseline := snapshotBinary(exe)
+	exe := f.resolveWorkBinaryPath()
 	return func(ctx context.Context) (bool, error) {
-		// Only hand off when the replacement binary file has actually been
-		// replaced on disk since this worker started (an intentional
-		// reinstall). Bead-only auto-commits (chore(beads): ... doc-stamp)
-		// advance the ddx repo HEAD but never rewrite the binary, so they must
-		// not terminate the worker (ddx-65d3ba51).
-		if !haveBaseline {
-			return false, nil
-		}
-		current, ok := snapshotBinary(exe)
-		if !ok || current.equal(baseline) {
-			return false, nil
-		}
 		checkCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		installedCommit, err := installedDDXCommit(checkCtx, exe)
@@ -54,20 +42,13 @@ func (f *CommandFactory) buildWorkBinaryRefreshCheck(cmd *cobra.Command, project
 		if wdErr != nil || wd == "" {
 			wd = projectRoot
 		}
-		args := append([]string(nil), os.Args[1:]...)
-		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "ddx work: detected installed ddx binary changed (current commit %s, installed commit %s); starting replacement worker and exiting\n", currentCommit, installedCommit)
-		if err := startReplacementDDX(exe, args, wd); err != nil {
+		argv := append([]string(nil), os.Args...)
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "ddx work: installed ddx commit changed from %s to %s; self-refreshing before the next bead\n", currentCommit, installedCommit)
+		if err := f.reexecWorkBinary(exe, argv, os.Environ(), wd); err != nil {
 			return false, err
 		}
 		return true, nil
 	}
-}
-
-func workBinaryRefreshEnabled(args []string) bool {
-	if len(args) == 0 {
-		return false
-	}
-	return filepath.Base(args[0]) == "ddx"
 }
 
 func installedDDXCommit(ctx context.Context, exe string) (string, error) {
@@ -96,27 +77,8 @@ func normalizeVersionCommit(commit string) string {
 	}
 }
 
-func shouldRefreshDDXBinary(currentCommit, installedCommit string) bool {
-	currentCommit = normalizeVersionCommit(currentCommit)
-	installedCommit = normalizeVersionCommit(installedCommit)
-	if currentCommit == "" || installedCommit == "" {
-		return false
-	}
-	if currentCommit == installedCommit {
-		return false
-	}
-	if len(currentCommit) >= 7 && len(installedCommit) >= 7 {
-		if strings.HasPrefix(currentCommit, installedCommit) || strings.HasPrefix(installedCommit, currentCommit) {
-			return false
-		}
-	}
-	return true
-}
-
-// binarySnapshot captures the on-disk identity of an executable so a worker can
-// tell whether the file was replaced (reinstalled) versus unchanged. It
-// deliberately does not look at git/version metadata — repo HEAD advances from
-// bead commits must not read as a binary change.
+// binarySnapshot captures the on-disk identity of an executable so tests can
+// verify reinstall detection behavior independently from the refresh hook.
 type binarySnapshot struct {
 	size    int64
 	modTime time.Time
@@ -134,6 +96,23 @@ func (b binarySnapshot) equal(o binarySnapshot) bool {
 	return b.size == o.size && b.modTime.Equal(o.modTime)
 }
 
+func shouldRefreshDDXBinary(currentCommit, installedCommit string) bool {
+	currentCommit = normalizeVersionCommit(currentCommit)
+	installedCommit = normalizeVersionCommit(installedCommit)
+	if currentCommit == "" || installedCommit == "" {
+		return false
+	}
+	if currentCommit == installedCommit {
+		return false
+	}
+	if len(currentCommit) >= 7 && len(installedCommit) >= 7 {
+		if strings.HasPrefix(currentCommit, installedCommit) || strings.HasPrefix(installedCommit, currentCommit) {
+			return false
+		}
+	}
+	return true
+}
+
 func resolveReplacementDDXPath() string {
 	if len(os.Args) > 0 && os.Args[0] != "" {
 		if path, err := exec.LookPath(os.Args[0]); err == nil {
@@ -149,12 +128,28 @@ func resolveReplacementDDXPath() string {
 	return "ddx"
 }
 
-func startReplacementDDX(exe string, args []string, dir string) error {
-	replacement := exec.Command(exe, args...)
-	replacement.Dir = dir
-	replacement.Env = os.Environ()
-	replacement.Stdin = os.Stdin
-	replacement.Stdout = os.Stdout
-	replacement.Stderr = os.Stderr
-	return replacement.Start()
+func workBinaryRefreshEnabled(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	return filepath.Base(args[0]) == "ddx"
+}
+
+func (f *CommandFactory) resolveWorkBinaryPath() string {
+	if f.workBinaryPathOverride != nil {
+		return f.workBinaryPathOverride()
+	}
+	return resolveReplacementDDXPath()
+}
+
+func (f *CommandFactory) reexecWorkBinary(exe string, argv []string, env []string, dir string) error {
+	if f.workBinaryReexecOverride != nil {
+		return f.workBinaryReexecOverride(exe, argv, env, dir)
+	}
+	if dir != "" {
+		if err := os.Chdir(dir); err != nil {
+			return err
+		}
+	}
+	return syscall.Exec(exe, argv, env)
 }

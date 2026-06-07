@@ -89,6 +89,15 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
+	// workBinaryPathOverride, when non-nil, resolves the installed ddx binary
+	// used for watch-mode self-refresh checks.
+	workBinaryPathOverride func() string
+
+	// workBinaryReexecOverride, when non-nil, replaces the in-place exec used
+	// by watch-mode self-refresh. Tests inject this to capture argv/env without
+	// replacing the process image.
+	workBinaryReexecOverride func(exe string, argv []string, env []string, dir string) error
+
 	// workerScannerOverride, when non-nil, replaces the live-process worker
 	// scanner used by "ddx work status". Tests inject a fixed snapshot so
 	// the command can be exercised without spawning real worker processes.
