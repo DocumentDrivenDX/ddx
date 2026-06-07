@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260607T014300-7222b224",
+  "bead_id": "ddx-e5511c6b",
+  "base_rev": "fada10f9a4d18a85f5ac7968cbf43e98f36b0730",
+  "created_at": "2026-06-07T01:43:14.766154378Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e5511c6b",
+    "title": "Document parent/deps disjointness and preserve clean-graph regression",
+    "description": "PROBLEM\nThe lifecycle contract documents decomposition and dependency behavior, but it does not yet state the invariant that `parent` and `deps` must stay disjoint or that deps must remain acyclic with the parent tree. Without that rule written down, the code and the queue can drift apart again.\n\nROOT CAUSE\n`docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md` currently explains the decomposition-first sequence, but it never explicitly records the parent/dep disjointness rule this bug depends on. There is also no regression that proves a known-good tracker snapshot still passes `ddx bead doctor` without `--fix`.\n\nPROPOSED FIX\nUpdate the governing lifecycle doc to state the parent/deps disjointness and parent-tree acyclicity invariant, then add a regression test against a pre-existing clean tracker snapshot so valid graphs continue to report clean. Keep the test focused on a known-good snapshot rather than a freshly constructed ad hoc graph.\n\nNON-SCOPE\nDo not add new runtime validation, new doctor repair behavior, or new decomposition behavior in this bead.\n\nIn-scope files:\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md\n- cli/internal/bead/doctor_test.go\n- cli/internal/bead/testdata/ (or an existing clean snapshot fixture, if reused)\n\nOut-of-scope:\n- cli/internal/bead/store.go\n- cli/internal/bead/doctor.go\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/lifecycle_dispatch.go",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/bead/... -run TestBeadDoctorValidGraphsRemainClean` passes.\n2. `cd cli \u0026\u0026 go test ./internal/bead/...` passes.\n3. `cd cli \u0026\u0026 lefthook run pre-commit` passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-e5511c6b\",\"fingerprint\":\"cfde4b246d684b266dcb6aba052c671ae9cfb4d1b0d89b672c77c7a483949a36\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"cfde4b246d684b266dcb6aba052c671ae9cfb4d1b0d89b672c77c7a483949a36\"}",
+          "created_at": "2026-06-07T01:40:57.214506109Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "work-last-detail": "tracker lock timeout (max elapsed, lock: /Users/erik/Projects/ddx/.ddx/.git-tracker.lock, owner pid: 1993005)",
+      "work-last-status": "preclaim-hook-failed",
+      "work-retry-after": "2026-06-06T14:05:03Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T014300-7222b224",
+    "prompt": ".ddx/executions/20260607T014300-7222b224/prompt.md",
+    "manifest": ".ddx/executions/20260607T014300-7222b224/manifest.json",
+    "result": ".ddx/executions/20260607T014300-7222b224/result.json",
+    "checks": ".ddx/executions/20260607T014300-7222b224/checks.json",
+    "usage": ".ddx/executions/20260607T014300-7222b224/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-e5511c6b-20260607T014300-7222b224"
+  },
+  "prompt_sha": "743ad4132ad417448779a3a0e934efdc0ed173df0af363046f8e0df7cb8c13f4"
+}
