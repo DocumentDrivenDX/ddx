@@ -1,0 +1,136 @@
+{
+  "attempt_id": "20260607T070244-40c98b11",
+  "bead_id": "ddx-8a8bf714",
+  "base_rev": "ebaa781b024f8e11a2e79a770c20297dbb3a7262",
+  "created_at": "2026-06-07T07:03:11.367550651Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8a8bf714",
+    "title": "Reject bead dep edges that re-introduce the parent or any ancestor: part: part 2",
+    "description": "PROBLEM\nParent bead ddx-130cf9ab is too broad for one execution pass. This child owns part 2 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-e19185aa is too broad for one execution pass. This child owns part 2 of 3 of that parent scope.\n\nROOT CAUSE\nThe decomposition action (currently invoked when a bead is too large for one execution and the agent splits it into child beads) is writing the parent's ID as a dep edge on every child. This produces an unbreakable deadlock:\n\n  e29892a4 (parent, open) -- parent --\u003e child_A\n  e29892a4 -- parent --\u003e child_B\n  child_A.deps = [e29892a4]           \u003c- BAD: parent is also a dep\n  child_B.deps = [child_A, e29892a4]  \u003c- BAD\n\nThe parent stays open until its children close. Every child is blocked on the parent. Nothing can be claimed. ddx work loops on the parent, the orchestrator emits 'mixed_commit_and_no_changes_rationale', the worker retries, and burns claim budget without progress.\n\nObserved scenario (niflheim, 2026-06-04 04:30-05:13 UTC):\n- Parent: niflheim-e29892a4 ('feat(delta): async write-behind ...')\n- 10 children created during planning loops (23223661, a44a8ceb, 054c89b7, 0470ba0d, f10e9e35, f076b08c, 6c041162, 94e1df73, 9da62c2d, 5e4f9fb2)\n- Every child carried deps=[..siblings.., niflheim-e29892a4]\n- ~50 minutes of agent time + 4 strong-policy claude/opus attempts with zero feature commits; only tracker chores\n- Unwedged manually by closing the parent via 'ddx bead close', after which siblings drained correctly in foundational order\n\nRoot cause is structural, not model-capability — auto-upgrading to a stronger model does NOT fix this. The orchestrator already detects the no-progress state but its only remediation is 'retry parent', which re-enters the same loop.\n\nThere is also a 'project root mutation rejected (continuing)' warning emitted by the readiness check during this state; that's a downstream symptom of the same problem, not the cause.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Programmatic decomposition path (the action that fans a too-large bead into children) MUST NOT add the parent as a dep. Existing action templates / system prompts are audited and amended; one golden e2e test (decompose_does_not_self_dep) creates a bead with N children and asserts every child's deps set excludes the parent.\n- 'ddx bead doctor' (existing subcommand) gains a check 'parent_ancestor_in_deps' that scans the tracker, lists violating beads, and (with --fix) removes the offending edges. Output is stable / scriptable.\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- 'ddx bead doctor' (existing subcommand) gains a check 'parent_ancestor_in_deps' that scans the tracker, lists violating beads, and (with --fix) removes the offending edges. Output is stable / scriptable. Test: ddx_doctor_detects_and_repairs_back_edge.\n- ddx work no-progress remediation: when an attempted bead's outcome is 'mixed_commit_and_no_changes_rationale' AND any freshly-created child carries the attempted bead in its deps, ddx auto-emits an 'operator_attention' event with reason 'parent_back_edge' and stops re-claiming that bead. (Today it loops indefinitely.) Test: ddx_work_halts_on_parent_back_edge.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. 'ddx bead doctor' (existing subcommand) gains a check 'parent_ancestor_in_deps' that scans the tracker, lists violating beads, and (with --fix) removes the offending edges. Output is stable / scriptable. Test: ddx_doctor_detects_and_repairs_back_edge.\n2. ddx work no-progress remediation: when an attempted bead's outcome is 'mixed_commit_and_no_changes_rationale' AND any freshly-created child carries the attempted bead in its deps, ddx auto-emits an 'operator_attention' event with reason 'parent_back_edge' and stops re-claiming that bead. (Today it loops indefinitely.) Test: ddx_work_halts_on_parent_back_edge.",
+    "parent": "ddx-130cf9ab",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"'ddx bead doctor' (existing subcommand) gains a check 'parent_ancestor_in_deps' that scans the tracker, lists violating beads, and (with --fix) removes the offending edges. Output is stable / scriptable. Test: ddx_doctor_detects_and_repairs_back_edge.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"ddx work no-progress remediation: when an attempted bead's outcome is 'mixed_commit_and_no_changes_rationale' AND any freshly-created child carries the attempted bead in its deps, ddx auto-emits an 'operator_attention' event with reason 'parent_back_edge' and stops re-claiming that bead. (Today it loops indefinitely.) Test: ddx_work_halts_on_parent_back_edge.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-06-07T06:13:39.343073683Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-07T06:22:25.537086761Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260607T061831-61f2aeb7\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":2458064,\"output_tokens\":10995,\"total_tokens\":2469059,\"cost_usd\":0,\"duration_ms\":214238,\"exit_code\":0}",
+          "created_at": "2026-06-07T06:22:25.610674888Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=2469059 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-07T06:27:53.033659398Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260607T062229-12cdb51c\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":3331517,\"output_tokens\":15186,\"total_tokens\":3346703,\"cost_usd\":0,\"duration_ms\":280036,\"exit_code\":0}",
+          "created_at": "2026-06-07T06:27:53.124754131Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=3346703 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[],\"requested_min_power\":7}",
+          "created_at": "2026-06-07T06:37:15.724901409Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260607T062758-6fdf3e66\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":4300975,\"output_tokens\":16032,\"total_tokens\":4317007,\"cost_usd\":0,\"duration_ms\":494717,\"exit_code\":0}",
+          "created_at": "2026-06-07T06:37:15.814945977Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4317007 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260607T062758-6fdf3e66\",\"bead_id\":\"ddx-8a8bf714\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-07T06:37:21.372162713Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=retryable full-package verification failure: `go test ./internal/bead/...` fails in `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait above budget; acceptance-focused tests for bead doctor and parent_back_edge handling passed\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-06-07T06:37:21.50539615Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\npowerClass=standard\nrationale: status: open\nreason: retryable full-package verification failure: `go test ./internal/bead/...` fails in `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait above budget; acceptance-focused tests for bead doctor and parent_back_edge handling passed\nresult_rev=6e269719128799a87169604e605aa3d970c39794\nbase_rev=6e269719128799a87169604e605aa3d970c39794\nretry_after=2026-06-07T06:42:21Z\noutcome_reason=no_changes",
+          "created_at": "2026-06-07T06:37:21.704285848Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"'ddx bead doctor' (existing subcommand) gains a check 'parent_ancestor_in_deps' that scans the tracker, lists violating beads, and (with --fix) removes the offending edges. Output is stable / scriptable. Test: ddx_doctor_detects_and_repairs_back_edge.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"ddx work no-progress remediation: when an attempted bead's outcome is 'mixed_commit_and_no_changes_rationale' AND any freshly-created child carries the attempted bead in its deps, ddx auto-emits an 'operator_attention' event with reason 'parent_back_edge' and stops re-claiming that bead. (Today it loops indefinitely.) Test: ddx_work_halts_on_parent_back_edge.\",\"kind\":\"prose\",\"verifiable\":false}]",
+          "created_at": "2026-06-07T06:56:35.800443679Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.00 threshold=0.50 verifiable=0/2"
+        }
+      ],
+      "work-last-detail": "retryable full-package verification failure: `go test ./internal/bead/...` fails in `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait above budget; acceptance-focused tests for bead doctor and parent_back_edge handling passed",
+      "work-last-status": "no_changes_autonomous_retry",
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5,
+      "work-retry-after": "2026-06-07T06:42:21Z",
+      "work-smart-retry": true,
+      "work-smart-retry-reason": "retryable full-package verification failure: `go test ./internal/bead/...` fails in `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait above budget; acceptance-focused tests for bead doctor and parent_back_edge handling passed",
+      "work-smart-retry-suggested-action": "retry with a smart agent",
+      "work-suggested-action": "retry with a smart agent"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T070244-40c98b11",
+    "prompt": ".ddx/executions/20260607T070244-40c98b11/prompt.md",
+    "manifest": ".ddx/executions/20260607T070244-40c98b11/manifest.json",
+    "result": ".ddx/executions/20260607T070244-40c98b11/result.json",
+    "checks": ".ddx/executions/20260607T070244-40c98b11/checks.json",
+    "usage": ".ddx/executions/20260607T070244-40c98b11/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8a8bf714-20260607T070244-40c98b11"
+  },
+  "prompt_sha": "3c7ed3657db5c3e28d344b4ef86d22f1b03b61f95505c0f9095b78aad163cae9"
+}
