@@ -253,6 +253,132 @@ func TestLifecycleDispatchRejectsProjectRootMutation(t *testing.T) {
 	assert.Empty(t, strings.TrimSpace(status))
 }
 
+func TestDispatchLogsErrorOnRootMutationWithBackEdge(t *testing.T) {
+	root, baseStore, later := newCleanPreClaimIntakeHookGitRoot(t)
+	parent := &bead.Bead{
+		ID:          "ddx-root-mutation-parent",
+		Title:       "Parent bead that triggers a back-edge",
+		IssueType:   bead.DefaultType,
+		Status:      bead.StatusOpen,
+		Priority:    0,
+		Description: "Parent bead used to establish a parent-back-edge state before the root mutation failure.",
+		Acceptance:  "1. split into children without wiring them back to the parent",
+		Labels:      []string{"phase:2", "area:agent", "kind:feature"},
+	}
+	require.NoError(t, baseStore.Create(context.Background(), parent))
+
+	store := &backEdgeDecompositionStore{
+		Store:    baseStore,
+		parentID: parent.ID,
+	}
+
+	sentinelAbs := filepath.Join(root, "lifecycle-sentinel.txt")
+	runner := preClaimIntakeHookRunnerFunc(func(opts RunArgs) (*Result, error) {
+		require.NoError(t, os.WriteFile(sentinelAbs, []byte("sentinel\n"), 0o644))
+		return &Result{
+			ExitCode: 0,
+			Output:   `{"classification":"atomic","confidence":0.99,"reasoning":"ready"}`,
+		}, nil
+	})
+	realHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), nil, runner)
+	hook := func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+		if beadID == parent.ID {
+			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+		}
+		return realHook(ctx, beadID)
+	}
+
+	var log bytes.Buffer
+	var eventSink bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			switch beadID {
+			case parent.ID:
+				return ExecuteBeadReport{
+					BeadID:             beadID,
+					Status:             ExecuteBeadStatusNoChanges,
+					Detail:             mixedCommitAndNoChangesRationaleReason,
+					BaseRev:            "feedface00112233",
+					ResultRev:          "feedface00112234",
+					SessionID:          "sess-root-mutation-back-edge",
+					AttemptID:          "attempt-root-mutation-back-edge",
+					WorkerID:           "worker-root-mutation-back-edge",
+					NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: split the parent",
+				}, nil
+			default:
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-root-mutation-back-edge",
+					ResultRev: "root-mutation-result",
+				}, nil
+			}
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", MaxDecompositionDepth: 3}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Log:                &log,
+		EventSink:          &eventSink,
+		PreClaimIntakeHook: hook,
+		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+			require.Equal(t, parent.ID, beadID)
+			return &PreClaimDecomposition{
+				Rationale: "split the parent for the back-edge regression",
+				Children: []PreClaimDecompositionChild{
+					{
+						Title:       "Child A",
+						Description: "child should not depend on the parent",
+						Acceptance:  "1. do child work",
+					},
+				},
+				ACMap: []ACMapEntry{
+					{
+						ParentAC: "1. split into children without wiring them back to the parent",
+						Coverage: "covered by Child A",
+					},
+				},
+			}, nil
+		},
+		ProjectRoot: root,
+		SessionID:   "sess-root-mutation-back-edge",
+		WorkerID:    "worker-root-mutation-back-edge",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 2, result.Attempts, "the worker must process the back-edge bead and the root-mutation bead")
+
+	events := parseLoopEvents(t, eventSink.String())
+	sawBackEdge := strings.Contains(eventSink.String(), "\"event\":\"post_attempt_decomposition.parent_back_edge\"")
+	var rootMutationError *loopEvent
+	var sawWarnForLater bool
+	for i := range events {
+		switch events[i].Type {
+		case "pre_claim_intake.warn":
+			if data, ok := events[i].Data["bead_id"].(string); ok && data == later.ID {
+				sawWarnForLater = true
+			}
+		case "pre_claim_intake.error":
+			if data, ok := events[i].Data["bead_id"].(string); ok && data == later.ID {
+				rootMutationError = &events[i]
+			}
+		}
+	}
+	require.Truef(t, sawBackEdge, "the run must first record the parent-back-edge state; events=%s", eventSink.String())
+	require.NotNil(t, rootMutationError, "the root-mutation rejection must be surfaced as an error event")
+	assert.Equal(t, "error", rootMutationError.Data["severity"])
+	assert.Equal(t, "error", rootMutationError.Data["decision"])
+	assert.Equal(t, "error", rootMutationError.Data["policy_mode"])
+	assert.Contains(t, fmt.Sprint(rootMutationError.Data["detail"]), "project root mutation rejected for bead "+later.ID)
+	assert.Contains(t, fmt.Sprint(rootMutationError.Data["detail"]), later.ID)
+	assert.Contains(t, log.String(), "check unavailable for bead "+later.ID)
+	assert.Contains(t, log.String(), "(error)")
+	assert.False(t, sawWarnForLater, "the root-mutation rejection must not be downgraded to a warning event")
+}
+
 func TestPreClaimIntakeHookWithLogDoesNotEmitPromptByDefault(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)

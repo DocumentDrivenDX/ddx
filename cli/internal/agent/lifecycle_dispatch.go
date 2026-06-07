@@ -50,7 +50,11 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 
 	result, dispatchErr := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 
-	if guardErr := guardLifecycleProjectStatus(projectRoot, before); guardErr != nil {
+	beadID := ""
+	if runtime.Correlation != nil {
+		beadID = strings.TrimSpace(runtime.Correlation["bead_id"])
+	}
+	if guardErr := guardLifecycleProjectStatus(projectRoot, before, beadID); guardErr != nil {
 		return nil, guardErr
 	}
 	if dispatchErr != nil {
@@ -127,7 +131,7 @@ func parseLifecycleProjectStatus(raw string) map[string]string {
 	return entries
 }
 
-func guardLifecycleProjectStatus(projectRoot string, before lifecycleProjectStatusSnapshot) error {
+func guardLifecycleProjectStatus(projectRoot string, before lifecycleProjectStatusSnapshot, beadID string) error {
 	if !before.available {
 		return nil
 	}
@@ -152,6 +156,9 @@ func guardLifecycleProjectStatus(projectRoot string, before lifecycleProjectStat
 		newPaths, changedPaths = diffLifecycleProjectStatus(before.entries, after.entries)
 	}
 	if len(newPaths) == 0 && len(changedPaths) == 0 {
+		if beadID != "" {
+			return fmt.Errorf("lifecycle dispatch: project root mutation rejected for bead %s", beadID)
+		}
 		return fmt.Errorf("lifecycle dispatch: project root mutation rejected")
 	}
 
@@ -161,6 +168,9 @@ func guardLifecycleProjectStatus(projectRoot string, before lifecycleProjectStat
 	}
 	if len(changedPaths) > 0 {
 		details = append(details, "changed existing dirty paths: "+strings.Join(changedPaths, ", "))
+	}
+	if beadID != "" {
+		return fmt.Errorf("lifecycle dispatch: project root mutation rejected for bead %s (%s)", beadID, strings.Join(details, "; "))
 	}
 	return fmt.Errorf("lifecycle dispatch: project root mutation rejected (%s)", strings.Join(details, "; "))
 }
