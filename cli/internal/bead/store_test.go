@@ -310,7 +310,7 @@ func TestCreateAndGet(t *testing.T) {
 	assert.Equal(t, b.IssueType, got.IssueType)
 }
 
-func TestStoreReadAll_RejectsCanceledContext(t *testing.T) {
+func TestStoreReadAllHonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -320,7 +320,7 @@ func TestStoreReadAll_RejectsCanceledContext(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestStoreReadAllFiltered_RejectsCanceledContext(t *testing.T) {
+func TestStoreReadAllFilteredHonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
