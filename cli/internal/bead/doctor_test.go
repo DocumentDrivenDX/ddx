@@ -28,6 +28,26 @@ func TestBeadDoctor_CleanFileReportsNothing(t *testing.T) {
 	assert.Empty(t, report.Findings)
 }
 
+// TestBeadDoctorValidGraphsRemainClean covers the clean-tracker regression
+// contract using the existing bd_export_with_labels_events.jsonl snapshot.
+// The fixture is a pre-existing tracker snapshot with parent/dependency
+// structure; doctor must treat it as clean when no field exceeds MaxFieldBytes.
+func TestBeadDoctorValidGraphsRemainClean(t *testing.T) {
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	path := filepath.Join(ddxDir, "beads.jsonl")
+
+	fixture, err := os.ReadFile(filepath.Join("testdata", "bd_export_with_labels_events.jsonl"))
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(path, fixture, 0o644))
+
+	report, err := BeadDoctor(path)
+	require.NoError(t, err)
+	assert.True(t, report.Clean())
+	assert.Empty(t, report.Findings)
+}
+
 // TestBeadDoctor_DetectsOversizedFields covers ddx-b695e162 AC #1: scanner
 // reports every field on every bead that exceeds the cap. Synthesizes a
 // description longer than MaxFieldBytes and an event body ditto so both

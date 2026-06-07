@@ -105,6 +105,10 @@ Both paths append an event (`lifecycle_reconciled` for reconcile-close, implicit
   exhausted reviewer retries, and no-changes uncertainty MUST NOT map to
   `blocked` unless the evidence names an external blocker whose later resolution
   can be rechecked mechanically.
+- `parent` and `deps` are disjoint structural relationships. A bead's deps
+  MUST NOT include its parent or any bead on its parent chain, and dependency
+  edges MUST remain acyclic with respect to the parent tree so the structural
+  graph cannot fold back on itself.
 - Decomposition depth overflow is not, by itself, an operator-required
   condition. At child-depth cap, the decomposer MUST try a sibling or replacement
   split under the nearest safe parent/root. Only a failed or lossy
