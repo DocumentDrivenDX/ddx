@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -12,28 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// getSmokeTestBinaryPath builds the CLI binary once and returns the path.
-func getSmokeTestBinaryPath(t *testing.T) string {
-	t.Helper()
-
-	_, filename, _, ok := runtime.Caller(0)
-	require.True(t, ok, "could not get caller info")
-
-	// e2e_smoke_test.go is in cli/cmd/, so go up one level to get cli/
-	cliRoot := filepath.Join(filepath.Dir(filename), "..")
-	cliRoot, err := filepath.Abs(cliRoot)
-	require.NoError(t, err)
-
-	binaryPath := filepath.Join(t.TempDir(), "ddx")
-	buildCmd := exec.Command("go", "build", "-buildvcs=false", "-o", binaryPath, ".")
-	buildCmd.Dir = cliRoot
-	out, err := buildCmd.CombinedOutput()
-	require.NoError(t, err, "go build failed: %s", string(out))
-	require.NoError(t, os.Chmod(binaryPath, 0755))
-
-	return binaryPath
-}
 
 // runInDir executes the binary with args in the given directory and returns combined output.
 // It strips DDx-specific env vars so the subprocess uses only the isolated workDir state.
