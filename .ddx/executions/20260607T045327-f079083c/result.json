@@ -1,0 +1,44 @@
+{
+  "bead_id": "ddx-171dc478",
+  "attempt_id": "20260607T045327-f079083c",
+  "base_rev": "f0a9acecf4adb022b0acb60b33b4dd6b955ef44c",
+  "result_rev": "824a673bdd27156e74522d3c3a6dc824e3bacf83",
+  "implementation_rev": "824a673bdd27156e74522d3c3a6dc824e3bacf83",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "post-land gate failed: sh -c export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli \u0026\u0026 go vet ./...: exit status 1: # github.com/DocumentDrivenDX/ddx/cmd\n# [github.com/DocumentDrivenDX/ddx/cmd]\nvet: cmd/work_binary_refresh_test.go:179:37: not enough arguments in call to store.Get\n\thave (string)\n\twant (context.Context, string)",
+  "orchestrator_status": "land_conflict",
+  "reason": "post-land gate failed: sh -c export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli \u0026\u0026 go vet ./...: exit status 1: # github.com/DocumentDrivenDX/ddx/cmd\n# [github.com/DocumentDrivenDX/ddx/cmd]\nvet: cmd/work_binary_refresh_test.go:179:37: not enough arguments in call to store.Get\n\thave (string)\n\twant (context.Context, string)",
+  "preserve_ref": "refs/ddx/iterations/ddx-171dc478/20260607T045327-f079083c-f774081d03b5",
+  "candidate_ref": "refs/ddx/iterations/20260607T045327-f079083c/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260607T045327-f079083c",
+      "result_rev": "824a673bdd27156e74522d3c3a6dc824e3bacf83",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-9d54a6bf",
+  "duration_ms": 7174342,
+  "tokens": 38190035,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260607T045327-f079083c",
+  "prompt_file": ".ddx/executions/20260607T045327-f079083c/prompt.md",
+  "manifest_file": ".ddx/executions/20260607T045327-f079083c/manifest.json",
+  "result_file": ".ddx/executions/20260607T045327-f079083c/result.json",
+  "usage_file": ".ddx/executions/20260607T045327-f079083c/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-07T04:53:39.289057171Z",
+  "finished_at": "2026-06-07T06:53:13.631203398Z"
+}

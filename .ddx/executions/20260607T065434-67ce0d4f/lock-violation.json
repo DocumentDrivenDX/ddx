@@ -1,0 +1,7 @@
+{
+  "lock_name": "tracker.lock",
+  "cap_ms": 30000,
+  "actual_hold_ms": 30008,
+  "holder_pid": 2049752,
+  "stack": "goroutine 19959 [running]:\nruntime/debug.Stack()\n\t/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/debug/stack.go:26 +0x64\ngithub.com/DocumentDrivenDX/ddx/internal/lockmetrics.enforceCapViolation({0x1e3206f, 0xc}, {0x1e49170, 0x14}, 0x1f46d8, {0x0?, 0x0?, 0x38262c0?}, {0x6fc23ac00, {0x60df6071c750, ...}, ...})\n\t/Users/erik/Projects/ddx/cli/internal/lockmetrics/lockcap.go:133 +0x68\ngithub.com/DocumentDrivenDX/ddx/internal/lockmetrics.InstrumentCapped.func1()\n\t/Users/erik/Projects/ddx/cli/internal/lockmetrics/lockcap.go:107 +0x38\ncreated by time.goFunc\n\t/home/linuxbrew/.linuxbrew/opt/go/libexec/src/time/sleep.go:215 +0x38\n"
+}
