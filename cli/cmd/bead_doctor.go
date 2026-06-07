@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -170,7 +171,11 @@ For each finding, reports whether result_rev is reachable from HEAD:
 func formatBeadDoctorFinding(f bead.DoctorFinding) string {
 	switch f.Kind {
 	case "parent_ancestor_in_deps":
-		return fmt.Sprintf("  %s  %s  %s  target=%s  chain=%s", f.BeadID, f.Kind, f.FieldPath, f.TargetID, f.SampleHead)
+		chain := f.SampleHead
+		if len(f.ParentChain) > 0 {
+			chain = strings.Join(f.ParentChain, " -> ")
+		}
+		return fmt.Sprintf("  %s  %s  %s  dependency=%s  ancestor=%s  chain=%s", f.BeadID, f.Kind, f.FieldPath, f.DependencyID, f.AncestorID, chain)
 	case "unparseable_line":
 		return fmt.Sprintf("  %s  %s  size=%d  head=%q", f.BeadID, f.Kind, f.SizeBytes, f.SampleHead)
 	default:

@@ -29,11 +29,11 @@ func TestBeadDoctor_CleanFileReportsNothing(t *testing.T) {
 	assert.Empty(t, report.Findings)
 }
 
-// TestBeadDoctorValidGraphsRemainClean covers the clean-tracker regression
+// TestBeadDoctorValidGraphSnapshotClean covers the clean-tracker regression
 // contract using the existing bd_export_with_labels_events.jsonl snapshot.
 // The fixture is a pre-existing tracker snapshot with parent/dependency
 // structure; doctor must treat it as clean when no field exceeds MaxFieldBytes.
-func TestBeadDoctorValidGraphsRemainClean(t *testing.T) {
+func TestBeadDoctorValidGraphSnapshotClean(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -190,11 +190,11 @@ func TestBeadDoctorFix_WritesBackupAndArtifact(t *testing.T) {
 		"repair event body must name the repaired field so operator audit can correlate")
 }
 
-// TestBeadDoctorDetectsAndRepairsBackEdge covers the parent-ancestor dependency
+// TestBeadDoctorRepairsParentAncestorBackEdge covers the parent-ancestor dependency
 // regression: the doctor must flag dependency edges that point back into the
 // bead's parent chain, repair only those edges under --fix, and leave unrelated
 // dependencies intact.
-func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
+func TestBeadDoctorRepairsParentAncestorBackEdge(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -266,6 +266,7 @@ func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
 	for _, finding := range report.Findings {
 		assert.Equal(t, doctorFindingKindParentAncestorInDeps, finding.Kind)
 		assert.Equal(t, "ddx-child", finding.BeadID)
+		assert.Equal(t, []string{"ddx-parent", "ddx-root"}, finding.ParentChain)
 	}
 	assert.Equal(t, "ddx-parent", report.Findings[0].TargetID)
 	assert.Equal(t, "ddx-root", report.Findings[1].TargetID)

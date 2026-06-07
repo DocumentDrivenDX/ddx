@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
+func TestBeadDoctorDetectsParentAncestorBackEdge(t *testing.T) {
 	workDir := t.TempDir()
 	ddxDir := filepath.Join(workDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -82,10 +82,13 @@ func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
 	factory := NewCommandFactory(workDir)
 
 	type finding struct {
-		Kind      string `json:"kind"`
-		BeadID    string `json:"bead_id"`
-		FieldPath string `json:"field_path"`
-		TargetID  string `json:"target_id"`
+		Kind         string   `json:"kind"`
+		BeadID       string   `json:"bead_id"`
+		FieldPath    string   `json:"field_path"`
+		TargetID     string   `json:"target_id"`
+		DependencyID string   `json:"dependency_id"`
+		AncestorID   string   `json:"ancestor_id"`
+		ParentChain  []string `json:"parent_chain"`
 	}
 	type report struct {
 		Path     string    `json:"path"`
@@ -102,8 +105,15 @@ func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
 	assert.False(t, first.Fixed)
 	require.Len(t, first.Findings, 2)
 	assert.Equal(t, "parent_ancestor_in_deps", first.Findings[0].Kind)
+	assert.Equal(t, "ddx-child", first.Findings[0].BeadID)
 	assert.Equal(t, "ddx-parent", first.Findings[0].TargetID)
+	assert.Equal(t, "ddx-parent", first.Findings[0].DependencyID)
+	assert.Equal(t, "ddx-parent", first.Findings[0].AncestorID)
+	assert.Equal(t, []string{"ddx-parent", "ddx-root"}, first.Findings[0].ParentChain)
 	assert.Equal(t, "ddx-root", first.Findings[1].TargetID)
+	assert.Equal(t, "ddx-root", first.Findings[1].DependencyID)
+	assert.Equal(t, "ddx-root", first.Findings[1].AncestorID)
+	assert.Equal(t, []string{"ddx-parent", "ddx-root"}, first.Findings[1].ParentChain)
 
 	fixOut, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "bead", "doctor", "--fix", "--json")
 	require.NoError(t, err)
