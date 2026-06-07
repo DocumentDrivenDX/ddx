@@ -2060,9 +2060,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				TS:        now().UTC(),
 				Message:   "readiness check",
 			})
-			intakeResult, intakeErr := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (PreClaimIntakeResult, error) {
-				return runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
-			})
+			intakeResult, intakeErr := runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
 			if intakeErr == nil {
 				readinessEstimatedDifficulty = normalizeReadinessEstimatedDifficulty(intakeResult.EstimatedDifficulty)
 			}
@@ -2257,9 +2255,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						_, _ = fmt.Fprintf(runtime.Log, "bead readiness requested decomposition; generating split (%s)\n", candidate.ID)
 					}
 					var hookErr error
-					decomp, hookErr = work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (*PreClaimDecomposition, error) {
-						return runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
-					})
+					decomp, hookErr = runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
 					if hookErr != nil {
 						if err := ctx.Err(); err != nil {
 							applyStop(work.StopInput{ContextErr: err})
@@ -2440,9 +2436,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// and must not stall or add advisory event noise before real work.
 		lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
 		if runtime.PreDispatchLintHook != nil && lintThreshold > 0 {
-			lintResult, lintErr := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (LintResult, error) {
-				return runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
-			})
+			lintResult, lintErr := runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
 			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
 
 			if lintErr != nil {
