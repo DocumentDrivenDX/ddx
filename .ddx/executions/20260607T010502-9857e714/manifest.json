@@ -1,0 +1,78 @@
+{
+  "attempt_id": "20260607T010502-9857e714",
+  "bead_id": "ddx-4173d55c",
+  "base_rev": "fb8304c29af1b92fd1504b020c147a1743cb1c11",
+  "created_at": "2026-06-07T01:05:15.137359304Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4173d55c",
+    "title": "Escalate lifecycle root-mutation rejection with back-edge context",
+    "description": "PROBLEM\nThe lifecycle dispatch path still returns the generic `project root mutation rejected` error and the caller path continues to log it as a warning/continuing condition. When that happens in the same run that already exhibits a parent-back-edge state, the operator only sees a soft warning instead of the structural failure that actually occurred.\n\nROOT CAUSE\n`cli/internal/agent/lifecycle_dispatch.go:130-165` rejects root mutations but does not include the offending bead ID in the failure shape, and `cli/internal/agent/preclaim_intake_hook.go:595` plus the surrounding loop code consume the error as a warning path. The result is a muted signal even though the run is already in a bad structural state.\n\nPROPOSED FIX\nWhen the parent-back-edge state and a root-mutation rejection coincide, upgrade the log/event severity from warning to error and attach the offending bead ID to the emitted message. Add the regression `TestDispatchLogsErrorOnRootMutationWithBackEdge` so the severity change cannot drift.\n\nNON-SCOPE\nDo not change the store validator, doctor scan/repair, or decomposition prompt text in this bead.\n\nIn-scope files:\n- cli/internal/agent/lifecycle_dispatch.go\n- cli/internal/agent/preclaim_intake_hook.go\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/preclaim_intake_hook_test.go\n\nOut-of-scope:\n- cli/internal/bead/store.go\n- cli/internal/bead/doctor.go\n- cli/internal/agent/execute_bead.go\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... -run TestDispatchLogsErrorOnRootMutationWithBackEdge` passes.\n2. `cd cli \u0026\u0026 go test ./internal/agent/...` passes.\n3. `cd cli \u0026\u0026 lefthook run pre-commit` passes.",
+    "parent": "ddx-e19185aa",
+    "labels": [
+      "area:tracker",
+      "area:lifecycle",
+      "area:decomposition",
+      "kind:safety",
+      "kind:correctness",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-06T23:57:41.125382023Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-4173d55c\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-06T23:58:00.17878333Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"recoverable\",\"detail\":\"committing tracker: fatal: unable to write new index file: exit status 128\",\"rationale\":\"attempt failed while committing DDx tracker metadata with git error `fatal: unable to write new index file`; this is an infrastructure/git index write failure with no evidence that bead implementation or verification failed\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-06T23:58:58.104306688Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "committing tracker: fatal: unable to write new index file: exit status 128\noutcome_reason=recoverable",
+          "created_at": "2026-06-06T23:58:58.267135662Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected\",\"fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8cca69d13ca3aa9a57249b1b86fb0045335c39878a22e755f9f98a79eb000f23\"}",
+          "created_at": "2026-06-07T01:02:59.482723027Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T010502-9857e714",
+    "prompt": ".ddx/executions/20260607T010502-9857e714/prompt.md",
+    "manifest": ".ddx/executions/20260607T010502-9857e714/manifest.json",
+    "result": ".ddx/executions/20260607T010502-9857e714/result.json",
+    "checks": ".ddx/executions/20260607T010502-9857e714/checks.json",
+    "usage": ".ddx/executions/20260607T010502-9857e714/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-4173d55c-20260607T010502-9857e714"
+  },
+  "prompt_sha": "b8849c4f6ad727e068f2209baeffb6b78b351a359053d9f36e7e98ff262afd44"
+}
