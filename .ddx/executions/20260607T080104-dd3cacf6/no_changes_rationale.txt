@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./...` fails in unrelated packages outside this bead's scope, including `cli/internal/agent` (`TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers`), `cli/internal/bead` (`TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget`), `cli/internal/server` (`TestServerStateBeadSnapshotLatencyBudget`, `TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel`), and `cli/internal/server/graphql` (`TestEfficacyRowsDateFilterAndPerfTargets`).
