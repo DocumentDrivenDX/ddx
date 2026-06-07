@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -155,5 +156,64 @@ func TestDocsAuditAlias(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "clean") {
 		t.Errorf("expected clean message, got: %q", out.String())
+	}
+}
+
+func TestDocStaleCommand_BucketsActiveHistoricalAndNoise(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "docs/parent.md", "---\nddx:\n  id: doc.parent\n---\n# Parent\n")
+	writeTestFile(t, dir, "docs/active.md", "---\nddx:\n  id: doc.active\n  status: draft\n  depends_on:\n    - doc.parent\n  review:\n    deps:\n      doc.parent: wrong\n---\n# Active\n")
+	writeTestFile(t, dir, "docs/historical.md", "---\nddx:\n  id: doc.historical\n  depends_on:\n    - doc.parent\n  review:\n    deps:\n      doc.parent: wrong\n---\n> **Historical** — archived planning note.\n# Historical\n")
+	writeTestFile(t, dir, "docs/reference.md", "---\nddx:\n  id: doc.reference\n  status: published\n  depends_on:\n    - doc.parent\n  review:\n    deps:\n      doc.parent: wrong\n---\n# Reference\n")
+
+	root := NewCommandFactory(dir).NewRootCommand()
+	root.SetArgs([]string{"doc", "stale", "--json"})
+
+	out := &bytes.Buffer{}
+	errOut := &bytes.Buffer{}
+	root.SetOut(out)
+	root.SetErr(errOut)
+
+	if err := root.Execute(); err != nil {
+		t.Fatalf("doc stale --json should succeed, got: %v", err)
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("expected no stderr output, got: %q", errOut.String())
+	}
+
+	var report struct {
+		ActiveActionable []struct {
+			ID string `json:"id"`
+		} `json:"active_actionable"`
+		HistoricalSuperseded []struct {
+			ID string `json:"id"`
+		} `json:"historical_superseded"`
+		Noise []struct {
+			ID string `json:"id"`
+		} `json:"noise"`
+		Summary struct {
+			Total                int `json:"total"`
+			ActiveActionable     int `json:"active_actionable"`
+			HistoricalSuperseded int `json:"historical_superseded"`
+			Noise                int `json:"noise"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &report); err != nil {
+		t.Fatalf("expected bucketed JSON, got %q: %v", out.String(), err)
+	}
+	if report.Summary.Total != 3 {
+		t.Fatalf("expected total 3 stale docs, got %+v", report.Summary)
+	}
+	if report.Summary.ActiveActionable != 1 || report.Summary.HistoricalSuperseded != 1 || report.Summary.Noise != 1 {
+		t.Fatalf("unexpected summary buckets: %+v", report.Summary)
+	}
+	if len(report.ActiveActionable) != 1 || report.ActiveActionable[0].ID != "doc.active" {
+		t.Fatalf("expected active doc in actionable bucket, got %+v", report.ActiveActionable)
+	}
+	if len(report.HistoricalSuperseded) != 1 || report.HistoricalSuperseded[0].ID != "doc.historical" {
+		t.Fatalf("expected historical doc in historical bucket, got %+v", report.HistoricalSuperseded)
+	}
+	if len(report.Noise) != 1 || report.Noise[0].ID != "doc.reference" {
+		t.Fatalf("expected reference doc in noise bucket, got %+v", report.Noise)
 	}
 }

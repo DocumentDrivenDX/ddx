@@ -146,7 +146,7 @@ not an authority edge:
 5. **Cascade propagation** — if a document is stale, all its dependents are transitively stale
 6. **Stamp command** (`ddx doc stamp`) — update `review.self_hash` and `review.deps` to mark a document as reviewed against its current dependencies
 7. **Graph query** (`ddx doc graph`) — show the document dependency graph as text or JSON
-8. **Stale query** (`ddx doc stale`) — list stale documents
+8. **Stale query** (`ddx doc stale`) — list stale documents, grouped into active-actionable, historical/superseded, and noise buckets so archived drift does not obscure current work
 9. **Input resolution** — resolve `inputs` selectors (`node:`, `refs:`, `code_refs:`, `paths:`) to actual content for prompt assembly
 10. **Graph configuration** — optional `.ddx/graphs/*.yaml` files defining required roots, ID-to-path mappings, and cascade rules
 11. **Body-link indexing** — scan markdown document bodies for `[[ID]]` reference syntax and index those as graph edges alongside frontmatter-declared `depends_on` edges. Support plain IDs (`[[FEAT-001]]`), slugged IDs (`[[US-036-list-mcp-servers]]`), and dotted IDs (`[[helix.workflow.artifact-hierarchy]]`). Return the union of body links and frontmatter edges without duplicate edges. Body-link indexing is markdown-only; binary/media artifacts are indexed only through sidecars.
@@ -163,12 +163,16 @@ not an authority edge:
 
 ```bash
 ddx doc graph [--json]              # Show document dependency graph
-ddx doc stale [--json]              # List stale documents
+ddx doc stale [--json]              # List stale documents, bucketed by actionability
 ddx doc stamp [paths...] [--all]    # Update review stamps
 ddx doc show <id>                   # Show document metadata and status
 ddx doc deps <id>                   # Show what a document depends on
 ddx doc dependents <id>             # Show what depends on a document
 ```
+
+`ddx doc stale --json` emits a bucketed object instead of a flat array, which
+keeps the active-actionable bucket visible while still preserving the
+historical/superseded and noise groups for operators who need the full report.
 
 ## Server Endpoints (FEAT-002 integration)
 

@@ -12,6 +12,7 @@ import (
 // DocFrontmatter holds the parsed ddx: (or legacy dun:) frontmatter block.
 type DocFrontmatter struct {
 	ID         string      `yaml:"id"`
+	Status     string      `yaml:"status"`
 	DependsOn  []string    `yaml:"depends_on"`
 	Prompt     string      `yaml:"prompt"`
 	Inputs     []string    `yaml:"inputs"`

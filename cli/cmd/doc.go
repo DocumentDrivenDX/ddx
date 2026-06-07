@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -168,36 +169,49 @@ func (f *CommandFactory) newDocGraphCommand() *cobra.Command {
 func (f *CommandFactory) newDocStaleCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stale",
-		Short: "List stale documents",
+		Short: "List stale documents by triage bucket",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			graph, err := f.buildDocGraph()
 			if err != nil {
 				return err
 			}
-			stale := graph.StaleDocs()
+			report := graph.StaleReport()
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(stale)
+				return enc.Encode(report)
 			}
 
-			if len(stale) == 0 {
+			if report.Summary.Total == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "All documents are up to date.")
 				return nil
 			}
 
-			for _, entry := range stale {
-				reasons := strings.Join(entry.Reasons, "; ")
-				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  (%s)\n", entry.ID, entry.Path, reasons)
-			}
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "stale documents: %d active-actionable, %d historical/superseded, %d noise\n",
+				report.Summary.ActiveActionable, report.Summary.HistoricalSuperseded, report.Summary.Noise)
+			printStaleBucket(out, "active-actionable", report.ActiveActionable)
+			printStaleBucket(out, "historical/superseded", report.HistoricalSuperseded)
+			printStaleBucket(out, "noise", report.Noise)
 			return nil
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd
+}
+
+func printStaleBucket(out io.Writer, label string, entries []docgraph.StaleReason) {
+	if len(entries) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "%s (%d):\n", label, len(entries))
+	for _, entry := range entries {
+		reasons := strings.Join(entry.Reasons, "; ")
+		fmt.Fprintf(out, "  - %s  %s  (%s)\n", entry.ID, entry.Path, reasons)
+	}
 }
 
 func (f *CommandFactory) newDocStampCommand() *cobra.Command {

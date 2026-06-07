@@ -91,6 +91,7 @@ type Document struct {
 	ID         string
 	Path       string
 	Title      string
+	Status     string
 	DependsOn  []string
 	Inputs     []string
 	Review     ReviewMetadata
@@ -111,6 +112,28 @@ type StaleReason struct {
 	Path    string   `json:"path"`
 	Reasons []string `json:"reasons"`
 }
+
+type StaleReport struct {
+	ActiveActionable     []StaleReason `json:"active_actionable"`
+	HistoricalSuperseded []StaleReason `json:"historical_superseded"`
+	Noise                []StaleReason `json:"noise"`
+	Summary              StaleSummary  `json:"summary"`
+}
+
+type StaleSummary struct {
+	Total                int `json:"total"`
+	ActiveActionable     int `json:"active_actionable"`
+	HistoricalSuperseded int `json:"historical_superseded"`
+	Noise                int `json:"noise"`
+}
+
+type StaleBucket string
+
+const (
+	StaleBucketActiveActionable     StaleBucket = "active_actionable"
+	StaleBucketHistoricalSuperseded StaleBucket = "historical_superseded"
+	StaleBucketNoise                StaleBucket = "noise"
+)
 
 type Graph struct {
 	RootDir    string
@@ -664,6 +687,7 @@ func ParseDocument(path string) (*Document, error) {
 	doc := &Document{
 		ID:            frontmatter.Doc.ID,
 		Title:         extractTitle([]byte(body)),
+		Status:        frontmatter.Doc.Status,
 		DependsOn:     dedupeSortedStrings(frontmatter.Doc.DependsOn),
 		Inputs:        dedupeSortedStrings(frontmatter.Doc.Inputs),
 		Review:        review,
@@ -879,6 +903,80 @@ func (g *Graph) StaleDocs() []StaleReason {
 		result = append(result, reason)
 	}
 	return result
+}
+
+// StaleReport groups stale documents into actionable, historical/superseded,
+// and noise buckets so callers can surface the active work first.
+func (g *Graph) StaleReport() StaleReport {
+	stale := g.StaleDocs()
+	report := StaleReport{
+		ActiveActionable:     []StaleReason{},
+		HistoricalSuperseded: []StaleReason{},
+		Noise:                []StaleReason{},
+	}
+	for _, entry := range stale {
+		doc := g.Documents[entry.ID]
+		switch classifyStaleBucket(doc) {
+		case StaleBucketHistoricalSuperseded:
+			report.HistoricalSuperseded = append(report.HistoricalSuperseded, entry)
+		case StaleBucketNoise:
+			report.Noise = append(report.Noise, entry)
+		default:
+			report.ActiveActionable = append(report.ActiveActionable, entry)
+		}
+	}
+	report.Summary = StaleSummary{
+		Total:                len(stale),
+		ActiveActionable:     len(report.ActiveActionable),
+		HistoricalSuperseded: len(report.HistoricalSuperseded),
+		Noise:                len(report.Noise),
+	}
+	return report
+}
+
+func classifyStaleBucket(doc *Document) StaleBucket {
+	if doc == nil {
+		return StaleBucketActiveActionable
+	}
+	if doc.ParkingLot || hasHistoricalBanner(doc.body) {
+		return StaleBucketHistoricalSuperseded
+	}
+
+	switch normalizeDocStatus(doc.Status) {
+	case "superseded", "archived", "historical", "deprecated":
+		return StaleBucketHistoricalSuperseded
+	case "published", "complete", "implemented", "converged":
+		return StaleBucketNoise
+	}
+
+	slashPath := filepath.ToSlash(doc.Path)
+	if strings.Contains(slashPath, "/references/") {
+		return StaleBucketNoise
+	}
+	if strings.Contains(slashPath, "/alignment-reviews/") {
+		return StaleBucketHistoricalSuperseded
+	}
+	return StaleBucketActiveActionable
+}
+
+func normalizeDocStatus(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	status = strings.ReplaceAll(status, "-", "_")
+	status = strings.ReplaceAll(status, " ", "_")
+	return status
+}
+
+func hasHistoricalBanner(body string) bool {
+	trimmed := strings.TrimSpace(body)
+	if trimmed == "" {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	firstBlock := lower
+	if idx := strings.Index(firstBlock, "\n\n"); idx >= 0 {
+		firstBlock = firstBlock[:idx]
+	}
+	return strings.Contains(firstBlock, "> **historical**") || strings.Contains(firstBlock, "> **superseded")
 }
 
 func staleReasonsForDocument(g *Graph, doc *Document) []string {

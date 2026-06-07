@@ -414,6 +414,44 @@ func TestParkingLotSkipped(t *testing.T) {
 	}
 }
 
+func TestStaleReportBuckets(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/parent.md":     "---\nddx:\n  id: doc.parent\n---\n# Parent\n",
+		"docs/active.md":     "---\nddx:\n  id: doc.active\n  status: draft\n  depends_on:\n    - doc.parent\n  review:\n    deps:\n      doc.parent: wrong\n---\n# Active\n",
+		"docs/historical.md": "---\nddx:\n  id: doc.historical\n  depends_on:\n    - doc.parent\n  review:\n    deps:\n      doc.parent: wrong\n---\n> **Historical** — archived planning note.\n# Historical\n",
+		"docs/reference.md":  "---\nddx:\n  id: doc.reference\n  status: published\n  depends_on:\n    - doc.parent\n  review:\n    deps:\n      doc.parent: wrong\n---\n# Reference\n",
+	})
+
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if graph.Documents["doc.active"].Status != "draft" {
+		t.Fatalf("expected doc.active status draft, got %q", graph.Documents["doc.active"].Status)
+	}
+	if graph.Documents["doc.reference"].Status != "published" {
+		t.Fatalf("expected doc.reference status published, got %q", graph.Documents["doc.reference"].Status)
+	}
+
+	report := graph.StaleReport()
+	if report.Summary.Total != 3 {
+		t.Fatalf("expected 3 stale docs, got %+v", report.Summary)
+	}
+	if report.Summary.ActiveActionable != 1 || report.Summary.HistoricalSuperseded != 1 || report.Summary.Noise != 1 {
+		t.Fatalf("unexpected stale summary: %+v", report.Summary)
+	}
+	if len(report.ActiveActionable) != 1 || report.ActiveActionable[0].ID != "doc.active" {
+		t.Fatalf("expected doc.active in active bucket, got %+v", report.ActiveActionable)
+	}
+	if len(report.HistoricalSuperseded) != 1 || report.HistoricalSuperseded[0].ID != "doc.historical" {
+		t.Fatalf("expected doc.historical in historical bucket, got %+v", report.HistoricalSuperseded)
+	}
+	if len(report.Noise) != 1 || report.Noise[0].ID != "doc.reference" {
+		t.Fatalf("expected doc.reference in noise bucket, got %+v", report.Noise)
+	}
+}
+
 func TestNoIDSkipped(t *testing.T) {
 	root := setupTestRepo(t, map[string]string{
 		"docs/noid.md": "---\nddx:\n  depends_on:\n    - something\n---\n# No ID\n",
