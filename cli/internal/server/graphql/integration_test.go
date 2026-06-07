@@ -32,6 +32,13 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func skipIntegrationInShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("integration test skipped in -short")
+	}
+}
+
 // TestMain scrubs GIT_* environment variables so subprocess git calls in tests
 // write to temp directories rather than the parent repository.
 func TestMain(m *testing.M) {
@@ -365,6 +372,7 @@ func gqlPost(t *testing.T, h http.Handler, query string) map[string]json.RawMess
 
 // TC-GQL-INT-001: Query.nodeInfo returns server node identity from StateProvider.
 func TestIntegration_Query_NodeInfo(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 	state := newTestStateProvider(workDir, store)
 	h := newGQLHandler(state, workDir, nil)
@@ -400,6 +408,7 @@ func TestIntegration_Query_NodeInfo(t *testing.T) {
 
 // TC-GQL-INT-002: Query.projects returns the registered project with correct path.
 func TestIntegration_Query_Projects(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 	state := newTestStateProvider(workDir, store)
 	h := newGQLHandler(state, workDir, nil)
@@ -438,6 +447,7 @@ func TestIntegration_Query_Projects(t *testing.T) {
 }
 
 func TestIntegration_Query_SessionsCostSummary(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 	state := newTestStateProvider(workDir, store)
 	estimate := 0.012
@@ -470,6 +480,7 @@ func TestIntegration_Query_SessionsCostSummary(t *testing.T) {
 
 // TC-GQL-INT-003: Query.beads returns beads loaded from real bead store, with pagination.
 func TestIntegration_Query_Beads(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 
 	// Create 3 beads in the real store before constructing the state provider.
@@ -522,6 +533,7 @@ func TestIntegration_Query_Beads(t *testing.T) {
 
 // TC-GQL-INT-004: Query.beadsByProject scopes results to a specific project ID.
 func TestIntegration_Query_BeadsByProject(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 
 	for _, title := range []string{"P1", "P2"} {
@@ -565,6 +577,7 @@ func TestIntegration_Query_BeadsByProject(t *testing.T) {
 
 // TC-GQL-INT-005: Mutation.beadCreate writes a new bead to the real store.
 func TestIntegration_Mutation_BeadCreate(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 	state := newTestStateProvider(workDir, store)
 	h := newGQLHandler(state, workDir, nil)
@@ -631,6 +644,7 @@ func TestIntegration_Mutation_BeadCreate(t *testing.T) {
 
 // TC-GQL-INT-006: Mutation.beadUpdate modifies fields on an existing real bead.
 func TestIntegration_Mutation_BeadUpdate(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 
 	orig := &bead.Bead{Title: "Original title", IssueType: "task", Priority: 1}
@@ -679,6 +693,7 @@ func TestIntegration_Mutation_BeadUpdate(t *testing.T) {
 
 // TC-GQL-INT-007: Mutation.beadClaim transitions bead to in_progress with assignee.
 func TestIntegration_Mutation_BeadClaim(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 
 	b := &bead.Bead{Title: "Claimable bead", IssueType: "task"}
@@ -716,6 +731,7 @@ func TestIntegration_Mutation_BeadClaim(t *testing.T) {
 
 // TC-GQL-INT-008: Mutation.beadUnclaim reverts a claimed bead back to open.
 func TestIntegration_Mutation_BeadUnclaim(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 
 	b := &bead.Bead{Title: "To be unclaimed", IssueType: "task"}
@@ -755,6 +771,7 @@ func TestIntegration_Mutation_BeadUnclaim(t *testing.T) {
 
 // TC-GQL-INT-009: Mutation.beadReopen sets a closed bead back to open.
 func TestIntegration_Mutation_BeadReopen(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 
 	b := &bead.Bead{Title: "Will be closed then reopened", IssueType: "task"}
@@ -794,6 +811,7 @@ func TestIntegration_Mutation_BeadReopen(t *testing.T) {
 // subscription resolver (resolver_sub_bead.go). The test verifies all events
 // arrive in order and that the subscription closes cleanly.
 func TestIntegration_Subscription_BeadLifecycle(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 	state := newTestStateProvider(workDir, store)
 

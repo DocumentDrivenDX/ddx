@@ -16,6 +16,7 @@ import (
 )
 
 func TestIntegration_FEAT008BackendOperations(t *testing.T) {
+	skipIntegrationInShort(t)
 	t.Setenv("HOME", t.TempDir())
 	workDir, store := setupIntegrationDir(t)
 

@@ -26,6 +26,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func skipIntegrationInShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("integration test skipped in -short")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 1: single bead, append-line + explicit commit → lands on main
 // ---------------------------------------------------------------------------
@@ -34,6 +41,7 @@ import (
 // runs a directive that appends a line to a file and commits, then asserts that
 // the bead is closed with a closing_commit_sha and that git log shows +1 commit.
 func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
@@ -92,6 +100,7 @@ func TestIntegration_ScriptHarness_SingleBead_AppendLine_Merged(t *testing.T) {
 // rationale results in outcome=no_changes and the bead remains open below the
 // adjudication threshold.
 func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
@@ -149,6 +158,7 @@ func TestIntegration_ScriptHarness_NoOp_ClassifiedAsNoChanges(t *testing.T) {
 // result returns after cancellation. That must only release the claim; it must
 // not record terminal/no_changes/loop-error queue noise.
 func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
@@ -248,6 +258,7 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 // directive creates files but omits an explicit commit, SynthesizeCommit fires and
 // the result is merged onto main with the new files present.
 func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
@@ -297,6 +308,7 @@ func TestIntegration_ScriptHarness_DirtyWorktreeSynthesized(t *testing.T) {
 // preserved under refs/ddx/iterations/, the bead stays open, and main is
 // unchanged beyond the tracker commit.
 func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
@@ -367,6 +379,7 @@ func TestIntegration_ScriptHarness_FailedExit_WithCommits_Preserved(t *testing.T
 // distinct beads and runs 5 workers concurrently (single shared store, single
 // projectRoot). All workers use the script harness.
 func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
+	skipIntegrationInShort(t)
 	const n = 5
 	projectRoot, initialSHA := newScriptHarnessRepo(t, n)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
@@ -448,6 +461,7 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 // bead while the other reports no_ready_work. This is the ddx-3315dce2 atomic
 // claim acceptance test.
 func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"
@@ -513,6 +527,7 @@ func TestIntegration_ScriptHarness_TwoWorkersSameBead_ClaimedOnce(t *testing.T) 
 // a conflict through the full ExecuteBead + script harness path would
 // duplicate that coverage without adding new invariants.
 func TestIntegration_ScriptHarness_MergeConflict_Preserved(t *testing.T) {
+	skipIntegrationInShort(t)
 	t.Skip("covered by internal/server.TestLandCoordinatorIntegration real-git merge conflict")
 }
 
@@ -525,6 +540,7 @@ func TestIntegration_ScriptHarness_MergeConflict_Preserved(t *testing.T) {
 // be claimed. This is a regression test for commit 21d16e6 (context cancellation
 // between iterations was not checked before claiming the next candidate).
 func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 2)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
@@ -578,6 +594,7 @@ func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) 
 // no_changes_rationale.txt containing a passing verification_command, the bead
 // closes as already_satisfied on the first attempt.
 func TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast(t *testing.T) {
+	skipIntegrationInShort(t)
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 	const beadID = "ddx-int-0001"

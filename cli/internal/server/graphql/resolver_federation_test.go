@@ -79,6 +79,7 @@ func newGQLHandlerWithFederation(t *testing.T, fed ddxgraphql.FederationProvider
 // returned row carries the routing metadata (nodeId, projectId, projectUrl,
 // writeCapability, status) along with the typed payload shape.
 func TestFederation_QueryShape_TwoHealthySpokes(t *testing.T) {
+	skipIntegrationInShort(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 
 	spoke1 := newSpokeServer(t, func(req map[string]any) any {
@@ -317,6 +318,7 @@ func TestFederation_QueryShape_TwoHealthySpokes(t *testing.T) {
 // render the offline spoke as a partial-result indicator). The offline spoke
 // contributes no rows to federatedBeads/Runs/Projects.
 func TestFederation_PartialResult_OneSpokeOffline(t *testing.T) {
+	skipIntegrationInShort(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 
 	good := newSpokeServer(t, func(req map[string]any) any {
@@ -395,6 +397,7 @@ func TestFederation_PartialResult_OneSpokeOffline(t *testing.T) {
 // show a version-skew badge) but is filtered out of the data fan-out, leaving
 // only compatible spokes contributing rows.
 func TestFederation_VersionSkew_RendersAndSkips(t *testing.T) {
+	skipIntegrationInShort(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 
 	compatible := newSpokeServer(t, func(req map[string]any) any {

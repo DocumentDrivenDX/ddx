@@ -12,6 +12,7 @@ import (
 )
 
 func TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	s := newTestStore(t)
 
 	// Seed a small, deterministic open-bead corpus. The IDs, timestamps, and
