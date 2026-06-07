@@ -862,12 +862,10 @@ var HeartbeatTTL = 90 * time.Second
 // Claim sets a bead to in_progress with claim metadata.
 // Fails if the bead is already claimed (status == in_progress) with a
 // fresh claim lease. A bead whose external lease is older than HeartbeatTTL
-// is considered stalled and will be reclaimed atomically.
+// is considered stalled, except that a same-machine owner with a live PID is
+// protected until the hard fallback ceiling expires.
 func (s *Store) Claim(id, assignee string) error {
-	machine, _ := os.Hostname()
-	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
-		machine = envID
-	}
+	machine := currentMachineID()
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
@@ -934,14 +932,11 @@ func (s *Store) Claim(id, assignee string) error {
 
 // ClaimWithOptions acquires or refreshes the external worker-claim lease
 // without mutating the tracked bead row. session and worktree are optional;
-// machine is derived from os.Hostname(). A stalled open/in_progress bead
-// (external lease older than HeartbeatTTL) is reclaimed atomically under the
-// store's lock.
+// machine is derived from the current host identity. A stalled open/in_progress
+// bead is reclaimed atomically under the store's lock, but a same-machine live
+// owner remains protected until the hard fallback ceiling expires.
 func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
-	machine, _ := os.Hostname()
-	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
-		machine = envID
-	}
+	machine := currentMachineID()
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
@@ -1009,13 +1004,14 @@ func (s *Store) Heartbeat(id string) error {
 }
 
 // claimLeaseIsStale returns true if the external claim lease is absent or
-// older than HeartbeatTTL. When no lease file exists, it falls back to the
-// legacy tracker heartbeat field for compatibility with imported/stale rows.
+// older than HeartbeatTTL. Same-machine live owners remain protected until the
+// hard fallback ceiling expires. When no lease file exists, it falls back to
+// the legacy tracker heartbeat field for compatibility with imported/stale rows.
 func claimLeaseIsStale(s *Store, extra map[string]any, id string) bool {
 	if s != nil {
-		if fresh, found, err := s.ClaimHeartbeatFresh(id); err == nil {
+		if rec, found, err := s.readClaimHeartbeat(id); err == nil {
 			if found {
-				return !fresh
+				return claimLeaseRecordIsStale(rec)
 			}
 		} else {
 			return heartbeatIsStale(extra)
