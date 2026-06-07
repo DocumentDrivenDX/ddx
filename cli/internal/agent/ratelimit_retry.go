@@ -2,63 +2,33 @@ package agent
 
 import (
 	"context"
-	"net/http"
-	"strconv"
-	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ratelimitpolicy"
 	agentlib "github.com/easel/fizeau"
 )
 
 // RateLimitRetryDefaultBudget is the default per-bead total wait budget for
 // rate-limit retries. AC #4 of ddx-c6e3db02 names 5 minutes.
-const RateLimitRetryDefaultBudget = 5 * time.Minute
+const RateLimitRetryDefaultBudget = ratelimitpolicy.DefaultBudget
 
 // RateLimitRetryDefaultPerWaitCap caps any single retry wait so a misbehaving
 // provider cannot pin the worker with a one-hour Retry-After. The bead
 // description names 60 seconds as the per-wait cap.
-const RateLimitRetryDefaultPerWaitCap = 60 * time.Second
+const RateLimitRetryDefaultPerWaitCap = ratelimitpolicy.DefaultPerWaitCap
 
 // RateLimitBudgetExhaustedReason is the canonical reason string written into
 // Result.Error when the per-bead retry budget is exhausted. The execute-bead
 // status mapping translates this into FailureModeAuthError so it surfaces in
 // the standard execution_failed pathway (TD-031 §8.4).
-const RateLimitBudgetExhaustedReason = "rate-limited beyond budget"
+const RateLimitBudgetExhaustedReason = ratelimitpolicy.BudgetExhaustedReason
 
 // RateLimitRetryEventKind is the bead event kind appended on each retry per
 // TD-031 §4 / §8.4 RateLimitRetryContract. The body carries the retry count
 // and wait duration.
 const RateLimitRetryEventKind = "rate-limit-retry"
 
-// rateLimitBackoffSchedule is the exponential-backoff fallback when a 429
-// response carries no parseable Retry-After value. The schedule names the
-// wait for the 1st, 2nd, … retry; entries past the end repeat the last value.
-// AC #3 of ddx-c6e3db02 specifies 1s, 5s, 15s, 30s, 60s.
-var rateLimitBackoffSchedule = []time.Duration{
-	1 * time.Second,
-	5 * time.Second,
-	15 * time.Second,
-	30 * time.Second,
-	60 * time.Second,
-}
-
-// RateLimitWaitDecision is the policy output for one rate-limit response.
-// The policy never mutates state; the caller decides whether to wait + retry
-// or to give up and surface RateLimitBudgetExhaustedReason.
-type RateLimitWaitDecision struct {
-	// ShouldRetry is true when the budget allows another wait + retry.
-	ShouldRetry bool
-	// Wait is the duration the caller should sleep before retrying.
-	// Only meaningful when ShouldRetry is true.
-	Wait time.Duration
-	// Source classifies how Wait was derived: "retry-after" when the upstream
-	// response named a specific delay, "exponential-backoff" when the schedule
-	// fallback was used. Empty when ShouldRetry is false.
-	Source string
-	// Reason is populated when ShouldRetry is false; carries
-	// RateLimitBudgetExhaustedReason in the budget-exhausted case.
-	Reason string
-}
+type RateLimitWaitDecision = ratelimitpolicy.WaitDecision
 
 // EvaluateRateLimitWait decides how long to wait before retrying after a
 // rate-limit response, and whether the per-bead budget allows the retry.
@@ -71,52 +41,7 @@ type RateLimitWaitDecision struct {
 //
 // The function is pure: no I/O, no time.Now, no global state.
 func EvaluateRateLimitWait(retryAfter time.Duration, attempt int, elapsed, budget, perWaitCap time.Duration) RateLimitWaitDecision {
-	if budget > 0 && elapsed >= budget {
-		return RateLimitWaitDecision{
-			ShouldRetry: false,
-			Reason:      RateLimitBudgetExhaustedReason,
-		}
-	}
-
-	var wait time.Duration
-	var source string
-	if retryAfter > 0 {
-		wait = retryAfter
-		source = "retry-after"
-	} else {
-		idx := attempt - 1
-		if idx < 0 {
-			idx = 0
-		}
-		if idx >= len(rateLimitBackoffSchedule) {
-			idx = len(rateLimitBackoffSchedule) - 1
-		}
-		wait = rateLimitBackoffSchedule[idx]
-		source = "exponential-backoff"
-	}
-
-	if perWaitCap > 0 && wait > perWaitCap {
-		wait = perWaitCap
-	}
-
-	if budget > 0 && elapsed+wait > budget {
-		// Trim the final wait so the bead doesn't block beyond the budget.
-		// If trimming leaves nothing, treat the budget as exhausted.
-		remaining := budget - elapsed
-		if remaining <= 0 {
-			return RateLimitWaitDecision{
-				ShouldRetry: false,
-				Reason:      RateLimitBudgetExhaustedReason,
-			}
-		}
-		wait = remaining
-	}
-
-	return RateLimitWaitDecision{
-		ShouldRetry: true,
-		Wait:        wait,
-		Source:      source,
-	}
+	return ratelimitpolicy.EvaluateRateLimitWait(retryAfter, attempt, elapsed, budget, perWaitCap)
 }
 
 // IsRateLimitResult reports whether a Runner Result indicates a rate-limit
@@ -130,55 +55,7 @@ func IsRateLimitResult(result *Result) bool {
 	if result == nil {
 		return false
 	}
-	combined := strings.ToLower(result.Error + "\n" + result.Stderr)
-	if combined == "\n" {
-		return false
-	}
-	// Quota wording must NOT match: that path is QuotaPauseContract
-	// (ddx-aede917d), not RateLimitRetryContract.
-	if strings.Contains(combined, "quota exceeded") ||
-		strings.Contains(combined, "insufficient quota") ||
-		strings.Contains(combined, "no viable provider") {
-		return false
-	}
-	if strings.Contains(combined, "rate limit") ||
-		strings.Contains(combined, "ratelimit") {
-		return true
-	}
-	// Match HTTP 429 with word boundary around the digits — avoid matching
-	// "port 4290" or fragment timestamps. The conservative form is to look
-	// for "429" framed by non-digits or as an HTTP status marker.
-	if hasIsolated429(combined) {
-		return true
-	}
-	return false
-}
-
-// hasIsolated429 returns true when the input contains "429" framed so it
-// cannot be a substring of a longer number (e.g. "4290", "12429"). A simple
-// scan is enough — the haystack is short.
-func hasIsolated429(s string) bool {
-	for i := 0; i+3 <= len(s); i++ {
-		if s[i:i+3] != "429" {
-			continue
-		}
-		// Check left boundary.
-		if i > 0 {
-			c := s[i-1]
-			if c >= '0' && c <= '9' {
-				continue
-			}
-		}
-		// Check right boundary.
-		if i+3 < len(s) {
-			c := s[i+3]
-			if c >= '0' && c <= '9' {
-				continue
-			}
-		}
-		return true
-	}
-	return false
+	return ratelimitpolicy.IsRateLimitText(result.Error + "\n" + result.Stderr)
 }
 
 // ParseRetryAfter parses a Retry-After header value per RFC 7231 §7.1.3:
@@ -188,30 +65,7 @@ func hasIsolated429(s string) bool {
 // now is supplied so tests can pin the clock; production callers pass
 // time.Now().
 func ParseRetryAfter(value string, now time.Time) time.Duration {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0
-	}
-	if secs, err := strconv.Atoi(value); err == nil {
-		if secs < 0 {
-			return 0
-		}
-		return time.Duration(secs) * time.Second
-	}
-	// HTTP-date: RFC 1123 / 850 / asctime per http.ParseTime.
-	if t, err := http.ParseTime(value); err == nil {
-		d := t.Sub(now)
-		if d < 0 {
-			return 0
-		}
-		return d
-	}
-	// Last resort: a Go duration literal ("30s", "2m"). Some harnesses emit
-	// this style on stderr; treat it as a courtesy.
-	if d, err := time.ParseDuration(value); err == nil && d >= 0 {
-		return d
-	}
-	return 0
+	return ratelimitpolicy.ParseRetryAfter(value, now)
 }
 
 // ExtractRetryAfterFromStderr scans subprocess stderr for a Retry-After
@@ -225,28 +79,7 @@ func ParseRetryAfter(value string, now time.Time) time.Duration {
 //
 // now is used as the reference for HTTP-date values.
 func ExtractRetryAfterFromStderr(stderr string, now time.Time) time.Duration {
-	if stderr == "" {
-		return 0
-	}
-	lower := strings.ToLower(stderr)
-	for _, marker := range []string{"retry-after:", "retry_after=", "retry-after ", "retry after "} {
-		idx := strings.Index(lower, marker)
-		if idx < 0 {
-			continue
-		}
-		rest := stderr[idx+len(marker):]
-		// Read up to the end of the line.
-		if eol := strings.IndexAny(rest, "\r\n"); eol >= 0 {
-			rest = rest[:eol]
-		}
-		// Strip surrounding quotes/spaces and an optional comma terminator.
-		rest = strings.TrimSpace(rest)
-		rest = strings.Trim(rest, "\"',")
-		if d := ParseRetryAfter(rest, now); d > 0 {
-			return d
-		}
-	}
-	return 0
+	return ratelimitpolicy.ExtractRetryAfterFromStderr(stderr, now)
 }
 
 // RateLimitRetryConfig configures the retry wrapper. Zero values mean
