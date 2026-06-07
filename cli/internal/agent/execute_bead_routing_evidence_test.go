@@ -108,7 +108,7 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	beadStore := bead.NewStore(ddxDir)
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
-	orchGitOps := &RealOrchestratorGitOps{}
+	orchGitOps := &RealGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
 		Model: dirFile,

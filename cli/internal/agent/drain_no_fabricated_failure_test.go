@@ -86,7 +86,7 @@ func scriptHarnessExecutorWithTempSessions(t *testing.T, projectRoot, directiveP
 	t.Helper()
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
-	orchGitOps := &RealOrchestratorGitOps{}
+	orchGitOps := &RealGitOps{}
 	repoMu := landMutexFor(projectRoot)
 	cleanupLogs := func() {
 		_ = os.RemoveAll(filepath.Join(projectRoot, ddxroot.DirName, "agent-logs"))

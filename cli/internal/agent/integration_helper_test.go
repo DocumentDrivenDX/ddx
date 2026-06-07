@@ -176,7 +176,7 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 	// calls share a stable test runner instance.
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
-	orchGitOps := &RealOrchestratorGitOps{}
+	orchGitOps := &RealGitOps{}
 	// Per-projectRoot mutex serializes git operations so concurrent workers
 	// don't race on the git index or on Land()'s CAS UpdateRefTo.
 	repoMu := landMutexFor(projectRoot)

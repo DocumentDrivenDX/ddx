@@ -284,7 +284,7 @@ func PreserveAfterPreMergeChecks(projectRoot string, res *ExecuteBeadResult, out
 		return nil, fmt.Errorf("pre-merge checks: preserve called without blocked outcome")
 	}
 	if gitOps == nil {
-		gitOps = &RealOrchestratorGitOps{}
+		gitOps = &RealGitOps{}
 	}
 	ref := PreserveRef(res.BeadID, res.BaseRev)
 	if err := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); err != nil {

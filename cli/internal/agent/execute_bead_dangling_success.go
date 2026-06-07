@@ -311,7 +311,7 @@ func recoverDanglingSuccess(
 
 	if isCommitObjectPresent(projectRoot, prior.ResultRev) {
 		ref := PreserveRef(beadID, prior.BaseRev)
-		if err := (&RealOrchestratorGitOps{}).UpdateRef(projectRoot, ref, prior.ResultRev); err == nil {
+		if err := (&RealGitOps{}).UpdateRef(projectRoot, ref, prior.ResultRev); err == nil {
 			payload["preserve_ref"] = ref
 			payload["action"] = "preserve_and_park"
 			if emit != nil {
