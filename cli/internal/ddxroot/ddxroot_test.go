@@ -26,16 +26,39 @@ func TestGlobalDir_HonorsXDGDataHome(t *testing.T) {
 	}
 }
 
-func TestDDxRoot_InTreeMode(t *testing.T) {
+func TestDDxRoot_InitializedInTreeUsesProjectDDx(t *testing.T) {
 	projectRoot := t.TempDir()
 	inTree := filepath.Join(projectRoot, ".ddx")
 	if err := os.MkdirAll(inTree, 0o755); err != nil {
 		t.Fatalf("mkdir .ddx: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(inTree, "config.yaml"), []byte("version: 1\n"), 0o644); err != nil {
+		t.Fatalf("write .ddx/config.yaml: %v", err)
+	}
 
 	got := Path(context.Background(), projectRoot)
 	if got != inTree {
 		t.Fatalf("Path() = %q, want %q", got, inTree)
+	}
+}
+
+func TestDDxRoot_BareInTreeFallsThroughToXDG(t *testing.T) {
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatalf("mkdir project root: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755); err != nil {
+		t.Fatalf("mkdir bare .ddx: %v", err)
+	}
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	got := Path(context.Background(), projectRoot)
+	want := filepath.Join(xdg, "ddx", "projects", expectedLocalIdentity(projectRoot))
+	if got != want {
+		t.Fatalf("Path() = %q, want %q", got, want)
 	}
 }
 
@@ -51,6 +74,33 @@ func TestDDxRoot_ConventionMode_XDGPath(t *testing.T) {
 	want := filepath.Join(xdg, "ddx", "projects", "github.com", "easel", "ddx")
 	if got != want {
 		t.Fatalf("Path() = %q, want %q", got, want)
+	}
+}
+
+func TestExistingPath_BareInTreeFallsThroughToXDG(t *testing.T) {
+	projectRoot := filepath.Join(t.TempDir(), "demo-project")
+	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
+		t.Fatalf("mkdir project root: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755); err != nil {
+		t.Fatalf("mkdir bare .ddx: %v", err)
+	}
+	initGitRepo(t, projectRoot)
+
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	want := filepath.Join(xdg, "ddx", "projects", expectedLocalIdentity(projectRoot))
+	if err := os.MkdirAll(want, 0o755); err != nil {
+		t.Fatalf("mkdir xdg root: %v", err)
+	}
+
+	got, ok := ExistingPath(context.Background(), projectRoot)
+	if !ok {
+		t.Fatal("ExistingPath() = false, want true")
+	}
+	if got != want {
+		t.Fatalf("ExistingPath() = %q, want %q", got, want)
 	}
 }
 

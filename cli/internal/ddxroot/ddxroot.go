@@ -39,7 +39,7 @@ func JoinRelative(elems ...string) string {
 // exists. Unlike Path, it never bootstraps a convention root.
 func ExistingPath(ctx context.Context, projectRoot string) (string, bool) {
 	inTree := InTree(projectRoot)
-	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+	if isInitializedInTree(inTree) {
 		return inTree, true
 	}
 	root := filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
@@ -69,17 +69,23 @@ func JoinProjectContext(ctx context.Context, projectRoot string, elems ...string
 
 // Path returns the DDx state root for projectRoot.
 //
-// When the project already has an in-tree `.ddx/`, that remains authoritative.
-// Otherwise DDx falls back to an XDG-scoped convention root derived from the
-// project's canonical git remote, or a deterministic local identity.
+// When the project already has an initialized in-tree `.ddx/config.yaml`, that
+// remains authoritative. Otherwise DDx falls back to an XDG-scoped convention
+// root derived from the project's canonical git remote, or a deterministic
+// local identity.
 func Path(ctx context.Context, projectRoot string) string {
 	inTree := InTree(projectRoot)
-	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+	if isInitializedInTree(inTree) {
 		return inTree
 	}
 	root := filepath.Join(projectsRoot(), projectIdentity(ctx, projectRoot))
 	_ = bootstrapConventionRoot(ctx, projectRoot, root)
 	return root
+}
+
+func isInitializedInTree(dir string) bool {
+	info, err := os.Stat(filepath.Join(dir, "config.yaml"))
+	return err == nil && !info.IsDir()
 }
 
 func projectsRoot() string {
