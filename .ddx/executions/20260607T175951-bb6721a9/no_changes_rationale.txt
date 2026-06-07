@@ -1,0 +1,2 @@
+status: open
+reason: retryable extraction failure while hoisting the execute-bead loop into runIteration; the source was restored to a known-good baseline and needs a safer scripted rewrite

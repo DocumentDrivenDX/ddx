@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260607T175951-bb6721a9",
+  "bead_id": "ddx-f2a366db",
+  "base_rev": "2429fabc7480ece64675f3022df1467bf8e48cf9",
+  "created_at": "2026-06-07T18:00:30.733506554Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f2a366db",
+    "title": "code-health: split ExecuteBeadWorker.Run loop body into a runIteration method (2473-LOC god function)",
+    "description": "PROBLEM/ROOT CAUSE: cli/internal/agent/execute_bead_loop.go:1133 ExecuteBeadWorker.Run is 2,473 LOC — pre-loop setup (:1133-:1499) plus the entire iteration loop (for { at :1500). The loop body has comment-delimited phases that are natural extraction seams (candidate selection :1500-1799, wedge-guard+atomic-claim :1840-1958, intake :2012, lint gate :2452, dispatch+watchdog :2559-2741, post-attempt classification :2742+).\n\nPROPOSED FIX: STRICTLY MECHANICAL hoist (no behavior change): extract the loop body into (w *ExecuteBeadWorker) runIteration(ctx, loopState, ...) (iterationOutcome, error), leaving Run as setup + for { runIteration(...) }. Introduce a small loopState/iterationOutcome struct for the values currently closed over. The phase helper functions mostly already exist further down the file.\n\nNON-SCOPE: do NOT also extract the dispatch/post-attempt sub-phases here (separate follow-up); do NOT touch ExecuteBeadWithConfig; no behavior/event/ordering change.",
+    "acceptance": "1. Run body \u003c 500 LOC; runIteration carries the per-iteration phases.\n2. No change to emitted events, claim/release ordering, or cooldown logic (diff is hoist-only).\n3. cd cli \u0026\u0026 go test ./internal/agent/... green (existing loop/worker tests unchanged).\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:agent",
+      "kind:refactor",
+      "code-health",
+      "phase:iterate",
+      "hot-file"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T175951-bb6721a9",
+    "prompt": ".ddx/executions/20260607T175951-bb6721a9/prompt.md",
+    "manifest": ".ddx/executions/20260607T175951-bb6721a9/manifest.json",
+    "result": ".ddx/executions/20260607T175951-bb6721a9/result.json",
+    "checks": ".ddx/executions/20260607T175951-bb6721a9/checks.json",
+    "usage": ".ddx/executions/20260607T175951-bb6721a9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f2a366db-20260607T175951-bb6721a9"
+  },
+  "prompt_sha": "0fc8f8ddaf84db5de520fbde62571f07cbf56ffce5299fa7fd623d58b21ff45a"
+}
