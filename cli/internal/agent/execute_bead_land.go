@@ -949,6 +949,24 @@ func landIterationRef(beadID, attemptID, tip string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, attempt, short)
 }
 
+func pinPreserveRef(gitOps LandingGitOps, wd string, req LandRequest, tip string) (string, error) {
+	preserveRef := landIterationRef(req.BeadID, req.AttemptID, tip)
+	if err := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); err != nil {
+		return preserveRef, err
+	}
+	return preserveRef, nil
+}
+
+func buildPreservedResult(req LandRequest, preserveRef, reason string, contribCount int) *LandResult {
+	return &LandResult{
+		Status:            "preserved",
+		PreserveRef:       preserveRef,
+		Reason:            reason,
+		TargetBranch:      req.TargetBranch,
+		MergedCommitCount: contribCount,
+	}
+}
+
 // prepareLandEvidence copies the execution evidence into the landing worktree,
 // rewrites the result artifact, and stages the evidence files. It runs outside
 // the main-git lock so large evidence directories do not hold the shared lock
@@ -1467,9 +1485,9 @@ func preserveIfPostLandGateFailsLocked(wd string, req LandRequest, gitOps Landin
 	if len(req.PostLandCommand) == 0 {
 		return nil, nil
 	}
-	preserveRef := landIterationRef(req.BeadID, req.AttemptID, preLandTip)
-	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
-		return nil, fmt.Errorf("preserving %s after post-land gate: %w", preserveRef, upErr)
+	preserveRef, err := pinPreserveRef(gitOps, wd, req, preLandTip)
+	if err != nil {
+		return nil, fmt.Errorf("preserving %s after post-land gate: %w", preserveRef, err)
 	}
 	if revertErr := gitOps.UpdateRefTo(wd, targetRef, preLandTip, landedTip); revertErr != nil {
 		return nil, fmt.Errorf("restoring %s to %s after post-land gate failed: %w", targetRef, preLandTip, revertErr)
@@ -1479,34 +1497,20 @@ func preserveIfPostLandGateFailsLocked(wd string, req LandRequest, gitOps Landin
 	if trimmed := strings.TrimSpace(output); trimmed != "" {
 		reason += ": " + truncatePostLandGateOutput(trimmed)
 	}
-	result := &LandResult{
-		Status:            "preserved",
-		PreserveRef:       preserveRef,
-		Reason:            reason,
-		TargetBranch:      req.TargetBranch,
-		MergedCommitCount: contribCount,
-	}
-	return result, nil
+	return buildPreservedResult(req, preserveRef, reason, contribCount), nil
 }
 
 func preserveAfterEvidenceFailure(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, dirtyBefore []string, evidenceErr error) (*LandResult, error) {
-	preserveRef := landIterationRef(req.BeadID, req.AttemptID, preLandTip)
-	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
-		return nil, fmt.Errorf("preserving %s after evidence commit failure: %w", preserveRef, upErr)
+	preserveRef, err := pinPreserveRef(gitOps, wd, req, preLandTip)
+	if err != nil {
+		return nil, fmt.Errorf("preserving %s after evidence commit failure: %w", preserveRef, err)
 	}
 	if landedTip != "" {
 		if revertErr := gitOps.UpdateRefTo(wd, targetRef, preLandTip, landedTip); revertErr != nil {
 			return nil, fmt.Errorf("restoring %s to %s after evidence commit failed: %w", targetRef, preLandTip, revertErr)
 		}
 	}
-	result := &LandResult{
-		Status:            "preserved",
-		PreserveRef:       preserveRef,
-		Reason:            "evidence commit failed: " + evidenceErr.Error(),
-		TargetBranch:      req.TargetBranch,
-		MergedCommitCount: contribCount,
-	}
-	return result, nil
+	return buildPreservedResult(req, preserveRef, "evidence commit failed: "+evidenceErr.Error(), contribCount), nil
 }
 
 func runPostLandCommand(wd string, command []string) (string, error) {
@@ -1551,17 +1555,11 @@ func preserveIfLargeDeletion(wd string, req LandRequest, gitOps LandingGitOps, c
 		return nil, nil
 	}
 
-	preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
-	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
-		return nil, fmt.Errorf("preserving %s after large-deletion gate: %w", preserveRef, upErr)
+	preserveRef, err := pinPreserveRef(gitOps, wd, req, currentTip)
+	if err != nil {
+		return nil, fmt.Errorf("preserving %s after large-deletion gate: %w", preserveRef, err)
 	}
-	return &LandResult{
-		Status:            "preserved",
-		PreserveRef:       preserveRef,
-		Reason:            fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold),
-		TargetBranch:      req.TargetBranch,
-		MergedCommitCount: contribCount,
-	}, nil
+	return buildPreservedResult(req, preserveRef, fmt.Sprintf("large-deletion gate: %s deleted %d lines (threshold %d) without intentional large deletion acknowledgement", finding.Path, finding.Deleted, threshold), contribCount), nil
 }
 
 func largeDeletionLineThreshold(req LandRequest) int {
@@ -1628,17 +1626,11 @@ func preserveIfSyntaxSanityFails(wd string, req LandRequest, gitOps LandingGitOp
 		return nil, nil
 	}
 
-	preserveRef := landIterationRef(req.BeadID, req.AttemptID, currentTip)
-	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
-		return nil, fmt.Errorf("preserving %s after syntax sanity gate: %w", preserveRef, upErr)
+	preserveRef, err := pinPreserveRef(gitOps, wd, req, currentTip)
+	if err != nil {
+		return nil, fmt.Errorf("preserving %s after syntax sanity gate: %w", preserveRef, err)
 	}
-	return &LandResult{
-		Status:            "preserved",
-		PreserveRef:       preserveRef,
-		Reason:            fmt.Sprintf("syntax sanity gate: %s: %s", finding.Path, finding.Reason),
-		TargetBranch:      req.TargetBranch,
-		MergedCommitCount: contribCount,
-	}, nil
+	return buildPreservedResult(req, preserveRef, fmt.Sprintf("syntax sanity gate: %s: %s", finding.Path, finding.Reason), contribCount), nil
 }
 
 func syntaxSanityFindingForResult(gitOps LandingGitOps, wd, baseRev, resultRev string) (syntaxSanityFinding, bool, error) {
