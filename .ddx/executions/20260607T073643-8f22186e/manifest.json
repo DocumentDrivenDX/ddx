@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260607T073643-8f22186e",
+  "bead_id": "ddx-ec9fef0a",
+  "base_rev": "513cc26b2b01e3b87f1ab5308225472feabb12d4",
+  "created_at": "2026-06-07T07:36:59.526650259Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ec9fef0a",
+    "title": "bead store: make list read APIs ctx-first",
+    "description": "PROBLEM\nTD-027 requires the foundational bead Store read surface to be typed and ctx-first, but Store list reads still accept untyped variadic arguments. This keeps ReadAll and ReadAllFiltered ambiguous and leaves their callsites dependent on storeCallContext argument scanning.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/backend.go:80-84 declares BeadReader with ReadAll(args ...any) and ReadAllFiltered(args ...any).\n- cli/internal/bead/store.go:181-240 exposes Store.ReadAll(args ...any) and Store.ReadAllFiltered(args ...any), using storeCallContext from cli/internal/bead/store.go:134-141.\n\nPROPOSED FIX\nChange only Store.ReadAll and Store.ReadAllFiltered to typed ctx-first signatures: ReadAll(ctx context.Context) and ReadAllFiltered(ctx context.Context, pred func(Bead) bool). Update the corresponding BeadReader interface methods in cli/internal/bead/backend.go. Migrate only ReadAll and ReadAllFiltered callsites across the repo to pass context explicitly. Add deterministic bead package tests proving canceled contexts are honored for both list read paths.\n\nNON-SCOPE\n- Init and GenID signature migration.\n- Mutation APIs: Create, Update, and Close.\n- Event method ctx threading: AppendEvent, Events, and EventsByKind.\n- Removing workflow helper methods beyond the foundational signatures this bead changes.\n- Caller migration unrelated to ReadAll and ReadAllFiltered.\n- Get and GetWithArchive signature migration; those are assigned to sibling children.\n- Do not implement parent acceptance criteria assigned to sibling child beads.\n\nGOVERNING ARTIFACT\n- TD-027.\n\nPARENT/DEPS\n- Parent/split source: ddx-464feba2.\n- Immediate parent bead: ddx-cc298105.\n- Deps: no additional deps; this child can land independently of the setup/id, mutation signature, Get, and GetWithArchive children.",
+    "acceptance": "1. TestStoreReadAllHonorsCanceledContext and TestStoreReadAllFilteredHonorsCanceledContext are added or updated under cli/internal/bead and pass with cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestStore(ReadAll|ReadAllFiltered)_'.\n2. All ReadAll and ReadAllFiltered callsites compile without variadic context arguments, and cd cli \u0026\u0026 go test ./internal/bead/... passes.\n3. lefthook run pre-commit passes.",
+    "parent": "ddx-0d3912d8",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:refactor",
+      "spec:TD-027",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-ec9fef0a (changed existing dirty paths: .ddx/beads.jsonl)\",\"fingerprint\":\"9f84147638bf3b60147697290275faf30df4955d13b0af5d5c899fd3c46db64b\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"9f84147638bf3b60147697290275faf30df4955d13b0af5d5c899fd3c46db64b\"}",
+          "created_at": "2026-06-07T07:35:10.914589148Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T073643-8f22186e",
+    "prompt": ".ddx/executions/20260607T073643-8f22186e/prompt.md",
+    "manifest": ".ddx/executions/20260607T073643-8f22186e/manifest.json",
+    "result": ".ddx/executions/20260607T073643-8f22186e/result.json",
+    "checks": ".ddx/executions/20260607T073643-8f22186e/checks.json",
+    "usage": ".ddx/executions/20260607T073643-8f22186e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ec9fef0a-20260607T073643-8f22186e"
+  },
+  "prompt_sha": "4d47d5cd565fc54b32334ad20b0cb7387472da00166c2283700650d8de5f29e4"
+}
