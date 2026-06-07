@@ -191,6 +191,8 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 	}
 	allowed := []string{
 		"ddx bead create",
+		"parent=<parent-id>",
+		"parent -> child",
 		"ddx bead dep add",
 		"child-to-child or sibling/replacement edges",
 		"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
@@ -215,6 +217,31 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 			for _, sub := range mustNotContain {
 				if strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt unexpectedly still contains deprecated lifecycle substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteBeadPromptSnapshotsUseParentToChildDecompositionEdges(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			if strings.Contains(rendered, "ddx bead dep add <child-id> <parent-id>") {
+				t.Fatalf("rendered %s prompt still contains deprecated child-to-parent dep-add instruction", c.variant)
+			}
+			for _, sub := range []string{
+				"parent=<parent-id>",
+				"parent -> child",
+				"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
+			} {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing parent-to-child decomposition substring %q", c.variant, sub)
 				}
 			}
 		})
