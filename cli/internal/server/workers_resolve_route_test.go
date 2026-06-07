@@ -165,15 +165,26 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()
+	m.LandCoordinators.gitOpsOverride = &fakeLandingGitOps{}
+	t.Cleanup(func() {
+		m.LandCoordinators.StopAll()
+	})
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		Harness: "fiz",
-		Model:   "gpt-5.4-mini",
-		Mode:    "once",
+		Harness:  "fiz",
+		Model:    "gpt-5.4-mini",
+		NoReview: true,
+		Mode:     "once",
 	})
 	require.NoError(t, err)
 
-	final := waitForWorkerExit(t, m, record.ID, 30*time.Second)
+	require.Eventually(t, func() bool {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		return svc.executeCalled
+	}, 2*time.Second, 10*time.Millisecond, "worker must reach Execute promptly")
+
+	final := waitForWorkerExit(t, m, record.ID, 6*time.Second)
 	assert.NotEqual(t, "failed", final.State, "worker should complete without a ResolveRoute failure")
 
 	svc.mu.Lock()
