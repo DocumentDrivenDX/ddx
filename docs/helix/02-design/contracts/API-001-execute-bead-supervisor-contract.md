@@ -112,12 +112,7 @@ drained, the operator stops it, or a fatal project error occurs.
 6. Run `ddx try` against the bead from the project root and
    capture its documented result schema.
 7. Classify the outcome reported by `execute-bead` from the documented
-   supervisor-visible `status` field:
-   - structural validation failure before launch
-   - execution failure
-   - post-run check failure
-   - land conflict after a successful attempt
-   - success
+   supervisor-visible `status` field using the canonical taxonomy below.
 8. Continue scanning the same project queue.
 
 The loop must never infer readiness from HELIX-specific hidden policy. It uses
@@ -174,12 +169,45 @@ epic execution is introduced elsewhere in the system.
 The supervisor consumes only the documented result envelope emitted by
 `ddx try`:
 
-- `status`: one of `structural_validation_failed`, `execution_failed`,
-  `post_run_check_failed`, `land_conflict`, or `success`
+- `status`: canonical supervisor-visible status, delegated to the
+  `ExecuteBeadStatus*` enum in `cli/internal/agent/execute_bead_status.go`
 - `detail`: optional operator-facing text for logging and diagnostics
 
 The supervisor must not infer state from free-form reason strings. It uses the
 `status` field for control flow and may surface `detail` for observability.
+FEAT-010 defines the broader layer-2 / layer-3 lifecycle, and API-001 only
+publishes the supervisor-visible projection of that implementation enum.
+
+| Status | Bucket | Supervisor-facing disposition |
+|---|---|---|
+| `success` | close | Close the bead and count the attempt as a success. |
+| `already_satisfied` | close | Close the bead as already satisfied; this is the success-adjacent terminal close path. |
+| `no_changes` | close-or-unclaim | This is the only conditional row: a verified already-satisfied rationale may close the bead, otherwise the loop keeps it open for retry or inspection. |
+| `structural_validation_failed` | unclaim | Validation failed before launch; leave the bead open. |
+| `execution_failed` | unclaim | Preserve the attempt evidence and leave the bead open. |
+| `post_run_check_failed` | unclaim | Preserve the attempt evidence and leave the bead open. |
+| `ratchet_failed` | unclaim | Preserve the attempt evidence and leave the bead open. |
+| `land_conflict` | unclaim | Preserve the attempt evidence and leave the bead open until conflict recovery or operator action. |
+| `push_failed` | unclaim | Preserve the attempt evidence and leave the bead open; the push side of landing failed. |
+| `push_conflict` | unclaim | Preserve the attempt evidence, park the bead, and leave it open for retry or recovery. |
+| `preserved_needs_review` | operator-attention | Park the bead for operator review. |
+| `no_evidence_produced` | unclaim | Leave the bead open; the attempt produced no durable evidence. |
+| `resource_exhausted` | operator-attention | Stop the worker loop and surface host-resource exhaustion for operator action. |
+| `declined_needs_decomposition` | operator-attention | Park the bead for decomposition rather than retrying the current shape. |
+| `review_request_changes` | unclaim | Reopen the bead for repair or a follow-up attempt. |
+| `review_block` | unclaim | Reopen the bead for repair or a follow-up attempt. |
+| `review_malfunction` | operator-attention | Park the bead because the review path malfunctioned. |
+| `review_request_clarification` | operator-attention | Park the bead for operator clarification. |
+| `land_conflict_unresolvable` | operator-attention | Park the bead because automated conflict recovery failed. |
+| `land_conflict_operator_required` | operator-attention | Move the bead to the operator lane. |
+| `review_terminal_block` | operator-attention | Move the bead to the operator lane because the review verdict is terminal. |
+| `review_fixable_gap` | unclaim | Reopen the bead for a repair cycle. |
+| `repair-cycle-exhausted` | operator-attention | Park the bead after the repair cycle budget is exhausted. |
+
+There are no future-only statuses in the current contract. The earlier
+five-status API-001 draft was a historical minimal subset and is superseded by
+the taxonomy above. `repair-cycle-exhausted` keeps its historical hyphenated
+wire spelling for compatibility with existing evidence.
 
 `execute-bead` result classification is based on the managed worktree outcome,
 not solely on agent-authored commits. If the agent leaves tracked file edits
