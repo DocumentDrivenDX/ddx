@@ -21,40 +21,12 @@ func TestE2E_BasicWorkflow(t *testing.T) {
 		t.Skip("Skipping E2E test in short mode")
 	}
 
-	// Build the CLI if needed
-	buildCmd := exec.Command("go", "build", "-o", "ddx", "..")
-	if err := buildCmd.Run(); err != nil {
-		t.Skipf("Could not build CLI: %v", err)
-	}
-
-	// Make sure it's executable
-	_ = os.Chmod("ddx", 0755)
-	defer func() { _ = os.Remove("ddx") }()
-
 	// Create test workspace
 	workspace := t.TempDir()
 	cliPath := filepath.Join(workspace, "ddx")
 
-	// Copy built CLI to workspace for consistent path handling
-	srcCLI := "ddx" // Built in current directory by buildCmd above
-
-	// Get source file info for permissions
-	srcInfo, err := os.Stat(srcCLI)
-	if err != nil {
-		t.Skipf("Could not stat CLI binary: %v", err)
-	}
-
-	// Read source file
-	srcData, err := os.ReadFile(srcCLI)
-	if err != nil {
-		t.Skipf("Could not read CLI binary: %v", err)
-	}
-
-	// Write to destination
-	err = os.WriteFile(cliPath, srcData, srcInfo.Mode())
-	if err != nil {
-		t.Skipf("Could not write CLI binary to workspace: %v", err)
-	}
+	// Copy shared CLI to workspace for consistent path handling.
+	copySmokeTestBinary(t, cliPath)
 
 	// Step 1: Initialize DDx
 	t.Run("init", func(t *testing.T) {
@@ -179,14 +151,7 @@ persona_bindings:
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 
-	// Build CLI
-	buildCmd := exec.Command("go", "build", "-o", cliPath, "..")
-	buildCmd.Dir = projectDir
-	if err := buildCmd.Run(); err != nil {
-		t.Skipf("Could not build CLI: %v", err)
-	}
-	_ = os.Chmod(cliPath, 0755)
-	defer func() { _ = os.Remove(cliPath) }()
+	copySmokeTestBinary(t, cliPath)
 
 	// Apply template
 	cmd := exec.Command(cliPath, "apply", "templates/test")
@@ -235,14 +200,7 @@ sync:
 	require.NoError(t, os.MkdirAll(ddxDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0644))
 
-	// Build CLI
-	buildCmd := exec.Command("go", "build", "-o", cliPath, "..")
-	buildCmd.Dir = workspace
-	if err := buildCmd.Run(); err != nil {
-		t.Skipf("Could not build CLI: %v", err)
-	}
-	_ = os.Chmod(cliPath, 0755)
-	defer func() { _ = os.Remove(cliPath) }()
+	copySmokeTestBinary(t, cliPath)
 
 	// Test update command
 	updateCmd := exec.Command(cliPath, "update", "--check")

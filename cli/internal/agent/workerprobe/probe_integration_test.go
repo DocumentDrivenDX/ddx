@@ -8,11 +8,21 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
+)
+
+var (
+	sharedDdxBinaryOnce       sync.Once
+	sharedDdxBinaryPath       string
+	sharedDdxBinaryBuildErr   error
+	sharedDdxBinaryBuildOut   []byte
+	sharedDdxBinaryBuildCount atomic.Int32
 )
 
 // TestWorker_RealAttemptEvents_FlowToServer is the wired-in end-to-end
@@ -35,17 +45,7 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	// one bead to claim → at least one bead-scoped event flows. We don't
 	// require the bead to succeed; ddx work will emit loop.start +
 	// bead.claimed before any harness invocation.
-	// Build a fresh ddx binary from the current tree so the subprocess
-	// includes the workerprobe wiring under test (cannot rely on $PATH ddx
-	// being current). Build before NewFixtureRepo so the same binary seeds
-	// the fixture, avoiding two builds.
-	binDir := t.TempDir()
-	binPath := filepath.Join(binDir, "ddx")
-	build := exec.Command("go", "build", "-buildvcs=false", "-o", binPath, ".")
-	build.Dir = repoCLIDir(t)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build ddx: %v\n%s", err, out)
-	}
+	binPath := sharedDdxBinary(t)
 	t.Setenv("DDX_BIN", binPath)
 
 	proj := buildFixtureRepo(t, binPath, "standard")
@@ -137,6 +137,46 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	}
 	if !hasExpected {
 		t.Errorf("expected at least one loop.* or bead.* event mirrored, got kinds=%v", kinds)
+	}
+}
+
+func sharedDdxBinary(t *testing.T) string {
+	t.Helper()
+
+	sharedDdxBinaryOnce.Do(func() {
+		sharedDdxBinaryBuildCount.Add(1)
+
+		binDir, err := os.MkdirTemp("", "ddx-workerprobe-bin-*")
+		if err != nil {
+			sharedDdxBinaryBuildErr = err
+			return
+		}
+		sharedDdxBinaryPath = filepath.Join(binDir, "ddx")
+
+		build := exec.Command("go", "build", "-buildvcs=false", "-o", sharedDdxBinaryPath, ".")
+		build.Dir = repoCLIDir(t)
+		sharedDdxBinaryBuildOut, sharedDdxBinaryBuildErr = build.CombinedOutput()
+	})
+
+	if sharedDdxBinaryBuildErr != nil {
+		t.Fatalf("go build ddx: %v\n%s", sharedDdxBinaryBuildErr, sharedDdxBinaryBuildOut)
+	}
+	return sharedDdxBinaryPath
+}
+
+func TestSharedDdxBinaryBuildsOnce(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test: builds ddx subprocess")
+	}
+
+	first := sharedDdxBinary(t)
+	second := sharedDdxBinary(t)
+
+	if first != second {
+		t.Fatalf("expected shared ddx binary path, got %q and %q", first, second)
+	}
+	if got := sharedDdxBinaryBuildCount.Load(); got != 1 {
+		t.Fatalf("expected one ddx binary build, got %d", got)
 	}
 }
 
