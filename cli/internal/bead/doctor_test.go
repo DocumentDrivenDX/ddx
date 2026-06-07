@@ -195,6 +195,14 @@ func TestBeadDoctorFix_WritesBackupAndArtifact(t *testing.T) {
 // bead's parent chain, repair only those edges under --fix, and leave unrelated
 // dependencies intact.
 func TestBeadDoctorRepairsParentAncestorBackEdge(t *testing.T) {
+	assertBeadDoctorRepairsParentAncestorBackEdge(t)
+}
+
+func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
+	assertBeadDoctorRepairsParentAncestorBackEdge(t)
+}
+
+func assertBeadDoctorRepairsParentAncestorBackEdge(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
