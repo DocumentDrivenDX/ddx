@@ -14,10 +14,11 @@ import (
 // newBeadDoctorCommand wires `ddx bead doctor` / `ddx bead doctor --fix`.
 //
 // Scan mode (no flags): exits non-zero if any field on any bead exceeds the
-// per-field cap (ddx-f8a11202), reporting the offending bead id, field, and
-// size. Safe to run on any tree — no mutations.
+// per-field cap (ddx-f8a11202) or if a dependency points back into the bead's
+// parent chain. Safe to run on any tree — no mutations.
 //
-// Fix mode (--fix): rewrites oversized fields in place. Before touching the
+// Fix mode (--fix): rewrites oversized fields in place and removes dependency
+// edges that point back into the bead's parent chain. Before touching the
 // tracker the command writes a timestamped backup under .ddx/backups/ so
 // the original file is always recoverable. Overflow content persists as
 // artifacts under .ddx/executions/<bead-id>/repair-<timestamp>/ and a
@@ -31,7 +32,7 @@ import (
 func (f *CommandFactory) newBeadDoctorCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Detect (and optionally repair) beads.jsonl rows with oversized fields",
+		Short: "Detect (and optionally repair) beads.jsonl rows with oversized fields or back-edge deps",
 		Long: `Scan the bead tracker for fields that exceed the per-field size cap.
 
 Bead fields (description, acceptance, notes, events[].body, events[].summary)
@@ -40,15 +41,21 @@ bd import (upstream's Dolt TEXT column limit). Fields over the cap usually
 come from a writer bug that landed before the cap was enforced — for
 example a reviewer stream dumped verbatim into an event body.
 
+The doctor also scans for dependency edges whose targets appear in the bead's
+parent chain. Those findings are reported as parent_ancestor_in_deps and
+--fix removes only the offending edges, leaving the rest of the dependency
+list untouched.
+
 Without --fix this command only reports offending rows and exits non-zero.
 With --fix it:
 
   1. Writes a timestamped backup to .ddx/backups/ before any mutation.
   2. Truncates each oversized field to the cap using head+tail+marker.
-  3. Writes the full original payload to
+  3. Writes the full original payload for truncated fields to
      .ddx/executions/<bead>/repair-<timestamp>/<field>.log so forensics
      remain possible.
-  4. Appends a kind=repair event to every rewritten bead.
+  4. Removes dependency edges that point back into the bead's parent chain.
+  5. Appends a kind=repair event to every rewritten bead.
 
 Idempotent: once a tracker is clean, running --fix again is a no-op.
 
@@ -136,15 +143,18 @@ For each finding, reports whether result_rev is reachable from HEAD:
 
 			out := cmd.OutOrStdout()
 			if report.Clean() {
-				fmt.Fprintf(out, "bead doctor: %s — clean (no fields exceed %d bytes)\n", path, bead.MaxFieldBytes)
+				fmt.Fprintf(out, "bead doctor: %s — clean (no oversized fields or parent-ancestor deps detected)\n", path)
 				return nil
 			}
-			fmt.Fprintf(out, "bead doctor: %s — %d finding(s) exceeding %d-byte cap:\n", path, len(report.Findings), bead.MaxFieldBytes)
+			fmt.Fprintf(out, "bead doctor: %s — %d finding(s):\n", path, len(report.Findings))
 			for _, f := range report.Findings {
-				fmt.Fprintf(out, "  %s  %s  %d bytes  head=%q\n", f.BeadID, f.FieldPath, f.SizeBytes, f.SampleHead)
+				fmt.Fprintln(out, formatBeadDoctorFinding(f))
 			}
 			if doFix {
-				fmt.Fprintf(out, "\nrepair complete. backup written to %s/backups/. artifact sidecars under %s/executions/<bead>/repair-*/\n", filepath.Dir(path), filepath.Dir(path))
+				fmt.Fprintf(out, "\nrepair complete. backup written to %s/backups/.\n", filepath.Dir(path))
+				if hasBeadDoctorKind(report.Findings, "oversized_field") {
+					fmt.Fprintf(out, "truncated fields were captured under %s/executions/<bead>/repair-*/\n", filepath.Dir(path))
+				}
 				return nil
 			}
 			// Non-fix scan: non-zero exit via cobra error so CI can catch it.
@@ -155,4 +165,24 @@ For each finding, reports whether result_rev is reachable from HEAD:
 	cmd.Flags().Bool("json", false, "Output findings as JSON")
 	cmd.Flags().Bool("dangling", false, "Detect in_progress beads with a prior task_succeeded result (dangling-success, ddx-2b2d114e)")
 	return cmd
+}
+
+func formatBeadDoctorFinding(f bead.DoctorFinding) string {
+	switch f.Kind {
+	case "parent_ancestor_in_deps":
+		return fmt.Sprintf("  %s  %s  %s  target=%s  chain=%s", f.BeadID, f.Kind, f.FieldPath, f.TargetID, f.SampleHead)
+	case "unparseable_line":
+		return fmt.Sprintf("  %s  %s  size=%d  head=%q", f.BeadID, f.Kind, f.SizeBytes, f.SampleHead)
+	default:
+		return fmt.Sprintf("  %s  %s  %s  %d bytes  head=%q", f.BeadID, f.Kind, f.FieldPath, f.SizeBytes, f.SampleHead)
+	}
+}
+
+func hasBeadDoctorKind(findings []bead.DoctorFinding, kind string) bool {
+	for _, f := range findings {
+		if f.Kind == kind {
+			return true
+		}
+	}
+	return false
 }
