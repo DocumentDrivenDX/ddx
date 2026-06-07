@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test test-full test-perf coverage-ratchet lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
+.PHONY: all build clean test test-full test-perf coverage-ratchet lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills go-discovery-verify eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -62,6 +62,17 @@ frontend-verify:
 	fi; \
 	echo "  ok"
 
+# Verify that Go package discovery never descends into frontend node_modules.
+# The CLI module owns the server/frontend build, while node_modules is a
+# separate nested module boundary used to keep third-party Go packages out of
+# `go list ./...` and `go test ./...`.
+go-discovery-verify:
+	@echo "Verifying Go discovery excludes frontend node_modules..."
+	@cd . && if go list ./... | grep -q 'frontend/node_modules'; then \
+		echo "go list discovered packages under internal/server/frontend/node_modules"; \
+		exit 1; \
+	fi
+
 # Sync the canonical default-plugin skill tree (../library/skills/) and its
 # manifest into internal/registry/defaultplugin/library/ so //go:embed (which
 # cannot traverse upward out of the package) picks them up. Runs as a prereq
@@ -105,7 +116,7 @@ deps:
 	go mod tidy
 
 # Run tests
-test: copy-skills
+test: copy-skills go-discovery-verify
 	@echo "Running tests..."
 	go test -v ./...
 
