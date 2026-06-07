@@ -390,7 +390,7 @@ func SubmitWithPreMergeChecks(
 // parks the parent for operator review if the split is lossy, depth-capped, or
 // introduces a parent back-edge. The bead must already be unclaimed before
 // this is called.
-func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) {
+func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) bool {
 	emit := func(kind string, body map[string]any) {
 		if runtime.EventSink == nil {
 			return
@@ -431,28 +431,28 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			CreatedAt: at,
 		})
 		parkOperator("queue-level depth cap exceeded; operator must split")
-		return
+		return false
 	}
 
 	decomp, err := runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
 	if err != nil {
 		parkOperator(fmt.Sprintf("decomposition hook error: %s", err.Error()))
-		return
+		return false
 	}
 	if decomp == nil {
 		parkOperator("decomposition hook returned no split")
-		return
+		return false
 	}
 	lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
 	if lossyOrEmpty {
 		parkOperator("decomposition AC map is incomplete; operator must produce a lossless split")
-		return
+		return false
 	}
 
 	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
 	if decompErr != nil {
 		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
-		return
+		return false
 	}
 	if runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition: bead %s split into %s\n", candidate.ID, strings.Join(childIDs, ", "))
@@ -467,10 +467,10 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge check failed: %v\n", err)
 		}
-		return
+		return false
 	}
 	if len(backEdgeChildIDs) == 0 {
-		return
+		return false
 	}
 	if runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge: bead %s children %s still depend on the parent\n", candidate.ID, strings.Join(backEdgeChildIDs, ", "))
@@ -482,6 +482,7 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	if parkErr := parkParentBackEdgeForOperator(w.Store, candidate.ID, assignee, backEdgeChildIDs, at); parkErr != nil && runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition parent back-edge park error: %v\n", parkErr)
 	}
+	return true
 }
 
 func detectPostAttemptDecompositionBackEdge(ctx context.Context, store ExecuteBeadLoopStore, parentID string, childIDs []string) ([]string, error) {
@@ -1210,6 +1211,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
+	sawParentBackEdge := false
 
 	// Wire the tracker-lock metrics sink so every acquire+release cycle is
 	// visible in the loop event stream and the terminal log. SetTrackerLockMetricsSink
@@ -2135,31 +2137,48 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
+				rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
+				message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+				eventType := "pre_claim_intake.warn"
+				policyMode := "warn-only"
+				decision := "warn"
+				suggestedAction := "check the readiness route or harness configuration and retry"
+				if rootMutationError {
+					message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
+					eventType = "pre_claim_intake.error"
+					policyMode = "error"
+					decision = "error"
+					suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
+				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
 						Phase:    "readiness",
 						BeadID:   candidate.ID,
-						Message:  fmt.Sprintf("check unavailable: %s (continuing)", warning),
+						Message:  message,
 						Harness:  harness,
 						Provider: provider,
 						Model:    model,
 					}))
 				}
-				emit("pre_claim_intake.warn", readinessDecisionBody(
+				eventBody := readinessDecisionBody(
 					"pre_claim_intake.system_unready",
 					classified.Reason,
 					"pre_claim_intake",
-					"warn-only",
-					"warn",
-					"check the readiness route or harness configuration and retry",
+					policyMode,
+					decision,
+					suggestedAction,
 					map[string]any{
 						"bead_id":       candidate.ID,
 						"outcome":       string(PreClaimIntakeError),
 						"system_reason": classified.SystemReason,
 						"detail":        warning,
 					},
-				))
-				if appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+				)
+				if rootMutationError {
+					eventBody["severity"] = "error"
+				}
+				emit(eventType, eventBody)
+				if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
 					return result, nil
 				}
 			case intakeOutcome == PreClaimIntakeActionableAtomic:
@@ -2199,31 +2218,48 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					reason = classified.Reason
 					systemReason = classified.SystemReason
 				}
+				rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
+				message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+				eventType := "pre_claim_intake.warn"
+				policyMode := "warn-only"
+				decision := "warn"
+				suggestedAction := "check the readiness route or harness configuration and retry"
+				if rootMutationError {
+					message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
+					eventType = "pre_claim_intake.error"
+					policyMode = "error"
+					decision = "error"
+					suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
+				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
 						Phase:    "readiness",
 						BeadID:   candidate.ID,
-						Message:  fmt.Sprintf("check unavailable: %s (continuing)", warning),
+						Message:  message,
 						Harness:  harness,
 						Provider: provider,
 						Model:    model,
 					}))
 				}
-				emit("pre_claim_intake.warn", readinessDecisionBody(
+				eventBody := readinessDecisionBody(
 					"pre_claim_intake.system_unready",
 					reason,
 					"pre_claim_intake",
-					"warn-only",
-					"warn",
-					"check the readiness route or harness configuration and retry",
+					policyMode,
+					decision,
+					suggestedAction,
 					map[string]any{
 						"bead_id":       candidate.ID,
 						"outcome":       string(PreClaimIntakeError),
 						"system_reason": systemReason,
 						"detail":        warning,
 					},
-				))
-				if appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+				)
+				if rootMutationError {
+					eventBody["severity"] = "error"
+				}
+				emit(eventType, eventBody)
+				if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
 					return result, nil
 				}
 			case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
@@ -3213,7 +3249,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
 				parsed := ParseNoChangesRationale(report.NoChangesRationale)
 				if parsed.OrchestratorAction == "decompose" {
-					w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
+					if backEdgeDetected := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC()); backEdgeDetected {
+						sawParentBackEdge = true
+					}
 					result.Failures++
 					result.LastFailureStatus = report.Status
 					continue
@@ -4051,6 +4089,10 @@ func preClaimIntakeWarningFingerprint(reason, detail string) string {
 		return ""
 	}
 	return hashText(normalized)
+}
+
+func isProjectRootMutationRejectedDetail(detail string) bool {
+	return strings.Contains(strings.ToLower(strings.TrimSpace(detail)), "project root mutation rejected")
 }
 
 func emitStaleCandidateSkip(emit func(string, map[string]any), beadID string, skip *candidateSkipDecision, fresh *bead.Bead, stage string) {
