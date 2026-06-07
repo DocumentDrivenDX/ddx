@@ -12,6 +12,11 @@ import (
 
 const claimLivenessNamespace = "ddx-claim-heartbeats"
 
+// claimLeaseSameMachineFallbackAge is the hard ceiling after which a same
+// machine + live PID lease stops blocking takeover and we fall back to age.
+// It stays comfortably above the lock-hold caps enforced elsewhere.
+const claimLeaseSameMachineFallbackAge = 2 * time.Hour
+
 type ClaimLeaseRecord struct {
 	BeadID    string    `json:"bead_id"`
 	Owner     string    `json:"owner,omitempty"`
@@ -38,6 +43,14 @@ func canonicalClaimRoot(ddxDir string) string {
 		root = real
 	}
 	return filepath.Clean(root)
+}
+
+func currentMachineID() string {
+	machine, _ := os.Hostname()
+	if envID := os.Getenv("DDX_MACHINE_ID"); envID != "" {
+		machine = envID
+	}
+	return machine
 }
 
 func writeAtomicClaimFile(path string, data []byte) error {
@@ -147,6 +160,25 @@ func (s *Store) ClaimHeartbeatFresh(id string) (bool, bool, error) {
 		return false, true, nil
 	}
 	return time.Since(rec.UpdatedAt) <= HeartbeatTTL, true, nil
+}
+
+// claimLeaseRecordIsStale reports whether the sidecar record can be taken
+// over. Legacy rows without Machine/PID still fall back to age-only behavior.
+func claimLeaseRecordIsStale(rec ClaimLeaseRecord) bool {
+	if rec.UpdatedAt.IsZero() {
+		return true
+	}
+
+	age := time.Since(rec.UpdatedAt)
+	if age <= HeartbeatTTL {
+		return false
+	}
+
+	if rec.Machine != "" && rec.Machine == currentMachineID() && rec.PID > 0 && processAlive(rec.PID) {
+		return age > claimLeaseSameMachineFallbackAge
+	}
+
+	return true
 }
 
 // ClaimLease returns the external worker/manual claim sidecar for id when one
