@@ -3797,10 +3797,10 @@ func preClaimIdleSkip(skips []pickerSkip) (detail, reasonCode, beadID string, ok
 				beadID = skip.BeadID
 			}
 			ok = true
-		case work.IsTrackerContentionPreClaimSkipReason(skip.Reason):
+		case isTransientTrackerContentionSkipReason(skip.Reason):
 			if reasonCode != preClaimIdleReasonSystemic {
 				reasonCode = preClaimIdleReasonTrackerContention
-				detail = work.TrackerContentionPreClaimDetail(skip.Reason)
+				detail = trackerContentionSkipDetail(skip.Reason)
 			}
 			if beadID == "" {
 				beadID = skip.BeadID
@@ -3811,6 +3811,23 @@ func preClaimIdleSkip(skips []pickerSkip) (detail, reasonCode, beadID string, ok
 		}
 	}
 	return detail, reasonCode, beadID, ok
+}
+
+func isTransientTrackerContentionSkipReason(reason string) bool {
+	if reason == "" {
+		return false
+	}
+	if work.IsTrackerContentionPreClaimSkipReason(reason) {
+		return true
+	}
+	return strings.Contains(reason, "tracker lock timeout")
+}
+
+func trackerContentionSkipDetail(reason string) string {
+	if work.IsTrackerContentionPreClaimSkipReason(reason) {
+		return work.TrackerContentionPreClaimDetail(reason)
+	}
+	return reason
 }
 
 func queueRankValue(raw any) any {
@@ -4188,21 +4205,26 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 			continue
 		}
 		allowed := true
+		reason := ""
 		for _, guard := range guards {
 			if guard == nil {
 				continue
 			}
-			ok, reason := guard.Allow(ctx, candidate.ID)
-			if ok {
+			guardOK, guardReason := guard.Allow(ctx, candidate.ID)
+			if guardOK {
 				continue
 			}
 			allowed = false
+			reason = guardReason
 			if reason != "" {
 				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: reason})
 			}
 			break
 		}
 		if !allowed {
+			if isTransientTrackerContentionSkipReason(reason) {
+				return bead.Bead{}, skips, false, nil
+			}
 			continue
 		}
 		return candidate, skips, true, nil
