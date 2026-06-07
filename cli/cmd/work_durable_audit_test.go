@@ -23,6 +23,7 @@ func TestWorkAttemptMetricsAutoCommitted(t *testing.T) {
 
 	projectRoot, store, beadIDs, head := newWorkAuditRepo(t, 1)
 	factory := NewCommandFactory(projectRoot)
+	factory.AgentRunnerOverride = stubQualityRunner(t)
 	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 		return agent.ExecuteBeadReport{
 			BeadID:           beadID,
@@ -64,6 +65,7 @@ func TestWorkOutcomeTrackerMutationAutoCommitted(t *testing.T) {
 
 	projectRoot, store, beadIDs, head := newWorkAuditRepo(t, 1)
 	factory := NewCommandFactory(projectRoot)
+	factory.AgentRunnerOverride = stubQualityRunner(t)
 	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 		return agent.ExecuteBeadReport{
 			BeadID:           beadID,
@@ -107,6 +109,7 @@ func TestWorkStopsWhenDurableAuditCommitFails(t *testing.T) {
 	var attempted []string
 
 	factory := NewCommandFactory(projectRoot)
+	factory.AgentRunnerOverride = stubQualityRunner(t)
 	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 		attempted = append(attempted, beadID)
 		return agent.ExecuteBeadReport{
@@ -158,6 +161,11 @@ func TestWorkStopsWhenDurableAuditCommitFails(t *testing.T) {
 
 	status := runGitWorkAudit(t, projectRoot, "status", "--short", "--", ".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl")
 	assert.NotEmpty(t, status)
+}
+
+func stubQualityRunner(t *testing.T) agent.AgentRunner {
+	t.Helper()
+	return passThroughRunner{}
 }
 
 func newWorkAuditRepo(t *testing.T, beadCount int) (string, *bead.Store, []string, string) {
