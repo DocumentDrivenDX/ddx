@@ -74,6 +74,7 @@ func TestSameBeadTwiceWedgeGuardStopsClaiming(t *testing.T) {
 	assert.Equal(t, beadID, body["bead_id"])
 	assert.Equal(t, float64(2), body["count"])
 	assert.Equal(t, float64(DefaultConsecutiveWedgeThreshold), body["threshold"])
+	assert.Equal(t, "ddx work", attention.Source)
 
 	// The queue keeps draining: the parked bead drops out of the execution-ready
 	// view while the sibling bead is still ready for the loop to continue to.

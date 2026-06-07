@@ -83,6 +83,7 @@ func TestProviderConnectivityRouteExclusionDoesNotWriteNumericRetryFloor(t *test
 	for _, ev := range events {
 		if ev.Kind == "route-failure" {
 			require.NoError(t, json.Unmarshal([]byte(ev.Body), &routeFailureBody))
+			assert.Equal(t, "ddx work", ev.Source)
 			break
 		}
 	}
@@ -680,6 +681,7 @@ func TestEmitRouteFailureEvent_IncludesEndpointAndTimeoutClass(t *testing.T) {
 	for _, ev := range events {
 		if ev.Kind == "route-failure" {
 			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, "ddx work", ev.Source)
 			break
 		}
 	}

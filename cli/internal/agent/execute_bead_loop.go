@@ -6439,22 +6439,14 @@ func flagWedgedForOperatorAttention(store ExecuteBeadLoopStore, beadID, assignee
 		recordConsecutiveWedge(store, beadID, FailureModeProgressWatchdog, at)
 	}
 	if store != nil && beadID != "" {
-		body, _ := json.Marshal(map[string]any{
+		appendWorkEvent(store, beadID, "operator_attention", FailureModeProgressWatchdog, map[string]any{
 			"reason":           FailureModeProgressWatchdog,
 			"bead_id":          beadID,
 			"attempt_id":       attemptID,
 			"last_activity_at": lastActivityAt.UTC().Format(time.RFC3339),
 			"diagnosis":        diagnosis,
 			"budget":           budget.String(),
-		})
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
-			Kind:      "operator_attention",
-			Summary:   FailureModeProgressWatchdog,
-			Body:      string(body),
-			Actor:     assignee,
-			Source:    "ddx work",
-			CreatedAt: at,
-		})
+		}, assignee, at)
 	}
 }
 
@@ -6578,7 +6570,7 @@ func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assigne
 	}); err != nil {
 		return err
 	}
-	body, _ := json.Marshal(map[string]any{
+	appendWorkEvent(store, beadID, "operator_attention", FailureModeConsecutiveWedge, map[string]any{
 		"reason":           FailureModeConsecutiveWedge,
 		"bead_id":          beadID,
 		"count":            marker.Count,
@@ -6586,15 +6578,7 @@ func flagConsecutiveWedgeForOperator(store ExecuteBeadLoopStore, beadID, assigne
 		"last_reason":      marker.LastReason,
 		"last_activity_at": marker.At,
 		"diagnosis":        diagnosis,
-	})
-	_ = store.AppendEvent(beadID, bead.BeadEvent{
-		Kind:      "operator_attention",
-		Summary:   FailureModeConsecutiveWedge,
-		Body:      string(body),
-		Actor:     assignee,
-		Source:    "ddx work",
-		CreatedAt: at,
-	})
+	}, assignee, at)
 	return nil
 }
 
@@ -6837,27 +6821,16 @@ func emitEscalationAbortedEvent(store BeadEventAppender, beadID, actor, provider
 	if store == nil || beadID == "" {
 		return
 	}
-	body, err := json.Marshal(map[string]any{
-		"provider":     provider,
-		"model":        model,
-		"actual_power": actualPower,
-		"reason":       fmt.Sprintf("ladder exhausted at power %d", actualPower),
-	})
-	if err != nil {
-		return
-	}
 	summary := fmt.Sprintf("escalation aborted: ladder exhausted at power %d provider=%s", actualPower, provider)
 	if model != "" {
 		summary += " model=" + model
 	}
-	_ = store.AppendEvent(beadID, bead.BeadEvent{
-		Kind:      "execution-escalation-aborted",
-		Summary:   summary,
-		Body:      string(body),
-		Actor:     actor,
-		Source:    "ddx work",
-		CreatedAt: at,
-	})
+	appendWorkEvent(store, beadID, "execution-escalation-aborted", summary, map[string]any{
+		"provider":     provider,
+		"model":        model,
+		"actual_power": actualPower,
+		"reason":       fmt.Sprintf("ladder exhausted at power %d", actualPower),
+	}, actor, at)
 }
 
 // emitRouteFailureEvent records a kind=route-failure event capturing the
@@ -6867,20 +6840,6 @@ func emitRouteFailureEvent(store BeadEventAppender, beadID, actor string, report
 		return
 	}
 	endpoint, timeoutClass := parseProviderConnectivityFacts(report)
-	body, err := json.Marshal(map[string]any{
-		"provider":       report.Provider,
-		"model":          report.Model,
-		"harness":        report.Harness,
-		"actual_power":   report.ActualPower,
-		"endpoint":       endpoint,
-		"timeout_class":  timeoutClass,
-		"detail":         report.Detail,
-		"error":          report.Error,
-		"outcome_reason": FailureModeProviderConnectivity,
-	})
-	if err != nil {
-		return
-	}
 	summary := "provider=" + report.Provider
 	if report.Model != "" {
 		summary += " model=" + report.Model
@@ -6892,14 +6851,17 @@ func emitRouteFailureEvent(store BeadEventAppender, beadID, actor string, report
 		summary += " (" + timeoutClass + ")"
 	}
 	summary += " connectivity failure"
-	_ = store.AppendEvent(beadID, bead.BeadEvent{
-		Kind:      "route-failure",
-		Summary:   summary,
-		Body:      string(body),
-		Actor:     actor,
-		Source:    "ddx work",
-		CreatedAt: at,
-	})
+	appendWorkEvent(store, beadID, "route-failure", summary, map[string]any{
+		"provider":       report.Provider,
+		"model":          report.Model,
+		"harness":        report.Harness,
+		"actual_power":   report.ActualPower,
+		"endpoint":       endpoint,
+		"timeout_class":  timeoutClass,
+		"detail":         report.Detail,
+		"error":          report.Error,
+		"outcome_reason": FailureModeProviderConnectivity,
+	}, actor, at)
 }
 
 func isRoutingInfrastructureReport(report ExecuteBeadReport) bool {

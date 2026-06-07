@@ -89,6 +89,7 @@ func TestWatchdogFiresOnPhaseEmptyHeartbeats(t *testing.T) {
 	assert.Equal(t, attemptID, body["attempt_id"])
 	assert.Equal(t, frozen.UTC().Format(time.RFC3339), body["last_activity_at"])
 	assert.NotEmpty(t, body["diagnosis"])
+	assert.Equal(t, "ddx work", attention.Source)
 }
 
 // TestAttemptTerminatesWhenBeadClosedExternally verifies AC #3: a running
