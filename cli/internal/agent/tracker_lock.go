@@ -284,7 +284,7 @@ func withTrackerLockPolicy(projectRoot, section string, policy LockRetryPolicy, 
 	if op == "" {
 		op = "tracker.commit"
 	}
-	fnErr := lockmetrics.Instrument("tracker.lock", op, fn)
+	fnErr := lockmetrics.InstrumentCapped("tracker.lock", op, lockmetrics.CapConfigFor("tracker.lock"), fn)
 	trackerLockSinkMu.RLock()
 	sink := trackerLockSinkFn
 	trackerLockSinkMu.RUnlock()

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -785,6 +787,74 @@ func TestTrackerLock_SectionField(t *testing.T) {
 	err := withMainGitLock(root, "durable_audit", func() error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, "durable_audit", got.Section)
+}
+
+// TestTrackerLock_HoldPastCapForceReleasesAndRecordsViolation asserts that a
+// tracker hold exceeding the configured cap force-releases the lock and writes
+// lock-violation.json for the attempt.
+func TestTrackerLock_HoldPastCapForceReleasesAndRecordsViolation(t *testing.T) {
+	root := initTrackerRepo(t)
+	evidenceDir := filepath.Join(t.TempDir(), "evidence")
+
+	t.Setenv("DDX_LOCK_CAP_TRACKER_MS", "25")
+	lockmetrics.SetCapEnforcement(root, evidenceDir)
+	t.Cleanup(func() { lockmetrics.SetCapEnforcement("", "") })
+
+	policy := LockRetryPolicy{
+		InitialBackoff: 5 * time.Millisecond,
+		MaxBackoff:     10 * time.Millisecond,
+		Multiplier:     2.0,
+		MaxRetries:     100,
+		MaxElapsed:     2 * time.Second,
+	}
+
+	entered := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- withTrackerLockPolicy(root, "hold_cap", policy, func() error {
+			close(entered)
+			time.Sleep(150 * time.Millisecond)
+			return nil
+		})
+	}()
+
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first tracker hold never entered the critical section")
+	}
+
+	secondAcquired := make(chan struct{})
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- withTrackerLockPolicy(root, "followup", policy, func() error {
+			close(secondAcquired)
+			return nil
+		})
+	}()
+
+	select {
+	case <-secondAcquired:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("second tracker acquisition never succeeded after the cap fired")
+	}
+
+	require.NoError(t, <-firstDone)
+	require.NoError(t, <-secondDone)
+
+	data, err := os.ReadFile(filepath.Join(evidenceDir, "lock-violation.json"))
+	require.NoError(t, err, "lock-violation.json must be written when the cap is exceeded")
+
+	var v lockmetrics.Violation
+	require.NoError(t, json.Unmarshal(data, &v))
+	require.Equal(t, "tracker.lock", v.LockName)
+	require.Equal(t, int64(25), v.CapMS)
+	require.GreaterOrEqual(t, v.ActualHoldMS, int64(25))
+	require.Equal(t, os.Getpid(), v.HolderPID)
+	require.NotEmpty(t, v.Stack)
+
+	_, statErr := os.Stat(trackerLockPath(root))
+	assert.True(t, os.IsNotExist(statErr), "tracker lock dir must be removed after force release")
 }
 
 // TestTrackerLock_SinkWorkerInstall asserts that the worker-style sink
