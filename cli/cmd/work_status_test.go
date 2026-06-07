@@ -475,3 +475,36 @@ func TestWorkStatusFlagsArePresent(t *testing.T) {
 	require.NotNil(t, statusCmd.Flags().Lookup("all-projects"))
 	require.NotNil(t, statusCmd.Flags().Lookup("json"))
 }
+
+func TestWorkStatusReportsServerUnavailableState(t *testing.T) {
+	projectRoot := t.TempDir()
+	scannerWorkers := []workerstatus.LiveWorker{
+		{
+			PID:         9090,
+			Command:     "ddx work --watch --project " + projectRoot,
+			ProjectRoot: projectRoot,
+			StartedAt:   time.Now().Add(-90 * time.Second).UTC(),
+			Age:         "1m30s",
+			AgeSeconds:  90,
+			Phase:       "server.unavailable",
+			Message:     "server unreachable: holding queue until /api/health returns",
+		},
+	}
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	textOut, err := executeCommand(root, "work", "status", "--project", projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "phase=server.unavailable")
+	assert.Contains(t, textOut, `message="server unreachable: holding queue until /api/health returns"`)
+
+	jsonOut, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, "server.unavailable", report.Workers[0].Phase)
+	assert.Equal(t, "server unreachable: holding queue until /api/health returns", report.Workers[0].Message)
+}

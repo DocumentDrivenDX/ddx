@@ -59,11 +59,30 @@ func (r *SidecarLivenessReporter) SetAttempt(beadID, attemptID, phase, route, ha
 	r.rec.CurrentBead = beadID
 	r.rec.AttemptID = attemptID
 	r.rec.Phase = phase
+	r.rec.Message = ""
 	r.rec.Route = route
 	r.rec.Harness = harness
 	r.rec.Model = model
 	r.rec.Profile = profile
 	r.rec.ChildPID = childPID
+	r.mu.Unlock()
+}
+
+// SetWorkerState records a non-attempt worker state in the sidecar.
+func (r *SidecarLivenessReporter) SetWorkerState(phase, message string) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.rec.CurrentBead = ""
+	r.rec.AttemptID = ""
+	r.rec.Phase = phase
+	r.rec.Message = message
+	r.rec.Route = ""
+	r.rec.Harness = ""
+	r.rec.Model = ""
+	r.rec.Profile = ""
+	r.rec.ChildPID = 0
 	r.mu.Unlock()
 }
 
@@ -101,6 +120,11 @@ func (r *SidecarLivenessReporter) ClearAttempt() {
 	r.rec.CurrentBead = ""
 	r.rec.AttemptID = ""
 	r.rec.Phase = ""
+	r.rec.Message = ""
+	r.rec.Route = ""
+	r.rec.Harness = ""
+	r.rec.Model = ""
+	r.rec.Profile = ""
 	r.rec.ChildPID = 0
 	r.mu.Unlock()
 }
@@ -139,6 +163,7 @@ func (r *SidecarLivenessReporter) emit(rec workerstatus.LivenessRecord, now time
 			"bead_id":          rec.CurrentBead,
 			"attempt_id":       rec.AttemptID,
 			"phase":            rec.Phase,
+			"message":          rec.Message,
 			"route":            rec.Route,
 			"harness":          rec.Harness,
 			"model":            rec.Model,

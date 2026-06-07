@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -284,6 +285,35 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
 		return fmt.Errorf("load resolved config: %w", err)
+	}
+	serverHealthProbe := func(ctx context.Context) (bool, error) {
+		addr := serverpkg.ReadServerAddr()
+		if strings.TrimSpace(addr) == "" {
+			return false, nil
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(addr, "/")+"/api/health", nil)
+		if err != nil {
+			return false, err
+		}
+		client := &http.Client{Timeout: 5 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return false, err
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			return false, fmt.Errorf("server health status %s", resp.Status)
+		}
+		smokeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+		smokeResult, smokeErr := agent.RunWithConfigViaService(smokeCtx, projectRoot, rcfg, agent.AgentRunRuntime{
+			Prompt:  "server health smoke test",
+			WorkDir: projectRoot,
+		})
+		if smokeErr != nil {
+			return false, smokeErr
+		}
+		return smokeResult != nil && smokeResult.ExitCode == 0, nil
 	}
 
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
@@ -602,6 +632,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		ProjectRoot:                  projectRoot,
 		CleanupRunner:                cleanupRunner,
 		ResourceChecker:              resourceChecker,
+		ServerHealthProbe:            serverHealthProbe,
 		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
 		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,
 		SessionID:                    loopSessionID,

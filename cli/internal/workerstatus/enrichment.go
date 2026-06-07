@@ -109,6 +109,9 @@ func applyLivenessRecord(worker *LiveWorker, rec LivenessRecord) {
 	if worker.Phase == "" && rec.Phase != "" {
 		worker.Phase = rec.Phase
 	}
+	if worker.Message == "" && rec.Message != "" {
+		worker.Message = rec.Message
+	}
 	if worker.ChildPID == 0 && rec.ChildPID > 0 {
 		worker.ChildPID = rec.ChildPID
 	}

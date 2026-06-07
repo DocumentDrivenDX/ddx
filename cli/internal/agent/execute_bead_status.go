@@ -38,6 +38,7 @@ const (
 	FailureModeRatchetMiss                    = "ratchet_miss"
 	FailureModeNoViableProvider               = "no_viable_provider"
 	FailureModeProviderConnectivity           = "provider_connectivity"
+	FailureModeServerUnavailable              = "server_unavailable"
 	FailureModeHarnessNotInstalled            = "harness_not_installed"
 	FailureModeBlockedByPassthroughConstraint = "blocked_by_passthrough_constraint"
 	FailureModeAgentPowerUnsatisfied          = "agent_power_unsatisfied"
@@ -142,6 +143,8 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		"no candidate satisfying local endpoint",
 		"no viable provider"):
 		return FailureModeNoViableProvider
+	case isServerTransportFailureText(lower):
+		return FailureModeServerUnavailable
 	case containsAny(lower,
 		"context length",
 		"context_length_exceeded",

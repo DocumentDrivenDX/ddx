@@ -24,6 +24,7 @@ type LivenessRecord struct {
 	CurrentBead    string    `json:"current_bead,omitempty"`
 	AttemptID      string    `json:"attempt_id,omitempty"`
 	Phase          string    `json:"phase,omitempty"`
+	Message        string    `json:"message,omitempty"`
 	Route          string    `json:"route,omitempty"`
 	Harness        string    `json:"harness,omitempty"`
 	Model          string    `json:"model,omitempty"`
