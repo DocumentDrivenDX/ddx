@@ -13,16 +13,18 @@ import (
 
 // newBeadDoctorCommand wires `ddx bead doctor` / `ddx bead doctor --fix`.
 //
-// Scan mode (no flags): exits non-zero if any field on any bead exceeds the
-// per-field cap (ddx-f8a11202), reporting the offending bead id, field, and
-// size. Safe to run on any tree — no mutations.
+// Scan mode (no flags): exits non-zero if any bead has an oversized field or
+// a dependency edge that points to its parent chain, reporting the offending
+// bead id, finding code, field path, and size. Safe to run on any tree — no
+// mutations.
 //
-// Fix mode (--fix): rewrites oversized fields in place. Before touching the
-// tracker the command writes a timestamped backup under .ddx/backups/ so
-// the original file is always recoverable. Overflow content persists as
-// artifacts under .ddx/executions/<bead-id>/repair-<timestamp>/ and a
-// repair event is appended to each rewritten bead. Idempotent — the second
-// invocation exits 0 without writing because the scan is clean.
+// Fix mode (--fix): rewrites oversized fields in place and removes
+// dependency back-edges. Before touching the tracker the command writes a
+// timestamped backup under .ddx/backups/ so the original file is always
+// recoverable. Overflow content persists as artifacts under
+// .ddx/executions/<bead-id>/repair-<timestamp>/ and a repair event is
+// appended to each rewritten bead. Idempotent — the second invocation exits
+// 0 without writing because the scan is clean.
 //
 // Dangling-success mode (--dangling): detects in_progress beads whose last
 // execution produced task_succeeded but CloseWithEvidence never ran. Safe
@@ -31,7 +33,7 @@ import (
 func (f *CommandFactory) newBeadDoctorCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "doctor",
-		Short: "Detect (and optionally repair) beads.jsonl rows with oversized fields",
+		Short: "Detect (and optionally repair) problematic beads.jsonl rows",
 		Long: `Scan the bead tracker for fields that exceed the per-field size cap.
 
 Bead fields (description, acceptance, notes, events[].body, events[].summary)
@@ -39,6 +41,10 @@ are capped at 65,535 bytes so DDx-authored beads round-trip cleanly through
 bd import (upstream's Dolt TEXT column limit). Fields over the cap usually
 come from a writer bug that landed before the cap was enforced — for
 example a reviewer stream dumped verbatim into an event body.
+
+This command also reports dependency edges that point to a bead's parent or
+ancestor. Those are historical structural defects that can wedge the work
+loop if left hidden.
 
 Without --fix this command only reports offending rows and exits non-zero.
 With --fix it:
@@ -48,7 +54,8 @@ With --fix it:
   3. Writes the full original payload to
      .ddx/executions/<bead>/repair-<timestamp>/<field>.log so forensics
      remain possible.
-  4. Appends a kind=repair event to every rewritten bead.
+  4. Removes dependency edges that point back to the bead's parent chain.
+  5. Appends a kind=repair event to every rewritten bead.
 
 Idempotent: once a tracker is clean, running --fix again is a no-op.
 
@@ -136,12 +143,16 @@ For each finding, reports whether result_rev is reachable from HEAD:
 
 			out := cmd.OutOrStdout()
 			if report.Clean() {
-				fmt.Fprintf(out, "bead doctor: %s — clean (no fields exceed %d bytes)\n", path, bead.MaxFieldBytes)
+				fmt.Fprintf(out, "bead doctor: %s — clean (no findings detected)\n", path)
 				return nil
 			}
-			fmt.Fprintf(out, "bead doctor: %s — %d finding(s) exceeding %d-byte cap:\n", path, len(report.Findings), bead.MaxFieldBytes)
+			fmt.Fprintf(out, "bead doctor: %s — %d finding(s):\n", path, len(report.Findings))
 			for _, f := range report.Findings {
-				fmt.Fprintf(out, "  %s  %s  %d bytes  head=%q\n", f.BeadID, f.FieldPath, f.SizeBytes, f.SampleHead)
+				code := f.Code
+				if code == "" {
+					code = bead.DoctorFindingCodeFieldTooLarge
+				}
+				fmt.Fprintf(out, "  %s  %s  %s  %d bytes  head=%q\n", f.BeadID, code, f.FieldPath, f.SizeBytes, f.SampleHead)
 			}
 			if doFix {
 				fmt.Fprintf(out, "\nrepair complete. backup written to %s/backups/. artifact sidecars under %s/executions/<bead>/repair-*/\n", filepath.Dir(path), filepath.Dir(path))
