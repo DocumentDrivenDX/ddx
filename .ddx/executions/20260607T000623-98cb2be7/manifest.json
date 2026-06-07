@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260607T000623-98cb2be7",
+  "bead_id": "ddx-ba93de9e",
+  "base_rev": "23f25d03b5538903334de6d1abc84d4d5c66298f",
+  "created_at": "2026-06-07T00:06:40.094156409Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ba93de9e",
+    "title": "bead: claim-lease takeover must require positive owner-PID death (same-machine), not heartbeat age alone",
+    "description": "PROBLEM: A peer worker reclaims a bead whose claim lease is merely AGED, even when the owning process is still alive — a primary cause of parallel execution (see ddx-d740539d, two attempts overlapping 16.6 min).\n\nROOT CAUSE: claimLeaseIsStale (cli/internal/bead/store.go:1014-1025) and ClaimHeartbeatFresh (cli/internal/bead/claim_liveness.go:138-150) decide reclaimability by AGE ALONE (time.Since(rec.UpdatedAt) \u003c= HeartbeatTTL), even though ClaimLeaseRecord records PID and Machine (claim_liveness.go:23, written at store.go:928/:977). Takeover never consults them. By contrast the tracker DIR-lock correctly uses positive death: breakStaleLockDir -\u003e processAlive(pid) (cli/internal/bead/lock.go:88-98). The claim lease has the PID but ignores it, so an aged-but-alive same-machine owner is treated as dead and reclaimed.\n\nPROPOSED FIX: In claimLeaseIsStale, when the lease is older than HeartbeatTTL BUT lease.Machine == this host AND processAlive(rec.PID) is true, treat it as NOT stale (owner alive — refuse takeover) up to a hard fallback ceiling (\u003e= the max lock-hold cap). When Machine differs (PID unknowable cross-machine) or PID is dead, fall back to the existing age-based staleness. Reuse the existing processAlive primitive (lock.go); keep the legacy heartbeatIsStale fallback for rows with no sidecar.\n\nNON-SCOPE: the intake heartbeat gap (sibling bead C1 — they are defense-in-depth; both close the window); land-lock holds.",
+    "acceptance": "1. New TestClaimLeaseIsStale_AliveOwnerSameMachineNotStaleDespiteAge (store_test.go or claim_liveness_test.go): lease UpdatedAt older than TTL, Machine=this host, PID=os.Getpid() (alive); assert claimLeaseIsStale/Claim/ClaimWithOptions REFUSE takeover.\n2. New TestClaimLeaseIsStale_DeadOwnerPIDReclaimable: Machine=this host, PID=a dead PID, UpdatedAt past TTL; assert takeover permitted.\n3. New TestClaimLeaseIsStale_ForeignMachineFallsBackToAge: different Machine; assert age-based staleness still governs (unchanged cross-machine).\n4. Existing claim/ready tests in store_test.go and port_gaps_test.go still pass.\n5. cd cli \u0026\u0026 go test ./internal/bead/... -run 'TestClaimLeaseIsStale|TestClaim|TestReady' -count=1 green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:bead",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:TP-021",
+      "spec:FEAT-010",
+      "concurrency",
+      "incident:parallel-execution"
+    ],
+    "metadata": {
+      "queue-rank": -3
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T000623-98cb2be7",
+    "prompt": ".ddx/executions/20260607T000623-98cb2be7/prompt.md",
+    "manifest": ".ddx/executions/20260607T000623-98cb2be7/manifest.json",
+    "result": ".ddx/executions/20260607T000623-98cb2be7/result.json",
+    "checks": ".ddx/executions/20260607T000623-98cb2be7/checks.json",
+    "usage": ".ddx/executions/20260607T000623-98cb2be7/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ba93de9e-20260607T000623-98cb2be7"
+  },
+  "prompt_sha": "d2edf3b99c79cbdb7e0b9148f627bc6e692de4aed6f3537373c14896e1e1572e"
+}
