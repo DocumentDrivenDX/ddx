@@ -1,0 +1,2 @@
+status: open
+reason: retryable - the race-enabled server package still reports stop-state preservation failures under pre-commit (`TestWorkerManagerStopSetsStoppedState` and `TestRunWorkerPreservesStoppedState`), so the stop/finalizer handoff needs another pass before the bead can be committed.
