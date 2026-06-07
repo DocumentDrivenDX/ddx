@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -255,4 +256,98 @@ func TestPicker_QueueRankOrdering(t *testing.T) {
 	assert.Equal(t, "ddx-rank-9", got2.ID)
 	assert.Len(t, skips2, 1)
 	assert.Equal(t, "in_attempted", skips2[0].Reason)
+}
+
+type pickerGuardFunc func(context.Context, string) (bool, string)
+
+func (f pickerGuardFunc) Allow(ctx context.Context, beadID string) (bool, string) {
+	return f(ctx, beadID)
+}
+
+func TestNextCandidate_TransientLockTimeoutOnHigherBeadDoesNotSelectLower(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	now := time.Now().UTC()
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-high",
+		Title:     "High bead",
+		Priority:  0,
+		CreatedAt: now,
+	}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-low",
+		Title:     "Low bead",
+		Priority:  0,
+		CreatedAt: now.Add(time.Second),
+	}))
+
+	worker := &ExecuteBeadWorker{Store: store}
+	transientReason := "tracker lock timeout (max elapsed, lock: /repo/.ddx/.git-tracker.lock, owner pid: 99)"
+	guard := pickerGuardFunc(func(ctx context.Context, beadID string) (bool, string) {
+		if beadID == "ddx-high" {
+			return false, transientReason
+		}
+		return true, ""
+	})
+
+	got, skips, ok, err := worker.nextCandidate(context.Background(), nil, []work.Guard{guard}, "", "")
+	require.NoError(t, err)
+	require.False(t, ok)
+	assert.Empty(t, got.ID)
+	require.Len(t, skips, 1)
+	assert.Equal(t, "ddx-high", skips[0].BeadID)
+	assert.Equal(t, transientReason, skips[0].Reason)
+
+	detail, reasonCode, beadID, isIdle := preClaimIdleSkip(skips)
+	require.True(t, isIdle)
+	assert.Equal(t, preClaimIdleReasonTrackerContention, reasonCode)
+	assert.Equal(t, "ddx-high", beadID)
+	assert.Equal(t, transientReason, detail)
+}
+
+func TestNextCandidate_GenuineSkipOnHigherBeadStillFallsThrough(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	now := time.Now().UTC()
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-high",
+		Title:     "High bead",
+		Priority:  0,
+		Labels:    []string{"area:cli"},
+		CreatedAt: now,
+	}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-low",
+		Title:     "Low bead",
+		Priority:  0,
+		Labels:    []string{"area:agent"},
+		CreatedAt: now.Add(time.Second),
+	}))
+
+	worker := &ExecuteBeadWorker{Store: store}
+	got, skips, ok, err := worker.nextCandidate(context.Background(), nil, nil, "area:agent", "")
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, "ddx-low", got.ID)
+	require.Len(t, skips, 1)
+	assert.Equal(t, "ddx-high", skips[0].BeadID)
+	assert.Equal(t, "label_filter", skips[0].Reason)
+}
+
+func TestPreClaimIdleSkip_IncludesTransientLockTimeout(t *testing.T) {
+	transientReason := "tracker lock timeout (max elapsed, lock: /repo/.ddx/.git-tracker.lock, owner pid: 99)"
+	detail, reasonCode, beadID, ok := preClaimIdleSkip([]pickerSkip{
+		{
+			BeadID:   "ddx-high",
+			Priority: 0,
+			Reason:   transientReason,
+		},
+	})
+
+	require.True(t, ok)
+	assert.Equal(t, preClaimIdleReasonTrackerContention, reasonCode)
+	assert.Equal(t, "ddx-high", beadID)
+	assert.Equal(t, transientReason, detail)
 }
