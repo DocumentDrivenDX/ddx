@@ -149,7 +149,7 @@ func runDurableAuditGitWithIndexLockRecovery(gitDir string, args ...string) ([]b
 			if lastErr == nil {
 				return nil
 			}
-			if !gitlock.IsIndexLockError(string(out)) {
+			if !gitlock.IsTransientGitContention(string(out), lastErr) {
 				return lastErr
 			}
 			result, recErr := gitlock.RecoverGitIndexLock(gitDir)

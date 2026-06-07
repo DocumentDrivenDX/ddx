@@ -40,6 +40,32 @@ func IsIndexLockError(output string) bool {
 		(strings.Contains(lower, "file exists") || strings.Contains(lower, "another git process"))
 }
 
+// IsTransientGitContention reports whether a git stderr / error pair is a
+// transient index/ref contention failure that should be retried rather than
+// surfaced as a hard stop.
+func IsTransientGitContention(output string, err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(output + "\n" + err.Error()))
+	if IsIndexLockError(msg) {
+		return true
+	}
+	for _, marker := range []string{
+		"unable to write new index file",
+		"cannot lock ref",
+		"unable to update the ref",
+		"tracker lock timeout",
+		"signal: killed",
+		"context deadline exceeded",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 // IndexLockPath returns the absolute path to .git/index.lock for projectRoot.
 func IndexLockPath(projectRoot string) string {
 	return filepath.Join(projectRoot, ".git", "index.lock")
@@ -204,7 +230,7 @@ func runGitWithIndexLockRecovery(ctx context.Context, dir string, args ...string
 		if err == nil {
 			return out, nil
 		}
-		if !IsIndexLockError(string(out)) {
+		if !IsTransientGitContention(string(out), err) {
 			return out, err
 		}
 		lastOut = out

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -130,6 +131,57 @@ func TestTrackerCommit_ConcurrentSafety(t *testing.T) {
 	if _, err := os.Stat(trackerLockPath(root)); !os.IsNotExist(err) {
 		t.Fatalf("tracker lock dir not cleaned up: stat err = %v", err)
 	}
+}
+
+func TestTrackerCommit_IndexLockContentionRetriesAndRecovers(t *testing.T) {
+	root := initTrackerRepo(t)
+	tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
+	require.NoError(t, os.WriteFile(tracker, []byte("{\"id\":\"ddx-retry-test\"}\n"), 0o644))
+
+	lockPath := filepath.Join(root, ".git", "index.lock")
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o644)
+	require.NoError(t, err)
+	defer func() {
+		_ = lockFile.Close()
+		_ = os.Remove(lockPath)
+	}()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- commitTrackerForTest(root)
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	require.NoError(t, lockFile.Close())
+	require.NoError(t, os.Remove(lockPath))
+
+	require.NoError(t, <-done)
+
+	subject := runGitInteg(t, root, "log", "-1", "--pretty=%s")
+	assert.True(t, strings.HasPrefix(subject, "chore: update tracker (execute-bead "),
+		"unexpected tracker commit subject: %q", subject)
+	status := runGitInteg(t, root, "status", "--short", "--", ".ddx/beads.jsonl")
+	assert.Empty(t, status)
+}
+
+func TestTrackerCommit_NonTransientPermissionFailureStillFails(t *testing.T) {
+	root := initTrackerRepo(t)
+	tracker := filepath.Join(root, ddxroot.DirName, "beads.jsonl")
+	require.NoError(t, os.WriteFile(tracker, []byte("{\"id\":\"ddx-permission-test\"}\n"), 0o644))
+
+	objectsDir := filepath.Join(root, ".git", "objects")
+	info, err := os.Stat(objectsDir)
+	require.NoError(t, err)
+	origPerm := info.Mode().Perm()
+	require.NoError(t, os.Chmod(objectsDir, 0o500))
+	t.Cleanup(func() {
+		_ = os.Chmod(objectsDir, origPerm)
+	})
+
+	err = commitTrackerForTest(root)
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "permission",
+		"tracker commit must still fail on genuine permission errors: %v", err)
 }
 
 func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {

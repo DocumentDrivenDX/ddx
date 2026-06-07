@@ -1112,17 +1112,10 @@ func parsePreExecuteCheckpointDirtyPaths(detail string) []string {
 
 // isTransientGitContention reports git index/ref contention errors that are
 // transient under concurrent workers and must be retried rather than treated
-// as a worker-stopping failure (ddx-23ac2796 and its sibling variants). It
-// covers .git/index.lock conflicts plus the DDx tracker-lock timeout sentinel
-// and the "unable to write new index file" / "cannot lock ref" forms git emits
-// when a concurrent process holds the index/ref. It also covers SIGKILL /
-// context-deadline errors: when the 30s durable-audit timeout fires while git
-// is blocked behind a concurrent lock, Go sends SIGKILL and exec.CommandContext
-// returns "signal: killed"; context.DeadlineExceeded may or may not be
-// unwrappable from the ExitError, so both the sentinel and the string forms are
-// matched. The audit commit is idempotent on re-entry, so retrying is safe.
-// A persistent cause (e.g. ENOSPC) simply keeps releasing+retrying the bead,
-// which is still preferable to halting the whole unattended drain.
+// as a worker-stopping failure (ddx-23ac2796 and its sibling variants). The
+// gitlock package owns the shared output/error classifier for the concrete git
+// forms; this wrapper adds the DDx tracker-lock timeout sentinel and the
+// context-deadline cases used by the loop's durable-audit stop logic.
 func isTransientGitContention(err error) bool {
 	if err == nil {
 		return false
@@ -1133,24 +1126,7 @@ func isTransientGitContention(err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	msg := err.Error()
-	if gitlock.IsIndexLockError(msg) {
-		return true
-	}
-	lower := strings.ToLower(msg)
-	for _, marker := range []string{
-		"unable to write new index file",
-		"cannot lock ref",
-		"unable to update the ref",
-		"tracker lock timeout",
-		"signal: killed",
-		"context deadline exceeded",
-	} {
-		if strings.Contains(lower, marker) {
-			return true
-		}
-	}
-	return false
+	return gitlock.IsTransientGitContention("", err)
 }
 
 func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {

@@ -151,15 +151,15 @@ func TestCommitDurableAuditOutputs_ResumesAfterPartialKill(t *testing.T) {
 		return origRunner(ctx, gitDir, args...)
 	}
 
-	firstErr := CommitDurableAuditOutputs(projectRoot, attemptID)
-	require.Error(t, firstErr)
-	require.True(t, isTransientGitContention(firstErr), "first killed commit should be treated as transient contention")
-	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"), "partial kill must not move HEAD")
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
+	require.GreaterOrEqual(t, atomic.LoadInt32(&commitAttempts), int32(2), "the killed commit must be retried")
+	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	assert.NotEqual(t, headBefore, headAfter)
 	statusArgs := append([]string{"status", "--short", "--"}, trackerpaths.ManagedPathspecs()...)
-	assert.NotEmpty(t, runGitInteg(t, projectRoot, statusArgs...))
+	assert.Empty(t, runGitInteg(t, projectRoot, statusArgs...))
 
 	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
-	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	headAfter = runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	assert.NotEqual(t, headBefore, headAfter)
 	assert.Empty(t, runGitInteg(t, projectRoot, statusArgs...))
 
@@ -378,6 +378,7 @@ func TestIsTransientGitContention_SignalKilledAndDeadline(t *testing.T) {
 		name string
 		err  error
 	}{
+		{"unable_to_write_new_index_file", fmt.Errorf("committing tracker: fatal: unable to write new index file: exit status 128")},
 		{"signal_killed_in_message", fmt.Errorf("commit durable audit outputs: committing durable audit outputs: : signal: killed")},
 		{"context_deadline_exceeded_string", fmt.Errorf("context deadline exceeded")},
 		{"tracker_lock_timeout_string", fmt.Errorf("tracker lock timeout (max elapsed, lock: .ddx/.git-tracker.lock, owner: 99)")},
@@ -392,6 +393,7 @@ func TestIsTransientGitContention_SignalKilledAndDeadline(t *testing.T) {
 
 	// Regression: genuine non-transient errors must not be misclassified.
 	falseFor := []error{
+		fmt.Errorf("committing tracker: fatal: insufficient permission for adding an object to repository database .git/objects: exit status 128"),
 		fmt.Errorf("committing durable audit outputs: fatal: insufficient permission for adding an object to repository database .git/objects: exit status 128"),
 		errors.New("disk full"),
 		context.Canceled,
