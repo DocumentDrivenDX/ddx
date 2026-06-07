@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
@@ -113,9 +116,9 @@ type ExecuteBeadLoopRuntime struct {
 	// ProjectRootDirtyCheck, when non-nil, is called at the top of each loop
 	// iteration before any bead is claimed. A non-empty return value means the
 	// canonical project root has uncommitted tracked non-.ddx changes. The
-	// worker emits a single loop.operator_attention event and stops instead of
-	// proceeding to claim — preventing a churn loop that repeatedly claims then
-	// fails workspace preparation because the root is dirty.
+	// worker emits loop.operator_attention and stops instead of proceeding to
+	// claim. Repeated exits for the same dirty path-set are tracked durably so
+	// a relaunch can escalate into a cooldown instead of spinning immediately.
 	ProjectRootDirtyCheck func(projectRoot string) []string
 	// ServerHealthProbe, when non-nil, is used while the worker is in
 	// server-unavailable backoff. Healthy should return true only after /api/health
@@ -907,7 +910,31 @@ type OperatorAttentionStop struct {
 	BeadID      string   `json:"bead_id,omitempty"`
 	ProjectRoot string   `json:"project_root,omitempty"`
 	DirtyPaths  []string `json:"dirty_paths,omitempty"`
+	RetryAfter  string   `json:"retry_after,omitempty"`
 	Message     string   `json:"message,omitempty"`
+}
+
+const (
+	// DefaultDirtyRootEscalationThreshold is the number of consecutive dirty-root
+	// exits with the same dirty-path fingerprint before the loop escalates the
+	// stop into a cooldown-bearing operator-attention response.
+	DefaultDirtyRootEscalationThreshold = 3
+
+	// DirtyRootEscalationCooldown is the backoff window used once the repeated
+	// dirty-root guard trips. It is intentionally short enough to stop instant
+	// restart spin but long enough for an operator to clean or commit the root.
+	DirtyRootEscalationCooldown = 5 * time.Minute
+
+	dirtyRootGuardStateFileName = "dirty-root-guard.json"
+)
+
+type dirtyRootGuardState struct {
+	Fingerprint     string    `json:"fingerprint,omitempty"`
+	DirtyPaths      []string  `json:"dirty_paths,omitempty"`
+	Count           int       `json:"count,omitempty"`
+	FirstObservedAt time.Time `json:"first_observed_at,omitempty"`
+	LastObservedAt  time.Time `json:"last_observed_at,omitempty"`
+	RetryAfter      time.Time `json:"retry_after,omitempty"`
 }
 
 type ExecuteBeadLoopResult struct {
@@ -1163,6 +1190,171 @@ func parsePreExecuteCheckpointDirtyPaths(detail string) []string {
 		}
 	}
 	return paths
+}
+
+func dirtyRootGuardStatePath(projectRoot string) string {
+	return ddxroot.JoinProject(projectRoot, dirtyRootGuardStateFileName)
+}
+
+func existingDirtyRootGuardStatePath(projectRoot string) (string, bool) {
+	return ddxroot.ExistingJoinProject(context.Background(), projectRoot, dirtyRootGuardStateFileName)
+}
+
+func readDirtyRootGuardState(projectRoot string) (*dirtyRootGuardState, error) {
+	path, ok := existingDirtyRootGuardStatePath(projectRoot)
+	if !ok {
+		return nil, nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var state dirtyRootGuardState
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+func writeDirtyRootGuardState(projectRoot string, state dirtyRootGuardState) error {
+	path := dirtyRootGuardStatePath(projectRoot)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(state, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	tmp, err := os.CreateTemp(filepath.Dir(path), "dirty-root-guard-*.json.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
+}
+
+func clearDirtyRootGuardState(projectRoot string) error {
+	path, ok := existingDirtyRootGuardStatePath(projectRoot)
+	if !ok {
+		return nil
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+func normalizeDirtyRootPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	uniq := make(map[string]struct{}, len(paths))
+	normalized := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, ok := uniq[path]; ok {
+			continue
+		}
+		uniq[path] = struct{}{}
+		normalized = append(normalized, path)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	sort.Strings(normalized)
+	return normalized
+}
+
+func dirtyRootPathFingerprint(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	return strings.Join(paths, "\x00")
+}
+
+func updateDirtyRootGuardState(projectRoot string, dirtyPaths []string, at time.Time, threshold int, cooldown time.Duration) (*dirtyRootGuardState, bool, error) {
+	if projectRoot == "" {
+		return nil, false, nil
+	}
+	if threshold <= 0 {
+		threshold = DefaultDirtyRootEscalationThreshold
+	}
+	if cooldown <= 0 {
+		cooldown = DirtyRootEscalationCooldown
+	}
+	paths := normalizeDirtyRootPaths(dirtyPaths)
+	if len(paths) == 0 {
+		if err := clearDirtyRootGuardState(projectRoot); err != nil {
+			return nil, false, err
+		}
+		return nil, false, nil
+	}
+	fingerprint := dirtyRootPathFingerprint(paths)
+	state, err := readDirtyRootGuardState(projectRoot)
+	if err != nil {
+		return nil, false, err
+	}
+	next := dirtyRootGuardState{
+		Fingerprint:     fingerprint,
+		DirtyPaths:      append([]string(nil), paths...),
+		Count:           1,
+		FirstObservedAt: at.UTC(),
+		LastObservedAt:  at.UTC(),
+	}
+	if state != nil && state.Fingerprint == fingerprint {
+		next.FirstObservedAt = state.FirstObservedAt
+		if next.FirstObservedAt.IsZero() {
+			next.FirstObservedAt = at.UTC()
+		}
+		next.Count = state.Count
+		next.RetryAfter = state.RetryAfter
+		if state.RetryAfter.After(at) {
+			// The cooldown is still active. Preserve the existing marker so the
+			// relaunch sees the same backoff instead of tightening the spin loop.
+			next.Count = state.Count
+			next.RetryAfter = state.RetryAfter
+			if err := writeDirtyRootGuardState(projectRoot, next); err != nil {
+				return nil, false, err
+			}
+			return &next, true, nil
+		}
+		next.Count = state.Count + 1
+		if next.Count >= threshold {
+			next.RetryAfter = at.UTC().Add(cooldown)
+		} else {
+			next.RetryAfter = time.Time{}
+		}
+	} else {
+		next.Count = 1
+		next.RetryAfter = time.Time{}
+	}
+	if next.Count >= threshold && next.RetryAfter.IsZero() {
+		next.RetryAfter = at.UTC().Add(cooldown)
+	}
+	if err := writeDirtyRootGuardState(projectRoot, next); err != nil {
+		return nil, false, err
+	}
+	return &next, next.Count >= threshold, nil
 }
 
 // isTransientGitContention reports git index/ref contention errors that are
@@ -1700,27 +1892,58 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 		if runtime.ProjectRootDirtyCheck != nil && runtime.ProjectRoot != "" {
 			if dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot); len(dirtyPaths) > 0 {
-				detail := fmt.Sprintf(
-					"project root has uncommitted tracked changes (%s); resolve before resuming autonomous work",
-					strings.Join(dirtyPaths, ", "),
+				guardState, escalated, guardErr := updateDirtyRootGuardState(
+					runtime.ProjectRoot,
+					dirtyPaths,
+					now().UTC(),
+					DefaultDirtyRootEscalationThreshold,
+					DirtyRootEscalationCooldown,
 				)
+				if guardErr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard persistence failed: %v\n", guardErr)
+				}
+				reason := "dirty_project_root"
+				retryAfter := ""
+				message := fmt.Sprintf(
+					"project root has uncommitted tracked changes (%s); resolve before resuming autonomous work",
+					strings.Join(normalizeDirtyRootPaths(dirtyPaths), ", "),
+				)
+				if guardState != nil {
+					if len(guardState.DirtyPaths) > 0 {
+						dirtyPaths = append([]string(nil), guardState.DirtyPaths...)
+					}
+					if escalated {
+						reason = "dirty_project_root_repeated"
+						retryAfter = guardState.RetryAfter.UTC().Format(time.RFC3339)
+						message = fmt.Sprintf(
+							"project root has uncommitted tracked changes (%s); relaunch suppressed until %s",
+							strings.Join(dirtyPaths, ", "),
+							retryAfter,
+						)
+					}
+				}
 				result.OperatorAttention = &OperatorAttentionStop{
-					Reason:      "dirty_project_root",
+					Reason:      reason,
 					ProjectRoot: runtime.ProjectRoot,
 					DirtyPaths:  dirtyPaths,
-					Message:     detail,
+					RetryAfter:  retryAfter,
+					Message:     message,
 				}
 				setExit("OperatorAttention", "operator_attention")
 				emit("loop.operator_attention", map[string]any{
-					"reason":       "dirty_project_root",
+					"reason":       reason,
 					"project_root": runtime.ProjectRoot,
 					"dirty_paths":  dirtyPaths,
-					"message":      detail,
+					"retry_after":  retryAfter,
+					"message":      message,
 				})
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", detail)
+					_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", message)
 				}
 				return result, nil
+			}
+			if guardErr := clearDirtyRootGuardState(runtime.ProjectRoot); guardErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard clear failed: %v\n", guardErr)
 			}
 		}
 
