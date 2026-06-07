@@ -174,23 +174,9 @@ epic execution is introduced elsewhere in the system.
 The supervisor consumes only the documented result envelope emitted by
 `ddx try`:
 
-- `status`: the stable `ExecuteBeadStatus*` vocabulary defined in
-  `cli/internal/agent/execute_bead_status.go`
+- `status`: one of `structural_validation_failed`, `execution_failed`,
+  `post_run_check_failed`, `land_conflict`, or `success`
 - `detail`: optional operator-facing text for logging and diagnostics
-
-The earlier five-status summary in this contract was a historical minimal v1
-subset. It is superseded by the status taxonomy below, which is the canonical
-supervisor-visible contract; FEAT-010 owns the queue/lifecycle semantics built
-on top of those values.
-
-| Status family | Queue behavior | Notes |
-|---|---|---|
-| `structural_validation_failed` | Leave open, unclaim | Pre-claim validation rejected the bead before any irreversible work.
-| `execution_failed`, `no_evidence_produced` | Preserve evidence when available; leave open | Agent or harness failure, or a run that exited without a commit/rationale. |
-| `post_run_check_failed`, `ratchet_failed`, `land_conflict`, `push_failed`, `push_conflict`, `preserved_needs_review` | Preserve the attempt, then unclaim or park for operator review | Landing, push, and preservation recovery outcomes. `push_conflict` and `land_conflict` are the divergence-aware cases; `preserved_needs_review` means the result was intentionally kept for manual landing. |
-| `no_changes`, `already_satisfied`, `success` | `success` and `already_satisfied` close; `no_changes` stays open for policy-driven retry or operator action | Clean completion or no-op completion. |
-| `resource_exhausted` | Stop the drain and surface operator attention | Host- or repo-level exhaustion, not a bead defect. |
-| `declined_needs_decomposition`, `review_request_changes`, `review_block`, `review_malfunction`, `review_request_clarification`, `land_conflict_unresolvable`, `land_conflict_operator_required`, `review_terminal_block`, `review_fixable_gap`, `repair-cycle-exhausted` | Park/propose or bounded repair; operator attention when automation cannot safely continue | Review, conflict-recovery, and repair-cycle statuses. Some are emitted by lower-level `try` paths, not the basic landing classifier. |
 
 The supervisor must not infer state from free-form reason strings. It uses the
 `status` field for control flow and may surface `detail` for observability.
