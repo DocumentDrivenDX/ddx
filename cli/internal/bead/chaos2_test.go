@@ -18,6 +18,7 @@ import (
 // update, append-event. After all goroutines finish the store must be
 // parseable, have no duplicate IDs, and all beads must have valid statuses.
 func TestChaos_MixedConcurrentOps(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		// Pre-seed beads that can be operated on.
 		const seedCount = 10
@@ -98,6 +99,7 @@ func TestChaos_MixedConcurrentOps(t *testing.T) {
 // TestChaos_ConcurrentClaimContention tests that when multiple goroutines race
 // to claim the same bead, exactly one succeeds and the rest see an error.
 func TestChaos_ConcurrentClaimContention(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		const rounds = 20
 		const claimers = 5
@@ -142,6 +144,7 @@ func TestChaos_ConcurrentClaimContention(t *testing.T) {
 // concurrently. After each wave the store must be parseable and contain no
 // duplicate IDs.
 func TestChaos_ConcurrentCreateCloseEvidence(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		const waves = 5
 		const goroutinesPerWave = 6
@@ -202,6 +205,7 @@ func TestChaos_ConcurrentCreateCloseEvidence(t *testing.T) {
 // TestChaos_ConcurrentDepManagement hammers DepAdd/DepRemove concurrently
 // and verifies the dependency graph is always well-formed (no cycles).
 func TestChaos_ConcurrentDepManagement(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		// Create a pool of beads.
 		const poolSize = 6
@@ -256,6 +260,7 @@ func TestChaos_ConcurrentDepManagement(t *testing.T) {
 // TestChaos_WriteAllUnderConcurrentReads verifies that WriteAll under
 // concurrent ReadAll never produces partial/corrupt reads.
 func TestChaos_WriteAllUnderConcurrentReads(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		// Seed initial beads.
 		const seed = 20
@@ -322,6 +327,7 @@ func TestChaos_WriteAllUnderConcurrentReads(t *testing.T) {
 // TestChaos_ImpossibleTransitionsNeverPersist verifies that if an update
 // with an invalid status is rejected, the bead retains its prior valid status.
 func TestChaos_ImpossibleTransitionsNeverPersist(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		b := &Bead{Title: "impossible-transitions"}
 		require.NoError(t, s.Create(testCtx(), b))
@@ -352,6 +358,7 @@ func TestChaos_ImpossibleTransitionsNeverPersist(t *testing.T) {
 // TestChaos_EventsNeverLostUnderConcurrentAppends verifies that when many
 // goroutines append events concurrently to the same bead, no events are lost.
 func TestChaos_EventsNeverLostUnderConcurrentAppends(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		b := &Bead{Title: "event-sink"}
 		require.NoError(t, s.Create(testCtx(), b))
@@ -406,6 +413,7 @@ func TestChaos_EventsNeverLostUnderConcurrentAppends(t *testing.T) {
 // TestChaos_TruncatedJSONLRecovery verifies that if the JSONL file is
 // truncated mid-line (simulating a crash), ReadAll recovers what it can.
 func TestChaos_TruncatedJSONLRecovery(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -448,6 +456,7 @@ func TestChaos_TruncatedJSONLRecovery(t *testing.T) {
 // TestChaos_LargeScaleConcurrentCreateReadAll verifies the store under high
 // concurrent-create load: all created beads must be findable in ReadAll.
 func TestChaos_LargeScaleConcurrentCreateReadAll(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		const goroutines = 15
 		const beadsEach = 15
@@ -524,6 +533,7 @@ func TestChaos_LargeScaleConcurrentCreateReadAll(t *testing.T) {
 // TestChaos_DuplicateRowFolding directly tests foldLatestBeads with handcrafted
 // duplicate scenarios to verify it always keeps the last written row.
 func TestChaos_DuplicateRowFolding(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 
 	t.Run("simple duplicate keeps last", func(t *testing.T) {
@@ -591,6 +601,7 @@ func TestChaos_DuplicateRowFolding(t *testing.T) {
 // TestChaos_StatusCountsAfterChaos verifies that Status() counts are consistent
 // with actual bead statuses returned by ReadAll after chaotic operations.
 func TestChaos_StatusCountsAfterChaos(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -666,6 +677,7 @@ func TestChaos_StatusCountsAfterChaos(t *testing.T) {
 // TestChaos_ExtraFieldsRoundTripUnderChaos verifies that Extra fields survive
 // concurrent updates without being silently dropped.
 func TestChaos_ExtraFieldsRoundTripUnderChaos(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		// Create a bead with custom Extra fields.
 		b := &Bead{
@@ -746,6 +758,7 @@ func assertValidJSONLFile(t *testing.T, s *Store) {
 // TestChaos_JSOLFileAlwaysValidJSON verifies that after any sequence of ops
 // the raw JSONL file contains only valid JSON lines.
 func TestChaos_JSONLFileAlwaysValidJSON(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 

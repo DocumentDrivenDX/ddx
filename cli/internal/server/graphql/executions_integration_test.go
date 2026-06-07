@@ -100,6 +100,7 @@ func writeExecutionFixture(t *testing.T, projectRoot, id, bead string) {
 
 // TestIntegration_Query_Executions covers list, detail, and tool-call paths.
 func TestIntegration_Query_Executions(t *testing.T) {
+	skipIntegrationInShort(t)
 	workDir, store := setupIntegrationDir(t)
 	base := newTestStateProvider(workDir, store)
 	projID := base.projects[0].ID

@@ -20,6 +20,7 @@ import (
 // TestProperty_CreateGetRoundTrip verifies that every created bead can be
 // retrieved with identical core fields (ID, title, status, priority, labels).
 func TestProperty_CreateGetRoundTrip(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	rng := rand.New(rand.NewSource(1337))
 	s := newTestStore(t)
@@ -88,6 +89,7 @@ func TestProperty_CreateGetRoundTrip(t *testing.T) {
 // TestProperty_OneRowPerID verifies that after any mixture of creates and
 // updates, ReadAll never returns duplicate IDs.
 func TestProperty_OneRowPerID(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	rng := rand.New(rand.NewSource(2024))
 	s := newTestStore(t)
@@ -128,6 +130,7 @@ func TestProperty_OneRowPerID(t *testing.T) {
 // TestProperty_StatusMustBeValid verifies that no operation can leave a bead
 // in an unrecognized status.
 func TestProperty_StatusMustBeValid(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -168,6 +171,7 @@ func TestProperty_StatusMustBeValid(t *testing.T) {
 // transitions (Unclaim, Close, reopen via Update) are idempotent and
 // never return errors regardless of current status.
 func TestProperty_ClaimStateMachine(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -215,6 +219,7 @@ func TestProperty_ClaimStateMachine(t *testing.T) {
 // TestProperty_UnclaimDoesNotReopenClosed verifies that unclaiming a closed
 // bead does not change its status to open.
 func TestProperty_UnclaimDoesNotReopenClosed(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -238,6 +243,7 @@ func TestProperty_UnclaimDoesNotReopenClosed(t *testing.T) {
 
 // TestProperty_ClaimRequiresOpen verifies that a non-open bead cannot be claimed.
 func TestProperty_ClaimRequiresOpen(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -265,6 +271,7 @@ func TestProperty_ClaimRequiresOpen(t *testing.T) {
 // TestProperty_DepCycleDetection verifies that the dependency graph never
 // acquires a cycle, regardless of the add order.
 func TestProperty_DepCycleDetection(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -298,6 +305,7 @@ func TestProperty_DepCycleDetection(t *testing.T) {
 // TestProperty_DepRemoveAndReadd verifies that removing and re-adding a
 // dependency is idempotent and the bead's dep list remains consistent.
 func TestProperty_DepRemoveAndReadd(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -342,6 +350,7 @@ func TestProperty_DepRemoveAndReadd(t *testing.T) {
 // are consistent: Ready beads have all deps closed, Blocked beads have at
 // least one open/in_progress dep. A bead cannot appear in both lists.
 func TestProperty_ReadyAndBlockedInvariants(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -423,6 +432,7 @@ func TestProperty_ReadyAndBlockedInvariants(t *testing.T) {
 // TestProperty_ReadyPriorityOrder verifies that Ready() returns beads in
 // ascending priority order (0 = highest).
 func TestProperty_ReadyPriorityOrder(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	rng := rand.New(rand.NewSource(42))
 	s := newTestStore(t)
@@ -455,6 +465,7 @@ func TestProperty_ReadyPriorityOrder(t *testing.T) {
 // TestProperty_EventsAreAppendOnly verifies that AppendEvent never drops
 // earlier events and events appear in insertion order.
 func TestProperty_EventsAreAppendOnly(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -499,6 +510,7 @@ func TestProperty_EventsAreAppendOnly(t *testing.T) {
 // TestProperty_EventsOnMultipleBeadsIndependent verifies that events on one
 // bead do not appear on another.
 func TestProperty_EventsOnMultipleBeadsIndependent(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 
@@ -529,6 +541,7 @@ func TestProperty_EventsOnMultipleBeadsIndependent(t *testing.T) {
 // operations and verifies that core invariants hold after each operation:
 // parseable file, one live row per ID, valid statuses.
 func TestProperty_RandomizedOpStream(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	rng := rand.New(rand.NewSource(777))
 	s := newTestStore(t)
@@ -602,6 +615,7 @@ func TestProperty_RandomizedOpStream(t *testing.T) {
 // TestProperty_MalformedJSONLRepair verifies that the store self-repairs when
 // the JSONL file contains malformed lines intermixed with valid ones.
 func TestProperty_MalformedJSONLRepair(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	t.Parallel()
 	s := newTestStore(t)
 

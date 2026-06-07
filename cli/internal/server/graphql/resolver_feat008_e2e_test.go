@@ -20,6 +20,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func skipIntegrationInShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("integration test skipped in -short")
+	}
+}
+
 // reviewFailureRunner is a test-local deterministic Executor + Reviewer pair
 // driving the "N reviewer failures, then 1 success" scenario. Test-local on
 // purpose: a shared cross-package testfixtures package would be unreachable
@@ -128,6 +135,7 @@ func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (
 //   - fixture: failUntilCall=5, which must remain unused because legacy
 //     post-land review is retired
 func TestReviewRetryThresholdFromConfigGraphQL(t *testing.T) {
+	skipIntegrationInShort(t)
 	const (
 		threshold   = 5
 		beadID      = "ddx-gql-rmr-001"

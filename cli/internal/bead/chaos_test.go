@@ -13,6 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func skipFullBeadSuiteInShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("full bead suite skipped in -short")
+	}
+}
+
 // newTestBackend returns a Backend rooted at a fresh temp dir for the explicit
 // backend name supplied by the caller. The chaos suite uses it so both JSONL
 // and axon run through the same Backend interface surface rather than one path
@@ -72,6 +79,7 @@ func forEachChaosBackend(t *testing.T, fn func(*testing.T, Backend)) {
 // TestChaos_ConcurrentAppendSafety spawns 10 goroutines each creating 10 beads
 // against the same store. Verifies all 100 beads exist, no duplicates, no corruption.
 func TestChaos_ConcurrentAppendSafety(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		const goroutines = 10
 		const beadsEach = 10
@@ -130,6 +138,7 @@ func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 // bead through open→in_progress→closed→open. After all iterations the bead
 // must have a valid status and the store must be fully parseable.
 func TestChaos_AtomicStatusTransitions(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		b := &Bead{Title: "status-churn"}
 		require.NoError(t, s.Create(testCtx(), b))
@@ -181,6 +190,7 @@ func TestChaos_AtomicStatusTransitions(t *testing.T) {
 // one goroutine closes a bead while another creates a new bead concurrently.
 // Both operations must persist; neither must clobber the other.
 func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		// Pre-create the bead that will be closed
 		existing := &Bead{Title: "to-be-closed"}
@@ -241,6 +251,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 // both goroutines complete (if the close finishes last, the status is closed;
 // if create finishes last, the store was read AFTER the close, so closed is preserved).
 func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		existing := &Bead{Title: "must-stay-closed"}
 		require.NoError(t, s.Create(testCtx(), existing))
@@ -315,6 +326,7 @@ func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 // TestChaos_JSONLRoundTripIntegrity writes beads with random/unicode/special
 // data and verifies all fields survive a round-trip through the store.
 func TestChaos_JSONLRoundTripIntegrity(t *testing.T) {
+	skipFullBeadSuiteInShort(t)
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		rng := rand.New(rand.NewSource(42))
 
