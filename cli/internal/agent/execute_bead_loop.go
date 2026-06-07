@@ -2060,7 +2060,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				TS:        now().UTC(),
 				Message:   "readiness check",
 			})
-			intakeResult, intakeErr := runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
+			// Keep the external claim lease alive while the model-backed
+			// readiness/intake hook runs. This closes the pre-attempt gap where
+			// the owned bead was previously heartbeated only after intake
+			// completed, allowing a live worker to look stale and be reclaimed.
+			intakeResult, intakeErr := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (PreClaimIntakeResult, error) {
+				return runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
+			})
 			if intakeErr == nil {
 				readinessEstimatedDifficulty = normalizeReadinessEstimatedDifficulty(intakeResult.EstimatedDifficulty)
 			}
