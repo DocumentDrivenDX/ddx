@@ -198,6 +198,24 @@ type BeadEventAppender interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 }
 
+func appendWorkEvent(store BeadEventAppender, beadID, kind, summary string, body map[string]any, actor string, at time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	encodedBody, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      kind,
+		Summary:   summary,
+		Body:      string(encodedBody),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
+}
+
 // BeadCancelStore reads/writes the cancel markers on a bead's Extra map.
 // Implemented by *bead.Store. ADR-022 §Cancel SLA: the worker polls
 // IsCancelRequested mid-attempt and on a positive read writes

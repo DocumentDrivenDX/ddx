@@ -248,6 +248,7 @@ func TestApplyNoChangesSmartRetry_LadderExhaustedEmitsEvent(t *testing.T) {
 	}
 	require.NotNil(t, aborted, "execution-escalation-aborted event must be emitted when no-changes ladder is exhausted")
 	assert.Contains(t, aborted.Summary, "40", "summary must reference actualPower")
+	assert.Equal(t, "ddx work", aborted.Source)
 }
 
 // TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent asserts that
@@ -278,6 +279,7 @@ func TestApplyRepairCycleExhaustedEscalation_LadderExhaustedEmitsEvent(t *testin
 	}
 	require.NotNil(t, aborted, "execution-escalation-aborted event must be emitted when repair-cycle ladder is exhausted")
 	assert.Contains(t, aborted.Summary, "60", "summary must reference actualPower")
+	assert.Equal(t, "ddx work", aborted.Source)
 }
 
 // TestProviderConnectivityFailure_RetriesOnAlternateProviderAtSamePower
