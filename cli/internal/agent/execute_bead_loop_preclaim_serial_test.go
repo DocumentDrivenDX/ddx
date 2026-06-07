@@ -624,3 +624,253 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, bead.StatusClosed, got.Status)
 	})
 }
+
+func withPreClaimHeartbeatTiming(t *testing.T, interval, ttl time.Duration) {
+	t.Helper()
+	origInterval := bead.HeartbeatInterval
+	origTTL := bead.HeartbeatTTL
+	bead.HeartbeatInterval = interval
+	bead.HeartbeatTTL = ttl
+	t.Cleanup(func() {
+		bead.HeartbeatInterval = origInterval
+		bead.HeartbeatTTL = origTTL
+	})
+}
+
+func newPreClaimHeartbeatTestStore(t *testing.T, beadID string) *bead.Store {
+	t.Helper()
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:       beadID,
+		Title:    "pre-claim heartbeat regression",
+		Priority: 0,
+	}))
+	return store
+}
+
+func containsBeadID(beads []bead.Bead, beadID string) bool {
+	for _, b := range beads {
+		if b.ID == beadID {
+			return true
+		}
+	}
+	return false
+}
+
+func TestExecuteBeadWorker_ClaimLeaseStaysFreshDuringPreClaimIntake(t *testing.T) {
+	withPreClaimHeartbeatTiming(t, 10*time.Millisecond, 100*time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const beadID = "ddx-preclaim-heartbeat-fresh"
+	inner := newPreClaimHeartbeatTestStore(t, beadID)
+	store := &claimCountingStore{Store: inner}
+
+	enteredIntake := make(chan struct{})
+	releaseIntake := make(chan struct{})
+	var enteredOnce sync.Once
+	var attemptCount atomic.Int32
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			attemptCount.Add(1)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-preclaim-heartbeat",
+				ResultRev: "rev-preclaim-heartbeat",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:          "worker-a",
+		HeartbeatInterval: 10 * time.Millisecond,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	runDone := make(chan struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			TargetBeadID: beadID,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				enteredOnce.Do(func() { close(enteredIntake) })
+				select {
+				case <-releaseIntake:
+					return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+				case <-ctx.Done():
+					return PreClaimIntakeResult{}, ctx.Err()
+				}
+			},
+		})
+		runDone <- struct {
+			result *ExecuteBeadLoopResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	select {
+	case <-enteredIntake:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pre-claim intake hook never started")
+	}
+
+	deadline := time.Now().Add(3 * bead.HeartbeatTTL)
+	poll := bead.HeartbeatTTL / 5
+	if poll <= 0 {
+		poll = 10 * time.Millisecond
+	}
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		fresh, found, err := inner.ClaimHeartbeatFresh(beadID)
+		require.NoError(t, err)
+		require.True(t, found, "claim heartbeat must exist while intake is blocked")
+		require.True(t, fresh, "claim heartbeat must stay fresh while intake is blocked")
+		<-ticker.C
+	}
+
+	close(releaseIntake)
+	out := <-runDone
+	require.NoError(t, out.err)
+	require.NotNil(t, out.result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "bead must be claimed once")
+	assert.Equal(t, int32(1), attemptCount.Load(), "exactly one attempt should run")
+	got, err := inner.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
+func TestExecuteBeadWorker_StaggeredSecondWorkerCannotReclaimDuringIntake(t *testing.T) {
+	withPreClaimHeartbeatTiming(t, 10*time.Millisecond, 100*time.Millisecond)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const beadID = "ddx-preclaim-heartbeat-reclaim"
+	inner := newPreClaimHeartbeatTestStore(t, beadID)
+	store := &claimCountingStore{Store: inner}
+
+	enteredIntake := make(chan struct{})
+	releaseIntake := make(chan struct{})
+	var enteredOnce sync.Once
+	var workerAAttempts atomic.Int32
+	var workerBAttempts atomic.Int32
+
+	workerA := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			workerAAttempts.Add(1)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-preclaim-a",
+				ResultRev: "rev-preclaim-a",
+			}, nil
+		}),
+	}
+	workerB := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			workerBAttempts.Add(1)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-preclaim-b",
+				ResultRev: "rev-preclaim-b",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:          "worker-a",
+		HeartbeatInterval: 10 * time.Millisecond,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	aDone := make(chan struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := workerA.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Once:         true,
+			TargetBeadID: beadID,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				enteredOnce.Do(func() { close(enteredIntake) })
+				select {
+				case <-releaseIntake:
+					return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+				case <-ctx.Done():
+					return PreClaimIntakeResult{}, ctx.Err()
+				}
+			},
+		})
+		aDone <- struct {
+			result *ExecuteBeadLoopResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	select {
+	case <-enteredIntake:
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker A never entered pre-claim intake")
+	}
+
+	deadline := time.Now().Add(3 * bead.HeartbeatTTL)
+	poll := bead.HeartbeatTTL / 5
+	if poll <= 0 {
+		poll = 10 * time.Millisecond
+	}
+	ticker := time.NewTicker(poll)
+	defer ticker.Stop()
+	for time.Now().Before(deadline) {
+		ready, err := inner.ReadyExecution()
+		require.NoError(t, err)
+		require.False(t, containsBeadID(ready, beadID), "ready queue must not expose the bead while worker A still owns a fresh lease")
+		<-ticker.C
+	}
+
+	bDone := make(chan struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}, 1)
+	go func() {
+		result, err := workerB.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Once: true,
+		})
+		bDone <- struct {
+			result *ExecuteBeadLoopResult
+			err    error
+		}{result: result, err: err}
+	}()
+
+	select {
+	case out := <-bDone:
+		require.NoError(t, out.err)
+		require.NotNil(t, out.result)
+	case <-time.After(2 * time.Second):
+		t.Fatal("worker B did not finish its readiness check")
+	}
+
+	close(releaseIntake)
+	outA := <-aDone
+	require.NoError(t, outA.err)
+	require.NotNil(t, outA.result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "worker B must not reclaim the bead")
+	assert.Equal(t, int32(1), workerAAttempts.Load(), "worker A must complete one attempt")
+	assert.Equal(t, int32(0), workerBAttempts.Load(), "worker B must not start an attempt while the lease is fresh")
+	got, err := inner.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
