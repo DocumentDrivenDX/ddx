@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -187,6 +188,116 @@ func TestBeadDoctorFix_WritesBackupAndArtifact(t *testing.T) {
 	assert.Equal(t, "ddx bead doctor", ev["actor"])
 	assert.Contains(t, ev["body"], "description",
 		"repair event body must name the repaired field so operator audit can correlate")
+}
+
+// TestBeadDoctorDetectsAndRepairsBackEdge covers the parent-ancestor dependency
+// regression: the doctor must flag dependency edges that point back into the
+// bead's parent chain, repair only those edges under --fix, and leave unrelated
+// dependencies intact.
+func TestBeadDoctorDetectsAndRepairsBackEdge(t *testing.T) {
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	path := filepath.Join(ddxDir, "beads.jsonl")
+
+	fixedAt := time.Date(2026, 4, 20, 12, 0, 0, 0, time.UTC)
+	tstamp := fixedAt.Format(time.RFC3339)
+	lines := []map[string]any{
+		{
+			"id":             "ddx-root",
+			"title":          "root",
+			"issue_type":     "task",
+			"status":         "open",
+			"priority":       2,
+			"schema_version": 1,
+			"created_at":     tstamp,
+			"updated_at":     tstamp,
+		},
+		{
+			"id":             "ddx-parent",
+			"title":          "parent",
+			"issue_type":     "task",
+			"status":         "open",
+			"priority":       2,
+			"schema_version": 1,
+			"parent":         "ddx-root",
+			"created_at":     tstamp,
+			"updated_at":     tstamp,
+		},
+		{
+			"id":             "ddx-independent",
+			"title":          "independent",
+			"issue_type":     "task",
+			"status":         "open",
+			"priority":       2,
+			"schema_version": 1,
+			"created_at":     tstamp,
+			"updated_at":     tstamp,
+		},
+		{
+			"id":             "ddx-child",
+			"title":          "child",
+			"issue_type":     "task",
+			"status":         "open",
+			"priority":       2,
+			"schema_version": 1,
+			"parent":         "ddx-parent",
+			"dependencies": []any{
+				map[string]any{"issue_id": "ddx-child", "depends_on_id": "ddx-parent", "type": "blocks"},
+				map[string]any{"issue_id": "ddx-child", "depends_on_id": "ddx-root", "type": "blocks"},
+				map[string]any{"issue_id": "ddx-child", "depends_on_id": "ddx-independent", "type": "blocks"},
+			},
+			"created_at": tstamp,
+			"updated_at": tstamp,
+		},
+	}
+	var file bytes.Buffer
+	for _, line := range lines {
+		encoded, err := json.Marshal(line)
+		require.NoError(t, err)
+		file.Write(encoded)
+		file.WriteByte('\n')
+	}
+	require.NoError(t, os.WriteFile(path, file.Bytes(), 0o644))
+
+	report, err := BeadDoctor(path)
+	require.NoError(t, err)
+	require.Len(t, report.Findings, 2)
+	for _, finding := range report.Findings {
+		assert.Equal(t, doctorFindingKindParentAncestorInDeps, finding.Kind)
+		assert.Equal(t, "ddx-child", finding.BeadID)
+	}
+	assert.Equal(t, "ddx-parent", report.Findings[0].TargetID)
+	assert.Equal(t, "ddx-root", report.Findings[1].TargetID)
+
+	fixReport, err := BeadDoctorFix(path, func() time.Time { return fixedAt })
+	require.NoError(t, err)
+	require.False(t, fixReport.Clean(), "the first repair pass must report the back-edge findings it remediated")
+	require.Len(t, fixReport.Findings, 2)
+
+	repaired, err := os.ReadFile(path)
+	require.NoError(t, err)
+	rows := strings.Split(strings.TrimSpace(string(repaired)), "\n")
+	require.Len(t, rows, 4)
+	var child map[string]any
+	require.NoError(t, json.Unmarshal([]byte(rows[3]), &child))
+	deps, ok := child["dependencies"].([]any)
+	require.True(t, ok)
+	require.Len(t, deps, 1, "repair must remove only the offending back-edge deps")
+	dep := deps[0].(map[string]any)
+	assert.Equal(t, "ddx-independent", dep["depends_on_id"])
+
+	events, ok := child["events"].([]any)
+	require.True(t, ok, "repair must append an audit event")
+	require.Len(t, events, 1)
+	ev := events[0].(map[string]any)
+	assert.Equal(t, "repair", ev["kind"])
+	assert.Contains(t, ev["body"], "ddx-parent")
+	assert.Contains(t, ev["body"], "ddx-root")
+
+	postReport, err := BeadDoctor(path)
+	require.NoError(t, err)
+	assert.True(t, postReport.Clean(), "after repair the doctor must report a clean tracker")
 }
 
 // TestBeadDoctorFix_OversizedLineFromFixture covers ddx-b695e162 AC #4 using
