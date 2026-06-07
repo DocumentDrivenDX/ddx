@@ -411,6 +411,77 @@ func (g *localOnlyGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) 
 	return g.real.DiffNameOnly(dir, base, tip)
 }
 
+type blockingEvidenceStageGitOps struct {
+	real         RealLandingGitOps
+	stageStarted chan struct{}
+	releaseStage <-chan struct{}
+	once         sync.Once
+}
+
+var _ LandingGitOps = (*blockingEvidenceStageGitOps)(nil)
+
+func (g *blockingEvidenceStageGitOps) CurrentBranch(dir string) (string, error) {
+	return g.real.CurrentBranch(dir)
+}
+
+func (g *blockingEvidenceStageGitOps) ResolveRef(dir, ref string) (string, error) {
+	return g.real.ResolveRef(dir, ref)
+}
+
+func (g *blockingEvidenceStageGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
+	return g.real.UpdateRefTo(dir, ref, sha, oldSHA)
+}
+
+func (g *blockingEvidenceStageGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	return g.real.SyncWorkTreeToHead(dir, fromRev)
+}
+
+func (g *blockingEvidenceStageGitOps) AddWorktree(dir, path, rev string) error {
+	return g.real.AddWorktree(dir, path, rev)
+}
+
+func (g *blockingEvidenceStageGitOps) AddBranchWorktree(dir, path, branch string) error {
+	return g.real.AddBranchWorktree(dir, path, branch)
+}
+
+func (g *blockingEvidenceStageGitOps) RemoveWorktree(dir, path string) error {
+	return g.real.RemoveWorktree(dir, path)
+}
+
+func (g *blockingEvidenceStageGitOps) MergeInto(wtDir, srcRev, msg string) error {
+	return g.real.MergeInto(wtDir, srcRev, msg)
+}
+
+func (g *blockingEvidenceStageGitOps) HeadRevAt(dir string) (string, error) {
+	return g.real.HeadRevAt(dir)
+}
+
+func (g *blockingEvidenceStageGitOps) CountCommits(dir, base, tip string) int {
+	return g.real.CountCommits(dir, base, tip)
+}
+
+func (g *blockingEvidenceStageGitOps) StageDir(dir, relPath string) error {
+	g.once.Do(func() {
+		if g.stageStarted != nil {
+			close(g.stageStarted)
+		}
+	})
+	<-g.releaseStage
+	return g.real.StageDir(dir, relPath)
+}
+
+func (g *blockingEvidenceStageGitOps) CommitStaged(dir, msg string) (string, error) {
+	return g.real.CommitStaged(dir, msg)
+}
+
+func (g *blockingEvidenceStageGitOps) DiffNumstat(dir, base, tip string) (string, error) {
+	return g.real.DiffNumstat(dir, base, tip)
+}
+
+func (g *blockingEvidenceStageGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
+	return g.real.DiffNameOnly(dir, base, tip)
+}
+
 // ----------------------------------------------------------------------------
 // Tests
 // ----------------------------------------------------------------------------
@@ -420,7 +491,7 @@ func (g *localOnlyGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) 
 // merge commit. The worker's commit becomes the new tip unchanged.
 func TestLand_HappyPath_FastForward(t *testing.T) {
 	r := newLandTestRepo(t)
-	ops := RealLandingGitOps{}
+	var ops LandingGitOps = RealLandingGitOps{}
 
 	// Worker commit at current main.
 	resultSHA := r.commitOn(r.baseSHA, "feature.txt", "hello\n", "feat: hello")
@@ -1205,6 +1276,172 @@ func TestChaos_PostLandCommandDoesNotHoldMainGitLock(t *testing.T) {
 	}
 	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
 		t.Fatalf("main tip = %s, want %s", got, workerSHA)
+	}
+}
+
+func TestChaos_PostLandEvidenceCommitDoesNotHoldMainGitLock(t *testing.T) {
+	r := newLandTestRepo(t)
+	var ops LandingGitOps = RealLandingGitOps{}
+
+	attemptID := "20260606T120000-evidence-lock"
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
+	prelim := &ExecuteBeadResult{
+		BeadID:       "ddx-land-evidence-lock",
+		AttemptID:    attemptID,
+		BaseRev:      r.baseSHA,
+		ResultRev:    r.baseSHA,
+		ExecutionDir: filepath.ToSlash(evidenceDir),
+		ResultFile:   filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
+		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
+	}
+	writeExecuteBeadBundle(t, r.dir, prelim, map[string]string{
+		"usage.json":           `{"tokens":123}`,
+		"embedded/agent.jsonl": `{"event":"step","n":1}` + "\n",
+	})
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       prelim.BeadID,
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+
+	stageStarted := make(chan struct{})
+	releaseStage := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() { close(releaseStage) })
+	}
+	ops = &blockingEvidenceStageGitOps{
+		real:         RealLandingGitOps{},
+		stageStarted: stageStarted,
+		releaseStage: releaseStage,
+	}
+
+	type landOutcome struct {
+		land *LandResult
+		err  error
+	}
+	landCh := make(chan landOutcome, 1)
+	go func() {
+		land, err := Land(r.dir, req, ops)
+		landCh <- landOutcome{land: land, err: err}
+	}()
+
+	select {
+	case <-stageStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for evidence staging to start")
+	}
+
+	acquired := make(chan error, 1)
+	go func() {
+		start := time.Now()
+		if err := withMainGitLock(r.dir, "test", func() error { return nil }); err != nil {
+			acquired <- err
+			return
+		}
+		if waited := time.Since(start); waited > time.Second {
+			acquired <- fmt.Errorf("main-git lock was held for %s while evidence staging was blocked", waited)
+			return
+		}
+		acquired <- nil
+	}()
+
+	select {
+	case err := <-acquired:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for concurrent main-git lock acquisition")
+	}
+
+	release()
+
+	select {
+	case out := <-landCh:
+		if out.err != nil {
+			t.Fatalf("Land: %v", out.err)
+		}
+		if out.land == nil || out.land.Status != "landed" {
+			t.Fatalf("expected landed result, got %+v", out.land)
+		}
+		if out.land.EvidenceCommitSHA == "" {
+			t.Fatal("expected evidence commit SHA")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for Land to finish after evidence stage release")
+	}
+}
+
+func TestPerformance_LandPostLandFinalizeLockHoldUnderCap(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	attemptID := "20260606T120001-evidence-hold"
+	evidenceDir := filepath.Join(ddxroot.DirName, "executions", attemptID)
+	prelim := &ExecuteBeadResult{
+		BeadID:       "ddx-land-evidence-perf",
+		AttemptID:    attemptID,
+		BaseRev:      r.baseSHA,
+		ResultRev:    r.baseSHA,
+		ExecutionDir: filepath.ToSlash(evidenceDir),
+		ResultFile:   filepath.ToSlash(filepath.Join(evidenceDir, "result.json")),
+		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
+	}
+	extraFiles := map[string]string{
+		"usage.json": `{"tokens":987}`,
+	}
+	for i := 0; i < 48; i++ {
+		extraFiles[filepath.ToSlash(filepath.Join("logs", fmt.Sprintf("chunk-%02d.jsonl", i)))] = fmt.Sprintf(`{"chunk":%d}`+"\n", i)
+	}
+	writeExecuteBeadBundle(t, r.dir, prelim, extraFiles)
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       prelim.BeadID,
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+
+	var mu sync.Mutex
+	var samples []TrackerLockSample
+	prevSink := SetTrackerLockMetricsSink(func(s TrackerLockSample) {
+		mu.Lock()
+		samples = append(samples, s)
+		mu.Unlock()
+	})
+	t.Cleanup(func() { SetTrackerLockMetricsSink(prevSink) })
+
+	land, err := Land(r.dir, req, RealLandingGitOps{})
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land == nil || land.Status != "landed" {
+		t.Fatalf("expected landed result, got %+v", land)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	var finalizeHold time.Duration
+	for _, sample := range samples {
+		if sample.Section == "land_post_land_finalize" {
+			finalizeHold = sample.Hold
+		}
+	}
+	if finalizeHold == 0 {
+		t.Fatal("did not capture land_post_land_finalize lock sample")
+	}
+	if finalizeHold >= 30*time.Second {
+		t.Fatalf("land_post_land_finalize lock hold %s exceeded 30s cap", finalizeHold)
 	}
 }
 

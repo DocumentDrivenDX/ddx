@@ -949,10 +949,29 @@ func landIterationRef(beadID, attemptID, tip string) string {
 	return fmt.Sprintf("refs/ddx/iterations/%s/%s-%s", beadID, attempt, short)
 }
 
-// landEvidence creates a trailing commit that folds the per-attempt execution
-// evidence directory into the target branch. Called after the main land (ff or
-// merge) succeeds and before checkout sync. The evidence commit is a normal
-// child of result.NewTip — the agent's original commit SHA is not amended.
+// prepareLandEvidence copies the execution evidence into the landing worktree,
+// rewrites the result artifact, and stages the evidence files. It runs outside
+// the main-git lock so large evidence directories do not hold the shared lock
+// while the filesystem work is in progress.
+func prepareLandEvidence(projectRoot, wd string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
+	if req.EvidenceDir == "" {
+		return nil
+	}
+	if err := copyEvidenceDirForLanding(projectRoot, wd, req.EvidenceDir); err != nil {
+		return fmt.Errorf("copying evidence into landing worktree: %w", err)
+	}
+	if err := rewriteFinalResultArtifactForLand(wd, req, result); err != nil {
+		return fmt.Errorf("rewriting final result artifact: %w", err)
+	}
+	if err := gitOps.StageDir(wd, req.EvidenceDir); err != nil {
+		return fmt.Errorf("stage evidence: %w", err)
+	}
+	return nil
+}
+
+// landEvidence creates the trailing evidence commit after the evidence files
+// have already been staged in the landing worktree. It runs under the
+// main-git lock only for the short ref-advancing commit boundary.
 func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
 	branch, err := gitOps.CurrentBranch(wd)
 	if err != nil {
@@ -960,9 +979,6 @@ func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps
 	}
 	if branch != targetBranch {
 		return fmt.Errorf("evidence commit branch mismatch: on %q, want %q", branch, targetBranch)
-	}
-	if err := gitOps.StageDir(wd, req.EvidenceDir); err != nil {
-		return fmt.Errorf("stage evidence: %w", err)
 	}
 	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(req.AttemptID))
 	sha, err := gitOps.CommitStaged(wd, msg)
@@ -1372,15 +1388,17 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		if result == nil {
 			return nil, fmt.Errorf("landing completed without a result")
 		}
+		if cleanup != nil {
+			defer func() {
+				if cleanup != nil {
+					cleanup()
+				}
+			}()
+		}
 
 		postLandOutput, postLandErr := runPostLandCommand(finalWD, req.PostLandCommand)
 		if postLandErr != nil {
 			err = withMainGitLock(projectRoot, "land_post_land_failure", func() error {
-				defer func() {
-					if cleanup != nil {
-						cleanup()
-					}
-				}()
 				var preserved *LandResult
 				preserved, err = preserveIfPostLandGateFailsLocked(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, postLandOutput, postLandErr)
 				if err != nil {
@@ -1402,19 +1420,25 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 			return result, nil
 		}
 
+		if req.EvidenceDir != "" {
+			if prepareErr := prepareLandEvidence(projectRoot, finalWD, req, gitOps, result); prepareErr != nil {
+				err = withMainGitLock(projectRoot, "land_post_land_finalize", func() error {
+					preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, prepareErr)
+					if preserveErr != nil {
+						return preserveErr
+					}
+					result = preserved
+					syncFromRev = result.NewTip
+					return nil
+				})
+				if err != nil {
+					return nil, err
+				}
+				return result, nil
+			}
+		}
 		err = withMainGitLock(projectRoot, "land_post_land_finalize", func() error {
-			defer func() {
-				if cleanup != nil {
-					cleanup()
-				}
-			}()
 			if req.EvidenceDir != "" {
-				if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
-					return fmt.Errorf("copying evidence into landing worktree: %w", err)
-				}
-				if err := rewriteFinalResultArtifactForLand(finalWD, req, result); err != nil {
-					return fmt.Errorf("rewriting final result artifact: %w", err)
-				}
 				if err := landEvidence(finalWD, prep.targetBranch, req, gitOps, result); err != nil {
 					preserved, preserveErr := preserveAfterEvidenceFailure(finalWD, req, gitOps, prep.targetRef, prep.currentTip, result.NewTip, prep.contribCount, nil, err)
 					if preserveErr != nil {
