@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
-	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // NowFunc allows tests to override time.Now for deterministic PreserveRef output.
@@ -96,18 +95,6 @@ type executeBeadChecks struct {
 // refs/ddx/iterations/<bead-id>/... rather than modifying the target branch.
 type OrchestratorGitOps interface {
 	UpdateRef(dir, ref, sha string) error
-}
-
-// RealOrchestratorGitOps implements OrchestratorGitOps via os/exec git commands.
-type RealOrchestratorGitOps struct{}
-
-// UpdateRef updates a git ref to point at sha.
-func (r *RealOrchestratorGitOps) UpdateRef(dir, ref, sha string) error {
-	out, err := internalgit.Command(context.Background(), dir, "update-ref", ref, sha).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git update-ref %s: %s: %w", ref, strings.TrimSpace(string(out)), err)
-	}
-	return nil
 }
 
 // BeadLandingOptions controls how the orchestrator lands a completed worker result.

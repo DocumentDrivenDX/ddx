@@ -400,7 +400,7 @@ func SubmitWithPreMergeChecks(
 		// did its job; the operator misconfigured the gate. Better to park
 		// the result under an iteration ref than to silently land it.
 		ref := PreserveRef(res.BeadID, res.BaseRev)
-		if upErr := (&RealOrchestratorGitOps{}).UpdateRef(projectRoot, ref, res.ResultRev); upErr != nil {
+		if upErr := (&RealGitOps{}).UpdateRef(projectRoot, ref, res.ResultRev); upErr != nil {
 			return nil, nil, fmt.Errorf("preserving result after checks setup error: %w (original error: %v)", upErr, err)
 		}
 		return &LandResult{
@@ -410,7 +410,7 @@ func SubmitWithPreMergeChecks(
 		}, nil, nil
 	}
 	if outcome.Blocked {
-		land, perr := PreserveAfterPreMergeChecks(projectRoot, res, outcome, &RealOrchestratorGitOps{})
+		land, perr := PreserveAfterPreMergeChecks(projectRoot, res, outcome, &RealGitOps{})
 		if perr != nil {
 			return nil, outcome, perr
 		}
@@ -424,7 +424,7 @@ func SubmitWithPreMergeChecks(
 	}
 	var submitted *LandResult
 	cfg, cfgErr := config.LoadWithWorkingDir(projectRoot)
-	_, landErr := LandBeadResult(projectRoot, res, &RealOrchestratorGitOps{}, BeadLandingOptions{
+	_, landErr := LandBeadResult(projectRoot, res, &RealGitOps{}, BeadLandingOptions{
 		LandingAdvancer: func(res *ExecuteBeadResult) (*LandResult, error) {
 			req := BuildLandRequestFromResult(projectRoot, res)
 			if cfgErr == nil && cfg != nil && cfg.Git != nil && len(cfg.Git.PostLandCommand) > 0 {

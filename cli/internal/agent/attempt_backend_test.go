@@ -63,7 +63,7 @@ func TestExecuteBeadWithConfig_LocalCloneBackendImportsResult(t *testing.T) {
 	out, catErr := runGitIntegOutput(projectRoot, "cat-file", "-e", res.ResultRev+"^{commit}")
 	require.NoError(t, catErr, out)
 
-	landing, landErr := LandBeadResult(projectRoot, res, &RealOrchestratorGitOps{}, BeadLandingOptions{
+	landing, landErr := LandBeadResult(projectRoot, res, &RealGitOps{}, BeadLandingOptions{
 		LandingAdvancer: func(r *ExecuteBeadResult) (*LandResult, error) {
 			return Land(projectRoot, BuildLandRequestFromResult(projectRoot, r), RealLandingGitOps{})
 		},

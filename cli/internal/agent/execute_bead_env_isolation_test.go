@@ -144,7 +144,7 @@ func TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched(t *testi
 	//    exercising the preserve-ref path (UpdateRef in projectRoot) without
 	//    requiring a remote.
 	gitOps := &RealGitOps{}
-	orchGitOps := &RealOrchestratorGitOps{}
+	orchGitOps := &RealGitOps{}
 
 	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
@@ -212,7 +212,7 @@ func TestExecuteBeadWorkerCannotMutatePrimaryGitConfig(t *testing.T) {
 	}).Resolve(config.CLIOverrides{Harness: "script"})
 
 	gitOps := &RealGitOps{}
-	orchGitOps := &RealOrchestratorGitOps{}
+	orchGitOps := &RealGitOps{}
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{}, gitOps)
 	require.NoError(t, err)
 	require.NotNil(t, res)

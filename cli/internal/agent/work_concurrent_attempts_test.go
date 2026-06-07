@@ -117,7 +117,7 @@ func TestWorkConcurrentAttempts_DirtyCheckoutDoesNotLoseSuccessfulResult(t *test
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("# operator edit\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "operator-scratch.txt"), []byte("scratch\n"), 0o644))
 
-	landing, err := LandBeadResult(projectRoot, res, &RealOrchestratorGitOps{}, BeadLandingOptions{
+	landing, err := LandBeadResult(projectRoot, res, &RealGitOps{}, BeadLandingOptions{
 		LandingAdvancer: func(r *ExecuteBeadResult) (*LandResult, error) {
 			return Land(projectRoot, BuildLandRequestFromResult(projectRoot, r), RealLandingGitOps{})
 		},
