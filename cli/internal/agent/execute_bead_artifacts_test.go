@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // artifactTestGitOps is a GitOps mock for artifact-focused tests. It lets
@@ -65,9 +66,7 @@ func (r *artifactTestAgentRunner) Run(opts RunArgs) (*Result, error) {
 func setupArtifactTestProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testutils.MakeInitializedDDxRoot(t, root)
 	return root
 }
 
@@ -75,10 +74,7 @@ func setupArtifactTestProjectRoot(t *testing.T) string {
 // bead. Optionally includes a governing spec and a required gate.
 func setupArtifactTestWorktree(t *testing.T, wtPath, beadID, specID string, withGate bool, gateExit int) {
 	t.Helper()
-	ddxDir := filepath.Join(wtPath, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	ddxDir := testutils.MakeInitializedDDxRoot(t, wtPath)
 	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatal(err)

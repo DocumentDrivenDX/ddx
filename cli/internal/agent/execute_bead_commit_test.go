@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // minimalResult returns an ExecuteBeadResult with all required fields set to
@@ -268,9 +268,7 @@ func TestSynthesizeCommitMessage_InExecuteBead(t *testing.T) {
 
 	var capturedMsg string
 	projectRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 
 	gitOps := &commitMsgCapturingGitOps{
 		projectRoot: projectRoot,

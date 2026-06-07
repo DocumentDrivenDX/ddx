@@ -2,11 +2,11 @@ package agent
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,7 +24,7 @@ func (f *fakeExecutionCleanupRunner) Cleanup(ctx context.Context) (ExecutionClea
 
 func TestTryResourcePreflight_ChecksEvidenceAndTempRoots(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	tempRoot := t.TempDir()
 	t.Setenv("DDX_EXEC_WT_DIR", tempRoot)
 
@@ -46,7 +46,7 @@ func TestTryResourcePreflight_ChecksEvidenceAndTempRoots(t *testing.T) {
 
 func TestTryResourcePreflight_RechecksAfterCleanup(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	tempRoot := t.TempDir()
 
 	healthy := false
@@ -89,7 +89,7 @@ func TestTryResourcePreflight_RechecksAfterCleanup(t *testing.T) {
 
 func TestWorkResourcePreflight_RunsCleanupBelowSoftFloor(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	tempRoot := filepath.Join(t.TempDir(), "ddx-exec-wt")
 
 	runner := &fakeExecutionCleanupRunner{}

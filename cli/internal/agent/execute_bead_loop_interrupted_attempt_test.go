@@ -10,6 +10,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -111,7 +112,7 @@ func runInterruptedAttemptInGitRepo(t *testing.T, trackDirtyRunState bool) inter
 	t.Helper()
 
 	projectRoot := newDurableAuditProject(t)
-	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	require.NoError(t, store.Init(context.Background()))
 

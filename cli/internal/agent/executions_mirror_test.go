@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // TestRenderMirrorPath verifies the four supported placeholders are
@@ -329,6 +330,7 @@ func TestMirror_CopiesExecutionDir(t *testing.T) {
 // file when SessionID is set and IncludeAgentLogs is true (default).
 func TestMirror_CopiesAgentLog(t *testing.T) {
 	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	const attemptID = "20260511T020202-bbccddee"
 	const beadID = "ddx-copy-agent-log"
 	const sessionID = "test-session-xyz"
@@ -380,6 +382,7 @@ func TestMirror_CopiesAgentLog(t *testing.T) {
 // copied when IncludeWorkers is explicitly set to true.
 func TestMirror_CopiesWorkerDirWhenIncluded(t *testing.T) {
 	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	const attemptID = "20260511T030303-ccddeegg"
 	const beadID = "ddx-copy-worker-dir"
 	const workerID = "worker-include-test"
@@ -431,6 +434,7 @@ func TestMirror_CopiesWorkerDirWhenIncluded(t *testing.T) {
 // NOT copied when IncludeWorkers is false (or defaults to false when nil).
 func TestMirror_SkipsWorkerDirWhenExcluded(t *testing.T) {
 	projectRoot := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	const attemptID = "20260511T040404-ddeeff00"
 	const beadID = "ddx-skip-worker-dir"
 	const workerID = "worker-exclude-test"

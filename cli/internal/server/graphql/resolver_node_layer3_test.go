@@ -17,12 +17,14 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // seedBeadProject creates a minimal DDx project at root with a single bead
 // having the supplied id and title.
 func seedBeadProject(t *testing.T, root, beadID, title string) {
 	t.Helper()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
 	b := &bead.Bead{ID: beadID, Title: title, Status: bead.StatusOpen}
 	if err := store.Create(context.Background(), b); err != nil {
@@ -34,6 +36,7 @@ func seedBeadProject(t *testing.T, root, beadID, title string) {
 // exec store.
 func seedExecRunProject(t *testing.T, root, runID, status string) {
 	t.Helper()
+	testutils.MakeInitializedDDxRoot(t, root)
 	store := ddxexec.NewStore(root)
 	now := time.Date(2026, 5, 2, 22, 0, 0, 0, time.UTC)
 	if err := store.SaveDefinition(ddxexec.Definition{

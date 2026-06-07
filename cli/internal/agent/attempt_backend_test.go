@@ -9,6 +9,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,7 +203,7 @@ func TestPrepareDockerAttemptRuntimeCreatesCacheRoots(t *testing.T) {
 
 func TestDockerProjectDockerfileAutodetectsProjectLayer(t *testing.T) {
 	projectRoot := t.TempDir()
-	require.NoError(t, os.MkdirAll(ddxroot.InTree(projectRoot), 0o755))
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	dockerfile := ddxroot.InTree(projectRoot, "attempt-runner.Dockerfile")
 	require.NoError(t, os.WriteFile(dockerfile, []byte("FROM scratch\n"), 0o644))
 

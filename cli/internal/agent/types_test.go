@@ -2,11 +2,11 @@ package agent
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 func TestResolveLogDir(t *testing.T) {
@@ -40,10 +40,7 @@ func TestResolveLogDir(t *testing.T) {
 
 	t.Run("in-tree ddx state stays anchored at project root", func(t *testing.T) {
 		projectRoot := t.TempDir()
-		requireDDX := ddxroot.InTree(projectRoot)
-		if err := os.MkdirAll(requireDDX, 0o755); err != nil {
-			t.Fatalf("mkdir .ddx: %v", err)
-		}
+		testutils.MakeInitializedDDxRoot(t, projectRoot)
 		want := filepath.Join(projectRoot, ddxroot.DirName, "agent-logs")
 		if got := ResolveLogDir(projectRoot, ""); got != want {
 			t.Errorf("ResolveLogDir(%q, %q) = %q; want %q", projectRoot, "", got, want)

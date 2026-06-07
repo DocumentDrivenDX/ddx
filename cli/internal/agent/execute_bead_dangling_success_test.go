@@ -19,6 +19,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +31,7 @@ import (
 // writeResultJSON writes a minimal result.json for a given bead/attempt.
 func writeResultJSON(t *testing.T, projectRoot, attemptID string, res ExecuteBeadResult) {
 	t.Helper()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	dir := filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)
 	require.NoError(t, os.MkdirAll(dir, 0755))
 	data, err := json.Marshal(res)
@@ -650,13 +652,13 @@ func newExecuteLoopProjectRoot(t *testing.T) (projectRoot string, beadID string)
 	runGitInteg(t, root, "add", ".")
 	runGitInteg(t, root, "commit", "-m", "chore: seed")
 
-	ddxDir := filepath.Join(root, ddxroot.DirName)
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
 
 	const id = "ddx-recovery-0001"
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: id, Title: "recovery test bead", IssueType: "task"}))
-	runGitInteg(t, root, "add", ".ddx/beads.jsonl")
+	runGitInteg(t, root, "add", ".ddx/beads.jsonl", ".ddx/config.yaml")
 	runGitInteg(t, root, "commit", "-m", "chore: seed beads")
 
 	return root, id

@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func (r *triageHookRunnerStub) Run(opts RunArgs) (*Result, error) {
 func newTriageHookTestRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, root)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ResolveLogDir(root, "")), 0o755))
 	skillDir := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle")
 	require.NoError(t, os.MkdirAll(skillDir, 0o755))

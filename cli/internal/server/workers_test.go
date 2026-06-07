@@ -20,6 +20,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -313,8 +314,7 @@ func installFastSuccessWorker(m *WorkerManager) {
 func setupBeadStore(t *testing.T, root string) {
 	t.Helper()
 	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	// Write empty but valid JSONL
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
 }
@@ -350,8 +350,7 @@ func TestWorkerManagerCancelledContext(t *testing.T) {
 func setupBeadStoreWithReadyBead(t *testing.T, root string) {
 	t.Helper()
 	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 
 	store := bead.NewStore(ddxDir)
 	err := store.Create(context.Background(), &bead.Bead{

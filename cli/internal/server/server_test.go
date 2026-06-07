@@ -20,6 +20,7 @@ import (
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // TestMain scrubs all GIT_* environment variables before running tests.
@@ -169,7 +170,7 @@ func setupProcessMetricsTestDir(t *testing.T) string {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 
-	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	ddxDir := testutils.MakeInitializedDDxRoot(t, dir)
 	if err := os.MkdirAll(filepath.Join(dir, agent.DefaultLogDir), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1121,10 +1122,7 @@ func setupProjectWithBeads(t *testing.T, beadPrefix string) string {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	ddxDir := testutils.MakeInitializedDDxRoot(t, dir)
 	open := fmt.Sprintf(`{"id":"%s-open","title":"Open bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`, beadPrefix)
 	inProgress := fmt.Sprintf(`{"id":"%s-ip","title":"In Progress bead","status":"in_progress","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`, beadPrefix)
 	closed := fmt.Sprintf(`{"id":"%s-closed","title":"Closed bead","status":"closed","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`, beadPrefix)
@@ -4390,6 +4388,7 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 // .ddx/workers/<id>/ directory — the same layout used by WorkerManager.
 func writeTestWorkerRecord(t *testing.T, projectRoot, id string, rec WorkerRecord) {
 	t.Helper()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	dir := filepath.Join(projectRoot, ddxroot.DirName, "workers", id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

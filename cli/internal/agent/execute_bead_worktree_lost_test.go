@@ -43,6 +43,9 @@ func (g *worktreeLostGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		return err
 	}
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\n"), 0o644); err != nil {
+		return err
+	}
 	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		return err

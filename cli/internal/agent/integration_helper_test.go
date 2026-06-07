@@ -14,7 +14,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,8 +88,7 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 	initialSHA := runGitInteg(t, root, "rev-parse", "HEAD")
 
 	// Set up .ddx dir and bead store.
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init(context.Background()))
 
@@ -107,7 +106,7 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 		), b))
 	}
 
-	runGitInteg(t, root, "add", ".ddx/beads.jsonl")
+	runGitInteg(t, root, "add", ".ddx/beads.jsonl", ".ddx/config.yaml")
 	runGitInteg(t, root, "commit", "-m", "chore: seed beads")
 
 	return root, initialSHA

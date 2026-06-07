@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -101,7 +102,7 @@ func writeExecutionCleanupCandidateWithoutMetadata(t *testing.T, dir string, fil
 func setupExecutionCleanupProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(root, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, root)
 	return root
 }
 
@@ -725,8 +726,8 @@ func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 	tempRoot := t.TempDir()
 	staleProjectRoot := filepath.Join(t.TempDir(), "stale-project")
 	activeProjectRoot := filepath.Join(t.TempDir(), "active-project")
-	require.NoError(t, os.MkdirAll(filepath.Join(staleProjectRoot, ddxroot.DirName), 0o755))
-	require.NoError(t, os.MkdirAll(filepath.Join(activeProjectRoot, ddxroot.DirName), 0o755))
+	testutils.MakeInitializedDDxRoot(t, staleProjectRoot)
+	testutils.MakeInitializedDDxRoot(t, activeProjectRoot)
 
 	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-foreign-20260508T120000-deadbeef")
 	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-foreign-20260508T120000-feedface")

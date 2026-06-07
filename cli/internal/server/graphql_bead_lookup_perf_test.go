@@ -21,6 +21,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 const (
@@ -120,7 +121,8 @@ func setupBeadLookupFixture(tb testing.TB) *beadLookupFixture {
 
 func seedBeadLookupProject(tb testing.TB, projectPath string, projectIdx, beadCount int) []bead.Bead {
 	tb.Helper()
-	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
+	ddxDir := testutils.MakeInitializedDDxRoot(tb, projectPath)
+	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		tb.Fatalf("init bead store: %v", err)
 	}

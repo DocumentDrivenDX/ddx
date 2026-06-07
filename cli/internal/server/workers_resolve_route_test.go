@@ -160,6 +160,8 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 		ID:    "ddx-worker-resolve-route-test",
 		Title: "worker resolve-route regression bead",
 	}))
+	runCmd(t, root, "git", "add", ".ddx/config.yaml", ".ddx/beads.jsonl")
+	runCmd(t, root, "git", "commit", "-m", "seed worker bead")
 
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()

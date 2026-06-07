@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // initScriptTestRepo creates a temp dir, initialises a git repo with a
@@ -31,6 +32,7 @@ func initScriptTestRepo(t *testing.T) string {
 		}
 	}
 	// Seed an initial commit so HEAD exists.
+	testutils.MakeInitializedDDxRoot(t, dir)
 	readme := filepath.Join(dir, "README.md")
 	if err := os.WriteFile(readme, []byte("# test"), 0644); err != nil {
 		t.Fatal(err)

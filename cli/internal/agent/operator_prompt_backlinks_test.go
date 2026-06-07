@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // runGit runs a git command in dir, failing the test on error.
@@ -34,9 +35,7 @@ func setupBacklinkRepo(t *testing.T) (dir, baseSHA, tipSHA, originatorID, affect
 	runGit(t, dir, "init", "-b", "main")
 	runGit(t, dir, "config", "user.name", "Test")
 	runGit(t, dir, "config", "user.email", "test@test.local")
-	if err := os.MkdirAll(filepath.Join(dir, ddxroot.DirName), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	testutils.MakeInitializedDDxRoot(t, dir)
 
 	originatorID = "op-originator"
 	affectedBeadID = "op-affected"
@@ -110,10 +109,7 @@ func TestComputeOperatorPromptAffected_DiffsBeadsAndArtifacts(t *testing.T) {
 // originator. Both are queryable via the bead store afterwards.
 func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	ddxDir := testutils.MakeInitializedDDxRoot(t, dir)
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"op\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -175,10 +171,7 @@ func TestRecordOperatorPromptBacklinks_AppendsEventsOnAffectedAndOriginator(t *t
 // pollute the bead-event ledger.
 func TestRecordOperatorPromptBacklinks_EmptyAffectedNoEvents(t *testing.T) {
 	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	ddxDir := testutils.MakeInitializedDDxRoot(t, dir)
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"op\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // makeInTreeRoot creates a projectRoot with an in-tree .ddx/ so ddxroot.Path()
@@ -14,9 +15,7 @@ import (
 func makeInTreeRoot(t *testing.T) string {
 	t.Helper()
 	projectRoot := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755); err != nil {
-		t.Fatalf("mkdir .ddx: %v", err)
-	}
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	return projectRoot
 }
 

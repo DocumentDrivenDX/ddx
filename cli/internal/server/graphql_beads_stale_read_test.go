@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // TestBeadsByProject_UpdateVisibleOnNextRequest covers ddx-9ce6842a AC §6:
@@ -25,7 +25,8 @@ func TestBeadsByProject_UpdateVisibleOnNextRequest(t *testing.T) {
 	t.Setenv("DDX_NODE_NAME", "stale-read-list")
 
 	projectPath := filepath.Join(t.TempDir(), "project")
-	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, projectPath)
+	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}
@@ -107,7 +108,8 @@ func TestBeadsByProject_ConcurrentQueriesAndUpdates(t *testing.T) {
 	t.Setenv("DDX_NODE_NAME", "stale-read-concurrent")
 
 	projectPath := filepath.Join(t.TempDir(), "project")
-	store := bead.NewStore(filepath.Join(projectPath, ddxroot.DirName))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, projectPath)
+	store := bead.NewStore(ddxDir)
 	if err := store.Init(context.Background()); err != nil {
 		t.Fatalf("init: %v", err)
 	}

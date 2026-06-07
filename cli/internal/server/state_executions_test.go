@@ -12,11 +12,13 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // seedBundle writes a single execute-bead bundle into projectRoot.
 func seedBundle(t *testing.T, projectRoot, attemptID, beadID, harness, verdict string, withToolCalls bool) {
 	t.Helper()
+	testutils.MakeInitializedDDxRoot(t, projectRoot)
 	bundleDir := filepath.Join(projectRoot, agent.ExecuteBeadArtifactDir, attemptID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -170,6 +172,7 @@ func TestExecutions_ListAndDetail(t *testing.T) {
 
 func TestExecutions_TerseManifestSchema(t *testing.T) {
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	dir := filepath.Join(root, agent.ExecuteBeadArtifactDir, "20260423T040000-dddd4444")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -223,6 +226,7 @@ func TestExecutionBundle_ExposesRevisionTriplet(t *testing.T) {
 	)
 
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	bundleID := "20260508T010000-revtriplet"
 	bundleDir := filepath.Join(root, agent.ExecuteBeadArtifactDir, bundleID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
@@ -288,6 +292,7 @@ func TestExecutionBundle_RevisionTriplet_ResultFallback(t *testing.T) {
 	)
 
 	root := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, root)
 	bundleID := "20260508T020000-revfallback"
 	bundleDir := filepath.Join(root, agent.ExecuteBeadArtifactDir, bundleID)
 	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
