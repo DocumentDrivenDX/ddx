@@ -19,8 +19,8 @@ ddx:
 FEAT-021 (Dashboard UI), FEAT-026 (Federation), FEAT-029 (Managed-Node Remote
 Control), SD-019 (Host+User Multi-Project Topology)
 
-> **Historical** — describes the pre-2026-04-14 React stack. Current stack: see ADR-002 v2.
-**Status:** Active
+> **Historical reference** — describes the pre-2026-04-14 React stack. This plan is superseded by current-stack test plans; retained rows below are historical only.
+**Status:** Superseded historical reference
 
 ## Scope
 
@@ -159,9 +159,9 @@ and this measurement methodology together.
 | TC-003.9 | Create bead submit | Submitting modal creates bead, card appears in OPEN column | Implemented |
 | TC-003.10 | Claim bead | "Claim" button on open bead moves it to IN PROGRESS | Implemented |
 | TC-003.11 | Unclaim bead | "Unclaim" button on in-progress bead moves it back to OPEN | Implemented (`e2e/beads.spec.ts` TC-003.11) |
-| TC-003.12 | Close bead | "Close" button on in-progress bead moves it to CLOSED | Deferred — no `beadClose` mutation in `schema.graphql`; no Close button in `BeadDetail.svelte`. File an implementation bead before re-scheduling this test. |
-| TC-003.13 | Reopen bead | "Re-open" on closed bead shows reason input, confirms reopens | Deferred — `beadReopen` mutation exists in `schema.graphql` but `BeadDetail.svelte` exposes no Reopen button. |
-| TC-003.14 | Drag and drop | Dragging a card between columns updates status | Deferred — no drag-drop UI in the beads page today. |
+| TC-003.12 | Close bead | "Close" button on in-progress bead moves it to CLOSED | Historical reference only — no `beadClose` mutation in `schema.graphql`; no Close button in `BeadDetail.svelte`. File an implementation bead before re-scheduling this test. |
+| TC-003.13 | Reopen bead | "Re-open" on closed bead shows reason input, confirms reopens | Historical reference only — `beadReopen` mutation exists in `schema.graphql` but `BeadDetail.svelte` exposes no Reopen button. |
+| TC-003.14 | Drag and drop | Dragging a card between columns updates status | Historical reference only — no drag-drop UI in the beads page today. |
 | TC-003.15 | Dependency display | Detail panel shows dependency list with check/circle status | Planned |
 
 ### TC-004: Document Graph
