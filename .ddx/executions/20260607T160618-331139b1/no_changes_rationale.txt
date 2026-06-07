@@ -1,0 +1,2 @@
+status: blocked
+reason: `go test ./cmd/` still fails in shared cmd tests outside the work/durable-audit batch (for example `TestAcRun_PassExitsZero` and `TestWorkPlan_CLI_TextOutput`), and fixing those failures would require changes to unrelated cmd fixtures/helpers beyond this bead's scope.

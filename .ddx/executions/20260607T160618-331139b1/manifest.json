@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260607T160618-331139b1",
+  "bead_id": "ddx-33bf24cf",
+  "base_rev": "b6b5829bc1eb882b27d1156451a200180387125c",
+  "created_at": "2026-06-07T16:06:33.988385958Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-33bf24cf",
+    "title": "test-scrub: migrate hand-rolled git-init setup in cmd onto testutils.NewFixtureRepo",
+    "description": "PROBLEM/ROOT CAUSE: ~24 cmd test files (e.g. newWorkAuditRepo/runGitWorkAudit/scrubbedWorkAuditGitEnv at cmd/work_durable_audit_test.go:163-217) hand-roll `git init`+config+seed+commit; only 4 files repo-wide use the shared testutils.NewFixtureRepo. The duplicated setup also blocks the fixture-caching win (S6).\n\nPROPOSED FIX: Replace the duplicated init helpers in a FIRST BATCH of cmd files (the work/durable-audit files) with testutils.NewFixtureRepo(t,\"minimal\"), then layer test-specific beads on top. Verify each call site's seeded state is reproduced. Land package-by-package; this bead covers the cmd work/durable-audit files only.\n\nNON-SCOPE: do NOT migrate all 54 files in one bead; match seeded state exactly. Behavior/coverage preserved.",
+    "acceptance": "1. The migrated cmd work/durable-audit tests pass with identical assertions.\n2. runGitWorkAudit/scrubbedWorkAuditGitEnv/newWorkAuditRepo duplication removed or reduced to a thin adapter over the fixture.\n3. cd cli \u0026\u0026 go test ./cmd/ green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "kind:test",
+      "test-suite-scrub",
+      "phase:iterate",
+      "needs-care"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"cmd/work_durable_audit_test.go:163\\\"\",\"fingerprint\":\"50fe9d2fb8dbae07552f825dcc83e3add76e8add44fc31804e1bc02f513bea66\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"50fe9d2fb8dbae07552f825dcc83e3add76e8add44fc31804e1bc02f513bea66\"}",
+          "created_at": "2026-06-07T16:04:13.732234489Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T160618-331139b1",
+    "prompt": ".ddx/executions/20260607T160618-331139b1/prompt.md",
+    "manifest": ".ddx/executions/20260607T160618-331139b1/manifest.json",
+    "result": ".ddx/executions/20260607T160618-331139b1/result.json",
+    "checks": ".ddx/executions/20260607T160618-331139b1/checks.json",
+    "usage": ".ddx/executions/20260607T160618-331139b1/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-33bf24cf-20260607T160618-331139b1"
+  },
+  "prompt_sha": "dab8f88167fa011dab74a2924d83d539f7d8381aeb1cbca521c08060e8ecbd6f"
+}
