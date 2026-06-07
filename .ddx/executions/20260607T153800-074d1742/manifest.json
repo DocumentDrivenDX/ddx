@@ -1,0 +1,31 @@
+{
+  "attempt_id": "20260607T153800-074d1742",
+  "bead_id": "ddx-bf02a378",
+  "base_rev": "eb12518a055a3568b080296e6322ad34b9940633",
+  "created_at": "2026-06-07T15:38:15.781743655Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bf02a378",
+    "title": "code-health: split Server.mcpTools (627-LOC flat list) into per-domain builders",
+    "description": "PROBLEM/ROOT CAUSE: cli/internal/server/server.go:3265 Server.mcpTools is a single 627-LOC method returning a flat slice of mcpTool literals.\n\nPROPOSED FIX: Split into per-domain builder functions (beadMcpTools(), docMcpTools(), etc.) concatenated by mcpTools. Pure data-list partition, no schema/behavior change.\n\nNON-SCOPE: no tool behavior/schema changes. Behavior-preserving.",
+    "acceptance": "1. mcpTools body \u003c 80 LOC, delegating to per-domain builders.\n2. The returned tool set (names, schemas) is identical — assert via the existing MCP tools-list test.\n3. cd cli \u0026\u0026 go test ./internal/server/... green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:server",
+      "kind:refactor",
+      "code-health",
+      "phase:iterate"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260607T153800-074d1742",
+    "prompt": ".ddx/executions/20260607T153800-074d1742/prompt.md",
+    "manifest": ".ddx/executions/20260607T153800-074d1742/manifest.json",
+    "result": ".ddx/executions/20260607T153800-074d1742/result.json",
+    "checks": ".ddx/executions/20260607T153800-074d1742/checks.json",
+    "usage": ".ddx/executions/20260607T153800-074d1742/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-bf02a378-20260607T153800-074d1742"
+  },
+  "prompt_sha": "f794a72dbe783c4b1cfcc0bba401b68e63c7ac841a19be64315f7b2d01485a9d"
+}
