@@ -17,7 +17,7 @@ If too big, decompose:
 
 1. `ddx bead create` for each child (copy parent's labels and spec-id).
 2. `ddx bead dep add` only for legitimate child-to-child or sibling/replacement edges; never the parent.
-3. `ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`.
+3. Use `parent=<parent-id>` metadata and wire `parent -> child`.
 4. Write `no_changes_rationale.txt` under the bead metadata `bundle` path with child IDs, then stop.
 
 Decomposition alone is success. Don't mix it with implementation.
