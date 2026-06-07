@@ -24,10 +24,25 @@ func TestShouldRefreshDDXBinary(t *testing.T) {
 	assert.False(t, shouldRefreshDDXBinary("8274fc381", "unknown"))
 }
 
-func TestWorkBinaryRefreshEnabledOnlyForInstalledDDX(t *testing.T) {
-	assert.True(t, workBinaryRefreshEnabled([]string{"/home/erik/.local/bin/ddx", "work"}))
-	assert.False(t, workBinaryRefreshEnabled([]string{"/tmp/go-build123/cmd.test", "-test.run=TestWork"}))
-	assert.False(t, workBinaryRefreshEnabled(nil))
+func TestWorkWatchSelfRefreshDefaultsToOnForWatch(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+
+	require.NoError(t, workCmd.Flags().Set("watch", "true"))
+	assert.True(t, workSelfRefreshEnabled(workCmd))
+}
+
+func TestWorkWatchSelfRefreshFalseDisablesWatchRefresh(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+
+	require.NoError(t, workCmd.Flags().Set("watch", "true"))
+	require.NoError(t, workCmd.Flags().Set("self-refresh", "false"))
+	assert.False(t, workSelfRefreshEnabled(workCmd))
 }
 
 // TestBinarySnapshotSurvivesBeadCommitsDetectsReinstall verifies the signal the
