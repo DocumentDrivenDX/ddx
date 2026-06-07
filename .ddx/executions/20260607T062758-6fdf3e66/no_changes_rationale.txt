@@ -1,0 +1,2 @@
+status: open
+reason: retryable full-package verification failure: `go test ./internal/bead/...` fails in `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait above budget; acceptance-focused tests for bead doctor and parent_back_edge handling passed
