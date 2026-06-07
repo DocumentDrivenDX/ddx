@@ -283,13 +283,39 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 func waitForWorkerExit(t *testing.T, m *WorkerManager, id string, timeout time.Duration) WorkerRecord {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
+
+	progressCh, unsubscribe := m.SubscribeProgress(id)
+	defer unsubscribe()
+
+	if progressCh != nil {
+		terminalSeen := false
+		for !terminalSeen {
+			remaining := time.Until(deadline)
+			if remaining <= 0 {
+				t.Fatalf("worker %s did not finish in time", id)
+			}
+			select {
+			case evt, ok := <-progressCh:
+				if !ok {
+					terminalSeen = true
+					continue
+				}
+				if terminalPhases[evt.Phase] {
+					terminalSeen = true
+				}
+			case <-time.After(remaining):
+				t.Fatalf("worker %s did not finish in time", id)
+			}
+		}
+	}
+
 	for time.Now().Before(deadline) {
 		record, err := m.Show(id)
 		require.NoError(t, err)
 		if !record.FinishedAt.IsZero() {
 			return record
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("worker %s did not finish in time", id)
 	return WorkerRecord{}
