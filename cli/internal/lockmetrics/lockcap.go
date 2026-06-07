@@ -214,6 +214,13 @@ func resolveCapConfig(lockName string) CapConfig {
 	}
 }
 
+// CapConfigFor returns the process-wide CapConfig for lockName. Callers that
+// need to route through InstrumentCapped explicitly can use this instead of
+// Instrument's internal helper.
+func CapConfigFor(lockName string) CapConfig {
+	return resolveCapConfig(lockName)
+}
+
 // SharedMainGitLockRoot resolves the DDx state root that should own the
 // process-shared main-git lock. Linked worktrees converge on the primary
 // workspace when one is available; otherwise the caller falls back to the

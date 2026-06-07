@@ -25,6 +25,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -1500,6 +1501,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 
 	attemptID := GenerateAttemptID()
+	if projectRoot != "" {
+		evidenceDir := filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)
+		lockmetrics.SetCapEnforcement(projectRoot, evidenceDir)
+		defer lockmetrics.SetCapEnforcement(projectRoot, "")
+	}
 
 	// Serialize only the parent-repo writes in pre-dispatch (tracker commit
 	// plus the caller-dirt checkpoint) under the main-git lock. Base
