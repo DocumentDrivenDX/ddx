@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./...` fails in pre-existing `cli/cmd` coverage with broad fixture/queue regressions unrelated to this bead (for example `TestAcRun_*`, `TestBead*`, and `TestWork*` all fail because the test harness cannot find expected bead data and queue state). The parent-ancestor doctor path already exists and `go test ./internal/bead -run TestBeadDoctorRepairsParentAncestorBackEdge -count=1` passes, but the required repo-wide acceptance gate is not green from this worktree.
