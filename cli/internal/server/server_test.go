@@ -1797,39 +1797,29 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 52 {
-		t.Fatalf("expected 52 MCP tools, got %d", len(tools))
+	expectedTools := srv.mcpTools()
+	if len(tools) != len(expectedTools) {
+		t.Fatalf("expected %d MCP tools, got %d", len(expectedTools), len(tools))
 	}
 
-	names := map[string]bool{}
-	for _, tool := range tools {
-		toolMap := tool.(map[string]any)
-		names[toolMap["name"].(string)] = true
+	actualJSON, err := json.Marshal(tools)
+	if err != nil {
+		t.Fatal(err)
 	}
-	expected := []string{
-		"ddx_list_documents", "ddx_read_document", "ddx_search", "ddx_list_personas", "ddx_resolve_persona",
-		"ddx_list_beads", "ddx_show_bead", "ddx_bead_ready", "ddx_bead_status",
-		"ddx_bead_blocked", "ddx_bead_dep_tree",
-		"ddx_bead_evidence", "ddx_bead_cooldown", "ddx_bead_routing",
-		"ddx_bead_create", "ddx_bead_update", "ddx_bead_claim",
-		"ddx_doc_graph", "ddx_doc_stale", "ddx_doc_show", "ddx_doc_deps", "ddx_doc_dependents",
-		"ddx_agent_sessions",
-		"ddx_exec_definitions", "ddx_exec_show", "ddx_exec_history",
-		"ddx_exec_dispatch", "ddx_exec_run", "ddx_exec_run_log",
-		"ddx_agent_dispatch",
-		"ddx_doc_changed",
-		"ddx_doc_write", "ddx_doc_history", "ddx_doc_diff",
-		"ddx_list_projects", "ddx_show_project",
-		"ddx_worker_list", "ddx_worker_show", "ddx_worker_log",
-		"ddx_agent_models", "ddx_agent_capabilities",
-		"ddx_metrics_summary", "ddx_metrics_cost", "ddx_metrics_cycle_time", "ddx_metrics_rework",
-		"ddx_metric_history", "ddx_metric_trend",
-		"ddx_list_mcp_servers", "ddx_list_plugins",
+	var actualTools []mcpTool
+	if err := json.Unmarshal(actualJSON, &actualTools); err != nil {
+		t.Fatal(err)
 	}
-	for _, name := range expected {
-		if !names[name] {
-			t.Errorf("missing MCP tool: %s", name)
-		}
+	actualCanonicalJSON, err := json.Marshal(actualTools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectedJSON, err := json.Marshal(expectedTools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(actualCanonicalJSON) != string(expectedJSON) {
+		t.Fatalf("MCP tools list mismatch\nactual:   %s\nexpected: %s", actualCanonicalJSON, expectedJSON)
 	}
 }
 

@@ -3263,14 +3263,34 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) mcpTools() []mcpTool {
-	// projectProp is the schema fragment for the optional "project" argument
-	// accepted by every project-local tool. Omitted when exactly one project is
-	// registered (singleton compat). Required when more than one project is
-	// registered — otherwise the tool returns a disambiguation error.
-	projectProp := map[string]any{
+	projectProp := mcpProjectProp()
+	tools := s.libraryMcpTools(projectProp)
+	tools = append(tools, s.personaMcpTools(projectProp)...)
+	tools = append(tools, s.beadQueryMcpTools(projectProp)...)
+	tools = append(tools, s.agentSessionMcpTools(projectProp)...)
+	tools = append(tools, s.providerMcpTools()...)
+	tools = append(tools, s.agentCapabilityMcpTools(projectProp)...)
+	tools = append(tools, s.beadMutationMcpTools(projectProp)...)
+	tools = append(tools, s.execMcpTools(projectProp)...)
+	tools = append(tools, s.agentDispatchMcpTools(projectProp)...)
+	tools = append(tools, s.docMcpTools(projectProp)...)
+	tools = append(tools, s.metricsMcpTools(projectProp)...)
+	tools = append(tools, s.projectMcpTools()...)
+	tools = append(tools, s.workerMcpTools(projectProp)...)
+	tools = append(tools, s.pluginMcpTools()...)
+	return tools
+}
+
+func mcpProjectProp() map[string]any {
+	// project is optional for singleton library installs and required when more
+	// than one project is registered.
+	return map[string]any{
 		"type":        "string",
 		"description": "Project ID (proj-...) or path. Optional when exactly one project is registered.",
 	}
+}
+
+func (s *Server) libraryMcpTools(projectProp map[string]any) []mcpTool {
 	return []mcpTool{
 		{
 			Name:        "ddx_list_documents",
@@ -3306,6 +3326,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"query"},
 			},
 		},
+	}
+}
+
+func (s *Server) personaMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_list_personas",
 			Description: "List all available personas",
@@ -3328,6 +3353,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"role"},
 			},
 		},
+	}
+}
+
+func (s *Server) beadQueryMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_list_beads",
 			Description: "List work items (beads) with optional filters",
@@ -3440,62 +3470,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
-		{
-			Name:        "ddx_doc_graph",
-			Description: "Get the full document dependency graph",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"project": projectProp,
-				},
-			},
-		},
-		{
-			Name:        "ddx_doc_stale",
-			Description: "List stale documents",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"project": projectProp,
-				},
-			},
-		},
-		{
-			Name:        "ddx_doc_show",
-			Description: "Show document metadata and staleness",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":      map[string]any{"type": "string", "description": "Document ID"},
-					"project": projectProp,
-				},
-				"required": []string{"id"},
-			},
-		},
-		{
-			Name:        "ddx_doc_deps",
-			Description: "Get upstream dependencies of a document",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":      map[string]any{"type": "string", "description": "Document ID"},
-					"project": projectProp,
-				},
-				"required": []string{"id"},
-			},
-		},
-		{
-			Name:        "ddx_doc_dependents",
-			Description: "Get documents that depend on a given document (reverse dependency direction)",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"id":      map[string]any{"type": "string", "description": "Document ID"},
-					"project": projectProp,
-				},
-				"required": []string{"id"},
-			},
-		},
+	}
+}
+
+func (s *Server) agentSessionMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_agent_sessions",
 			Description: "List recent agent sessions",
@@ -3507,6 +3486,11 @@ func (s *Server) mcpTools() []mcpTool {
 				},
 			},
 		},
+	}
+}
+
+func (s *Server) providerMcpTools() []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_provider_list",
 			Description: "List all configured provider harnesses with routing availability, auth state, quota/headroom, and signal freshness (host+user global, not project-scoped)",
@@ -3526,6 +3510,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"harness"},
 			},
 		},
+	}
+}
+
+func (s *Server) agentCapabilityMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_agent_models",
 			Description: "List models for a configured provider (or all providers)",
@@ -3549,6 +3538,11 @@ func (s *Server) mcpTools() []mcpTool {
 				},
 			},
 		},
+	}
+}
+
+func (s *Server) beadMutationMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_bead_create",
 			Description: "Create a new bead (work item)",
@@ -3604,6 +3598,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+	}
+}
+
+func (s *Server) execMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_exec_definitions",
 			Description: "List execution definitions with optional artifact filter",
@@ -3675,6 +3674,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+	}
+}
+
+func (s *Server) agentDispatchMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_agent_dispatch",
 			Description: "Dispatch an agent invocation (localhost-only)",
@@ -3694,6 +3698,67 @@ func (s *Server) mcpTools() []mcpTool {
 					"project":       projectProp,
 				},
 				"required": []string{},
+			},
+		},
+	}
+}
+
+func (s *Server) docMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
+		{
+			Name:        "ddx_doc_graph",
+			Description: "Get the full document dependency graph",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_doc_stale",
+			Description: "List stale documents",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_doc_show",
+			Description: "Show document metadata and staleness",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Document ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_doc_deps",
+			Description: "Get upstream dependencies of a document",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Document ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
+			},
+		},
+		{
+			Name:        "ddx_doc_dependents",
+			Description: "Get documents that depend on a given document (reverse dependency direction)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":      map[string]any{"type": "string", "description": "Document ID"},
+					"project": projectProp,
+				},
+				"required": []string{"id"},
 			},
 		},
 		{
@@ -3745,6 +3810,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+	}
+}
+
+func (s *Server) metricsMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_metrics_summary",
 			Description: "Process metrics summary: throughput, lead time, and rework rate",
@@ -3815,6 +3885,11 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+	}
+}
+
+func (s *Server) projectMcpTools() []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_list_projects",
 			Description: "List projects registered with this ddx-server node",
@@ -3834,6 +3909,11 @@ func (s *Server) mcpTools() []mcpTool {
 				},
 			},
 		},
+	}
+}
+
+func (s *Server) workerMcpTools(projectProp map[string]any) []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_worker_list",
 			Description: "List agent workers for the project",
@@ -3868,13 +3948,18 @@ func (s *Server) mcpTools() []mcpTool {
 				"required": []string{"id"},
 			},
 		},
+	}
+}
+
+func (s *Server) pluginMcpTools() []mcpTool {
+	return []mcpTool{
 		{
 			Name:        "ddx_list_mcp_servers",
 			Description: "List MCP servers available in the DDx library registry",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"project": projectProp,
+					"project": mcpProjectProp(),
 				},
 			},
 		},
