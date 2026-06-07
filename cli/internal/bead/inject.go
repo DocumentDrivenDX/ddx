@@ -102,7 +102,7 @@ func (s *Store) Inject(ctx context.Context, parent string, payload InjectPayload
 	var foundID string
 	err := s.WithLock(func() error {
 		// Verify parent exists.
-		parentBead, err := s.Get(parent)
+		parentBead, err := s.Get(ctx, parent)
 		if err != nil {
 			return fmt.Errorf("inject: parent bead lookup failed: %w", err)
 		}

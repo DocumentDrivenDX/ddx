@@ -121,7 +121,7 @@ func TestLoop_BinaryRefreshStopsBeforeClaim(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 	assert.Equal(t, "BinaryRefresh", result.StopCondition)
 	assert.Equal(t, "binary_refresh", result.ExitReason)
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
@@ -172,9 +172,9 @@ func TestWorkWatch_SystemicPreClaimErrorIdlesWithoutCooldown(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 	assert.Equal(t, 0, result.Failures)
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
@@ -253,12 +253,12 @@ func TestPreClaimWarnSameFingerprintEscalatesAfterThreshold(t *testing.T) {
 	assert.Equal(t, "OperatorAttention", result.StopCondition)
 
 	for _, beadID := range beadIDs[:len(beadIDs)-1] {
-		got, err := store.Get(beadID)
+		got, err := store.Get(context.Background(), beadID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusClosed, got.Status)
 		assert.Nil(t, got.Extra["work-retry-after"])
 	}
-	lastBead, err := store.Get(beadIDs[len(beadIDs)-1])
+	lastBead, err := store.Get(context.Background(), beadIDs[len(beadIDs)-1])
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, lastBead.Status)
 
@@ -370,9 +370,9 @@ func TestWorkWatch_PreClaimIdleEscalatesAfterRepeatedSameDetail(t *testing.T) {
 	assert.Nil(t, result.OperatorAttention)
 
 	// Beads stay open and uncooldowned — tracker contention never faults a bead.
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
@@ -549,7 +549,7 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, int32(2), atomic.LoadInt32(&execCalls), "watch mode must redispatch after preserving root dirt")
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotFirst.Status)
 
@@ -674,11 +674,11 @@ func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
 	// Wait deterministically for both beads to close (the behavior under
 	// test), then cancel the worker so Run returns context.Canceled.
 	require.Eventually(t, func() bool {
-		first, err := store.Get("ddx-int-0001")
+		first, err := store.Get(context.Background(), "ddx-int-0001")
 		if err != nil || first.Status != bead.StatusClosed {
 			return false
 		}
-		second, err := store.Get("ddx-int-0002")
+		second, err := store.Get(context.Background(), "ddx-int-0002")
 		if err != nil || second.Status != bead.StatusClosed {
 			return false
 		}
@@ -700,9 +700,9 @@ func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
 	assert.Nil(t, result.OperatorAttention)
 	assert.NotContains(t, eventSink.String(), `"type":"loop.pre_dispatch_dirty_preserved"`)
 
-	first, getErr := store.Get("ddx-int-0001")
+	first, getErr := store.Get(context.Background(), "ddx-int-0001")
 	require.NoError(t, getErr)
-	second, getErr := store.Get("ddx-int-0002")
+	second, getErr := store.Get(context.Background(), "ddx-int-0002")
 	require.NoError(t, getErr)
 	assert.Equal(t, bead.StatusClosed, first.Status)
 	assert.Equal(t, bead.StatusClosed, second.Status)
@@ -766,7 +766,7 @@ func TestPreDispatchDirtyPreserveRequiresStableImplementationDirt(t *testing.T) 
 	assert.Nil(t, result.OperatorAttention)
 	assert.NotContains(t, eventSink.String(), `"type":"loop.pre_dispatch_dirty_preserved"`)
 
-	got, getErr := store.Get("ddx-int-0001")
+	got, getErr := store.Get(context.Background(), "ddx-int-0001")
 	require.NoError(t, getErr)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -825,9 +825,9 @@ func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "only the first ready bead may be claimed while the tree is dirty")
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
@@ -902,9 +902,9 @@ func TestLoop_WatchCheckpointDirtyPreserveFailureFallsBackToOperatorAttention(t 
 	assert.Equal(t, dirtyPaths, result.OperatorAttention.DirtyPaths)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "checkpoint dirt fallback must still stop before a second claim")
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
@@ -949,9 +949,9 @@ func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
 	assert.Equal(t, "/repo/drain", result.OperatorAttention.ProjectRoot)
 	assert.Equal(t, []string{"cli/internal/agent/dirty_impl.go"}, result.OperatorAttention.DirtyPaths)
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
@@ -1233,10 +1233,10 @@ func TestDrain_RoutingPreflightRunsOnce(t *testing.T) {
 	assert.Equal(t, 2, result.Attempts)
 	assert.Equal(t, 2, result.Successes)
 
-	gotFirst, err := inner.Get(first.ID)
+	gotFirst, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotFirst.Status)
-	gotSecond, err := inner.Get(second.ID)
+	gotSecond, err := inner.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
 }

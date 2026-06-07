@@ -122,7 +122,7 @@ func TestWatchSurvivesPerBeadRoutingFailureAndContinues(t *testing.T) {
 
 	// Both beads remain open, unclaimed, and un-parked (no cooldown).
 	for _, id := range []string{first.ID, second.ID} {
-		got, getErr := inner.Get(id)
+		got, getErr := inner.Get(context.Background(), id)
 		require.NoError(t, getErr)
 		assert.Equal(t, bead.StatusOpen, got.Status)
 		assert.Empty(t, got.Owner)
@@ -210,7 +210,7 @@ func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	}
 
 	// Bead must remain open with no owner — confirms no Claim side-effects.
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -253,7 +253,7 @@ func TestRoutingPreflightSuccessAllowsClaim(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&execCount), "executor must run when preflight passes")
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }

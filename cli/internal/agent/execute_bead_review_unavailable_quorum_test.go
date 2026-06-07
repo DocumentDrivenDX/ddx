@@ -39,7 +39,7 @@ func TestReviewerUnavailable_DoesNotParkAfterMaxRetries(t *testing.T) {
 	}
 
 	// Bead must NOT be parked to proposed — it must stay open for retry.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusProposed, got.Status,
 		"reviewer_unavailable must not park the bead to proposed")
@@ -120,7 +120,7 @@ func TestReviewGroup_EvidencelessBlockLosesToQuorum(t *testing.T) {
 	require.True(t, out.Approved,
 		"lone evidence-less BLOCK must not auto-block: quorum rule gives APPROVE the win")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status,
 		"quorum APPROVE must close the bead")
@@ -193,7 +193,7 @@ func TestReviewGroup_EvidencedBlockWinsOverApprove(t *testing.T) {
 	require.False(t, out.Approved,
 		"a BLOCK citing a concrete location must override the approving reviewer")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status,
 		"an evidenced BLOCK must not close the bead")

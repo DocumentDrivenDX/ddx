@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -111,7 +112,7 @@ func TestWorkerManagerPruneReapsDeadPID(t *testing.T) {
 	assert.False(t, rec.FinishedAt.IsZero())
 
 	// Bead claim must be released.
-	b, err := store.Get("ddx-prune-pid")
+	b, err := store.Get(context.Background(), "ddx-prune-pid")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"Prune must release the bead claim so the queue drainer can pick it up again")
@@ -265,7 +266,7 @@ func TestWorkerManagerStopStaleDiskEntry(t *testing.T) {
 	assert.False(t, rec.FinishedAt.IsZero())
 
 	// Bead claim must be released.
-	b, err := store.Get("ddx-stop-stale")
+	b, err := store.Get(context.Background(), "ddx-stop-stale")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"Stop on stale entry must release the bead claim")
@@ -414,7 +415,7 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 	assert.False(t, rec.FinishedAt.IsZero())
 
 	// Bead claim must be released.
-	b, err := store.Get("ddx-reconcile")
+	b, err := store.Get(context.Background(), "ddx-reconcile")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"ReconcileStaleWorkers must release bead claims for dead workers")

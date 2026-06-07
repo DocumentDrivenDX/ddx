@@ -185,7 +185,7 @@ func TestWorkConcurrentAttempts_WorktreeLostLeavesBeadRetryable(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, FailureModeWorktreeLost, result.Results[0].OutcomeReason)
 
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)

@@ -170,7 +170,7 @@ func TestRecoverDanglingSuccess_NopWhenNoPriorSuccess(t *testing.T) {
 	assert.Nil(t, recovery)
 
 	// Bead should still be in_progress.
-	b, _ := store.Get("ddx-test")
+	b, _ := store.Get(context.Background(), "ddx-test")
 	assert.Equal(t, bead.StatusInProgress, b.Status)
 }
 
@@ -211,7 +211,7 @@ func TestRecoverDanglingSuccess_EmitsEventWhenResultRevUnreachable(t *testing.T)
 	assert.Equal(t, "deadbeefdeadbeefdeadbeef", payload["result_rev"])
 	assert.Contains(t, payload["failure_reason"], "not present in the local git object database")
 
-	b, _ := store.Get(beadID)
+	b, _ := store.Get(context.Background(), beadID)
 	assert.Equal(t, bead.StatusProposed, b.Status, "missing successful commit must park the bead instead of retrying")
 	meta := bead.GetNeedsHumanMeta(*b)
 	assert.Equal(t, "successful result commit could not be recovered automatically", meta.Reason)
@@ -269,7 +269,7 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 	}))
 
 	// Verify the bead is in_progress before recovery.
-	beforeB, _ := store.Get(beadID)
+	beforeB, _ := store.Get(context.Background(), beadID)
 	require.Equal(t, bead.StatusInProgress, beforeB.Status)
 
 	// Step 4: run the loop with Once=true. The executor must NOT be called.
@@ -296,7 +296,7 @@ func TestDanglingSuccess_AC2_FinalizeFailureThenRetry(t *testing.T) {
 	require.NotNil(t, result)
 
 	// AC2: bead must be closed.
-	afterB, err := store.Get(beadID)
+	afterB, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, afterB.Status,
 		"bead must be closed by dangling-success recovery, not re-executed")
@@ -369,7 +369,7 @@ func TestExecuteBeadWorker_UnmergedTaskSucceededResultDoesNotRetry(t *testing.T)
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, result.LastFailureStatus)
 
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 
@@ -616,7 +616,7 @@ func TestDanglingSuccess_DDX5baa6a15SuccessfulOpenBeadRecoveredBeforeRetry(t *te
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
 
-	got, err := store.Get(beadID)
+	got, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -689,7 +689,7 @@ func TestDanglingSuccess_RecoverFromResultRevAlreadyMerged(t *testing.T) {
 
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Claim(beadID, "worker"))
-	beforeB, _ := store.Get(beadID)
+	beforeB, _ := store.Get(context.Background(), beadID)
 	require.Equal(t, bead.StatusInProgress, beforeB.Status)
 
 	var events []string
@@ -700,7 +700,7 @@ func TestDanglingSuccess_RecoverFromResultRevAlreadyMerged(t *testing.T) {
 	require.NotNil(t, recovery)
 	assert.Equal(t, danglingSuccessOutcomeClosed, recovery.Outcome, "result_rev is reachable — must be recovered")
 
-	afterB, err := store.Get(beadID)
+	afterB, err := store.Get(context.Background(), beadID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, afterB.Status, "bead must be closed after recovery")
 	assert.Contains(t, events, "bead.dangling_success_recovery",

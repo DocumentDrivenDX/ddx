@@ -103,7 +103,7 @@ func TestReviewer_RequestClarification_NotBlockingQueue(t *testing.T) {
 	assert.Equal(t, ExecuteBeadStatusReviewRequestClarification, out.Report.Status)
 
 	// Bead must be parked to proposed (operator lane), not closed.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "REQUEST_CLARIFICATION must park to proposed")
 	assert.NotEqual(t, bead.StatusClosed, got.Status, "REQUEST_CLARIFICATION must not close the bead")

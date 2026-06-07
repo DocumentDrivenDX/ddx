@@ -46,7 +46,7 @@ func TestExecuteBeadWorkerNoChangesVerifiedLongCommandCloses(t *testing.T) {
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -109,7 +109,7 @@ func TestExecuteBeadWorkerNoChangesVerificationTimeoutKeepsOpenAndReaps(t *testi
 	assert.Equal(t, 0, result.Successes)
 	assert.Equal(t, 1, result.Failures)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Contains(t, got.Labels, NoChangesLabelUnverified)

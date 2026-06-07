@@ -282,7 +282,7 @@ func HasBeadLabelPrefix(labels []string, prefix string) bool {
 
 // BeadReader can fetch a bead by ID. Implemented by *bead.Store.
 type BeadReader interface {
-	Get(args ...any) (*bead.Bead, error)
+	Get(ctx context.Context, id string) (*bead.Bead, error)
 }
 
 // BeadEventReader reads the event history recorded against a bead.

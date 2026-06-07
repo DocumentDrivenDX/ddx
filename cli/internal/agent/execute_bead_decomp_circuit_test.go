@@ -77,7 +77,7 @@ func TestMixedCommitCooldown(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(1), atomic.LoadInt32(&callCount), "executor must run exactly once")
 
-	got, err := store.Get("ddx-mixed-cb")
+	got, err := store.Get(context.Background(), "ddx-mixed-cb")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status,
 		"bead must be parked to proposed after 2nd mixed_commit within 24h")
@@ -119,7 +119,7 @@ func TestMixedCommitCooldown_FirstOccurrenceDoesNotPark(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := store.Get("ddx-mixed-first")
+	got, err := store.Get(context.Background(), "ddx-mixed-first")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status,
 		"bead must remain open after first mixed_commit (circuit-breaker needs 2 occurrences)")
@@ -170,7 +170,7 @@ func TestMixedCommitCooldown_OutsideWindowDoesNotPark(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := store.Get("ddx-mixed-old")
+	got, err := store.Get(context.Background(), "ddx-mixed-old")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status,
 		"bead must remain open when prior mixed_commit event is outside the 24h window")

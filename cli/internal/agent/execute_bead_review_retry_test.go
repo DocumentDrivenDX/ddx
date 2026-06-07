@@ -103,7 +103,7 @@ func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 		"manual-required body must include the blocked result_rev for triage")
 
 	// §13 invariant: bead must NOT be closed by reviewer-failure escalation.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status,
 		"reviewer failure (even at terminal escalation) must never close the bead")
@@ -415,7 +415,7 @@ func TestPreCloseReview_CostCapFeedsReviewError(t *testing.T) {
 		"review-error body must carry the blocked result_rev")
 
 	// AC 3: the bead must remain open (not closed by the cap refusal).
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status,
 		"cost cap exceeded must not close the bead")

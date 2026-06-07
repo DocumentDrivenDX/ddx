@@ -66,7 +66,7 @@ func TestExecuteBeadWorkerPushFailedStaysOpen(t *testing.T) {
 	assert.GreaterOrEqual(t, result.Failures, 1)
 	assert.Equal(t, ExecuteBeadStatusPushFailed, result.LastFailureStatus)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "push_failed must NOT close the bead")
 	assert.Empty(t, got.Owner, "push_failed must release the claim")
@@ -117,7 +117,7 @@ func TestExecuteBeadWorkerPushConflictParksAndEmitsEvent(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, ExecuteBeadStatusPushConflict, result.LastFailureStatus)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "push_conflict must NOT close the bead")
 	require.NotNil(t, got.Extra)

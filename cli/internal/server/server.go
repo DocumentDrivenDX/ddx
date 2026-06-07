@@ -1564,7 +1564,7 @@ func (s *Server) handleListBeads(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		store := bead.NewStore(ddxroot.JoinProject(proj.Path))
-		beads, err := store.ReadAll()
+		beads, err := store.ReadAll(context.Background())
 		if err != nil {
 			continue
 		}
@@ -1593,7 +1593,7 @@ func (s *Server) handleShowBead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := s.beadStoreForRequest(r)
-	b, err := store.Get(id)
+	b, err := store.Get(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
 		return
@@ -1688,7 +1688,7 @@ func (s *Server) handleBeadCooldown(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store := s.beadStoreForRequest(r)
-	b, err := store.Get(id)
+	b, err := store.Get(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "bead not found"})
 		return
@@ -1902,7 +1902,7 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := store.Get(id)
+	updated, err := store.Get(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -4339,7 +4339,7 @@ func (s *Server) mcpShowBead(workingDir, id string) mcpToolResult {
 		}
 	}
 	store := bead.NewStore(ddxroot.JoinProject(workingDir))
-	b, err := store.Get(id)
+	b, err := store.Get(context.Background(), id)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText("bead not found")},
@@ -4687,7 +4687,7 @@ func (s *Server) mcpBeadUpdate(workingDir, id string, req BeadUpdateRequest) mcp
 			IsError: true,
 		}
 	}
-	updated, _ := store.Get(id)
+	updated, _ := store.Get(context.Background(), id)
 	data, _ := json.Marshal(updated)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
@@ -5366,7 +5366,7 @@ func (s *Server) mcpBeadCooldown(workingDir, id string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
 	store := bead.NewStore(ddxroot.JoinProject(workingDir))
-	b, err := store.Get(id)
+	b, err := store.Get(context.Background(), id)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("bead not found")}, IsError: true}
 	}

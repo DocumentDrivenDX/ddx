@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,12 +77,12 @@ func TestBeadCreate_RelativeEnvInsideLinkedWorktreeUsesPrimaryNamingAndStore(t *
 		"bead create from a linked execute-bead worktree must use the primary workspace naming convention, got %q", createdID)
 
 	primaryStore := bead.NewStore(ddxDir)
-	created, err := primaryStore.Get(createdID)
+	created, err := primaryStore.Get(context.Background(), createdID)
 	require.NoError(t, err, "created bead must be written to the primary workspace store")
 	require.Equal(t, "worktree-created bead", created.Title)
 
 	worktreeStore := bead.NewStore(worktreeDDX)
-	_, err = worktreeStore.Get(createdID)
+	_, err = worktreeStore.Get(context.Background(), createdID)
 	require.Error(t, err, "created bead must not be written to the isolated worktree store")
 }
 
@@ -150,12 +151,12 @@ func TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix(t *testing.T) {
 	}
 
 	primaryStore := bead.NewStore(ddxDir)
-	created, err := primaryStore.Get(createdID)
+	created, err := primaryStore.Get(context.Background(), createdID)
 	require.NoError(t, err)
 	require.Equal(t, "real subprocess bead", created.Title)
 
 	worktreeStore := bead.NewStore(worktreeDDX)
-	_, err = worktreeStore.Get(createdID)
+	_, err = worktreeStore.Get(context.Background(), createdID)
 	require.Error(t, err, "created bead must not be written to the isolated worktree store")
 }
 

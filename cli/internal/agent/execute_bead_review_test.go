@@ -222,7 +222,7 @@ func TestPostLandReviewPath_UnreachableInCandidateCycle(t *testing.T) {
 	assert.Equal(t, 0, result.Failures)
 	assert.Equal(t, 0, reviewerCalls, "legacy post-land reviewer must not run after candidate-cycle land")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -381,7 +381,7 @@ func TestPostLandReviewPath_RequestChangesIgnoredAfterLand(t *testing.T) {
 	assert.Equal(t, 0, result.Failures)
 	assert.Equal(t, 0, reviewerCalls)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -432,7 +432,7 @@ func TestPostLandReviewPath_BlockIgnoredAfterLand(t *testing.T) {
 	assert.Equal(t, 0, result.Failures)
 	assert.Equal(t, 0, reviewerCalls)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	events, err := store.Events(first.ID)
@@ -497,7 +497,7 @@ func TestRunPostMergeReview_UnanimousApproveCloses(t *testing.T) {
 	})
 	require.True(t, out.Approved)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -571,7 +571,7 @@ func TestRunPostMergeReview_ApproveWithoutEvidenceIsReviewError(t *testing.T) {
 	require.False(t, out.Approved)
 	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, out.Report.Status)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status)
 
@@ -612,7 +612,7 @@ func TestRunPostMergeReview_BlockWithoutRationaleIsMalfunction(t *testing.T) {
 	require.False(t, out.Approved)
 	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, out.Report.Status)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	// ddx-e30e60a9 + ddx-738edf47: malformed BLOCK is a reviewer malfunction,
 	// not a terminal verdict. The loop refuses to close on a malfunction so
@@ -720,7 +720,7 @@ func TestExecuteBeadWorkerNoReviewSkipsReviewer(t *testing.T) {
 	assert.False(t, reviewerCalled, "reviewer must not be called when NoReview=true")
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -791,7 +791,7 @@ func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
 	assert.True(t, reviewerCalled, "reviewer must be called when review:skip lacks a review:skip-reason label")
 	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, out.Report.Status)
 
-	got, err := store.Get(labeled.ID)
+	got, err := store.Get(context.Background(), labeled.ID)
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status, "label-only skip should be ignored")
 }
@@ -817,7 +817,7 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -865,7 +865,7 @@ func TestExecuteBeadWorkerReviewBypassesRetiredPostLandPath(t *testing.T) {
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
 
-	got, err := store.Get(only.ID)
+	got, err := store.Get(context.Background(), only.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -1016,7 +1016,7 @@ func TestRunPostMergeReviewIgnoresProseFindingsForClosure(t *testing.T) {
 	})
 
 	require.True(t, out.Approved, "advisory prose findings must not block closure")
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }

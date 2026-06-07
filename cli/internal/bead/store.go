@@ -131,15 +131,6 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	return s
 }
 
-func storeCallContext(args []any) context.Context {
-	for _, arg := range args {
-		if ctx, ok := arg.(context.Context); ok && ctx != nil {
-			return ctx
-		}
-	}
-	return context.Background()
-}
-
 // NewStoreWithCollection creates a store for a named logical collection.
 func NewStoreWithCollection(dir, collection string) *Store {
 	return NewStore(dir, WithCollection(collection))
@@ -178,8 +169,7 @@ func (s *Store) GenID(ctx context.Context) (string, error) {
 }
 
 // ReadAll loads all beads from the configured backend.
-func (s *Store) ReadAll(args ...any) ([]Bead, error) {
-	ctx := storeCallContext(args)
+func (s *Store) ReadAll(ctx context.Context) ([]Bead, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -220,17 +210,9 @@ func (s *Store) ReadAll(args ...any) ([]Bead, error) {
 // the return slice without first being held in an intermediate full-corpus
 // list, so queries that match a small subset avoid materializing the
 // mismatches (ddx-9ce6842a Part 2 step 2: filter pushdown).
-func (s *Store) ReadAllFiltered(args ...any) ([]Bead, error) {
-	ctx := storeCallContext(args)
+func (s *Store) ReadAllFiltered(ctx context.Context, pred func(Bead) bool) ([]Bead, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	var pred func(Bead) bool
-	for _, arg := range args {
-		if fn, ok := arg.(func(Bead) bool); ok {
-			pred = fn
-			break
-		}
 	}
 	if s.backend != nil {
 		all, err := s.backend.ReadAll()
@@ -600,22 +582,14 @@ func (s *Store) Create(ctx context.Context, b *Bead) error {
 }
 
 // Get retrieves a bead by ID.
-func (s *Store) Get(args ...any) (*Bead, error) {
-	ctx := storeCallContext(args)
+func (s *Store) Get(ctx context.Context, id string) (*Bead, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
-	}
-	var id string
-	for _, arg := range args {
-		if s, ok := arg.(string); ok {
-			id = s
-			break
-		}
 	}
 	if id == "" {
 		return nil, fmt.Errorf("bead: get requires bead id")
 	}
-	beads, err := s.ReadAll(args...)
+	beads, err := s.ReadAll(ctx)
 	if err != nil {
 		return nil, err
 	}

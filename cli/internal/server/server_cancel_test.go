@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -26,7 +27,7 @@ func TestOperatorCancel_SetsBeadExtra(t *testing.T) {
 	}
 
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
-	b, err := store.Get("bx-001")
+	b, err := store.Get(context.Background(), "bx-001")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestOperatorCancel_Idempotent(t *testing.T) {
 		t.Fatalf("second cancel: expected 200, got %d: %s", w2.Code, w2.Body.String())
 	}
 
-	b, err := store.Get("bx-001")
+	b, err := store.Get(context.Background(), "bx-001")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}

@@ -72,7 +72,7 @@ func TestReviewTerminalClassifications_BlockWithoutNoProgress(t *testing.T) {
 			assert.Equal(t, ExecuteBeadStatusReviewTerminalBlock, out.Report.Status)
 
 			// Bead must move to operator attention (not closed).
-			got, err := store.Get(first.ID)
+			got, err := store.Get(context.Background(), first.ID)
 			require.NoError(t, err)
 			assert.Equal(t, bead.StatusProposed, got.Status, "terminal block must move to proposed")
 			assert.NotEqual(t, bead.StatusClosed, got.Status, "terminal block must not close the bead")
@@ -144,7 +144,7 @@ func TestReviewTerminalClassifications_ExhaustedReviewErrorProposed(t *testing.T
 		"review-manual-required body must carry result_rev")
 
 	// Operator parking must be status-owned on exhausted review error.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status,
 		"exhausted review_error must move bead to proposed for operator triage")
@@ -196,7 +196,7 @@ func TestReadinessPreservesOperatorPromotedOpen(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get the bead with current status.
-	first, err = store.Get(first.ID)
+	first, err = store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, first.Status, "operator must promote bead to open")
 
@@ -239,7 +239,7 @@ func TestReadinessPreservesOperatorPromotedOpen(t *testing.T) {
 	require.False(t, out.Approved)
 
 	// The key assertion: the bead should remain open, not be downgraded to proposed.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status,
 		"operator-promoted bead must remain open despite terminal review block")
@@ -262,7 +262,7 @@ func TestReadinessStillDowngradesAgentProposed(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the bead is in proposed.
-	first, err = store.Get(first.ID)
+	first, err = store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, first.Status)
 
@@ -306,7 +306,7 @@ func TestReadinessStillDowngradesAgentProposed(t *testing.T) {
 
 	// Since there is no operator promotion, the bead should remain proposed.
 	// (In this case, there's no downgrade needed since it's already proposed).
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status,
 		"agent-parked proposed bead must stay proposed with terminal block")
@@ -344,7 +344,7 @@ func TestReadinessLoopBoundedAfterOperatorPromotion(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	first, err = store.Get(first.ID)
+	first, err = store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
@@ -381,7 +381,7 @@ func TestReadinessLoopBoundedAfterOperatorPromotion(t *testing.T) {
 		Assignee:    "worker",
 	})
 
-	first, _ = store.Get(first.ID)
+	first, _ = store.Get(context.Background(), first.ID)
 	statusAfterFirst := first.Status
 	eventsAfterFirst, _ := store.Events(first.ID)
 	countAfterFirst := len(eventsAfterFirst)
@@ -404,7 +404,7 @@ func TestReadinessLoopBoundedAfterOperatorPromotion(t *testing.T) {
 		Assignee:    "worker",
 	})
 
-	first, _ = store.Get(first.ID)
+	first, _ = store.Get(context.Background(), first.ID)
 	statusAfterSecond := first.Status
 	eventsAfterSecond, _ := store.Events(first.ID)
 	countAfterSecond := len(eventsAfterSecond)
@@ -456,7 +456,7 @@ func TestReadinessHonorsOperatorAcceptanceAcrossSessions(t *testing.T) {
 	require.NoError(t, err)
 
 	// Fetch from store again (simulating process restart).
-	first, err = store.Get(first.ID)
+	first, err = store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, first.Status)
 
@@ -495,7 +495,7 @@ func TestReadinessHonorsOperatorAcceptanceAcrossSessions(t *testing.T) {
 	})
 
 	// Fetch the bead again.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	// The operator acceptance signal must be honored across the process restart.

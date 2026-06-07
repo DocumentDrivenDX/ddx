@@ -85,7 +85,7 @@ func TestLoop_DisruptedExecution_NoCooldown(t *testing.T) {
 	assert.Empty(t, report.RetryAfter,
 		"Disrupted report must NOT carry a retry_after — no cooldown applied")
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
 		_, hasRetry := got.Extra["work-retry-after"]
@@ -129,7 +129,7 @@ func TestLoop_GenuineNoProgress_NoDefaultCooldown(t *testing.T) {
 	require.Empty(t, report.RetryAfter,
 		"unjustified no_changes must not be parked under noProgressCooldown by default")
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 	_, hasRetry := got.Extra["work-retry-after"]
@@ -174,7 +174,7 @@ func TestLoop_PreflightRejection_NoCooldown(t *testing.T) {
 	assert.Empty(t, report.RetryAfter,
 		"preflight-rejected bead must not carry retry_after")
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
 		_, hasRetry := got.Extra["work-retry-after"]
@@ -284,7 +284,7 @@ func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	assert.True(t, result.Results[0].Disrupted)
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -305,7 +305,7 @@ func TestWorkInterrupt_DoesNotSetNoProgressCooldown(t *testing.T) {
 	assert.Equal(t, "context_canceled", report.DisruptionReason)
 	assert.Empty(t, report.RetryAfter)
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	_, hasRetry := got.Extra["work-retry-after"]
 	assert.False(t, hasRetry, "interrupted work must not persist work-retry-after")
@@ -337,7 +337,7 @@ func TestWorkInterrupt_NoChangesLikeCanceledAttemptDoesNotWriteTrackerNoise(t *t
 	assert.True(t, result.Results[0].Disrupted)
 	assert.Equal(t, "context_canceled", result.Results[0].DisruptionReason)
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -372,7 +372,7 @@ func TestWorkInterrupt_RemovesClaimLiveness(t *testing.T) {
 	assert.False(t, fresh, "removed heartbeat cannot be fresh")
 
 	require.NoError(t, store.Claim(candidate.ID, "worker-b"), "bead must be re-claimable after cleanup")
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "worker-b", got.Owner)
 }
@@ -414,7 +414,7 @@ func TestInterruptedAfterTerminalMutation_DoesNotUndoClose(t *testing.T) {
 	require.NotNil(t, result)
 	require.Len(t, result.Results, 1)
 
-	got, err := realStore.Get(candidate.ID)
+	got, err := realStore.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.Equal(t, "worker", got.Owner)

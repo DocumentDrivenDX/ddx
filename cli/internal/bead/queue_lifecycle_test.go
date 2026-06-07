@@ -40,7 +40,7 @@ func assertQueueRank(t *testing.T, s *Store, id string, want int) {
 
 func assertQueueRankInArchive(t *testing.T, s *Store, id string, want int) {
 	t.Helper()
-	got, err := s.GetWithArchive(id)
+	got, err := s.GetWithArchive(testCtx(), id)
 	require.NoError(t, err)
 	rank, ok := parseQueueRank(got.Extra[queueRankKey])
 	if !ok {

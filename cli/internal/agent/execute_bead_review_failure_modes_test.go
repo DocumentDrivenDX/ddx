@@ -71,7 +71,7 @@ func TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 			})
 			require.False(t, out.Approved)
 
-			got, err := store.Get(first.ID)
+			got, err := store.Get(context.Background(), first.ID)
 			require.NoError(t, err)
 			assert.NotEqual(t, bead.StatusClosed, got.Status,
 				"reviewer failure of any kind must not close the bead — the whole point of this invariant is that a broken reviewer cannot silently end work")

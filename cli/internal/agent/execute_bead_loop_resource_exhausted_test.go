@@ -104,12 +104,12 @@ func TestExecuteBeadWorkerResourceExhaustedStopsLoop(t *testing.T) {
 	assert.Equal(t, first.ID, result.Results[0].BeadID)
 	assert.Contains(t, logBuf.String(), ResourceExhaustedStopMessage)
 
-	gotFirst, err := inner.Get(first.ID)
+	gotFirst, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "open", gotFirst.Status)
 	assert.Empty(t, gotFirst.Owner)
 
-	gotSecond, err := inner.Get(second.ID)
+	gotSecond, err := inner.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "open", gotSecond.Status)
 	assert.Empty(t, gotSecond.Owner)
@@ -138,7 +138,7 @@ func TestExecuteBeadWorkerResourceExhaustedUnclaimsAndNoCooldown(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	got, err := inner.Get(first.ID)
+	got, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "open", got.Status)
 	assert.Empty(t, got.Owner)
@@ -264,7 +264,7 @@ func TestWorkResourcePreflight_ContinuesAfterCleanupRestoresBudget(t *testing.T)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls))
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
 
-	got, err := inner.Get(first.ID)
+	got, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", got.Status)
 }
@@ -333,7 +333,7 @@ func TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls))
 	assert.Contains(t, logBuf.String(), ResourceExhaustedStopMessage)
 
-	got, err := inner.Get(first.ID)
+	got, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "open", got.Status)
 	assert.Empty(t, got.Owner)

@@ -71,13 +71,13 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "executor must not run")
 
 	// Parent must remain open (not proposed) after a successful decomposition.
-	got, err := store.Get("ddx-decomp-parent")
+	got, err := store.Get(context.Background(), "ddx-decomp-parent")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "parent must remain open after successful decomposition")
 	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent must be marked execution-ineligible after successful decomposition")
 
 	// Two children must exist with Parent == candidate.ID.
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
 	for _, b := range all {
@@ -88,7 +88,7 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	assert.Len(t, children, 2, "two children must be created")
 
 	// Parent must not gain dependency edges to its children.
-	got, err = store.Get("ddx-decomp-parent")
+	got, err = store.Get(context.Background(), "ddx-decomp-parent")
 	require.NoError(t, err)
 	assert.Empty(t, got.DepIDs(), "parent must not depend on its decomposed children")
 
@@ -156,13 +156,13 @@ func TestDecomposeDoesNotSelfDep(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent must be parked as execution-ineligible")
 	assert.Empty(t, got.DepIDs(), "parent must not depend on its children")
 
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
 	for _, b := range all {
@@ -229,7 +229,7 @@ func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing
 	assert.Equal(t, int32(1), atomic.LoadInt32(&hookCalls))
 	assert.Equal(t, 0, result.Attempts)
 
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
 	for _, b := range all {
@@ -240,7 +240,7 @@ func TestIntake_TooLargeWithoutConcreteSplit_InvokesDecompositionHook(t *testing
 	require.Len(t, children, 1)
 	assert.Equal(t, "Child from hook", children[0].Title)
 
-	parent, err := store.Get(candidate.ID)
+	parent, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, parent.Status)
 	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig], "parent must be marked execution-ineligible after hook decomposition")
@@ -371,14 +371,14 @@ func TestIntake_DecompositionACMapRejectsDroppedAC(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts, "lossy split must not count as an attempt")
 
 	// No children must be created.
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	for _, b := range all {
 		assert.NotEqual(t, "ddx-lossy-intake", b.Parent, "no children must be created for a lossy split")
 	}
 
 	// Parent must be parked for operator review.
-	got, err := store.Get("ddx-lossy-intake")
+	got, err := store.Get(context.Background(), "ddx-lossy-intake")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "lossy split must park parent for operator review")
 }
@@ -434,7 +434,7 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts, "depth cap must not count as an attempt")
 
 	// Grandchild must be parked as proposed.
-	got, err := store.Get("ddx-dc-grand")
+	got, err := store.Get(context.Background(), "ddx-dc-grand")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "depth-capped bead must be parked as proposed")
 
@@ -509,7 +509,7 @@ func TestPostAttemptTooLargeNoChanges_AutoDecomposes(t *testing.T) {
 	assert.Equal(t, 0, result.Successes)
 
 	// Two children must be created with Parent == candidate.ID.
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
 	for _, b := range all {
@@ -600,7 +600,7 @@ func TestPostAttemptTooLargeNoChanges_UsesQueueDepthNotAttemptPromptDepth(t *tes
 	assert.Equal(t, 1, result.Failures)
 
 	// Child must be created.
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var children []bead.Bead
 	for _, b := range all {
@@ -668,7 +668,7 @@ func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {
 	assert.Equal(t, 1, result.Failures)
 
 	// No children must be created.
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	for _, b := range all {
 		assert.NotEqual(t, "ddx-lossy-postdecomp", b.Parent,
@@ -676,7 +676,7 @@ func TestPostAttemptTooLargeNoChanges_LossySplitBlocksHuman(t *testing.T) {
 	}
 
 	// Parent must be parked for operator review.
-	got, err := store.Get("ddx-lossy-postdecomp")
+	got, err := store.Get(context.Background(), "ddx-lossy-postdecomp")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status,
 		"lossy post-attempt split must park parent for operator review")

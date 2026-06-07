@@ -62,7 +62,7 @@ func TestNoChangesBadAttempt_EscalatesNextAttemptPower(t *testing.T) {
 		return actualPower + 1, nil
 	}))
 
-	updated, err := store.Get("ddx-bead-1")
+	updated, err := store.Get(context.Background(), "ddx-bead-1")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, updated.Status)
 	require.Equal(t, 71, noChangesMinPowerOverride(updated, 70))
@@ -84,7 +84,7 @@ func TestNoEvidenceProduced_EscalatesImmediately(t *testing.T) {
 		return actualPower + 2, nil
 	}))
 
-	updated, err := store.Get("ddx-bead-2")
+	updated, err := store.Get(context.Background(), "ddx-bead-2")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, updated.Status)
 	require.Equal(t, 72, noChangesMinPowerOverride(updated, 70))
@@ -107,7 +107,7 @@ func TestNoChangesEscalation_BoundedByLadderCap(t *testing.T) {
 		return 0, fmt.Errorf("ladder exhausted")
 	}))
 
-	updated, err := store.Get("ddx-bead-3")
+	updated, err := store.Get(context.Background(), "ddx-bead-3")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusProposed, updated.Status)
 	assert.Empty(t, updated.Owner)

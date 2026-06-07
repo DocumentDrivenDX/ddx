@@ -213,7 +213,7 @@ func TestWorkCleanup_RunsAtStartup(t *testing.T) {
 	require.NotNil(t, result)
 	assert.GreaterOrEqual(t, atomic.LoadInt32(&cleanupCalls), int32(1))
 
-	got, err := inner.Get(first.ID)
+	got, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -293,7 +293,7 @@ func TestWorkCleanup_RunsAfterSetupFailureBeforeNextClaim(t *testing.T) {
 	require.NotNil(t, result)
 	assert.GreaterOrEqual(t, atomic.LoadInt32(&appendCalls), int32(1))
 
-	gotSecond, err := inner.Get(second.ID)
+	gotSecond, err := inner.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
 }
@@ -528,7 +528,7 @@ func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
 		return atomic.LoadInt32(&cleanupCalls) > beforeCancel
 	}, 2*time.Second, 10*time.Millisecond)
 
-	got, err := inner.Get(first.ID)
+	got, err := inner.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Owner)
 }

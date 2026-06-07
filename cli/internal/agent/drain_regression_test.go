@@ -107,7 +107,7 @@ agent:
 	assert.Equal(t, 0, result.Failures)
 
 	// Bead closed cleanly — drain ended in success, not in 19 burned attempts.
-	final, err := store.Get(target.ID)
+	final, err := store.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, final.Status)
 }

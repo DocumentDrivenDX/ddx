@@ -69,7 +69,7 @@ func TestIntake_ActionableAtomic_ClaimsNormally(t *testing.T) {
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -206,7 +206,7 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim must run before intake check")
 	assert.Equal(t, 0, result.Attempts)
 
-	got, err := inner.Get("ddx-0001")
+	got, err := inner.Get(context.Background(), "ddx-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
@@ -251,7 +251,7 @@ func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 1, result.Attempts)
 
-	got, err := inner.Get(beadRef.ID)
+	got, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -268,7 +268,7 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 			difficulty := ReadinessEstimatedDifficultyFromContext(ctx)
 			assert.Equal(t, "hard", difficulty)
-			got, err := inner.Get(beadID)
+			got, err := inner.Get(context.Background(), beadID)
 			require.NoError(t, err)
 			if got.Extra != nil {
 				require.NotContains(t, got.Extra, retryFloorKey)
@@ -303,7 +303,7 @@ func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := inner.Get(beadRef.ID)
+	got, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	if got.Extra != nil {
@@ -349,7 +349,7 @@ func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {
 	}
 
 	intakeHook := NewACQualityPreClaimGate(store, config.BeadQualityModeWarnOnly, DefaultACQualityMinScore, func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
-		b, err := store.Get(beadID)
+		b, err := store.Get(context.Background(), beadID)
 		require.NoError(t, err)
 		assert.NotEqual(t, false, b.Extra["execution-eligible"], "warn-only AC quality must not make the bead ineligible")
 		atomic.StoreInt32(&innerSeen, 1)
@@ -416,7 +416,7 @@ func TestHardOperatorRequiredStillParksProposed(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "operator_required intake must park the bead")
 	assert.Equal(t, 0, result.Attempts, "operator_required must not reach implementation")
 
-	got, err := inner.Get(beadRef.ID)
+	got, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
@@ -457,7 +457,7 @@ func TestPreClaimIntakeOperatorOverridePreventsRepeatParking(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "first operator_required intake must park the bead")
 
-	got, err := inner.Get(beadRef.ID)
+	got, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
@@ -478,7 +478,7 @@ func TestPreClaimIntakeOperatorOverridePreventsRepeatParking(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "operator acceptance must suppress repeat parking for the same finding")
 
-	got, err = inner.Get(beadRef.ID)
+	got, err = inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -536,7 +536,7 @@ func TestPreClaimIntakeChangedBeadInvalidatesOverride(t *testing.T) {
 
 	assert.Equal(t, int32(2), atomic.LoadInt32(&store.parkCalls), "changed prompt-relevant fields must invalidate the override")
 
-	got, err := inner.Get(beadRef.ID)
+	got, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 
@@ -652,7 +652,7 @@ func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 	assert.Contains(t, log.String(), "readiness check unavailable: empty output (continuing)")
 	assert.NotContains(t, log.String(), "pre-claim intake: pre-claim intake:")
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.NotContains(t, got.Extra, "work-last-status")
@@ -875,7 +875,7 @@ func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 		beforeClaim: func() {
 			// Claim now happens BEFORE intake, so the description must NOT
 			// be rewritten yet when beforeClaim is called.
-			got, err := inner.Get(candidate.ID)
+			got, err := inner.Get(context.Background(), candidate.ID)
 			require.NoError(t, err)
 			if strings.Contains(got.Description, "Add an explicit validation step.") {
 				t.Fatalf("description must NOT be rewritten before Claim; got %q", got.Description)
@@ -923,7 +923,7 @@ func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Contains(t, got.Description, "Add an explicit validation step.")
 	assert.Contains(t, got.Acceptance, "lefthook run pre-commit")
@@ -1001,7 +1001,7 @@ func TestIntake_UnsafeRewriteWarnsAndExecutesOriginal(t *testing.T) {
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status, "rejected rewrite must not move bead to operator attention")
 	assert.NotContains(t, got.Description, "invented product semantics", "original description must be preserved")
@@ -1069,7 +1069,7 @@ func TestIntake_UnsafeRewriteDoesNotParkOrRemoveFromExecution(t *testing.T) {
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.Contains(t, got.Description, "Do not change the API contract")
@@ -1120,7 +1120,7 @@ func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Successes)
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status, "bead must keep moving after description preservation failure")
 	assert.Contains(t, got.Description, "original problem text", "original description must not be overwritten")
@@ -1421,7 +1421,7 @@ func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			got, err := inner.Get(beadID)
+			got, err := inner.Get(context.Background(), beadID)
 			require.NoError(t, err)
 			executorSawDescription = got.Description
 			return ExecuteBeadReport{
@@ -1459,7 +1459,7 @@ func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
 	assert.Contains(t, executorSawDescription, "missing file:line anchor",
 		"executor must see the rewritten description before dispatch")
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Contains(t, got.Acceptance, "cd cli && go test", "rewrite must be persisted in bead store")
 }
@@ -1499,7 +1499,7 @@ func TestIntake_AmbiguousNeedsHuman_BlocksWithoutClaim(t *testing.T) {
 
 	assert.Equal(t, 0, result.Attempts, "ambiguous_needs_human must not dispatch an implementer")
 
-	got, err := inner.Get("ddx-0001")
+	got, err := inner.Get(context.Background(), "ddx-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "bead must be moved to operator attention")
 	assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
@@ -1590,7 +1590,7 @@ func TestIntakeBlockedCarriesRuleFingerprint(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 
 	events, err := inner.Events(got.ID)
@@ -1650,7 +1650,7 @@ func TestIntakeBlockedFingerprintDedupes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result1)
 
-	got1, err := inner.Get(candidate.ID)
+	got1, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 
 	events1, err := inner.Events(got1.ID)
@@ -1684,7 +1684,7 @@ func TestIntakeBlockedFingerprintDedupes(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result2)
 
-	got2, err := inner.Get(candidate.ID)
+	got2, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 
 	events2, err := inner.Events(got2.ID)
@@ -1981,7 +1981,7 @@ func TestReadinessStaleExternalBlockerClearedByNotes(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&store.parkCalls), "stale-blocker-cleared bead must not be parked to operator attention")
 	assert.Equal(t, 1, result.Successes, "stale-blocker-cleared bead must execute successfully")
 
-	got, err := inner.Get(beadRef.ID)
+	got, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status, "stale-blocker-cleared bead must close after successful execution")
 }
@@ -1999,7 +1999,7 @@ func TestReadinessNotesIncludedInPromptPayload(t *testing.T) {
 		b.Notes = clearanceNote
 	}))
 
-	b, err := inner.Get(beadRef.ID)
+	b, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 
 	prompt, err := buildPreClaimIntakePrompt(root, inner, b)
@@ -2033,7 +2033,7 @@ func TestReadinessUnblockNotesSupersedeStaleBlockerEvents(t *testing.T) {
 		b.Notes = unblockNote
 	}))
 
-	b, err := inner.Get(beadRef.ID)
+	b, err := inner.Get(context.Background(), beadRef.ID)
 	require.NoError(t, err)
 
 	prompt, err := buildPreClaimIntakePrompt(root, inner, b)

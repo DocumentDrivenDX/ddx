@@ -435,7 +435,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			b, err := s.GetWithArchive(args[0])
+			b, err := s.GetWithArchive(context.Background(), args[0])
 			if err != nil {
 				return err
 			}
@@ -1313,7 +1313,7 @@ triage it without tailing JSONL agent-logs for empty harness/route fields.`,
 // them oldest-first.
 func (f *CommandFactory) collectOperatorAttentionReleases() ([]beadOperatorAttentionRow, error) {
 	s := f.beadStore()
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}

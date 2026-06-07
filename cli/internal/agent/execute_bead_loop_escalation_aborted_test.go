@@ -49,7 +49,7 @@ func TestApplyProviderConnectivityRouteExclusion_DoesNotEscalatePower(t *testing
 	}
 	assert.Nil(t, aborted, "execution-escalation-aborted event must NOT be emitted for provider connectivity failures; power escalation is deferred to no_viable_provider handling")
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open for retry on alternate providers")
 
@@ -80,7 +80,7 @@ func TestApplyProviderConnectivityRouteExclusion_NoEscalationMetadata(t *testing
 	err := applyProviderConnectivityRouteExclusion(store, b.ID, "test-actor", report, false, exhaustedFn, time.Now().UTC())
 	require.NoError(t, err)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 
 	assert.NotContains(t, got.Extra, legacyRetryFloorKey, "no legacy retry floor should be written for provider connectivity failures")
@@ -110,7 +110,7 @@ func TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry(t *test
 	err := applyProviderConnectivityRouteExclusion(store, b.ID, "test-actor", report, false, nextFloorFn, at)
 	require.NoError(t, err)
 
-	first, err := store.Get(b.ID)
+	first, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, first.Status, "bead must remain open after first failure")
 
@@ -118,7 +118,7 @@ func TestProviderConnectivityRepeatedFailure_KeepsOpenForAutonomousRetry(t *test
 	err = applyProviderConnectivityRouteExclusion(store, b.ID, "test-actor", report, false, nextFloorFn, at)
 	require.NoError(t, err)
 
-	second, err := store.Get(b.ID)
+	second, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, second.Status, "bead must remain open after repeated provider connectivity failures")
 	assert.Empty(t, bead.GetNeedsHumanMeta(*second).Reason)
@@ -194,7 +194,7 @@ func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
 	assert.Equal(t, 1, reopened)
 	assert.Equal(t, []string{"provider_connectivity.auto_reopen"}, emitted)
 
-	gotRetryable, err := store.Get(retryable.ID)
+	gotRetryable, err := store.Get(context.Background(), retryable.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotRetryable.Status)
 	assert.NotContains(t, gotRetryable.Labels, bead.LabelNeedsHuman)
@@ -211,7 +211,7 @@ func TestAutoReopenRetryableProviderConnectivityProposals(t *testing.T) {
 		return false
 	}, "auto-reopen event must be recorded")
 
-	gotManual, err := store.Get(manual.ID)
+	gotManual, err := store.Get(context.Background(), manual.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, gotManual.Status)
 	assert.Contains(t, gotManual.Labels, bead.LabelNeedsHuman)
@@ -307,7 +307,7 @@ func TestProviderConnectivityFailure_RetriesOnAlternateProviderAtSamePower(t *te
 	err := applyProviderConnectivityRouteExclusion(store, b.ID, "worker", report1, false, nil, at)
 	require.NoError(t, err)
 
-	afterFirst, err := store.Get(b.ID)
+	afterFirst, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 
 	// Verify bead remains open and reclaimable

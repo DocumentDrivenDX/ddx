@@ -75,7 +75,7 @@ func newWorkLoopOperatorOverrideFixture(t *testing.T) (*bead.Store, *bead.Bead, 
 	}))
 
 	// Build the preservation baseline from the mutated bead, not the helper defaults.
-	updated, err := inner.Get(target.ID)
+	updated, err := inner.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	target = updated
 
@@ -125,7 +125,7 @@ func TestWorkLoopOperatorPromotedOpenDoesNotDowngradeAgain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "first readiness pass must park the bead")
 
-	got, err := inner.Get(target.ID)
+	got, err := inner.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assertWorkLoopCommitmentsPreserved(t, got, want)
@@ -160,7 +160,7 @@ func TestWorkLoopOperatorPromotedOpenDoesNotDowngradeAgain(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		got, err = inner.Get(target.ID)
+		got, err = inner.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusOpen, got.Status, "later pass %d must not re-park the bead", i+1)
 		assertWorkLoopCommitmentsPreserved(t, got, want)
@@ -195,7 +195,7 @@ func TestWorkLoopOperatorOverridePreservesCommitmentText(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err := inner.Get(target.ID)
+	got, err := inner.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 
@@ -212,7 +212,7 @@ func TestWorkLoopOperatorOverridePreservesCommitmentText(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	got, err = inner.Get(target.ID)
+	got, err = inner.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assertWorkLoopCommitmentsPreserved(t, got, want)
@@ -249,7 +249,7 @@ func TestWorkLoopHardManualRequiredStillParks(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "hard manual-required readiness must still claim before parking")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "hard manual-required readiness must still park the bead")
 
-	got, err := inner.Get(target.ID)
+	got, err := inner.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)

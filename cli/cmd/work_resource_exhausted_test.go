@@ -141,11 +141,11 @@ library:
 	require.Equal(t, int32(2), atomic.LoadInt32(&checker.calls))
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	first, err := store.Get("resource-bead-1")
+	first, err := store.Get(context.Background(), "resource-bead-1")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, first.Status)
 	require.Empty(t, first.Owner)
-	second, err := store.Get("resource-bead-2")
+	second, err := store.Get(context.Background(), "resource-bead-2")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, second.Status)
 	require.Empty(t, second.Owner)
@@ -229,12 +229,12 @@ library:
 	require.Equal(t, int32(3), atomic.LoadInt32(&checker.calls))
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
-	first, err := store.Get("resource-e2e-first")
+	first, err := store.Get(context.Background(), "resource-e2e-first")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, first.Status)
 	require.Empty(t, first.Owner)
 
-	second, err := store.Get("resource-e2e-second")
+	second, err := store.Get(context.Background(), "resource-e2e-second")
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, second.Status)
 	require.Empty(t, second.Owner)

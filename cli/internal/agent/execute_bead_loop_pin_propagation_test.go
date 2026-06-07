@@ -98,7 +98,7 @@ func driveLoopAcrossIgnoredPostLandReview(t *testing.T, firstVerdict Verdict, sp
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err, "worker.Run")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusClosed, got.Status,
 		"post-land %s review path is retired; a successful pre-land-reviewed attempt closes directly",

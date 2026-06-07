@@ -594,7 +594,7 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	assert.Empty(t, report.OutcomeReason)
 	assert.Empty(t, report.RetryAfter, "hook failure must not create default no_changes cooldown")
 
-	got, err := store.Get(candidate.ID)
+	got, err := store.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 	_, ok := got.Extra["work-retry-after"]
@@ -697,7 +697,7 @@ func TestNoChangesWithReviewSpecGapClassification_RoutesToProposed(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "spec-gap no_changes must route bead to proposed without reviewer")
 	assert.False(t, reviewerCalled, "reviewer must not gate spec-gap routing")

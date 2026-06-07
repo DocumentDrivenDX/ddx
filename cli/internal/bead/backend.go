@@ -35,11 +35,11 @@ type RawBackend interface {
 type Backend interface {
 	// Foundational
 	Init(ctx context.Context) error
-	ReadAll(args ...any) ([]Bead, error)
+	ReadAll(ctx context.Context) ([]Bead, error)
 
 	// CRUD
 	Create(ctx context.Context, b *Bead) error
-	Get(args ...any) (*Bead, error)
+	Get(ctx context.Context, id string) (*Bead, error)
 	Update(ctx context.Context, id string, mutate func(*Bead)) error
 	Close(ctx context.Context, id string) error
 
@@ -78,9 +78,9 @@ type BeadInitializer interface {
 }
 
 type BeadReader interface {
-	ReadAll(args ...any) ([]Bead, error)
-	ReadAllFiltered(args ...any) ([]Bead, error)
-	Get(args ...any) (*Bead, error)
+	ReadAll(ctx context.Context) ([]Bead, error)
+	ReadAllFiltered(ctx context.Context, pred func(Bead) bool) ([]Bead, error)
+	Get(ctx context.Context, id string) (*Bead, error)
 }
 
 type BeadLifecycle interface {

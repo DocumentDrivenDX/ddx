@@ -197,14 +197,7 @@ type acQualityTestStore struct {
 	events []bead.BeadEvent
 }
 
-func (s *acQualityTestStore) Get(args ...any) (*bead.Bead, error) {
-	var id string
-	for _, arg := range args {
-		if v, ok := arg.(string); ok {
-			id = v
-			break
-		}
-	}
+func (s *acQualityTestStore) Get(_ context.Context, id string) (*bead.Bead, error) {
 	if s.b == nil || s.b.ID != id {
 		return nil, fmt.Errorf("bead %s not found", id)
 	}

@@ -412,7 +412,7 @@ func TestWorkHaltsOnParentBackEdge(t *testing.T) {
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Failures)
 
-	gotParent, err := inner.Get(parent.ID)
+	gotParent, err := inner.Get(context.Background(), parent.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, gotParent.Status, "parent must be parked after the back-edge is detected")
 
@@ -437,7 +437,7 @@ func TestWorkHaltsOnParentBackEdge(t *testing.T) {
 	}
 	assert.True(t, sawOperatorAttention, "operator_attention event must be written for the back-edge")
 
-	children, err := inner.ReadAll()
+	children, err := inner.ReadAll(context.Background())
 	require.NoError(t, err)
 	var backEdgeChild *bead.Bead
 	for i := range children {
@@ -604,7 +604,7 @@ func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.Equal(t, "sess-1", got.Extra["session_id"])
@@ -715,7 +715,7 @@ func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
 	assert.Equal(t, []string{second.ID}, executed)
 	assert.Equal(t, 1, result.Attempts)
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 }
@@ -757,12 +757,12 @@ func TestExecuteBeadWorkerPreservedFailureStaysOpenAndContinues(t *testing.T) {
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.LastFailureStatus)
 
-	firstGot, err := store.Get(first.ID)
+	firstGot, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, firstGot.Status)
 	assert.Empty(t, firstGot.Owner)
 
-	secondGot, err := store.Get(second.ID)
+	secondGot, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, secondGot.Status)
 	assert.Equal(t, "sess-2", secondGot.Extra["session_id"])
@@ -805,7 +805,7 @@ func TestExecuteBeadWorkerLandConflictStaysOpenAndContinues(t *testing.T) {
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusLandConflict, result.LastFailureStatus)
 
-	firstGot, err := store.Get(first.ID)
+	firstGot, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, firstGot.Status)
 
@@ -851,7 +851,7 @@ func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, result.LastFailureStatus)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -916,7 +916,7 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, result.LastFailureStatus)
 
-	firstGot, err := store.Get(first.ID)
+	firstGot, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, firstGot.Status)
 	assert.Empty(t, firstGot.Owner)
@@ -988,7 +988,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedRemainsRunnableAcrossRuns(t *testi
 	require.Len(t, firstRun.Results, 1)
 	assert.Empty(t, firstRun.Results[0].RetryAfter)
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Contains(t, gotFirst.Labels, NoChangesLabelUnjustified)
@@ -1004,7 +1004,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedRemainsRunnableAcrossRuns(t *testi
 	assert.Equal(t, first.ID, secondRun.Results[0].BeadID)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, secondRun.LastFailureStatus)
 
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
 	assert.Equal(t, 2, callCount)
@@ -1051,7 +1051,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	assert.Empty(t, result.Results[0].RetryAfter, "no per-bead cooldown for no_viable_provider")
 	assert.Contains(t, sink.String(), "loop.paused-infra", "worker must emit paused-infra event")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -1092,7 +1092,7 @@ func TestProviderConnectivityFailure_NoBeadCooldown(t *testing.T) {
 	assert.Equal(t, "provider_connectivity", result.Results[0].DisruptionReason)
 	assert.Empty(t, result.Results[0].RetryAfter, "no per-bead cooldown for provider_connectivity")
 
-	got, err := store.Get(target.ID)
+	got, err := store.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -1129,7 +1129,7 @@ func TestProviderConnectivityFailure_RouteExclusionStillRecorded(t *testing.T) {
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
-	got, err := store.Get(target.ID)
+	got, err := store.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Extra["work-retry-after"], "no bead cooldown")
 	// work-failed-routes must be set — the exclusion mechanism is intact.
@@ -1168,7 +1168,7 @@ func TestNoViableProvider_TransitionsToPausedInfra(t *testing.T) {
 	require.Len(t, result.Results, 1)
 
 	// No per-bead cooldown.
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Extra["work-retry-after"], "no per-bead cooldown for no_viable_provider")
 
@@ -1255,14 +1255,14 @@ func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.
 	assert.True(t, result.Results[0].Disrupted)
 	assert.Equal(t, "routing", result.Results[0].DisruptionReason)
 
-	gotFirst, err := store.Get(first.ID)
+	gotFirst, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
 	assert.Empty(t, gotFirst.Owner)
 	require.NotNil(t, gotFirst.Extra)
 	assert.NotContains(t, gotFirst.Extra, "work-retry-after")
 
-	gotSecond, err := store.Get(second.ID)
+	gotSecond, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
 	assert.Empty(t, gotSecond.Owner)
@@ -1302,7 +1302,7 @@ func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
 	assert.True(t, result.Results[0].Disrupted)
 	assert.Equal(t, "routing", result.Results[0].DisruptionReason)
 
-	got, err := store.Get(target.ID)
+	got, err := store.Get(context.Background(), target.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
@@ -1413,7 +1413,7 @@ func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 	assert.Empty(t, result.NoReadyWorkDetail.EpicClosureCandidates)
 
 	// The completed epic must be closed by the cascade.
-	got, err := store.Get(completedEpic.ID)
+	got, err := store.Get(context.Background(), completedEpic.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -1566,7 +1566,7 @@ func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing
 	assert.Equal(t, 1, totalAttempts)
 	assert.Equal(t, 1, totalSuccesses)
 
-	got, err := store.Get(only.ID)
+	got, err := store.Get(context.Background(), only.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.Equal(t, "sess-race", got.Extra["session_id"])
@@ -1637,9 +1637,9 @@ func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testi
 	assert.Equal(t, 2, totalAttempts)
 	assert.Equal(t, 2, totalSuccesses)
 
-	firstGot, err := store.Get(first.ID)
+	firstGot, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	secondGot, err := store.Get(second.ID)
+	secondGot, err := store.Get(context.Background(), second.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, firstGot.Status)
 	assert.Equal(t, bead.StatusClosed, secondGot.Status)
@@ -1850,7 +1850,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel(t *testing.T) {
 	assert.Equal(t, 0, r.Successes)
 	assert.Equal(t, 1, r.Failures)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "unjustified rationale must NOT close the bead")
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
@@ -1905,7 +1905,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result.Results[0].Status)
 	assert.Equal(t, "acceptance criteria already met", result.Results[0].Detail)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -1967,7 +1967,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 	require.Len(t, result.Results, 1)
 	assert.Empty(t, result.Results[0].RetryAfter, "retry cooldown must not be recorded by default")
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.NotContains(t, got.Extra, "work-retry-after")
@@ -2038,9 +2038,9 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, 1, result1.Failures)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, result1.LastFailureStatus)
 
-	w1, _ := store.Get(work1.ID)
-	w2, _ := store.Get(work2.ID)
-	nc, _ := store.Get(ncBead.ID)
+	w1, _ := store.Get(context.Background(), work1.ID)
+	w2, _ := store.Get(context.Background(), work2.ID)
+	nc, _ := store.Get(context.Background(), ncBead.ID)
 	assert.Equal(t, bead.StatusClosed, w1.Status)
 	assert.Equal(t, bead.StatusClosed, w2.Status)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead must stay open after first no_changes")
@@ -2053,7 +2053,7 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, 0, result2.Successes)
 	assert.Equal(t, 1, result2.Failures)
 
-	nc, _ = store.Get(ncBead.ID)
+	nc, _ = store.Get(context.Background(), ncBead.ID)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead stays open under NoChangesContract")
 	assert.Contains(t, nc.Labels, NoChangesLabelUnjustified)
 }
@@ -2098,7 +2098,7 @@ func TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result.Results[0].Status)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
@@ -2150,7 +2150,7 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 	assert.Equal(t, 0, r.Successes)
 	assert.Equal(t, 1, r.Failures)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "verification failure must NOT close the bead")
 	assert.Contains(t, got.Labels, NoChangesLabelUnverified)
@@ -2193,7 +2193,7 @@ func TestNoChangesRetryDoesNotWriteLegacyRetryFloorKey(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, r.Successes)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "autonomous no_changes must remain worker-runnable")
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
@@ -2251,7 +2251,7 @@ func TestNoChangesSmartRetry_TopPowerClassExhausted_GoesToProposed(t *testing.T)
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "no_changes at top powerClass must park bead to proposed (genuine spec gap)")
 	assert.Empty(t, got.Owner, "proposed bead must not be owned")
@@ -2285,7 +2285,7 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 0, r.Successes)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
@@ -2335,7 +2335,7 @@ func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
 	assert.Equal(t, 0, r.Successes)
 	assert.Equal(t, 1, r.Failures)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
@@ -2386,7 +2386,7 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *te
 	require.Len(t, r.Results, 1)
 	assert.Empty(t, r.Results[0].RetryAfter)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
@@ -2442,7 +2442,7 @@ func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, r.Successes)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.NotContains(t, got.Extra, "work-retry-after")
@@ -2507,7 +2507,7 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 
 	// execution-eligible must be false so the bead is no longer execution-ready
 	// (TD-031 §5: operator action is required, not a time-based cooldown).
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusOpen, got.Status, "bead stays open; execution-eligible=false removes it from queue")
 	retryAfter, _ := got.Extra["work-retry-after"].(string)
@@ -2613,7 +2613,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 		require.NotNil(t, result)
 		assert.Equal(t, int32(1), atomic.LoadInt32(&parentExecCount), "watch worker must not dispatch the same decomposed parent twice")
 
-		got, err := store.Get(parent.ID)
+		got, err := store.Get(context.Background(), parent.ID)
 		require.NoError(t, err)
 		assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig])
 		assert.Contains(t, got.Labels, "decomposed")
@@ -2689,7 +2689,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 		require.Len(t, claimed, 1)
 		assert.Equal(t, next.ID, claimed[0]["bead_id"], "stale parent must not be claimed")
 
-		got, err := baseStore.Get(parent.ID)
+		got, err := baseStore.Get(context.Background(), parent.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusOpen, got.Status, "skipped parent must remain open")
 		assert.Empty(t, got.Owner, "skipped parent must not remain claimed")
@@ -2742,7 +2742,7 @@ func TestExecuteBeadWorkerWatchDoesNotRetryExecutionIneligibleAfterPreservedNoCh
 		assert.Equal(t, "decomposed", skips[0]["reason"])
 		assert.Equal(t, "pre_claim", skips[0]["stage"])
 
-		got, err := baseStore.Get(parent.ID)
+		got, err := baseStore.Get(context.Background(), parent.ID)
 		require.NoError(t, err)
 		assert.Equal(t, bead.StatusOpen, got.Status)
 		assert.Empty(t, got.Owner)
@@ -2974,7 +2974,7 @@ func TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable(t *testing.
 	assert.Equal(t, 0, result1.Attempts, "hook failure must not count as an attempt")
 	assert.Empty(t, executedIDs, "executor must not be called when hook always fails")
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after hook always fails")
 }
@@ -3029,7 +3029,7 @@ func TestExecuteBeadWorkerPreClaimHookFailureRetriesOnNextIteration(t *testing.T
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, []string{b.ID}, executedIDs)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
@@ -3256,12 +3256,12 @@ func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
 	assert.Equal(t, 3, result.Attempts)
 
 	// Bead B must be closed.
-	gotB, err := store.Get(b.ID)
+	gotB, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotB.Status)
 
 	// Bead C must be closed as already_satisfied.
-	gotC, err := store.Get(c.ID)
+	gotC, err := store.Get(context.Background(), c.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotC.Status)
 }

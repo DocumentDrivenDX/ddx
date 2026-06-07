@@ -24,20 +24,20 @@ func TestPerBeadCostTracker_ChainsIntoAutoRecovery(t *testing.T) {
 		// Counter starts at zero (key absent).
 		Background(), b))
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Nil(t, got.Extra[consecutiveLadderExhaustionsKey], "counter should be absent before any exhaustion")
 
 	// First per-bead budget exhaustion: counter becomes 1.
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
-	got, err = store.Get(b.ID)
+	got, err = store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 1, got.Extra[consecutiveLadderExhaustionsKey],
 		"counter must be 1 after first per-bead budget exhaustion")
 
 	// Second per-bead budget exhaustion: counter becomes 2 (auto-recovery threshold).
 	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
-	got, err = store.Get(b.ID)
+	got, err = store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.EqualValues(t, 2, got.Extra[consecutiveLadderExhaustionsKey],
 		"counter must be 2 after second per-bead budget exhaustion (auto-recovery threshold)")

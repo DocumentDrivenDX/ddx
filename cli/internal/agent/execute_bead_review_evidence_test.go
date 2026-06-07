@@ -281,7 +281,7 @@ func TestReviewContextOverflow(t *testing.T) {
 	// RunPostMergeReview after a candidate has landed.
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	b, err := store.Get("ddx-overflow")
+	b, err := store.Get(context.Background(), "ddx-overflow")
 	require.NoError(t, err)
 	outReview := RunPostMergeReview(context.Background(), PostMergeReviewInput{
 		Bead: *b,

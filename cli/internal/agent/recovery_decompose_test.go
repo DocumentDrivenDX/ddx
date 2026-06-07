@@ -94,11 +94,11 @@ func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
 
 	assert.True(t, decomposeDispatched, "decomposer must be dispatched for TooLarge class")
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent execution-eligible must be false after decompose")
 
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var childBeads []bead.Bead
 	for _, bb := range all {
@@ -153,14 +153,14 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 		gotWorkDir = opts.WorkDir
 		gotPermissions = opts.Permissions
 
-		all, readErr := store.ReadAll()
+		all, readErr := store.ReadAll(context.Background())
 		require.NoError(t, readErr)
 		for _, bb := range all {
 			if bb.Parent == b.ID {
 				childCountBefore++
 			}
 		}
-		parent, getErr := store.Get(b.ID)
+		parent, getErr := store.Get(context.Background(), b.ID)
 		require.NoError(t, getErr)
 		if parent.Extra != nil {
 			_, parentEligSetBefore = parent.Extra[bead.ExtraExecutionElig]
@@ -183,11 +183,11 @@ func TestPostLadderDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.NotEqual(t, PermissionsReadOnlyReviewer, gotPermissions)
 	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 
-	parent, err := store.Get(b.ID)
+	parent, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig])
 
-	all, err := store.ReadAll()
+	all, err := store.ReadAll(context.Background())
 	require.NoError(t, err)
 	var childBeads []bead.Bead
 	for _, bb := range all {

@@ -46,7 +46,7 @@ func TestReviewBlock_EscalatesImplementerWithoutBeadRetryFloorMetadata(t *testin
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after escalation")
 	assert.NotContains(t, got.Extra, legacyRetryFloorKey)
@@ -82,7 +82,7 @@ func TestReviewBlock_StillFailsAtTopPowerClass_ParkProposed(t *testing.T) {
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "bead must be parked to proposed when ladder exhausted")
 	assert.Empty(t, got.Owner, "proposed bead must not be owned")

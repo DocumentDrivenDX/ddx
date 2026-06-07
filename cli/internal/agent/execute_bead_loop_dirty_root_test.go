@@ -117,7 +117,7 @@ func TestDirtyRootCleanRootProceedsNormally(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "clean root must claim bead")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "executor must run on clean root")
 
-	got, err := inner.Get(candidate.ID)
+	got, err := inner.Get(context.Background(), candidate.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", got.Status)
 }

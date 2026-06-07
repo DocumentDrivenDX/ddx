@@ -31,7 +31,7 @@ func TestBeadReconcileCommandDryRunDoesNotMutate(t *testing.T) {
 	out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(), "bead", "reconcile", "--dry-run")
 	require.NoError(t, err)
 	assert.Contains(t, out, "would repair")
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Contains(t, got.Extra, bead.ExtraLastStatus)
 }
@@ -56,7 +56,7 @@ func TestBeadReconcileCommandApplyMutatesThroughStore(t *testing.T) {
 	out, err := executeCommand(NewCommandFactory(dir).NewRootCommand(), "bead", "reconcile", "--apply")
 	require.NoError(t, err)
 	assert.Contains(t, out, "repaired")
-	got, err := store.Get(b.ID)
+	got, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Extra, bead.ExtraLastStatus)
 	assert.NotContains(t, got.Labels, bead.LabelNoChangesUnjustified)

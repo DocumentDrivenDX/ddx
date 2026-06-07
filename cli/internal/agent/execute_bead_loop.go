@@ -715,7 +715,7 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
-	Get(args ...any) (*bead.Bead, error)
+	Get(ctx context.Context, id string) (*bead.Bead, error)
 	Create(ctx context.Context, b *bead.Bead) error
 	Claim(id, assignee string) error
 	Unclaim(id string) error
@@ -5538,7 +5538,7 @@ func isInfraFaultCooldownStatus(status string) bool {
 func infraCooldownResumeAt(store ExecuteBeadLoopStore, cooldownIDs []string) (time.Time, bool) {
 	var earliest time.Time
 	for _, id := range cooldownIDs {
-		b, err := store.Get(id)
+		b, err := store.Get(context.Background(), id)
 		if err != nil || b == nil {
 			return time.Time{}, false
 		}
@@ -6004,7 +6004,7 @@ func (t *attemptTermination) get() string {
 // beadStatusReader is the narrow read capability the external-close watcher
 // needs. ExecuteBeadLoopStore satisfies it via Get.
 type beadStatusReader interface {
-	Get(args ...any) (*bead.Bead, error)
+	Get(ctx context.Context, id string) (*bead.Bead, error)
 }
 
 // beadClosedExternally reports whether beadID has transitioned to closed —
@@ -6014,7 +6014,7 @@ func beadClosedExternally(store beadStatusReader, beadID string) (bool, error) {
 	if store == nil || beadID == "" {
 		return false, nil
 	}
-	b, err := store.Get(beadID)
+	b, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		return false, err
 	}

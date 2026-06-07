@@ -233,7 +233,7 @@ func TestOperatorPromptApprove_DeniedEmptyAllowlist(t *testing.T) {
 	if len(parsed) == 0 || !contains(parsed[0].Message, "allowlist") {
 		t.Errorf("denial must reference the allowlist, got %q", parsed)
 	}
-	persisted, err := store.Get(id)
+	persisted, err := store.Get(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
 	}

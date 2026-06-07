@@ -62,7 +62,7 @@ func TestProviderConnectivityRouteExclusionDoesNotWriteNumericRetryFloor(t *test
 
 	require.Empty(t, floorCalls, "EscalationNextFloor must NOT be called for provider connectivity failures; power escalation is deferred to no_viable_provider handling")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner, "bead must be unclaimed for the next attempt")
@@ -137,7 +137,7 @@ func TestExecuteBeadWorker_ProviderTimeoutPreservesOperatorPin(t *testing.T) {
 	assert.Equal(t, FailureModeProviderConnectivity, report.OutcomeReason)
 	assert.Equal(t, 0, floorCalls, "EscalationNextFloor must NOT be consulted under operator pin")
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 
@@ -204,7 +204,7 @@ func TestFailedRoutesDoNotWriteNumericRetryFloor(t *testing.T) {
 			At:     frozen.Add(-10 * time.Minute).Format(time.RFC3339),
 		})
 	})
-	b, err := store.Get(first.ID)
+	b, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	noViableRoute := func(_ context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
@@ -226,7 +226,7 @@ func TestFailedRoutesDoNotWriteNumericRetryFloor(t *testing.T) {
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
 	assert.Equal(t, first.ID, report.BeadID)
 
-	updated, err := store.Get(first.ID)
+	updated, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, updated.Extra, legacyRetryFloorKey)
 	assert.Contains(t, report.Detail, "escalating current retry floor to 70")
@@ -252,7 +252,7 @@ func TestFailedRoutes_DeduplicatesOnSameProviderModel(t *testing.T) {
 	// second call: same (provider, model) — triggers repeatFailure + ParkToProposed
 	_ = applyProviderConnectivityRouteExclusion(store, first.ID, "actor", report, false, noopFloor, t2)
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 
@@ -301,7 +301,7 @@ func TestFailedRoutes_ExclusionWindowFiltersOldEntriesFromRouteRequest(t *testin
 		}
 	}))
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	audit := readFailedRoutes(got.Extra)
@@ -330,7 +330,7 @@ func TestFailedRoutes_StoreGetCollapsesLegacyDuplicates(t *testing.T) {
 		}
 	}))
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	entries := readFailedRoutes(got.Extra)
@@ -416,7 +416,7 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 	}))
 	// Claim the bead so a lease is held when route resolution wedges.
 	require.NoError(t, store.Claim(first.ID, "worker-a"))
-	claimed, err := store.Get(first.ID)
+	claimed, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusInProgress, claimed.Status)
 
@@ -468,7 +468,7 @@ func TestWorkerReleasesOnRouteResolutionTimeout(t *testing.T) {
 	assert.True(t, got.report.Disrupted, "route-resolution timeout report must be Disrupted=true (retryable)")
 
 	// The lease was released atomically: status back to open, owner cleared.
-	released, err := store.Get(first.ID)
+	released, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, released.Status, "the held lease must be released to open")
 	assert.Empty(t, released.Owner, "the claim owner must be cleared on release")
@@ -513,7 +513,7 @@ func TestPerBeadRouteResolutionTimeoutIsRetryable(t *testing.T) {
 		})
 	}))
 	require.NoError(t, store.Claim(first.ID, "worker-a"))
-	claimed, err := store.Get(first.ID)
+	claimed, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	require.Equal(t, bead.StatusInProgress, claimed.Status)
 
@@ -561,7 +561,7 @@ func TestPerBeadRouteResolutionTimeoutIsRetryable(t *testing.T) {
 	assert.Equal(t, FailureModeRouteResolutionTimeout, got.report.DisruptionReason)
 
 	// AC #2: lease released, bead is immediately re-claimable.
-	after, getErr := store.Get(first.ID)
+	after, getErr := store.Get(context.Background(), first.ID)
 	require.NoError(t, getErr)
 	assert.Equal(t, bead.StatusOpen, after.Status, "lease must be released to open")
 	assert.Empty(t, after.Owner, "owner must be cleared on release")
@@ -649,7 +649,7 @@ func TestApplyProviderConnectivityRouteExclusion_RecordsEndpointAndTimeoutClass(
 
 	require.NoError(t, applyProviderConnectivityRouteExclusion(store, first.ID, "actor", report, false, noopFloor, at))
 
-	got, err := store.Get(first.ID)
+	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 	entries := readFailedRoutes(got.Extra)
 	require.Len(t, entries, 1)
@@ -787,7 +787,7 @@ func TestCheckAndApplyRouteExclusions_DoesNotExcludeSubscriptionHarness(t *testi
 			At:     frozen.Add(-1 * time.Minute).Format(time.RFC3339),
 		})
 	}))
-	b, err := store.Get(first.ID)
+	b, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	// Subscription harnesses present on PATH but reporting Available=false
@@ -838,7 +838,7 @@ func TestCheckAndApplyRouteExclusions_StillExcludesNonSubscriptionAlongsideShiel
 			At:     frozen.Add(-1 * time.Minute).Format(time.RFC3339),
 		})
 	}))
-	b, err := store.Get(first.ID)
+	b, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
 
 	svc := &passthroughTestService{
