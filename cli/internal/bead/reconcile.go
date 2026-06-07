@@ -108,6 +108,7 @@ type ReconcilePlan struct {
 	ClearFields    []string       `json:"clear_fields,omitempty"`
 	RemoveLabels   []string       `json:"remove_labels,omitempty"`
 	AddLabels      []string       `json:"add_labels,omitempty"`
+	TargetStatus   string         `json:"target_status,omitempty"`
 	CloseSatisfied bool           `json:"close_satisfied,omitempty"`
 	Applied        bool           `json:"applied"`
 }
@@ -125,6 +126,8 @@ func (s *Store) ReconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePl
 		return nil, err
 	}
 	childrenByParent := make(map[string]int)
+	nonTerminalChildrenByParent := make(map[string]int)
+	closedChildrenByParent := make(map[string]int)
 	idFilter := make(map[string]bool, len(opts.IDs))
 	for _, id := range opts.IDs {
 		if strings.TrimSpace(id) != "" {
@@ -134,6 +137,12 @@ func (s *Store) ReconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePl
 	for _, b := range beads {
 		if b.Parent != "" {
 			childrenByParent[b.Parent]++
+			if b.Status != StatusClosed && b.Status != StatusCancelled {
+				nonTerminalChildrenByParent[b.Parent]++
+			}
+			if b.Status == StatusClosed {
+				closedChildrenByParent[b.Parent]++
+			}
 		}
 	}
 
@@ -143,7 +152,7 @@ func (s *Store) ReconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePl
 			continue
 		}
 		events, _ := s.eventsForBead(&b)
-		if p, ok := planLifecycleReconcile(b, events, childrenByParent[b.ID], opts.Now); ok {
+		if p, ok := planLifecycleReconcile(b, events, childrenByParent[b.ID], nonTerminalChildrenByParent[b.ID], closedChildrenByParent[b.ID], opts.Now); ok {
 			if opts.Apply {
 				if err := s.applyReconcilePlan(p); err != nil {
 					return plans, err
@@ -156,7 +165,7 @@ func (s *Store) ReconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePl
 	return plans, nil
 }
 
-func planLifecycleReconcile(b Bead, events []BeadEvent, childCount int, now time.Time) (ReconcilePlan, bool) {
+func planLifecycleReconcile(b Bead, events []BeadEvent, childCount, nonTerminalChildCount, closedChildCount int, now time.Time) (ReconcilePlan, bool) {
 	p := ReconcilePlan{
 		BeadID:        b.ID,
 		CurrentFields: currentLifecycleFields(b),
@@ -181,6 +190,7 @@ func planLifecycleReconcile(b Bead, events []BeadEvent, childCount int, now time
 		p.Reason = "verified no_changes evidence closes as already_satisfied"
 		p.ClearFields = noChangesFieldsPresent(b)
 		p.RemoveLabels = noChangesLabelsPresent(b)
+		p.TargetStatus = StatusClosed
 		p.CloseSatisfied = true
 		return p, true
 	}
@@ -188,6 +198,19 @@ func planLifecycleReconcile(b Bead, events []BeadEvent, childCount int, now time
 	if isExpiredRetryAfter(b, now) {
 		p.Reason = "expired retry-after metadata no longer blocks execution"
 		p.ClearFields = []string{ExtraRetryAfter}
+		return p, true
+	}
+
+	if isEpicBead(b) && childCount > 0 && nonTerminalChildCount == 0 && b.Status != StatusClosed && b.Status != StatusCancelled {
+		if closedChildCount == 0 {
+			p.Reason = "auto-cancel epic: all children cancelled, no work completed"
+			p.TargetStatus = StatusCancelled
+			p.CloseSatisfied = false
+			return p, true
+		}
+		p.Reason = "auto-close epic: all children reached terminal state"
+		p.TargetStatus = StatusClosed
+		p.CloseSatisfied = true
 		return p, true
 	}
 
@@ -233,16 +256,32 @@ func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
 			Source:    "ddx bead reconcile",
 			CreatedAt: time.Now().UTC(),
 		})
+		if strings.HasPrefix(p.Reason, "auto-close epic:") || strings.HasPrefix(p.Reason, "auto-cancel epic:") {
+			event := BeadEvent{
+				Kind:      "epic_auto_close",
+				Actor:     "ddx",
+				Source:    "ddx bead reconcile",
+				CreatedAt: time.Now().UTC(),
+			}
+			if p.TargetStatus == StatusCancelled {
+				event.Summary = "auto-cancelled: all children cancelled, no work completed"
+				event.Body = "closed_because: all_children_cancelled"
+			} else {
+				event.Summary = "auto-closed: all children reached terminal state"
+				event.Body = "closed_because: all_children_terminal"
+			}
+			appendInlineEvent(b, event)
+		}
 		return nil
 	}
 	var err error
-	// TD-031 §3.1: reconcile-close is a meta-close that intentionally bypasses
-	// ClosureGate — the bead has no execution session and no closing_commit_sha
-	// of its own. The bypass is safe because every transitive dependency is closed:
-	// each having individually passed ClosureGate or been a prior meta-close, so
-	// the parent's closure inherits evidence by reference through dependency edges.
-	if p.CloseSatisfied {
-		err = s.UpdateWithLifecycleStatus(p.BeadID, StatusClosed, LifecycleTransitionOptions{
+	if p.TargetStatus != "" {
+		// TD-031 §3.1: reconcile terminal transitions are meta-transitions that
+		// intentionally bypass ClosureGate — the bead has no execution session and
+		// no closing_commit_sha of its own. The bypass is safe because every
+		// transitive dependency is terminal, so the parent's transition inherits
+		// evidence by reference through dependency edges.
+		err = s.UpdateWithLifecycleStatus(p.BeadID, p.TargetStatus, LifecycleTransitionOptions{
 			ManualClose: true,
 			Reason:      p.Reason,
 			Actor:       "ddx",
@@ -256,7 +295,7 @@ func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
 	if err != nil {
 		return err
 	}
-	if p.CloseSatisfied {
+	if p.TargetStatus != "" {
 		return s.externalizeEvents(p.BeadID)
 	}
 	return nil

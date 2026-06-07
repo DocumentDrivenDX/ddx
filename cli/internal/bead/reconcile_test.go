@@ -102,6 +102,106 @@ func TestBeadReconcile_ParentEpicMarksNotExecutableOnlyWithChildEvidence(t *test
 	assert.Equal(t, "parent/epic container; execute child beads first", got.Extra[ExtraExecutionReason])
 }
 
+func TestPlanLifecycleReconcile_ClosesAllTerminalEpic(t *testing.T) {
+	s := newTestStore(t)
+	epic := &Bead{
+		ID:        "ddx-epic-close",
+		Title:     "EPIC: imported close should reconcile",
+		IssueType: "epic",
+	}
+	childA := &Bead{ID: "ddx-epic-close-a", Title: "child a", Status: StatusClosed, Parent: epic.ID}
+	childB := &Bead{ID: "ddx-epic-close-b", Title: "child b", Status: StatusClosed, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), epic))
+	require.NoError(t, s.Create(testCtx(), childA))
+	require.NoError(t, s.Create(testCtx(), childB))
+
+	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+	assert.Equal(t, epic.ID, plans[0].BeadID)
+	assert.Equal(t, StatusClosed, plans[0].TargetStatus)
+	assert.True(t, plans[0].CloseSatisfied)
+}
+
+func TestPlanLifecycleReconcile_SkipsEpicWithOpenChild(t *testing.T) {
+	s := newTestStore(t)
+	epic := &Bead{
+		ID:        "ddx-epic-open-child",
+		Title:     "EPIC: keep open while child is open",
+		IssueType: "epic",
+	}
+	child := &Bead{ID: "ddx-epic-open-child-a", Title: "child a", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), epic))
+	require.NoError(t, s.Create(testCtx(), child))
+
+	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{})
+	require.NoError(t, err)
+	assert.Empty(t, plans)
+}
+
+func TestPlanLifecycleReconcile_AllCancelledChildrenCancelsEpic(t *testing.T) {
+	s := newTestStore(t)
+	epic := &Bead{
+		ID:        "ddx-epic-cancel",
+		Title:     "EPIC: imported cancels should reconcile",
+		IssueType: "epic",
+	}
+	childA := &Bead{ID: "ddx-epic-cancel-a", Title: "child a", Status: StatusCancelled, Parent: epic.ID}
+	childB := &Bead{ID: "ddx-epic-cancel-b", Title: "child b", Status: StatusCancelled, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), epic))
+	require.NoError(t, s.Create(testCtx(), childA))
+	require.NoError(t, s.Create(testCtx(), childB))
+
+	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+	assert.Equal(t, epic.ID, plans[0].BeadID)
+	assert.Equal(t, StatusCancelled, plans[0].TargetStatus)
+	assert.False(t, plans[0].CloseSatisfied)
+}
+
+func TestReconcile_ClosesEpicAfterImportedChildClose(t *testing.T) {
+	s := newTestStore(t)
+	epic := &Bead{
+		ID:        "ddx-reconcile-epic",
+		Title:     "EPIC: imported close should reconcile",
+		IssueType: "epic",
+	}
+	child := &Bead{ID: "ddx-reconcile-child", Title: "child", Status: StatusOpen, Parent: epic.ID}
+	require.NoError(t, s.Create(testCtx(), epic))
+	require.NoError(t, s.Create(testCtx(), child))
+
+	require.NoError(t, s.SetLifecycleStatus(child.ID, StatusClosed, LifecycleTransitionOptions{ManualClose: true}))
+
+	before, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, before.Status)
+
+	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+	assert.Equal(t, epic.ID, plans[0].BeadID)
+	assert.Equal(t, StatusClosed, plans[0].TargetStatus)
+	assert.True(t, plans[0].CloseSatisfied)
+	assert.True(t, plans[0].Applied)
+
+	got, err := s.Get(testCtx(), epic.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, got.Status)
+
+	events, err := s.Events(epic.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range events {
+		if e.Kind == "epic_auto_close" {
+			found = true
+			assert.Contains(t, e.Body, "all_children_terminal")
+			break
+		}
+	}
+	assert.True(t, found, "epic should have epic_auto_close event after reconcile")
+}
+
 func TestLifecycle_ReconcileLatestSuccessClearsStaleNoChanges(t *testing.T) {
 	TestBeadReconcile_LatestSuccessClearsStaleNoChangesMetadata(t)
 }
