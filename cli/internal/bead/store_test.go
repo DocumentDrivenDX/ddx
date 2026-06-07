@@ -757,7 +757,7 @@ func TestClose_WalkUp_DeadIntermediateWithRemainingOpenChildren(t *testing.T) {
 	}
 }
 
-func TestClose_WalkUp_SingleHopOnly(t *testing.T) {
+func TestClose_WalkUp_RecursesThroughGrandparentDeadIntermediate(t *testing.T) {
 	s := newTestStore(t)
 
 	// Create chain P → Q → X (all execution-eligible=false)
@@ -791,7 +791,7 @@ func TestClose_WalkUp_SingleHopOnly(t *testing.T) {
 		b.Parent = q.ID
 	}))
 
-	// Close X, should auto-close Q (one hop), but NOT P (next Close() will handle)
+	// Close X, should auto-close Q and recurse to P in the same operation.
 	require.NoError(t, s.Close(testCtx(), x.ID))
 
 	// Verify X is closed
@@ -799,22 +799,42 @@ func TestClose_WalkUp_SingleHopOnly(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, xGot.Status)
 
-	// Verify Q is closed (one hop up from X)
+	// Verify Q is closed by the recursive walk-up.
 	qGot, err := s.Get(testCtx(), q.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, qGot.Status)
 
-	// Verify P is still open (single-hop only, not chased to grandparent)
+	// Verify P is also closed by the recursive walk-up.
 	pGot, err := s.Get(testCtx(), p.ID)
 	require.NoError(t, err)
-	assert.Equal(t, StatusOpen, pGot.Status)
+	assert.Equal(t, StatusClosed, pGot.Status)
 
-	// P should have no dead_intermediate_close event (not closed yet)
+	// Both ancestors should have dead_intermediate_close events.
+	qEvents, err := s.Events(q.ID)
+	require.NoError(t, err)
+	found := false
+	for _, e := range qEvents {
+		if e.Kind == "dead_intermediate_close" {
+			assert.Contains(t, e.Body, "all_children_closed")
+			assert.Contains(t, e.Body, "execution_eligible: false")
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Q should have dead_intermediate_close event")
+
 	pEvents, err := s.Events(p.ID)
 	require.NoError(t, err)
+	found = false
 	for _, e := range pEvents {
-		assert.NotEqual(t, "dead_intermediate_close", e.Kind, "P should not have dead_intermediate_close event yet")
+		if e.Kind == "dead_intermediate_close" {
+			assert.Contains(t, e.Body, "all_children_closed")
+			assert.Contains(t, e.Body, "execution_eligible: false")
+			found = true
+			break
+		}
 	}
+	assert.True(t, found, "P should have dead_intermediate_close event")
 }
 
 func TestClose_EpicAutoClose_AllChildrenClosed(t *testing.T) {
@@ -1109,6 +1129,121 @@ func TestCloseWithEvidence_AllCancelledChildrenCancelsEpic(t *testing.T) {
 	epicGot, err := s.Get(testCtx(), epic.ID)
 	require.NoError(t, err)
 	assert.Equal(t, StatusCancelled, epicGot.Status, "epic should be cancelled when all children are cancelled")
+}
+
+func TestWalkUpClosure_RecursesToGrandparentEpic(t *testing.T) {
+	s := newTestStore(t)
+
+	grandparent := &Bead{Title: "Grandparent epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), grandparent))
+	parent := &Bead{Title: "Parent epic", IssueType: "epic", Status: StatusOpen, Parent: grandparent.ID}
+	require.NoError(t, s.Create(testCtx(), parent))
+	leaf := &Bead{Title: "Leaf task", Status: StatusOpen, Parent: parent.ID}
+	require.NoError(t, s.Create(testCtx(), leaf))
+
+	closeWithEvidenceHelper(t, s, leaf.ID)
+
+	parentGot, err := s.Get(testCtx(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, parentGot.Status, "parent epic should auto-close when its only child closes")
+
+	grandparentGot, err := s.Get(testCtx(), grandparent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, grandparentGot.Status, "grandparent epic should auto-close in the same close operation")
+
+	parentEvents, err := s.Events(parent.ID)
+	require.NoError(t, err)
+	parentFound := false
+	for _, e := range parentEvents {
+		if e.Kind == "epic_auto_close" {
+			assert.Contains(t, e.Body, "all_children_terminal")
+			parentFound = true
+			break
+		}
+	}
+	assert.True(t, parentFound, "parent epic should have epic_auto_close event")
+
+	grandparentEvents, err := s.Events(grandparent.ID)
+	require.NoError(t, err)
+	grandparentFound := false
+	for _, e := range grandparentEvents {
+		if e.Kind == "epic_auto_close" {
+			assert.Contains(t, e.Body, "all_children_terminal")
+			grandparentFound = true
+			break
+		}
+	}
+	assert.True(t, grandparentFound, "grandparent epic should have epic_auto_close event")
+}
+
+func TestWalkUpClosure_StopsAtOpenAncestor(t *testing.T) {
+	s := newTestStore(t)
+
+	grandparent := &Bead{Title: "Grandparent epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), grandparent))
+	parent := &Bead{Title: "Parent epic", IssueType: "epic", Status: StatusOpen, Parent: grandparent.ID}
+	require.NoError(t, s.Create(testCtx(), parent))
+	leaf := &Bead{Title: "Leaf task", Status: StatusOpen, Parent: parent.ID}
+	require.NoError(t, s.Create(testCtx(), leaf))
+	sibling := &Bead{Title: "Grandparent sibling", Status: StatusOpen, Parent: grandparent.ID}
+	require.NoError(t, s.Create(testCtx(), sibling))
+
+	closeWithEvidenceHelper(t, s, leaf.ID)
+
+	parentGot, err := s.Get(testCtx(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, parentGot.Status, "parent epic should still auto-close")
+
+	grandparentGot, err := s.Get(testCtx(), grandparent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, grandparentGot.Status, "grandparent epic must stay open while sibling remains open")
+}
+
+func TestWalkUpClosure_CycleGuardTerminates(t *testing.T) {
+	s := newTestStore(t)
+
+	parent := &Bead{Title: "Parent epic", IssueType: "epic", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), parent))
+	cyclePeer := &Bead{Title: "Cycle peer", IssueType: "epic", Status: StatusOpen, Parent: parent.ID}
+	require.NoError(t, s.Create(testCtx(), cyclePeer))
+	leaf := &Bead{Title: "Leaf task", Status: StatusOpen, Parent: parent.ID}
+	require.NoError(t, s.Create(testCtx(), leaf))
+
+	require.NoError(t, s.SetLifecycleStatus(cyclePeer.ID, StatusClosed, LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "seed malformed cycle",
+		Source:      "TestWalkUpClosure_CycleGuardTerminates",
+	}))
+	require.NoError(t, s.Update(testCtx(), parent.ID, func(b *Bead) {
+		b.Parent = cyclePeer.ID
+	}))
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := s.AppendEvent(leaf.ID, BeadEvent{
+			Kind:    "execute-bead",
+			Summary: "success",
+		}); err != nil {
+			errCh <- err
+			return
+		}
+		errCh <- s.CloseWithEvidence(leaf.ID, "session-test", "abc123")
+	}()
+
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("walk-up closure did not terminate on a malformed parent cycle")
+	}
+
+	parentGot, err := s.Get(testCtx(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, parentGot.Status, "parent epic should still close")
+
+	cyclePeerGot, err := s.Get(testCtx(), cyclePeer.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, cyclePeerGot.Status, "cycle peer should remain closed after recursion terminates")
 }
 
 func TestListFilters(t *testing.T) {

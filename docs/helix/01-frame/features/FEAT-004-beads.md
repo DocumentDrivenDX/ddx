@@ -142,8 +142,8 @@ queue-drain contract as ordinary executable task/bug/chore beads.
     (immediately when the last child closes — via `Close()` *and*
     `CloseWithEvidence`, so autonomous worker drains settle the epic without
     waiting for an idle pass) **and** the idle-path remediator (for children
-    closed outside the worker — imports, manual edits, federation sync). It
-    **recurses the full parent chain**: closing the last leaf of a nested
+    closed outside the worker — imports, manual edits, federation sync). This
+    nested-epic convergence guarantee means closing the last leaf of a nested
     epic-of-epics settles every ancestor epic in one operation, bounded by a
     visited-set cycle guard.
   - **Supersession cascade** when an open child carries `superseded-by:<Y>`
