@@ -330,7 +330,21 @@ func TestStoreReadAllFilteredHonorsCanceledContext(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestStoreGet_RejectsCanceledContext(t *testing.T) {
+func TestStoreGet_UsesTypedIDArgument(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+
+	b := &Bead{Title: "typed get"}
+	require.NoError(t, s.Create(testCtx(), b))
+
+	got, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.Equal(t, b.ID, got.ID)
+	assert.Equal(t, b.Title, got.Title)
+}
+
+func TestStoreGet_HonorsCanceledContext(t *testing.T) {
 	t.Parallel()
 	s := newTestStore(t)
 	ctx, cancel := context.WithCancel(context.Background())
