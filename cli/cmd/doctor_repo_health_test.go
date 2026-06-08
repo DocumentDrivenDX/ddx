@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -185,6 +186,42 @@ func TestCheckGitRepoHealthDetectsLocalHooksPath(t *testing.T) {
 	if err := get.Run(); err == nil {
 		t.Fatalf("core.hooksPath should be unset after --fix")
 	}
+}
+
+func TestCheckGitRepoHealthFixUsesSharedHelperForSafeConfigKeys(t *testing.T) {
+	dir := t.TempDir()
+	initTestRepo(t, dir)
+
+	bogus := filepath.Join(t.TempDir(), "not-the-real-worktree")
+	for _, args := range [][]string{
+		{"config", "core.worktree", bogus},
+		{"config", "core.hooksPath", ".git/hooks"},
+		{"config", "core.bare", "true"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = gitpkg.CleanEnv()
+		require.NoError(t, cmd.Run(), "git %v", args)
+	}
+
+	issues := checkGitRepoHealth(dir, true)
+	assert.True(t, hasIssueType(issues, gitrepohealth.IssueCoreBareCorruption),
+		"expected core.bare issue, got: %+v", issues)
+	assert.True(t, hasIssueType(issues, gitrepohealth.IssueStrayCoreWorktree),
+		"expected core.worktree issue, got: %+v", issues)
+	assert.True(t, hasIssueType(issues, gitrepohealth.IssueLocalHooksPath),
+		"expected hooksPath issue, got: %+v", issues)
+
+	for _, key := range []string{"core.bare", "core.worktree", "core.hooksPath"} {
+		cmd := exec.Command("git", "config", "--local", "--get", key)
+		cmd.Dir = dir
+		cmd.Env = gitpkg.CleanEnv()
+		assert.Error(t, cmd.Run(), "%s should be unset after --fix", key)
+	}
+	cmd := exec.Command("git", "config", "--local", "--get", "extensions.worktreeConfig")
+	cmd.Dir = dir
+	cmd.Env = gitpkg.CleanEnv()
+	assert.Error(t, cmd.Run(), "doctor --fix must leave extensions.worktreeConfig warning-only")
 }
 
 // TestPreCommitDDXValidateFailsOnCoreWorktreeRedirect verifies the pre-commit

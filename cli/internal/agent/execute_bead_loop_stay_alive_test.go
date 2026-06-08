@@ -17,6 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -779,7 +780,7 @@ func TestLoop_WatchCheckpointDirtyStopsWithoutRetry(t *testing.T) {
 	inner, first, second := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	dirtyPaths := []string{"cli/cmd/execute_loop_shared.go", "cli/internal/agent/dirty_impl.go"}
@@ -959,6 +960,162 @@ func TestLoop_DrainCheckpointDirtyStopsQueue(t *testing.T) {
 	assert.Empty(t, gotSecond.Owner)
 
 	assert.Contains(t, logBuf.String(), "commit or clean")
+}
+
+func TestWorkRepairsCoreBareAndContinuesSameCandidate(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 2)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{
+		`create-file repaired-${DDX_BEAD_ID}.txt ok`,
+		`commit test: ${DDX_BEAD_ID}`,
+	})
+
+	runGitInteg(t, projectRoot, "config", "core.bare", "true")
+	require.Equal(t, "true", runGitInteg(t, projectRoot, "config", "--local", "--get", "core.bare"))
+
+	var execCalls int32
+	var executed []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			executed = append(executed, beadID)
+			return scriptHarnessExecutor(t, projectRoot, dirFile)(ctx, beadID)
+		}),
+	}
+
+	var logBuf, eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:        executeloop.ModeDrain,
+		Log:         &logBuf,
+		EventSink:   &eventSink,
+		ProjectRoot: projectRoot,
+		SessionID:   "sess-git-repair-core-bare",
+		WorkerID:    "worker-git-repair-core-bare",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 2, result.Attempts)
+	assert.Equal(t, 2, result.Successes)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&execCalls))
+	require.NotEmpty(t, executed)
+	assert.Equal(t, "ddx-int-0001", executed[0], "repair must continue with the originally selected bead")
+	getBareOut, getBareErr := runGitIntegOutput(projectRoot, "config", "--local", "--get", "core.bare")
+	assert.Error(t, getBareErr, getBareOut)
+
+	out := eventSink.String()
+	assert.Contains(t, out, `"type":"loop.pre_dispatch_git_repaired"`)
+	assert.Contains(t, out, gitrepohealth.IssueCoreBareCorruption)
+	assert.Contains(t, logBuf.String(), "repaired project git config before readiness")
+}
+
+func TestWorkRepairsCoreWorktreeAndHooksPathAndContinues(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{
+		`create-file repaired-worktree-hooks.txt ok`,
+		`commit test: ${DDX_BEAD_ID}`,
+	})
+
+	runGitInteg(t, projectRoot, "config", "core.worktree", filepath.Join(t.TempDir(), "wrong-worktree"))
+	runGitInteg(t, projectRoot, "config", "core.hooksPath", ".git/hooks")
+
+	worker := &ExecuteBeadWorker{
+		Store:    store,
+		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
+	}
+
+	var eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:        executeloop.ModeDrain,
+		EventSink:   &eventSink,
+		ProjectRoot: projectRoot,
+		SessionID:   "sess-git-repair-worktree-hooks",
+		WorkerID:    "worker-git-repair-worktree-hooks",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	for _, key := range []string{"core.worktree", "core.hooksPath"} {
+		out, getErr := runGitIntegOutput(projectRoot, "config", "--local", "--get", key)
+		assert.Error(t, getErr, out, "%s should be unset after work repair", key)
+	}
+
+	out := eventSink.String()
+	assert.Contains(t, out, `"type":"loop.pre_dispatch_git_repaired"`)
+	assert.Contains(t, out, gitrepohealth.IssueStrayCoreWorktree)
+	assert.Contains(t, out, gitrepohealth.IssueLocalHooksPath)
+}
+
+func TestWorkGitRepairFailureStopsBeforeSecondClaim(t *testing.T) {
+	inner, first, second := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{}, nil
+		}),
+		preDispatchGitRepairer: func(ctx context.Context, projectRoot string) gitrepohealth.RepairResult {
+			return gitrepohealth.RepairResult{
+				Issues: []gitrepohealth.Issue{{
+					Type:  gitrepohealth.IssueCoreBareCorruption,
+					Error: "git config --unset core.bare failed",
+				}},
+				StatusStderr: "fatal: this operation must be run in a work tree",
+			}
+		},
+	}
+
+	var logBuf, eventSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Mode:        executeloop.ModeDrain,
+		Log:         &logBuf,
+		EventSink:   &eventSink,
+		ProjectRoot: "/repo/broken",
+		SessionID:   "sess-git-repair-failure",
+		WorkerID:    "worker-git-repair-failure",
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls), "failed repair stops before executing the claimed bead")
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, "OperatorAttention", result.StopCondition)
+	assert.Equal(t, "operator_attention", result.ExitReason)
+	require.NotNil(t, result.OperatorAttention)
+	assert.Equal(t, preDispatchGitRepairFailedReason, result.OperatorAttention.Reason)
+	assert.Equal(t, first.ID, result.OperatorAttention.BeadID)
+
+	gotFirst, err := store.Get(context.Background(), first.ID)
+	require.NoError(t, err)
+	gotSecond, err := store.Get(context.Background(), second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Empty(t, gotFirst.Owner)
+	assert.Empty(t, gotSecond.Owner)
+
+	assert.Contains(t, logBuf.String(), "pre-dispatch git repair failed")
+	events := eventSink.String()
+	assert.Contains(t, events, `"reason":"pre_dispatch_git_repair_failed"`)
+	assert.Contains(t, events, "fatal: this operation must be run in a work tree")
 }
 
 func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {

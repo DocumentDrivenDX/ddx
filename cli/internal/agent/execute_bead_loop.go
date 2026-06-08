@@ -993,6 +993,10 @@ type ExecuteBeadWorker struct {
 	// in tests so checkpoint dirt fallback behavior can be exercised without a
 	// real git repo.
 	preDispatchDirtyPreserver func(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error)
+	// preDispatchGitRepairer replaces the project-root git config repair
+	// preflight in tests so failed/unresolved repairs can be exercised without
+	// corrupting a real repository in unsupported ways.
+	preDispatchGitRepairer preDispatchGitRepairerFunc
 
 	// transientCandidateSkips is an in-memory per-Run filter for queue entries
 	// that were returned from an older snapshot but rejected by a fresh
@@ -2465,6 +2469,68 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
 
+	repairer := w.preDispatchGitRepairer
+	if repairer == nil {
+		repairer = defaultPreDispatchGitRepairer
+	}
+	gitRepair := repairer(ctx, runtime.ProjectRoot)
+	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		stop := &OperatorAttentionStop{
+			Reason:      preDispatchGitRepairFailedReason,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			Message:     "DDx could not repair project git config; resolve the git status failure before restarting ddx work",
+		}
+		result.OperatorAttention = stop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git repair failed for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":          stop.Reason,
+			"bead_id":         candidate.ID,
+			"project_root":    runtime.ProjectRoot,
+			"message":         stop.Message,
+			"detail":          detail,
+			"git_stderr":      gitRepair.StatusStderr,
+			"issue_types":     gitRepair.RepairedTypes,
+			"repair_commands": gitRepair.Commands,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if len(gitRepair.RepairedTypes) > 0 {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"repaired project git config before readiness for %s: %s (%s)\n",
+				candidate.ID,
+				strings.Join(gitRepair.RepairedTypes, ", "),
+				strings.Join(gitRepair.Commands, "; "),
+			)
+		}
+		emit("loop.pre_dispatch_git_repaired", map[string]any{
+			"bead_id":          candidate.ID,
+			"project_root":     runtime.ProjectRoot,
+			"issue_types":      gitRepair.RepairedTypes,
+			"repair_commands":  gitRepair.Commands,
+			"status_rechecked": gitRepair.StatusSucceeded,
+			"stage":            "readiness",
+		})
+	}
+
 	skipPreClaimIntake := false
 	readinessEstimatedDifficulty := ""
 
@@ -3067,6 +3133,63 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
 	candidate = *freshCandidate
+	gitRepair = repairer(ctx, runtime.ProjectRoot)
+	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		stop := &OperatorAttentionStop{
+			Reason:      preDispatchGitRepairFailedReason,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			Message:     "DDx could not repair project git config; resolve the git status failure before restarting ddx work",
+		}
+		result.OperatorAttention = stop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git repair failed for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":          stop.Reason,
+			"bead_id":         candidate.ID,
+			"project_root":    runtime.ProjectRoot,
+			"message":         stop.Message,
+			"detail":          detail,
+			"git_stderr":      gitRepair.StatusStderr,
+			"issue_types":     gitRepair.RepairedTypes,
+			"repair_commands": gitRepair.Commands,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if len(gitRepair.RepairedTypes) > 0 {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"repaired project git config before dispatch for %s: %s (%s)\n",
+				candidate.ID,
+				strings.Join(gitRepair.RepairedTypes, ", "),
+				strings.Join(gitRepair.Commands, "; "),
+			)
+		}
+		emit("loop.pre_dispatch_git_repaired", map[string]any{
+			"bead_id":          candidate.ID,
+			"project_root":     runtime.ProjectRoot,
+			"issue_types":      gitRepair.RepairedTypes,
+			"repair_commands":  gitRepair.Commands,
+			"status_rechecked": gitRepair.StatusSucceeded,
+			"stage":            "attempt",
+		})
+	}
 
 	// Generate a provisional attempt_id for progress events.
 	// The real attempt_id is assigned inside ExecuteBead; we use this
@@ -3268,6 +3391,36 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
 	}
 	classifyLoopReportFailure(&report)
+	if gitRepairStop, detail, ok := preDispatchGitRepairStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, unclaimErr
+		}
+		result.OperatorAttention = gitRepairStop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git repair failed for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":       gitRepairStop.Reason,
+			"bead_id":      candidate.ID,
+			"project_root": runtime.ProjectRoot,
+			"message":      gitRepairStop.Message,
+			"detail":       detail,
+			"git_stderr":   detail,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
 	if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
 		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
 			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
