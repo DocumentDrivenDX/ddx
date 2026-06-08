@@ -1,0 +1,2 @@
+status: open
+reason: staged verification is blocked by broad pre-existing cmd and internal/agent test-suite failures unrelated to the git-health repair changes; see `lefthook run pre-commit` output for failing command tests and `TestWorkCleanup_ShutdownPassRunsOnSignal`
