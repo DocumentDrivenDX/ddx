@@ -1,0 +1,91 @@
+{
+  "attempt_id": "20260608T064814-7fbb7d25",
+  "bead_id": "ddx-978efe2c",
+  "base_rev": "6593583a4bd353fdacb0afb9c8218a465e906290",
+  "created_at": "2026-06-08T06:48:23.792561703Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-978efe2c",
+    "title": "test: two concurrent workers with a stale-but-alive lease must not both execute one bead (parallel-execution regression)",
+    "description": "PROBLEM: No test covers the STAGGERED contention case that actually occurred (ddx-d740539d): worker A claims and is alive but its lease aged past TTL (mid-intake / mid-long-op), and worker B then scans and reclaims -\u003e both execute. The existing TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead only covers a same-instant race with a FRESH lease. Real-world signature: an attempt.terminated reason=bead_closed_externally event in .ddx/attachments/ddx-d740539d/events.jsonl after two attempts overlapped ~16.6 min.\n\nROOT CAUSE: missing end-to-end exclusivity regression for the stale-but-alive-lease scenario. This bead pins the contract that C1 (ddx-d333ad8a, intake heartbeat) + C2 (ddx-ba93de9e, PID-death takeover) must satisfy.\n\nPROPOSED FIX: Add a chaos/integration regression simulating the exact scenario; it must FAIL before C1+C2 and PASS after.\n\nNON-SCOPE: the fixes themselves (C1/C2).",
+    "acceptance": "1. New TestChaos_StaleButAliveLeaseDoesNotPermitSecondExecution (cli/internal/agent/, new _chaos/_liveness test): worker A claims a single ready bead and enters a long phase exceeding an overridden small HeartbeatTTL while A's process is alive; concurrently run worker B's pick+claim loop against the same store. Assert EXACTLY ONE worker executes (one execute-bead attempt / one attempt_id), B never claims, and NO attempt.terminated/bead_closed_externally event is produced for the bead.\n2. The test fails (two attempts) if either C1 or C2 is reverted (note this in a comment).\n3. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run 'TestChaos_StaleButAliveLeaseDoesNotPermitSecondExecution' -count=1 green.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "area:agent",
+      "area:test",
+      "kind:test",
+      "kind:reliability",
+      "phase:iterate",
+      "spec:TP-021",
+      "concurrency",
+      "incident:parallel-execution",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-ba93de9e (1 edge(s))\ndependencies→removed dangling ddx-d333ad8a (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.463840013Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 2 change(s)"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T06:41:49.988500195Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider= reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260608T062336-897bbe9e\",\"bead_id\":\"ddx-978efe2c\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-08T06:41:52.154191848Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-06-08T06:41:52.315253909Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-06-08T06:41:52.448095779Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt; dirty paths: cli/internal/agent/execute_bead_loop_chaos_liveness_test.go\npowerClass=standard\nresult_rev=12a2db19cb4e17f2ac04fd5b178f1954d380f3a0\nbase_rev=12a2db19cb4e17f2ac04fd5b178f1954d380f3a0\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-06-08T06:41:52.577081861Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        }
+      ],
+      "work-no-changes-count": 1,
+      "work-no-changes-next-min-power": 5
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T064814-7fbb7d25",
+    "prompt": ".ddx/executions/20260608T064814-7fbb7d25/prompt.md",
+    "manifest": ".ddx/executions/20260608T064814-7fbb7d25/manifest.json",
+    "result": ".ddx/executions/20260608T064814-7fbb7d25/result.json",
+    "checks": ".ddx/executions/20260608T064814-7fbb7d25/checks.json",
+    "usage": ".ddx/executions/20260608T064814-7fbb7d25/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-978efe2c-20260608T064814-7fbb7d25"
+  },
+  "prompt_sha": "63ab0f788a218ea1896ce6800669bc3a141094d36e77071532f959158dfa9ce8"
+}
