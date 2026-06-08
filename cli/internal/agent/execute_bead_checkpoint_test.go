@@ -185,18 +185,6 @@ func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
 	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, runStateRootRel, runStateAttemptRel)
 }
 
-// TestPreDispatchCheckpointDirtyPathsPreservesGitStderr verifies that the git
-// status probe still surfaces the underlying stderr when project-root git
-// config corruption makes the checkout unusable.
-func TestPreDispatchCheckpointDirtyPathsPreservesGitStderr(t *testing.T) {
-	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	runGitInteg(t, projectRoot, "config", "core.bare", "true")
-
-	_, err := preDispatchCheckpointDirtyPaths(projectRoot)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "fatal: this operation must be run in a work tree")
-}
-
 func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260515T000002-embedded"

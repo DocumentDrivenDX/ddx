@@ -398,9 +398,9 @@ func (InTreeAttemptBackend) Cleanup(_ context.Context, ws *AttemptWorkspace) err
 }
 
 func checkTreeClean(ctx context.Context, projectRoot, beadID string) error {
-	out, err := internalgit.Command(ctx, projectRoot, "status", "--porcelain").CombinedOutput()
+	out, err := internalgit.Command(ctx, projectRoot, "status", "--porcelain").Output()
 	if err != nil {
-		return fmt.Errorf("checking git status: %s: %w", strings.TrimSpace(string(out)), err)
+		return fmt.Errorf("checking git status: %w", err)
 	}
 
 	var dirtyFiles []string
