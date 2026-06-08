@@ -1,0 +1,4 @@
+status: proposed
+reason: operator needed
+blocker: The bead contract is internally unsatisfiable as written. AC1 requires typed ctx-first replacements for the foundational Store methods, AC3 requires `lefthook run pre-commit` to pass, and NON-SCOPE / AC4 forbid the caller-package migration that would be required to keep the repo building after those signature changes.
+evidence: The current tree already shows ctx-first signatures for the listed foundational methods in `cli/internal/bead/store.go`, while the bead history and prior triage records document that the repo-wide caller sweep is the missing piece and is out of scope here.
