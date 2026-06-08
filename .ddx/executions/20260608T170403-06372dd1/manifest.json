@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260608T170403-06372dd1",
+  "bead_id": "ddx-df319cf9",
+  "base_rev": "07ef13a594a6054a3e7a947ab7b6204cfd4a8127",
+  "created_at": "2026-06-08T17:04:12.464640534Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-df319cf9",
+    "title": "Classify repeated pre-claim system warnings as operator-visible worker s: part 1",
+    "description": "PROBLEM\nParent bead ddx-eea2dfca is too broad for one execution pass. This child owns part 1 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nA Niflheim worker repeatedly emitted pre-claim readiness/intake warnings for the same systemic dirty/generated DDx artifact condition and continued polling/releasing. That looks like forward progress but does not create a clear operator-visible system-unready lane after the configured threshold.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_loop.go:1967-2072` emits pre-claim timeout/system-unready outcomes as warn-only by default and continues implementation when strict intake blocking is off.\n- `cli/internal/agent/failclass/failclass.go:103-142` says setup/dirty worktree/system outcomes should not escalate, but repeated pre-claim warnings are not consistently classified into retry/operator-attention decisions before worker retry loops continue.\n\nPROPOSED FIX\nAdd a self-contained Niflheim-style pre-claim fixture or table-driven case under `cli/internal/agent/...` for repeated readiness timeout/system-unready warnings with generated DDx artifact dirt such as `.ddx/harness-sessions/...json`. After the configured same-fingerprint threshold, classify the condition as system-unready/operator-attention and release/park without implementation retry or model escalation. Align with `ddx-d67f124e` rather than duplicating its lower-level implementation.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`; this bead only adds the Niflheim observation as regression coverage and decision/audit wiring.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related: `ddx-e1a576a7`, `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineering-principles.md:39-45.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention` adds a self-contained Niflheim evidence case for repeated readiness timeout/system-unready warnings with generated DDx artifact dirt and asserts the worker records an operator-visible system-unready/operator-attention state after the configured threshold.\n- `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile; repeated pre-claim system warnings, land coordination, decomposed-parent outcomes, and dirty generated DDx evidence do not raise min power.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_RepeatedPreClaimSystemWarningBecomesOperatorAttention` adds a self-contained Niflheim evidence case for repeated readiness timeout/system-unready warnings with generated DDx artifact dirt and asserts the worker records an operator-visible system-unready/operator-attention state after the configured threshold.\n2. `TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower` proves only semantic acceptance/review failures can increase requested min power/profile; repeated pre-claim system warnings, land coordination, decomposed-parent outcomes, and dirty generated DDx evidence do not raise min power.",
+    "parent": "ddx-eea2dfca",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention",
+      "decomposed"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T170403-06372dd1",
+    "prompt": ".ddx/executions/20260608T170403-06372dd1/prompt.md",
+    "manifest": ".ddx/executions/20260608T170403-06372dd1/manifest.json",
+    "result": ".ddx/executions/20260608T170403-06372dd1/result.json",
+    "checks": ".ddx/executions/20260608T170403-06372dd1/checks.json",
+    "usage": ".ddx/executions/20260608T170403-06372dd1/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-df319cf9-20260608T170403-06372dd1"
+  },
+  "prompt_sha": "a113afa0e279c054d26793296251338c77f7b56c6b321dd1764a85152611b2f9"
+}
