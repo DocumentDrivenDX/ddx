@@ -1,7 +1,0 @@
-{
-  "lock_name": "index.lock",
-  "cap_ms": 10000,
-  "actual_hold_ms": 10000,
-  "holder_pid": 3755834,
-  "stack": "goroutine 25431 [running]:\nruntime/debug.Stack()\n\t/home/linuxbrew/.linuxbrew/opt/go/libexec/src/runtime/debug/stack.go:26 +0x64\ngithub.com/DocumentDrivenDX/ddx/internal/lockmetrics.enforceCapViolation({0x1e3e95a, 0xa}, {0x3a1ef50ba000, 0xc}, 0x394f3a, {0x3a1ef48aaf70?, 0x0?, 0x38362a0?}, {0x2540be400, {0x3a1ef449a420, ...}, ...})\n\t/Users/erik/Projects/ddx/cli/internal/lockmetrics/lockcap.go:133 +0x68\ngithub.com/DocumentDrivenDX/ddx/internal/lockmetrics.InstrumentCapped.func1()\n\t/Users/erik/Projects/ddx/cli/internal/lockmetrics/lockcap.go:107 +0x38\ncreated by time.goFunc\n\t/home/linuxbrew/.linuxbrew/opt/go/libexec/src/time/sleep.go:215 +0x38\n"
-}
