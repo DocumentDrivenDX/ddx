@@ -41,12 +41,85 @@ func TestBeadDoctorValidGraphSnapshotClean(t *testing.T) {
 
 	fixture, err := os.ReadFile(filepath.Join("testdata", "bd_export_with_labels_events.jsonl"))
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, fixture, 0o644))
+	// The snapshot's sole bead (bd-fixture-1) depends on bd-fixture-dep; include
+	// that target so the graph is referentially complete. A valid graph has its
+	// dependency targets present — an edge to an absent target is a dangling_dep
+	// finding (see TestBeadDoctor_DetectsAndFixesDanglingDep).
+	depTarget := []byte("\n" + `{"id":"bd-fixture-dep","title":"dep target","issue_type":"task","status":"closed","priority":2}` + "\n")
+	require.NoError(t, os.WriteFile(path, append(append([]byte(nil), fixture...), depTarget...), 0o644))
 
 	report, err := BeadDoctor(path)
 	require.NoError(t, err)
 	assert.True(t, report.Clean())
 	assert.Empty(t, report.Findings)
+}
+
+// TestBeadDoctor_DetectsAndFixesDanglingDep covers the dangling-dependency
+// finding: an edge whose target bead exists in neither the active file nor the
+// archive is flagged, and --fix prunes it (these edges otherwise block the
+// referrer from readiness forever, since the target can never close).
+func TestBeadDoctor_DetectsAndFixesDanglingDep(t *testing.T) {
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	path := filepath.Join(ddxDir, "beads.jsonl")
+	lines := strings.Join([]string{
+		`{"id":"ddx-referrer","title":"t","issue_type":"task","status":"open","priority":2,"dependencies":[{"depends_on_id":"ddx-ghost"},{"depends_on_id":"ddx-real"}]}`,
+		`{"id":"ddx-real","title":"real","issue_type":"task","status":"closed","priority":2}`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(lines), 0o644))
+
+	report, err := BeadDoctor(path)
+	require.NoError(t, err)
+	var dangling []DoctorFinding
+	for _, f := range report.Findings {
+		if f.Kind == doctorFindingKindDanglingDep {
+			dangling = append(dangling, f)
+		}
+	}
+	require.Len(t, dangling, 1, "exactly the ghost edge is dangling")
+	assert.Equal(t, "ddx-referrer", dangling[0].BeadID)
+	assert.Equal(t, "ddx-ghost", dangling[0].TargetID)
+
+	_, err = BeadDoctorFix(path, nil)
+	require.NoError(t, err)
+
+	fixed, err := BeadDoctor(path)
+	require.NoError(t, err)
+	assert.Empty(t, fixed.Findings, "second pass is clean (idempotent)")
+
+	// The real, closed dependency must survive; only the ghost edge is pruned.
+	repaired, err := loadDoctorRows(path)
+	require.NoError(t, err)
+	var referrer *Bead
+	for _, r := range repaired {
+		if r.bead != nil && r.bead.ID == "ddx-referrer" {
+			referrer = r.bead
+		}
+	}
+	require.NotNil(t, referrer)
+	require.Len(t, referrer.Dependencies, 1)
+	assert.Equal(t, "ddx-real", referrer.Dependencies[0].DependsOnID)
+}
+
+// TestBeadDoctor_ArchivedDepTargetIsNotDangling covers archive-awareness: a
+// dependency on a closed bead that has migrated to beads-archive.jsonl is a
+// legitimate target and must NOT be flagged as dangling.
+func TestBeadDoctor_ArchivedDepTargetIsNotDangling(t *testing.T) {
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	path := filepath.Join(ddxDir, "beads.jsonl")
+	require.NoError(t, os.WriteFile(path,
+		[]byte(`{"id":"ddx-referrer","title":"t","issue_type":"task","status":"open","priority":2,"dependencies":[{"depends_on_id":"ddx-archived"}]}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads-archive.jsonl"),
+		[]byte(`{"id":"ddx-archived","title":"old","issue_type":"task","status":"closed","priority":2}`+"\n"), 0o644))
+
+	report, err := BeadDoctor(path)
+	require.NoError(t, err)
+	for _, f := range report.Findings {
+		assert.NotEqual(t, doctorFindingKindDanglingDep, f.Kind, "archived target is not dangling")
+	}
 }
 
 // TestBeadDoctor_DetectsOversizedFields covers ddx-b695e162 AC #1: scanner
