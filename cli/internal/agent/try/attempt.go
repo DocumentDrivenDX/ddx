@@ -65,6 +65,8 @@ type Report struct {
 	FinalPowerClass             string
 	DecompositionRecommendation []string
 	DecompositionRationale      string
+	DecomposedChildIDs          []string
+	ExecutionDecision           string
 	Disrupted                   bool
 	DisruptionReason            string
 	OutcomeReason               string
@@ -122,6 +124,8 @@ type ExecutionCycleTrace struct {
 	ReviewClassification string
 	LandStatus           string
 	ReconcileStatus      string
+	DecomposedChildIDs   []string
+	ExecutionDecision    string
 }
 
 type ReviewAC struct {

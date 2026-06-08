@@ -48,6 +48,8 @@ func toTryReport(report ExecuteBeadReport) agenttry.Report {
 		FinalPowerClass:             report.FinalPowerClass,
 		DecompositionRecommendation: report.DecompositionRecommendation,
 		DecompositionRationale:      report.DecompositionRationale,
+		DecomposedChildIDs:          append([]string(nil), report.DecomposedChildIDs...),
+		ExecutionDecision:           report.ExecutionDecision,
 		Disrupted:                   report.Disrupted,
 		DisruptionReason:            report.DisruptionReason,
 		OutcomeReason:               report.OutcomeReason,
@@ -100,6 +102,8 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 		FinalPowerClass:             report.FinalPowerClass,
 		DecompositionRecommendation: report.DecompositionRecommendation,
 		DecompositionRationale:      report.DecompositionRationale,
+		DecomposedChildIDs:          append([]string(nil), report.DecomposedChildIDs...),
+		ExecutionDecision:           report.ExecutionDecision,
 		Disrupted:                   report.Disrupted,
 		DisruptionReason:            report.DisruptionReason,
 		OutcomeReason:               report.OutcomeReason,
@@ -179,6 +183,8 @@ func toTryCycleTrace(entry ExecutionCycleTrace) agenttry.ExecutionCycleTrace {
 		ReviewClassification: entry.ReviewClassification,
 		LandStatus:           entry.LandStatus,
 		ReconcileStatus:      entry.ReconcileStatus,
+		DecomposedChildIDs:   append([]string(nil), entry.DecomposedChildIDs...),
+		ExecutionDecision:    entry.ExecutionDecision,
 	}
 }
 
@@ -232,6 +238,8 @@ func fromTryCycleTrace(entry agenttry.ExecutionCycleTrace) ExecutionCycleTrace {
 		ReviewClassification: entry.ReviewClassification,
 		LandStatus:           entry.LandStatus,
 		ReconcileStatus:      entry.ReconcileStatus,
+		DecomposedChildIDs:   append([]string(nil), entry.DecomposedChildIDs...),
+		ExecutionDecision:    entry.ExecutionDecision,
 	}
 }
 
