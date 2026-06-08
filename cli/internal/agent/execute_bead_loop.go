@@ -2194,13 +2194,17 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			if preClaimIdleStreak >= preClaimIdleEscalationThreshold && !preClaimIdleEscalated {
 				preClaimIdleEscalated = true
 				elapsedIdle := now().UTC().Sub(preClaimIdleFirstAt)
-				emit("loop.operator_attention", map[string]any{
+				payload := map[string]any{
 					"reason":       "preclaim_idle_escalation",
 					"bead_id":      idleBeadID,
 					"detail":       detail,
 					"elapsed_idle": elapsedIdle.String(),
 					"idle_count":   preClaimIdleStreak,
-				})
+				}
+				for k, v := range preClaimDecisionAudit("preclaim_idle_escalation", preClaimIdleStreak) {
+					payload[k] = v
+				}
+				emit("loop.operator_attention", payload)
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "operator attention: pre-claim idled %d consecutive cycles on the same blocker (%s; idle for %s); manual intervention may be required\n", preClaimIdleStreak, detail, elapsedIdle)
 				}
@@ -4158,9 +4162,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			report.Disrupted = true
 			report.DisruptionReason = FailureModeLandRetry
 			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-				Kind:      "land-coordination",
-				Summary:   "retry-land",
-				Body:      fmt.Sprintf("action=retry-land\ndetail=%s\nresult_rev=%s\nbase_rev=%s", report.Detail, report.ResultRev, report.BaseRev),
+				Kind:    "land-coordination",
+				Summary: "retry-land",
+				Body: strings.Join([]string{
+					"action=retry-land",
+					"detail=" + report.Detail,
+					"result_rev=" + report.ResultRev,
+					"base_rev=" + report.BaseRev,
+					decisionAuditEventBodyLine(report),
+				}, "\n"),
 				Actor:     assignee,
 				Source:    "ddx work",
 				CreatedAt: now().UTC(),
@@ -4177,9 +4187,15 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				_, _ = fmt.Fprintf(runtime.Log, "land coordination operator-attention park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
 			}
 			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-				Kind:      "operator_attention",
-				Summary:   FailureModeLandOperatorAttention,
-				Body:      fmt.Sprintf("action=operator-attention\ndetail=%s\nresult_rev=%s\nbase_rev=%s", report.Detail, report.ResultRev, report.BaseRev),
+				Kind:    "operator_attention",
+				Summary: FailureModeLandOperatorAttention,
+				Body: strings.Join([]string{
+					"action=operator-attention",
+					"detail=" + report.Detail,
+					"result_rev=" + report.ResultRev,
+					"base_rev=" + report.BaseRev,
+					decisionAuditEventBodyLine(report),
+				}, "\n"),
 				Actor:     assignee,
 				Source:    "ddx work",
 				CreatedAt: now().UTC(),
@@ -4893,6 +4909,9 @@ func emitStaleCandidateSkip(emit func(string, map[string]any), beadID string, sk
 		"detail":  skip.Detail,
 		"stage":   stage,
 	}
+	for k, v := range preClaimDecisionAudit(skip.Reason, 0) {
+		payload[k] = v
+	}
 	if fresh != nil {
 		payload["status"] = fresh.Status
 		if eligible, known := freshCandidateExecutionEligible(*fresh); known {
@@ -5255,6 +5274,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		if traceJSON, err := json.Marshal(report.CycleTrace); err == nil {
 			parts = append(parts, "cycle_trace="+string(traceJSON))
 		}
+	}
+	if auditLine := decisionAuditEventBodyLine(report); auditLine != "" {
+		parts = append(parts, auditLine)
 	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
@@ -5826,6 +5848,9 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, m
 		"example_detail":    snapshot.ExampleDetail,
 		"first_observed_at": snapshot.FirstObservedAt.UTC().Format(time.RFC3339),
 		"example_payload":   cloneStringAnyMap(snapshot.ExamplePayload),
+	}
+	for k, v := range preClaimDecisionAudit("preclaim_warn_repeated", snapshot.Count) {
+		payload[k] = v
 	}
 	if emit != nil {
 		emit("loop.operator_attention", payload)

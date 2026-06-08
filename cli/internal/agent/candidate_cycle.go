@@ -614,6 +614,12 @@ func appendExecutionCycleTrace(trace []ExecutionCycleTrace, entry ExecutionCycle
 }
 
 func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewResult, finalDecision string) ExecutionCycleTrace {
+	reviewPresent := review != nil
+	reviewVerdict := ""
+	if review != nil {
+		reviewVerdict = review.Verdict
+	}
+	audit := executionDecisionAuditForReport(candidate.Report, finalDecision, reviewPresent, reviewVerdict)
 	entry := ExecutionCycleTrace{
 		CycleIndex: candidate.CycleIndex,
 		AttemptID:  candidate.Report.AttemptID,
@@ -624,8 +630,11 @@ func executionCycleTraceFor(candidate CandidateResult, review *CandidateReviewRe
 			Model:       candidate.Report.Model,
 			ActualPower: candidate.Report.ActualPower,
 		},
-		FinalDecision: finalDecision,
+		RequestedRoute: audit.RequestedRoute,
+		ActualRoute:    audit.ActualRoute,
+		FinalDecision:  finalDecision,
 	}
+	applyDecisionAuditToTrace(&entry, audit)
 	if review == nil {
 		return entry
 	}

@@ -83,6 +83,17 @@ type ExecutionCycleRouteFacts struct {
 	ResolvedBaseURL string
 }
 
+type ExecutionCycleRequestedRouteFacts struct {
+	Harness             string
+	Provider            string
+	Model               string
+	Profile             string
+	RoutingIntentSource string
+	EstimatedDifficulty string
+	InferredPowerClass  string
+	RequestedPowerClass string
+}
+
 type ExecutionCycleReviewResult struct {
 	Verdict        string
 	Rationale      string
@@ -96,11 +107,20 @@ type ExecutionCycleTrace struct {
 	AttemptID        string
 	ResultRev        string
 	ImplementerRoute ExecutionCycleRouteFacts
+	RequestedRoute   ExecutionCycleRequestedRouteFacts
+	ActualRoute      ExecutionCycleRouteFacts
 	ReviewGroupID    string
 	ReviewerIndices  []int
 	ReviewVerdicts   []string
 	ReviewResult     ExecutionCycleReviewResult
 	FinalDecision    string
+	FailureClass     string
+	RetryAction      string
+	EscalationCount  int
+	ReviewStatus     string
+	ReviewSkipReason string
+	LandStatus       string
+	ReconcileStatus  string
 }
 
 type ReviewAC struct {
