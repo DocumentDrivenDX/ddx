@@ -1,0 +1,8 @@
+status: open
+reason: Required verification gate is red outside this bead's scope. The focused acceptance command passed after the test changes were staged:
+  cd cli && go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|LandCoordination|RetryEscalation|LandCoordinationDecisionAudit' -count=1
+However the required broad command failed reproducibly in unrelated cmd package tests:
+  cd cli && go test ./internal/agent/... ./cmd/... -count=1
+and staged pre-commit failed in go-test with the same unrelated cmd failures plus an unrelated internal/agent short-race failure:
+  lefthook run pre-commit
+Representative failures include TestBeadDoctorDetectsParentAncestorBackEdge, TestDoctor_ReportsAndAppliesHousekeepingCounts, TestDoctor_ReportsBothInstallLayers, TestExecuteBeadRoutingEvidence*, TestRunPersonaInjectsBodyIntoPrompt, TestSkillsCheckDefaultPathsIncludesShippedPluginSkills, TestExecutionsRetention_ArchivesOldEvidence, and TestPreDispatchDirtyPreserveRequiresStableImplementationDirt. The in-scope land coordination acceptance tests are green, but the bead contract forbids committing while required gates are red.
