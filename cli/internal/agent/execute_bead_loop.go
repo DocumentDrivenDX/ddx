@@ -715,6 +715,9 @@ type ExecuteBeadReport struct {
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
+	// ReviewSkipReason carries the durable review:skip-reason:* label when a
+	// success path is allowed to close without running a reviewer.
+	ReviewSkipReason string `json:"review_skip_reason,omitempty"`
 	// CycleTrace carries the append-only execution cycle trace in order.
 	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
 	// PowerClass is the model powerClass used for the final attempt (cheap, standard, smart).

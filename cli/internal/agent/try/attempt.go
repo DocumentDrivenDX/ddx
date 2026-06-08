@@ -103,24 +103,25 @@ type ExecutionCycleReviewResult struct {
 }
 
 type ExecutionCycleTrace struct {
-	CycleIndex       int
-	AttemptID        string
-	ResultRev        string
-	ImplementerRoute ExecutionCycleRouteFacts
-	RequestedRoute   ExecutionCycleRequestedRouteFacts
-	ActualRoute      ExecutionCycleRouteFacts
-	ReviewGroupID    string
-	ReviewerIndices  []int
-	ReviewVerdicts   []string
-	ReviewResult     ExecutionCycleReviewResult
-	FinalDecision    string
-	FailureClass     string
-	RetryAction      string
-	EscalationCount  int
-	ReviewStatus     string
-	ReviewSkipReason string
-	LandStatus       string
-	ReconcileStatus  string
+	CycleIndex           int
+	AttemptID            string
+	ResultRev            string
+	ImplementerRoute     ExecutionCycleRouteFacts
+	RequestedRoute       ExecutionCycleRequestedRouteFacts
+	ActualRoute          ExecutionCycleRouteFacts
+	ReviewGroupID        string
+	ReviewerIndices      []int
+	ReviewVerdicts       []string
+	ReviewResult         ExecutionCycleReviewResult
+	FinalDecision        string
+	FailureClass         string
+	RetryAction          string
+	EscalationCount      int
+	ReviewStatus         string
+	ReviewSkipReason     string
+	ReviewClassification string
+	LandStatus           string
+	ReconcileStatus      string
 }
 
 type ReviewAC struct {

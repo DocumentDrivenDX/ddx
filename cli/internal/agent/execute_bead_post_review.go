@@ -92,8 +92,9 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		now = time.Now
 	}
 
-	reviewSkipped := hasDurableReviewSkipReason(in.Bead.Labels)
-	if reviewSkipped {
+	reviewSkipReason := durableReviewSkipReason(in.Bead.Labels)
+	if reviewSkipReason != "" {
+		report.ReviewSkipReason = reviewSkipReason
 		if err := in.Store.CloseWithEvidence(in.Bead.ID, report.SessionID, report.ResultRev); err != nil {
 			out.StoreErrOp = "CloseWithEvidence"
 			out.StoreErr = err
@@ -477,7 +478,19 @@ func runPreCloseReviewGroup(ctx context.Context, reviewer BeadReviewer, beadID, 
 }
 
 func hasDurableReviewSkipReason(labels []string) bool {
-	return HasBeadLabel(labels, "review:skip") && HasBeadLabelPrefix(labels, "review:skip-reason:")
+	return durableReviewSkipReason(labels) != ""
+}
+
+func durableReviewSkipReason(labels []string) string {
+	if !HasBeadLabel(labels, "review:skip") {
+		return ""
+	}
+	for _, label := range labels {
+		if strings.HasPrefix(label, "review:skip-reason:") {
+			return strings.TrimSpace(label)
+		}
+	}
+	return ""
 }
 
 func successReportHasEmptyReviewResult(report ExecuteBeadReport) bool {
