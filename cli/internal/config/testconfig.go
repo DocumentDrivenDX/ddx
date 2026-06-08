@@ -96,6 +96,7 @@ func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
 		Agent: &AgentConfig{
 			Model:         opts.Model,
 			TimeoutMS:     int(opts.Timeout / time.Millisecond),
+			WallClockMS:   int(opts.WallClock / time.Millisecond),
 			SessionLogDir: opts.SessionLogDir,
 			Permissions:   opts.Permissions,
 		},

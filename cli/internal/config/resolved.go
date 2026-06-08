@@ -101,6 +101,9 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	} else if agent != nil && agent.TimeoutMS > 0 {
 		r.timeout = time.Duration(agent.TimeoutMS) * time.Millisecond
 	}
+	if agent != nil && agent.WallClockMS > 0 {
+		r.wallClock = time.Duration(agent.WallClockMS) * time.Millisecond
+	}
 
 	if overrides.ProviderRequestTimeout != nil {
 		r.providerRequestTimeout = *overrides.ProviderRequestTimeout

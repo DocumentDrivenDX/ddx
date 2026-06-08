@@ -445,6 +445,7 @@ type AgentConfig struct {
 	Models          map[string]string   `yaml:"models,omitempty" json:"models,omitempty"`
 	ReasoningLevels map[string][]string `yaml:"reasoning_levels,omitempty" json:"reasoning_levels,omitempty"`
 	TimeoutMS       int                 `yaml:"timeout_ms,omitempty" json:"timeout_ms,omitempty"`
+	WallClockMS     int                 `yaml:"wall_clock_ms,omitempty" json:"wall_clock_ms,omitempty"`
 	SessionLogDir   string              `yaml:"session_log_dir,omitempty" json:"session_log_dir,omitempty"`
 	Permissions     string              `yaml:"permissions,omitempty" json:"permissions,omitempty"`
 	Endpoints       []AgentEndpoint     `yaml:"endpoints,omitempty" json:"endpoints,omitempty"`
