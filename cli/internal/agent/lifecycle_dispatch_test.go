@@ -3,6 +3,7 @@ package agent
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,4 +28,17 @@ func TestNewLifecycleScratchDirSeedsFromHEAD(t *testing.T) {
 	content, err := os.ReadFile(seed)
 	require.NoError(t, err)
 	assert.Equal(t, "seed\n", string(content))
+}
+
+// TestCaptureLifecycleProjectStatusPreservesGitStderr verifies that git status
+// failures still surface the underlying git stderr instead of a bare wrapper
+// error.
+func TestCaptureLifecycleProjectStatusPreservesGitStderr(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	runGitInteg(t, projectRoot, "config", "core.bare", "true")
+
+	_, err := captureLifecycleProjectStatus(projectRoot)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "fatal: this operation must be run in a work tree")
+	assert.True(t, strings.Contains(err.Error(), "snapshot project root dirtiness"))
 }

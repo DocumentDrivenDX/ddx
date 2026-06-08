@@ -1150,6 +1150,7 @@ func danglingSuccessRecoveryReport(beadID string, recovery *DanglingSuccessRecov
 	return report
 }
 
+const preDispatchGitRepairFailurePrefix = "pre-dispatch git repair failed: "
 const preExecuteCheckpointDirtyMarker = "pre-execute-bead checkpoint: " + preDispatchCheckpointDirtyRefusalPrefix
 
 func preExecuteCheckpointDirtyStop(report ExecuteBeadReport, err error, projectRoot, beadID string) (*OperatorAttentionStop, bool) {
@@ -1169,6 +1170,25 @@ func preExecuteCheckpointDirtyStop(report ExecuteBeadReport, err error, projectR
 		BeadID:      beadID,
 		ProjectRoot: projectRoot,
 		DirtyPaths:  paths,
+		Message:     message,
+	}, true
+}
+
+func preExecuteCheckpointGitRepairFailedStop(report ExecuteBeadReport, err error, projectRoot, beadID string) (*OperatorAttentionStop, bool) {
+	detail := strings.TrimSpace(firstNonEmpty(report.Error, report.Detail))
+	if err != nil && strings.Contains(err.Error(), preDispatchGitRepairFailurePrefix) {
+		detail = strings.TrimSpace(err.Error())
+	} else if !strings.Contains(detail, preDispatchGitRepairFailurePrefix) {
+		return nil, false
+	}
+	message := "project git config repair failed; resolve the git error before continuing autonomous work"
+	if detail != "" {
+		message += ": " + detail
+	}
+	return &OperatorAttentionStop{
+		Reason:      "pre_dispatch_git_repair_failed",
+		BeadID:      beadID,
+		ProjectRoot: projectRoot,
 		Message:     message,
 	}, true
 }
@@ -3103,6 +3123,39 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
 		}
 		classifyLoopReportFailure(&report)
+		if gitRepair, ok := preExecuteCheckpointGitRepairFailedStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
+			if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, unclaimErr
+			}
+			result.OperatorAttention = gitRepair
+			setExit("OperatorAttention", "operator_attention")
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log,
+					"operator attention: project git config repair failed for %s; released %s. %s\n",
+					gitRepair.ProjectRoot,
+					candidate.ID,
+					gitRepair.Message,
+				)
+			}
+			detail := strings.TrimSpace(firstNonEmpty(report.Error, report.Detail))
+			if detail == "" && err != nil {
+				detail = strings.TrimSpace(err.Error())
+			}
+			emit("loop.operator_attention", map[string]any{
+				"reason":       gitRepair.Reason,
+				"bead_id":      candidate.ID,
+				"project_root": gitRepair.ProjectRoot,
+				"message":      gitRepair.Message,
+				"detail":       detail,
+			})
+			return result, nil
+		}
 		if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
 			if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {

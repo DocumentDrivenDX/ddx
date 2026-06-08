@@ -34,6 +34,25 @@ var preDispatchDirtyPathLister = func(projectRoot string) ([]string, error) {
 	return preDispatchCheckpointDirtyPaths(projectRoot)
 }
 
+var projectRootGitHealthChecker = internalgit.CheckGitRepoHealth
+
+func summarizeProjectRootGitRepair(issues []internalgit.RepoHealthIssue) (fixed, failed []string) {
+	for _, issue := range issues {
+		if issue.Type == "git_worktree_config_disabled" {
+			continue
+		}
+		remediation := strings.Join(issue.Remediation, "; ")
+		if issue.RepairError != "" {
+			failed = append(failed, fmt.Sprintf("%s (%s): %s", issue.Type, remediation, issue.RepairError))
+			continue
+		}
+		if issue.Fixed {
+			fixed = append(fixed, fmt.Sprintf("%s (%s)", issue.Type, remediation))
+		}
+	}
+	return fixed, failed
+}
+
 func normalizePreDispatchDirtyPaths(paths []string) []string {
 	seen := make(map[string]bool, len(paths))
 	normalized := make([]string, 0, len(paths))
@@ -177,11 +196,38 @@ func preservePreDispatchDirtyPathsLocked(projectRoot string, dirtyPaths []string
 }
 
 func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
-	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+	repairAttempted := false
+	repairErr := func(err error) error {
+		if err == nil {
+			return nil
+		}
+		if repairAttempted {
+			return fmt.Errorf("pre-dispatch git repair failed: %w", err)
+		}
+		return err
+	}
+	if issues := projectRootGitHealthChecker(projectRoot, true); len(issues) > 0 {
+		fixed, failed := summarizeProjectRootGitRepair(issues)
+		repairAttempted = len(fixed) > 0 || len(failed) > 0
+		if len(fixed) > 0 {
+			_, _ = fmt.Fprintf(os.Stderr, "ddx: repaired project git config in %s: %s\n", projectRoot, strings.Join(fixed, "; "))
+		}
+		if len(failed) > 0 {
+			_, _ = fmt.Fprintf(os.Stderr, "ddx: project git config repair failed in %s: %s\n", projectRoot, strings.Join(failed, "; "))
+			return false, fmt.Errorf("pre-dispatch git repair failed: %s", strings.Join(failed, "; "))
+		}
+	}
+	if out, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").CombinedOutput(); err != nil {
+		if repairAttempted {
+			return false, fmt.Errorf("pre-dispatch git repair failed: %s: %w", strings.TrimSpace(string(out)), err)
+		}
 		return false, nil
 	}
-	headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").Output()
+	headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").CombinedOutput()
 	if err != nil {
+		if repairAttempted {
+			return false, repairErr(fmt.Errorf("resolving HEAD for pre-dispatch checkpoint: %s: %w", strings.TrimSpace(string(headOut)), err))
+		}
 		return false, nil
 	}
 	head := strings.TrimSpace(string(headOut))
@@ -191,12 +237,15 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 
 	skipWorktreePaths, err := checkpointSkipWorktreePaths(projectRoot)
 	if err != nil {
+		if repairAttempted {
+			return false, repairErr(err)
+		}
 		return false, err
 	}
 
 	dirtyPaths, err := preDispatchDirtyPathLister(projectRoot)
 	if err != nil {
-		return false, err
+		return false, repairErr(err)
 	}
 	if len(dirtyPaths) == 0 {
 		return false, nil
@@ -206,7 +255,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if len(blockedPaths) > 0 {
 		stableBlockedPaths, currentDirtyPaths, err := stablePreDispatchImplementationDirtyPaths(projectRoot, blockedPaths)
 		if err != nil {
-			return false, err
+			return false, repairErr(err)
 		}
 		if len(stableBlockedPaths) > 0 {
 			return false, fmt.Errorf(
@@ -223,7 +272,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 
 	indexFile, err := config.CreateExecutionScratch(projectRoot, "ddx-pre-dispatch-index-*")
 	if err != nil {
-		return false, fmt.Errorf("creating temp checkpoint index: %w", err)
+		return false, repairErr(fmt.Errorf("creating temp checkpoint index: %w", err))
 	}
 	indexPath := indexFile.Name()
 	_ = indexFile.Close()
@@ -237,18 +286,18 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	}
 
 	if out, err := gitWithIndex("read-tree", "HEAD"); err != nil {
-		return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+		return false, repairErr(fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err))
 	}
 
 	addArgs := []string{"add", "-A", "--force", "--"}
 	addArgs = append(addArgs, allowedPaths...)
 	if out, err := gitWithIndex(addArgs...); err != nil {
-		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
+		return false, repairErr(fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err))
 	}
 
 	changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
 	if err != nil {
-		return false, fmt.Errorf("checking checkpoint diff: %w", err)
+		return false, repairErr(fmt.Errorf("checking checkpoint diff: %w", err))
 	}
 	if len(bytes.TrimSpace(changedOut)) == 0 {
 		return false, nil
@@ -256,7 +305,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 
 	treeOut, err := gitWithIndex("write-tree")
 	if err != nil {
-		return false, fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
+		return false, repairErr(fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err))
 	}
 	tree := strings.TrimSpace(string(treeOut))
 	msg := "chore: checkpoint pre-execute-bead " + attemptID
@@ -266,7 +315,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		"commit-tree", tree, "-p", head, "-m", msg,
 	).CombinedOutput()
 	if err != nil {
-		return false, fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
+		return false, repairErr(fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err))
 	}
 	commit := strings.TrimSpace(string(commitOut))
 
@@ -276,21 +325,21 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		ref = "HEAD"
 	}
 	if out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput(); err != nil {
-		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", strings.TrimSpace(string(out)), err)
+		return false, repairErr(fmt.Errorf("advancing checkpoint ref: %s: %w", strings.TrimSpace(string(out)), err))
 	}
 	if out, err := internalgit.Command(context.Background(), projectRoot, "read-tree", "HEAD").CombinedOutput(); err != nil {
-		return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+		return false, repairErr(fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err))
 	}
 	if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
-		return false, err
+		return false, repairErr(err)
 	}
 	return true, nil
 }
 
 func checkpointSkipWorktreePaths(projectRoot string) ([]string, error) {
-	out, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "-t", "-z").Output()
+	out, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "-t", "-z").CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("listing skip-worktree paths: %w", err)
+		return nil, fmt.Errorf("listing skip-worktree paths: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	var paths []string
 	for len(out) > 0 {
@@ -376,9 +425,9 @@ func isMaterializedSkillSymlink(projectRoot, path string) bool {
 
 func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 	out, err := internalgit.Command(context.Background(), projectRoot,
-		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").Output()
+		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("listing checkpoint dirt: %w", err)
+		return nil, fmt.Errorf("listing checkpoint dirt: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	if len(out) == 0 {
 		return nil, nil
