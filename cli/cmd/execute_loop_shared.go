@@ -135,11 +135,16 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
 	if !watch {
 		return false
 	}
-	if !cmd.Flags().Changed("self-refresh") {
-		return true
+	// Explicit opt-out always wins: --no-self-refresh disables the capability
+	// even though it is on by default in watch mode.
+	if noRefresh, _ := cmd.Flags().GetBool("no-self-refresh"); noRefresh {
+		return false
 	}
-	enabled, _ := cmd.Flags().GetBool("self-refresh")
-	return enabled
+	if cmd.Flags().Changed("self-refresh") {
+		enabled, _ := cmd.Flags().GetBool("self-refresh")
+		return enabled
+	}
+	return true
 }
 
 func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker) agent.ExecuteBeadRuntime {
