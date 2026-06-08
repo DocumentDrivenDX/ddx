@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260608T042724-6cf00a16",
+  "bead_id": "ddx-9b78b617",
+  "base_rev": "fcc83440e784dec6e3b64191f71496e1e4b3c8bc",
+  "created_at": "2026-06-08T04:27:33.025991164Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9b78b617",
+    "title": "code-health: split ExecuteBeadWorker.Run loop body into a runIteration m: part 2",
+    "description": "PROBLEM\nParent bead ddx-f2a366db is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM/ROOT CAUSE: cli/internal/agent/execute_bead_loop.go:1133 ExecuteBeadWorker.Run is 2,473 LOC — pre-loop setup (:1133-:1499) plus the entire iteration loop (for { at :1500). The loop body has comment-delimited phases that are natural extraction seams (candidate selection :1500-1799, wedge-guard+atomic-claim :1840-1958, intake :2012, lint gate :2452, dispatch+watchdog :2559-2741, post-attempt classification :2742+).\n\nPROPOSED FIX: STRICTLY MECHANICAL hoist (no behavior change): extract the loop body into (w *ExecuteBeadWorker) runIteration(ctx, loopState, ...) (iterationOutcome, error), leaving Run as setup + for { runIteration(...) }. Introduce a small loopState/iterationOutcome struct for the values currently closed over. The phase helper functions mostly already exist further down the file.\n\nNON-SCOPE: do NOT also extract the dispatch/post-attempt sub-phases here (separate follow-up); do NOT touch ExecuteBeadWithConfig; no behavior/event/ordering change.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- cd cli \u0026\u0026 go test ./internal/agent/... green (existing loop/worker tests unchanged).\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. cd cli \u0026\u0026 go test ./internal/agent/... green (existing loop/worker tests unchanged).\n2. lefthook run pre-commit passes.",
+    "parent": "ddx-f2a366db",
+    "labels": [
+      "area:agent",
+      "kind:refactor",
+      "code-health",
+      "phase:iterate",
+      "hot-file",
+      "decomposed"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-9b78b617)\",\"fingerprint\":\"3090d0908e51fd2ef4395c160bc5f84c714a2a2c5a4557cac56db65edd4aa81a\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3090d0908e51fd2ef4395c160bc5f84c714a2a2c5a4557cac56db65edd4aa81a\"}",
+          "created_at": "2026-06-08T04:25:21.378114395Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260608T042724-6cf00a16",
+    "prompt": ".ddx/executions/20260608T042724-6cf00a16/prompt.md",
+    "manifest": ".ddx/executions/20260608T042724-6cf00a16/manifest.json",
+    "result": ".ddx/executions/20260608T042724-6cf00a16/result.json",
+    "checks": ".ddx/executions/20260608T042724-6cf00a16/checks.json",
+    "usage": ".ddx/executions/20260608T042724-6cf00a16/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9b78b617-20260608T042724-6cf00a16"
+  },
+  "prompt_sha": "4aa5bb3600e8ed30fae81abe07e4ebf15a4c97a286a574b41e762f76e2a91b24"
+}
