@@ -796,7 +796,7 @@ func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
 	assert.NotEqual(t, bead.StatusClosed, got.Status, "label-only skip should be ignored")
 }
 
-func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
+func TestExecuteBeadWorker_NiflheimEvidence_EmptyReviewResultCannotClose(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -804,22 +804,135 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:    beadID,
 				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-nil-reviewer",
+				SessionID: "sess-empty-review",
 				ResultRev: "badc0ffe",
+				CycleTrace: []ExecutionCycleTrace{
+					{
+						CycleIndex:    0,
+						AttemptID:     "attempt-empty-review",
+						ResultRev:     "badc0ffe",
+						ReviewGroupID: "rg-empty-review",
+						ReviewerIndices: []int{
+							0,
+						},
+						ReviewVerdicts: []string{
+							"APPROVE",
+						},
+						ReviewResult:  ExecutionCycleReviewResult{},
+						FinalDecision: ExecuteBeadStatusSuccess,
+					},
+				},
 			}, nil
 		}),
-		Reviewer: nil, // no reviewer
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			return &ReviewResult{Verdict: VerdictApprove}, nil
+		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
-	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.LastFailureStatus)
 
 	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.NotEqual(t, bead.StatusClosed, got.Status)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var reviewError *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "review-error" {
+			reviewError = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, reviewError, "empty review result must emit review-error evidence")
+	assert.NotEmpty(t, reviewError.Body)
+	assert.Contains(t, reviewError.Body, "empty review result before close")
+}
+
+func TestExecuteBeadWorker_NiflheimEvidence_NilReviewerRequiresExplicitSkip(t *testing.T) {
+	t.Run("missing durable skip fails review gate", func(t *testing.T) {
+		store := bead.NewStore(t.TempDir())
+		require.NoError(t, store.Init(context.Background()))
+		target := &bead.Bead{ID: "ddx-nil-reviewer", Title: "Nil reviewer"}
+		require.NoError(t, store.Create(context.Background(), target))
+
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-nil-reviewer",
+					ResultRev: "badc0ffe",
+				}, nil
+			}),
+			Reviewer: nil,
+		}
+
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true, PostMergeReview: true})
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Successes)
+		assert.Equal(t, 1, result.Failures)
+		assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.LastFailureStatus)
+
+		got, err := store.Get(context.Background(), target.ID)
+		require.NoError(t, err)
+		assert.NotEqual(t, bead.StatusClosed, got.Status)
+
+		events, err := store.Events(target.ID)
+		require.NoError(t, err)
+		var reviewError *bead.BeadEvent
+		for i := range events {
+			if events[i].Kind == "review-error" {
+				reviewError = &events[i]
+				break
+			}
+		}
+		require.NotNil(t, reviewError, "nil reviewer without durable skip must emit review-error evidence")
+		assert.Contains(t, reviewError.Body, "reviewer is nil")
+	})
+
+	t.Run("durable skip closes", func(t *testing.T) {
+		store := bead.NewStore(t.TempDir())
+		require.NoError(t, store.Init(context.Background()))
+		target := &bead.Bead{
+			ID:     "ddx-nil-reviewer-skip",
+			Title:  "Nil reviewer durable skip",
+			Labels: []string{"review:skip", "review:skip-reason:test-fixture"},
+		}
+		require.NoError(t, store.Create(context.Background(), target))
+
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+				return ExecuteBeadReport{
+					BeadID:    beadID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-nil-reviewer-skip",
+					ResultRev: "feedface",
+				}, nil
+			}),
+			Reviewer: nil,
+		}
+
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true, PostMergeReview: true})
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Successes)
+
+		got, err := store.Get(context.Background(), target.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusClosed, got.Status)
+	})
 }
 
 // TestExecuteBeadWorkerReviewBypassesRetiredPostLandPath verifies the retired post-land
