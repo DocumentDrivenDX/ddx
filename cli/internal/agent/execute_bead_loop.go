@@ -3896,17 +3896,38 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				result.LastFailureStatus = report.Status
 			}
 		} else {
-			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("CloseWithEvidence", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			closeBlocked := false
+			if successReportHasEmptyReviewResult(report) && !hasDurableReviewSkipReason(candidate.Labels) {
+				reason := "empty review result before close"
+				appendReviewGateError(w.Store, candidate.ID, assignee, now().UTC(), report.ResultRev, evidence.OutcomeReviewUnparseable, reason)
+				report.Status = ExecuteBeadStatusReviewMalfunction
+				report.Detail = "pre-close review: " + reason
+				if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("Unclaim", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
 				}
-				return executeBeadIterationOutcome{Continue: true}, nil
+				result.Failures++
+				result.LastFailureStatus = report.Status
+				closeBlocked = true
 			}
-			result.Successes++
-			result.LastSuccessAt = now().UTC()
+			if !closeBlocked {
+				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("CloseWithEvidence", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+				result.Successes++
+				result.LastSuccessAt = now().UTC()
+			}
 		}
 	} else if attemptOut.Disposition == agenttry.OutcomePark {
 		result.Failures++
