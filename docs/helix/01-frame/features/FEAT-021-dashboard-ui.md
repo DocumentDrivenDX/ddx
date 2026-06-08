@@ -65,6 +65,7 @@ All routes embed context so every view is directly addressable:
 /nodes/:nodeId                        → node overview (health, project list)
 /nodes/:nodeId/runs                   → combined run history (all projects)
 /nodes/:nodeId/beads                  → combined bead queue (all projects)
+/nodes/:nodeId/workers                → combined worker workbench (all projects)
 /nodes/:nodeId/projects/:projectId                   → project overview
 /nodes/:nodeId/projects/:projectId/beads             → project beads
 /nodes/:nodeId/projects/:projectId/artifacts         → artifact browser
@@ -73,6 +74,7 @@ All routes embed context so every view is directly addressable:
 /nodes/:nodeId/projects/:projectId/commits           → commit log
 /nodes/:nodeId/projects/:projectId/runs              → project run history
 /nodes/:nodeId/projects/:projectId/runs/:runId       → project run detail
+/nodes/:nodeId/projects/:projectId/workers           → project worker workbench
 ```
 
 **Combined views** (`/nodes/:nodeId/runs`, `/nodes/:nodeId/beads`) operate
@@ -151,6 +153,34 @@ label: `work`, `try`, or `run`.
 **GraphQL Query:** `runs` from FEAT-010 with optional `projectID` omitted.
 
 **File:** `src/routes/nodes/[nodeId]/runs/+page.svelte`
+
+### Combined Worker Workbench (`/nodes/:nodeId/workers`)
+
+All DDx work workers across the selected node's registered projects merged into
+one operator view. When the node is a federation hub, the view accepts
+`?scope=federation` and includes workers reported by registered spokes. Each row
+shows the owner node, project, worker id, state, current bead id/title when
+available, attempt id, phase, harness/provider/model, elapsed time, last event
+time, freshness (`connected`, `stale`, `disconnected`, `offline`), and the
+worker command mode (`once`, `drain`, or `watch`).
+
+- Scope toggle: `LOCAL` shows this node only; `FEDERATION` fans out across
+  registered spokes when hub-mode is enabled.
+- Project and node filters are URL-backed.
+- Rows link to the owning project worker detail route.
+- A detail drawer shows recent phase transitions, captured output, prompt,
+  route/model, current bead, attempt bundle link, and stop/cancel actions.
+- `+ Add worker` starts one or more autonomous `ddx work` workers for a selected
+  project through the server. The server is a launcher and observer; the bead
+  store remains the claim authority per ADR-022.
+- Hub-mode worker start/stop commands are owner-targeted. The hub forwards to
+  the node that owns the selected project; it never broadcasts a worker command.
+
+**GraphQL Queries:** `reportedWorkers`, `workersByProject`, `queueAndWorkersSummary`.
+
+**GraphQL Mutations:** `startWorker`, `stopWorker`.
+
+**File:** `src/routes/nodes/[nodeId]/workers/+page.svelte`
 
 ### Project Overview (`/nodes/:nodeId/projects/:projectId`)
 
@@ -238,6 +268,20 @@ FEAT-010, and FEAT-019: `work` shows `overview`; `try` shows `overview`,
 
 **File:** `src/routes/nodes/[nodeId]/projects/[projectId]/runs/[runId]/+page.svelte`
 
+### Project Worker Workbench (`/nodes/:nodeId/projects/:projectId/workers`)
+
+Project-scoped variant of the combined worker workbench. It shows only workers
+for the selected project and keeps the same row, detail, start, stop, and live
+progress affordances. This is the primary page for increasing capacity on one
+queue: the operator can see ready depth, running count, worker cap, and start
+additional autonomous workers without opening a shell.
+
+**GraphQL Queries:** `workersByProject`, `reportedWorkers`, `queueAndWorkersSummary`.
+
+**GraphQL Mutations:** `startWorker`, `stopWorker`.
+
+**File:** `src/routes/nodes/[nodeId]/projects/[projectId]/workers/+page.svelte`
+
 ## Navigation
 
 The global navigation bar shows:
@@ -295,6 +339,23 @@ exists in the target project.
     `work` -> `try` -> `run`, with breadcrumbs back up the hierarchy.
 12. Project artifact routes expose FEAT-008 media-type rendering and link to
     producing runs when `generated_by` is present.
+13. Combined worker view lists every worker for the selected node and, in
+    hub-mode with `scope=federation`, every reachable spoke with node/project
+    badges and freshness state.
+14. Worker detail exposes the current bead, attempt phase, route/model, recent
+    events, captured output, prompt, and stop action.
+15. Starting workers from the UI creates autonomous `ddx work` workers through
+    the server for the selected project. The UI can request `count > 1`, but the
+    server enforces project and global worker caps before launching.
+16. Hub-mode worker start/stop is owner-targeted. Commands for spoke projects
+    forward to the owning spoke and are refused when the spoke is offline or
+    lacks the advertised write capability.
+17. Bead queue mutations (`create`, `update`, `approve`, `block`, `cancel`,
+    `reopen`, dependency edits when implemented) are project-scoped and
+    owner-targeted in hub-mode.
+18. Spec/document edits from the UI are project-scoped, path-confined, and
+    owner-targeted in hub-mode. Editing `docs/helix/**` is the primary spec-edit
+    workflow for basic functionality.
 
 ### Non-Functional
 
@@ -420,6 +481,117 @@ exists in the target project.
   browser entry and that artifact links back to the producing run
 
 **E2E Test:** `runs.spec.ts` — full workflow: navigate to project runs → apply layer filter → verify URL → click work record → verify work detail fields → click child try → verify try fields → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored → follow artifact link from run → verify artifact links back to run
+
+### US-100: Operator Sees Every Worker in One Pane
+**As an** operator running DDx workers across projects and nodes
+**I want** one Workers workbench that shows every worker with node and project
+context
+**So that** I can understand what is running without opening shells on each
+machine
+
+**Acceptance Criteria:**
+- Given two projects on one node each have active or recently-reported workers,
+  when I open `/nodes/:nodeId/workers`, then I see all workers with project
+  badges, worker state, current bead id/title, phase, model/route, elapsed time,
+  and last-event freshness.
+- Given the node is a federation hub with one spoke, when I set
+  `scope=federation`, then I see hub and spoke workers in the same table with
+  node badges and direct fallback URLs for spoke rows.
+- Given a worker stops reporting, then its row transitions from `connected` to
+  `stale` or `disconnected` without disappearing.
+- Given I click a worker row, then a detail view shows recent phase events,
+  captured output, prompt, attempt id, current bead link, and stop action.
+
+**E2E Test:** `workers-single-pane.spec.ts` — full workflow: seed two projects
+with reported workers, open node workers, verify badges and current bead fields,
+open detail, verify prompt/output/events, then run a two-node fixture and verify
+`scope=federation` merges hub and spoke workers with freshness badges.
+
+### US-101: Operator Starts Server-Managed Work Capacity
+**As an** operator watching a ready queue
+**I want** to start more `ddx work` workers from the server UI
+**So that** the server handles worker launch, tracking, and stop control
+
+**Acceptance Criteria:**
+- Given a project has ready beads, when I click `+ Add worker` and request
+  count `2`, mode `watch`, and an optional label filter, then the server starts
+  two autonomous workers for that project and the Workers table shows both.
+- Given the project has `workers.max_count` configured, then the UI disables or
+  rejects starts that would exceed the cap and shows the cap reason.
+- Given a newly-started worker claims a bead, then the worker row updates with
+  current bead id/title and phase without a page reload.
+- Given I click Stop on a running worker, then the server requests stop and the
+  row reaches a terminal or stopping state with an audit event.
+
+**E2E Test:** `workers-dispatch.spec.ts` — full workflow: open project workers,
+start two workers, verify rows and queue summary, verify cap refusal, stop one
+worker, and verify terminal state plus audit event.
+
+### US-102: Operator Controls Workers on Spoke Nodes
+**As an** operator using a federation hub
+**I want** worker start and stop commands for spoke projects to route to the
+owning spoke
+**So that** the hub is the single pane of glass but the owning node remains
+authoritative
+
+**Acceptance Criteria:**
+- Given a hub and spoke are registered, when I start a worker for a spoke
+  project from the hub UI, then the hub forwards the command to exactly that
+  spoke and the spoke starts the worker locally.
+- Given the spoke reports worker events, then the hub Workers view shows the
+  new worker with spoke node badge and project badge.
+- Given the spoke is offline, then the hub refuses the start/stop command with a
+  clear offline reason and does not create a phantom worker row.
+- Given a command is retried with the same request id, then the owning node
+  returns the original result without launching a duplicate worker.
+
+**E2E Test:** `federation-worker-control.spec.ts` — full workflow: start hub and
+spoke, register projects, start a spoke worker from the hub, verify exactly one
+spoke-local worker, stop it, simulate offline spoke, and verify command refusal.
+
+### US-103: Operator Mutates Any Project's Bead Queue
+**As an** operator triaging work across projects
+**I want** to create, edit, approve, block, cancel, reopen, and inspect beads
+from the web UI for any registered project
+**So that** queue stewardship does not require shell access in each checkout
+
+**Acceptance Criteria:**
+- Given I am on a project bead page, when I create a bead with title,
+  description, acceptance, priority, type, and labels, then it appears in that
+  project only and no sibling project receives it.
+- Given I edit title, labels, priority, description, acceptance, or status
+  fields, then the mutation is persisted in the owning project and the row
+  updates without cross-project leakage.
+- Given I approve, block, cancel, or reopen a bead, then the lifecycle event is
+  recorded and the queue summary updates.
+- Given I perform the same actions from a federation hub against a spoke
+  project, then the hub forwards the mutation to the owning spoke and preserves
+  origin/forwarding audit metadata.
+
+**E2E Test:** `beads-queue-mutations.spec.ts` — full workflow: create and edit
+a bead in project A, verify project B isolation, run approve/block/cancel/reopen
+actions, then repeat create/edit through a hub against a spoke project and
+verify owner-targeted write routing.
+
+### US-104: Operator Edits Specs for Any Project
+**As an** operator aligning implementation work
+**I want** to edit project specs and documents through the web UI
+**So that** I can update FEAT/ADR/TP docs before launching workers
+
+**Acceptance Criteria:**
+- Given I open a `docs/helix/**` document, when I edit and save it, then the
+  `documentWrite` mutation writes only inside the selected project and the
+  rendered document refreshes.
+- Given I attempt a path traversal or absolute-path write, then the server
+  rejects it and no file is written.
+- Given I edit a spoke project's spec from the hub UI, then the hub forwards the
+  write to the owning spoke and preserves origin/forwarding audit metadata.
+- Given the document changed after the editor loaded, then save fails with a
+  conflict or stale-write message instead of silently overwriting.
+
+**E2E Test:** `spec-editing.spec.ts` — full workflow: edit a FEAT document in
+project A, verify project B isolation and graph/staleness refresh, reject path
+escape, repeat through hub-to-spoke forwarding, and verify stale-write refusal.
 
 ## New API Required
 
