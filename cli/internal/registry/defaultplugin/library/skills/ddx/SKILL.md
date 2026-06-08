@@ -85,6 +85,12 @@ exact definitions.
   finalization.
 - **Work** — drain the bead queue. `ddx work` picks ready beads and invokes
   `ddx try`; it owns queue iteration and retry policy.
+- **Worker** — a `ddx work` / `ddx try` process scoped to a specific project
+  root. Do not call every `ddx work` process a "DDx worker" when multiple
+  projects are visible. If the user says "DDx worker" without a qualifier,
+  assume they mean the worker for the current/requested project. Say "worker
+  for `<project>`" or "DDx-powered worker"; reserve "DDx repo worker" for work
+  whose project root is the DDx repository.
 - **Execution** — a generic DDx execution run (FEAT-010). Includes execution
   definitions, execution records, and execution evidence under `.ddx/runs/<id>/`.
 - **Agent** — an AI coding agent (Claude, Codex, Gemini, etc.)

@@ -58,6 +58,18 @@ workers from another repository — surfacing a worker that belongs to a
 different project as evidence that this project is "still working" is the
 exact failure this command was added to prevent.
 
+Terminology matters when several projects are active on the same host:
+
+- Say "worker for `<project-root>`" when reporting a project-scoped worker.
+- If the user says "DDx worker" without a qualifier, assume they mean the
+  worker for the current/requested project.
+- Say "DDx-powered worker" for a generic `ddx work` process whose project is
+  not the DDx repository.
+- Say "DDx repo worker" only when the worker's project root is the DDx repo.
+- In cross-project views, group by project root first, then bead ID or PID.
+  Use cross-project views only when the user explicitly asks for them; a single
+  worker outside the current project is not relevant status for this project.
+
 **Required when answering "is the worker still running for project X?":**
 
 1. Resolve the requested project root before answering. Pass `--project`
@@ -70,9 +82,14 @@ exact failure this command was added to prevent.
 3. Always name the project root the worker status applies to ("for
    `<project>`: …"). A bare "yes, a worker is running" answer is unsafe
    because the reader cannot tell which project it refers to.
-4. If a live worker belongs to a *different* project, mention it only as
-   explicitly out-of-scope context (`--all-projects` view), not as
-   evidence that the asked-about project is progressing.
+4. Treat the bead prefix as a sanity check, not as the source of truth:
+   `ddx-*` work normally belongs to the DDx repo, `tablespec-*` work belongs
+   to Tablespec, and any mismatch between bead prefix and project root should
+   be called out.
+5. Do not mention live workers from other projects unless the user explicitly
+   asks for a cross-project view. If you do mention them, mark them as
+   out-of-scope context (`--all-projects` view), not evidence that the
+   asked-about project is progressing.
 
 ## Am I healthy?
 

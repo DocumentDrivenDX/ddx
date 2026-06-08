@@ -128,23 +128,20 @@ async function getFixtureIds(
 	};
 }
 
-// TC-006: Sidebar nav links are disabled (rendered as spans) when no project is selected
-test('TC-006: sidebar nav links are disabled without a project', async ({ page }) => {
-	// Hit the live fixture harness without selecting a project. The picker
-	// does not auto-select, so projectStore stays empty and NavShell renders
-	// project-scoped links as <span> elements.
+// TC-006: Sidebar nav links auto-activate for the server startup project
+test('TC-006: sidebar nav links are active on first load for the startup project', async ({
+	page,
+	request
+}) => {
+	const ids = await getFixtureIds(request);
 	await page.goto('/');
 	await page.waitForSelector('nav');
 
-	// The project-scoped Beads entry is visible…
 	const nav = page.locator('nav');
-	await expect(nav.getByText('Beads', { exact: true })).toBeVisible();
-
-	// …and is rendered as a <span>, not an <a>. Exact-label matching is
-	// required so the always-anchor "All Beads" node-scoped link below the
-	// divider is not picked up here.
-	const beadsAnchor = nav.locator('a').filter({ hasText: /^\s*Beads\s*$/ });
-	await expect(beadsAnchor).toHaveCount(0);
+	const base = `/nodes/${ids.nodeId}/projects/${ids.projectId}`;
+	await expect(nav.locator(`a[href="${base}/beads"]`)).toBeVisible();
+	await expect(nav.locator(`a[href="${base}/documents"]`)).toBeVisible();
+	await expect(projectSelect(page)).toHaveValue(ids.projectId);
 });
 
 // TC-007: Sidebar nav links become active anchors after a project is selected
