@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260608T145012-25b83406",
+  "bead_id": "ddx-1865eadc",
+  "base_rev": "88f25d0c16dc68dbfd722bf092606b4c19343b3e",
+  "created_at": "2026-06-08T14:50:32.693230326Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 7
+  },
+  "bead": {
+    "id": "ddx-1865eadc",
+    "title": "agent: record retry and review decision audit fields",
+    "description": "PROBLEM\nThe worker result JSON and event payloads do not yet carry enough typed audit data to explain why a bead closed, retried, escalated, reconciled, or went to operator attention. That makes the Niflheim-style failure families hard to classify after the fact and leaves empty review results looking like success.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead.go:154-174` defines `ExecutionCycleTrace`, but its current fields are still sparse and optional, so the result can omit the classification trail the worker used. `cli/internal/agent/execute_bead_review.go:168-193` also allows a zero-value `ReviewResult` with no verdict, evidence, or skip reason, which makes the review part of the audit trail ambiguous unless additional gating is added elsewhere.\n\nPROPOSED FIX\n- Extend result serialization and event bodies with `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, review status/verdict or explicit skip reason, and land/reconcile status.\n- Ensure the Niflheim scenario families all emit those fields so a reader can tell whether the worker closed, retried, escalated, reconciled, or parked the bead.\n- Keep the audit fields stable and machine-readable so regression tests can assert on them directly.\n\nNON-SCOPE\n- Do not redesign the retry policy in this child.\n- Do not duplicate the land/review gating logic covered by sibling children; this child only makes the decision visible.",
+    "acceptance": "1. `TestExecuteBeadResult_NiflheimEvidence_CycleTraceCarriesDecisionAudit` proves result JSON/event bodies include `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, review status/verdict or explicit skip reason, and land/reconcile status for the Niflheim scenario families.\n2. The audit data is present for the empty-review, land-failure, decomposed-parent, and pre-claim-warning scenarios that appear in this bead.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'CycleTraceCarriesDecisionAudit' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-08T14:44:54.764195197Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T140832-958b4fa1\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":23541269,\"output_tokens\":102606,\"total_tokens\":23643875,\"cost_usd\":0,\"duration_ms\":1861964,\"exit_code\":0}",
+          "created_at": "2026-06-08T14:44:54.833995884Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=23643875 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"sindri\",\"resolved_model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-08T14:50:07.831650071Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=sindri model=dflash reason=policy=cheap; score=135.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260608T144458-978d48d8\",\"harness\":\"fiz\",\"provider\":\"sindri\",\"model\":\"dflash\",\"route_reason\":\"policy=cheap; score=135.0\",\"input_tokens\":84384,\"output_tokens\":280,\"total_tokens\":84664,\"cost_usd\":0,\"duration_ms\":274055,\"exit_code\":1}",
+          "created_at": "2026-06-08T14:50:07.937315535Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=84664 model=dflash"
+        }
+      ],
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T145012-25b83406",
+    "prompt": ".ddx/executions/20260608T145012-25b83406/prompt.md",
+    "manifest": ".ddx/executions/20260608T145012-25b83406/manifest.json",
+    "result": ".ddx/executions/20260608T145012-25b83406/result.json",
+    "checks": ".ddx/executions/20260608T145012-25b83406/checks.json",
+    "usage": ".ddx/executions/20260608T145012-25b83406/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-1865eadc-20260608T145012-25b83406"
+  },
+  "prompt_sha": "30d84474cecdfa407dc82807ca9ac31a174d6fcc45f78a9b37566edd91a8daa7"
+}
