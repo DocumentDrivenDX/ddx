@@ -216,7 +216,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 }
 
 func (r *startupHousekeepingRunner) scanWorkerDirs(ctx context.Context, now time.Time, apply bool, report *startupHousekeepingReport) error {
-	root := ddxroot.JoinProject(r.projectRoot, "workers")
+	root := workerstatus.LivenessDir(r.projectRoot)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if os.IsNotExist(err) {

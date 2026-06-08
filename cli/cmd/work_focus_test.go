@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
@@ -262,7 +263,48 @@ func TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus(t *testing.T) {
 	}
 }
 
-// TestWorkFocusJSONStableKeys verifies AC3: --json returns the five stable keys.
+func TestWorkFocusActiveWorkerSummaryUsesSharedSnapshot(t *testing.T) {
+	projectRoot := t.TempDir()
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+
+	freshSidecar := &bead.Bead{ID: "ddx-focus-summary-sidecar", Title: "Sidecar bead"}
+	freshRunState := &bead.Bead{ID: "ddx-focus-summary-runstate", Title: "Run-state bead"}
+	require.NoError(t, store.Create(context.Background(), freshSidecar))
+	require.NoError(t, store.Create(context.Background(), freshRunState))
+
+	now := time.Now().UTC()
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-focus-summary", workerstatus.LivenessRecord{
+		WorkerID:       "worker-focus-summary",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    freshSidecar.ID,
+		AttemptID:      "att-focus-summary-sidecar",
+		Phase:          "running",
+		LastActivityAt: now,
+	}))
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:      freshRunState.ID,
+		AttemptID:   "att-focus-summary-runstate",
+		PID:         4243,
+		StartedAt:   now.Add(-time.Minute),
+		RefreshedAt: now,
+		ExpiresAt:   now.Add(time.Minute),
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "work", "focus", "--json")
+	require.NoError(t, err)
+
+	var report WorkFocusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	require.Equal(t, 2, report.ActiveWork.Count, "shared snapshot must include fresh sidecars and run-state entries")
+	assert.Contains(t, report.ActiveWork.BeadIDs, freshSidecar.ID)
+	assert.Contains(t, report.ActiveWork.BeadIDs, freshRunState.ID)
+	require.Len(t, report.ActiveWorkers, 2)
+}
+
+// TestWorkFocusJSONStableKeys verifies AC3: --json returns the stable keys.
 func TestWorkFocusJSONStableKeys(t *testing.T) {
 	env := setupWorkFocusEnv(t)
 	root := NewCommandFactory(env.Dir).NewRootCommand()
@@ -273,7 +315,7 @@ func TestWorkFocusJSONStableKeys(t *testing.T) {
 	var raw map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal([]byte(out), &raw))
 
-	for _, key := range []string{"human_required", "blocked_or_planning", "ready_summary", "worker_recommendation", "unknowns"} {
+	for _, key := range []string{"human_required", "blocked_or_planning", "ready_summary", "active_work", "worker_recommendation", "unknowns"} {
 		assert.Contains(t, raw, key, "JSON output must contain stable key: %s", key)
 	}
 }

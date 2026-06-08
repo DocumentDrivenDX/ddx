@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	agentpkg "github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -18,6 +19,26 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
 	"github.com/spf13/cobra"
 )
+
+// BeadStatusReport is the JSON payload emitted by `ddx bead status --json`.
+// It preserves the lifecycle counts while exposing the reconciled active-work
+// snapshot separately.
+type BeadStatusReport struct {
+	Total             int                 `json:"total"`
+	Open              int                 `json:"open"`
+	InProgress        int                 `json:"in_progress"`
+	Closed            int                 `json:"closed"`
+	Blocked           int                 `json:"blocked"`
+	Proposed          int                 `json:"proposed"`
+	Cancelled         int                 `json:"cancelled"`
+	NeedsHuman        int                 `json:"needs_human"`
+	Ready             int                 `json:"ready"`
+	WorkerReady       int                 `json:"worker_ready"`
+	DependencyWaiting int                 `json:"dependency_waiting"`
+	ExternalBlocked   int                 `json:"external_blocked"`
+	OperatorAttention int                 `json:"operator_attention"`
+	ActiveWork        activework.Snapshot `json:"active_work"`
+}
 
 func (f *CommandFactory) newBeadCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -299,6 +320,14 @@ func (f *CommandFactory) beadStore() *bead.Store {
 		return bead.NewStore("")
 	}
 	return bead.NewStore(ddxroot.JoinProject(workspaceRoot))
+}
+
+func (f *CommandFactory) beadStatusStore(projectRoot string) *bead.Store {
+	inTree := filepath.Join(projectRoot, ddxroot.DirName)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return bead.NewStore(inTree)
+	}
+	return f.beadStore()
 }
 
 func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
@@ -1682,11 +1711,16 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
-		Short: "Show bead counts",
+		Short: "Show bead counts and active work",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			s := f.beadStore()
+			projectRoot := f.beadWorkspaceRoot()
+			s := f.beadStatusStore(projectRoot)
 			counts, err := s.Status()
+			if err != nil {
+				return err
+			}
+			activeWork, err := collectActiveWorkSnapshot(projectRoot, s, time.Now().UTC())
 			if err != nil {
 				return err
 			}
@@ -1695,17 +1729,37 @@ func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
-				return enc.Encode(counts)
+				report := BeadStatusReport{
+					Total:             counts.Total,
+					Open:              counts.Open,
+					InProgress:        counts.InProgress,
+					Closed:            counts.Closed,
+					Blocked:           counts.Blocked,
+					Proposed:          counts.Proposed,
+					Cancelled:         counts.Cancelled,
+					NeedsHuman:        counts.NeedsHuman,
+					Ready:             counts.Ready,
+					WorkerReady:       counts.WorkerReady,
+					DependencyWaiting: counts.DependencyWaiting,
+					ExternalBlocked:   counts.ExternalBlocked,
+					OperatorAttention: counts.OperatorAttention,
+					ActiveWork:        activeWork,
+				}
+				return enc.Encode(report)
 			}
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Total:              %d\n", counts.Total)
 			fmt.Fprintf(out, "Open:               %d\n", counts.Open)
-			fmt.Fprintf(out, "In progress:        %d\n", counts.InProgress)
+			fmt.Fprintf(out, "Lifecycle in progress: %d\n", counts.InProgress)
 			fmt.Fprintf(out, "Closed:             %d\n", counts.Closed)
 			fmt.Fprintf(out, "Blocked:            %d\n", counts.Blocked)
 			fmt.Fprintf(out, "Proposed:           %d\n", counts.Proposed)
 			fmt.Fprintf(out, "Cancelled:          %d\n", counts.Cancelled)
+			fmt.Fprintf(out, "Active workers:     %d\n", activeWork.Count)
+			if len(activeWork.BeadIDs) > 0 {
+				fmt.Fprintf(out, "Active bead IDs:    %s\n", strings.Join(activeWork.BeadIDs, ", "))
+			}
 			fmt.Fprintf(out, "Ready:              %d\n", counts.Ready)
 			fmt.Fprintf(out, "Worker ready:       %d\n", counts.WorkerReady)
 			fmt.Fprintf(out, "Dependency waiting: %d\n", counts.DependencyWaiting)
