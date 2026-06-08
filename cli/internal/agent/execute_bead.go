@@ -787,6 +787,29 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		lockmetrics.SetCapEnforcement(projectRoot, evidenceDir)
 		defer lockmetrics.SetCapEnforcement(projectRoot, "")
 	}
+	gitRepair := defaultPreDispatchGitRepairer(ctx, projectRoot)
+	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
+		res := &ExecuteBeadResult{
+			BeadID:      beadID,
+			WorkerID:    runtime.WorkerID,
+			AttemptID:   attemptID,
+			ExitCode:    1,
+			Error:       preDispatchGitRepairFailedMarker + detail,
+			Reason:      preDispatchGitRepairFailedReason,
+			Outcome:     ExecuteBeadOutcomeTaskFailed,
+			Status:      ExecuteBeadStatusExecutionFailed,
+			ProjectRoot: projectRoot,
+		}
+		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+		return res, nil
+	}
+	if runtime.Output != nil && len(gitRepair.RepairedTypes) > 0 {
+		_, _ = fmt.Fprintf(runtime.Output,
+			"repaired project git config before execute-bead: %s (%s)\n",
+			strings.Join(gitRepair.RepairedTypes, ", "),
+			strings.Join(gitRepair.Commands, "; "),
+		)
+	}
 
 	// Serialize only the parent-repo writes in pre-dispatch (tracker commit
 	// plus the caller-dirt checkpoint) under the main-git lock. Base
