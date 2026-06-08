@@ -13,6 +13,8 @@ import (
 const (
 	StatusExecutionFailed            = "execution_failed"
 	StatusLandConflict               = "land_conflict"
+	StatusLandRetry                  = "land_retry"
+	StatusLandOperatorAttention      = "land_operator_attention"
 	StatusSuccess                    = "success"
 	StatusNoChanges                  = "no_changes"
 	StatusAlreadySatisfied           = "already_satisfied"

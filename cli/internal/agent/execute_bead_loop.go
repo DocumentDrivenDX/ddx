@@ -4132,6 +4132,39 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			result.Failures++
 			result.LastFailureStatus = report.Status
+		} else if report.Status == ExecuteBeadStatusLandRetry {
+			report.OutcomeReason = FailureModeLandRetry
+			report.Disrupted = true
+			report.DisruptionReason = FailureModeLandRetry
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:      "land-coordination",
+				Summary:   "retry-land",
+				Body:      fmt.Sprintf("action=retry-land\ndetail=%s\nresult_rev=%s\nbase_rev=%s", report.Detail, report.ResultRev, report.BaseRev),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: now().UTC(),
+			})
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		} else if report.Status == ExecuteBeadStatusLandOperatorAttention {
+			report.OutcomeReason = FailureModeLandOperatorAttention
+			reason := report.Detail
+			if strings.TrimSpace(reason) == "" {
+				reason = FailureModeLandOperatorAttention
+			}
+			if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkAutoRecoveryFailed, reason, now().UTC()); parkErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "land coordination operator-attention park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+			}
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:      "operator_attention",
+				Summary:   FailureModeLandOperatorAttention,
+				Body:      fmt.Sprintf("action=operator-attention\ndetail=%s\nresult_rev=%s\nbase_rev=%s", report.Detail, report.ResultRev, report.BaseRev),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: now().UTC(),
+			})
+			result.Failures++
+			result.LastFailureStatus = report.Status
 		} else {
 			if isProviderConnectivityFailureReport(report) {
 				report.OutcomeReason = FailureModeProviderConnectivity
@@ -5548,6 +5581,16 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.OutcomeReason = FailureModeNoEvidenceProduced
 		return
 	}
+	if report.Status == ExecuteBeadStatusLandRetry {
+		report.OutcomeReason = FailureModeLandRetry
+		report.Disrupted = true
+		report.DisruptionReason = FailureModeLandRetry
+		return
+	}
+	if report.Status == ExecuteBeadStatusLandOperatorAttention {
+		report.OutcomeReason = FailureModeLandOperatorAttention
+		return
+	}
 	mode := ClassifyFailureMode(report.Status, 1, combined)
 	if mode == "" || mode == FailureModeUnknown {
 		return
@@ -6166,6 +6209,8 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeAgentPowerUnsatisfied,
 		FailureModeBlockedByPassthroughConstraint,
 		FailureModeNoEvidenceProduced,
+		FailureModeLandRetry,
+		FailureModeLandOperatorAttention,
 		FailureModeWorktreeLost,
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
@@ -6178,6 +6223,8 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 	case ExecuteBeadStatusReviewMalfunction,
 		ExecuteBeadStatusDeclinedNeedsDecomposition,
 		ExecuteBeadStatusLandConflictOperatorRequired,
+		ExecuteBeadStatusLandRetry,
+		ExecuteBeadStatusLandOperatorAttention,
 		ExecuteBeadStatusReviewTerminalBlock:
 		return false
 	}
@@ -6227,6 +6274,7 @@ func isTransientOutcomeReason(reason string) bool {
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
 		FailureModeLockContention,
+		FailureModeLandRetry,
 		FailureModeNoViableProvider,
 		FailureModeServerUnavailable,
 		FailureModeWorktreeLost:
