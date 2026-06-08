@@ -236,6 +236,124 @@ func TestExecuteBeadResult_NiflheimEvidence_ReviewDecisionAudit(t *testing.T) {
 	})
 }
 
+func TestExecuteBeadResult_NiflheimEvidence_PreClaimDecisionAudit(t *testing.T) {
+	cases := []struct {
+		name   string
+		reason string
+		detail string
+	}{
+		{
+			name:   "timeout warning family",
+			reason: "timeout",
+			detail: "readiness check timed out after 45s (.ddx/harness-sessions/session-timeout.json)",
+		},
+		{
+			name:   "system_unready warning family",
+			reason: "system_unready",
+			detail: "generated DDx artifact dirt at .ddx/harness-sessions/session-system-unready.json",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, first, second := newExecuteLoopTestStore(t)
+			state := &preClaimWarnRepeatState{}
+			var emitted map[string]any
+			emit := func(_ string, payload map[string]any) {
+				emitted = payload
+			}
+
+			at := time.Unix(10, 0).UTC()
+			threshold := 2
+			assert.False(t, appendPreClaimIntakeWarning(store, emit, state, threshold, first.ID, "worker", tc.reason, tc.detail, at))
+			assert.True(t, appendPreClaimIntakeWarning(store, emit, state, threshold, second.ID, "worker", tc.reason, tc.detail, at.Add(time.Second)))
+
+			require.NotNil(t, emitted)
+			assert.Equal(t, "preclaim_warn_repeated", emitted["reason"])
+			assert.Equal(t, "preclaim_warn_repeated", emitted["failure_class"])
+			assert.Equal(t, "operator_attention", emitted["retry_action"])
+			assert.Equal(t, float64(threshold), numericAny(emitted["escalation_count"]))
+			assert.NotEmpty(t, emitted["fingerprint"])
+			assert.Equal(t, float64(threshold), numericAny(emitted["count"]))
+			assert.Equal(t, tc.detail, emitted["example_detail"])
+
+			distinctBeadIDs, ok := emitted["distinct_bead_ids"].([]string)
+			require.True(t, ok, "distinct_bead_ids must remain a Go string slice before JSON encoding")
+			require.Len(t, distinctBeadIDs, threshold)
+			assert.Equal(t, first.ID, distinctBeadIDs[0])
+			assert.Equal(t, second.ID, distinctBeadIDs[1])
+
+			events, err := store.Events(second.ID)
+			require.NoError(t, err)
+			var durable map[string]any
+			for _, event := range events {
+				if event.Kind != "operator_attention" {
+					continue
+				}
+				require.NoError(t, json.Unmarshal([]byte(event.Body), &durable))
+				break
+			}
+			require.NotNil(t, durable)
+			assert.Equal(t, "preclaim_warn_repeated", durable["reason"])
+			assert.Equal(t, "preclaim_warn_repeated", durable["failure_class"])
+			assert.Equal(t, "operator_attention", durable["retry_action"])
+			assert.Equal(t, float64(threshold), durable["count"])
+			assert.Equal(t, tc.detail, durable["example_detail"])
+
+			report := ExecuteBeadReport{
+				BeadID:              second.ID,
+				AttemptID:           "attempt-" + tc.reason,
+				Status:              ExecuteBeadStatusLandOperatorAttention,
+				Detail:              tc.detail,
+				ResultRev:           "result-" + tc.reason,
+				Harness:             "codex",
+				Provider:            "openai",
+				Model:               "gpt-5",
+				ActualPower:         72,
+				RequestedProfile:    "smart",
+				RoutingIntentSource: "readiness",
+				EstimatedDifficulty: "hard",
+				InferredPowerClass:  "smart",
+				EscalationCount:     threshold,
+				OutcomeReason:       "preclaim_warn_repeated",
+			}
+			trace := executionCycleTraceFor(CandidateResult{Report: report, CycleIndex: 0}, nil, report.Status)
+			report.CycleTrace = []ExecutionCycleTrace{trace}
+
+			raw, err := json.Marshal(ExecuteBeadResult{
+				BeadID:     report.BeadID,
+				AttemptID:  report.AttemptID,
+				Status:     report.Status,
+				ResultRev:  report.ResultRev,
+				CycleTrace: report.CycleTrace,
+			})
+			require.NoError(t, err)
+			var resultJSON map[string]any
+			require.NoError(t, json.Unmarshal(raw, &resultJSON))
+			cycle := firstCycleTrace(t, resultJSON)
+			assert.Equal(t, "preclaim_warn_repeated", cycle["failure_class"])
+			assert.Equal(t, "operator_attention", cycle["retry_action"])
+			assert.Equal(t, float64(threshold), cycle["escalation_count"])
+			assert.Equal(t, "smart", nestedString(t, cycle, "requested_route", "profile"))
+			assert.Equal(t, "readiness", nestedString(t, cycle, "requested_route", "routing_intent_source"))
+			assert.Equal(t, "openai", nestedString(t, cycle, "actual_route", "provider"))
+			assert.Equal(t, "gpt-5", nestedString(t, cycle, "actual_route", "model"))
+
+			event := executeBeadLoopEvent(report, "worker", time.Unix(0, 0))
+			audit := decisionAuditFromEventBody(t, event.Body)
+			assert.Equal(t, "preclaim_warn_repeated", audit["failure_class"])
+			assert.Equal(t, "operator_attention", audit["retry_action"])
+			assert.Equal(t, float64(threshold), audit["escalation_count"])
+			assert.Equal(t, "smart", nestedString(t, audit, "requested_route", "profile"))
+			assert.Equal(t, "readiness", nestedString(t, audit, "requested_route", "routing_intent_source"))
+			assert.Equal(t, "openai", nestedString(t, audit, "actual_route", "provider"))
+			assert.Equal(t, "gpt-5", nestedString(t, audit, "actual_route", "model"))
+			assert.Contains(t, event.Body, "outcome_reason=preclaim_warn_repeated")
+			assert.Contains(t, event.Body, tc.detail)
+		})
+	}
+}
+
 func firstCycleTrace(t *testing.T, result map[string]any) map[string]any {
 	t.Helper()
 	rawTrace, ok := result["cycle_trace"].([]any)
