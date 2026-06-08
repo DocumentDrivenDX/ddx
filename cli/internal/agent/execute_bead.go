@@ -195,6 +195,8 @@ type ExecutionCycleTrace struct {
 	ReviewClassification string                            `json:"review_classification"`
 	LandStatus           string                            `json:"land_status"`
 	ReconcileStatus      string                            `json:"reconcile_status"`
+	DecomposedChildIDs   []string                          `json:"decomposed_child_ids,omitempty"`
+	ExecutionDecision    string                            `json:"execution_decision,omitempty"`
 }
 
 // AttemptDiagnostic captures infrastructure state when an attempt cannot be

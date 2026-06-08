@@ -440,6 +440,12 @@ func SubmitWithPreMergeChecks(
 	return submitted, outcome, landErr
 }
 
+type postAttemptDecompositionDecision struct {
+	ChildIDs          []string
+	ExecutionDecision string
+	BackEdgeDetected  bool
+}
+
 // handlePostAttemptDecomposition runs the orchestrator-level splitter when a
 // no_changes attempt signals orchestrator_action: decompose. It checks the
 // queue-level max_decomposition_depth (not the implementation prompt cap),
@@ -447,7 +453,8 @@ func SubmitWithPreMergeChecks(
 // parks the parent for operator review if the split is lossy, depth-capped, or
 // introduces a parent back-edge. The bead must already be unclaimed before
 // this is called.
-func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) bool {
+func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) postAttemptDecompositionDecision {
+	decision := postAttemptDecompositionDecision{ExecutionDecision: "proposed"}
 	emit := func(kind string, body map[string]any) {
 		if runtime.EventSink == nil {
 			return
@@ -488,29 +495,31 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			CreatedAt: at,
 		})
 		parkOperator("queue-level depth cap exceeded; operator must split")
-		return false
+		return decision
 	}
 
 	decomp, err := runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
 	if err != nil {
 		parkOperator(fmt.Sprintf("decomposition hook error: %s", err.Error()))
-		return false
+		return decision
 	}
 	if decomp == nil {
 		parkOperator("decomposition hook returned no split")
-		return false
+		return decision
 	}
 	lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
 	if lossyOrEmpty {
 		parkOperator("decomposition AC map is incomplete; operator must produce a lossless split")
-		return false
+		return decision
 	}
 
 	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
+	decision.ChildIDs = append([]string(nil), childIDs...)
 	if decompErr != nil {
 		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
-		return false
+		return decision
 	}
+	decision.ExecutionDecision = "execution_ineligible"
 	if runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition: bead %s split into %s\n", candidate.ID, strings.Join(childIDs, ", "))
 	}
@@ -524,10 +533,10 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge check failed: %v\n", err)
 		}
-		return false
+		return decision
 	}
 	if len(backEdgeChildIDs) == 0 {
-		return false
+		return decision
 	}
 	if runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge: bead %s children %s still depend on the parent\n", candidate.ID, strings.Join(backEdgeChildIDs, ", "))
@@ -539,7 +548,9 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	if parkErr := parkParentBackEdgeForOperator(w.Store, candidate.ID, assignee, backEdgeChildIDs, at); parkErr != nil && runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition parent back-edge park error: %v\n", parkErr)
 	}
-	return true
+	decision.ExecutionDecision = "proposed"
+	decision.BackEdgeDetected = true
+	return decision
 }
 
 func detectPostAttemptDecompositionBackEdge(ctx context.Context, store ExecuteBeadLoopStore, parentID string, childIDs []string) ([]string, error) {
@@ -750,6 +761,12 @@ type ExecuteBeadReport struct {
 	// DecompositionRationale is a free-form explanation accompanying
 	// DecompositionRecommendation. Optional.
 	DecompositionRationale string `json:"decomposition_rationale,omitempty"`
+	// DecomposedChildIDs carries child bead IDs created by a decomposition
+	// outcome so result/event audit can explain why the parent is not retried.
+	DecomposedChildIDs []string `json:"decomposed_child_ids,omitempty"`
+	// ExecutionDecision records the queue-level disposition selected after an
+	// attempt, such as execution_ineligible, proposed, or dependency_waiting.
+	ExecutionDecision string `json:"execution_decision,omitempty"`
 	// Disrupted marks a failed attempt as worker-disrupted rather than
 	// model-gave-up: the model was prevented from making progress by an
 	// external cause (context cancellation, executor SIGKILL/SIGTERM,
@@ -3959,11 +3976,23 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
 			parsed := ParseNoChangesRationale(report.NoChangesRationale)
 			if parsed.OrchestratorAction == "decompose" {
-				if backEdgeDetected := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC()); backEdgeDetected {
+				decompDecision := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
+				if decompDecision.BackEdgeDetected {
 					sawParentBackEdge = true
 				}
+				report.OutcomeReason = "decomposed"
+				report.DecomposedChildIDs = append([]string(nil), decompDecision.ChildIDs...)
+				report.ExecutionDecision = decompDecision.ExecutionDecision
+				attachDecisionAuditTraceIfMissing(&report)
 				result.Failures++
 				result.LastFailureStatus = report.Status
+				result.Results = append(result.Results, report)
+				if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+				}
+				if finalizeDurableAuditOrStop(candidate.ID, report) {
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
 				return executeBeadIterationOutcome{Continue: true}, nil
 			}
 		}
@@ -4253,14 +4282,27 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 						if parsed.OrchestratorAction == "decompose" {
 							report.OutcomeReason = "decomposed"
 							if runtime.PostAttemptDecompositionHook != nil {
-								if backEdgeDetected := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC()); backEdgeDetected {
+								decompDecision := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
+								if decompDecision.BackEdgeDetected {
 									sawParentBackEdge = true
 								}
+								report.DecomposedChildIDs = append([]string(nil), decompDecision.ChildIDs...)
+								report.ExecutionDecision = decompDecision.ExecutionDecision
 							} else if parkErr := markExecutionIneligible(w.Store, candidate.ID); parkErr != nil && runtime.Log != nil {
 								_, _ = fmt.Fprintf(runtime.Log, "mixed_commit decomposition park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+							} else {
+								report.ExecutionDecision = "execution_ineligible"
 							}
+							attachDecisionAuditTraceIfMissing(&report)
 							result.Failures++
 							result.LastFailureStatus = report.Status
+							result.Results = append(result.Results, report)
+							if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil && runtime.Log != nil {
+								_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+							}
+							if finalizeDurableAuditOrStop(candidate.ID, report) {
+								return executeBeadIterationOutcome{Stop: true}, nil
+							}
 							return executeBeadIterationOutcome{Continue: true}, nil
 						}
 					}

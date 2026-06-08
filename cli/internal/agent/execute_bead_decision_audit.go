@@ -17,6 +17,8 @@ type executionDecisionAudit struct {
 	ReviewClassification string                            `json:"review_classification"`
 	LandStatus           string                            `json:"land_status"`
 	ReconcileStatus      string                            `json:"reconcile_status"`
+	DecomposedChildIDs   []string                          `json:"decomposed_child_ids,omitempty"`
+	ExecutionDecision    string                            `json:"execution_decision,omitempty"`
 }
 
 func executionDecisionAuditForReport(report ExecuteBeadReport, finalDecision string, reviewPresent bool, reviewVerdict string) executionDecisionAudit {
@@ -37,6 +39,8 @@ func executionDecisionAuditForReport(report ExecuteBeadReport, finalDecision str
 		ReviewClassification: reviewClassificationForAudit(report, reviewStatus),
 		LandStatus:           landStatusForAudit(report, finalDecision),
 		ReconcileStatus:      reconcileStatusForAudit(report),
+		DecomposedChildIDs:   append([]string(nil), report.DecomposedChildIDs...),
+		ExecutionDecision:    executionDecisionForAudit(report, finalDecision),
 	}
 }
 
@@ -54,6 +58,8 @@ func applyDecisionAuditToTrace(entry *ExecutionCycleTrace, audit executionDecisi
 	entry.ReviewClassification = audit.ReviewClassification
 	entry.LandStatus = audit.LandStatus
 	entry.ReconcileStatus = audit.ReconcileStatus
+	entry.DecomposedChildIDs = append([]string(nil), audit.DecomposedChildIDs...)
+	entry.ExecutionDecision = audit.ExecutionDecision
 }
 
 func requestedRouteFactsForAudit(report ExecuteBeadReport) ExecutionCycleRequestedRouteFacts {
@@ -91,6 +97,9 @@ func failureClassForAudit(report ExecuteBeadReport, finalDecision string) string
 }
 
 func retryActionForAudit(report ExecuteBeadReport, finalDecision string) string {
+	if decomposedParentAudit(report) {
+		return "operator_attention"
+	}
 	status := firstNonEmpty(strings.TrimSpace(finalDecision), report.Status)
 	if strings.Contains(strings.ToLower(report.Detail), "land coordination reconciled") {
 		return "reconcile"
@@ -119,6 +128,33 @@ func retryActionForAudit(report ExecuteBeadReport, finalDecision string) string 
 			return "unknown"
 		}
 		return "retry"
+	}
+}
+
+func executionDecisionForAudit(report ExecuteBeadReport, finalDecision string) string {
+	if decision := strings.TrimSpace(report.ExecutionDecision); decision != "" {
+		return decision
+	}
+	if decomposedParentAudit(report) {
+		return "execution_ineligible"
+	}
+	status := firstNonEmpty(strings.TrimSpace(finalDecision), report.Status)
+	switch status {
+	case ExecuteBeadStatusDeclinedNeedsDecomposition, ExecuteBeadStatusLandOperatorAttention,
+		ExecuteBeadStatusLandConflictOperatorRequired, ExecuteBeadStatusReviewBlock,
+		ExecuteBeadStatusReviewRequestClarification, ExecuteBeadStatusPreservedNeedsReview:
+		return "proposed"
+	default:
+		return ""
+	}
+}
+
+func decomposedParentAudit(report ExecuteBeadReport) bool {
+	switch strings.TrimSpace(report.OutcomeReason) {
+	case "decomposed", "too_large_decomposed":
+		return true
+	default:
+		return strings.TrimSpace(report.ExecutionDecision) == "execution_ineligible" && len(report.DecomposedChildIDs) > 0
 	}
 }
 
@@ -209,6 +245,15 @@ func decisionAuditEventBodyLine(report ExecuteBeadReport) string {
 		return ""
 	}
 	return "decision_audit=" + string(auditJSON)
+}
+
+func attachDecisionAuditTraceIfMissing(report *ExecuteBeadReport) {
+	if report == nil || len(report.CycleTrace) > 0 {
+		return
+	}
+	report.CycleTrace = []ExecutionCycleTrace{
+		executionCycleTraceFor(CandidateResult{Report: *report, CycleIndex: report.CycleIndex}, nil, report.Status),
+	}
 }
 
 func retryActionForSkipAudit(reason string) string {
