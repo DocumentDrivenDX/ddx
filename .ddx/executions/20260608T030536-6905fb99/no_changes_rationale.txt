@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/...` is red in this workspace. The package run fails in multiple existing execute-bead tests with `Expected value not to be nil`, plus a panic in `TestWorkerIdle_AllInfraCooledDown_EntersPausedInfra`, and the output includes harness-level `agent: idle timeout`, `tool call timeout`, and `effort "turbo" is not a known reasoning level for harness "codex"`. This needs a clean rerun in a stable test environment before staging or committing.
