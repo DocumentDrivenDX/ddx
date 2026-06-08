@@ -21,7 +21,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
@@ -1565,7 +1564,7 @@ func cleanupAttemptWorktree(gitOps GitOps, workDir, wtPath, outcome string, pres
 // single critical section so concurrent workers do not race on the parent's
 // HEAD ref.
 func commitTrackerLocked(projectRoot string) error {
-	trackerFile := ddxroot.JoinProject(projectRoot, "beads.jsonl")
+	trackerFile := filepath.Join(beadStoreRoot(projectRoot), "beads.jsonl")
 	info, err := os.Stat(trackerFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1637,7 +1636,7 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 }
 
 func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, *bead.Bead, error) {
-	b, refs, err := loadBeadContext(wtPath, beadID)
+	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1697,13 +1696,27 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 	return artifacts, b, nil
 }
 
-func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
-	store := bead.NewStore(ddxroot.JoinProject(wtPath))
-	b, err := store.Get(context.Background(), beadID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
+func loadBeadContext(projectRoot, wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
+	roots := []string{wtPath}
+	if projectRoot != "" && projectRoot != wtPath {
+		roots = append(roots, projectRoot)
 	}
-	return b, ResolveGoverningRefs(wtPath, b), nil
+	var lastErr error
+	for _, root := range roots {
+		if strings.TrimSpace(root) == "" {
+			continue
+		}
+		store := bead.NewStore(beadStoreRoot(root))
+		b, err := store.Get(context.Background(), beadID)
+		if err == nil {
+			return b, ResolveGoverningRefs(root, b), nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("bead: not found: %s", beadID)
+	}
+	return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, lastErr)
 }
 
 func noChangesMinPowerOverride(b *bead.Bead, currentMinPower int) int {
@@ -2175,7 +2188,7 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 		return 0
 	}
 
-	store := bead.NewStore(ddxroot.JoinProject(workDir))
+	store := bead.NewStore(beadStoreRoot(workDir))
 	depth := beadDecomposedChildDepth(b)
 	seen := map[string]struct{}{}
 	current := b

@@ -180,7 +180,8 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 
 // resolveInstallDirs returns the install root directory and agent/claude skill
 // directories for either a global or project-local install. For project installs,
-// ddxroot.Path() handles the in-tree vs convention distinction automatically.
+// the existing in-tree .ddx directory wins when present, otherwise we fall back
+// to the convention root.
 func (f *CommandFactory) resolveInstallDirs(global bool) (installRoot, agentSkillsDir, claudeSkillsDir string, err error) {
 	if global {
 		installRoot = ddxroot.GlobalDir()
@@ -192,7 +193,7 @@ func (f *CommandFactory) resolveInstallDirs(global bool) (installRoot, agentSkil
 		claudeSkillsDir = filepath.Join(home, ".claude", "skills")
 		return
 	}
-	installRoot = ddxroot.Path(context.Background(), f.WorkingDir)
+	installRoot = resolveBeadStoreRoot(f.WorkingDir)
 	agentSkillsDir = filepath.Join(f.WorkingDir, ".agents", "skills")
 	claudeSkillsDir = filepath.Join(f.WorkingDir, ".claude", "skills")
 	return
@@ -526,7 +527,7 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, global
 	if global {
 		pluginDir = filepath.Join(ddxroot.GlobalDir(), "plugins", name)
 	} else {
-		ddxRootDir := ddxroot.Path(context.Background(), f.WorkingDir)
+		ddxRootDir := resolveBeadStoreRoot(f.WorkingDir)
 		pluginDir = filepath.Join(ddxRootDir, "plugins", name)
 	}
 

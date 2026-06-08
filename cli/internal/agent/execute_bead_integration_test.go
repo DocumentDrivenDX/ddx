@@ -165,18 +165,22 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")
 	writeDirectiveFile(t, dirFile, []string{
-		"sleep-ms 250",
+		"sleep-ms 1000",
 		"no-op",
 	})
 
-	store := makeLoopStore(t, ddxDir)
-	worker := &ExecuteBeadWorker{
-		Store:    store,
-		Executor: scriptHarnessExecutor(t, projectRoot, dirFile),
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	store := makeLoopStore(t, ddxDir)
+	baseExecutor := scriptHarnessExecutor(t, projectRoot, dirFile)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			time.AfterFunc(50*time.Millisecond, cancel)
+			return baseExecutor(ctx, beadID)
+		}),
+	}
 
 	done := make(chan struct {
 		result *ExecuteBeadLoopResult
@@ -198,8 +202,6 @@ func TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracke
 		lease, found, err := leaseStore.ClaimLease(beadID)
 		return err == nil && found && lease.Owner == "integration-worker"
 	}, 5*time.Second, 10*time.Millisecond, "worker did not acquire the claim lease")
-
-	cancel()
 
 	var out struct {
 		result *ExecuteBeadLoopResult

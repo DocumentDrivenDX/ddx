@@ -207,7 +207,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}
 	}
 
-	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {
 		workerStore = newIgnoreCooldownStore(store)
@@ -267,8 +267,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if !spec.NoReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
-			BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
+			BeadStore:   bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			BeadEvents:  bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 			Harness:     spec.ReviewHarness,
 			Model:       spec.ReviewModel,
 		}
@@ -346,7 +346,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
-			Events:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
+			Events:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 			Actor:       resolveClaimAssignee(),
 			Source:      "ddx work",
 		})
@@ -434,7 +434,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, executeLoopAttemptRuntime(
 			spec,
 			cmd.OutOrStdout(),
-			bead.NewStore(ddxroot.JoinProject(projectRoot)),
+			bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 			f.AgentRunnerOverride,
 			resourceChecker,
 		), gitOps)
@@ -456,7 +456,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-				bead.NewStore(ddxroot.JoinProject(projectRoot)),
+				bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 				resolveClaimAssignee(), "ddx work",
 				nil,
 			)

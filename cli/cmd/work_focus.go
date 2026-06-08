@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -166,9 +164,18 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 	// capacity signal rather than the raw lifecycle count.
 	workerRec := buildWorkerRecommendation(readyCount, activeWork.Count)
 
-	// Unknowns: worker process liveness is not verifiable from the bead store.
+	// Unknowns: worker process liveness is not verifiable from the bead store
+	// alone; only add the hazard when we have in-progress beads but the only
+	// active evidence is a claim heartbeat.
 	var unknowns []string
-	if inProgressCount > 0 && activeWork.Count == 0 {
+	hasNonClaimActive := false
+	for _, rec := range activeWork.Records {
+		if rec.Source != "claim" {
+			hasNonClaimActive = true
+			break
+		}
+	}
+	if inProgressCount > 0 && !hasNonClaimActive {
 		unknowns = append(unknowns, fmt.Sprintf(
 			"worker process liveness: %d bead(s) are in_progress but no active worker snapshot is fresh; check `ddx work status` for live processes",
 			inProgressCount,
@@ -243,7 +250,7 @@ only as a depth summary.
 func (f *CommandFactory) runWorkFocus(cmd *cobra.Command, _ []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	ddxDir := ddxroot.Path(context.Background(), f.WorkingDir)
+	ddxDir := resolveBeadStoreRoot(f.WorkingDir)
 	store := bead.NewStore(ddxDir)
 
 	report, err := buildWorkFocusReport(store, f.WorkingDir)

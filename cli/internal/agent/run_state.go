@@ -57,19 +57,49 @@ type RunState struct {
 // runStatePath returns the absolute path of the run-state file for the
 // project rooted at projectRoot.
 func runStatePath(projectRoot string) string {
-	return ddxroot.JoinProject(projectRoot, RunStateFileName)
+	return filepath.Join(beadStoreRoot(projectRoot), RunStateFileName)
 }
 
 func runStateDirPath(projectRoot string) string {
-	return ddxroot.JoinProject(projectRoot, RunStateDirName)
+	return filepath.Join(beadStoreRoot(projectRoot), RunStateDirName)
 }
 
 func existingRunStatePath(projectRoot string) (string, bool) {
-	return ddxroot.ExistingJoinProject(context.Background(), projectRoot, RunStateFileName)
+	root, ok := existingBeadStoreRoot(projectRoot)
+	if !ok {
+		return "", false
+	}
+	path := filepath.Join(root, RunStateFileName)
+	if _, err := os.Stat(path); err == nil {
+		return path, true
+	}
+	return "", false
 }
 
 func existingRunStateDirPath(projectRoot string) (string, bool) {
-	return ddxroot.ExistingJoinProject(context.Background(), projectRoot, RunStateDirName)
+	root, ok := existingBeadStoreRoot(projectRoot)
+	if !ok {
+		return "", false
+	}
+	path := filepath.Join(root, RunStateDirName)
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		return path, true
+	}
+	return "", false
+}
+
+func existingBeadStoreRoot(projectRoot string) (string, bool) {
+	if projectRoot == "" {
+		return "", false
+	}
+	inTree := filepath.Join(projectRoot, ddxroot.DirName)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return inTree, true
+	}
+	if root, ok := ddxroot.ExistingPath(context.Background(), projectRoot); ok {
+		return root, true
+	}
+	return "", false
 }
 
 func runStateAttemptPath(projectRoot, attemptID string) (string, error) {
@@ -121,7 +151,7 @@ func WriteRunState(projectRoot string, state RunState) error {
 	if err != nil {
 		return err
 	}
-	ddxDir := ddxroot.JoinProject(projectRoot)
+	ddxDir := beadStoreRoot(projectRoot)
 	attemptDir := filepath.Dir(attemptPath)
 	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		return fmt.Errorf("run-state: mkdir .ddx: %w", err)

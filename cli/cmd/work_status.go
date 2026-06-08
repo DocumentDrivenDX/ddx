@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -12,7 +11,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
@@ -101,7 +99,7 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 			now,
 		),
 	}
-	if active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(ddxroot.Path(context.Background(), projectRoot)), now); err == nil {
+	if active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now); err == nil {
 		report.ActiveWork = active
 	} else {
 		return fmt.Errorf("work status: active work query: %w", err)

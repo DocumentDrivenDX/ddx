@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -84,9 +82,9 @@ func (f *CommandFactory) runWorkPlan(cmd *cobra.Command, _ []string) error {
 	// Resolve the project root (same logic work.go uses).
 	projectRoot := f.WorkingDir
 
-	// Open the bead store directly — same path ReadyExecution uses.
-	ddxDir := ddxroot.Path(context.Background(), projectRoot)
-	store := bead.NewStore(ddxDir)
+	// Open the bead store directly, preferring an existing in-tree store when
+	// the fixture seeded one without a config.yaml.
+	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
 
 	filters := agent.PickerFilters{
 		LabelFilter:  labelFilter,

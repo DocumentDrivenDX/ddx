@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,10 +13,12 @@ import (
 // worktree with `.ddx/...` pathspecs. In convention mode, callers switch to
 // the XDG state repository and strip the `.ddx/` prefix.
 func ddxStateGitScope(projectRoot string, projectPathspecs ...string) (string, []string) {
-	stateRoot := ddxroot.JoinProject(projectRoot)
-	if filepath.Clean(stateRoot) == filepath.Clean(ddxroot.InTree(projectRoot)) {
+	inTree := ddxroot.InTree(projectRoot)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
 		return projectRoot, append([]string(nil), projectPathspecs...)
 	}
+
+	stateRoot := ddxroot.JoinProject(projectRoot)
 
 	pathspecs := make([]string, 0, len(projectPathspecs))
 	for _, pathspec := range projectPathspecs {

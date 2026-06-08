@@ -20,7 +20,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/spf13/cobra"
@@ -164,7 +163,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
 
 	// Pre-flight: look up the bead.
 	target, err := store.Get(context.Background(), beadID)
@@ -250,8 +249,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if !noReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(ddxroot.JoinProject(projectRoot)),
-			BeadEvents:  bead.NewStore(ddxroot.JoinProject(projectRoot)),
+			BeadStore:   bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			BeadEvents:  bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 			Harness:     reviewHarness,
 			Model:       reviewModel,
 		}
@@ -355,7 +354,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
 					FromRev:         fromRev,
 					Output:          cmd.OutOrStdout(),
-					BeadEvents:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
+					BeadEvents:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 					ResourceChecker: resourceChecker,
 				}, gitOps)
 				// Safety net: commit any execution-evidence bundle that
@@ -415,7 +414,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 						ctx, projectRoot, targetBead, res,
 						func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-						bead.NewStore(ddxroot.JoinProject(projectRoot)),
+						bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 						resolveClaimAssignee(), "ddx try",
 						nil,
 					)
@@ -485,7 +484,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
-			Events:      bead.NewStore(ddxroot.JoinProject(projectRoot)),
+			Events:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
 			Actor:       resolveClaimAssignee(),
 			Source:      "ddx try",
 		})
