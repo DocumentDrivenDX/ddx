@@ -1377,6 +1377,10 @@ func isTransientGitContention(err error) bool {
 }
 
 func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
+	return w.runIteration(ctx, rcfg, runtime)
+}
+
+func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
 	if w.Store == nil {
 		return nil, fmt.Errorf("execute-bead loop: store is required")
 	}
