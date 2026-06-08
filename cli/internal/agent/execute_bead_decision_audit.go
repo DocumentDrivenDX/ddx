@@ -6,16 +6,17 @@ import (
 )
 
 type executionDecisionAudit struct {
-	FailureClass     string                            `json:"failure_class"`
-	RetryAction      string                            `json:"retry_action"`
-	EscalationCount  int                               `json:"escalation_count"`
-	RequestedRoute   ExecutionCycleRequestedRouteFacts `json:"requested_route"`
-	ActualRoute      ExecutionCycleRouteFacts          `json:"actual_route"`
-	ReviewStatus     string                            `json:"review_status"`
-	ReviewVerdict    string                            `json:"review_verdict,omitempty"`
-	ReviewSkipReason string                            `json:"review_skip_reason"`
-	LandStatus       string                            `json:"land_status"`
-	ReconcileStatus  string                            `json:"reconcile_status"`
+	FailureClass         string                            `json:"failure_class"`
+	RetryAction          string                            `json:"retry_action"`
+	EscalationCount      int                               `json:"escalation_count"`
+	RequestedRoute       ExecutionCycleRequestedRouteFacts `json:"requested_route"`
+	ActualRoute          ExecutionCycleRouteFacts          `json:"actual_route"`
+	ReviewStatus         string                            `json:"review_status"`
+	ReviewVerdict        string                            `json:"review_verdict,omitempty"`
+	ReviewSkipReason     string                            `json:"review_skip_reason"`
+	ReviewClassification string                            `json:"review_classification"`
+	LandStatus           string                            `json:"land_status"`
+	ReconcileStatus      string                            `json:"reconcile_status"`
 }
 
 func executionDecisionAuditForReport(report ExecuteBeadReport, finalDecision string, reviewPresent bool, reviewVerdict string) executionDecisionAudit {
@@ -25,16 +26,17 @@ func executionDecisionAuditForReport(report ExecuteBeadReport, finalDecision str
 	reviewVerdict = strings.TrimSpace(firstNonEmpty(reviewVerdict, report.ReviewVerdict, report.FirstReviewVerdictFromTrace()))
 	reviewStatus, reviewSkipReason := reviewAuditStatus(report, reviewPresent, reviewVerdict)
 	return executionDecisionAudit{
-		FailureClass:     failureClassForAudit(report, finalDecision),
-		RetryAction:      retryActionForAudit(report, finalDecision),
-		EscalationCount:  report.EscalationCount,
-		RequestedRoute:   requestedRouteFactsForAudit(report),
-		ActualRoute:      actualRouteFactsForAudit(report),
-		ReviewStatus:     reviewStatus,
-		ReviewVerdict:    reviewVerdict,
-		ReviewSkipReason: reviewSkipReason,
-		LandStatus:       landStatusForAudit(report, finalDecision),
-		ReconcileStatus:  reconcileStatusForAudit(report),
+		FailureClass:         failureClassForAudit(report, finalDecision),
+		RetryAction:          retryActionForAudit(report, finalDecision),
+		EscalationCount:      report.EscalationCount,
+		RequestedRoute:       requestedRouteFactsForAudit(report),
+		ActualRoute:          actualRouteFactsForAudit(report),
+		ReviewStatus:         reviewStatus,
+		ReviewVerdict:        reviewVerdict,
+		ReviewSkipReason:     reviewSkipReason,
+		ReviewClassification: reviewClassificationForAudit(report, reviewStatus),
+		LandStatus:           landStatusForAudit(report, finalDecision),
+		ReconcileStatus:      reconcileStatusForAudit(report),
 	}
 }
 
@@ -49,6 +51,7 @@ func applyDecisionAuditToTrace(entry *ExecutionCycleTrace, audit executionDecisi
 	entry.ActualRoute = audit.ActualRoute
 	entry.ReviewStatus = audit.ReviewStatus
 	entry.ReviewSkipReason = audit.ReviewSkipReason
+	entry.ReviewClassification = audit.ReviewClassification
 	entry.LandStatus = audit.LandStatus
 	entry.ReconcileStatus = audit.ReconcileStatus
 }
@@ -120,6 +123,9 @@ func retryActionForAudit(report ExecuteBeadReport, finalDecision string) string 
 }
 
 func reviewAuditStatus(report ExecuteBeadReport, reviewPresent bool, reviewVerdict string) (string, string) {
+	if strings.TrimSpace(report.ReviewSkipReason) != "" {
+		return "skipped", strings.TrimSpace(report.ReviewSkipReason)
+	}
 	if reviewPresent || len(report.ReviewVerdictsFromTrace()) > 0 {
 		if strings.TrimSpace(reviewVerdict) == "" {
 			return "malformed", ""
@@ -133,6 +139,20 @@ func reviewAuditStatus(report ExecuteBeadReport, reviewPresent bool, reviewVerdi
 		return "malformed", ""
 	}
 	return "skipped", "review_not_configured"
+}
+
+func reviewClassificationForAudit(report ExecuteBeadReport, reviewStatus string) string {
+	if class := strings.TrimSpace(report.FirstReviewClassificationFromTrace()); class != "" {
+		return class
+	}
+	switch reviewStatus {
+	case "malformed":
+		return ReviewFindingClassMalfunction
+	case "skipped":
+		return "review_skipped"
+	default:
+		return "review_completed"
+	}
 }
 
 func landStatusForAudit(report ExecuteBeadReport, finalDecision string) string {
@@ -223,6 +243,15 @@ func (r ExecuteBeadReport) FirstReviewVerdictFromTrace() string {
 	for _, trace := range r.CycleTrace {
 		if strings.TrimSpace(trace.ReviewResult.Verdict) != "" {
 			return strings.TrimSpace(trace.ReviewResult.Verdict)
+		}
+	}
+	return ""
+}
+
+func (r ExecuteBeadReport) FirstReviewClassificationFromTrace() string {
+	for _, trace := range r.CycleTrace {
+		if strings.TrimSpace(trace.ReviewResult.Classification) != "" {
+			return strings.TrimSpace(trace.ReviewResult.Classification)
 		}
 	}
 	return ""

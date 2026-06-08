@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestExecuteBeadResult_NiflheimEvidence_CycleTraceCarriesDecisionAudit(t *testing.T) {
+func TestExecuteBeadResult_NiflheimEvidence_ReviewDecisionAudit(t *testing.T) {
 	t.Run("empty review result serializes audit in result JSON and execute event", func(t *testing.T) {
 		report := ExecuteBeadReport{
 			BeadID:              "ddx-empty-review",
@@ -55,6 +55,7 @@ func TestExecuteBeadResult_NiflheimEvidence_CycleTraceCarriesDecisionAudit(t *te
 		assert.Equal(t, "retry", cycle["retry_action"])
 		assert.Equal(t, float64(2), cycle["escalation_count"])
 		assert.Equal(t, "malformed", cycle["review_status"])
+		assert.Equal(t, ReviewFindingClassMalfunction, cycle["review_classification"])
 		assert.Equal(t, "not_landed", cycle["land_status"])
 		assert.Equal(t, "not_applicable", cycle["reconcile_status"])
 		assert.Equal(t, "smart", nestedString(t, cycle, "requested_route", "profile"))
@@ -64,7 +65,85 @@ func TestExecuteBeadResult_NiflheimEvidence_CycleTraceCarriesDecisionAudit(t *te
 		assert.Equal(t, ExecuteBeadStatusReviewMalfunction, eventAudit["failure_class"])
 		assert.Equal(t, "retry", eventAudit["retry_action"])
 		assert.Equal(t, "malformed", eventAudit["review_status"])
+		assert.Equal(t, ReviewFindingClassMalfunction, eventAudit["review_classification"])
 		assert.Equal(t, "smart", nestedString(t, eventAudit, "requested_route", "requested_power_class"))
+		assert.Equal(t, "openai", nestedString(t, eventAudit, "actual_route", "provider"))
+	})
+
+	t.Run("explicit review skip serializes durable reason in result JSON and execute event", func(t *testing.T) {
+		store := bead.NewStore(t.TempDir())
+		require.NoError(t, store.Init(t.Context()))
+		skipped := &bead.Bead{
+			ID:     "ddx-review-skip",
+			Title:  "Review skip",
+			Labels: []string{"review:skip", "review:skip-reason:test-fixture"},
+		}
+		require.NoError(t, store.Create(t.Context(), skipped))
+		reviewOut := RunPostMergeReview(t.Context(), PostMergeReviewInput{
+			Bead: *skipped,
+			Report: ExecuteBeadReport{
+				BeadID:           "ddx-review-skip",
+				AttemptID:        "attempt-review-skip",
+				Harness:          "codex",
+				Provider:         "openai",
+				Model:            "gpt-5",
+				ActualPower:      70,
+				Status:           ExecuteBeadStatusSuccess,
+				ResultRev:        "feedface",
+				RequestedProfile: "standard",
+				PowerClass:       "standard",
+				EscalationCount:  1,
+			},
+			Store:    store,
+			Assignee: "worker",
+			Now:      time.Now,
+		})
+		require.True(t, reviewOut.Approved)
+		report := reviewOut.Report
+		require.Equal(t, ExecuteBeadReport{
+			BeadID:           "ddx-review-skip",
+			AttemptID:        "attempt-review-skip",
+			Harness:          "codex",
+			Provider:         "openai",
+			Model:            "gpt-5",
+			ActualPower:      70,
+			Status:           ExecuteBeadStatusSuccess,
+			ResultRev:        "feedface",
+			RequestedProfile: "standard",
+			PowerClass:       "standard",
+			EscalationCount:  1,
+			ReviewSkipReason: "review:skip-reason:test-fixture",
+		}, report)
+		trace := executionCycleTraceFor(CandidateResult{Report: report, CycleIndex: 0}, nil, report.Status)
+		report.CycleTrace = []ExecutionCycleTrace{trace}
+
+		raw, err := json.Marshal(ExecuteBeadResult{
+			BeadID:     report.BeadID,
+			AttemptID:  report.AttemptID,
+			Status:     report.Status,
+			ResultRev:  report.ResultRev,
+			CycleTrace: report.CycleTrace,
+		})
+		require.NoError(t, err)
+		var resultJSON map[string]any
+		require.NoError(t, json.Unmarshal(raw, &resultJSON))
+		cycle := firstCycleTrace(t, resultJSON)
+		assert.Equal(t, "none", cycle["failure_class"])
+		assert.Equal(t, "close", cycle["retry_action"])
+		assert.Equal(t, float64(1), cycle["escalation_count"])
+		assert.Equal(t, "skipped", cycle["review_status"])
+		assert.Equal(t, "review:skip-reason:test-fixture", cycle["review_skip_reason"])
+		assert.Equal(t, "review_skipped", cycle["review_classification"])
+		assert.Equal(t, "standard", nestedString(t, cycle, "requested_route", "profile"))
+		assert.Equal(t, "gpt-5", nestedString(t, cycle, "actual_route", "model"))
+
+		eventAudit := decisionAuditFromEventBody(t, executeBeadLoopEvent(report, "worker", time.Unix(0, 0)).Body)
+		assert.Equal(t, "none", eventAudit["failure_class"])
+		assert.Equal(t, "close", eventAudit["retry_action"])
+		assert.Equal(t, "skipped", eventAudit["review_status"])
+		assert.Equal(t, "review:skip-reason:test-fixture", eventAudit["review_skip_reason"])
+		assert.Equal(t, "review_skipped", eventAudit["review_classification"])
+		assert.Equal(t, "standard", nestedString(t, eventAudit, "requested_route", "requested_power_class"))
 		assert.Equal(t, "openai", nestedString(t, eventAudit, "actual_route", "provider"))
 	})
 

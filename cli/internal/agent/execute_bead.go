@@ -177,24 +177,25 @@ type ExecutionCycleReviewResult struct {
 // ExecutionCycleTrace records one implementation or repair cycle and its
 // durable review/final-decision metadata.
 type ExecutionCycleTrace struct {
-	CycleIndex       int                               `json:"cycle_index"`
-	AttemptID        string                            `json:"attempt_id,omitempty"`
-	ResultRev        string                            `json:"result_rev,omitempty"`
-	ImplementerRoute ExecutionCycleRouteFacts          `json:"implementer_route"`
-	RequestedRoute   ExecutionCycleRequestedRouteFacts `json:"requested_route"`
-	ActualRoute      ExecutionCycleRouteFacts          `json:"actual_route"`
-	ReviewGroupID    string                            `json:"review_group_id,omitempty"`
-	ReviewerIndices  []int                             `json:"reviewer_indices,omitempty"`
-	ReviewVerdicts   []string                          `json:"review_verdicts,omitempty"`
-	ReviewResult     ExecutionCycleReviewResult        `json:"review_result,omitempty"`
-	FinalDecision    string                            `json:"final_decision,omitempty"`
-	FailureClass     string                            `json:"failure_class"`
-	RetryAction      string                            `json:"retry_action"`
-	EscalationCount  int                               `json:"escalation_count"`
-	ReviewStatus     string                            `json:"review_status"`
-	ReviewSkipReason string                            `json:"review_skip_reason"`
-	LandStatus       string                            `json:"land_status"`
-	ReconcileStatus  string                            `json:"reconcile_status"`
+	CycleIndex           int                               `json:"cycle_index"`
+	AttemptID            string                            `json:"attempt_id,omitempty"`
+	ResultRev            string                            `json:"result_rev,omitempty"`
+	ImplementerRoute     ExecutionCycleRouteFacts          `json:"implementer_route"`
+	RequestedRoute       ExecutionCycleRequestedRouteFacts `json:"requested_route"`
+	ActualRoute          ExecutionCycleRouteFacts          `json:"actual_route"`
+	ReviewGroupID        string                            `json:"review_group_id,omitempty"`
+	ReviewerIndices      []int                             `json:"reviewer_indices,omitempty"`
+	ReviewVerdicts       []string                          `json:"review_verdicts,omitempty"`
+	ReviewResult         ExecutionCycleReviewResult        `json:"review_result,omitempty"`
+	FinalDecision        string                            `json:"final_decision,omitempty"`
+	FailureClass         string                            `json:"failure_class"`
+	RetryAction          string                            `json:"retry_action"`
+	EscalationCount      int                               `json:"escalation_count"`
+	ReviewStatus         string                            `json:"review_status"`
+	ReviewSkipReason     string                            `json:"review_skip_reason"`
+	ReviewClassification string                            `json:"review_classification"`
+	LandStatus           string                            `json:"land_status"`
+	ReconcileStatus      string                            `json:"reconcile_status"`
 }
 
 // AttemptDiagnostic captures infrastructure state when an attempt cannot be
