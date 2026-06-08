@@ -14,6 +14,7 @@ import (
 const (
 	doctorFindingKindOversizedField       = "oversized_field"
 	doctorFindingKindParentAncestorInDeps = "parent_ancestor_in_deps"
+	doctorFindingKindDanglingDep          = "dangling_dep"
 	doctorFindingKindUnparseableLine      = "unparseable_line"
 )
 
@@ -102,6 +103,20 @@ func BeadDoctor(path string) (DoctorReport, error) {
 		byID[row.bead.ID] = row.bead
 	}
 
+	// knownIDs is the set of all bead IDs that a dependency may legitimately
+	// reference: the active file plus the archive sibling (closed beads migrate
+	// there but stay valid dependency targets). A dependency whose target is in
+	// neither is dangling — it can never be satisfied, so it blocks readiness
+	// forever. Archive presence is best-effort; an absent archive just means
+	// every target is checked against the active file.
+	knownIDs := make(map[string]struct{}, len(byID))
+	for id := range byID {
+		knownIDs[id] = struct{}{}
+	}
+	for id := range loadArchiveBeadIDs(path) {
+		knownIDs[id] = struct{}{}
+	}
+
 	for _, row := range rows {
 		if row.parseErr != nil {
 			report.Findings = append(report.Findings, DoctorFinding{
@@ -118,6 +133,7 @@ func BeadDoctor(path string) (DoctorReport, error) {
 		}
 		report.Findings = append(report.Findings, oversizedFieldFindings(row.bead)...)
 		report.Findings = append(report.Findings, parentAncestorDepFindings(row.bead, byID)...)
+		report.Findings = append(report.Findings, danglingDepFindings(row.bead, knownIDs)...)
 	}
 
 	sortDoctorFindings(report.Findings)
@@ -212,6 +228,60 @@ func parentAncestorDepFindings(b *Bead, byID map[string]*Bead) []DoctorFinding {
 	return findings
 }
 
+// danglingDepFindings flags dependency edges whose target bead exists in
+// neither the active file nor the archive. Such an edge can never be satisfied
+// (its target will never reach status=closed because it does not exist), so the
+// referring bead is blocked from readiness permanently. These accumulate when a
+// tracker merge unions in dependency edges from a branch/worktree whose child
+// bead records were dropped, or when a malformed/worktree-prefixed child ID is
+// written. Mutually exclusive with parent_ancestor_in_deps: an ancestor target
+// must exist to be in the parent chain, a dangling target does not exist.
+func danglingDepFindings(b *Bead, knownIDs map[string]struct{}) []DoctorFinding {
+	if b == nil || len(b.Dependencies) == 0 {
+		return nil
+	}
+	findings := make([]DoctorFinding, 0, len(b.Dependencies))
+	for i, dep := range b.Dependencies {
+		target := strings.TrimSpace(dep.DependsOnID)
+		if target == "" {
+			continue
+		}
+		if _, ok := knownIDs[target]; ok {
+			continue
+		}
+		findings = append(findings, DoctorFinding{
+			Kind:         doctorFindingKindDanglingDep,
+			BeadID:       b.ID,
+			FieldPath:    fmt.Sprintf("dependencies[%d].depends_on_id", i),
+			TargetID:     target,
+			DependencyID: target,
+		})
+	}
+	return findings
+}
+
+// loadArchiveBeadIDs returns the set of bead IDs in the beads-archive.jsonl
+// sibling of activePath. Best-effort: a missing or unreadable archive yields an
+// empty set (every dependency target is then checked against the active file
+// alone). Never returns the active file's own IDs.
+func loadArchiveBeadIDs(activePath string) map[string]struct{} {
+	out := map[string]struct{}{}
+	archivePath := filepath.Join(filepath.Dir(activePath), "beads-archive.jsonl")
+	if archivePath == activePath {
+		return out
+	}
+	rows, err := loadDoctorRows(archivePath)
+	if err != nil {
+		return out
+	}
+	for _, row := range rows {
+		if row.bead != nil && row.bead.ID != "" {
+			out[row.bead.ID] = struct{}{}
+		}
+	}
+	return out
+}
+
 func sortDoctorFindings(findings []DoctorFinding) {
 	sort.SliceStable(findings, func(i, j int) bool {
 		if findings[i].BeadID != findings[j].BeadID {
@@ -242,8 +312,10 @@ func doctorFindingKindRank(kind string) int {
 		return 0
 	case doctorFindingKindParentAncestorInDeps:
 		return 1
-	case doctorFindingKindUnparseableLine:
+	case doctorFindingKindDanglingDep:
 		return 2
+	case doctorFindingKindUnparseableLine:
+		return 3
 	default:
 		return 9
 	}
@@ -390,6 +462,11 @@ func repairBead(raw map[string]any, findings []DoctorFinding, repairDir, ddxDir 
 		changed = true
 	}
 
+	if depRefs := applyDanglingDepRepair(raw, findings); len(depRefs) > 0 {
+		artifactRefs = append(artifactRefs, depRefs...)
+		changed = true
+	}
+
 	if !changed {
 		return false, nil
 	}
@@ -487,6 +564,65 @@ func applyParentAncestorDepRepair(raw map[string]any, findings []DoctorFinding) 
 	for _, target := range targetOrder {
 		if n := removedCounts[target]; n > 0 {
 			refs = append(refs, fmt.Sprintf("dependencies→removed %s (%d edge(s))", target, n))
+		}
+	}
+	return refs
+}
+
+// applyDanglingDepRepair removes dependency edges whose target bead exists
+// nowhere (the dangling_dep findings). Returns audit references for the removed
+// edges. Structurally mirrors applyParentAncestorDepRepair but keyed on the
+// dangling_dep finding kind so the two removals stay independently auditable.
+func applyDanglingDepRepair(raw map[string]any, findings []DoctorFinding) []string {
+	targetOrder := make([]string, 0, len(findings))
+	seenTargets := make(map[string]struct{}, len(findings))
+	for _, f := range findings {
+		if f.Kind != doctorFindingKindDanglingDep || f.TargetID == "" {
+			continue
+		}
+		if _, ok := seenTargets[f.TargetID]; ok {
+			continue
+		}
+		seenTargets[f.TargetID] = struct{}{}
+		targetOrder = append(targetOrder, f.TargetID)
+	}
+	if len(targetOrder) == 0 {
+		return nil
+	}
+
+	deps, ok := raw["dependencies"].([]any)
+	if !ok || len(deps) == 0 {
+		return nil
+	}
+
+	removedCounts := make(map[string]int, len(targetOrder))
+	filtered := make([]any, 0, len(deps))
+	for _, depRaw := range deps {
+		dep, _ := depRaw.(map[string]any)
+		if dep == nil {
+			filtered = append(filtered, depRaw)
+			continue
+		}
+		target, _ := dep["depends_on_id"].(string)
+		if target == "" {
+			filtered = append(filtered, depRaw)
+			continue
+		}
+		if _, ok := seenTargets[target]; ok {
+			removedCounts[target]++
+			continue
+		}
+		filtered = append(filtered, depRaw)
+	}
+	if len(removedCounts) == 0 {
+		return nil
+	}
+	raw["dependencies"] = filtered
+
+	refs := make([]string, 0, len(removedCounts))
+	for _, target := range targetOrder {
+		if n := removedCounts[target]; n > 0 {
+			refs = append(refs, fmt.Sprintf("dependencies→removed dangling %s (%d edge(s))", target, n))
 		}
 	}
 	return refs

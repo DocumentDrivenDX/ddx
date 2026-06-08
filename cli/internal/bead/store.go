@@ -647,6 +647,10 @@ func (s *Store) updateBead(id string, allowStatusChange bool, mutate func(*Bead)
 		for i := range beads {
 			if beads[i].ID == id {
 				beforeStatus := beads[i].Status
+				beforeDeps := make(map[string]bool, len(beads[i].Dependencies))
+				for _, dep := range beads[i].DepIDs() {
+					beforeDeps[dep] = true
+				}
 				if mutate != nil {
 					if err := mutate(&beads[i]); err != nil {
 						return err
@@ -659,6 +663,23 @@ func (s *Store) updateBead(id string, allowStatusChange bool, mutate func(*Bead)
 				// Core validation after mutation
 				if err := s.validateBead(&beads[i]); err != nil {
 					return err
+				}
+				// Reject NEWLY-introduced dependency edges whose target bead does
+				// not exist — these can never be satisfied and block the referrer
+				// from readiness forever (the phantom/dangling-dep class). Pre-
+				// existing dangling edges are grandfathered so an already-corrupted
+				// bead stays updatable and repairable via `ddx bead doctor --fix`.
+				if mutate != nil {
+					existing := make(map[string]bool, len(beads))
+					for j := range beads {
+						existing[beads[j].ID] = true
+					}
+					for _, dep := range beads[i].DepIDs() {
+						if existing[dep] || beforeDeps[dep] {
+							continue
+						}
+						return fmt.Errorf("bead: refusing to write dangling dependency edge: target %s does not exist", dep)
+					}
 				}
 				// Run update hook
 				if err := s.runHook("validate-bead-update", &beads[i]); err != nil {
