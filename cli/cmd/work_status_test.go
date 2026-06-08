@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -507,4 +509,58 @@ func TestWorkStatusReportsServerUnavailableState(t *testing.T) {
 	require.Len(t, report.Workers, 1)
 	assert.Equal(t, "server.unavailable", report.Workers[0].Phase)
 	assert.Equal(t, "server unreachable: holding queue until /api/health returns", report.Workers[0].Message)
+}
+
+func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {
+	projectRoot := t.TempDir()
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+
+	sidecarBead := &bead.Bead{ID: "ddx-work-status-sidecar", Title: "Sidecar active bead"}
+	runStateBead := &bead.Bead{ID: "ddx-work-status-runstate", Title: "Run-state active bead"}
+	require.NoError(t, store.Create(context.Background(), sidecarBead))
+	require.NoError(t, store.Create(context.Background(), runStateBead))
+
+	now := time.Now().UTC()
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-status-sidecar", workerstatus.LivenessRecord{
+		WorkerID:       "worker-status-sidecar",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    sidecarBead.ID,
+		AttemptID:      "att-status-sidecar",
+		Phase:          "running",
+		PID:            5151,
+		LastActivityAt: now,
+	}))
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:      runStateBead.ID,
+		AttemptID:   "att-status-runstate",
+		PID:         5152,
+		StartedAt:   now.Add(-time.Minute),
+		RefreshedAt: now,
+		ExpiresAt:   now.Add(time.Minute),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: nil}
+	root := factory.NewRootCommand()
+
+	workStatusOut, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var workStatus WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(workStatusOut), &workStatus))
+	require.Equal(t, 2, workStatus.ActiveWork.Count)
+	assert.Contains(t, workStatus.ActiveWork.BeadIDs, sidecarBead.ID)
+	assert.Contains(t, workStatus.ActiveWork.BeadIDs, runStateBead.ID)
+
+	beadStatusOut, err := executeCommand(NewCommandFactory(projectRoot).NewRootCommand(), "bead", "status", "--json")
+	require.NoError(t, err)
+
+	var beadStatus BeadStatusReport
+	require.NoError(t, json.Unmarshal([]byte(beadStatusOut), &beadStatus))
+	require.Equal(t, 2, beadStatus.ActiveWork.Count)
+	assert.Contains(t, beadStatus.ActiveWork.BeadIDs, sidecarBead.ID)
+	assert.Contains(t, beadStatus.ActiveWork.BeadIDs, runStateBead.ID)
+	assert.Equal(t, workStatus.ActiveWork.Count, beadStatus.ActiveWork.Count)
+	assert.ElementsMatch(t, workStatus.ActiveWork.BeadIDs, beadStatus.ActiveWork.BeadIDs)
 }

@@ -42,6 +42,10 @@ var LivenessTTL = 90 * time.Second
 
 // LivenessDir returns the worker sidecar directory for a project.
 func LivenessDir(projectRoot string) string {
+	inTree := ddxroot.InTree(projectRoot)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return filepath.Join(inTree, "workers")
+	}
 	return ddxroot.JoinProject(projectRoot, "workers")
 }
 
