@@ -592,6 +592,16 @@ func parkParentBackEdgeForOperator(store ExecuteBeadLoopStore, beadID, actor str
 	})
 }
 
+func markExecutionIneligible(store ExecuteBeadLoopStore, beadID string) error {
+	if store == nil || beadID == "" {
+		return nil
+	}
+	return store.Update(context.Background(), beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[bead.ExtraExecutionElig] = false
+	})
+}
+
 // runPostAttemptTriage invokes the optional post-attempt triage hook after
 // the attempt outcome has been finalized but before any cooldown decision is
 // applied. Hook failures are fail-open: the report is returned unchanged and
@@ -4165,6 +4175,22 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				}
 				if !serverOutageActivated {
 					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+					if report.Detail == mixedCommitAndNoChangesRationaleReason && report.NoChangesRationale != "" {
+						parsed := ParseNoChangesRationale(report.NoChangesRationale)
+						if parsed.OrchestratorAction == "decompose" {
+							report.OutcomeReason = "decomposed"
+							if runtime.PostAttemptDecompositionHook != nil {
+								if backEdgeDetected := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC()); backEdgeDetected {
+									sawParentBackEdge = true
+								}
+							} else if parkErr := markExecutionIneligible(w.Store, candidate.ID); parkErr != nil && runtime.Log != nil {
+								_, _ = fmt.Fprintf(runtime.Log, "mixed_commit decomposition park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+							}
+							result.Failures++
+							result.LastFailureStatus = report.Status
+							return executeBeadIterationOutcome{Continue: true}, nil
+						}
+					}
 					if shouldSuppressNoProgress(report) {
 						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 						if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
@@ -6132,6 +6158,7 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		"claim_race",
 		"actionable_but_rewritten",
 		"too_large_decomposed",
+		"decomposed",
 		"intake_error",
 		"ambiguous_needs_human",
 		FailureModeAuthError,

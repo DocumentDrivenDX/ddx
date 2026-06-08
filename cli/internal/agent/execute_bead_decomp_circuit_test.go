@@ -83,6 +83,102 @@ func TestMixedCommitCooldown(t *testing.T) {
 		"bead must be parked to proposed after 2nd mixed_commit within 24h")
 }
 
+func TestExecuteBeadLoop_NiflheimEvidence_DecomposedParentIsExecutionIneligible(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	parent := &bead.Bead{ID: "ddx-niflheim-parent", Title: "Niflheim decomposed parent"}
+	require.NoError(t, store.Create(context.Background(), parent))
+
+	decomp := &PreClaimDecomposition{
+		Rationale: "split the parent after mixed-commit decomposition",
+		Children: []PreClaimDecompositionChild{
+			{Title: "Child A", Description: "child a", Acceptance: "1. do child a"},
+			{Title: "Child B", Description: "child b", Acceptance: "1. do child b"},
+		},
+		ACMap: []ACMapEntry{
+			{ParentAC: "1. split the parent", Coverage: "covered by Child A"},
+			{ParentAC: "2. keep the parent out of the ready queue", Coverage: "covered by Child B"},
+		},
+	}
+
+	var execCalls int32
+	var escalationCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusExecutionFailed,
+				Detail:             mixedCommitAndNoChangesRationaleReason,
+				BaseRev:            "base-niflheim",
+				ResultRev:          "result-niflheim",
+				NoChangesRationale: "status: open\norchestrator_action: decompose\nreason: split the parent",
+			}, nil
+		}),
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			atomic.AddInt32(&escalationCalls, 1)
+			return actualPower + 1, nil
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", MaxDecompositionDepth: 3}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	runtime := ExecuteBeadLoopRuntime{
+		Once:         true,
+		TargetBeadID: parent.ID,
+		PostAttemptTriageHook: func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
+			return TriageResult{
+				Classification:    "decomposed",
+				RecommendedAction: "close_decomposed_or_mark_execution_ineligible",
+				Rationale:         "parent split already exists",
+			}, nil
+		},
+		PostAttemptDecompositionHook: func(ctx context.Context, beadID string) (*PreClaimDecomposition, error) {
+			return decomp, nil
+		},
+	}
+
+	_, err := worker.Run(context.Background(), rcfg, runtime)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "executor must run exactly once")
+	assert.Zero(t, atomic.LoadInt32(&escalationCalls), "decomposed parents must not schedule min-power escalation")
+
+	got, err := store.Get(context.Background(), parent.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "decomposed parent must stay open")
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "decomposed parent must be execution-ineligible")
+
+	events, err := store.Events(parent.ID)
+	require.NoError(t, err)
+	foundDecomposition := false
+	for _, ev := range events {
+		if ev.Kind != "triage-decomposed" {
+			continue
+		}
+		foundDecomposition = true
+		assert.Contains(t, ev.Body, `"child_ids"`, "decomposition event must record child IDs")
+	}
+	assert.True(t, foundDecomposition, "post-attempt decomposition must record a triage-decomposed event")
+
+	children, err := store.ReadAll(context.Background())
+	require.NoError(t, err)
+	childCount := 0
+	for i := range children {
+		if children[i].Parent != parent.ID {
+			continue
+		}
+		childCount++
+		assert.Equal(t, parent.ID, children[i].Parent, "child must reference the decomposed parent")
+	}
+	assert.Equal(t, 2, childCount, "post-attempt decomposition must create both child beads")
+
+	_, err = worker.Run(context.Background(), rcfg, runtime)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "parent must not be re-claimed after parking")
+}
+
 // TestMixedCommitCooldown_FirstOccurrenceDoesNotPark verifies that a single
 // mixed_commit outcome (no prior events) does NOT park the bead.
 func TestMixedCommitCooldown_FirstOccurrenceDoesNotPark(t *testing.T) {

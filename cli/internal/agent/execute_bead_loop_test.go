@@ -212,6 +212,15 @@ func TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates(t 
 				ResultRev:     "abc123",
 			},
 		},
+		{
+			name: "decomposed",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "decomposed",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
