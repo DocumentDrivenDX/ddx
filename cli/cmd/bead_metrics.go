@@ -8,7 +8,6 @@ import (
 	"sort"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +33,7 @@ type beadMetricsRow struct {
 // scanBeadMetrics reads .ddx/executions/*/result.json under workingDir and
 // groups attempts by bead_id. Malformed or bead_id-less results are skipped.
 func scanBeadMetrics(workingDir string) (map[string]*beadMetricsSummary, error) {
-	execRoot := ddxroot.JoinProject(workingDir, "executions")
+	execRoot := filepath.Join(resolveBeadStoreRoot(workingDir), "executions")
 	entries, err := os.ReadDir(execRoot)
 	if err != nil {
 		if os.IsNotExist(err) {

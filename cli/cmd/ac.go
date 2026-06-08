@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ Exits 1 if any check returns block or error.`,
 				return fmt.Errorf("diff paths: %w", err)
 			}
 
-			all, err := checks.LoadDir(ddxroot.JoinProject(projectRoot, "checks"))
+			all, err := checks.LoadDir(filepath.Join(resolveBeadStoreRoot(projectRoot), "checks"))
 			if err != nil {
 				return err
 			}
@@ -129,7 +130,7 @@ Exits 1 if any check returns block or error.`,
 }
 
 func loadBead(projectRoot, id string) (*bead.Bead, error) {
-	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
 	return store.Get(context.Background(), id)
 }
 

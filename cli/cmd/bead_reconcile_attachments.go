@@ -92,7 +92,7 @@ func (f *CommandFactory) beadStateGitScope(projectPathspecs ...string) (string, 
 		return "", append([]string(nil), projectPathspecs...)
 	}
 
-	stateRoot := ddxroot.JoinProject(workspaceRoot)
+	stateRoot := resolveBeadStoreRoot(workspaceRoot)
 	if filepath.Clean(stateRoot) == filepath.Clean(ddxroot.InTree(workspaceRoot)) {
 		return workspaceRoot, append([]string(nil), projectPathspecs...)
 	}

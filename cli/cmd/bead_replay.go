@@ -15,7 +15,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/spf13/cobra"
 )
 
@@ -414,7 +413,7 @@ func (f *CommandFactory) runBeadReplay(cmd *cobra.Command, args []string) error 
 	if res != nil {
 		outcome = res.Outcome
 	}
-	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
 	_ = store.AppendEvent(m.BeadID, bead.BeadEvent{
 		Kind:    "replay",
 		Summary: fmt.Sprintf("replay_of=%s outcome=%s run_id=%s", attemptID, outcome, newAttemptID),

@@ -319,7 +319,7 @@ func (f *CommandFactory) beadStore() *bead.Store {
 	if workspaceRoot == "" {
 		return bead.NewStore("")
 	}
-	return bead.NewStore(ddxroot.JoinProject(workspaceRoot))
+	return bead.NewStore(resolveBeadStoreRoot(workspaceRoot))
 }
 
 func (f *CommandFactory) beadStatusStore(projectRoot string) *bead.Store {

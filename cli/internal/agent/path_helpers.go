@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -14,16 +15,16 @@ func projectStatePath(projectRoot, rel string) string {
 
 	clean := filepath.Clean(filepath.FromSlash(rel))
 	if clean == ddxroot.DirName {
-		return ddxroot.JoinProject(projectRoot)
+		return beadStoreRoot(projectRoot)
 	}
 
 	prefix := ddxroot.DirName + string(filepath.Separator)
 	if strings.HasPrefix(clean, prefix) {
 		trimmed := strings.TrimPrefix(clean, prefix)
 		if trimmed == "" || trimmed == "." {
-			return ddxroot.JoinProject(projectRoot)
+			return beadStoreRoot(projectRoot)
 		}
-		return ddxroot.JoinProject(projectRoot, strings.Split(trimmed, string(filepath.Separator))...)
+		return filepath.Join(append([]string{beadStoreRoot(projectRoot)}, strings.Split(trimmed, string(filepath.Separator))...)...)
 	}
 
 	return filepath.Join(projectRoot, clean)
@@ -31,4 +32,15 @@ func projectStatePath(projectRoot, rel string) string {
 
 func executeBeadArtifactRoot(projectRoot string) string {
 	return ddxroot.JoinProject(projectRoot, "executions")
+}
+
+func beadStoreRoot(projectRoot string) string {
+	if projectRoot == "" {
+		return ddxroot.JoinProject(projectRoot)
+	}
+	inTree := filepath.Join(projectRoot, ddxroot.DirName)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return inTree
+	}
+	return ddxroot.JoinProject(projectRoot)
 }
