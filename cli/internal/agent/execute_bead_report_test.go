@@ -36,7 +36,7 @@ func TestMarkResultExecutionErrorReturnsStructuredReport(t *testing.T) {
 	assert.Contains(t, report.Detail, "failed to read worktree HEAD")
 }
 
-func TestMarkResultLandErrorPreservesWorkerCommit(t *testing.T) {
+func TestMarkResultLandErrorReconcilesAlreadyLandedWorkerCommit(t *testing.T) {
 	repo := initReportTestRepo(t)
 	base := gitReportTest(t, repo, "rev-parse", "HEAD")
 
@@ -54,12 +54,48 @@ func TestMarkResultLandErrorPreservesWorkerCommit(t *testing.T) {
 		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
 	}
 
-	MarkResultLandError(repo, res, errors.New("git update-ref refs/heads/main: fatal: cannot lock ref 'HEAD': is at abc but expected def: exit status 128"))
+	MarkResultLandError(repo, res, errors.New("git update-ref refs/heads/main: fatal: cannot lock ref 'refs/heads/main': is at abc but expected def: exit status 128"))
 
-	assert.Equal(t, ExecuteBeadStatusExecutionFailed, res.Status)
-	assert.Contains(t, res.Detail, "land coordination failed")
-	require.NotEmpty(t, res.PreserveRef)
-	assert.Equal(t, result, gitReportTest(t, repo, "rev-parse", res.PreserveRef))
+	assert.Equal(t, ExecuteBeadStatusSuccess, res.Status)
+	assert.Contains(t, res.Detail, "land coordination reconciled")
+	assert.Equal(t, result, res.ImplementationRev)
+	assert.Equal(t, result, res.ResultRev)
+	assert.Empty(t, res.PreserveRef)
+	assert.Empty(t, res.FailureMode)
+}
+
+func TestMarkResultLandErrorClassifiesStagedGeneratedEvidenceAsRetryLand(t *testing.T) {
+	res := &ExecuteBeadResult{
+		BeadID:    "ddx-land",
+		AttemptID: "20260507T020000-test",
+		BaseRev:   "base",
+		ResultRev: "result",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+	}
+
+	MarkResultLandError(t.TempDir(), res, errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260507T020000-test/result.json"))
+
+	assert.Equal(t, ExecuteBeadStatusLandRetry, res.Status)
+	assert.Equal(t, FailureModeLandRetry, res.FailureMode)
+	assert.Contains(t, res.Detail, "land coordination retry")
+}
+
+func TestMarkResultLandErrorClassifiesStagedImplementationWorkAsOperatorAttention(t *testing.T) {
+	res := &ExecuteBeadResult{
+		BeadID:    "ddx-land",
+		AttemptID: "20260507T020000-test",
+		BaseRev:   "base",
+		ResultRev: "result",
+		ExitCode:  0,
+		Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+	}
+
+	MarkResultLandError(t.TempDir(), res, errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\tcli/internal/agent/foo.go"))
+
+	assert.Equal(t, ExecuteBeadStatusLandOperatorAttention, res.Status)
+	assert.Equal(t, FailureModeLandOperatorAttention, res.FailureMode)
+	assert.Contains(t, res.Detail, "land coordination operator attention")
 }
 
 func initReportTestRepo(t *testing.T) string {

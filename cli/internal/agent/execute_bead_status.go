@@ -70,7 +70,15 @@ const (
 	// distinct from implementation/agent failures so operators can tell a DDx
 	// validation rejection apart from a genuine task failure (ddx-725b65b4).
 	FailureModeAttemptIntegrity = "attempt_integrity"
-	FailureModeUnknown          = "unknown"
+	// FailureModeLandRetry classifies land/ref/index coordination failures
+	// where the implementation result is still valid and the worker should
+	// retry/reconcile the landing step instead of escalating implementation.
+	FailureModeLandRetry = "land_retry"
+	// FailureModeLandOperatorAttention classifies land/ref/index coordination
+	// failures where local staged state includes operator-owned work and must
+	// be reviewed before DDx lands or retries the result.
+	FailureModeLandOperatorAttention = "land_operator_attention"
+	FailureModeUnknown               = "unknown"
 )
 
 // ResourceExhaustedStopMessage is the operator-visible message emitted when
@@ -335,6 +343,8 @@ const (
 	ExecuteBeadStatusPostRunCheckFailed         = "post_run_check_failed"
 	ExecuteBeadStatusRatchetFailed              = "ratchet_failed"
 	ExecuteBeadStatusLandConflict               = "land_conflict"
+	ExecuteBeadStatusLandRetry                  = "land_retry"
+	ExecuteBeadStatusLandOperatorAttention      = "land_operator_attention"
 	ExecuteBeadStatusPushFailed                 = "push_failed"
 	ExecuteBeadStatusPushConflict               = "push_conflict"
 	ExecuteBeadStatusPreservedNeedsReview       = "preserved_needs_review"
