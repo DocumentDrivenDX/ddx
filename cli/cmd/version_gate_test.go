@@ -146,6 +146,17 @@ func TestDetectInstalledBinaryBehindSourceIgnoresTrackerOnlyAheadCommit(t *testi
 func writeProjectVersion(t *testing.T, workDir, version string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755))
+	// An in-tree .ddx is only authoritative for ddxroot.Path (and thus visible to
+	// the version gate's readProjectVersions) once it is *initialized* — i.e. it
+	// has a config.yaml. Without it, ddxroot.Path falls back to the XDG convention
+	// root, so the gate never sees versions.yaml AND bootstrapConventionRoot writes
+	// into the real XDG dir. Seed a minimal config.yaml so this models a real
+	// in-tree project and stays hermetic.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(workDir, ddxroot.DirName, "config.yaml"),
+		[]byte("version: \"1.0\"\n"),
+		0o644,
+	))
 	require.NoError(t, os.WriteFile(
 		filepath.Join(workDir, ddxroot.DirName, "versions.yaml"),
 		[]byte("ddx_version: \""+version+"\"\n"),
