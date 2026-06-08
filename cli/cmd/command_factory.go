@@ -178,6 +178,10 @@ More information:
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ddx.yml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().StringVar(&libraryPath, "library-base-path", "", "override path for DDx library location")
+	// Opt-out for the automatic update check / network call that otherwise runs
+	// on every command (also DDX_DISABLE_UPDATE_CHECK=1 / update_check.enabled:
+	// false). A default-on capability must be disableable from the CLI.
+	rootCmd.PersistentFlags().Bool("no-update-check", false, "Disable the automatic update check (network call) on each command")
 
 	// Store flag values in command context for access by subcommands
 	rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
@@ -267,10 +271,26 @@ func (f *CommandFactory) initConfig(cfgFile, libPath string) {
 	}
 }
 
+// updateChecksDisabled reports whether the automatic update check should be
+// suppressed. It honors the env var, the persistent --no-update-check flag, and
+// a command-local --no-check flag (e.g. on `ddx version`) when present.
+func updateChecksDisabled(cmd *cobra.Command) bool {
+	if os.Getenv("DDX_DISABLE_UPDATE_CHECK") == "1" {
+		return true
+	}
+	if v, err := cmd.Flags().GetBool("no-update-check"); err == nil && v {
+		return true
+	}
+	if v, err := cmd.Flags().GetBool("no-check"); err == nil && v {
+		return true
+	}
+	return false
+}
+
 // checkForUpdates performs automatic update check (synchronous, once per 24h)
 func (f *CommandFactory) checkForUpdates(cmd *cobra.Command) {
-	// Check if disabled via env var
-	if os.Getenv("DDX_DISABLE_UPDATE_CHECK") == "1" {
+	// Skip if disabled via env var, --no-update-check, or a local --no-check.
+	if updateChecksDisabled(cmd) {
 		return
 	}
 
@@ -305,8 +325,8 @@ func (f *CommandFactory) checkForUpdates(cmd *cobra.Command) {
 
 // displayUpdateNotification shows update notification if available
 func (f *CommandFactory) displayUpdateNotification(cmd *cobra.Command) error {
-	// Skip if disabled via environment variable
-	if os.Getenv("DDX_DISABLE_UPDATE_CHECK") == "1" {
+	// Skip if disabled via env var, --no-update-check, or a local --no-check.
+	if updateChecksDisabled(cmd) {
 		return nil
 	}
 
@@ -524,13 +544,12 @@ func (f *CommandFactory) registerSubcommands(rootCmd *cobra.Command) {
 			_, _ = fmt.Fprint(cmd.OutOrStdout(), f.versionOutput())
 			f.warnIfInstalledBinaryBehindSource(cmd)
 
-			// Check for --no-check flag
-			noCheck, _ := cmd.Flags().GetBool("no-check")
-			_ = noCheck // TODO: Implement update checking when this flag is used
-			// For now, we don't check for updates
+			// --no-check is honored by updateChecksDisabled (used by
+			// checkForUpdates / displayUpdateNotification in the root pre/post-run),
+			// so no per-command update call happens here.
 		},
 	}
-	versionCmd.Flags().Bool("no-check", false, "Skip checking for updates")
+	versionCmd.Flags().Bool("no-check", false, "Skip checking for updates (alias of --no-update-check, scoped to this command)")
 	rootCmd.AddCommand(versionCmd)
 
 	// Completion command

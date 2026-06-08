@@ -139,6 +139,11 @@ MCP (POST /mcp):
 			if cmd.Flags().Changed("tsnet") {
 				tc.Enabled = tsnetEnabled
 			}
+			// --no-tsnet is the discoverable opt-out for the default-on listener
+			// and takes precedence over config and the positive --tsnet flag.
+			if noTsnet, _ := cmd.Flags().GetBool("no-tsnet"); noTsnet {
+				tc.Enabled = false
+			}
 			if tsnetHostname != "" {
 				tc.Hostname = tsnetHostname
 			}
@@ -163,7 +168,8 @@ MCP (POST /mcp):
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1", "Address to bind to")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", "", "TLS certificate file (PEM); auto-generates self-signed cert if omitted")
 	cmd.Flags().StringVar(&tlsKey, "tls-key", "", "TLS private key file (PEM); auto-generates self-signed key if omitted")
-	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", true, "Enable Tailscale ts-net listener (use --tsnet=false to disable; see ADR-006)")
+	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", true, "Enable Tailscale ts-net listener (on by default; use --no-tsnet to disable; see ADR-006)")
+	cmd.Flags().Bool("no-tsnet", false, "Disable the Tailscale ts-net listener (on by default; see ADR-006)")
 	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx-<hostname>)")
 	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
 	cmd.Flags().BoolVar(&hubMode, "hub-mode", false, "Run as a federation hub: mount /api/federation/* routes (FEAT-026)")
