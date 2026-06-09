@@ -3841,11 +3841,16 @@ func TestCurrentProject(t *testing.T) {
 }
 
 func TestRegisterProject(t *testing.T) {
+	withTestDirFilterDisabled(t)
 	workDir := setupNodeTestDir(t)
 	srv := New(":0", workDir)
 
 	// Register a second project path.
-	body := `{"path":"/tmp/other-project"}`
+	otherProject := filepath.Join(t.TempDir(), "other-project")
+	if err := os.MkdirAll(otherProject, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"path":%q}`, otherProject)
 	req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
 	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("Content-Type", "application/json")
@@ -3863,8 +3868,8 @@ func TestRegisterProject(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &entry); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if entry.Path != "/tmp/other-project" {
-		t.Errorf("expected path=/tmp/other-project, got %s", entry.Path)
+	if entry.Path != otherProject {
+		t.Errorf("expected path=%s, got %s", otherProject, entry.Path)
 	}
 	if !strings.HasPrefix(entry.ID, "proj-") {
 		t.Errorf("expected id prefix 'proj-', got %q", entry.ID)
@@ -3884,7 +3889,7 @@ func TestRegisterProject(t *testing.T) {
 	}
 	found := false
 	for _, p := range projects {
-		if p.Path == "/tmp/other-project" {
+		if p.Path == otherProject {
 			found = true
 		}
 	}
@@ -3909,10 +3914,15 @@ func TestRegisterProjectMissingPath(t *testing.T) {
 }
 
 func TestRegisterProjectIdempotent(t *testing.T) {
+	withTestDirFilterDisabled(t)
 	workDir := setupNodeTestDir(t)
 	srv := New(":0", workDir)
 
-	body := `{"path":"/tmp/idempotent-project"}`
+	idempotentProject := filepath.Join(t.TempDir(), "idempotent-project")
+	if err := os.MkdirAll(idempotentProject, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`{"path":%q}`, idempotentProject)
 	for range 3 {
 		req := httptest.NewRequest("POST", "/api/projects/register", strings.NewReader(body))
 		req.RemoteAddr = "127.0.0.1:12345"
@@ -4470,6 +4480,42 @@ func TestRegisterProjectDeduplicate(t *testing.T) {
 	}
 	if projects[0].LastSeen.Before(start) {
 		t.Errorf("last_seen %v should be >= start of registrations %v", projects[0].LastSeen, start)
+	}
+}
+
+func TestListProjectsSweepsTransientPollution(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	now := time.Now().UTC()
+	transient := filepath.Join(os.TempDir(), "ddx-go", "TestExecuteBeadInvalidBeadIDbead^1233542036", "001")
+	srv.state.Projects = append(srv.state.Projects, ProjectEntry{
+		ID:           projectID(transient),
+		Name:         filepath.Base(transient),
+		Path:         transient,
+		RegisteredAt: now,
+		LastSeen:     now,
+	})
+
+	req := httptest.NewRequest("GET", "/api/projects", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var projects []ProjectEntry
+	if err := json.Unmarshal(w.Body.Bytes(), &projects); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	for _, p := range projects {
+		if p.Path == transient {
+			t.Fatalf("transient project should be swept from /api/projects: %s", transient)
+		}
+	}
+	if _, ok := srv.state.GetProjectByPath(transient); ok {
+		t.Fatalf("transient project should be removed from persisted state: %s", transient)
 	}
 }
 

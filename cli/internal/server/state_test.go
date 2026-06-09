@@ -54,6 +54,14 @@ func TestIsTestDirPathMatches(t *testing.T) {
 		"/tmp/TestAgentCheckSuccess3666443068/001",
 		"/private/tmp/TestMac789/001",
 		"/private/tmp/something",
+		"/var/tmp/ddx-go/TestExecuteBeadInvalidBeadIDbead^1233542036/001",
+		"/home/erik/tmp/TestExecuteBeadInvalidBeadIDbead~1324027905/001",
+		"/home/erik/.cache/fleet-tmp/ddx-cmd-tests-774492673/TestBeadCommandsCRUDLifecycle2946498393/001",
+		"/home/erik/.cache/fleet-tmp/TestIntegration_MultiWorkerLockContention_5Workers607960191/001/ddxfixture",
+		"/home/erik/.cache/fleet-tmp/ddx-cmd-tests-774492673/TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix1462893753/002/origin-tree",
+		"/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-12345678-20260505T000000-deadbeef",
+		"/Users/erik/Projects/ddx/.claude/worktrees/agent-a7bf6d44",
+		"/Users/erik/Projects/helix-yolo/runs/codex-20260525T190541/workspace",
 		"/var/folders/xy/abc/T/TestFoo123/001",
 		"/home/user/Projects/TestFooBar123/inner", // Test-named segment anywhere
 	}

@@ -1151,6 +1151,8 @@ func (s *Server) federationRole() string {
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	includeUnreachable := r.URL.Query().Get("include_unreachable") == "true"
+	_ = s.state.SweepProjects()
+	_ = s.state.save()
 	writeJSON(w, http.StatusOK, s.state.GetProjects(includeUnreachable))
 }
 

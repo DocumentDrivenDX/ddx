@@ -18,9 +18,10 @@ import (
 
 // goTestNameRegexp matches a path segment shaped like a Go test directory:
 // a function name starting with Test followed by an upper-case letter and
-// ending in digits (the numeric suffix that `t.TempDir()` appends). The
-// testing package documents this convention in `(*T).TempDir`.
-var goTestNameRegexp = regexp.MustCompile(`/Test[A-Z][A-Za-z0-9_]*\d+/`)
+// ending in digits (the numeric suffix that `t.TempDir()` appends). Some test
+// names include punctuation after subtest sanitization, so the middle is
+// intentionally broad and bounded only by path separators.
+var goTestNameRegexp = regexp.MustCompile(`/Test[A-Z][^/]*\d+/`)
 
 // testDirFilterOverride is a test-only escape hatch. When set, it fully
 // overrides IsTestDirPath's default behavior so the handful of tests in this
@@ -33,11 +34,12 @@ var (
 	testDirFilterOverrideMu sync.RWMutex
 )
 
-// IsTestDirPath reports whether path looks like a Go test temp directory
-// that leaked into the server's registered-project list. These entries are
-// never a real user project — they come from tests that forgot to isolate
-// XDG_DATA_HOME. The check is intentionally aggressive: any match here makes
-// the entry ineligible for long-term retention.
+// IsTestDirPath reports whether path looks like a transient test, cache, or
+// generated worker directory that leaked into the server's registered-project
+// list. These entries are never a real user project — they come from tests or
+// generated execution worktrees that talked to the developer's long-lived
+// server. The check is intentionally aggressive: any match here makes the
+// entry ineligible for long-term retention.
 //
 // Polluted state files are the hidden amplifier behind ddx-9ce6842a (beads
 // perf) and ddx-2ceb02fa (sessions feed) — both cross-project queries iterate
@@ -45,8 +47,9 @@ var (
 // entries inflate those loops by orders of magnitude.
 //
 // The rules match the bead contract for ddx-15f7ee0b:
-//   - path starts with /tmp/, /private/tmp/, or /var/folders/ (macOS temp root)
-//   - path contains a /Test[A-Z]\w*\d+/ segment (Go test naming convention)
+//   - path is under a known temp/cache root
+//   - path contains a /Test[A-Z]...\d+/ segment (Go test naming convention)
+//   - path is under known DDx execution-worktree or harness workspace roots
 func IsTestDirPath(path string) bool {
 	testDirFilterOverrideMu.RLock()
 	override := testDirFilterOverride
@@ -57,9 +60,30 @@ func IsTestDirPath(path string) bool {
 	if path == "" {
 		return false
 	}
-	if strings.HasPrefix(path, "/tmp/") ||
-		strings.HasPrefix(path, "/private/tmp/") ||
-		strings.HasPrefix(path, "/var/folders/") {
+	if hasPathPrefix(path, "/tmp") ||
+		hasPathPrefix(path, "/private/tmp") ||
+		hasPathPrefix(path, "/var/tmp") ||
+		hasPathPrefix(path, "/var/folders") ||
+		hasPathPrefix(path, os.TempDir()) {
+		return true
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if hasPathPrefix(path, filepath.Join(home, "tmp")) ||
+			hasPathPrefix(path, filepath.Join(home, ".cache", "fleet-tmp")) {
+			return true
+		}
+		if filepath.Clean(path) == filepath.Join(home, "Projects") {
+			return true
+		}
+	}
+	if strings.Contains(path, "/.cache/fleet-tmp/") ||
+		strings.Contains(path, "/ddx-cmd-tests-") ||
+		strings.Contains(path, "/.ddx-exec-wt/") ||
+		strings.Contains(path, "/.ddx-external-workers/") ||
+		strings.Contains(path, "/.claude/worktrees/") ||
+		strings.Contains(path, "/.agents/worktrees/") ||
+		(strings.Contains(path, "/runs/") && filepath.Base(path) == "workspace") ||
+		strings.HasPrefix(filepath.Base(path), ".execute-bead-wt-") {
 		return true
 	}
 	// Normalise trailing/leading so the regex sees bounded segments.
@@ -71,6 +95,18 @@ func IsTestDirPath(path string) bool {
 		probe = probe + "/"
 	}
 	return goTestNameRegexp.MatchString(probe)
+}
+
+func hasPathPrefix(path, prefix string) bool {
+	if path == "" || prefix == "" {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	cleanPrefix := filepath.Clean(prefix)
+	if cleanPath == cleanPrefix {
+		return true
+	}
+	return strings.HasPrefix(cleanPath, cleanPrefix+string(filepath.Separator))
 }
 
 // NodeState holds persistent identity for this ddx-server instance.
@@ -303,7 +339,7 @@ func (s *ServerState) SweepProjects() []ProjectEntry {
 
 	kept := make([]ProjectEntry, 0, len(s.Projects))
 	for _, p := range s.Projects {
-		if IsTestDirPath(p.Path) {
+		if IsTestDirPath(p.Path) && !s.isOwnWorkingDir(p.Path) {
 			// Test-dir pollution — drop unconditionally.
 			continue
 		}
@@ -329,6 +365,13 @@ func (s *ServerState) SweepProjects() []ProjectEntry {
 	}
 	s.Projects = kept
 	return append([]ProjectEntry(nil), s.Projects...)
+}
+
+func (s *ServerState) isOwnWorkingDir(path string) bool {
+	if s.workingDir == "" {
+		return false
+	}
+	return canonicalizePath(path) == canonicalizePath(s.workingDir)
 }
 
 // GetProjects returns a snapshot of registered projects.

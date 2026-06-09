@@ -11,19 +11,76 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"time"
 )
 
 const defaultServerURL = "https://localhost:7743"
 
+var goTestSegmentRegexp = regexp.MustCompile(`/Test[A-Z][^/]*\d+/`)
+
 // TryRegisterAsync fires off a project registration in a background goroutine
 // and returns immediately. Errors are silently discarded.
 func TryRegisterAsync(projectPath string) {
+	if isTransientProjectPath(projectPath) {
+		return
+	}
 	url := resolveServerURL()
 	if url == "" {
 		return
 	}
 	go register(url, projectPath)
+}
+
+func isTransientProjectPath(path string) bool {
+	if path == "" {
+		return false
+	}
+	if hasPathPrefix(path, "/tmp") ||
+		hasPathPrefix(path, "/private/tmp") ||
+		hasPathPrefix(path, "/var/tmp") ||
+		hasPathPrefix(path, "/var/folders") ||
+		hasPathPrefix(path, os.TempDir()) {
+		return true
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if hasPathPrefix(path, filepath.Join(home, "tmp")) ||
+			hasPathPrefix(path, filepath.Join(home, ".cache", "fleet-tmp")) ||
+			filepath.Clean(path) == filepath.Join(home, "Projects") {
+			return true
+		}
+	}
+	if strings.Contains(path, "/.cache/fleet-tmp/") ||
+		strings.Contains(path, "/ddx-cmd-tests-") ||
+		strings.Contains(path, "/.ddx-exec-wt/") ||
+		strings.Contains(path, "/.ddx-external-workers/") ||
+		strings.Contains(path, "/.claude/worktrees/") ||
+		strings.Contains(path, "/.agents/worktrees/") ||
+		(strings.Contains(path, "/runs/") && filepath.Base(path) == "workspace") ||
+		strings.HasPrefix(filepath.Base(path), ".execute-bead-wt-") {
+		return true
+	}
+	probe := path
+	if !strings.HasPrefix(probe, "/") {
+		probe = "/" + probe
+	}
+	if !strings.HasSuffix(probe, "/") {
+		probe += "/"
+	}
+	return goTestSegmentRegexp.MatchString(probe)
+}
+
+func hasPathPrefix(path, prefix string) bool {
+	if path == "" || prefix == "" {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	cleanPrefix := filepath.Clean(prefix)
+	if cleanPath == cleanPrefix {
+		return true
+	}
+	return strings.HasPrefix(cleanPath, cleanPrefix+string(filepath.Separator))
 }
 
 func register(serverURL, projectPath string) {
