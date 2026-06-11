@@ -62,7 +62,7 @@ func TestStoreNeedsHumanListsProposedOperatorAttentionSorted(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), plain))
 	require.NoError(t, s.Create(testCtx(), legacy))
 	require.NoError(t, s.Create(testCtx(), closed))
-	require.NoError(t, s.DepAdd(nhDep.ID, blocker.ID))
+	require.NoError(t, s.DepAdd(testCtx(), nhDep.ID, blocker.ID))
 	require.NoError(t, s.Close(testCtx(), closed.ID))
 
 	result, err := s.NeedsHuman()

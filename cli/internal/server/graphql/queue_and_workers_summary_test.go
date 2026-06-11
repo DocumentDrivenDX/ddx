@@ -34,7 +34,7 @@ func TestGraphQLQueueAndWorkersSummary(t *testing.T) {
 	if err := store.Create(context.Background(), blocked); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DepAdd(blocked.ID, dep.ID); err != nil {
+	if err := store.DepAdd(context.Background(), blocked.ID, dep.ID); err != nil {
 		t.Fatal(err)
 	}
 

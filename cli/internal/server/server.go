@@ -1676,7 +1676,7 @@ func (s *Server) handleBeadDepTree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := s.beadStoreForRequest(r)
-	tree, err := store.DepTree(id)
+	tree, err := store.DepTree(r.Context(), id)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -2054,9 +2054,9 @@ func (s *Server) handleBeadDeps(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Action {
 	case "add":
-		err = store.DepAdd(id, req.DepID)
+		err = store.DepAdd(r.Context(), id, req.DepID)
 	case "remove":
-		err = store.DepRemove(id, req.DepID)
+		err = store.DepRemove(r.Context(), id, req.DepID)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action must be 'add' or 'remove'"})
 		return
@@ -4549,7 +4549,7 @@ func (s *Server) mcpBeadDepTree(workingDir, id string) mcpToolResult {
 		}
 	}
 	store := bead.NewStore(ddxroot.JoinProject(workingDir))
-	tree, err := store.DepTree(id)
+	tree, err := store.DepTree(context.Background(), id)
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(fmt.Sprintf(`{"error":"%s"}`, err.Error()))},

@@ -285,15 +285,15 @@ func TestProperty_DepCycleDetection(t *testing.T) {
 
 	// Build a valid chain: ids[1] depends on ids[0], ids[2] on ids[1], etc.
 	for i := 1; i < len(ids); i++ {
-		require.NoError(t, s.DepAdd(ids[i], ids[i-1]), "dep %d->%d must succeed", i, i-1)
+		require.NoError(t, s.DepAdd(testCtx(), ids[i], ids[i-1]), "dep %d->%d must succeed", i, i-1)
 	}
 
 	// Attempt to create a cycle: ids[0] depends on ids[len-1].
-	err := s.DepAdd(ids[0], ids[len(ids)-1])
+	err := s.DepAdd(testCtx(), ids[0], ids[len(ids)-1])
 	assert.Error(t, err, "creating a dependency cycle must be rejected")
 
 	// Self-dependency must also be rejected.
-	err = s.DepAdd(ids[0], ids[0])
+	err = s.DepAdd(testCtx(), ids[0], ids[0])
 	assert.Error(t, err, "self-dependency must be rejected")
 
 	// Verify the valid chain is intact.
@@ -315,23 +315,23 @@ func TestProperty_DepRemoveAndReadd(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), b))
 
 	// Add dep: b depends on a.
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 
 	got, _ := s.Get(testCtx(), b.ID)
 	assert.True(t, got.HasDep(a.ID))
 
 	// Remove dep.
-	require.NoError(t, s.DepRemove(b.ID, a.ID))
+	require.NoError(t, s.DepRemove(testCtx(), b.ID, a.ID))
 	got, _ = s.Get(testCtx(), b.ID)
 	assert.False(t, got.HasDep(a.ID))
 
 	// Re-add.
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 	got, _ = s.Get(testCtx(), b.ID)
 	assert.True(t, got.HasDep(a.ID))
 
 	// Adding same dep again must not duplicate.
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 	got, _ = s.Get(testCtx(), b.ID)
 	count := 0
 	for _, d := range got.Dependencies {
@@ -370,7 +370,7 @@ func TestProperty_ReadyAndBlockedInvariants(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), closedOne))
 	require.NoError(t, s.Close(testCtx(), closedOne.ID))
 
-	require.NoError(t, s.DepAdd(depA.ID, prereq.ID))
+	require.NoError(t, s.DepAdd(testCtx(), depA.ID, prereq.ID))
 
 	// State: prereq=open(no deps), depA=open(dep on prereq open), depB=open(no deps), closedOne=closed
 	// Expected: Ready = [prereq, depB], Blocked = [depA]
