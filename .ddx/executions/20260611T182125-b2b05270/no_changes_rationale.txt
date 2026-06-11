@@ -1,0 +1,2 @@
+status: blocked
+reason: pre-commit is blocked by an existing agent-suite failure in TestPreDispatchDirtyPreserveRequiresStableImplementationDirt; it fails under `go test -short -race ./internal/agent -run TestPreDispatchDirtyPreserveRequiresStableImplementationDirt` even when run alone, so the staged changes cannot be committed cleanly from this bead.
