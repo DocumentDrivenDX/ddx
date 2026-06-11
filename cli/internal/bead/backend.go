@@ -54,9 +54,9 @@ type Backend interface {
 	Blocked() ([]Bead, error)
 
 	// Dep ops
-	DepAdd(id, depID string) error
-	DepRemove(id, depID string) error
-	DepTree(rootID string) (string, error)
+	DepAdd(ctx context.Context, id, depID string) error
+	DepRemove(ctx context.Context, id, depID string) error
+	DepTree(ctx context.Context, rootID string) (string, error)
 
 	// Events
 	AppendEvent(id string, event BeadEvent) error

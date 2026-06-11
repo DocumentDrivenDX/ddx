@@ -1323,7 +1323,7 @@ func TestReadyAndBlocked(t *testing.T) {
 	b := &Bead{Title: "Second"}
 	require.NoError(t, s.Create(testCtx(), a))
 	require.NoError(t, s.Create(testCtx(), b))
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 
 	// B is blocked by A
 	ready, err := s.Ready()
@@ -1356,20 +1356,20 @@ func TestDepAddValidation(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), a))
 
 	// Dep on nonexistent
-	err := s.DepAdd(a.ID, "nonexistent")
+	err := s.DepAdd(testCtx(), a.ID, "nonexistent")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "dependency not found")
 
 	// Self-dep
-	err = s.DepAdd(a.ID, a.ID)
+	err = s.DepAdd(testCtx(), a.ID, a.ID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "cannot depend on self")
 
 	// Idempotent add
 	b := &Bead{Title: "B"}
 	require.NoError(t, s.Create(testCtx(), b))
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
-	require.NoError(t, s.DepAdd(b.ID, a.ID)) // no error on duplicate
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID)) // no error on duplicate
 }
 
 func TestBeadDepAddRejectsParentAncestor(t *testing.T) {
@@ -1390,7 +1390,7 @@ func TestBeadDepAddRejectsParentAncestor(t *testing.T) {
 	}))
 
 	t.Run("direct-parent", func(t *testing.T) {
-		err := s.DepAdd(child.ID, parent.ID)
+		err := s.DepAdd(testCtx(), child.ID, parent.ID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "ancestor in the parent chain")
 		assert.Contains(t, err.Error(), parent.ID)
@@ -1398,7 +1398,7 @@ func TestBeadDepAddRejectsParentAncestor(t *testing.T) {
 	})
 
 	t.Run("grandparent-ancestor", func(t *testing.T) {
-		err := s.DepAdd(child.ID, root.ID)
+		err := s.DepAdd(testCtx(), child.ID, root.ID)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "ancestor in the parent chain")
 		assert.Contains(t, err.Error(), root.ID)
@@ -1413,12 +1413,12 @@ func TestDepRemove(t *testing.T) {
 	b := &Bead{Title: "B"}
 	require.NoError(t, s.Create(testCtx(), a))
 	require.NoError(t, s.Create(testCtx(), b))
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 
 	got, _ := s.Get(testCtx(), b.ID)
 	assert.Contains(t, got.DepIDs(), a.ID)
 
-	require.NoError(t, s.DepRemove(b.ID, a.ID))
+	require.NoError(t, s.DepRemove(testCtx(), b.ID, a.ID))
 	got, _ = s.Get(testCtx(), b.ID)
 	assert.NotContains(t, got.DepIDs(), a.ID)
 }
@@ -1430,9 +1430,9 @@ func TestDepTree(t *testing.T) {
 	b := &Bead{Title: "Child task"}
 	require.NoError(t, s.Create(testCtx(), a))
 	require.NoError(t, s.Create(testCtx(), b))
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 
-	tree, err := s.DepTree("")
+	tree, err := s.DepTree(testCtx(), "")
 	require.NoError(t, err)
 	assert.Contains(t, tree, "Root task")
 	assert.Contains(t, tree, "Child task")
@@ -1447,7 +1447,7 @@ func TestStatusCounts(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), a))
 	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Create(testCtx(), c))
-	require.NoError(t, s.DepAdd(c.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), c.ID, a.ID))
 	require.NoError(t, s.Close(testCtx(), b.ID))
 
 	counts, err := s.Status()

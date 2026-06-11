@@ -331,7 +331,7 @@ func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), dep))
 	require.NoError(t, s.Create(testCtx(), blockedByDep))
 	require.NoError(t, s.Create(testCtx(), parked))
-	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
+	require.NoError(t, s.DepAdd(testCtx(), blockedByDep.ID, dep.ID))
 
 	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
 	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits", ""))
@@ -375,7 +375,7 @@ func TestBlockedAll_ReportsRetryCooldownWithoutHidingDependencyBlockers(t *testi
 	require.NoError(t, s.Create(testCtx(), dep))
 	require.NoError(t, s.Create(testCtx(), blockedByDep))
 	require.NoError(t, s.Create(testCtx(), parked))
-	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
+	require.NoError(t, s.DepAdd(testCtx(), blockedByDep.ID, dep.ID))
 
 	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
 	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits", ""))
@@ -413,7 +413,7 @@ func TestBlockedAllPrefersDependencyOverCooldown(t *testing.T) {
 	both := &Bead{Title: "Dep blocked + parked"}
 	require.NoError(t, s.Create(testCtx(), dep))
 	require.NoError(t, s.Create(testCtx(), both))
-	require.NoError(t, s.DepAdd(both.ID, dep.ID))
+	require.NoError(t, s.DepAdd(testCtx(), both.ID, dep.ID))
 	require.NoError(t, s.SetExecutionCooldown(both.ID, time.Now().UTC().Add(2*time.Hour), "no_changes", "also parked", ""))
 
 	entries, err := s.BlockedAll()
@@ -577,11 +577,11 @@ func TestCircularDepDetected(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Create(testCtx(), c))
 
-	require.NoError(t, s.DepAdd(b.ID, a.ID)) // B depends on A
-	require.NoError(t, s.DepAdd(c.ID, b.ID)) // C depends on B
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID)) // B depends on A
+	require.NoError(t, s.DepAdd(testCtx(), c.ID, b.ID)) // C depends on B
 
 	// A depends on C would create A→C→B→A cycle
-	err := s.DepAdd(a.ID, c.ID)
+	err := s.DepAdd(testCtx(), a.ID, c.ID)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
 }
@@ -639,4 +639,35 @@ func TestMalformedJSONLAllBadReturnsError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "0 valid")
 	assert.True(t, strings.Contains(err.Error(), "beads.jsonl"))
+}
+
+// TestQueueOrdering_OperatorRankWithinBucket verifies that operator-assigned
+// queue-rank values sort before unranked beads within the same priority bucket,
+// and that the rank boundary does not cross priority levels.
+func TestQueueOrdering_OperatorRankWithinBucket(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		// Priority 1 bucket: one ranked, one not
+		{ID: "p1-ranked", Title: "P1 ranked", Status: StatusOpen, Priority: 1, IssueType: "task",
+			CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 5}},
+		{ID: "p1-unranked", Title: "P1 unranked", Status: StatusOpen, Priority: 1, IssueType: "task",
+			CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute)},
+		// Priority 0 bucket (higher urgency): no operator rank
+		{ID: "p0-unranked", Title: "P0 unranked", Status: StatusOpen, Priority: 0, IssueType: "task",
+			CreatedAt: now, UpdatedAt: now},
+	}))
+
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 3)
+
+	// Priority boundary must not be crossed by queue-rank.
+	assert.Equal(t, "p0-unranked", ready[0].ID, "P0 must precede P1 regardless of rank")
+
+	// Within P1 bucket: explicit rank beats no rank.
+	assert.Equal(t, "p1-ranked", ready[1].ID, "P1 ranked must precede P1 unranked")
+	assert.Equal(t, "p1-unranked", ready[2].ID, "P1 unranked must follow explicit rank")
 }

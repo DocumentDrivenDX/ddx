@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 
+	beadqueue "github.com/DocumentDrivenDX/ddx/internal/bead/ops/queue"
 	"github.com/spf13/cobra"
 )
 
@@ -34,7 +35,7 @@ func (f *CommandFactory) newBeadQueueTopCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return f.withBeadTrackerWriteLock(func() error {
-				if err := f.beadStore().QueueTop(args[0]); err != nil {
+				if err := beadqueue.Top(cmd.Context(), f.beadStore(), args[0]); err != nil {
 					return err
 				}
 				_, err := f.beadAutoCommit("queue top " + args[0])
@@ -59,16 +60,56 @@ func (f *CommandFactory) newBeadQueueMoveCommand() *cobra.Command {
 				return fmt.Errorf("cannot specify both --before and --after")
 			}
 			return f.withBeadTrackerWriteLock(func() error {
-				if before != "" {
-					if err := f.beadStore().QueueMove(args[0], before, true); err != nil {
-						return err
+				store := f.beadStore()
+				ctx := cmd.Context()
+				id := args[0]
+
+				beads, err := store.ReadAll(ctx)
+				if err != nil {
+					return err
+				}
+
+				refID := before
+				isBefore := before != ""
+				if !isBefore {
+					refID = after
+				}
+
+				var targetPriority, refPriority int
+				targetFound, refFound := false, false
+				for _, b := range beads {
+					if b.ID == id {
+						targetPriority = b.Priority
+						targetFound = true
 					}
-				} else {
-					if err := f.beadStore().QueueMove(args[0], after, false); err != nil {
-						return err
+					if b.ID == refID {
+						refPriority = b.Priority
+						refFound = true
 					}
 				}
-				_, err := f.beadAutoCommit("queue move " + args[0])
+				if !targetFound {
+					return fmt.Errorf("bead: not found: %s", id)
+				}
+				if !refFound {
+					return fmt.Errorf("bead: not found: %s", refID)
+				}
+				if targetPriority != refPriority {
+					return fmt.Errorf("bead: queue move limited to one priority bucket: %s (P%d) and %s (P%d)",
+						id, targetPriority, refID, refPriority)
+				}
+
+				pos := beadqueue.BucketPosition(beads, id, refID)
+				if pos == -1 {
+					return fmt.Errorf("bead: queue move limited to one priority bucket: %s and %s", id, refID)
+				}
+				if !isBefore {
+					pos++
+				}
+
+				if err := beadqueue.Move(ctx, store, id, pos); err != nil {
+					return err
+				}
+				_, err = f.beadAutoCommit("queue move " + id)
 				return err
 			})
 		},
@@ -85,7 +126,7 @@ func (f *CommandFactory) newBeadQueueClearCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return f.withBeadTrackerWriteLock(func() error {
-				if err := f.beadStore().QueueClear(args[0]); err != nil {
+				if err := beadqueue.Clear(cmd.Context(), f.beadStore(), args[0]); err != nil {
 					return err
 				}
 				_, err := f.beadAutoCommit("queue clear " + args[0])

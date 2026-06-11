@@ -52,6 +52,10 @@ type Store struct {
 // cli/cmd callers program against.
 var _ Backend = (*Store)(nil)
 
+// Compile-time checks: *Store satisfies the TD-027 dependency sub-interfaces.
+var _ BeadDependencyReader = (*Store)(nil)
+var _ BeadDependencyWriter = (*Store)(nil)
+
 type StoreOption func(*Store)
 
 // WithCollection selects the logical bead collection. The default collection
@@ -2842,7 +2846,10 @@ func (s *Store) Status() (*StatusCounts, error) {
 }
 
 // DepAdd adds a dependency: id depends on depID.
-func (s *Store) DepAdd(id, depID string) error {
+func (s *Store) DepAdd(ctx context.Context, id, depID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
@@ -2898,15 +2905,15 @@ func (s *Store) DepAdd(id, depID string) error {
 }
 
 // DepRemove removes a dependency.
-func (s *Store) DepRemove(id, depID string) error {
-	return s.Update(context.Background(), id, func(b *Bead) {
+func (s *Store) DepRemove(ctx context.Context, id, depID string) error {
+	return s.Update(ctx, id, func(b *Bead) {
 		b.RemoveDep(depID)
 	})
 }
 
 // DepTree returns a text representation of the dependency tree.
-func (s *Store) DepTree(rootID string) (string, error) {
-	beads, err := s.ReadAll(context.Background())
+func (s *Store) DepTree(ctx context.Context, rootID string) (string, error) {
+	beads, err := s.ReadAll(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -2914,7 +2921,7 @@ func (s *Store) DepTree(rootID string) (string, error) {
 	// beads stored only in the archive must still appear.
 	if s.Collection == DefaultCollection {
 		archive := s.archivePartner()
-		if archived, aerr := archive.ReadAll(context.Background()); aerr == nil {
+		if archived, aerr := archive.ReadAll(ctx); aerr == nil {
 			seen := make(map[string]bool, len(beads))
 			for _, b := range beads {
 				seen[b.ID] = true
