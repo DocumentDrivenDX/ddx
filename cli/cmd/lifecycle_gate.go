@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
 
@@ -13,7 +15,12 @@ func (f *CommandFactory) checkLifecycleMigrationGate(cmd *cobra.Command) error {
 		return nil
 	}
 
-	status, err := f.beadStore().DetectLifecycleMigrationRequired()
+	s := f.beadStore()
+	mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
+	if err != nil {
+		return err
+	}
+	status, err := mig.DetectLifecycleMigrationRequired(context.Background())
 	if err != nil {
 		return err
 	}

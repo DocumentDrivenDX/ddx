@@ -32,7 +32,7 @@ func TestLifecycleMigrate_NeedsHumanLabelBecomesProposed(t *testing.T) {
 		}),
 	}))
 
-	stats, err := s.MigrateLifecycle()
+	stats, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.LegacyNeedsHumanLabels)
 	assert.Equal(t, 1, stats.ToProposed)
@@ -64,7 +64,7 @@ func TestLifecycleMigrate_NeedsInvestigationSmartRunnableRemainsOpen(t *testing.
 		}),
 	}))
 
-	stats, err := s.MigrateLifecycle()
+	stats, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.LegacyNeedsInvestigationLabels)
 	assert.Equal(t, 1, stats.LegacyNoChangesMetadataRows)
@@ -93,7 +93,7 @@ func TestLifecycleMigrate_NeedsInvestigationOperatorRequiredBecomesProposed(t *t
 		}),
 	}))
 
-	stats, err := s.MigrateLifecycle()
+	stats, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.ToProposed)
 
@@ -118,7 +118,7 @@ func TestLifecycleMigrate_ExternalBlockerBecomesBlocked(t *testing.T) {
 	})
 	require.NoError(t, s.WriteAll([]Bead{dep, waiting, external}))
 
-	stats, err := s.MigrateLifecycle()
+	stats, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.ToBlocked)
 	assert.Equal(t, 1, stats.ToOpen)
@@ -152,7 +152,7 @@ func TestLifecycleMigrate_ApplyWritesSchemaMarkerAndIsIdempotent(t *testing.T) {
 		}),
 	}))
 
-	dry, err := s.MigrateLifecycleDryRun()
+	dry, err := (&storeMigrator{store: s}).MigrateLifecycleDryRun(testCtx())
 	require.NoError(t, err)
 	assert.True(t, dry.DryRun)
 	assert.True(t, dry.SchemaMarkerMissing)
@@ -161,7 +161,7 @@ func TestLifecycleMigrate_ApplyWritesSchemaMarkerAndIsIdempotent(t *testing.T) {
 	_, statErr := os.Stat(s.LifecycleSchemaMarkerPath())
 	assert.True(t, os.IsNotExist(statErr), "dry-run must not write marker")
 
-	first, err := s.MigrateLifecycle()
+	first, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assert.True(t, first.Changed())
 	assert.Equal(t, 1, first.RowsChanged)
@@ -169,7 +169,7 @@ func TestLifecycleMigrate_ApplyWritesSchemaMarkerAndIsIdempotent(t *testing.T) {
 	before, err := os.ReadFile(s.LifecycleSchemaMarkerPath())
 	require.NoError(t, err)
 
-	second, err := s.MigrateLifecycle()
+	second, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assert.False(t, second.Changed(), "second lifecycle migration must be a no-op")
 	assert.False(t, second.SchemaMarkerMissing)

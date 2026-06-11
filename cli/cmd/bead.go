@@ -343,11 +343,13 @@ func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized bead storage at %s\n", s.File)
 
 			// Auto-migrate from .helix/issues.jsonl if present
-			n, migrated, err := s.MigrateFromHelix()
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: migration from .helix/issues.jsonl failed: %v\n", err)
-			} else if migrated {
-				fmt.Fprintf(cmd.OutOrStdout(), "Migrated %d beads from .helix/issues.jsonl\n", n)
+			if mig, merr := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir}); merr == nil {
+				n, migrated, merr := mig.MigrateFromHelix(context.Background())
+				if merr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: migration from .helix/issues.jsonl failed: %v\n", merr)
+				} else if migrated {
+					fmt.Fprintf(cmd.OutOrStdout(), "Migrated %d beads from .helix/issues.jsonl\n", n)
+				}
 			}
 			return nil
 		},
@@ -1647,29 +1649,34 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 			_, _ = cmd.Flags().GetBool("dry-run")
 			asJSON, _ := cmd.Flags().GetBool("json")
 			s := f.beadStore()
+			mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
+			if err != nil {
+				return err
+			}
 			var (
 				plans []bead.ReconcilePlan
-				err   error
 			)
 			runReconcile := func() error {
-				plans, err = s.ReconcileLifecycleMetadata(bead.ReconcileOptions{Apply: apply, IDs: args})
-				if err != nil {
-					return err
+				var rerr error
+				plans, rerr = mig.ReconcileLifecycleMetadata(context.Background(), bead.ReconcileOptions{Apply: apply, IDs: args})
+				if rerr != nil {
+					return rerr
 				}
 				if apply {
-					if _, err := f.beadAutoCommit("reconcile lifecycle metadata"); err != nil {
-						return err
+					if _, rerr := f.beadAutoCommit("reconcile lifecycle metadata"); rerr != nil {
+						return rerr
 					}
 				}
 				return nil
 			}
+			var rerr error
 			if apply {
-				err = f.withBeadTrackerWriteLock(runReconcile)
+				rerr = f.withBeadTrackerWriteLock(runReconcile)
 			} else {
-				err = runReconcile()
+				rerr = runReconcile()
 			}
-			if err != nil {
-				return err
+			if rerr != nil {
+				return rerr
 			}
 			if plans == nil {
 				plans = []bead.ReconcilePlan{}

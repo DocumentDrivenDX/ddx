@@ -25,7 +25,7 @@ func TestLifecycleMigrationGateDetectsLegacyQueue(t *testing.T) {
 	}, "\n") + "\n"
 	require.NoError(t, os.WriteFile(store.File, []byte(rows), 0o644))
 
-	status, err := store.DetectLifecycleMigrationRequired()
+	status, err := (&storeMigrator{store: store}).DetectLifecycleMigrationRequired(testCtx())
 	require.NoError(t, err)
 	assert.True(t, status.QueuePresent)
 	assert.True(t, status.SchemaMarkerMissing)
@@ -43,7 +43,7 @@ func TestLifecycleMigrationGateReportsMarkerlessCleanQueueWithoutBlocking(t *tes
 	dir := t.TempDir()
 	store := NewStore(filepath.Join(dir, ddxroot.DirName))
 
-	missing, err := store.DetectLifecycleMigrationRequired()
+	missing, err := (&storeMigrator{store: store}).DetectLifecycleMigrationRequired(testCtx())
 	require.NoError(t, err)
 	assert.False(t, missing.QueuePresent)
 	assert.False(t, missing.Required())
@@ -54,7 +54,7 @@ func TestLifecycleMigrationGateReportsMarkerlessCleanQueueWithoutBlocking(t *tes
 	row := `{"id":"ddx-clean","title":"clean","status":"open","priority":2,"issue_type":"task","created_at":"` + now + `","updated_at":"` + now + `"}` + "\n"
 	require.NoError(t, os.WriteFile(store.File, []byte(row), 0o644))
 
-	markerless, err := store.DetectLifecycleMigrationRequired()
+	markerless, err := (&storeMigrator{store: store}).DetectLifecycleMigrationRequired(testCtx())
 	require.NoError(t, err)
 	assert.True(t, markerless.QueuePresent)
 	assert.True(t, markerless.SchemaMarkerMissing)
@@ -71,7 +71,7 @@ func TestLifecycleMigrationGateDoesNotRequireCleanMarkedQueue(t *testing.T) {
 	row := `{"id":"ddx-clean","title":"clean","status":"open","priority":2,"issue_type":"task","created_at":"` + now + `","updated_at":"` + now + `"}` + "\n"
 	require.NoError(t, os.WriteFile(store.File, []byte(row), 0o644))
 
-	clean, err := store.DetectLifecycleMigrationRequired()
+	clean, err := (&storeMigrator{store: store}).DetectLifecycleMigrationRequired(testCtx())
 	require.NoError(t, err)
 	assert.True(t, clean.QueuePresent)
 	assert.False(t, clean.SchemaMarkerMissing)
@@ -85,7 +85,7 @@ func TestLifecycleMigrationGateRequiresOldMarker(t *testing.T) {
 	require.NoError(t, store.Init(testCtx()))
 	require.NoError(t, os.WriteFile(store.LifecycleSchemaMarkerPath(), []byte(`{"version":0}`+"\n"), 0o644))
 
-	status, err := store.DetectLifecycleMigrationRequired()
+	status, err := (&storeMigrator{store: store}).DetectLifecycleMigrationRequired(testCtx())
 	require.NoError(t, err)
 	assert.True(t, status.SchemaMarkerOld)
 	assert.True(t, status.Required())

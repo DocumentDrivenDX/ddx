@@ -9,4 +9,5 @@ var (
 	ErrAlreadyClaimed    = errors.New("bead: already claimed by another owner")
 	ErrNotClaimedByOwner = errors.New("bead: not claimed by requesting owner")
 	ErrUnsupported       = errors.New("bead: operation not supported by this backend")
+	ErrDeprecated        = errors.New("bead: deprecated")
 )

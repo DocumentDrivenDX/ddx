@@ -181,7 +181,7 @@ func TestMigrateDryRunReportsWithoutWriting(t *testing.T) {
 	_, archiveStatErr := os.Stat(archivePath)
 	require.True(t, os.IsNotExist(archiveStatErr), "archive should not exist before migrate")
 
-	stats, err := s.MigrateDryRun()
+	stats, err := (&storeMigrator{store: s}).MigrateDryRun(testCtx())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.EventsExternalized)
 	assert.Equal(t, 2, stats.Archived)
@@ -295,7 +295,7 @@ func loadMigrateToAxonFixture(t *testing.T) (*Store, bytes.Buffer) {
 func TestMigrate_AxonBackend_RoundTrip(t *testing.T) {
 	jsonlStore, preBuf := loadMigrateToAxonFixture(t)
 
-	stats, err := jsonlStore.MigrateToAxon()
+	stats, err := jsonlStore.migrateToAxon()
 	require.NoError(t, err)
 	// 3 active + 2 archive (no overlap) = 5 distinct beads.
 	assert.Equal(t, 5, stats.BeadsMigrated)
@@ -329,7 +329,7 @@ func TestMigrate_AxonBackend_RoundTrip(t *testing.T) {
 // the same fixture is a no-op at the axon file level.
 func TestMigrate_AxonBackend_Idempotent(t *testing.T) {
 	jsonlStore, _ := loadMigrateToAxonFixture(t)
-	stats, err := jsonlStore.MigrateToAxon()
+	stats, err := jsonlStore.migrateToAxon()
 	require.NoError(t, err)
 
 	axBeadsBefore, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_beads.jsonl"))
@@ -337,7 +337,7 @@ func TestMigrate_AxonBackend_Idempotent(t *testing.T) {
 	axEventsBefore, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_bead_events.jsonl"))
 	require.NoError(t, err)
 
-	stats2, err := jsonlStore.MigrateToAxon()
+	stats2, err := jsonlStore.migrateToAxon()
 	require.NoError(t, err)
 	assert.Equal(t, stats, stats2, "second migration reports the same counts")
 
@@ -363,7 +363,7 @@ func TestMigrateToAxonNoSources(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	s := NewStore(dir)
-	stats, err := s.MigrateToAxon()
+	stats, err := s.migrateToAxon()
 	require.NoError(t, err)
 	assert.Equal(t, 0, stats.BeadsMigrated)
 	assert.Equal(t, 0, stats.EventsMigrated)
@@ -380,6 +380,52 @@ func sortedNonEmptyLines(s string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func TestMigrator_MigrateToAxon_ReturnsDeprecated(t *testing.T) {
+	s := newTestStore(t)
+	mig := &storeMigrator{store: s}
+	_, err := mig.MigrateToAxon(testCtx())
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrDeprecated)
+}
+
+func TestMigrator_LifecycleMigration_RoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	require.NoError(t, s.WriteAll([]Bead{
+		{
+			ID:        "ddx-roundtrip",
+			Title:     "roundtrip",
+			Status:    StatusOpen,
+			Priority:  1,
+			IssueType: DefaultType,
+			CreatedAt: time.Now().UTC().Add(-time.Hour),
+			UpdatedAt: time.Now().UTC(),
+			Labels:    []string{LabelNeedsHuman},
+		},
+	}))
+	mig := &storeMigrator{store: s}
+	dry, err := mig.MigrateLifecycleDryRun(testCtx())
+	require.NoError(t, err)
+	assert.True(t, dry.DryRun)
+	assert.Equal(t, 1, dry.LegacyNeedsHumanLabels)
+	stats, err := mig.MigrateLifecycle(testCtx())
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.LegacyNeedsHumanLabels)
+	assert.Equal(t, 1, stats.ToProposed)
+	got, err := s.Get(testCtx(), "ddx-roundtrip")
+	require.NoError(t, err)
+	assert.Equal(t, StatusProposed, got.Status)
+}
+
+func TestMigrator_FromHelix_PreservesAllFields(t *testing.T) {
+	s := newTestStore(t)
+	mig := &storeMigrator{store: s}
+	// No .helix/issues.jsonl present → no-op.
+	n, migrated, err := mig.MigrateFromHelix(testCtx())
+	require.NoError(t, err)
+	assert.False(t, migrated)
+	assert.Equal(t, 0, n)
 }
 
 func TestMigratePreservesReferencedDeps(t *testing.T) {
