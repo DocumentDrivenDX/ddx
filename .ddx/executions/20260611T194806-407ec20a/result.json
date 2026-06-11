@@ -1,0 +1,61 @@
+{
+  "bead_id": "ddx-3af1c1a6",
+  "attempt_id": "20260611T194806-407ec20a",
+  "base_rev": "19f97c95e00b700a4d3874dc48462fe736a79598",
+  "result_rev": "4f2356a4d2a62ff555946274c4c5e2feab5383c1",
+  "implementation_rev": "4f2356a4d2a62ff555946274c4c5e2feab5383c1",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "large-deletion gate: cli/internal/bead/queue.go deleted 224 lines (threshold 200) without intentional large deletion acknowledgement",
+  "orchestrator_status": "land_conflict",
+  "reason": "large-deletion gate: cli/internal/bead/queue.go deleted 224 lines (threshold 200) without intentional large deletion acknowledgement",
+  "preserve_ref": "refs/ddx/iterations/ddx-3af1c1a6/20260611T194806-407ec20a-19f97c95e00b",
+  "candidate_ref": "refs/ddx/iterations/20260611T194806-407ec20a/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260611T194806-407ec20a",
+      "result_rev": "4f2356a4d2a62ff555946274c4c5e2feab5383c1",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-24545429",
+  "duration_ms": 4811014,
+  "tokens": 130285,
+  "cost_usd": 14.875265099999993,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260611T194806-407ec20a",
+  "prompt_file": ".ddx/executions/20260611T194806-407ec20a/prompt.md",
+  "manifest_file": ".ddx/executions/20260611T194806-407ec20a/manifest.json",
+  "result_file": ".ddx/executions/20260611T194806-407ec20a/result.json",
+  "usage_file": ".ddx/executions/20260611T194806-407ec20a/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-11T19:48:16.907058922Z",
+  "finished_at": "2026-06-11T21:08:27.921487795Z"
+}
