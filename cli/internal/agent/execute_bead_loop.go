@@ -440,6 +440,12 @@ func SubmitWithPreMergeChecks(
 	return submitted, outcome, landErr
 }
 
+type postAttemptDecompositionDecision struct {
+	ChildIDs          []string
+	ExecutionDecision string
+	BackEdgeDetected  bool
+}
+
 // handlePostAttemptDecomposition runs the orchestrator-level splitter when a
 // no_changes attempt signals orchestrator_action: decompose. It checks the
 // queue-level max_decomposition_depth (not the implementation prompt cap),
@@ -447,7 +453,8 @@ func SubmitWithPreMergeChecks(
 // parks the parent for operator review if the split is lossy, depth-capped, or
 // introduces a parent back-edge. The bead must already be unclaimed before
 // this is called.
-func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) bool {
+func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) postAttemptDecompositionDecision {
+	decision := postAttemptDecompositionDecision{ExecutionDecision: "proposed"}
 	emit := func(kind string, body map[string]any) {
 		if runtime.EventSink == nil {
 			return
@@ -488,29 +495,31 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			CreatedAt: at,
 		})
 		parkOperator("queue-level depth cap exceeded; operator must split")
-		return false
+		return decision
 	}
 
 	decomp, err := runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
 	if err != nil {
 		parkOperator(fmt.Sprintf("decomposition hook error: %s", err.Error()))
-		return false
+		return decision
 	}
 	if decomp == nil {
 		parkOperator("decomposition hook returned no split")
-		return false
+		return decision
 	}
 	lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
 	if lossyOrEmpty {
 		parkOperator("decomposition AC map is incomplete; operator must produce a lossless split")
-		return false
+		return decision
 	}
 
 	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
+	decision.ChildIDs = append([]string(nil), childIDs...)
 	if decompErr != nil {
 		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
-		return false
+		return decision
 	}
+	decision.ExecutionDecision = "execution_ineligible"
 	if runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition: bead %s split into %s\n", candidate.ID, strings.Join(childIDs, ", "))
 	}
@@ -524,10 +533,10 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge check failed: %v\n", err)
 		}
-		return false
+		return decision
 	}
 	if len(backEdgeChildIDs) == 0 {
-		return false
+		return decision
 	}
 	if runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition back-edge: bead %s children %s still depend on the parent\n", candidate.ID, strings.Join(backEdgeChildIDs, ", "))
@@ -539,7 +548,9 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	if parkErr := parkParentBackEdgeForOperator(w.Store, candidate.ID, assignee, backEdgeChildIDs, at); parkErr != nil && runtime.Log != nil {
 		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition parent back-edge park error: %v\n", parkErr)
 	}
-	return true
+	decision.ExecutionDecision = "proposed"
+	decision.BackEdgeDetected = true
+	return decision
 }
 
 func detectPostAttemptDecompositionBackEdge(ctx context.Context, store ExecuteBeadLoopStore, parentID string, childIDs []string) ([]string, error) {
@@ -589,6 +600,16 @@ func parkParentBackEdgeForOperator(store ExecuteBeadLoopStore, beadID, actor str
 		Actor:     actor,
 		Source:    "ddx work",
 		CreatedAt: at,
+	})
+}
+
+func markExecutionIneligible(store ExecuteBeadLoopStore, beadID string) error {
+	if store == nil || beadID == "" {
+		return nil
+	}
+	return store.Update(context.Background(), beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[bead.ExtraExecutionElig] = false
 	})
 }
 
@@ -705,6 +726,9 @@ type ExecuteBeadReport struct {
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
+	// ReviewSkipReason carries the durable review:skip-reason:* label when a
+	// success path is allowed to close without running a reviewer.
+	ReviewSkipReason string `json:"review_skip_reason,omitempty"`
 	// CycleTrace carries the append-only execution cycle trace in order.
 	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
 	// PowerClass is the model powerClass used for the final attempt (cheap, standard, smart).
@@ -737,6 +761,12 @@ type ExecuteBeadReport struct {
 	// DecompositionRationale is a free-form explanation accompanying
 	// DecompositionRecommendation. Optional.
 	DecompositionRationale string `json:"decomposition_rationale,omitempty"`
+	// DecomposedChildIDs carries child bead IDs created by a decomposition
+	// outcome so result/event audit can explain why the parent is not retried.
+	DecomposedChildIDs []string `json:"decomposed_child_ids,omitempty"`
+	// ExecutionDecision records the queue-level disposition selected after an
+	// attempt, such as execution_ineligible, proposed, or dependency_waiting.
+	ExecutionDecision string `json:"execution_decision,omitempty"`
 	// Disrupted marks a failed attempt as worker-disrupted rather than
 	// model-gave-up: the model was prevented from making progress by an
 	// external cause (context cancellation, executor SIGKILL/SIGTERM,
@@ -993,6 +1023,10 @@ type ExecuteBeadWorker struct {
 	// in tests so checkpoint dirt fallback behavior can be exercised without a
 	// real git repo.
 	preDispatchDirtyPreserver func(projectRoot string, dirtyPaths []string) (*PreDispatchDirtyPreservation, error)
+	// preDispatchGitRepairer replaces the project-root git config repair
+	// preflight in tests so failed/unresolved repairs can be exercised without
+	// corrupting a real repository in unsupported ways.
+	preDispatchGitRepairer preDispatchGitRepairerFunc
 
 	// transientCandidateSkips is an in-memory per-Run filter for queue entries
 	// that were returned from an older snapshot but rejected by a fresh
@@ -1376,11 +1410,53 @@ func isTransientGitContention(err error) bool {
 	return gitlock.IsTransientGitContention("", err)
 }
 
-func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
-	return w.runIteration(ctx, rcfg, runtime)
+type executeBeadLoopState struct {
+	now                        func() time.Time
+	assignee                   string
+	preClaimTimeout            time.Duration
+	noProgressCooldown         time.Duration
+	heartbeatInterval          time.Duration
+	harness                    string
+	provider                   string
+	model                      string
+	profile                    string
+	loopMode                   executeloop.Mode
+	idleInterval               time.Duration
+	result                     *ExecuteBeadLoopResult
+	resultsResetIdx            int
+	transientCandidateSkips    map[string]string
+	pausedInfraUntil           time.Time
+	complexityGuard            *work.ComplexityGuard
+	preclaimGuard              *work.PreClaimGuard
+	workLog                    WorkLogRenderer
+	wasIdle                    bool
+	lastIdleQueueSignature     string
+	preClaimIdleDetail         string
+	preClaimIdleStreak         int
+	preClaimIdleFirstAt        time.Time
+	preClaimIdleEscalated      bool
+	liveness                   *work.SidecarLivenessReporter
+	serverOutage               *serverOutageTracker
+	serverUnavailableLogged    bool
+	sawParentBackEdge          bool
+	claimSuccessRateWindowSize int
+	claimSuccessRateThreshold  float64
+	claimSuccessRateWindow     []bool
+	claimSuccessRateSuccesses  int
+	claimSuccessRateWarned     bool
+	preClaimWarnThreshold      int
+	preClaimWarnState          preClaimWarnRepeatState
+	exitReason                 string
+	cleanupLog                 io.Writer
+	attemptStarted             *bool
 }
 
-func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
+type executeBeadIterationOutcome struct {
+	Stop     bool
+	Continue bool
+}
+
+func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime) (*ExecuteBeadLoopResult, error) {
 	if w.Store == nil {
 		return nil, fmt.Errorf("execute-bead loop: store is required")
 	}
@@ -1440,11 +1516,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	preClaimIdleStreak := 0
 	preClaimIdleFirstAt := time.Time{}
 	preClaimIdleEscalated := false
-	resetPreClaimIdleStreak := func() {
-		preClaimIdleDetail = ""
-		preClaimIdleStreak = 0
-		preClaimIdleEscalated = false
-	}
 
 	// Worker-side liveness sidecar. Updated on each heartbeat tick so an
 	// operator's `ddx work focus` / GraphQL panel can answer "is this worker
@@ -1463,20 +1534,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		runtime.effectiveServerHealthProbeInterval(),
 	)
 	serverUnavailableLogged := false
-	setServerUnavailableState := func(at time.Time) {
-		if liveness == nil {
-			return
-		}
-		liveness.SetWorkerState(serverUnavailableStatePhase, serverUnavailableLogMessage)
-		liveness.OnTick(at)
-	}
-	clearServerUnavailableState := func(at time.Time) {
-		if liveness == nil {
-			return
-		}
-		liveness.SetWorkerState("", "")
-		liveness.OnTick(at)
-	}
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
@@ -1518,6 +1575,265 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		exitReason = reason
 		result.StopCondition = condition
 		result.ExitReason = reason
+	}
+
+	emit("loop.start", map[string]any{
+		"worker_id":    runtime.WorkerID,
+		"project_root": runtime.ProjectRoot,
+		"harness":      harness,
+		"model":        model,
+		"session_id":   runtime.SessionID,
+		"assignee":     assignee,
+		"mode":         string(loopMode),
+		"once":         loopMode == executeloop.ModeOnce,
+	})
+	cleanupLog := runtime.CleanupLog
+	if cleanupLog == nil {
+		cleanupLog = runtime.Log
+	}
+	cleanupStop := startExecutionCleanupWorker(ctx, runtime.ProjectRoot, runtime.CleanupRunner, runtime.CleanupInterval, runtime.CleanupTickCh, cleanupLog, emit)
+	attemptStarted := false
+	defer func() {
+		cleanupStop(ctx.Err() != nil && attemptStarted)
+	}()
+	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
+	leaseReader, _ := w.Store.(orphanHarnessLeaseReader)
+	releaser, _ := w.Store.(orphanHarnessLeaseReleaser)
+	appender, _ := w.Store.(orphanHarnessEventAppender)
+	if reaped, reapErr := reapOrphanedHarnessChildren(
+		ctx,
+		runtime.ProjectRoot,
+		newOrphanHarnessProcessScanner(),
+		leaseReader,
+		releaser,
+		appender,
+		assignee,
+		runtime.Log,
+		emit,
+		func(pid int) error { return killProcessGroup(pid) },
+	); reapErr != nil {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper failed: %v\n", reapErr)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":       "orphan_harness_reaper_failed",
+			"project_root": runtime.ProjectRoot,
+			"error":        reapErr.Error(),
+		})
+	} else if reaped > 0 && runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper killed %d orphaned harness process(es)\n", reaped)
+	}
+	if runtime.RoutePreflight != nil {
+		routeTimeout := runtime.effectiveRouteResolutionTimeout()
+		rerr, timedOut := runRoutePreflightBounded(ctx, routeTimeout, func(c context.Context) error {
+			return runtime.RoutePreflight(c, harness, model)
+		})
+		if timedOut {
+			// Slow-but-live resolver: no bead lease is held at startup so there
+			// is nothing to release. Log, emit a non-fatal warning, and continue
+			// into the drain loop — the next claim iteration calls RoutePreflight
+			// again, giving a slow resolver another window to succeed (D1c).
+			detail := fmt.Sprintf("routing preflight timed out after %s (harness=%s model=%s); no lease held — continuing",
+				routeTimeout, harness, model)
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s\n", detail)
+			}
+			emit("loop.warn", map[string]any{
+				"reason":  "startup_route_preflight_timeout",
+				"harness": harness,
+				"model":   model,
+				"timeout": routeTimeout.String(),
+				"detail":  detail,
+			})
+		} else if rerr != nil {
+			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
+				harness, model, rerr.Error())
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (startup)\n", detail)
+			}
+			emit("preflight.rejected", map[string]any{
+				"harness": harness,
+				"model":   model,
+				"reason":  rerr.Error(),
+				"startup": true,
+			})
+			report := ExecuteBeadReport{
+				Status:           ExecuteBeadStatusExecutionFailed,
+				Detail:           detail,
+				Harness:          harness,
+				Model:            model,
+				Disrupted:        true,
+				DisruptionReason: "preflight_rejected",
+				OutcomeReason:    "preflight_failed",
+			}
+			emitDisruptionDetected(emit, w.Store, "", "preflight_rejected", detail, harness, model, assignee, now().UTC())
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			result.Results = append(result.Results, report)
+			setExit("Preflight", "preflight_failed")
+			return result, nil
+		}
+	}
+	defer func() {
+		emit("loop.end", map[string]any{
+			"attempts":            result.Attempts,
+			"successes":           result.Successes,
+			"failures":            result.Failures,
+			"last_failure_status": result.LastFailureStatus,
+			"exit_reason":         exitReason,
+		})
+	}()
+
+	state := &executeBeadLoopState{
+		now:                        now,
+		assignee:                   assignee,
+		preClaimTimeout:            preClaimTimeout,
+		noProgressCooldown:         noProgressCooldown,
+		heartbeatInterval:          heartbeatInterval,
+		harness:                    harness,
+		provider:                   provider,
+		model:                      model,
+		profile:                    profile,
+		loopMode:                   loopMode,
+		idleInterval:               idleInterval,
+		result:                     result,
+		resultsResetIdx:            resultsResetIdx,
+		transientCandidateSkips:    transientCandidateSkips,
+		pausedInfraUntil:           pausedInfraUntil,
+		complexityGuard:            complexityGuard,
+		preclaimGuard:              preclaimGuard,
+		workLog:                    workLog,
+		wasIdle:                    wasIdle,
+		lastIdleQueueSignature:     lastIdleQueueSignature,
+		preClaimIdleDetail:         preClaimIdleDetail,
+		preClaimIdleStreak:         preClaimIdleStreak,
+		preClaimIdleFirstAt:        preClaimIdleFirstAt,
+		preClaimIdleEscalated:      preClaimIdleEscalated,
+		liveness:                   liveness,
+		serverOutage:               serverOutage,
+		serverUnavailableLogged:    serverUnavailableLogged,
+		sawParentBackEdge:          sawParentBackEdge,
+		claimSuccessRateWindowSize: claimSuccessRateWindowSize,
+		claimSuccessRateThreshold:  claimSuccessRateThreshold,
+		claimSuccessRateWindow:     claimSuccessRateWindow,
+		claimSuccessRateSuccesses:  claimSuccessRateSuccesses,
+		claimSuccessRateWarned:     claimSuccessRateWarned,
+		preClaimWarnThreshold:      preClaimWarnThreshold,
+		preClaimWarnState:          preClaimWarnState,
+		exitReason:                 exitReason,
+		cleanupLog:                 cleanupLog,
+		attemptStarted:             &attemptStarted,
+	}
+	for {
+		outcome, err := w.runIteration(ctx, rcfg, runtime, state)
+		exitReason = state.exitReason
+		if err != nil {
+			return result, err
+		}
+		if outcome.Stop {
+			return result, nil
+		}
+	}
+}
+
+func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.ResolvedConfig, runtime ExecuteBeadLoopRuntime, state *executeBeadLoopState) (executeBeadIterationOutcome, error) {
+	now := state.now
+	assignee := state.assignee
+	preClaimTimeout := state.preClaimTimeout
+	noProgressCooldown := state.noProgressCooldown
+	heartbeatInterval := state.heartbeatInterval
+	harness := state.harness
+	provider := state.provider
+	model := state.model
+	profile := state.profile
+	loopMode := state.loopMode
+	idleInterval := state.idleInterval
+	result := state.result
+	resultsResetIdx := state.resultsResetIdx
+	transientCandidateSkips := state.transientCandidateSkips
+	pausedInfraUntil := state.pausedInfraUntil
+	complexityGuard := state.complexityGuard
+	preclaimGuard := state.preclaimGuard
+	workLog := state.workLog
+	wasIdle := state.wasIdle
+	lastIdleQueueSignature := state.lastIdleQueueSignature
+	preClaimIdleDetail := state.preClaimIdleDetail
+	preClaimIdleStreak := state.preClaimIdleStreak
+	preClaimIdleFirstAt := state.preClaimIdleFirstAt
+	preClaimIdleEscalated := state.preClaimIdleEscalated
+	liveness := state.liveness
+	serverOutage := state.serverOutage
+	serverUnavailableLogged := state.serverUnavailableLogged
+	sawParentBackEdge := state.sawParentBackEdge
+	claimSuccessRateWindowSize := state.claimSuccessRateWindowSize
+	claimSuccessRateThreshold := state.claimSuccessRateThreshold
+	claimSuccessRateWindow := state.claimSuccessRateWindow
+	claimSuccessRateSuccesses := state.claimSuccessRateSuccesses
+	claimSuccessRateWarned := state.claimSuccessRateWarned
+	preClaimWarnThreshold := state.preClaimWarnThreshold
+	preClaimWarnState := state.preClaimWarnState
+	exitReason := state.exitReason
+	cleanupLog := state.cleanupLog
+	attemptStarted := false
+	if state.attemptStarted != nil {
+		attemptStarted = *state.attemptStarted
+	}
+	defer func() {
+		state.resultsResetIdx = resultsResetIdx
+		state.pausedInfraUntil = pausedInfraUntil
+		state.workLog = workLog
+		state.wasIdle = wasIdle
+		state.lastIdleQueueSignature = lastIdleQueueSignature
+		state.preClaimIdleDetail = preClaimIdleDetail
+		state.preClaimIdleStreak = preClaimIdleStreak
+		state.preClaimIdleFirstAt = preClaimIdleFirstAt
+		state.preClaimIdleEscalated = preClaimIdleEscalated
+		state.serverUnavailableLogged = serverUnavailableLogged
+		state.sawParentBackEdge = sawParentBackEdge
+		state.claimSuccessRateWindow = claimSuccessRateWindow
+		state.claimSuccessRateSuccesses = claimSuccessRateSuccesses
+		state.claimSuccessRateWarned = claimSuccessRateWarned
+		state.preClaimWarnState = preClaimWarnState
+		state.exitReason = exitReason
+		if state.attemptStarted != nil {
+			*state.attemptStarted = attemptStarted
+		}
+	}()
+
+	setExit := func(condition, reason string) {
+		exitReason = reason
+		result.StopCondition = condition
+		result.ExitReason = reason
+	}
+	applyStop := func(input work.StopInput) bool {
+		decision, ok := work.ClassifyStop(input)
+		if !ok {
+			return false
+		}
+		setExit(string(decision.Condition), decision.ExitReason)
+		return true
+	}
+	resetPreClaimIdleStreak := func() {
+		preClaimIdleDetail = ""
+		preClaimIdleStreak = 0
+		preClaimIdleEscalated = false
+	}
+	setServerUnavailableState := func(at time.Time) {
+		if liveness == nil {
+			return
+		}
+		liveness.SetWorkerState(serverUnavailableStatePhase, serverUnavailableLogMessage)
+		liveness.OnTick(at)
+	}
+	clearServerUnavailableState := func(at time.Time) {
+		if liveness == nil {
+			return
+		}
+		liveness.SetWorkerState("", "")
+		liveness.OnTick(at)
+	}
+	emit := func(eventType string, data map[string]any) {
+		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
 	appendPreClaimWarn := func(beadID, reason, detail string, at time.Time) bool {
 		escalated := appendPreClaimIntakeWarning(w.Store, emit, &preClaimWarnState, preClaimWarnThreshold, beadID, assignee, reason, detail, at)
@@ -1599,53 +1915,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	strictIntakeBlocking := func() bool {
 		return runtime.TargetBeadID != ""
 	}
-
-	emit("loop.start", map[string]any{
-		"worker_id":    runtime.WorkerID,
-		"project_root": runtime.ProjectRoot,
-		"harness":      harness,
-		"model":        model,
-		"session_id":   runtime.SessionID,
-		"assignee":     assignee,
-		"mode":         string(loopMode),
-		"once":         loopMode == executeloop.ModeOnce,
-	})
-	cleanupLog := runtime.CleanupLog
-	if cleanupLog == nil {
-		cleanupLog = runtime.Log
-	}
-	cleanupStop := startExecutionCleanupWorker(ctx, runtime.ProjectRoot, runtime.CleanupRunner, runtime.CleanupInterval, runtime.CleanupTickCh, cleanupLog, emit)
-	attemptStarted := false
-	defer func() {
-		cleanupStop(ctx.Err() != nil && attemptStarted)
-	}()
-	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
-	leaseReader, _ := w.Store.(orphanHarnessLeaseReader)
-	releaser, _ := w.Store.(orphanHarnessLeaseReleaser)
-	appender, _ := w.Store.(orphanHarnessEventAppender)
-	if reaped, reapErr := reapOrphanedHarnessChildren(
-		ctx,
-		runtime.ProjectRoot,
-		newOrphanHarnessProcessScanner(),
-		leaseReader,
-		releaser,
-		appender,
-		assignee,
-		runtime.Log,
-		emit,
-		func(pid int) error { return killProcessGroup(pid) },
-	); reapErr != nil {
-		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper failed: %v\n", reapErr)
-		}
-		emit("loop.operator_attention", map[string]any{
-			"reason":       "orphan_harness_reaper_failed",
-			"project_root": runtime.ProjectRoot,
-			"error":        reapErr.Error(),
-		})
-	} else if reaped > 0 && runtime.Log != nil {
-		_, _ = fmt.Fprintf(runtime.Log, "startup orphan harness reaper killed %d orphaned harness process(es)\n", reaped)
-	}
 	finalizeDurableAuditOrStop := func(candidateID string, report ExecuteBeadReport) bool {
 		if runtime.FinalizeDurableAudit == nil {
 			return false
@@ -1654,7 +1923,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			// Transient .git/index.lock contention from concurrent workers must
 			// not stop the drain (ddx-23ac2796). The pending tracker/audit
 			// changes remain staged and are committed on a later iteration, so
-			// treat lock contention as retryable rather than operator attention —
+			// treat lock contention as retryable rather than operator attention --
 			// a transient lock conflict must never halt an unattended worker.
 			if isTransientGitContention(err) {
 				if runtime.Log != nil {
@@ -1698,432 +1967,227 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 		return false
 	}
-	applyStop := func(input work.StopInput) bool {
-		decision, ok := work.ClassifyStop(input)
-		if !ok {
-			return false
+	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "pre-claim")
+	// Respect context cancellation between iterations. Without this check,
+	// a Stop() request (which cancels ctx) would only take effect during
+	// the idle poll sleep — the loop would happily claim the next ready
+	// bead as soon as the current Execute returned, ignoring the cancel.
+	if err := ctx.Err(); err != nil {
+		if exitReason == "" {
+			applyStop(work.StopInput{ContextErr: err})
 		}
-		setExit(string(decision.Condition), decision.ExitReason)
-		return true
+		return executeBeadIterationOutcome{Stop: true}, err
 	}
-	if runtime.RoutePreflight != nil {
-		routeTimeout := runtime.effectiveRouteResolutionTimeout()
-		rerr, timedOut := runRoutePreflightBounded(ctx, routeTimeout, func(c context.Context) error {
-			return runtime.RoutePreflight(c, harness, model)
-		})
-		if timedOut {
-			// Slow-but-live resolver: no bead lease is held at startup so there
-			// is nothing to release. Log, emit a non-fatal warning, and continue
-			// into the drain loop — the next claim iteration calls RoutePreflight
-			// again, giving a slow resolver another window to succeed (D1c).
-			detail := fmt.Sprintf("routing preflight timed out after %s (harness=%s model=%s); no lease held — continuing",
-				routeTimeout, harness, model)
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s\n", detail)
+	if loopMode == executeloop.ModeWatch && serverOutage.Active() {
+		if !serverUnavailableLogged && runtime.Log != nil {
+			_, _ = fmt.Fprintln(runtime.Log, serverUnavailableLogMessage)
+			serverUnavailableLogged = true
+		}
+		setServerUnavailableState(now().UTC())
+		for serverOutage.Active() {
+			delay := time.Until(serverOutage.NextProbeAt())
+			if delay < 0 {
+				delay = 0
 			}
-			emit("loop.warn", map[string]any{
-				"reason":  "startup_route_preflight_timeout",
-				"harness": harness,
-				"model":   model,
-				"timeout": routeTimeout.String(),
-				"detail":  detail,
-			})
-		} else if rerr != nil {
-			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
-				harness, model, rerr.Error())
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (startup)\n", detail)
+			if err := sleepOrWake(ctx, delay, runtime.WakeCh); err != nil {
+				if exitReason == "" {
+					applyStop(work.StopInput{ContextErr: err})
+				}
+				return executeBeadIterationOutcome{Stop: true}, err
 			}
-			emit("preflight.rejected", map[string]any{
-				"harness": harness,
-				"model":   model,
-				"reason":  rerr.Error(),
-				"startup": true,
-			})
-			report := ExecuteBeadReport{
-				Status:           ExecuteBeadStatusExecutionFailed,
-				Detail:           detail,
-				Harness:          harness,
-				Model:            model,
-				Disrupted:        true,
-				DisruptionReason: "preflight_rejected",
-				OutcomeReason:    "preflight_failed",
+			probeAt := now().UTC()
+			setServerUnavailableState(probeAt)
+			healthy := false
+			var probeErr error
+			if runtime.ServerHealthProbe != nil {
+				healthy, probeErr = runtime.ServerHealthProbe(ctx)
+				if probeErr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "server health probe failed: %v (retrying)\n", probeErr)
+				}
 			}
-			emitDisruptionDetected(emit, w.Store, "", "preflight_rejected", detail, harness, model, assignee, now().UTC())
+			serverOutage.MarkProbeAttempt(probeAt)
+			if healthy {
+				reason := serverOutage.Reason()
+				serverOutage.Clear()
+				clearServerUnavailableState(now().UTC())
+				serverUnavailableLogged = false
+				emit("loop.server_recovered", map[string]any{
+					"reason": reason,
+				})
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintln(runtime.Log, "server reachable: resuming queue")
+				}
+				break
+			}
+		}
+		if serverOutage.Active() {
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+	}
+	if runtime.BudgetStop != nil {
+		if budgetDecision, budgetReport, stopped := runtime.BudgetStop(); stopped {
+			if budgetDecision == (work.StopDecision{}) {
+				budgetDecision = work.StopDecision{Condition: work.StopConditionBudget, ExitReason: "budget"}
+			}
+			setExit(string(budgetDecision.Condition), budgetDecision.ExitReason)
+			if budgetReport.Status == "" {
+				budgetReport.Status = ExecuteBeadStatusExecutionFailed
+			}
+			if budgetReport.Detail != "" && runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, budgetReport.Detail)
+			}
 			result.Failures++
-			result.LastFailureStatus = report.Status
-			result.Results = append(result.Results, report)
-			setExit("Preflight", "preflight_failed")
-			return result, nil
+			result.LastFailureStatus = budgetReport.Status
+			result.Results = append(result.Results, budgetReport)
+			return executeBeadIterationOutcome{Stop: true}, nil
 		}
 	}
-	defer func() {
-		emit("loop.end", map[string]any{
-			"attempts":            result.Attempts,
-			"successes":           result.Successes,
-			"failures":            result.Failures,
-			"last_failure_status": result.LastFailureStatus,
-			"exit_reason":         exitReason,
-		})
-	}()
-
-	for {
-		_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "pre-claim")
-		// Respect context cancellation between iterations. Without this check,
-		// a Stop() request (which cancels ctx) would only take effect during
-		// the idle poll sleep — the loop would happily claim the next ready
-		// bead as soon as the current Execute returned, ignoring the cancel.
-		if err := ctx.Err(); err != nil {
-			if exitReason == "" {
-				applyStop(work.StopInput{ContextErr: err})
-			}
-			return result, err
-		}
-		if loopMode == executeloop.ModeWatch && serverOutage.Active() {
-			if !serverUnavailableLogged && runtime.Log != nil {
-				_, _ = fmt.Fprintln(runtime.Log, serverUnavailableLogMessage)
-				serverUnavailableLogged = true
-			}
-			setServerUnavailableState(now().UTC())
-			for serverOutage.Active() {
-				delay := time.Until(serverOutage.NextProbeAt())
-				if delay < 0 {
-					delay = 0
+	if runtime.ResourceChecker != nil {
+		checkResult, checkErr := runtime.ResourceChecker.Check(ctx)
+		emitResourcePreflight(emit, "pre-claim", checkResult, checkErr)
+		logResourcePreflight(runtime.Log, "pre-claim", checkResult, checkErr)
+		if checkErr != nil {
+			var resourceErr *ResourceExhaustedError
+			if errors.As(checkErr, &resourceErr) {
+				resourceResult := resourceErr.Result
+				if resourceResult.ProjectRoot == "" && len(resourceResult.RootChecks) == 0 {
+					resourceResult = checkResult
 				}
-				if err := sleepOrWake(ctx, delay, runtime.WakeCh); err != nil {
-					if exitReason == "" {
-						applyStop(work.StopInput{ContextErr: err})
-					}
-					return result, err
-				}
-				probeAt := now().UTC()
-				setServerUnavailableState(probeAt)
-				healthy := false
-				var probeErr error
-				if runtime.ServerHealthProbe != nil {
-					healthy, probeErr = runtime.ServerHealthProbe(ctx)
-					if probeErr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "server health probe failed: %v (retrying)\n", probeErr)
-					}
-				}
-				serverOutage.MarkProbeAttempt(probeAt)
-				if healthy {
-					reason := serverOutage.Reason()
-					serverOutage.Clear()
-					clearServerUnavailableState(now().UTC())
-					serverUnavailableLogged = false
-					emit("loop.server_recovered", map[string]any{
-						"reason": reason,
-					})
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintln(runtime.Log, "server reachable: resuming queue")
-					}
-					break
-				}
-			}
-			if serverOutage.Active() {
-				continue
-			}
-		}
-		if runtime.BudgetStop != nil {
-			if budgetDecision, budgetReport, stopped := runtime.BudgetStop(); stopped {
-				if budgetDecision == (work.StopDecision{}) {
-					budgetDecision = work.StopDecision{Condition: work.StopConditionBudget, ExitReason: "budget"}
-				}
-				setExit(string(budgetDecision.Condition), budgetDecision.ExitReason)
-				if budgetReport.Status == "" {
-					budgetReport.Status = ExecuteBeadStatusExecutionFailed
-				}
-				if budgetReport.Detail != "" && runtime.Log != nil {
-					_, _ = fmt.Fprintln(runtime.Log, budgetReport.Detail)
+				report := ExecuteBeadReport{
+					WorkerID:          runtime.WorkerID,
+					Harness:           harness,
+					Model:             model,
+					Status:            ExecuteBeadStatusResourceExhausted,
+					Detail:            ResourceExhaustedStopMessage,
+					Error:             resourceErr.Error(),
+					SessionID:         runtime.SessionID,
+					ResourceExhausted: &resourceResult,
+					Disrupted:         true,
+					DisruptionReason:  ReadinessSystemReasonResourceExhausted,
+					OutcomeReason:     ReadinessSystemReasonResourceExhausted,
 				}
 				result.Failures++
-				result.LastFailureStatus = budgetReport.Status
-				result.Results = append(result.Results, budgetReport)
-				return result, nil
-			}
-		}
-		if runtime.ResourceChecker != nil {
-			checkResult, checkErr := runtime.ResourceChecker.Check(ctx)
-			emitResourcePreflight(emit, "pre-claim", checkResult, checkErr)
-			logResourcePreflight(runtime.Log, "pre-claim", checkResult, checkErr)
-			if checkErr != nil {
-				var resourceErr *ResourceExhaustedError
-				if errors.As(checkErr, &resourceErr) {
-					resourceResult := resourceErr.Result
-					if resourceResult.ProjectRoot == "" && len(resourceResult.RootChecks) == 0 {
-						resourceResult = checkResult
-					}
-					report := ExecuteBeadReport{
-						WorkerID:          runtime.WorkerID,
-						Harness:           harness,
-						Model:             model,
-						Status:            ExecuteBeadStatusResourceExhausted,
-						Detail:            ResourceExhaustedStopMessage,
-						Error:             resourceErr.Error(),
-						SessionID:         runtime.SessionID,
-						ResourceExhausted: &resourceResult,
-						Disrupted:         true,
-						DisruptionReason:  ReadinessSystemReasonResourceExhausted,
-						OutcomeReason:     ReadinessSystemReasonResourceExhausted,
-					}
-					result.Failures++
-					result.LastFailureStatus = report.Status
-					result.Results = append(result.Results, report)
-					setExit("ResourceExhausted", "resource_exhausted")
-					emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
-					}
-					return result, nil
-				}
-				setExit("Preflight", "preflight_failed")
-				return result, checkErr
-			}
-		}
-		if runtime.BinaryRefreshCheck != nil {
-			refreshed, refreshErr := runtime.BinaryRefreshCheck(ctx)
-			if refreshErr != nil {
+				result.LastFailureStatus = report.Status
+				result.Results = append(result.Results, report)
+				setExit("ResourceExhausted", "resource_exhausted")
+				emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "binary refresh check failed: %v; continuing\n", refreshErr)
+					_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
 				}
-				emit("loop.binary_refresh_check_error", map[string]any{"error": refreshErr.Error()})
-			} else if refreshed {
-				setExit("BinaryRefresh", "binary_refresh")
-				emit("loop.binary_refresh", map[string]any{"reason": "installed_binary_changed"})
-				return result, nil
+				return executeBeadIterationOutcome{Stop: true}, nil
 			}
+			setExit("Preflight", "preflight_failed")
+			return executeBeadIterationOutcome{Stop: true}, checkErr
 		}
-		if runtime.ProjectRootDirtyCheck != nil && runtime.ProjectRoot != "" {
-			if dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot); len(dirtyPaths) > 0 {
-				guardState, escalated, guardErr := updateDirtyRootGuardState(
-					runtime.ProjectRoot,
-					dirtyPaths,
-					now().UTC(),
-					DefaultDirtyRootEscalationThreshold,
-					DirtyRootEscalationCooldown,
-				)
-				if guardErr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard persistence failed: %v\n", guardErr)
-				}
-				reason := "dirty_project_root"
-				retryAfter := ""
-				message := fmt.Sprintf(
-					"project root has uncommitted tracked changes (%s); resolve before resuming autonomous work",
-					strings.Join(normalizeDirtyRootPaths(dirtyPaths), ", "),
-				)
-				if guardState != nil {
-					if len(guardState.DirtyPaths) > 0 {
-						dirtyPaths = append([]string(nil), guardState.DirtyPaths...)
-					}
-					if escalated {
-						reason = "dirty_project_root_repeated"
-						retryAfter = guardState.RetryAfter.UTC().Format(time.RFC3339)
-						message = fmt.Sprintf(
-							"project root has uncommitted tracked changes (%s); relaunch suppressed until %s",
-							strings.Join(dirtyPaths, ", "),
-							retryAfter,
-						)
-					}
-				}
-				result.OperatorAttention = &OperatorAttentionStop{
-					Reason:      reason,
-					ProjectRoot: runtime.ProjectRoot,
-					DirtyPaths:  dirtyPaths,
-					RetryAfter:  retryAfter,
-					Message:     message,
-				}
-				setExit("OperatorAttention", "operator_attention")
-				emit("loop.operator_attention", map[string]any{
-					"reason":       reason,
-					"project_root": runtime.ProjectRoot,
-					"dirty_paths":  dirtyPaths,
-					"retry_after":  retryAfter,
-					"message":      message,
-				})
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", message)
-				}
-				return result, nil
-			}
-			if guardErr := clearDirtyRootGuardState(runtime.ProjectRoot); guardErr != nil && runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard clear failed: %v\n", guardErr)
-			}
-		}
-
-		if runtime.TargetBeadID == "" {
-			if reopened, reopenErr := autoReopenRetryableProviderConnectivityProposals(ctx, w.Store, assignee, now().UTC(), emit); reopenErr != nil {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "provider-connectivity auto-reopen failed: %v; continuing\n", reopenErr)
-				}
-				emit("provider_connectivity.auto_reopen_error", map[string]any{
-					"error": reopenErr.Error(),
-				})
-			} else if reopened > 0 && runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "provider-connectivity auto-reopened %d operator-attention bead(s)\n", reopened)
-			}
-		}
-
-		candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard, preclaimGuard}, runtime.LabelFilter, runtime.TargetBeadID)
-		if err != nil {
-			setExit("FatalConfig", "fatal_config")
-			return result, err
-		}
-		// Diagnostic: when nextCandidate selected a lower-priority bead while
-		// at least one higher-priority bead was skipped, emit a structured
-		// picker.priority_skip event naming each skipped bead and the reason
-		// (ddx-9d55601f AC #4). Without this surface, an operator who sees a
-		// worker claim a P2 while P0s sit in `ddx bead ready` cannot tell
-		// whether the picker has a bug, the P0s are filtered upstream, or a
-		// label filter is in play.
-		if ok {
-			emitPickerPrioritySkips(emit, candidate, skips)
-		}
-		if !ok {
-			if detail, reasonCode, idleBeadID, isIdle := preClaimIdleSkip(skips); isIdle {
-				if runtime.Log != nil && !wasIdle {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim hook blocked queue: %s; sleeping %s\n", detail, idleInterval)
-				}
-				emit("loop.idle", map[string]any{
-					"reason":        reasonCode,
-					"detail":        detail,
-					"idle_interval": idleInterval.String(),
-				})
-				emitProgress(runtime.ProgressCh, ProgressEvent{
-					EventID:   "evt-" + randomProgressID(),
-					WorkerID:  runtime.WorkerID,
-					ProjectID: runtime.ProjectRoot,
-					Phase:     "loop.idle",
-					Heartbeat: true,
-					TS:        now().UTC(),
-					Message:   reasonCode,
-				})
-				wasIdle = true
-
-				// Same-detail escalation (ddx-df77e668 AC #3): count consecutive
-				// idle cycles on an identical blocker and emit a non-terminal
-				// operator-attention event once the streak crosses the threshold,
-				// instead of looping silently forever.
-				if detail == preClaimIdleDetail {
-					preClaimIdleStreak++
-				} else {
-					preClaimIdleDetail = detail
-					preClaimIdleStreak = 1
-					preClaimIdleFirstAt = now().UTC()
-					preClaimIdleEscalated = false
-				}
-				if preClaimIdleStreak >= preClaimIdleEscalationThreshold && !preClaimIdleEscalated {
-					preClaimIdleEscalated = true
-					elapsedIdle := now().UTC().Sub(preClaimIdleFirstAt)
-					emit("loop.operator_attention", map[string]any{
-						"reason":       "preclaim_idle_escalation",
-						"bead_id":      idleBeadID,
-						"detail":       detail,
-						"elapsed_idle": elapsedIdle.String(),
-						"idle_count":   preClaimIdleStreak,
-					})
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "operator attention: pre-claim idled %d consecutive cycles on the same blocker (%s; idle for %s); manual intervention may be required\n", preClaimIdleStreak, detail, elapsedIdle)
-					}
-				}
-
-				if loopMode != executeloop.ModeWatch {
-					setExit("Preflight", reasonCode)
-					return result, nil
-				}
-				if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
-					if exitReason == "" {
-						applyStop(work.StopInput{ContextErr: err})
-					}
-					return result, err
-				}
-				continue
-			}
-			if hasGuardSkips(skips) {
-				continue
-			}
-
-			// Before reporting NoReadyWork, check whether every cooldown in the
-			// queue is from an infra-fault class. If so, transition the WORKER to
-			// paused-infra and wait for the earliest cooldown to expire instead of
-			// returning idle/drained — this keeps beads immediately reclaimable
-			// and avoids the misleading "drained" signal when the real issue is infra.
-			if diag, ok := w.Store.(readyDiagnoser); ok {
-				if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil && len(breakdown.ExecutionReady) == 0 && len(breakdown.RetryCooldown) > 0 {
-					if resumeAt, allInfra := infraCooldownResumeAt(w.Store, breakdown.RetryCooldown); allInfra {
-						emit("loop.paused-infra", map[string]any{
-							"reason":    "all_infra_cooldowns",
-							"resume_at": resumeAt.Format(time.RFC3339),
-						})
-						emitProgress(runtime.ProgressCh, ProgressEvent{
-							EventID:   "evt-" + randomProgressID(),
-							WorkerID:  runtime.WorkerID,
-							ProjectID: runtime.ProjectRoot,
-							Phase:     "loop.paused-infra",
-							Heartbeat: true,
-							TS:        now().UTC(),
-							Message:   "all_infra_cooldowns",
-						})
-						sleepDur := time.Until(resumeAt)
-						if sleepDur <= 0 {
-							sleepDur = PausedInfraInterval
-						}
-						if err := sleepOrWake(ctx, sleepDur, runtime.WakeCh); err != nil {
-							if exitReason == "" {
-								applyStop(work.StopInput{ContextErr: err})
-							}
-							return result, err
-						}
-						continue
-					}
-				}
-			}
-
-			// Idle-path closure cascade (FEAT-004 §Queue Semantics For Epics):
-			// before declaring no ready work, close any epics whose children have
-			// all reached a terminal state. If any were closed, loop again —
-			// those closures may unblock downstream work.
-			if closed, _ := w.runEpicClosureCascade(ctx, emit); closed > 0 {
-				continue
-			}
-
-			result.NoReadyWork = true
-			if diag, ok := w.Store.(readyDiagnoser); ok {
-				if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
-					result.NoReadyWorkDetail = noReadyWorkBreakdownFromLifecycle(breakdown)
-					snapshot := queueSnapshotFromLifecycle(breakdown)
-					result.QueueSnapshot = &snapshot
-				}
-			}
-			if applyStop(work.StopInput{
-				NoReadyWork: true,
-				Once:        loopMode == executeloop.ModeOnce,
-				Mode:        loopMode,
-			}) {
-				return result, nil
-			}
+	}
+	if runtime.BinaryRefreshCheck != nil {
+		refreshed, refreshErr := runtime.BinaryRefreshCheck(ctx)
+		if refreshErr != nil {
 			if runtime.Log != nil {
-				signature := workLogQueueSnapshotSignature(result.QueueSnapshot)
-				includeBlockers := signature != "" && signature != lastIdleQueueSignature
-				_, _ = fmt.Fprint(runtime.Log, workLog.FormatWatchIdle(idleInterval, result.QueueSnapshot, includeBlockers))
-				lastIdleQueueSignature = signature
+				_, _ = fmt.Fprintf(runtime.Log, "binary refresh check failed: %v; continuing\n", refreshErr)
 			}
-			clearTransientCandidateSkips()
-			resetPreClaimIdleStreak()
-			wasIdle = true
-			// Watch mode treats an empty queue as idle, not terminal. --once
-			// and drain exits are classified above through work.StopCondition.
-			// Emit a transient "no_ready_work"
-			// event so server-managed workers can surface this as an idle substate
-			// (ddx-dc157075 AC #5) instead of treating it as terminal.
+			emit("loop.binary_refresh_check_error", map[string]any{"error": refreshErr.Error()})
+		} else if refreshed {
+			setExit("BinaryRefresh", "binary_refresh")
+			emit("loop.binary_refresh", map[string]any{"reason": "installed_binary_changed"})
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+	}
+	if runtime.ProjectRootDirtyCheck != nil && runtime.ProjectRoot != "" {
+		if dirtyPaths := runtime.ProjectRootDirtyCheck(runtime.ProjectRoot); len(dirtyPaths) > 0 {
+			guardState, escalated, guardErr := updateDirtyRootGuardState(
+				runtime.ProjectRoot,
+				dirtyPaths,
+				now().UTC(),
+				DefaultDirtyRootEscalationThreshold,
+				DirtyRootEscalationCooldown,
+			)
+			if guardErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard persistence failed: %v\n", guardErr)
+			}
+			reason := "dirty_project_root"
+			retryAfter := ""
+			message := fmt.Sprintf(
+				"project root has uncommitted tracked changes (%s); resolve before resuming autonomous work",
+				strings.Join(normalizeDirtyRootPaths(dirtyPaths), ", "),
+			)
+			if guardState != nil {
+				if len(guardState.DirtyPaths) > 0 {
+					dirtyPaths = append([]string(nil), guardState.DirtyPaths...)
+				}
+				if escalated {
+					reason = "dirty_project_root_repeated"
+					retryAfter = guardState.RetryAfter.UTC().Format(time.RFC3339)
+					message = fmt.Sprintf(
+						"project root has uncommitted tracked changes (%s); relaunch suppressed until %s",
+						strings.Join(dirtyPaths, ", "),
+						retryAfter,
+					)
+				}
+			}
+			result.OperatorAttention = &OperatorAttentionStop{
+				Reason:      reason,
+				ProjectRoot: runtime.ProjectRoot,
+				DirtyPaths:  dirtyPaths,
+				RetryAfter:  retryAfter,
+				Message:     message,
+			}
+			setExit("OperatorAttention", "operator_attention")
+			emit("loop.operator_attention", map[string]any{
+				"reason":       reason,
+				"project_root": runtime.ProjectRoot,
+				"dirty_paths":  dirtyPaths,
+				"retry_after":  retryAfter,
+				"message":      message,
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "operator attention: %s\n", message)
+			}
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		if guardErr := clearDirtyRootGuardState(runtime.ProjectRoot); guardErr != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "dirty-root guard clear failed: %v\n", guardErr)
+		}
+	}
+
+	if runtime.TargetBeadID == "" {
+		if reopened, reopenErr := autoReopenRetryableProviderConnectivityProposals(ctx, w.Store, assignee, now().UTC(), emit); reopenErr != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "provider-connectivity auto-reopen failed: %v; continuing\n", reopenErr)
+			}
+			emit("provider_connectivity.auto_reopen_error", map[string]any{
+				"error": reopenErr.Error(),
+			})
+		} else if reopened > 0 && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "provider-connectivity auto-reopened %d operator-attention bead(s)\n", reopened)
+		}
+	}
+
+	candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard, preclaimGuard}, runtime.LabelFilter, runtime.TargetBeadID)
+	if err != nil {
+		setExit("FatalConfig", "fatal_config")
+		return executeBeadIterationOutcome{Stop: true}, err
+	}
+	// Diagnostic: when nextCandidate selected a lower-priority bead while
+	// at least one higher-priority bead was skipped, emit a structured
+	// picker.priority_skip event naming each skipped bead and the reason
+	// (ddx-9d55601f AC #4). Without this surface, an operator who sees a
+	// worker claim a P2 while P0s sit in `ddx bead ready` cannot tell
+	// whether the picker has a bug, the P0s are filtered upstream, or a
+	// label filter is in play.
+	if ok {
+		emitPickerPrioritySkips(emit, candidate, skips)
+	}
+	if !ok {
+		if detail, reasonCode, idleBeadID, isIdle := preClaimIdleSkip(skips); isIdle {
+			if runtime.Log != nil && !wasIdle {
+				_, _ = fmt.Fprintf(runtime.Log, "pre-claim hook blocked queue: %s; sleeping %s\n", detail, idleInterval)
+			}
 			emit("loop.idle", map[string]any{
-				"reason":        "no_ready_work",
+				"reason":        reasonCode,
+				"detail":        detail,
 				"idle_interval": idleInterval.String(),
 			})
-			// Surface the idle substate via the progress channel so server-side
-			// drainProgress can flip WorkerRecord.Substate to "idle" without
-			// reading the JSONL event log. Phase="loop.idle" is treated as a
-			// substate signal, not a per-bead attempt phase.
 			emitProgress(runtime.ProgressCh, ProgressEvent{
 				EventID:   "evt-" + randomProgressID(),
 				WorkerID:  runtime.WorkerID,
@@ -2131,917 +2195,1155 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				Phase:     "loop.idle",
 				Heartbeat: true,
 				TS:        now().UTC(),
-				Message:   "no_ready_work",
+				Message:   reasonCode,
 			})
-			resultsResetIdx = len(result.Results)
+			wasIdle = true
+
+			// Same-detail escalation (ddx-df77e668 AC #3): count consecutive
+			// idle cycles on an identical blocker and emit a non-terminal
+			// operator-attention event once the streak crosses the threshold,
+			// instead of looping silently forever.
+			if detail == preClaimIdleDetail {
+				preClaimIdleStreak++
+			} else {
+				preClaimIdleDetail = detail
+				preClaimIdleStreak = 1
+				preClaimIdleFirstAt = now().UTC()
+				preClaimIdleEscalated = false
+			}
+			if preClaimIdleStreak >= preClaimIdleEscalationThreshold && !preClaimIdleEscalated {
+				preClaimIdleEscalated = true
+				elapsedIdle := now().UTC().Sub(preClaimIdleFirstAt)
+				payload := map[string]any{
+					"reason":       "preclaim_idle_escalation",
+					"bead_id":      idleBeadID,
+					"detail":       detail,
+					"elapsed_idle": elapsedIdle.String(),
+					"idle_count":   preClaimIdleStreak,
+				}
+				for k, v := range preClaimDecisionAudit("preclaim_idle_escalation", preClaimIdleStreak) {
+					payload[k] = v
+				}
+				emit("loop.operator_attention", payload)
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "operator attention: pre-claim idled %d consecutive cycles on the same blocker (%s; idle for %s); manual intervention may be required\n", preClaimIdleStreak, detail, elapsedIdle)
+				}
+			}
+
+			if loopMode != executeloop.ModeWatch {
+				setExit("Preflight", reasonCode)
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
 			if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
 				if exitReason == "" {
 					applyStop(work.StopInput{ContextErr: err})
 				}
-				return result, err
+				return executeBeadIterationOutcome{Stop: true}, err
 			}
-			continue
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+		if hasGuardSkips(skips) {
+			return executeBeadIterationOutcome{Continue: true}, nil
 		}
 
-		// Found a candidate: clear any "idle" substate set on the previous
-		// no-candidate iteration (ddx-dc157075 AC #5).
-		if wasIdle && runtime.Log != nil {
-			_, _ = fmt.Fprint(runtime.Log, workLog.FormatNextReadyTransition(candidate.ID, candidate.Title))
+		// Before reporting NoReadyWork, check whether every cooldown in the
+		// queue is from an infra-fault class. If so, transition the WORKER to
+		// paused-infra and wait for the earliest cooldown to expire instead of
+		// returning idle/drained — this keeps beads immediately reclaimable
+		// and avoids the misleading "drained" signal when the real issue is infra.
+		if diag, ok := w.Store.(readyDiagnoser); ok {
+			if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil && len(breakdown.ExecutionReady) == 0 && len(breakdown.RetryCooldown) > 0 {
+				if resumeAt, allInfra := infraCooldownResumeAt(w.Store, breakdown.RetryCooldown); allInfra {
+					emit("loop.paused-infra", map[string]any{
+						"reason":    "all_infra_cooldowns",
+						"resume_at": resumeAt.Format(time.RFC3339),
+					})
+					emitProgress(runtime.ProgressCh, ProgressEvent{
+						EventID:   "evt-" + randomProgressID(),
+						WorkerID:  runtime.WorkerID,
+						ProjectID: runtime.ProjectRoot,
+						Phase:     "loop.paused-infra",
+						Heartbeat: true,
+						TS:        now().UTC(),
+						Message:   "all_infra_cooldowns",
+					})
+					sleepDur := time.Until(resumeAt)
+					if sleepDur <= 0 {
+						sleepDur = PausedInfraInterval
+					}
+					if err := sleepOrWake(ctx, sleepDur, runtime.WakeCh); err != nil {
+						if exitReason == "" {
+							applyStop(work.StopInput{ContextErr: err})
+						}
+						return executeBeadIterationOutcome{Stop: true}, err
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+			}
 		}
-		wasIdle = false
+
+		// Idle-path closure cascade (FEAT-004 §Queue Semantics For Epics):
+		// before declaring no ready work, close any epics whose children have
+		// all reached a terminal state. If any were closed, loop again —
+		// those closures may unblock downstream work.
+		if closed, _ := w.runEpicClosureCascade(ctx, emit); closed > 0 {
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+
+		result.NoReadyWork = true
+		if diag, ok := w.Store.(readyDiagnoser); ok {
+			if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
+				result.NoReadyWorkDetail = noReadyWorkBreakdownFromLifecycle(breakdown)
+				snapshot := queueSnapshotFromLifecycle(breakdown)
+				result.QueueSnapshot = &snapshot
+			}
+		}
+		if applyStop(work.StopInput{
+			NoReadyWork: true,
+			Once:        loopMode == executeloop.ModeOnce,
+			Mode:        loopMode,
+		}) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		if runtime.Log != nil {
+			signature := workLogQueueSnapshotSignature(result.QueueSnapshot)
+			includeBlockers := signature != "" && signature != lastIdleQueueSignature
+			_, _ = fmt.Fprint(runtime.Log, workLog.FormatWatchIdle(idleInterval, result.QueueSnapshot, includeBlockers))
+			lastIdleQueueSignature = signature
+		}
+		clearTransientCandidateSkips()
 		resetPreClaimIdleStreak()
+		wasIdle = true
+		// Watch mode treats an empty queue as idle, not terminal. --once
+		// and drain exits are classified above through work.StopCondition.
+		// Emit a transient "no_ready_work"
+		// event so server-managed workers can surface this as an idle substate
+		// (ddx-dc157075 AC #5) instead of treating it as terminal.
+		emit("loop.idle", map[string]any{
+			"reason":        "no_ready_work",
+			"idle_interval": idleInterval.String(),
+		})
+		// Surface the idle substate via the progress channel so server-side
+		// drainProgress can flip WorkerRecord.Substate to "idle" without
+		// reading the JSONL event log. Phase="loop.idle" is treated as a
+		// substate signal, not a per-bead attempt phase.
+		emitProgress(runtime.ProgressCh, ProgressEvent{
+			EventID:   "evt-" + randomProgressID(),
+			WorkerID:  runtime.WorkerID,
+			ProjectID: runtime.ProjectRoot,
+			Phase:     "loop.idle",
+			Heartbeat: true,
+			TS:        now().UTC(),
+			Message:   "no_ready_work",
+		})
+		resultsResetIdx = len(result.Results)
+		if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
+			if exitReason == "" {
+				applyStop(work.StopInput{ContextErr: err})
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+
+	// Found a candidate: clear any "idle" substate set on the previous
+	// no-candidate iteration (ddx-dc157075 AC #5).
+	if wasIdle && runtime.Log != nil {
+		_, _ = fmt.Fprint(runtime.Log, workLog.FormatNextReadyTransition(candidate.ID, candidate.Title))
+	}
+	wasIdle = false
+	resetPreClaimIdleStreak()
+	emitProgress(runtime.ProgressCh, ProgressEvent{
+		EventID:   "evt-" + randomProgressID(),
+		WorkerID:  runtime.WorkerID,
+		ProjectID: runtime.ProjectRoot,
+		BeadID:    candidate.ID,
+		Phase:     "loop.active",
+		Heartbeat: true,
+		TS:        now().UTC(),
+	})
+
+	if allowed, reason := complexityGuard.Allow(ctx, candidate.ID); !allowed {
+		if runtime.Log != nil && reason != "" {
+			_, _ = fmt.Fprintf(runtime.Log, "complexity gate: %s (skipping %s)\n", reason, candidate.ID)
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	freshCandidate, staleSkip, refreshErr := w.refreshCandidateBeforeClaim(ctx, candidate)
+	if refreshErr != nil {
+		return executeBeadIterationOutcome{Stop: true}, refreshErr
+	}
+	if staleSkip != nil {
+		transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before claim: %s\n", candidate.ID, staleSkip.Detail)
+		}
+		emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_claim")
+		recordClaimAttempt(false, candidate.ID)
+		if stopAfterNonAttemptSkip() {
+			applyStop(work.StopInput{Once: true})
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	candidate = *freshCandidate
+	// Consecutive-wedge guard (ddx-9714eaac): if this bead wedged
+	// (route_resolution_timeout / progress_watchdog) on its immediately
+	// preceding claim(s) up to the threshold, stop re-claiming it. A
+	// route-independent wedge carries no failed-route entry, so without this
+	// guard a freshly released wedged bead is re-claimed and re-wedged
+	// indefinitely while ready work starves (parent ddx-8f2e0ebf criterion E).
+	// The bead is parked to proposed for operator attention; `continue` moves
+	// the loop on to the next ready bead so the queue keeps draining.
+	if marker := readWedgeMarker(candidate.Extra); consecutiveWedgeGuardTrips(marker, runtime.effectiveConsecutiveWedgeThreshold()) {
+		threshold := runtime.effectiveConsecutiveWedgeThreshold()
+		if parkErr := flagConsecutiveWedgeForOperator(w.Store, candidate.ID, assignee, marker, threshold, now().UTC()); parkErr != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: failed to park %s for operator attention: %v\n", candidate.ID, parkErr)
+		}
+		emit("loop.consecutive_wedge_guard", map[string]any{
+			"bead_id":     candidate.ID,
+			"count":       marker.Count,
+			"threshold":   threshold,
+			"last_reason": marker.LastReason,
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: %s wedged %d consecutive claims (>= %d); flagged for operator attention, continuing to next ready bead\n", candidate.ID, marker.Count, threshold)
+		}
+		recordClaimAttempt(false, candidate.ID)
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	// Claim atomically before model-backed intake and lint to prevent
+	// concurrent workers from issuing duplicate model calls or appending
+	// duplicate lint events for the same bead. Terminal non-actionable
+	// outcomes unclaim and park the bead rather than proceeding to execution.
+	var claimErr error
+	if claimer, ok := w.Store.(claimWithOptionsStore); ok {
+		claimErr = claimer.ClaimWithOptions(candidate.ID, assignee, runtime.SessionID, "")
+	} else {
+		claimErr = w.Store.Claim(candidate.ID, assignee)
+	}
+	if claimErr != nil {
+		// Another worker won the race for this bead. Emit a structured
+		// claim_race event so concurrent-worker losses are observable
+		// (ddx-9d55601f AC #4). The bead remains in `attempted` for this
+		// run; on the next iteration it will be filtered out of
+		// ReadyExecution naturally because the winner now holds the fresh
+		// claim lease sidecar, so the loser keeps moving down priority
+		// order.
+		emit("picker.claim_race", map[string]any{
+			"bead_id":    candidate.ID,
+			"priority":   candidate.Priority,
+			"queue_rank": queueRankValue(candidate.Extra["queue-rank"]),
+			"reason":     claimErr.Error(),
+		})
+		recordClaimAttempt(false, candidate.ID)
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	recordClaimAttempt(true, candidate.ID)
+
+	overrideRetryAfter := ""
+	overrideMeta := forcedCooldownMetadata{}
+	if runtime.IgnoreCooldown {
+		if reporter, ok := w.Store.(cooldownOverrideReporter); ok {
+			if retryAfter, overridden := reporter.CooldownOverrideInfo(candidate.ID); overridden {
+				overrideRetryAfter = retryAfter
+				overrideMeta = forcedCooldownSnapshot(candidate, retryAfter, true)
+				appendForceClaimEvent(w.Store, candidate.ID, assignee, executeLoopEventSource(runtime), runtime.CooldownOverrideReason, retryAfter, now().UTC())
+			}
+		}
+	}
+
+	emit("bead.claimed", map[string]any{
+		"bead_id":  candidate.ID,
+		"title":    candidate.Title,
+		"assignee": assignee,
+	})
+
+	if runtime.Log != nil {
+		workLog = workLog.WithCurrentBeadID(candidate.ID)
+		_, _ = fmt.Fprint(runtime.Log, workLog.FormatHeader(candidate.ID, candidate.Title))
+	}
+
+	recovery, recErr := recoverDanglingSuccess(
+		w.Store, runtime.ProjectRoot, candidate.ID,
+		assignee, now, emit,
+	)
+	if recErr != nil {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "dangling-success recovery error (%s): %v\n", candidate.ID, recErr)
+		}
+		_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+			return commitOutcomeError("recoverDanglingSuccess", assignee, result, recErr)
+		})
+		if ctx.Err() != nil {
+			return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	if recovery != nil {
+		report := danglingSuccessRecoveryReport(candidate.ID, recovery)
+		result.Attempts++
+		if recovery.Outcome == danglingSuccessOutcomeClosed {
+			result.Successes++
+			result.LastSuccessAt = now().UTC()
+		} else {
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		}
+		result.Results = append(result.Results, report)
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		if applyStop(work.StopInput{Once: loopMode == executeloop.ModeOnce}) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+
+	repairer := w.preDispatchGitRepairer
+	if repairer == nil {
+		repairer = defaultPreDispatchGitRepairer
+	}
+	gitRepair := repairer(ctx, runtime.ProjectRoot)
+	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		stop := &OperatorAttentionStop{
+			Reason:      preDispatchGitRepairFailedReason,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			Message:     "DDx could not repair project git config; resolve the git status failure before restarting ddx work",
+		}
+		result.OperatorAttention = stop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git repair failed for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":          stop.Reason,
+			"bead_id":         candidate.ID,
+			"project_root":    runtime.ProjectRoot,
+			"message":         stop.Message,
+			"detail":          detail,
+			"git_stderr":      gitRepair.StatusStderr,
+			"issue_types":     gitRepair.RepairedTypes,
+			"repair_commands": gitRepair.Commands,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if len(gitRepair.RepairedTypes) > 0 {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"repaired project git config before readiness for %s: %s (%s)\n",
+				candidate.ID,
+				strings.Join(gitRepair.RepairedTypes, ", "),
+				strings.Join(gitRepair.Commands, "; "),
+			)
+		}
+		emit("loop.pre_dispatch_git_repaired", map[string]any{
+			"bead_id":          candidate.ID,
+			"project_root":     runtime.ProjectRoot,
+			"issue_types":      gitRepair.RepairedTypes,
+			"repair_commands":  gitRepair.Commands,
+			"status_rechecked": gitRepair.StatusSucceeded,
+			"stage":            "readiness",
+		})
+	}
+
+	skipPreClaimIntake := false
+	readinessEstimatedDifficulty := ""
+
+	// Queue-level decomposition depth cap: when the bead has already been split
+	// to the configured limit, block it for operator review without invoking
+	// the classifier or splitter (docs/triage/decomposition.md §Recursion depth cap).
+	if runtime.PreClaimIntakeHook != nil && rcfg.MaxDecompositionDepth() > 0 {
+		maxDepth := rcfg.MaxDecompositionDepth()
+		depth := storeBeadDepth(ctx, w.Store, &candidate)
+		if depth >= maxDepth {
+			body, _ := json.Marshal(map[string]any{"depth": depth, "max": maxDepth})
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:      "triage-overflow",
+				Summary:   "depth cap exceeded",
+				Body:      string(body),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: now().UTC(),
+			})
+			if lerr := addBeadLabel(ctx, w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
+			}
+			overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
+			if strictIntakeBlocking() {
+				if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+				} else if parked {
+					_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+					if stopAfterNonAttemptSkip() {
+						applyStop(work.StopInput{Once: true})
+						return executeBeadIterationOutcome{Stop: true}, nil
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+			} else {
+				if appendPreClaimWarn(candidate.ID, "decomposition_depth_cap", overflowDetail, now().UTC()) {
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+				emit("pre_claim_intake.warn", readinessDecisionBody(
+					"pre_claim_intake.decomposition_depth_cap",
+					"too_large",
+					"pre_claim_intake",
+					"best-effort",
+					"attempt",
+					"continue with implementation; operator attention is reserved for explicit targeted execution",
+					map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeTooLargeDecomposed),
+						"detail":  overflowDetail,
+					},
+				))
+				skipPreClaimIntake = true
+			}
+		}
+	}
+
+	// Pre-dispatch intake runs after claiming so that only the owning worker
+	// performs model-backed readiness evaluation. Concurrent workers that lose
+	// the claim race skip intake entirely (picker.claim_race above). Terminal
+	// non-actionable outcomes unclaim and park the bead so it does not
+	// re-appear in ReadyExecution until an operator reviews it.
+	if runtime.PreClaimIntakeHook != nil && !skipPreClaimIntake {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+				Phase:    "readiness",
+				BeadID:   candidate.ID,
+				Message:  "check: starting",
+				Harness:  harness,
+				Provider: provider,
+				Model:    model,
+			}))
+		}
+		emit("pre_claim_intake.start", map[string]any{
+			"bead_id": candidate.ID,
+		})
 		emitProgress(runtime.ProgressCh, ProgressEvent{
 			EventID:   "evt-" + randomProgressID(),
 			WorkerID:  runtime.WorkerID,
 			ProjectID: runtime.ProjectRoot,
 			BeadID:    candidate.ID,
-			Phase:     "loop.active",
+			Phase:     "pre_claim_intake",
 			Heartbeat: true,
 			TS:        now().UTC(),
+			Message:   "readiness check",
 		})
-
-		if allowed, reason := complexityGuard.Allow(ctx, candidate.ID); !allowed {
-			if runtime.Log != nil && reason != "" {
-				_, _ = fmt.Fprintf(runtime.Log, "complexity gate: %s (skipping %s)\n", reason, candidate.ID)
-			}
-			continue
-		}
-		freshCandidate, staleSkip, refreshErr := w.refreshCandidateBeforeClaim(ctx, candidate)
-		if refreshErr != nil {
-			return result, refreshErr
-		}
-		if staleSkip != nil {
-			transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before claim: %s\n", candidate.ID, staleSkip.Detail)
-			}
-			emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_claim")
-			recordClaimAttempt(false, candidate.ID)
-			if stopAfterNonAttemptSkip() {
-				applyStop(work.StopInput{Once: true})
-				return result, nil
-			}
-			continue
-		}
-		candidate = *freshCandidate
-		// Consecutive-wedge guard (ddx-9714eaac): if this bead wedged
-		// (route_resolution_timeout / progress_watchdog) on its immediately
-		// preceding claim(s) up to the threshold, stop re-claiming it. A
-		// route-independent wedge carries no failed-route entry, so without this
-		// guard a freshly released wedged bead is re-claimed and re-wedged
-		// indefinitely while ready work starves (parent ddx-8f2e0ebf criterion E).
-		// The bead is parked to proposed for operator attention; `continue` moves
-		// the loop on to the next ready bead so the queue keeps draining.
-		if marker := readWedgeMarker(candidate.Extra); consecutiveWedgeGuardTrips(marker, runtime.effectiveConsecutiveWedgeThreshold()) {
-			threshold := runtime.effectiveConsecutiveWedgeThreshold()
-			if parkErr := flagConsecutiveWedgeForOperator(w.Store, candidate.ID, assignee, marker, threshold, now().UTC()); parkErr != nil && runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: failed to park %s for operator attention: %v\n", candidate.ID, parkErr)
-			}
-			emit("loop.consecutive_wedge_guard", map[string]any{
-				"bead_id":     candidate.ID,
-				"count":       marker.Count,
-				"threshold":   threshold,
-				"last_reason": marker.LastReason,
-			})
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "consecutive-wedge guard: %s wedged %d consecutive claims (>= %d); flagged for operator attention, continuing to next ready bead\n", candidate.ID, marker.Count, threshold)
-			}
-			recordClaimAttempt(false, candidate.ID)
-			continue
-		}
-		// Claim atomically before model-backed intake and lint to prevent
-		// concurrent workers from issuing duplicate model calls or appending
-		// duplicate lint events for the same bead. Terminal non-actionable
-		// outcomes unclaim and park the bead rather than proceeding to execution.
-		var claimErr error
-		if claimer, ok := w.Store.(claimWithOptionsStore); ok {
-			claimErr = claimer.ClaimWithOptions(candidate.ID, assignee, runtime.SessionID, "")
-		} else {
-			claimErr = w.Store.Claim(candidate.ID, assignee)
-		}
-		if claimErr != nil {
-			// Another worker won the race for this bead. Emit a structured
-			// claim_race event so concurrent-worker losses are observable
-			// (ddx-9d55601f AC #4). The bead remains in `attempted` for this
-			// run; on the next iteration it will be filtered out of
-			// ReadyExecution naturally because the winner now holds the fresh
-			// claim lease sidecar, so the loser keeps moving down priority
-			// order.
-			emit("picker.claim_race", map[string]any{
-				"bead_id":    candidate.ID,
-				"priority":   candidate.Priority,
-				"queue_rank": queueRankValue(candidate.Extra["queue-rank"]),
-				"reason":     claimErr.Error(),
-			})
-			recordClaimAttempt(false, candidate.ID)
-			continue
-		}
-		recordClaimAttempt(true, candidate.ID)
-
-		overrideRetryAfter := ""
-		overrideMeta := forcedCooldownMetadata{}
-		if runtime.IgnoreCooldown {
-			if reporter, ok := w.Store.(cooldownOverrideReporter); ok {
-				if retryAfter, overridden := reporter.CooldownOverrideInfo(candidate.ID); overridden {
-					overrideRetryAfter = retryAfter
-					overrideMeta = forcedCooldownSnapshot(candidate, retryAfter, true)
-					appendForceClaimEvent(w.Store, candidate.ID, assignee, executeLoopEventSource(runtime), runtime.CooldownOverrideReason, retryAfter, now().UTC())
-				}
-			}
-		}
-
-		emit("bead.claimed", map[string]any{
-			"bead_id":  candidate.ID,
-			"title":    candidate.Title,
-			"assignee": assignee,
+		// Keep the external claim lease alive while the model-backed
+		// readiness/intake hook runs. This closes the pre-attempt gap where
+		// the owned bead was previously heartbeated only after intake
+		// completed, allowing a live worker to look stale and be reclaimed.
+		intakeResult, intakeErr := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (PreClaimIntakeResult, error) {
+			return runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
 		})
-
-		if runtime.Log != nil {
-			workLog = workLog.WithCurrentBeadID(candidate.ID)
-			_, _ = fmt.Fprint(runtime.Log, workLog.FormatHeader(candidate.ID, candidate.Title))
+		if intakeErr == nil {
+			readinessEstimatedDifficulty = normalizeReadinessEstimatedDifficulty(intakeResult.EstimatedDifficulty)
 		}
-
-		recovery, recErr := recoverDanglingSuccess(
-			w.Store, runtime.ProjectRoot, candidate.ID,
-			assignee, now, emit,
-		)
-		if recErr != nil {
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "dangling-success recovery error (%s): %v\n", candidate.ID, recErr)
+		intakeOutcome := intakeResult.normalizedOutcome()
+		if intakeResult.SystemReason == ReadinessSystemReasonTimeout {
+			timeoutDetail := strings.TrimSpace(intakeResult.Detail)
+			if timeoutDetail == "" {
+				timeoutDetail = fmt.Sprintf("readiness check timed out after %s", preClaimTimeout)
 			}
-			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("recoverDanglingSuccess", assignee, result, recErr)
-			})
-			if ctx.Err() != nil {
-				return result, ctx.Err()
-			}
-			continue
-		}
-		if recovery != nil {
-			report := danglingSuccessRecoveryReport(candidate.ID, recovery)
-			result.Attempts++
-			if recovery.Outcome == danglingSuccessOutcomeClosed {
-				result.Successes++
-				result.LastSuccessAt = now().UTC()
-			} else {
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			}
-			result.Results = append(result.Results, report)
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
-			}
-			if finalizeDurableAuditOrStop(candidate.ID, report) {
-				return result, nil
-			}
-			if applyStop(work.StopInput{Once: loopMode == executeloop.ModeOnce}) {
-				return result, nil
-			}
-			continue
-		}
-
-		skipPreClaimIntake := false
-		readinessEstimatedDifficulty := ""
-
-		// Queue-level decomposition depth cap: when the bead has already been split
-		// to the configured limit, block it for operator review without invoking
-		// the classifier or splitter (docs/triage/decomposition.md §Recursion depth cap).
-		if runtime.PreClaimIntakeHook != nil && rcfg.MaxDecompositionDepth() > 0 {
-			maxDepth := rcfg.MaxDecompositionDepth()
-			depth := storeBeadDepth(ctx, w.Store, &candidate)
-			if depth >= maxDepth {
-				body, _ := json.Marshal(map[string]any{"depth": depth, "max": maxDepth})
-				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-					Kind:      "triage-overflow",
-					Summary:   "depth cap exceeded",
-					Body:      string(body),
-					Actor:     assignee,
-					Source:    "ddx work",
-					CreatedAt: now().UTC(),
-				})
-				if lerr := addBeadLabel(ctx, w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
-				}
-				overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
-				if strictIntakeBlocking() {
-					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-					} else if parked {
-						_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-						if stopAfterNonAttemptSkip() {
-							applyStop(work.StopInput{Once: true})
-							return result, nil
-						}
-						continue
-					}
-				} else {
-					if appendPreClaimWarn(candidate.ID, "decomposition_depth_cap", overflowDetail, now().UTC()) {
-						return result, nil
-					}
-					emit("pre_claim_intake.warn", readinessDecisionBody(
-						"pre_claim_intake.decomposition_depth_cap",
-						"too_large",
-						"pre_claim_intake",
-						"best-effort",
-						"attempt",
-						"continue with implementation; operator attention is reserved for explicit targeted execution",
-						map[string]any{
-							"bead_id": candidate.ID,
-							"outcome": string(PreClaimIntakeTooLargeDecomposed),
-							"detail":  overflowDetail,
-						},
-					))
-					skipPreClaimIntake = true
-				}
-			}
-		}
-
-		// Pre-dispatch intake runs after claiming so that only the owning worker
-		// performs model-backed readiness evaluation. Concurrent workers that lose
-		// the claim race skip intake entirely (picker.claim_race above). Terminal
-		// non-actionable outcomes unclaim and park the bead so it does not
-		// re-appear in ReadyExecution until an operator reviews it.
-		if runtime.PreClaimIntakeHook != nil && !skipPreClaimIntake {
 			if runtime.Log != nil {
 				_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
 					Phase:    "readiness",
 					BeadID:   candidate.ID,
-					Message:  "check: starting",
+					Message:  fmt.Sprintf("check timed out after %s (continuing)", preClaimTimeout),
 					Harness:  harness,
 					Provider: provider,
 					Model:    model,
 				}))
 			}
-			emit("pre_claim_intake.start", map[string]any{
-				"bead_id": candidate.ID,
-			})
-			emitProgress(runtime.ProgressCh, ProgressEvent{
-				EventID:   "evt-" + randomProgressID(),
-				WorkerID:  runtime.WorkerID,
-				ProjectID: runtime.ProjectRoot,
-				BeadID:    candidate.ID,
-				Phase:     "pre_claim_intake",
-				Heartbeat: true,
-				TS:        now().UTC(),
-				Message:   "readiness check",
-			})
-			// Keep the external claim lease alive while the model-backed
-			// readiness/intake hook runs. This closes the pre-attempt gap where
-			// the owned bead was previously heartbeated only after intake
-			// completed, allowing a live worker to look stale and be reclaimed.
-			intakeResult, intakeErr := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (PreClaimIntakeResult, error) {
-				return runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
-			})
-			if intakeErr == nil {
-				readinessEstimatedDifficulty = normalizeReadinessEstimatedDifficulty(intakeResult.EstimatedDifficulty)
-			}
-			intakeOutcome := intakeResult.normalizedOutcome()
-			if intakeResult.SystemReason == ReadinessSystemReasonTimeout {
-				timeoutDetail := strings.TrimSpace(intakeResult.Detail)
-				if timeoutDetail == "" {
-					timeoutDetail = fmt.Sprintf("readiness check timed out after %s", preClaimTimeout)
+			eventBody := readinessDecisionBody(
+				"pre_claim_intake.timeout",
+				"timeout",
+				"pre_claim_intake",
+				func() string {
+					if strictIntakeBlocking() {
+						return "block"
+					}
+					return "warn-only"
+				}(),
+				func() string {
+					if strictIntakeBlocking() {
+						return "park"
+					}
+					return "continue"
+				}(),
+				func() string {
+					if strictIntakeBlocking() {
+						return "review the readiness timeout and retry the bead later"
+					}
+					return "continue with implementation; review should create follow-up work for any readiness gaps"
+				}(),
+				map[string]any{
+					"bead_id":       candidate.ID,
+					"command":       "ddx work readiness check",
+					"context":       "pre-claim intake",
+					"detail":        timeoutDetail,
+					"harness":       harness,
+					"model":         model,
+					"mode":          string(loopMode),
+					"outcome":       string(PreClaimIntakeError),
+					"provider":      provider,
+					"system_reason": ReadinessSystemReasonTimeout,
+					"targeted":      strictIntakeBlocking(),
+					"timeout":       preClaimTimeout.String(),
+					"worker_id":     runtime.WorkerID,
+				},
+			)
+			operatorOverrideTimeout, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake.timeout", ReadinessReasonSystemUnready, "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
+			eventBody["operator_override"] = operatorOverrideTimeout
+			if strictIntakeBlocking() {
+				emit("pre_claim_intake.blocked", eventBody)
+				if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeError, ReadinessReasonSystemUnready, timeoutDetail, now().UTC()); berr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+				} else if parked {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness timeout parked bead %s for operator review\n", candidate.ID)
+					}
 				}
+				_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+				if stopAfterNonAttemptSkip() {
+					applyStop(work.StopInput{Once: true})
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			} else {
+				emit("pre_claim_intake.warn", eventBody)
+				if appendPreClaimWarn(candidate.ID, "timeout", timeoutDetail, now().UTC()) {
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+				intakeOutcome = PreClaimIntakeActionableAtomic
+			}
+		}
+		switch {
+		case intakeErr != nil:
+			if errors.Is(intakeErr, context.Canceled) || errors.Is(intakeErr, context.DeadlineExceeded) {
+				if exitReason == "" {
+					applyStop(work.StopInput{ContextErr: intakeErr})
+				}
+				return executeBeadIterationOutcome{Stop: true}, intakeErr
+			}
+			warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
+			classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
+			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
+			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+			eventType := "pre_claim_intake.warn"
+			policyMode := "warn-only"
+			decision := "warn"
+			suggestedAction := "check the readiness route or harness configuration and retry"
+			if rootMutationError {
+				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
+				eventType = "pre_claim_intake.error"
+				policyMode = "error"
+				decision = "error"
+				suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+					Phase:    "readiness",
+					BeadID:   candidate.ID,
+					Message:  message,
+					Harness:  harness,
+					Provider: provider,
+					Model:    model,
+				}))
+			}
+			eventBody := readinessDecisionBody(
+				"pre_claim_intake.system_unready",
+				classified.Reason,
+				"pre_claim_intake",
+				policyMode,
+				decision,
+				suggestedAction,
+				map[string]any{
+					"bead_id":       candidate.ID,
+					"outcome":       string(PreClaimIntakeError),
+					"system_reason": classified.SystemReason,
+					"detail":        warning,
+				},
+			)
+			if rootMutationError {
+				eventBody["severity"] = "error"
+			}
+			emit(eventType, eventBody)
+			if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
+		case intakeOutcome == PreClaimIntakeActionableAtomic:
+			// pass-through
+		case intakeOutcome == PreClaimIntakeActionableButRewritten:
+			if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
+				warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
 				if runtime.Log != nil {
-					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-						Phase:    "readiness",
-						BeadID:   candidate.ID,
-						Message:  fmt.Sprintf("check timed out after %s (continuing)", preClaimTimeout),
-						Harness:  harness,
-						Provider: provider,
-						Model:    model,
-					}))
+					_, _ = fmt.Fprintf(runtime.Log, "bead readiness: rewrite error: %s (continuing with original %s)\n", warning, candidate.ID)
 				}
-				eventBody := readinessDecisionBody(
-					"pre_claim_intake.timeout",
-					"timeout",
+				emit("pre_claim_intake.warn", readinessDecisionBody(
+					"pre_claim_intake.rewrite_rejected",
+					"rewrite_rejected",
 					"pre_claim_intake",
-					func() string {
-						if strictIntakeBlocking() {
-							return "block"
-						}
-						return "warn-only"
-					}(),
-					func() string {
-						if strictIntakeBlocking() {
-							return "park"
-						}
-						return "continue"
-					}(),
-					func() string {
-						if strictIntakeBlocking() {
-							return "review the readiness timeout and retry the bead later"
-						}
-						return "continue with implementation; review should create follow-up work for any readiness gaps"
-					}(),
+					"warn-only",
+					"warn",
+					"revise the rewrite so it preserves every explicit commitment",
 					map[string]any{
-						"bead_id":       candidate.ID,
-						"command":       "ddx work readiness check",
-						"context":       "pre-claim intake",
-						"detail":        timeoutDetail,
-						"harness":       harness,
-						"model":         model,
-						"mode":          string(loopMode),
-						"outcome":       string(PreClaimIntakeError),
-						"provider":      provider,
-						"system_reason": ReadinessSystemReasonTimeout,
-						"targeted":      strictIntakeBlocking(),
-						"timeout":       preClaimTimeout.String(),
-						"worker_id":     runtime.WorkerID,
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeActionableButRewritten),
+						"detail":  warning,
 					},
-				)
-				operatorOverrideTimeout, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake.timeout", ReadinessReasonSystemUnready, "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
-				eventBody["operator_override"] = operatorOverrideTimeout
-				if strictIntakeBlocking() {
-					emit("pre_claim_intake.blocked", eventBody)
-					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeError, ReadinessReasonSystemUnready, timeoutDetail, now().UTC()); berr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-					} else if parked {
-						if runtime.Log != nil {
-							_, _ = fmt.Fprintf(runtime.Log, "readiness timeout parked bead %s for operator review\n", candidate.ID)
-						}
-					}
-					_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-					if stopAfterNonAttemptSkip() {
-						applyStop(work.StopInput{Once: true})
-						return result, nil
-					}
-					continue
-				} else {
-					emit("pre_claim_intake.warn", eventBody)
-					if appendPreClaimWarn(candidate.ID, "timeout", timeoutDetail, now().UTC()) {
-						return result, nil
-					}
-					intakeOutcome = PreClaimIntakeActionableAtomic
+				))
+				if appendPreClaimWarn(candidate.ID, "rewrite_rejected", warning, now().UTC()) {
+					return executeBeadIterationOutcome{Stop: true}, nil
 				}
 			}
-			switch {
-			case intakeErr != nil:
-				if errors.Is(intakeErr, context.Canceled) || errors.Is(intakeErr, context.DeadlineExceeded) {
-					if exitReason == "" {
-						applyStop(work.StopInput{ContextErr: intakeErr})
-					}
-					return result, intakeErr
-				}
-				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
+		case intakeOutcome == PreClaimIntakeError:
+			warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
+			if warning == "" {
+				warning = "readiness check returned intake_error"
+			}
+			reason := intakeResult.Reason
+			systemReason := intakeResult.SystemReason
+			if reason == "" && systemReason == "" {
 				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
-				rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
-				message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
-				eventType := "pre_claim_intake.warn"
-				policyMode := "warn-only"
-				decision := "warn"
-				suggestedAction := "check the readiness route or harness configuration and retry"
-				if rootMutationError {
-					message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
-					eventType = "pre_claim_intake.error"
-					policyMode = "error"
-					decision = "error"
-					suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
-				}
+				reason = classified.Reason
+				systemReason = classified.SystemReason
+			}
+			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
+			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
+			eventType := "pre_claim_intake.warn"
+			policyMode := "warn-only"
+			decision := "warn"
+			suggestedAction := "check the readiness route or harness configuration and retry"
+			if rootMutationError {
+				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
+				eventType = "pre_claim_intake.error"
+				policyMode = "error"
+				decision = "error"
+				suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+					Phase:    "readiness",
+					BeadID:   candidate.ID,
+					Message:  message,
+					Harness:  harness,
+					Provider: provider,
+					Model:    model,
+				}))
+			}
+			eventBody := readinessDecisionBody(
+				"pre_claim_intake.system_unready",
+				reason,
+				"pre_claim_intake",
+				policyMode,
+				decision,
+				suggestedAction,
+				map[string]any{
+					"bead_id":       candidate.ID,
+					"outcome":       string(PreClaimIntakeError),
+					"system_reason": systemReason,
+					"detail":        warning,
+				},
+			)
+			if rootMutationError {
+				eventBody["severity"] = "error"
+			}
+			emit(eventType, eventBody)
+			if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
+		case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
+			// too_large_decomposed should move work forward by splitting before
+			// claim. Some intake classifiers only identify the need to split;
+			// when no concrete children are attached, ask the orchestrator
+			// decomposer for executable child specs and then apply them.
+			decomp := intakeResult.Decomposition
+			if decomp == nil && runtime.PostAttemptDecompositionHook != nil {
 				if runtime.Log != nil {
-					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-						Phase:    "readiness",
-						BeadID:   candidate.ID,
-						Message:  message,
-						Harness:  harness,
-						Provider: provider,
-						Model:    model,
-					}))
+					_, _ = fmt.Fprintf(runtime.Log, "bead readiness requested decomposition; generating split (%s)\n", candidate.ID)
 				}
-				eventBody := readinessDecisionBody(
-					"pre_claim_intake.system_unready",
-					classified.Reason,
-					"pre_claim_intake",
-					policyMode,
-					decision,
-					suggestedAction,
-					map[string]any{
-						"bead_id":       candidate.ID,
-						"outcome":       string(PreClaimIntakeError),
-						"system_reason": classified.SystemReason,
-						"detail":        warning,
-					},
-				)
-				if rootMutationError {
-					eventBody["severity"] = "error"
-				}
-				emit(eventType, eventBody)
-				if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
-					return result, nil
-				}
-			case intakeOutcome == PreClaimIntakeActionableAtomic:
-				// pass-through
-			case intakeOutcome == PreClaimIntakeActionableButRewritten:
-				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
-					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
+				var hookErr error
+				decomp, hookErr = runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
+				if hookErr != nil {
+					if err := ctx.Err(); err != nil {
+						applyStop(work.StopInput{ContextErr: err})
+						return executeBeadIterationOutcome{Stop: true}, err
+					}
+					warning := fmt.Sprintf("decomposition hook unavailable: %s", hookErr.Error())
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead readiness: rewrite error: %s (continuing with original %s)\n", warning, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", hookErr.Error(), candidate.ID)
 					}
-					emit("pre_claim_intake.warn", readinessDecisionBody(
-						"pre_claim_intake.rewrite_rejected",
-						"rewrite_rejected",
-						"pre_claim_intake",
-						"warn-only",
-						"warn",
-						"revise the rewrite so it preserves every explicit commitment",
-						map[string]any{
-							"bead_id": candidate.ID,
-							"outcome": string(PreClaimIntakeActionableButRewritten),
-							"detail":  warning,
-						},
-					))
-					if appendPreClaimWarn(candidate.ID, "rewrite_rejected", warning, now().UTC()) {
-						return result, nil
-					}
-				}
-			case intakeOutcome == PreClaimIntakeError:
-				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
-				if warning == "" {
-					warning = "readiness check returned intake_error"
-				}
-				reason := intakeResult.Reason
-				systemReason := intakeResult.SystemReason
-				if reason == "" && systemReason == "" {
-					classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
-					reason = classified.Reason
-					systemReason = classified.SystemReason
-				}
-				rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
-				message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
-				eventType := "pre_claim_intake.warn"
-				policyMode := "warn-only"
-				decision := "warn"
-				suggestedAction := "check the readiness route or harness configuration and retry"
-				if rootMutationError {
-					message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
-					eventType = "pre_claim_intake.error"
-					policyMode = "error"
-					decision = "error"
-					suggestedAction = "inspect the parent back-edge and clean the project root before retrying"
-				}
-				if runtime.Log != nil {
-					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-						Phase:    "readiness",
-						BeadID:   candidate.ID,
-						Message:  message,
-						Harness:  harness,
-						Provider: provider,
-						Model:    model,
-					}))
-				}
-				eventBody := readinessDecisionBody(
-					"pre_claim_intake.system_unready",
-					reason,
-					"pre_claim_intake",
-					policyMode,
-					decision,
-					suggestedAction,
-					map[string]any{
-						"bead_id":       candidate.ID,
-						"outcome":       string(PreClaimIntakeError),
-						"system_reason": systemReason,
-						"detail":        warning,
-					},
-				)
-				if rootMutationError {
-					eventBody["severity"] = "error"
-				}
-				emit(eventType, eventBody)
-				if !rootMutationError && appendPreClaimWarn(candidate.ID, "system_unready", warning, now().UTC()) {
-					return result, nil
-				}
-			case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
-				// too_large_decomposed should move work forward by splitting before
-				// claim. Some intake classifiers only identify the need to split;
-				// when no concrete children are attached, ask the orchestrator
-				// decomposer for executable child specs and then apply them.
-				decomp := intakeResult.Decomposition
-				if decomp == nil && runtime.PostAttemptDecompositionHook != nil {
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead readiness requested decomposition; generating split (%s)\n", candidate.ID)
-					}
-					var hookErr error
-					decomp, hookErr = runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
-					if hookErr != nil {
-						if err := ctx.Err(); err != nil {
-							applyStop(work.StopInput{ContextErr: err})
-							return result, err
-						}
-						warning := fmt.Sprintf("decomposition hook unavailable: %s", hookErr.Error())
-						if runtime.Log != nil {
-							_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", hookErr.Error(), candidate.ID)
-						}
-						if appendPreClaimWarn(candidate.ID, "decomposition_hook_unavailable", warning, now().UTC()) {
-							return result, nil
-						}
-						emit("pre_claim_intake.warn", map[string]any{
-							"bead_id": candidate.ID,
-							"outcome": string(PreClaimIntakeTooLargeDecomposed),
-							"reason":  "decomposition_hook_unavailable",
-							"detail":  warning,
-						})
-						break
-					}
-				}
-				if decomp == nil {
-					warning := "decomposition hook returned no split"
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", warning, candidate.ID)
-					}
-					if appendPreClaimWarn(candidate.ID, "decomposition_hook_empty", warning, now().UTC()) {
-						return result, nil
+					if appendPreClaimWarn(candidate.ID, "decomposition_hook_unavailable", warning, now().UTC()) {
+						return executeBeadIterationOutcome{Stop: true}, nil
 					}
 					emit("pre_claim_intake.warn", map[string]any{
 						"bead_id": candidate.ID,
 						"outcome": string(PreClaimIntakeTooLargeDecomposed),
-						"reason":  "decomposition_hook_empty",
+						"reason":  "decomposition_hook_unavailable",
 						"detail":  warning,
 					})
 					break
 				}
-				// too_large_decomposed with concrete child specs: validate the AC map,
-				// check the queue-level depth cap, then create children and wire deps.
-				lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
-				depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
-				if lossyOrEmpty || depthAtCap {
-					// Cannot produce a lossless split: block for operator.
-					blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
-					if depthAtCap {
-						blockedDetail = "depth cap reached during decomposition; operator must split"
-					}
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (%s)\n", blockedDetail, candidate.ID)
-					}
-					operatorOverrideDecompBlocked, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
-					emit("pre_claim_intake.blocked", map[string]any{
-						"bead_id":           candidate.ID,
-						"operator_override": operatorOverrideDecompBlocked,
-						"outcome":           string(PreClaimIntakeOperatorRequired),
-						"reason":            blockedDetail,
-						"detail":            blockedDetail,
-					})
-					if strictIntakeBlocking() {
-						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
-							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-						} else if parked {
-							_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-							if stopAfterNonAttemptSkip() {
-								applyStop(work.StopInput{Once: true})
-								return result, nil
-							}
-							continue
-						}
-					} else {
-						if appendPreClaimWarn(candidate.ID, "decomposition_blocked_best_effort", blockedDetail, now().UTC()) {
-							return result, nil
-						}
-					}
-					break
-				}
-				childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, &candidate, decomp, assignee, now().UTC())
-				if decompErr != nil {
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (%s)\n", decompErr, candidate.ID)
-					}
-					operatorOverrideDecompErr, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
-					emit("pre_claim_intake.blocked", readinessDecisionBody(
-						"pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)),
-						"operator_required",
-						"pre_claim_intake",
-						"block",
-						"park",
-						"review intake result and accept, rewrite, split, block, or cancel",
-						map[string]any{
-							"bead_id":           candidate.ID,
-							"operator_override": operatorOverrideDecompErr,
-							"outcome":           string(PreClaimIntakeOperatorRequired),
-							"detail":            decompErr.Error(),
-						},
-					))
-					if strictIntakeBlocking() {
-						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
-							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-						} else if parked {
-							_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-							if stopAfterNonAttemptSkip() {
-								applyStop(work.StopInput{Once: true})
-								return result, nil
-							}
-							continue
-						}
-					} else {
-						if appendPreClaimWarn(candidate.ID, "decomposition_error_best_effort", decompErr.Error(), now().UTC()) {
-							return result, nil
-						}
-					}
-					break
-				}
+			}
+			if decomp == nil {
+				warning := "decomposition hook returned no split"
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "bead decomposed into %s (releasing %s)\n", strings.Join(childIDs, ", "), candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", warning, candidate.ID)
 				}
-				emit("pre_claim_intake.decomposed", map[string]any{
-					"bead_id":   candidate.ID,
-					"child_ids": childIDs,
+				if appendPreClaimWarn(candidate.ID, "decomposition_hook_empty", warning, now().UTC()) {
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+				emit("pre_claim_intake.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeTooLargeDecomposed),
+					"reason":  "decomposition_hook_empty",
+					"detail":  warning,
 				})
-				// Parent stays open (not proposed) — it is now execution-ineligible
-				// and will close once the decomposed children reach terminal state.
-				_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
-				if stopAfterNonAttemptSkip() {
-					applyStop(work.StopInput{Once: true})
-					return result, nil
-				}
-				continue
-			default:
-				// Terminal non-actionable intake outcomes are warnings during
-				// broad queue drain: the worker should prefer making an attempt
-				// and letting review/follow-up work handle gaps. Explicit
-				// targeted execution keeps the stricter parking behavior.
-				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
-				if warning == "" {
-					warning = string(intakeOutcome)
+				break
+			}
+			// too_large_decomposed with concrete child specs: validate the AC map,
+			// check the queue-level depth cap, then create children and wire deps.
+			lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
+			depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
+			if lossyOrEmpty || depthAtCap {
+				// Cannot produce a lossless split: block for operator.
+				blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
+				if depthAtCap {
+					blockedDetail = "depth cap reached during decomposition; operator must split"
 				}
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (%s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (%s)\n", blockedDetail, candidate.ID)
 				}
-				operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", "best-effort", "attempt", "continue with implementation; review should create follow-up work for remaining gaps")
-				emit("pre_claim_intake.blocked", readinessDecisionBody(
-					"pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)),
-					intakeResult.Reason,
-					"pre_claim_intake",
-					"best-effort",
-					"attempt",
-					"continue with implementation; review should create follow-up work for remaining gaps",
-					map[string]any{
-						"bead_id":           candidate.ID,
-						"operator_override": operatorOverrideTerminal,
-						"outcome":           string(intakeOutcome),
-						"detail":            warning,
-					},
-				))
+				operatorOverrideDecompBlocked, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
+				emit("pre_claim_intake.blocked", map[string]any{
+					"bead_id":           candidate.ID,
+					"operator_override": operatorOverrideDecompBlocked,
+					"outcome":           string(PreClaimIntakeOperatorRequired),
+					"reason":            blockedDetail,
+					"detail":            blockedDetail,
+				})
 				if strictIntakeBlocking() {
-					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
+					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 					} else if parked {
 						_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 						if stopAfterNonAttemptSkip() {
 							applyStop(work.StopInput{Once: true})
-							return result, nil
+							return executeBeadIterationOutcome{Stop: true}, nil
 						}
-						continue
+						return executeBeadIterationOutcome{Continue: true}, nil
 					}
 				} else {
-					if appendPreClaimWarn(candidate.ID, "readiness_best_effort", warning, now().UTC()) {
-						return result, nil
+					if appendPreClaimWarn(candidate.ID, "decomposition_blocked_best_effort", blockedDetail, now().UTC()) {
+						return executeBeadIterationOutcome{Stop: true}, nil
 					}
 				}
+				break
 			}
-		}
-
-		// Model-backed lint is only a dispatch gate when a block threshold is
-		// configured. The default warn-only path relies on readiness diagnostics
-		// and must not stall or add advisory event noise before real work.
-		lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
-		if runtime.PreDispatchLintHook != nil && lintThreshold > 0 {
-			lintResult, lintErr := runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
-			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
-
-			if lintErr != nil {
-				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, lintErr.Error())
+			childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, &candidate, decomp, assignee, now().UTC())
+			if decompErr != nil {
 				if runtime.Log != nil {
-					var lhe *LintHookError
-					if errors.As(lintErr, &lhe) && lhe.Kind == LintHookErrorKindMissingHarness {
-						_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-							Phase:    "readiness",
-							BeadID:   candidate.ID,
-							Message:  "check unavailable: no harness configured; continuing",
-							Harness:  harness,
-							Provider: provider,
-							Model:    model,
-						}))
-					} else {
-						_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-							Phase:    "readiness",
-							BeadID:   candidate.ID,
-							Message:  fmt.Sprintf("check unavailable: %v (continuing)", lintErr),
-							Harness:  harness,
-							Provider: provider,
-							Model:    model,
-						}))
+					_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (%s)\n", decompErr, candidate.ID)
+				}
+				operatorOverrideDecompErr, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)), "operator_required", "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
+				emit("pre_claim_intake.blocked", readinessDecisionBody(
+					"pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)),
+					"operator_required",
+					"pre_claim_intake",
+					"block",
+					"park",
+					"review intake result and accept, rewrite, split, block, or cancel",
+					map[string]any{
+						"bead_id":           candidate.ID,
+						"operator_override": operatorOverrideDecompErr,
+						"outcome":           string(PreClaimIntakeOperatorRequired),
+						"detail":            decompErr.Error(),
+					},
+				))
+				if strictIntakeBlocking() {
+					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					} else if parked {
+						_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+						if stopAfterNonAttemptSkip() {
+							applyStop(work.StopInput{Once: true})
+							return executeBeadIterationOutcome{Stop: true}, nil
+						}
+						return executeBeadIterationOutcome{Continue: true}, nil
+					}
+				} else {
+					if appendPreClaimWarn(candidate.ID, "decomposition_error_best_effort", decompErr.Error(), now().UTC()) {
+						return executeBeadIterationOutcome{Stop: true}, nil
 					}
 				}
-				emit("pre_dispatch_lint.warn", map[string]any{
-					"bead_id":       candidate.ID,
-					"warning":       lintErr.Error(),
-					"reason":        classified.Reason,
-					"system_reason": classified.SystemReason,
-				})
-			} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
-				blockMsg := fmt.Sprintf(
-					"bead-quality check blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
-					candidate.ID, lintResult.Score, lintThreshold,
-				)
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintln(runtime.Log, blockMsg)
-				}
-				emit("pre_dispatch_lint.blocked", map[string]any{
-					"bead_id":          candidate.ID,
-					"score":            lintResult.Score,
-					"threshold_score":  lintThreshold,
-					"skill":            "bead-lifecycle",
-					"skill_path":       ".agents/skills/ddx/bead-lifecycle/SKILL.md",
-					"dispatch_skipped": true,
-					"warning_mode":     false,
-					"rationale":        lintResult.Rationale,
-					"suggested_fixes":  lintResult.SuggestedFixes,
-					"waivers_applied":  lintResult.WaiversApplied,
-				})
-				if strictIntakeBlocking() {
+				break
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "bead decomposed into %s (releasing %s)\n", strings.Join(childIDs, ", "), candidate.ID)
+			}
+			emit("pre_claim_intake.decomposed", map[string]any{
+				"bead_id":   candidate.ID,
+				"child_ids": childIDs,
+			})
+			// Parent stays open (not proposed) — it is now execution-ineligible
+			// and will close once the decomposed children reach terminal state.
+			_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+			if stopAfterNonAttemptSkip() {
+				applyStop(work.StopInput{Once: true})
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		default:
+			// Terminal non-actionable intake outcomes are warnings during
+			// broad queue drain: the worker should prefer making an attempt
+			// and letting review/follow-up work handle gaps. Explicit
+			// targeted execution keeps the stricter parking behavior.
+			warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
+			if warning == "" {
+				warning = string(intakeOutcome)
+			}
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (%s)\n", warning, candidate.ID)
+			}
+			operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", "best-effort", "attempt", "continue with implementation; review should create follow-up work for remaining gaps")
+			emit("pre_claim_intake.blocked", readinessDecisionBody(
+				"pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)),
+				intakeResult.Reason,
+				"pre_claim_intake",
+				"best-effort",
+				"attempt",
+				"continue with implementation; review should create follow-up work for remaining gaps",
+				map[string]any{
+					"bead_id":           candidate.ID,
+					"operator_override": operatorOverrideTerminal,
+					"outcome":           string(intakeOutcome),
+					"detail":            warning,
+				},
+			))
+			if strictIntakeBlocking() {
+				if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+				} else if parked {
 					_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 					if stopAfterNonAttemptSkip() {
 						applyStop(work.StopInput{Once: true})
-						return result, nil
+						return executeBeadIterationOutcome{Stop: true}, nil
 					}
-					continue
+					return executeBeadIterationOutcome{Continue: true}, nil
 				}
-				if appendPreClaimWarn(candidate.ID, "lint_blocked_best_effort", blockMsg, now().UTC()) {
-					return result, nil
+			} else {
+				if appendPreClaimWarn(candidate.ID, "readiness_best_effort", warning, now().UTC()) {
+					return executeBeadIterationOutcome{Stop: true}, nil
 				}
 			}
 		}
-		freshCandidate, staleSkip, refreshErr = w.refreshClaimedCandidateBeforeAttempt(ctx, candidate)
-		if refreshErr != nil {
-			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				return result, err
-			}
-			return result, refreshErr
-		}
-		if staleSkip != nil {
-			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				continue
-			}
-			transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
+	}
+
+	// Model-backed lint is only a dispatch gate when a block threshold is
+	// configured. The default warn-only path relies on readiness diagnostics
+	// and must not stall or add advisory event noise before real work.
+	lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
+	if runtime.PreDispatchLintHook != nil && lintThreshold > 0 {
+		lintResult, lintErr := runPreDispatchLintHookWithTimeout(ctx, runtime.PreDispatchLintHook, candidate.ID, preClaimTimeout)
+		appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
+
+		if lintErr != nil {
+			classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, lintErr.Error())
 			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before attempt: %s\n", candidate.ID, staleSkip.Detail)
+				var lhe *LintHookError
+				if errors.As(lintErr, &lhe) && lhe.Kind == LintHookErrorKindMissingHarness {
+					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+						Phase:    "readiness",
+						BeadID:   candidate.ID,
+						Message:  "check unavailable: no harness configured; continuing",
+						Harness:  harness,
+						Provider: provider,
+						Model:    model,
+					}))
+				} else {
+					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+						Phase:    "readiness",
+						BeadID:   candidate.ID,
+						Message:  fmt.Sprintf("check unavailable: %v (continuing)", lintErr),
+						Harness:  harness,
+						Provider: provider,
+						Model:    model,
+					}))
+				}
 			}
-			emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_attempt")
-			if stopAfterNonAttemptSkip() {
-				applyStop(work.StopInput{Once: true})
-				return result, nil
+			emit("pre_dispatch_lint.warn", map[string]any{
+				"bead_id":       candidate.ID,
+				"warning":       lintErr.Error(),
+				"reason":        classified.Reason,
+				"system_reason": classified.SystemReason,
+			})
+		} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
+			blockMsg := fmt.Sprintf(
+				"bead-quality check blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
+				candidate.ID, lintResult.Score, lintThreshold,
+			)
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, blockMsg)
 			}
-			continue
+			emit("pre_dispatch_lint.blocked", map[string]any{
+				"bead_id":          candidate.ID,
+				"score":            lintResult.Score,
+				"threshold_score":  lintThreshold,
+				"skill":            "bead-lifecycle",
+				"skill_path":       ".agents/skills/ddx/bead-lifecycle/SKILL.md",
+				"dispatch_skipped": true,
+				"warning_mode":     false,
+				"rationale":        lintResult.Rationale,
+				"suggested_fixes":  lintResult.SuggestedFixes,
+				"waivers_applied":  lintResult.WaiversApplied,
+			})
+			if strictIntakeBlocking() {
+				_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+				if stopAfterNonAttemptSkip() {
+					applyStop(work.StopInput{Once: true})
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			if appendPreClaimWarn(candidate.ID, "lint_blocked_best_effort", blockMsg, now().UTC()) {
+				return executeBeadIterationOutcome{Stop: true}, nil
+			}
 		}
-		candidate = *freshCandidate
-
-		// Generate a provisional attempt_id for progress events.
-		// The real attempt_id is assigned inside ExecuteBead; we use this
-		// for queueing/running events and replace with the real one once known.
-		provAttemptID := time.Now().UTC().Format("20060102T150405") + "-" + randomProgressID()
-		runStart := now()
-		phaseSeq := 0
-		phaseEmitter := newLoopPhaseEmitter(runtime, harness, model, profile, runStart, now, &phaseSeq, emit)
-
-		_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseQueueing, work.Outcome{
-			AttemptID: provAttemptID,
+	}
+	freshCandidate, staleSkip, refreshErr = w.refreshClaimedCandidateBeforeAttempt(ctx, candidate)
+	if refreshErr != nil {
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		return executeBeadIterationOutcome{Stop: true}, refreshErr
+	}
+	if staleSkip != nil {
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+		transientCandidateSkips[candidate.ID] = staleCandidateSkipReason
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "picker skip stale candidate %s before attempt: %s\n", candidate.ID, staleSkip.Detail)
+		}
+		emitStaleCandidateSkip(emit, candidate.ID, staleSkip, freshCandidate, "pre_attempt")
+		if stopAfterNonAttemptSkip() {
+			applyStop(work.StopInput{Once: true})
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	candidate = *freshCandidate
+	gitRepair = repairer(ctx, runtime.ProjectRoot)
+	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		stop := &OperatorAttentionStop{
+			Reason:      preDispatchGitRepairFailedReason,
+			BeadID:      candidate.ID,
+			ProjectRoot: runtime.ProjectRoot,
+			Message:     "DDx could not repair project git config; resolve the git status failure before restarting ddx work",
+		}
+		result.OperatorAttention = stop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git repair failed for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":          stop.Reason,
+			"bead_id":         candidate.ID,
+			"project_root":    runtime.ProjectRoot,
+			"message":         stop.Message,
+			"detail":          detail,
+			"git_stderr":      gitRepair.StatusStderr,
+			"issue_types":     gitRepair.RepairedTypes,
+			"repair_commands": gitRepair.Commands,
 		})
-
-		_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseRunning, work.Outcome{
-			AttemptID: provAttemptID,
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if len(gitRepair.RepairedTypes) > 0 {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"repaired project git config before dispatch for %s: %s (%s)\n",
+				candidate.ID,
+				strings.Join(gitRepair.RepairedTypes, ", "),
+				strings.Join(gitRepair.Commands, "; "),
+			)
+		}
+		emit("loop.pre_dispatch_git_repaired", map[string]any{
+			"bead_id":          candidate.ID,
+			"project_root":     runtime.ProjectRoot,
+			"issue_types":      gitRepair.RepairedTypes,
+			"repair_commands":  gitRepair.Commands,
+			"status_rechecked": gitRepair.StatusSucceeded,
+			"stage":            "attempt",
 		})
+	}
 
-		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
-		// invocation while letting try.Attempt own conflict recovery.
-		attemptCtx := ContextWithReadinessEstimatedDifficulty(ctx, readinessEstimatedDifficulty)
-		// A cancelable attempt context so the progress watchdog and the
-		// external-close watcher can terminate a wedged or already-landed
-		// attempt promptly (ddx-dc23f001).
-		attemptCtx, attemptCancel := context.WithCancel(attemptCtx)
-		if liveness != nil {
-			liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), "", harness, model, profile, 0)
-			// Tick once now so the sidecar shows the new attempt before the
-			// first heartbeat fires; long attempts otherwise wait one
-			// heartbeat interval before the sidecar reflects the current bead.
-			liveness.OnTick(now())
-		}
-		// Per-attempt route callback: once fizeau resolves the route
-		// mid-stream, UpdateRoute overwrites the liveness record so the
-		// progress watchdog sees a non-empty route field and does not mistake
-		// a healthy long-running attempt for a wedge (ddx-6190edc6).
-		var onRouteResolved func(harness, provider, model string)
-		if liveness != nil {
-			beadIDForRoute := candidate.ID
-			onRouteResolved = func(h, p, m string) { liveness.UpdateRoute(beadIDForRoute, h, m, p) }
-		}
-		attemptStarted = true
+	// Generate a provisional attempt_id for progress events.
+	// The real attempt_id is assigned inside ExecuteBead; we use this
+	// for queueing/running events and replace with the real one once known.
+	provAttemptID := time.Now().UTC().Format("20060102T150405") + "-" + randomProgressID()
+	runStart := now()
+	phaseSeq := 0
+	phaseEmitter := newLoopPhaseEmitter(runtime, harness, model, profile, runStart, now, &phaseSeq, emit)
 
-		// Progress watchdog + external-close watcher run alongside WithHeartbeat
-		// for the lifetime of this attempt. The watchdog fires when phase-empty
-		// heartbeats (harness/model/route all empty) persist past the phase
-		// budget — an 80-minute wedge that the liveness TTL alone treats as
-		// healthy (ddx-8f2e0ebf criterion B). The external-close watcher fires
-		// when a parallel attempt closes the same bead, so a wedged worker stops
-		// holding a stale lease. The first guard to fire releases the lease;
-		// term carries the reason so the loop skips normal failure escalation.
-		term := &attemptTermination{}
-		var guardWG sync.WaitGroup
-		candidateID := candidate.ID
+	_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseQueueing, work.Outcome{
+		AttemptID: provAttemptID,
+	})
+
+	_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseRunning, work.Outcome{
+		AttemptID: provAttemptID,
+	})
+
+	// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
+	// invocation while letting try.Attempt own conflict recovery.
+	attemptCtx := ContextWithReadinessEstimatedDifficulty(ctx, readinessEstimatedDifficulty)
+	// A cancelable attempt context so the progress watchdog and the
+	// external-close watcher can terminate a wedged or already-landed
+	// attempt promptly (ddx-dc23f001).
+	attemptCtx, attemptCancel := context.WithCancel(attemptCtx)
+	if liveness != nil {
+		liveness.SetAttempt(candidate.ID, provAttemptID, string(work.PhaseRunning), "", harness, model, profile, 0)
+		// Tick once now so the sidecar shows the new attempt before the
+		// first heartbeat fires; long attempts otherwise wait one
+		// heartbeat interval before the sidecar reflects the current bead.
+		liveness.OnTick(now())
+	}
+	// Per-attempt route callback: once fizeau resolves the route
+	// mid-stream, UpdateRoute overwrites the liveness record so the
+	// progress watchdog sees a non-empty route field and does not mistake
+	// a healthy long-running attempt for a wedge (ddx-6190edc6).
+	var onRouteResolved func(harness, provider, model string)
+	if liveness != nil {
+		beadIDForRoute := candidate.ID
+		onRouteResolved = func(h, p, m string) { liveness.UpdateRoute(beadIDForRoute, h, m, p) }
+	}
+	attemptStarted = true
+
+	// Progress watchdog + external-close watcher run alongside WithHeartbeat
+	// for the lifetime of this attempt. The watchdog fires when phase-empty
+	// heartbeats (harness/model/route all empty) persist past the phase
+	// budget — an 80-minute wedge that the liveness TTL alone treats as
+	// healthy (ddx-8f2e0ebf criterion B). The external-close watcher fires
+	// when a parallel attempt closes the same bead, so a wedged worker stops
+	// holding a stale lease. The first guard to fire releases the lease;
+	// term carries the reason so the loop skips normal failure escalation.
+	term := &attemptTermination{}
+	var guardWG sync.WaitGroup
+	candidateID := candidate.ID
+	guardWG.Add(1)
+	go func() {
+		defer guardWG.Done()
+		work.RunExternalCloseWatcher(attemptCtx, heartbeatInterval, work.ExternalCloseWatcherConfig{
+			IsClosed: func() (bool, error) { return beadClosedExternally(w.Store, candidateID) },
+			OnClosed: func() {
+				if term.set("external_close") {
+					releaseClosedExternally(w.Store, candidateID, assignee, now().UTC())
+					attemptCancel()
+				}
+			},
+		})
+	}()
+	if liveness != nil {
 		guardWG.Add(1)
 		go func() {
 			defer guardWG.Done()
-			work.RunExternalCloseWatcher(attemptCtx, heartbeatInterval, work.ExternalCloseWatcherConfig{
-				IsClosed: func() (bool, error) { return beadClosedExternally(w.Store, candidateID) },
-				OnClosed: func() {
-					if term.set("external_close") {
-						releaseClosedExternally(w.Store, candidateID, assignee, now().UTC())
+			work.RunProgressWatchdog(attemptCtx, heartbeatInterval, work.ProgressWatchdogConfig{
+				Budgets:  work.DefaultPhaseBudgets(),
+				Snapshot: liveness.Snapshot,
+				Now:      now,
+				OnWedged: func(rec workerstatus.LivenessRecord, budget time.Duration) {
+					if term.set("progress_watchdog") {
+						flagWedgedForOperatorAttention(w.Store, candidateID, assignee, rec.AttemptID, rec.Phase, rec.LastActivityAt, budget, now().UTC())
 						attemptCancel()
 					}
 				},
 			})
 		}()
-		if liveness != nil {
-			guardWG.Add(1)
-			go func() {
-				defer guardWG.Done()
-				work.RunProgressWatchdog(attemptCtx, heartbeatInterval, work.ProgressWatchdogConfig{
-					Budgets:  work.DefaultPhaseBudgets(),
-					Snapshot: liveness.Snapshot,
-					Now:      now,
-					OnWedged: func(rec workerstatus.LivenessRecord, budget time.Duration) {
-						if term.set("progress_watchdog") {
-							flagWedgedForOperatorAttention(w.Store, candidateID, assignee, rec.AttemptID, rec.Phase, rec.LastActivityAt, budget, now().UTC())
-							attemptCancel()
-						}
-					},
-				})
-			}()
-		}
-		verificationRunner := w.VerificationRunner
-		if verificationRunner == nil {
-			verificationRunner = defaultVerificationCommandRunnerForConfig(rcfg)
-		}
+	}
+	verificationRunner := w.VerificationRunner
+	if verificationRunner == nil {
+		verificationRunner = defaultVerificationCommandRunnerForConfig(rcfg)
+	}
 
-		// Dispatch system kinds (review-finding, alignment-review) to dedicated handlers
-		// instead of the normal attempt flow.
-		var attemptOut agenttry.Outcome
-		var dispatchErr error
-		if candidate.IssueType == bead.IssueTypeReviewFinding || candidate.IssueType == bead.IssueTypeAlignmentReview {
-			sysReport, handled, sysErr := systemKindDispatcher(attemptCtx, candidate.ID, &candidate, w.Store, runtime.ProjectRoot, assignee, now)
-			if sysErr != nil {
-				attemptOut = agenttry.Outcome{
-					Disposition: agenttry.OutcomeReported,
-					Report: agenttry.Report{
-						SessionID: provAttemptID,
-						BeadID:    candidate.ID,
-						BaseRev:   "",
-						ResultRev: "",
-						Status:    sysReport.Status,
-						Error:     fmt.Sprintf("system kind dispatch: %v", sysErr),
-					},
-				}
-			} else if handled {
-				attemptOut = agenttry.Outcome{
-					Disposition: agenttry.OutcomeSuccess,
-					Report: agenttry.Report{
-						SessionID: provAttemptID,
-						BeadID:    candidate.ID,
-						BaseRev:   "",
-						ResultRev: "",
-						Status:    sysReport.Status,
-						Detail:    sysReport.Detail,
-					},
-				}
-			} else {
-				// Not a system kind, fall through to normal attempt
-				attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
-					return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
-						Bead:                candidate,
-						Executor:            tryExecutor(w.Executor, onRouteResolved),
-						Store:               w.Store,
-						ProjectRoot:         runtime.ProjectRoot,
-						SatisfactionChecker: w.SatisfactionChecker,
-						VerificationRunner:  verificationRunner,
-						AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
-						ConflictResolver:    w.ConflictResolver,
-						Assignee:            assignee,
-						Now:                 now,
-						Cooldown:            LandConflictCooldown,
-						RateLimitOnRetry: func(_ context.Context, info agenttry.RateLimitRetryInfo) {
-							appendRateLimitRetryEvent(w.Store, candidate.ID, fromTryRateLimitRetryInfo(info))
-						},
-					})
-				})
+	// Dispatch system kinds (review-finding, alignment-review) to dedicated handlers
+	// instead of the normal attempt flow.
+	var attemptOut agenttry.Outcome
+	var dispatchErr error
+	if candidate.IssueType == bead.IssueTypeReviewFinding || candidate.IssueType == bead.IssueTypeAlignmentReview {
+		sysReport, handled, sysErr := systemKindDispatcher(attemptCtx, candidate.ID, &candidate, w.Store, runtime.ProjectRoot, assignee, now)
+		if sysErr != nil {
+			attemptOut = agenttry.Outcome{
+				Disposition: agenttry.OutcomeReported,
+				Report: agenttry.Report{
+					SessionID: provAttemptID,
+					BeadID:    candidate.ID,
+					BaseRev:   "",
+					ResultRev: "",
+					Status:    sysReport.Status,
+					Error:     fmt.Sprintf("system kind dispatch: %v", sysErr),
+				},
+			}
+		} else if handled {
+			attemptOut = agenttry.Outcome{
+				Disposition: agenttry.OutcomeSuccess,
+				Report: agenttry.Report{
+					SessionID: provAttemptID,
+					BeadID:    candidate.ID,
+					BaseRev:   "",
+					ResultRev: "",
+					Status:    sysReport.Status,
+					Detail:    sysReport.Detail,
+				},
 			}
 		} else {
+			// Not a system kind, fall through to normal attempt
 			attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
 				return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 					Bead:                candidate,
@@ -3061,916 +3363,1073 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				})
 			})
 		}
-		// The attempt has returned. Stop the guards and wait for any in-flight
-		// OnWedged/OnClosed callback (lease release + event emit) to finish
-		// before reading the termination reason.
-		attemptCancel()
-		guardWG.Wait()
-		err = dispatchErr
-		if liveness != nil {
-			liveness.ClearAttempt()
-			liveness.OnTick(now())
-		}
-		// A guard terminated this attempt: the lease was already released and,
-		// for a wedge, operator attention was flagged. Skip normal report
-		// processing so a context-cancelled attempt is not re-escalated as a
-		// failure (ddx-dc23f001). The bead is either closed (external close) or
-		// released to open with an operator_attention event (wedge).
-		if termReason := term.get(); termReason != "" {
-			emit("loop.attempt_terminated", map[string]any{
-				"bead_id": candidate.ID,
-				"reason":  termReason,
+	} else {
+		attemptOut, dispatchErr = work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, liveness, func() (agenttry.Outcome, error) {
+			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
+				Bead:                candidate,
+				Executor:            tryExecutor(w.Executor, onRouteResolved),
+				Store:               w.Store,
+				ProjectRoot:         runtime.ProjectRoot,
+				SatisfactionChecker: w.SatisfactionChecker,
+				VerificationRunner:  verificationRunner,
+				AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
+				ConflictResolver:    w.ConflictResolver,
+				Assignee:            assignee,
+				Now:                 now,
+				Cooldown:            LandConflictCooldown,
+				RateLimitOnRetry: func(_ context.Context, info agenttry.RateLimitRetryInfo) {
+					appendRateLimitRetryEvent(w.Store, candidate.ID, fromTryRateLimitRetryInfo(info))
+				},
 			})
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "attempt %s terminated by %s; lease released\n", candidate.ID, termReason)
+		})
+	}
+	// The attempt has returned. Stop the guards and wait for any in-flight
+	// OnWedged/OnClosed callback (lease release + event emit) to finish
+	// before reading the termination reason.
+	attemptCancel()
+	guardWG.Wait()
+	err = dispatchErr
+	if liveness != nil {
+		liveness.ClearAttempt()
+		liveness.OnTick(now())
+	}
+	// A guard terminated this attempt: the lease was already released and,
+	// for a wedge, operator attention was flagged. Skip normal report
+	// processing so a context-cancelled attempt is not re-escalated as a
+	// failure (ddx-dc23f001). The bead is either closed (external close) or
+	// released to open with an operator_attention event (wedge).
+	if termReason := term.get(); termReason != "" {
+		emit("loop.attempt_terminated", map[string]any{
+			"bead_id": candidate.ID,
+			"reason":  termReason,
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "attempt %s terminated by %s; lease released\n", candidate.ID, termReason)
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	// The attempt ran to completion without a wedge guard firing — the route
+	// resolved and the agent executed (real progress). Reset any
+	// consecutive-wedge marker so a single transient wedge does not
+	// permanently sideline a bead that subsequently makes progress
+	// (ddx-9714eaac AC #2).
+	clearConsecutiveWedge(w.Store, candidate.ID)
+	report := fromTryReport(attemptOut.Report)
+	if report.BeadID == "" {
+		report.BeadID = candidate.ID
+	}
+	if report.Status == "" {
+		report.Status = ExecuteBeadStatusExecutionFailed
+	}
+	if report.Detail == "" {
+		report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
+	}
+	classifyLoopReportFailure(&report)
+	if gitRepairStop, detail, ok := preDispatchGitRepairStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 			}
-			continue
+			return executeBeadIterationOutcome{Stop: true}, unclaimErr
 		}
-		// The attempt ran to completion without a wedge guard firing — the route
-		// resolved and the agent executed (real progress). Reset any
-		// consecutive-wedge marker so a single transient wedge does not
-		// permanently sideline a bead that subsequently makes progress
-		// (ddx-9714eaac AC #2).
-		clearConsecutiveWedge(w.Store, candidate.ID)
-		report := fromTryReport(attemptOut.Report)
-		if report.BeadID == "" {
-			report.BeadID = candidate.ID
+		result.OperatorAttention = gitRepairStop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git repair failed for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
 		}
-		if report.Status == "" {
-			report.Status = ExecuteBeadStatusExecutionFailed
+		emit("loop.operator_attention", map[string]any{
+			"reason":       gitRepairStop.Reason,
+			"bead_id":      candidate.ID,
+			"project_root": runtime.ProjectRoot,
+			"message":      gitRepairStop.Message,
+			"detail":       detail,
+			"git_stderr":   detail,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, unclaimErr
 		}
-		if report.Detail == "" {
-			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
+		detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
+		if detail == "" && err != nil {
+			detail = strings.TrimSpace(err.Error())
 		}
-		classifyLoopReportFailure(&report)
-		if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
-			if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+		if loopMode == executeloop.ModeWatch && runtime.ProjectRoot != "" {
+			preserveDirty := w.preDispatchDirtyPreserver
+			if preserveDirty == nil {
+				preserveDirty = preservePreDispatchDirtyPaths
+			}
+			if preserved, preserveErr := preserveDirty(runtime.ProjectRoot, checkpointDirty.DirtyPaths); preserveErr == nil && preserved != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"preserved pre-dispatch implementation changes in %s under %s; released %s and continuing watch. dirty paths: %s. recover with %s\n",
+						runtime.ProjectRoot,
+						preserved.PreserveRef,
+						candidate.ID,
+						strings.Join(preserved.DirtyPaths, ", "),
+						preserved.RecoverCommand,
+					)
+				}
+				emit("loop.pre_dispatch_dirty_preserved", map[string]any{
+					"reason":          checkpointDirty.Reason,
+					"bead_id":         candidate.ID,
+					"project_root":    runtime.ProjectRoot,
+					"dirty_paths":     preserved.DirtyPaths,
+					"preserve_ref":    preserved.PreserveRef,
+					"recover_command": preserved.RecoverCommand,
+					"detail":          detail,
 				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				return result, unclaimErr
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-			detail := strings.TrimSpace(firstNonEmpty(report.Detail, report.Error))
-			if detail == "" && err != nil {
-				detail = strings.TrimSpace(err.Error())
-			}
-			if loopMode == executeloop.ModeWatch && runtime.ProjectRoot != "" {
-				preserveDirty := w.preDispatchDirtyPreserver
-				if preserveDirty == nil {
-					preserveDirty = preservePreDispatchDirtyPaths
-				}
-				if preserved, preserveErr := preserveDirty(runtime.ProjectRoot, checkpointDirty.DirtyPaths); preserveErr == nil && preserved != nil {
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log,
-							"preserved pre-dispatch implementation changes in %s under %s; released %s and continuing watch. dirty paths: %s. recover with %s\n",
-							runtime.ProjectRoot,
-							preserved.PreserveRef,
-							candidate.ID,
-							strings.Join(preserved.DirtyPaths, ", "),
-							preserved.RecoverCommand,
-						)
-					}
-					emit("loop.pre_dispatch_dirty_preserved", map[string]any{
-						"reason":          checkpointDirty.Reason,
-						"bead_id":         candidate.ID,
-						"project_root":    runtime.ProjectRoot,
-						"dirty_paths":     preserved.DirtyPaths,
-						"preserve_ref":    preserved.PreserveRef,
-						"recover_command": preserved.RecoverCommand,
-						"detail":          detail,
-					})
-					continue
-				}
-			}
-			result.OperatorAttention = checkpointDirty
-			setExit("OperatorAttention", "operator_attention")
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log,
-					"operator attention: project worktree %s has uncommitted implementation changes; released %s. %s\n",
-					checkpointDirty.ProjectRoot,
-					candidate.ID,
-					checkpointDirty.Message,
-				)
-			}
-			emit("loop.operator_attention", map[string]any{
-				"reason":       checkpointDirty.Reason,
-				"bead_id":      candidate.ID,
-				"project_root": checkpointDirty.ProjectRoot,
-				"dirty_paths":  checkpointDirty.DirtyPaths,
-				"message":      checkpointDirty.Message,
-				"detail":       detail,
-			})
-			return result, nil
 		}
-		if IsResourceExhaustedStatus(report.Status) {
-			result.Attempts++
-			setExit("ResourceExhausted", "resource_exhausted")
-			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				return result, err
-			}
-			emitResourceExhausted(emit, w.Store, candidate.ID, report, assignee, now().UTC())
-			result.Results = append(result.Results, report)
-			result.Failures++
-			result.LastFailureStatus = report.Status
-			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("AppendEvent", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				return result, err
-			}
-			if finalizeDurableAuditOrStop(candidate.ID, report) {
-				return result, nil
-			}
-			finalAttemptID := report.AttemptID
-			if finalAttemptID == "" {
-				finalAttemptID = provAttemptID
-			}
-			phaseSeq++
-			emitProgress(runtime.ProgressCh, ProgressEvent{
-				EventID:   "evt-" + randomProgressID(),
-				AttemptID: finalAttemptID,
-				WorkerID:  runtime.WorkerID,
-				ProjectID: runtime.ProjectRoot,
-				BeadID:    candidate.ID,
-				Harness:   harness,
-				Model:     model,
-				Profile:   profile,
-				Phase:     "failed",
-				PhaseSeq:  phaseSeq,
-				Heartbeat: false,
-				TS:        now().UTC(),
-				ElapsedMS: now().Sub(runStart).Milliseconds(),
-				Message:   report.Detail,
-			})
-			emit("bead.result", map[string]any{
-				"bead_id":              candidate.ID,
-				"status":               report.Status,
-				"detail":               report.Detail,
-				"session_id":           report.SessionID,
-				"result_rev":           report.ResultRev,
-				"base_rev":             report.BaseRev,
-				"preserve_ref":         report.PreserveRef,
-				"no_changes_rationale": report.NoChangesRationale,
-				"duration_ms":          now().Sub(runStart).Milliseconds(),
-			})
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
-			}
-			return result, nil
+		result.OperatorAttention = checkpointDirty
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: project worktree %s has uncommitted implementation changes; released %s. %s\n",
+				checkpointDirty.ProjectRoot,
+				candidate.ID,
+				checkpointDirty.Message,
+			)
 		}
-		if isRoutingInfrastructureReport(report) {
-			result.Attempts++
-			report.OutcomeReason = FailureModeNoViableProvider
+		emit("loop.operator_attention", map[string]any{
+			"reason":       checkpointDirty.Reason,
+			"bead_id":      candidate.ID,
+			"project_root": checkpointDirty.ProjectRoot,
+			"dirty_paths":  checkpointDirty.DirtyPaths,
+			"message":      checkpointDirty.Message,
+			"detail":       detail,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if IsResourceExhaustedStatus(report.Status) {
+		result.Attempts++
+		setExit("ResourceExhausted", "resource_exhausted")
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		emitResourceExhausted(emit, w.Store, candidate.ID, report, assignee, now().UTC())
+		result.Results = append(result.Results, report)
+		result.Failures++
+		result.LastFailureStatus = report.Status
+		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("AppendEvent", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		finalAttemptID := report.AttemptID
+		if finalAttemptID == "" {
+			finalAttemptID = provAttemptID
+		}
+		phaseSeq++
+		emitProgress(runtime.ProgressCh, ProgressEvent{
+			EventID:   "evt-" + randomProgressID(),
+			AttemptID: finalAttemptID,
+			WorkerID:  runtime.WorkerID,
+			ProjectID: runtime.ProjectRoot,
+			BeadID:    candidate.ID,
+			Harness:   harness,
+			Model:     model,
+			Profile:   profile,
+			Phase:     "failed",
+			PhaseSeq:  phaseSeq,
+			Heartbeat: false,
+			TS:        now().UTC(),
+			ElapsedMS: now().Sub(runStart).Milliseconds(),
+			Message:   report.Detail,
+		})
+		emit("bead.result", map[string]any{
+			"bead_id":              candidate.ID,
+			"status":               report.Status,
+			"detail":               report.Detail,
+			"session_id":           report.SessionID,
+			"result_rev":           report.ResultRev,
+			"base_rev":             report.BaseRev,
+			"preserve_ref":         report.PreserveRef,
+			"no_changes_rationale": report.NoChangesRationale,
+			"duration_ms":          now().Sub(runStart).Milliseconds(),
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
+		}
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	if isRoutingInfrastructureReport(report) {
+		result.Attempts++
+		report.OutcomeReason = FailureModeNoViableProvider
+		report.Disrupted = true
+		report.DisruptionReason = "routing"
+		serverOutageActivated := false
+		if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
+			serverOutageActivated = true
+			pausedInfraUntil = time.Time{}
+		}
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		emitDisruptionDetected(emit, w.Store, candidate.ID,
+			report.DisruptionReason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
+		appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
+		result.Results = append(result.Results, report)
+		result.Failures++
+		result.LastFailureStatus = report.Status
+		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("AppendEvent", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		finalAttemptID := report.AttemptID
+		if finalAttemptID == "" {
+			finalAttemptID = provAttemptID
+		}
+		phaseSeq++
+		emitProgress(runtime.ProgressCh, ProgressEvent{
+			EventID:   "evt-" + randomProgressID(),
+			AttemptID: finalAttemptID,
+			WorkerID:  runtime.WorkerID,
+			ProjectID: runtime.ProjectRoot,
+			BeadID:    candidate.ID,
+			Harness:   harness,
+			Model:     model,
+			Profile:   profile,
+			Phase:     "failed",
+			PhaseSeq:  phaseSeq,
+			Heartbeat: false,
+			TS:        now().UTC(),
+			ElapsedMS: now().Sub(runStart).Milliseconds(),
+			Message:   report.Detail,
+		})
+		emit("bead.result", map[string]any{
+			"bead_id":              candidate.ID,
+			"status":               report.Status,
+			"detail":               report.Detail,
+			"session_id":           report.SessionID,
+			"result_rev":           report.ResultRev,
+			"base_rev":             report.BaseRev,
+			"preserve_ref":         report.PreserveRef,
+			"no_changes_rationale": report.NoChangesRationale,
+			"duration_ms":          now().Sub(runStart).Milliseconds(),
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+		}
+		// In watch mode a single bead that cannot route (no_viable_provider)
+		// must not terminate an otherwise-healthy long-running drain
+		// (ddx-a827d07f): skip it for the rest of the pass and keep draining
+		// other ready beads. The bead is left open and untouched (no
+		// park/cooldown) so it stays immediately re-claimable; the in-memory
+		// skip clears when the queue next drains empty, giving routing a
+		// fresh retry. Once and drain modes retain the existing
+		// stop-on-routing-failure contract.
+		if loopMode == executeloop.ModeWatch {
+			if !serverOutageActivated {
+				transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+		setExit("RoutingUnavailable", "routing_unavailable")
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	// Per-bead cost budget exhausted: unclaim the bead (immediately
+	// re-claimable), emit the TD-031 §5 per-bead-budget-exhausted event,
+	// and increment the consecutive_ladder_exhaustions counter so the
+	// auto-recovery hook (sister bead ddx-63155d5c) can fire when the
+	// threshold is exceeded. No cooldown is set per ADR-024 Per-Bead Budget.
+	if isPerBeadBudgetExhaustedReport(report) {
+		result.Attempts++
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, err
+		}
+		_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+			Kind:      "per-bead-budget-exhausted",
+			Summary:   "per-bead cost budget exhausted; bead returned to open without cooldown",
+			Body:      fmt.Sprintf("total_cost=%.4f\n%s", report.CostUSD, report.Detail),
+			Actor:     assignee,
+			Source:    "ddx work",
+			CreatedAt: now().UTC(),
+		})
+		_ = incrementConsecutiveLadderExhaustions(ctx, w.Store, candidate.ID)
+		if updated, getErr := w.Store.Get(ctx, candidate.ID); getErr == nil &&
+			consecutiveLadderExhaustionsValue(updated.Extra[consecutiveLadderExhaustionsKey]) >= 2 {
+			hasManualLabel := false
+			for _, lbl := range candidate.Labels {
+				if lbl == "recovery:manual" {
+					hasManualLabel = true
+					break
+				}
+			}
+			if hasManualLabel {
+				_ = parkToProposedSimple(w.Store, candidate.ID, bead.ParkLadderExhaustionManual, "recovery:manual label set", now().UTC())
+			} else if runtime.PostLadderExhaustionHook != nil {
+				failureClass := deriveRecoveryFailureClass(report)
+				_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass)
+			}
+		}
+		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+			}
+		}
+		result.Results = append(result.Results, report)
+		result.Failures++
+		result.LastFailureStatus = report.Status
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		emit("bead.result", map[string]any{
+			"bead_id":              candidate.ID,
+			"status":               report.Status,
+			"detail":               report.Detail,
+			"session_id":           report.SessionID,
+			"result_rev":           report.ResultRev,
+			"base_rev":             report.BaseRev,
+			"preserve_ref":         report.PreserveRef,
+			"no_changes_rationale": report.NoChangesRationale,
+			"duration_ms":          now().Sub(runStart).Milliseconds(),
+		})
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+	// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
+	// A failed attempt where the loop ctx was cancelled, or the executor
+	// surfaced a transport-class error, is not evidence the model could
+	// not make progress — skip the no-progress cooldown so the bead is
+	// immediately re-claimable. If the executor itself already marked
+	// report.Disrupted (e.g. a future SIGKILL/SIGTERM or server-restart
+	// classifier inside ExecuteBeadWithConfig), preserve it.
+	if !report.Disrupted && report.Status != ExecuteBeadStatusSuccess {
+		if reason, disrupted := classifyDisruption(ctx, err); disrupted {
 			report.Disrupted = true
-			report.DisruptionReason = "routing"
-			serverOutageActivated := false
-			if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
-				serverOutageActivated = true
-				pausedInfraUntil = time.Time{}
-			}
-			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				return result, err
-			}
-			emitDisruptionDetected(emit, w.Store, candidate.ID,
-				report.DisruptionReason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
-			appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
-			result.Results = append(result.Results, report)
-			result.Failures++
-			result.LastFailureStatus = report.Status
-			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("AppendEvent", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				return result, err
-			}
-			if finalizeDurableAuditOrStop(candidate.ID, report) {
-				return result, nil
-			}
-			finalAttemptID := report.AttemptID
-			if finalAttemptID == "" {
-				finalAttemptID = provAttemptID
-			}
-			phaseSeq++
-			emitProgress(runtime.ProgressCh, ProgressEvent{
-				EventID:   "evt-" + randomProgressID(),
-				AttemptID: finalAttemptID,
-				WorkerID:  runtime.WorkerID,
-				ProjectID: runtime.ProjectRoot,
-				BeadID:    candidate.ID,
-				Harness:   harness,
-				Model:     model,
-				Profile:   profile,
-				Phase:     "failed",
-				PhaseSeq:  phaseSeq,
-				Heartbeat: false,
-				TS:        now().UTC(),
-				ElapsedMS: now().Sub(runStart).Milliseconds(),
-				Message:   report.Detail,
-			})
-			emit("bead.result", map[string]any{
-				"bead_id":              candidate.ID,
-				"status":               report.Status,
-				"detail":               report.Detail,
-				"session_id":           report.SessionID,
-				"result_rev":           report.ResultRev,
-				"base_rev":             report.BaseRev,
-				"preserve_ref":         report.PreserveRef,
-				"no_changes_rationale": report.NoChangesRationale,
-				"duration_ms":          now().Sub(runStart).Milliseconds(),
-			})
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
-			}
-			// In watch mode a single bead that cannot route (no_viable_provider)
-			// must not terminate an otherwise-healthy long-running drain
-			// (ddx-a827d07f): skip it for the rest of the pass and keep draining
-			// other ready beads. The bead is left open and untouched (no
-			// park/cooldown) so it stays immediately re-claimable; the in-memory
-			// skip clears when the queue next drains empty, giving routing a
-			// fresh retry. Once and drain modes retain the existing
-			// stop-on-routing-failure contract.
-			if loopMode == executeloop.ModeWatch {
-				if !serverOutageActivated {
-					transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
-				}
-				continue
-			}
-			setExit("RoutingUnavailable", "routing_unavailable")
-			return result, nil
+			report.DisruptionReason = reason
 		}
-		// Per-bead cost budget exhausted: unclaim the bead (immediately
-		// re-claimable), emit the TD-031 §5 per-bead-budget-exhausted event,
-		// and increment the consecutive_ladder_exhaustions counter so the
-		// auto-recovery hook (sister bead ddx-63155d5c) can fire when the
-		// threshold is exceeded. No cooldown is set per ADR-024 Per-Bead Budget.
-		if isPerBeadBudgetExhaustedReport(report) {
-			result.Attempts++
+	}
+	if ctxErr := loopContextErr(ctx); ctxErr != nil && report.Status != ExecuteBeadStatusSuccess {
+		if report.Detail == "" || report.Detail == ExecuteBeadStatusDetail(report.Status, "", "") {
+			report.Detail = ctxErr.Error()
+		}
+		if report.Error == "" {
+			report.Error = ctxErr.Error()
+		}
+		report.Disrupted = true
+		if report.DisruptionReason == "" {
+			report.DisruptionReason, _ = classifyDisruption(ctx, err)
+		}
+		result.Attempts++
+		result.Results = append(result.Results, report)
+		result.Failures++
+		result.LastFailureStatus = report.Status
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt cleanup error (Unclaim %s): %v\n", candidate.ID, unclaimErr)
+		}
+		if finalizeDurableAuditOrStop(candidate.ID, report) {
+			return executeBeadIterationOutcome{Stop: true}, ctxErr
+		}
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt released %s without recording terminal outcome: %v\n", candidate.ID, ctxErr)
+		}
+		return executeBeadIterationOutcome{Stop: true}, ctxErr
+	}
+	if report.Disrupted {
+		reason := report.DisruptionReason
+		if reason == "" {
+			reason = "unknown"
+		}
+		emitDisruptionDetected(emit, w.Store, candidate.ID,
+			reason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
+	}
+
+	result.Attempts++
+	appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
+
+	if attemptOut.StoreErr != nil {
+		_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+			return commitOutcomeError(attemptOut.StoreErrOp, assignee, result, attemptOut.StoreErr)
+		})
+	}
+
+	if parking := attemptOut.Parking; parking != nil {
+		if parking.Unclaim {
 			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
 				if ctx.Err() != nil {
-					return result, ctx.Err()
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 				}
-				return result, err
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
+		}
+		if parking.RunPostAttemptTriage {
+			report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+		}
+		if parking.Event != nil {
 			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-				Kind:      "per-bead-budget-exhausted",
-				Summary:   "per-bead cost budget exhausted; bead returned to open without cooldown",
-				Body:      fmt.Sprintf("total_cost=%.4f\n%s", report.CostUSD, report.Detail),
+				Kind:      parking.Event.Kind,
+				Summary:   parking.Event.Summary,
+				Body:      parking.Event.Body,
 				Actor:     assignee,
 				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
-			_ = incrementConsecutiveLadderExhaustions(ctx, w.Store, candidate.ID)
-			if updated, getErr := w.Store.Get(ctx, candidate.ID); getErr == nil &&
-				consecutiveLadderExhaustionsValue(updated.Extra[consecutiveLadderExhaustionsKey]) >= 2 {
-				hasManualLabel := false
-				for _, lbl := range candidate.Labels {
-					if lbl == "recovery:manual" {
-						hasManualLabel = true
-						break
-					}
+		}
+		if !parking.RetryAfter.IsZero() {
+			if err := w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 				}
-				if hasManualLabel {
-					_ = parkToProposedSimple(w.Store, candidate.ID, bead.ParkLadderExhaustionManual, "recovery:manual label set", now().UTC())
-				} else if runtime.PostLadderExhaustionHook != nil {
-					failureClass := deriveRecoveryFailureClass(report)
-					_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass)
-				}
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
-				}
-			}
-			result.Results = append(result.Results, report)
-			result.Failures++
-			result.LastFailureStatus = report.Status
-			if finalizeDurableAuditOrStop(candidate.ID, report) {
-				return result, nil
-			}
-			emit("bead.result", map[string]any{
-				"bead_id":              candidate.ID,
-				"status":               report.Status,
-				"detail":               report.Detail,
-				"session_id":           report.SessionID,
-				"result_rev":           report.ResultRev,
-				"base_rev":             report.BaseRev,
-				"preserve_ref":         report.PreserveRef,
-				"no_changes_rationale": report.NoChangesRationale,
-				"duration_ms":          now().Sub(runStart).Milliseconds(),
-			})
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
-			}
-			continue
+			report.RetryAfter = parking.RetryAfter.Format(time.RFC3339)
 		}
-		// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
-		// A failed attempt where the loop ctx was cancelled, or the executor
-		// surfaced a transport-class error, is not evidence the model could
-		// not make progress — skip the no-progress cooldown so the bead is
-		// immediately re-claimable. If the executor itself already marked
-		// report.Disrupted (e.g. a future SIGKILL/SIGTERM or server-restart
-		// classifier inside ExecuteBeadWithConfig), preserve it.
-		if !report.Disrupted && report.Status != ExecuteBeadStatusSuccess {
-			if reason, disrupted := classifyDisruption(ctx, err); disrupted {
-				report.Disrupted = true
-				report.DisruptionReason = reason
-			}
-		}
-		if ctxErr := loopContextErr(ctx); ctxErr != nil && report.Status != ExecuteBeadStatusSuccess {
-			if report.Detail == "" || report.Detail == ExecuteBeadStatusDetail(report.Status, "", "") {
-				report.Detail = ctxErr.Error()
-			}
-			if report.Error == "" {
-				report.Error = ctxErr.Error()
-			}
-			report.Disrupted = true
-			if report.DisruptionReason == "" {
-				report.DisruptionReason, _ = classifyDisruption(ctx, err)
-			}
-			result.Attempts++
-			result.Results = append(result.Results, report)
-			result.Failures++
-			result.LastFailureStatus = report.Status
-			if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil && runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt cleanup error (Unclaim %s): %v\n", candidate.ID, unclaimErr)
-			}
-			if finalizeDurableAuditOrStop(candidate.ID, report) {
-				return result, ctxErr
-			}
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "interrupted attempt released %s without recording terminal outcome: %v\n", candidate.ID, ctxErr)
-			}
-			return result, ctxErr
-		}
-		if report.Disrupted {
-			reason := report.DisruptionReason
-			if reason == "" {
-				reason = "unknown"
-			}
-			emitDisruptionDetected(emit, w.Store, candidate.ID,
-				reason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
-		}
+	}
 
-		result.Attempts++
-		appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
-
-		if attemptOut.StoreErr != nil {
+	if attemptOut.Disposition == agenttry.OutcomeSuccess {
+		finalizationCtx := context.Background()
+		if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
 			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError(attemptOut.StoreErrOp, assignee, result, attemptOut.StoreErr)
+				return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
 		}
-
-		if parking := attemptOut.Parking; parking != nil {
-			if parking.Unclaim {
+		result.Successes++
+		result.LastSuccessAt = now().UTC()
+	} else if report.Status == ExecuteBeadStatusSuccess {
+		finalizationCtx := context.Background()
+		if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+		appendLoopRoutingEvidence(w.Store, candidate, report, now().UTC(), readFailedRoutes(candidate.Extra))
+		// Story 15: when an operator-prompt bead succeeds, scan
+		// base..result for affected beads and artifacts, and append
+		// origin_operator_prompt_id back-link events. Failure is
+		// logged but does not fail the attempt — the bead's own
+		// commit has already landed and the audit data is best-effort.
+		if candidate.IssueType == bead.IssueTypeOperatorPrompt {
+			affected, affErr := computeOperatorPromptAffected(runtime.ProjectRoot, report.BaseRev, report.ResultRev, candidate.ID)
+			if affErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks scan: %v\n", affErr)
+				}
+			} else if recErr := recordOperatorPromptBacklinks(w.Store, candidate.ID, affected, assignee, now().UTC()); recErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks: %v\n", recErr)
+				}
+			}
+		}
+		// Advisory prose-check evidence for docs-changing attempts. Runs
+		// before CloseWithEvidence so findings land in the bead's history
+		// while the attempt is still editable. Errors are advisory.
+		if runtime.ProseEvidenceHook != nil {
+			if proseErr := runtime.ProseEvidenceHook(ctx, candidate.ID, report); proseErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "prose evidence: %v (continuing)\n", proseErr)
+			}
+		}
+		// Automated close eligibility is now owned by the pre-land
+		// candidate-cycle reviewer. The old post-land/pre-close reviewer
+		// remains available only through an explicit runtime opt-in.
+		if runtime.PostMergeReview {
+			reviewOut := RunPostMergeReview(ctx, PostMergeReviewInput{
+				Bead:          candidate,
+				Report:        report,
+				Reviewer:      w.Reviewer,
+				Store:         w.Store,
+				ProjectRoot:   runtime.ProjectRoot,
+				Rcfg:          rcfg,
+				NoReview:      runtime.NoReview,
+				Log:           runtime.Log,
+				Assignee:      assignee,
+				Now:           now,
+				ReviewCostCap: runtime.ReviewCostCap,
+			})
+			report = reviewOut.Report
+			if reviewOut.StoreErr != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError(reviewOut.StoreErrOp, assignee, result, reviewOut.StoreErr)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			if reviewOut.Approved {
+				result.Successes++
+				result.LastSuccessAt = now().UTC()
+			} else {
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			}
+		} else {
+			closeBlocked := false
+			if successReportHasEmptyReviewResult(report) && !hasDurableReviewSkipReason(candidate.Labels) {
+				reason := "empty review result before close"
+				appendReviewGateError(w.Store, candidate.ID, assignee, now().UTC(), report.ResultRev, evidence.OutcomeReviewUnparseable, reason)
+				report.Status = ExecuteBeadStatusReviewMalfunction
+				report.Detail = "pre-close review: " + reason
 				if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("Unclaim", assignee, result, err)
 					})
 					if ctx.Err() != nil {
-						return result, ctx.Err()
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 					}
-					continue
+					return executeBeadIterationOutcome{Continue: true}, nil
 				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
+				closeBlocked = true
 			}
-			if parking.RunPostAttemptTriage {
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-			}
-			if parking.Event != nil {
-				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-					Kind:      parking.Event.Kind,
-					Summary:   parking.Event.Summary,
-					Body:      parking.Event.Body,
-					Actor:     assignee,
-					Source:    "ddx work",
-					CreatedAt: now().UTC(),
-				})
-			}
-			if !parking.RetryAfter.IsZero() {
-				if err := w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				report.RetryAfter = parking.RetryAfter.Format(time.RFC3339)
-			}
-		}
-
-		if attemptOut.Disposition == agenttry.OutcomeSuccess {
-			finalizationCtx := context.Background()
-			if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				continue
-			}
-			result.Successes++
-			result.LastSuccessAt = now().UTC()
-		} else if report.Status == ExecuteBeadStatusSuccess {
-			finalizationCtx := context.Background()
-			if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				continue
-			}
-			appendLoopRoutingEvidence(w.Store, candidate, report, now().UTC(), readFailedRoutes(candidate.Extra))
-			// Story 15: when an operator-prompt bead succeeds, scan
-			// base..result for affected beads and artifacts, and append
-			// origin_operator_prompt_id back-link events. Failure is
-			// logged but does not fail the attempt — the bead's own
-			// commit has already landed and the audit data is best-effort.
-			if candidate.IssueType == bead.IssueTypeOperatorPrompt {
-				affected, affErr := computeOperatorPromptAffected(runtime.ProjectRoot, report.BaseRev, report.ResultRev, candidate.ID)
-				if affErr != nil {
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks scan: %v\n", affErr)
-					}
-				} else if recErr := recordOperatorPromptBacklinks(w.Store, candidate.ID, affected, assignee, now().UTC()); recErr != nil {
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks: %v\n", recErr)
-					}
-				}
-			}
-			// Advisory prose-check evidence for docs-changing attempts. Runs
-			// before CloseWithEvidence so findings land in the bead's history
-			// while the attempt is still editable. Errors are advisory.
-			if runtime.ProseEvidenceHook != nil {
-				if proseErr := runtime.ProseEvidenceHook(ctx, candidate.ID, report); proseErr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "prose evidence: %v (continuing)\n", proseErr)
-				}
-			}
-			// Automated close eligibility is now owned by the pre-land
-			// candidate-cycle reviewer. The old post-land/pre-close reviewer
-			// remains available only through an explicit runtime opt-in.
-			if runtime.PostMergeReview {
-				reviewOut := RunPostMergeReview(ctx, PostMergeReviewInput{
-					Bead:          candidate,
-					Report:        report,
-					Reviewer:      w.Reviewer,
-					Store:         w.Store,
-					ProjectRoot:   runtime.ProjectRoot,
-					Rcfg:          rcfg,
-					NoReview:      runtime.NoReview,
-					Log:           runtime.Log,
-					Assignee:      assignee,
-					Now:           now,
-					ReviewCostCap: runtime.ReviewCostCap,
-				})
-				report = reviewOut.Report
-				if reviewOut.StoreErr != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError(reviewOut.StoreErrOp, assignee, result, reviewOut.StoreErr)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				if reviewOut.Approved {
-					result.Successes++
-					result.LastSuccessAt = now().UTC()
-				} else {
-					result.Failures++
-					result.LastFailureStatus = report.Status
-				}
-			} else {
+			if !closeBlocked {
 				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("CloseWithEvidence", assignee, result, err)
 					})
 					if ctx.Err() != nil {
-						return result, ctx.Err()
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 					}
-					continue
+					return executeBeadIterationOutcome{Continue: true}, nil
 				}
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
 			}
-		} else if attemptOut.Disposition == agenttry.OutcomePark {
+		}
+	} else if attemptOut.Disposition == agenttry.OutcomePark {
+		result.Failures++
+		result.LastFailureStatus = report.Status
+	} else if attemptOut.NoChanges != nil {
+		noChanges := attemptOut.NoChanges
+		if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+
+		// Post-attempt orchestrator decomposition: when the implementation
+		// attempt signals orchestrator_action: decompose (because it hit the
+		// implementation depth cap or the bead is too large for the worktree),
+		// invoke the queue-level splitter. The orchestrator checks the
+		// queue-level max_decomposition_depth, not the implementation cap.
+		if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
+			parsed := ParseNoChangesRationale(report.NoChangesRationale)
+			if parsed.OrchestratorAction == "decompose" {
+				decompDecision := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
+				if decompDecision.BackEdgeDetected {
+					sawParentBackEdge = true
+				}
+				report.OutcomeReason = "decomposed"
+				report.DecomposedChildIDs = append([]string(nil), decompDecision.ChildIDs...)
+				report.ExecutionDecision = decompDecision.ExecutionDecision
+				attachDecisionAuditTraceIfMissing(&report)
+				result.Failures++
+				result.LastFailureStatus = report.Status
+				result.Results = append(result.Results, report)
+				if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+				}
+				if finalizeDurableAuditOrStop(candidate.ID, report) {
+					return executeBeadIterationOutcome{Stop: true}, nil
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+		}
+
+		if noChanges.EventKind != "" {
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:      noChanges.EventKind,
+				Summary:   noChanges.EventKind,
+				Body:      noChanges.EventBody,
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: now().UTC(),
+			})
+		}
+		if noChanges.Label != "" {
+			if err := addBeadLabel(ctx, w.Store, candidate.ID, noChanges.Label); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("addBeadLabel", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+		}
+		switch noChanges.Action {
+		case agenttry.NoChangesActionCloseAlreadySatisfied:
+			// Adjudication confirmed bead is already satisfied.
+			// Set the terminal status BEFORE the close so the late
+			// executeBeadLoopEvent append captures "already_satisfied"
+			// (not "no_changes"), and emit an early execute-bead
+			// evidence event so the closure gate accepts even when
+			// BaseRev is empty (test fixtures and genuinely-no-commit
+			// satisfied beads).
+			report.Status = ExecuteBeadStatusAlreadySatisfied
+			if noChanges.Evidence != "" {
+				// Checker evidence explains why the bead is being closed;
+				// it takes precedence over the executor's attempt detail.
+				report.Detail = noChanges.Evidence
+			}
+			_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
+			finalizationCtx := context.Background()
+			if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("CloseWithEvidence", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			result.Successes++
+			result.LastSuccessAt = now().UTC()
+		case agenttry.NoChangesActionKeepOpenSmartRetry:
+			if err := applyNoChangesSmartRetry(w.Store, candidate.ID, assignee, noChanges, report.ActualPower, w.EscalationNextFloor); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("applyNoChangesSmartRetry", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			if shouldSuppressNoProgress(report) {
+				retryAfter := now().UTC().Add(SmartRetryCooldown)
+				cooldownStatus := noChanges.EventKind
+				if cooldownStatus == "" {
+					cooldownStatus = report.Status
+				}
+				cooldownDetail := noChanges.Reason
+				if cooldownDetail == "" {
+					cooldownDetail = report.Detail
+				}
+				// This is a queue-fairness pause, not a stale-world
+				// no-progress cooldown. Keep it wall-clock only so a
+				// locally-ahead branch does not immediately invalidate it
+				// against origin/main.
+				if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, cooldownStatus, cooldownDetail, ""); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+				report.RetryAfter = retryAfter.Format(time.RFC3339)
+			}
 			result.Failures++
 			result.LastFailureStatus = report.Status
-		} else if attemptOut.NoChanges != nil {
-			noChanges := attemptOut.NoChanges
+		case agenttry.NoChangesActionBadAttemptNoCooldown:
+			emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
+			if err := applyNoChangesBadAttemptEscalation(w.Store, candidate.ID, assignee, noChanges, report.ActualPower, w.EscalationNextFloor); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("applyNoChangesBadAttemptEscalation", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		case agenttry.NoChangesActionOperatorRequired:
+			if err := applyNoChangesOperatorRequired(w.Store, candidate.ID, assignee, noChanges, now().UTC()); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("applyNoChangesOperatorRequired", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		case agenttry.NoChangesActionBlockedExternal:
+			if err := applyNoChangesBlockedExternal(w.Store, candidate.ID, assignee, noChanges); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("applyNoChangesBlockedExternal", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		case agenttry.NoChangesActionRetryLaterCooldown:
+			// Unresolved: suppress immediate retry so the queue can
+			// move on to other beads.
+			emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
+			if noChanges.CooldownEligible && shouldSuppressNoProgress(report) {
+				retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
+				if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+				report.RetryAfter = retryAfter.Format(time.RFC3339)
+			}
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		default:
+			emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		}
+	} else {
+		if attemptOut.Parking == nil && attemptOut.Disposition != agenttry.OutcomePark {
 			if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
 				})
 				if ctx.Err() != nil {
-					return result, ctx.Err()
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 				}
-				continue
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-
-			// Post-attempt orchestrator decomposition: when the implementation
-			// attempt signals orchestrator_action: decompose (because it hit the
-			// implementation depth cap or the bead is too large for the worktree),
-			// invoke the queue-level splitter. The orchestrator checks the
-			// queue-level max_decomposition_depth, not the implementation cap.
-			if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
-				parsed := ParseNoChangesRationale(report.NoChangesRationale)
-				if parsed.OrchestratorAction == "decompose" {
-					if backEdgeDetected := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC()); backEdgeDetected {
-						sawParentBackEdge = true
-					}
-					result.Failures++
-					result.LastFailureStatus = report.Status
-					continue
-				}
-			}
-
-			if noChanges.EventKind != "" {
-				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-					Kind:      noChanges.EventKind,
-					Summary:   noChanges.EventKind,
-					Body:      noChanges.EventBody,
-					Actor:     assignee,
-					Source:    "ddx work",
-					CreatedAt: now().UTC(),
+		}
+		if report.Status == ExecuteBeadStatusPreservedNeedsReview {
+			if err := w.Store.AppendNotes(candidate.ID, preservedNeedsReviewNote(report)); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("AppendNotes", assignee, result, err)
 				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-			if noChanges.Label != "" {
-				if err := addBeadLabel(ctx, w.Store, candidate.ID, noChanges.Label); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("addBeadLabel", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		} else if report.Status == ExecuteBeadStatusRepairCycleExhausted {
+			if err := applyRepairCycleExhaustedEscalation(w.Store, candidate.ID, assignee, report.ActualPower, now(), w.EscalationNextFloor); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("applyRepairCycleExhaustedEscalation", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 				}
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-			switch noChanges.Action {
-			case agenttry.NoChangesActionCloseAlreadySatisfied:
-				// Adjudication confirmed bead is already satisfied.
-				// Set the terminal status BEFORE the close so the late
-				// executeBeadLoopEvent append captures "already_satisfied"
-				// (not "no_changes"), and emit an early execute-bead
-				// evidence event so the closure gate accepts even when
-				// BaseRev is empty (test fixtures and genuinely-no-commit
-				// satisfied beads).
-				report.Status = ExecuteBeadStatusAlreadySatisfied
-				if noChanges.Evidence != "" {
-					// Checker evidence explains why the bead is being closed;
-					// it takes precedence over the executor's attempt detail.
-					report.Detail = noChanges.Evidence
-				}
-				_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
-				finalizationCtx := context.Background()
-				if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("CloseWithEvidence", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				result.Successes++
-				result.LastSuccessAt = now().UTC()
-			case agenttry.NoChangesActionKeepOpenSmartRetry:
-				if err := applyNoChangesSmartRetry(w.Store, candidate.ID, assignee, noChanges, report.ActualPower, w.EscalationNextFloor); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("applyNoChangesSmartRetry", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				if shouldSuppressNoProgress(report) {
-					retryAfter := now().UTC().Add(SmartRetryCooldown)
-					cooldownStatus := noChanges.EventKind
-					if cooldownStatus == "" {
-						cooldownStatus = report.Status
-					}
-					cooldownDetail := noChanges.Reason
-					if cooldownDetail == "" {
-						cooldownDetail = report.Detail
-					}
-					// This is a queue-fairness pause, not a stale-world
-					// no-progress cooldown. Keep it wall-clock only so a
-					// locally-ahead branch does not immediately invalidate it
-					// against origin/main.
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, cooldownStatus, cooldownDetail, ""); err != nil {
-						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-						})
-						if ctx.Err() != nil {
-							return result, ctx.Err()
-						}
-						continue
-					}
-					report.RetryAfter = retryAfter.Format(time.RFC3339)
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			case agenttry.NoChangesActionBadAttemptNoCooldown:
-				emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
-				if err := applyNoChangesBadAttemptEscalation(w.Store, candidate.ID, assignee, noChanges, report.ActualPower, w.EscalationNextFloor); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("applyNoChangesBadAttemptEscalation", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			case agenttry.NoChangesActionOperatorRequired:
-				if err := applyNoChangesOperatorRequired(w.Store, candidate.ID, assignee, noChanges, now().UTC()); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("applyNoChangesOperatorRequired", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			case agenttry.NoChangesActionBlockedExternal:
-				if err := applyNoChangesBlockedExternal(w.Store, candidate.ID, assignee, noChanges); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("applyNoChangesBlockedExternal", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			case agenttry.NoChangesActionRetryLaterCooldown:
-				// Unresolved: suppress immediate retry so the queue can
-				// move on to other beads.
-				emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
-				if noChanges.CooldownEligible && shouldSuppressNoProgress(report) {
-					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
-						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-						})
-						if ctx.Err() != nil {
-							return result, ctx.Err()
-						}
-						continue
-					}
-					report.RetryAfter = retryAfter.Format(time.RFC3339)
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			default:
-				emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
-				result.Failures++
-				result.LastFailureStatus = report.Status
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		} else if report.Status == ExecuteBeadStatusLandRetry {
+			report.OutcomeReason = FailureModeLandRetry
+			report.Disrupted = true
+			report.DisruptionReason = FailureModeLandRetry
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:    "land-coordination",
+				Summary: "retry-land",
+				Body: strings.Join([]string{
+					"action=retry-land",
+					"detail=" + report.Detail,
+					"result_rev=" + report.ResultRev,
+					"base_rev=" + report.BaseRev,
+					decisionAuditEventBodyLine(report),
+				}, "\n"),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: now().UTC(),
+			})
+			result.Failures++
+			result.LastFailureStatus = report.Status
+		} else if report.Status == ExecuteBeadStatusLandOperatorAttention {
+			report.OutcomeReason = FailureModeLandOperatorAttention
+			reason := report.Detail
+			if strings.TrimSpace(reason) == "" {
+				reason = FailureModeLandOperatorAttention
 			}
+			if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkAutoRecoveryFailed, reason, now().UTC()); parkErr != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "land coordination operator-attention park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+			}
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:    "operator_attention",
+				Summary: FailureModeLandOperatorAttention,
+				Body: strings.Join([]string{
+					"action=operator-attention",
+					"detail=" + report.Detail,
+					"result_rev=" + report.ResultRev,
+					"base_rev=" + report.BaseRev,
+					decisionAuditEventBodyLine(report),
+				}, "\n"),
+				Actor:     assignee,
+				Source:    "ddx work",
+				CreatedAt: now().UTC(),
+			})
+			result.Failures++
+			result.LastFailureStatus = report.Status
 		} else {
-			if attemptOut.Parking == nil && attemptOut.Disposition != agenttry.OutcomePark {
-				if err := releaseWorkerClaim(w.Store, candidate.ID, assignee); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("Unclaim", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
+			if isProviderConnectivityFailureReport(report) {
+				report.OutcomeReason = FailureModeProviderConnectivity
+				report.Disrupted = true
+				report.DisruptionReason = "provider_connectivity"
+				operatorPinned := isOperatorRoutingPinned(rcfg.Passthrough())
+				if err := applyProviderConnectivityRouteExclusion(w.Store, candidate.ID, assignee, report, operatorPinned, w.EscalationNextFloor, now().UTC()); err != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "route-exclusion update failed for %s: %v (continuing)\n", candidate.ID, err)
 					}
-					continue
 				}
-			}
-			if report.Status == ExecuteBeadStatusPreservedNeedsReview {
-				if err := w.Store.AppendNotes(candidate.ID, preservedNeedsReviewNote(report)); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("AppendNotes", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			} else if report.Status == ExecuteBeadStatusRepairCycleExhausted {
-				if err := applyRepairCycleExhaustedEscalation(w.Store, candidate.ID, assignee, report.ActualPower, now(), w.EscalationNextFloor); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("applyRepairCycleExhaustedEscalation", assignee, result, err)
-					})
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
-				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			} else {
-				if isProviderConnectivityFailureReport(report) {
-					report.OutcomeReason = FailureModeProviderConnectivity
-					report.Disrupted = true
-					report.DisruptionReason = "provider_connectivity"
-					operatorPinned := isOperatorRoutingPinned(rcfg.Passthrough())
-					if err := applyProviderConnectivityRouteExclusion(w.Store, candidate.ID, assignee, report, operatorPinned, w.EscalationNextFloor, now().UTC()); err != nil {
-						if runtime.Log != nil {
-							_, _ = fmt.Fprintf(runtime.Log, "route-exclusion update failed for %s: %v (continuing)\n", candidate.ID, err)
-						}
-					}
-					emitRouteFailureEvent(w.Store, candidate.ID, assignee, report, now().UTC())
-					// Route exclusion (TTL-based via RouteExclusionWindow) is the
-					// correct mechanism — no per-bead cooldown. Bead is immediately
-					// reclaimable; next attempt routes around the failed (provider,model).
-				} else if isNoViableProviderReport(report) {
-					report.OutcomeReason = FailureModeNoViableProvider
-					report.Disrupted = true
-					report.DisruptionReason = "no_viable_provider"
-					serverOutageActivated := false
-					if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
-						serverOutageActivated = true
-						pausedInfraUntil = time.Time{}
-					} else {
-						// Transition the worker to paused-infra: leave every bead
-						// immediately reclaimable, pause this worker for PausedInfraInterval,
-						// then re-evaluate the full queue (P6 + ADR-024 §Infra Fallback).
-						pausedInfraUntil = now().UTC().Add(PausedInfraInterval)
-					}
-					if loopMode == executeloop.ModeWatch {
-						if !serverOutageActivated {
-							transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
-						}
-						continue
-					}
+				emitRouteFailureEvent(w.Store, candidate.ID, assignee, report, now().UTC())
+				// Route exclusion (TTL-based via RouteExclusionWindow) is the
+				// correct mechanism — no per-bead cooldown. Bead is immediately
+				// reclaimable; next attempt routes around the failed (provider,model).
+			} else if isNoViableProviderReport(report) {
+				report.OutcomeReason = FailureModeNoViableProvider
+				report.Disrupted = true
+				report.DisruptionReason = "no_viable_provider"
+				serverOutageActivated := false
+				if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
+					serverOutageActivated = true
+					pausedInfraUntil = time.Time{}
 				} else {
-					serverOutageActivated := false
-					if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
-						serverOutageActivated = true
-						pausedInfraUntil = time.Time{}
-					}
+					// Transition the worker to paused-infra: leave every bead
+					// immediately reclaimable, pause this worker for PausedInfraInterval,
+					// then re-evaluate the full queue (P6 + ADR-024 §Infra Fallback).
+					pausedInfraUntil = now().UTC().Add(PausedInfraInterval)
+				}
+				if loopMode == executeloop.ModeWatch {
 					if !serverOutageActivated {
-						report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-						if shouldSuppressNoProgress(report) {
-							retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-							if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
-								_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-									return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-								})
-								if ctx.Err() != nil {
-									return result, ctx.Err()
+						transientCandidateSkips[candidate.ID] = routingUnavailableSkipReason
+					}
+					return executeBeadIterationOutcome{Continue: true}, nil
+				}
+			} else {
+				serverOutageActivated := false
+				if activated, _ := serverOutage.Record(report, candidate.ID, now().UTC()); activated {
+					serverOutageActivated = true
+					pausedInfraUntil = time.Time{}
+				}
+				if !serverOutageActivated {
+					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+					if report.Detail == mixedCommitAndNoChangesRationaleReason && report.NoChangesRationale != "" {
+						parsed := ParseNoChangesRationale(report.NoChangesRationale)
+						if parsed.OrchestratorAction == "decompose" {
+							report.OutcomeReason = "decomposed"
+							if runtime.PostAttemptDecompositionHook != nil {
+								decompDecision := w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
+								if decompDecision.BackEdgeDetected {
+									sawParentBackEdge = true
 								}
-								continue
+								report.DecomposedChildIDs = append([]string(nil), decompDecision.ChildIDs...)
+								report.ExecutionDecision = decompDecision.ExecutionDecision
+							} else if parkErr := markExecutionIneligible(w.Store, candidate.ID); parkErr != nil && runtime.Log != nil {
+								_, _ = fmt.Fprintf(runtime.Log, "mixed_commit decomposition park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+							} else {
+								report.ExecutionDecision = "execution_ineligible"
 							}
-							report.RetryAfter = retryAfter.Format(time.RFC3339)
+							attachDecisionAuditTraceIfMissing(&report)
+							result.Failures++
+							result.LastFailureStatus = report.Status
+							result.Results = append(result.Results, report)
+							if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil && runtime.Log != nil {
+								_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+							}
+							if finalizeDurableAuditOrStop(candidate.ID, report) {
+								return executeBeadIterationOutcome{Stop: true}, nil
+							}
+							return executeBeadIterationOutcome{Continue: true}, nil
 						}
-						if report.Detail == mixedCommitAndNoChangesRationaleReason &&
-							countRecentMixedCommitEvents(w.Store, candidate.ID, mixedCommitCooldownWindow, now().UTC()) >= 1 {
-							if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkNoChangesOperatorRequired,
-								"circuit-breaker: "+mixedCommitAndNoChangesRationaleReason+" repeated within 24h; operator review required",
-								now().UTC()); parkErr != nil && runtime.Log != nil {
-								_, _ = fmt.Fprintf(runtime.Log, "mixed_commit circuit-breaker park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
+					}
+					if shouldSuppressNoProgress(report) {
+						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
+						if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
+							_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+								return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+							})
+							if ctx.Err() != nil {
+								return executeBeadIterationOutcome{Stop: true}, ctx.Err()
 							}
+							return executeBeadIterationOutcome{Continue: true}, nil
+						}
+						report.RetryAfter = retryAfter.Format(time.RFC3339)
+					}
+					if report.Detail == mixedCommitAndNoChangesRationaleReason &&
+						countRecentMixedCommitEvents(w.Store, candidate.ID, mixedCommitCooldownWindow, now().UTC()) >= 1 {
+						if parkErr := parkToProposedSimple(w.Store, candidate.ID, bead.ParkNoChangesOperatorRequired,
+							"circuit-breaker: "+mixedCommitAndNoChangesRationaleReason+" repeated within 24h; operator review required",
+							now().UTC()); parkErr != nil && runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "mixed_commit circuit-breaker park failed for %s: %v (continuing)\n", candidate.ID, parkErr)
 						}
 					}
 				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
 			}
-		}
-
-		if overrideMeta.Active {
-			if err := restoreForcedCooldownMetadata(context.Background(), w.Store, candidate.ID, overrideMeta); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("restoreForcedCooldownMetadata", assignee, result, err)
-				})
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				continue
-			}
-			if report.Status != ExecuteBeadStatusSuccess && report.Status != ExecuteBeadStatusAlreadySatisfied {
-				report.RetryAfter = overrideRetryAfter
-			}
-		}
-
-		result.Results = append(result.Results, report)
-
-		// Skip the late execute-bead append for already-satisfied beads —
-		// the satisfied path appends its own terminal event before
-		// CloseWithEvidence so the closure gate sees execution evidence.
-		// Duplicating it here would yield two identical events.
-		if report.Status != ExecuteBeadStatusAlreadySatisfied {
-			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
-				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("AppendEvent", assignee, result, err)
-				})
-				// Event recording failure is non-terminal: log it and continue.
-				// result counters were already updated by the outcome block above;
-				// do not double-count by re-running the outcome handler.
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
-				}
-				if ctx.Err() == nil {
-					_ = w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "loop-error", "AppendEvent: "+err.Error(), "")
-				}
-				if ctx.Err() != nil {
-					return result, ctx.Err()
-				}
-				continue
-			}
-		}
-		if finalizeDurableAuditOrStop(candidate.ID, report) {
-			return result, nil
-		}
-
-		// Use the real attempt_id from the report if available.
-		finalAttemptID := report.AttemptID
-		if finalAttemptID == "" {
-			finalAttemptID = provAttemptID
-		}
-		_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseTerminal, phaseOutcomeFromAttemptOut(
-			report,
-			attemptOut,
-			finalAttemptID,
-			now().Sub(runStart).Milliseconds(),
-		))
-
-		if runtime.Log != nil {
-			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
-		}
-
-		// Paused-infra: no_viable_provider transitions the WORKER (not the bead)
-		// to a wait state. Emit the event always so observers can surface the
-		// substate; only sleep in Watch mode (Once mode exits below).
-		if !pausedInfraUntil.IsZero() {
-			resumeAt := pausedInfraUntil
-			pausedInfraUntil = time.Time{}
-			emit("loop.paused-infra", map[string]any{
-				"reason":    "no_viable_provider",
-				"resume_at": resumeAt.Format(time.RFC3339),
-			})
-			emitProgress(runtime.ProgressCh, ProgressEvent{
-				EventID:   "evt-" + randomProgressID(),
-				WorkerID:  runtime.WorkerID,
-				ProjectID: runtime.ProjectRoot,
-				Phase:     "loop.paused-infra",
-				Heartbeat: true,
-				TS:        now().UTC(),
-				Message:   "no_viable_provider",
-			})
-			if loopMode != executeloop.ModeOnce {
-				if err := sleepOrWake(ctx, time.Until(resumeAt), runtime.WakeCh); err != nil {
-					if exitReason == "" {
-						applyStop(work.StopInput{ContextErr: err})
-					}
-					return result, err
-				}
-				continue
-			}
-		}
-
-		if loopMode == executeloop.ModeOnce {
-			applyStop(work.StopInput{Once: true})
-			return result, nil
+			result.Failures++
+			result.LastFailureStatus = report.Status
 		}
 	}
+
+	if overrideMeta.Active {
+		if err := restoreForcedCooldownMetadata(context.Background(), w.Store, candidate.ID, overrideMeta); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("restoreForcedCooldownMetadata", assignee, result, err)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+		if report.Status != ExecuteBeadStatusSuccess && report.Status != ExecuteBeadStatusAlreadySatisfied {
+			report.RetryAfter = overrideRetryAfter
+		}
+	}
+
+	result.Results = append(result.Results, report)
+
+	// Skip the late execute-bead append for already-satisfied beads —
+	// the satisfied path appends its own terminal event before
+	// CloseWithEvidence so the closure gate sees execution evidence.
+	// Duplicating it here would yield two identical events.
+	if report.Status != ExecuteBeadStatusAlreadySatisfied {
+		if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("AppendEvent", assignee, result, err)
+			})
+			// Event recording failure is non-terminal: log it and continue.
+			// result counters were already updated by the outcome block above;
+			// do not double-count by re-running the outcome handler.
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+			}
+			if ctx.Err() == nil {
+				_ = w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "loop-error", "AppendEvent: "+err.Error(), "")
+			}
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+	}
+	if finalizeDurableAuditOrStop(candidate.ID, report) {
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+
+	// Use the real attempt_id from the report if available.
+	finalAttemptID := report.AttemptID
+	if finalAttemptID == "" {
+		finalAttemptID = provAttemptID
+	}
+	_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseTerminal, phaseOutcomeFromAttemptOut(
+		report,
+		attemptOut,
+		finalAttemptID,
+		now().Sub(runStart).Milliseconds(),
+	))
+
+	if runtime.Log != nil {
+		_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+	}
+
+	// Paused-infra: no_viable_provider transitions the WORKER (not the bead)
+	// to a wait state. Emit the event always so observers can surface the
+	// substate; only sleep in Watch mode (Once mode exits below).
+	if !pausedInfraUntil.IsZero() {
+		resumeAt := pausedInfraUntil
+		pausedInfraUntil = time.Time{}
+		emit("loop.paused-infra", map[string]any{
+			"reason":    "no_viable_provider",
+			"resume_at": resumeAt.Format(time.RFC3339),
+		})
+		emitProgress(runtime.ProgressCh, ProgressEvent{
+			EventID:   "evt-" + randomProgressID(),
+			WorkerID:  runtime.WorkerID,
+			ProjectID: runtime.ProjectRoot,
+			Phase:     "loop.paused-infra",
+			Heartbeat: true,
+			TS:        now().UTC(),
+			Message:   "no_viable_provider",
+		})
+		if loopMode != executeloop.ModeOnce {
+			if err := sleepOrWake(ctx, time.Until(resumeAt), runtime.WakeCh); err != nil {
+				if exitReason == "" {
+					applyStop(work.StopInput{ContextErr: err})
+				}
+				return executeBeadIterationOutcome{Stop: true}, err
+			}
+			return executeBeadIterationOutcome{Continue: true}, nil
+		}
+	}
+
+	if loopMode == executeloop.ModeOnce {
+		applyStop(work.StopInput{Once: true})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
+	return executeBeadIterationOutcome{Continue: true}, nil
 }
 
 // runEpicClosureCascade closes any epics whose children have all reached a
@@ -4495,6 +4954,9 @@ func emitStaleCandidateSkip(emit func(string, map[string]any), beadID string, sk
 		"detail":  skip.Detail,
 		"stage":   stage,
 	}
+	for k, v := range preClaimDecisionAudit(skip.Reason, 0) {
+		payload[k] = v
+	}
 	if fresh != nil {
 		payload["status"] = fresh.Status
 		if eligible, known := freshCandidateExecutionEligible(*fresh); known {
@@ -4858,6 +5320,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 			parts = append(parts, "cycle_trace="+string(traceJSON))
 		}
 	}
+	if auditLine := decisionAuditEventBodyLine(report); auditLine != "" {
+		parts = append(parts, auditLine)
+	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
 	}
@@ -5204,6 +5669,16 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.OutcomeReason = FailureModeNoEvidenceProduced
 		return
 	}
+	if report.Status == ExecuteBeadStatusLandRetry {
+		report.OutcomeReason = FailureModeLandRetry
+		report.Disrupted = true
+		report.DisruptionReason = FailureModeLandRetry
+		return
+	}
+	if report.Status == ExecuteBeadStatusLandOperatorAttention {
+		report.OutcomeReason = FailureModeLandOperatorAttention
+		return
+	}
 	mode := ClassifyFailureMode(report.Status, 1, combined)
 	if mode == "" || mode == FailureModeUnknown {
 		return
@@ -5418,6 +5893,9 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, emit func(string, m
 		"example_detail":    snapshot.ExampleDetail,
 		"first_observed_at": snapshot.FirstObservedAt.UTC().Format(time.RFC3339),
 		"example_payload":   cloneStringAnyMap(snapshot.ExamplePayload),
+	}
+	for k, v := range preClaimDecisionAudit("preclaim_warn_repeated", snapshot.Count) {
+		payload[k] = v
 	}
 	if emit != nil {
 		emit("loop.operator_attention", payload)
@@ -5814,6 +6292,7 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		"claim_race",
 		"actionable_but_rewritten",
 		"too_large_decomposed",
+		"decomposed",
 		"intake_error",
 		"ambiguous_needs_human",
 		FailureModeAuthError,
@@ -5821,6 +6300,8 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeAgentPowerUnsatisfied,
 		FailureModeBlockedByPassthroughConstraint,
 		FailureModeNoEvidenceProduced,
+		FailureModeLandRetry,
+		FailureModeLandOperatorAttention,
 		FailureModeWorktreeLost,
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
@@ -5833,6 +6314,8 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 	case ExecuteBeadStatusReviewMalfunction,
 		ExecuteBeadStatusDeclinedNeedsDecomposition,
 		ExecuteBeadStatusLandConflictOperatorRequired,
+		ExecuteBeadStatusLandRetry,
+		ExecuteBeadStatusLandOperatorAttention,
 		ExecuteBeadStatusReviewTerminalBlock:
 		return false
 	}
@@ -5882,6 +6365,7 @@ func isTransientOutcomeReason(reason string) bool {
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
 		FailureModeLockContention,
+		FailureModeLandRetry,
 		FailureModeNoViableProvider,
 		FailureModeServerUnavailable,
 		FailureModeWorktreeLost:

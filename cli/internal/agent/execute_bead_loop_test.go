@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -208,6 +209,15 @@ func TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates(t 
 			report: ExecuteBeadReport{
 				Status:        ExecuteBeadStatusLandConflictOperatorRequired,
 				OutcomeReason: "operator_required",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "decomposed",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "decomposed",
 				BaseRev:       "abc123",
 				ResultRev:     "abc123",
 			},
@@ -825,6 +835,138 @@ func TestExecuteBeadWorkerLandConflictStaysOpenAndContinues(t *testing.T) {
 	}
 	assert.True(t, sawIntent, "routing intent evidence must be recorded")
 	assert.True(t, sawExecute, "execute-bead event must still be recorded")
+}
+
+func TestExecuteBeadLoop_NiflheimEvidence_LandCoordinationFailureDoesNotRerunImplementation(t *testing.T) {
+	tests := []struct {
+		name       string
+		reportFunc func(t *testing.T, beadID string) ExecuteBeadReport
+		wantStatus string
+		wantAction string
+		wantBead   string
+	}{
+		{
+			name: "cannot lock ref after result already landed reconciles",
+			reportFunc: func(t *testing.T, beadID string) ExecuteBeadReport {
+				repo := initReportTestRepo(t)
+				base := gitReportTest(t, repo, "rev-parse", "HEAD")
+				require.NoError(t, os.WriteFile(filepath.Join(repo, "already.txt"), []byte("landed\n"), 0o644))
+				gitReportTest(t, repo, "add", "already.txt")
+				gitReportTest(t, repo, "commit", "-m", "already landed")
+				result := gitReportTest(t, repo, "rev-parse", "HEAD")
+				res := &ExecuteBeadResult{
+					BeadID:    beadID,
+					AttemptID: "20260608T010203-reconcile",
+					BaseRev:   base,
+					ResultRev: result,
+					ExitCode:  0,
+					Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+					SessionID: "sess-reconcile",
+				}
+				MarkResultLandError(repo, res, errors.New("git update-ref refs/heads/main: fatal: cannot lock ref 'refs/heads/main': is at abc but expected def: exit status 128"))
+				return ReportFromExecuteBeadResult(res, "standard")
+			},
+			wantStatus: ExecuteBeadStatusSuccess,
+			wantAction: "reconcile",
+			wantBead:   bead.StatusClosed,
+		},
+		{
+			name: "staged generated evidence retries land",
+			reportFunc: func(t *testing.T, beadID string) ExecuteBeadReport {
+				res := &ExecuteBeadResult{
+					BeadID:    beadID,
+					AttemptID: "20260608T010203-retry",
+					BaseRev:   "base-retry",
+					ResultRev: "result-retry",
+					ExitCode:  0,
+					Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+					SessionID: "sess-retry",
+				}
+				MarkResultLandError(t.TempDir(), res, errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\t.ddx/executions/20260608T010203-retry/result.json"))
+				return ReportFromExecuteBeadResult(res, "standard")
+			},
+			wantStatus: ExecuteBeadStatusLandRetry,
+			wantAction: "retry-land",
+			wantBead:   bead.StatusOpen,
+		},
+		{
+			name: "staged implementation work parks for operator attention",
+			reportFunc: func(t *testing.T, beadID string) ExecuteBeadReport {
+				res := &ExecuteBeadResult{
+					BeadID:    beadID,
+					AttemptID: "20260608T010203-operator",
+					BaseRev:   "base-operator",
+					ResultRev: "result-operator",
+					ExitCode:  0,
+					Outcome:   ExecuteBeadOutcomeTaskSucceeded,
+					SessionID: "sess-operator",
+				}
+				MarkResultLandError(t.TempDir(), res, errors.New("landing worktree has staged changes after waiting 2s:\nM\t.ddx/beads.jsonl\nM\tcli/internal/agent/foo.go"))
+				return ReportFromExecuteBeadResult(res, "standard")
+			},
+			wantStatus: ExecuteBeadStatusLandOperatorAttention,
+			wantAction: "operator-attention",
+			wantBead:   bead.StatusProposed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store, first, _ := newExecuteLoopTestStore(t)
+			var calls atomic.Int32
+			var escalationCalls atomic.Int32
+			worker := &ExecuteBeadWorker{
+				Store: store,
+				Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+					calls.Add(1)
+					return tt.reportFunc(t, beadID), nil
+				}),
+				EscalationNextFloor: func(actualPower int) (int, error) {
+					escalationCalls.Add(1)
+					return actualPower + 10, nil
+				},
+			}
+
+			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+			result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			require.Len(t, result.Results, 1)
+			assert.Equal(t, tt.wantStatus, result.Results[0].Status)
+			assert.Equal(t, int32(1), calls.Load(), "land coordination must not schedule a fresh implementation run")
+			assert.Zero(t, escalationCalls.Load(), "land coordination must not escalate model power")
+
+			got, err := store.Get(context.Background(), first.ID)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantBead, got.Status)
+
+			switch tt.wantAction {
+			case "reconcile":
+				assert.Equal(t, 1, result.Successes)
+				assert.Contains(t, result.Results[0].Detail, "land coordination reconciled")
+			case "retry-land":
+				assert.Equal(t, 1, result.Failures)
+				assert.Equal(t, FailureModeLandRetry, result.Results[0].OutcomeReason)
+				assert.True(t, result.Results[0].Disrupted)
+				events, err := store.Events(first.ID)
+				require.NoError(t, err)
+				assert.Condition(t, func() bool {
+					for _, ev := range events {
+						if ev.Kind == "land-coordination" && ev.Summary == "retry-land" {
+							return true
+						}
+					}
+					return false
+				}, "retry-land action event must be recorded")
+			case "operator-attention":
+				assert.Equal(t, 1, result.Failures)
+				assert.Equal(t, FailureModeLandOperatorAttention, result.Results[0].OutcomeReason)
+				meta := bead.GetNeedsHumanMeta(*got)
+				assert.Contains(t, meta.Reason, "land coordination operator attention")
+			}
+		})
+	}
 }
 
 func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {

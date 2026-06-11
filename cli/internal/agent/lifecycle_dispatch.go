@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -101,9 +102,14 @@ func captureLifecycleProjectStatus(projectRoot string) (lifecycleProjectStatusSn
 		}
 		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: stat project root .git: %w", err)
 	}
-	out, err := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain", "--untracked-files=all").Output()
+	repair := gitrepohealth.RepairKnownConfigCorruption(context.Background(), projectRoot)
+	if !repair.StatusSucceeded {
+		detail := strings.TrimSpace(firstNonEmpty(repair.StatusStderr, repair.StatusOutput))
+		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %s", detail)
+	}
+	out, err := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
 	if err != nil {
-		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %w", err)
+		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return lifecycleProjectStatusSnapshot{
 		available: true,

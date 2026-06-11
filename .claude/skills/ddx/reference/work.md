@@ -93,6 +93,19 @@ worktree — the active bead ID. Always name the project root the answer
 applies to; never substitute a worker from a different repository as
 evidence that this project is progressing.
 
+When multiple repositories have workers, report them project-first:
+
+```text
+<project-root>
+  pid=<pid> bead=<bead-id> phase=<phase>
+```
+
+Use "worker for `<project-root>`" for project-scoped status. Use
+"DDx-powered worker" for a generic `ddx work` process. Use "DDx repo worker"
+only when the project root is the DDx repository. If the user says "DDx
+worker" without a qualifier, assume the current/requested project and do not
+surface workers from other projects.
+
 `--all-projects` is the only sanctioned way to ask "what ddx workers
 exist anywhere on this host?" — use it only when the question is
 explicitly cross-project.

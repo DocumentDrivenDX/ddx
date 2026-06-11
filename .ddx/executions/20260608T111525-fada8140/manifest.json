@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260608T111525-fada8140",
+  "bead_id": "ddx-3a6f1ad6",
+  "base_rev": "9ee22c705e62d398dfbb81659575e3e330324754",
+  "created_at": "2026-06-08T11:15:35.026507845Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3a6f1ad6",
+    "title": "agent: classify land coordination failures as reconciliation",
+    "description": "PROBLEM\nLanding failures that are really ref-lock, already-landed, or staged-evidence coordination issues still look like ordinary implementation failures to the worker. That causes fresh implementation reruns and the wrong retry lane instead of reconciliation or operator attention.\n\nROOT CAUSE\n`cli/internal/agent/execute_bead_orchestrator.go:292-312` wraps every `LandingAdvancer` error as a generic `land advancer` failure, which loses whether the candidate was already landed, whether `refs/heads/main` could not be locked, or whether the landing worktree was dirty. `cli/internal/agent/execute_bead_report_test.go:57-62` only proves the current detail string records land failure; it does not distinguish the coordination class from implementation failure.\n\nPROPOSED FIX\n- Split land/ref/index/evidence-staging failures into explicit retry actions: reconcile, retry-land, or operator-attention.\n- If the candidate commit or merge is already landed or is an ancestor of the target, reconcile and continue without rerunning implementation.\n- If the landing worktree has staged generated evidence or DDx metadata, preserve or retry the land/evidence step according to local policy rather than escalating the model.\n\nNON-SCOPE\n- Do not change review gating, decomposition detection, or power escalation policy in this child.\n- Do not reimplement low-level tracker/index contention fixes owned by sibling work.",
+    "acceptance": "1. `TestExecuteBeadLoop_NiflheimEvidence_LandCoordinationFailureDoesNotRerunImplementation` simulates both observed details (`cannot lock ref refs/heads/main` after a candidate/merge is already landed, and `landing worktree has staged changes after waiting 2s`) and asserts the action is reconcile/retry-land/operator-attention, not a fresh implementation run and not model escalation.\n2. The regression shows the worker preserves or reconciles land state instead of rerunning implementation when the land result is already effectively landed or blocked by dirty staged evidence.\n3. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'LandCoordination' -count=1` passes.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-334c0958",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "area:review",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "adr:024",
+      "incident:niflheim-2026-06-06",
+      "prevention"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260608T111525-fada8140",
+    "prompt": ".ddx/executions/20260608T111525-fada8140/prompt.md",
+    "manifest": ".ddx/executions/20260608T111525-fada8140/manifest.json",
+    "result": ".ddx/executions/20260608T111525-fada8140/result.json",
+    "checks": ".ddx/executions/20260608T111525-fada8140/checks.json",
+    "usage": ".ddx/executions/20260608T111525-fada8140/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3a6f1ad6-20260608T111525-fada8140"
+  },
+  "prompt_sha": "7a36651785b91a40e0785185fca6ddc24bd2403ea8cc3a6e598e9dbdce2a0868"
+}

@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./internal/agent -run 'TestExecuteBeadResult_NiflheimEvidence_PreClaimDecisionAudit'

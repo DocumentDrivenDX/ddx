@@ -309,7 +309,61 @@ Verifies FEAT-026 hub/spoke pull aggregation.
 | TC-015.3 | Federated reads | Hub combined bead/run/project views merge local and spoke rows with node/project badges | Planned |
 | TC-015.4 | Stale/offline/degraded | Slow, unreachable, stale, and version-skewed spokes produce partial results and visible status badges | Planned |
 
-### TC-016: Managed-Node Remote Control
+### TC-016: Worker Single Pane and Server-Managed Work
+
+Verifies FEAT-021 US-100/US-101. This is the basic "server runs work and the
+operator sees it" contract. The fixture uses local JSONL-backed projects and
+existing autonomous workers; Axon and 2k-scale performance are out of scope.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-016.1 | Node-wide workers | `/nodes/:nodeId/workers` lists workers from at least two registered projects with project badge, worker id, state, current bead id/title, phase, route/model, elapsed time, and freshness | Planned |
+| TC-016.2 | Worker detail | Clicking a worker opens detail with recent phase events, captured output, prompt, attempt id, current bead link, and stop action | Planned |
+| TC-016.3 | Start multiple workers | Project workers page starts `count=2` autonomous `ddx work` workers through `startWorker`; both rows appear and the queue/worker summary updates | Planned |
+| TC-016.4 | Worker cap | Starting beyond `.ddx/config.yaml workers.max_count` is refused or disabled with an operator-visible cap reason | Planned |
+| TC-016.5 | Stop worker | Stop action reaches a stopping/terminal state and records a lifecycle/audit event | Planned |
+| TC-016.6 | Live updates | Worker row updates current bead and phase without page reload via subscription or polling fallback | Planned |
+
+### TC-017: Federated Worker Control and Owner-Targeted Writes
+
+Verifies FEAT-026 US-097b and FEAT-021 US-102. The hub is a single pane of glass,
+but the owning node executes every mutation locally.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-017.1 | Federated worker list | Hub `/nodes/:hubId/workers?scope=federation` lists hub and spoke workers with node/project badges and freshness | Planned |
+| TC-017.2 | Start spoke worker | Starting a worker for a spoke project from the hub forwards to exactly that spoke; the worker is created on the spoke, not the hub | Planned |
+| TC-017.3 | Stop spoke worker | Stopping a spoke worker from the hub forwards to the owning spoke and the hub view reflects the terminal state | Planned |
+| TC-017.4 | Offline refusal | Commands for an offline spoke are refused with an operator-visible reason and do not create phantom local rows | Planned |
+| TC-017.5 | Idempotency | Retrying a forwarded command with the same request id returns the original result without launching duplicates or appending duplicate events | Planned |
+
+### TC-018: Cross-Project Bead Queue Mutations
+
+Verifies FEAT-021 US-103. Queue stewardship must be possible from the web UI for
+any registered project.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-018.1 | Create bead | Creating a bead with title, description, acceptance, priority, type, and labels persists it in the selected project only | Planned |
+| TC-018.2 | Edit bead | Editing title, labels, priority, description, acceptance, or status persists and updates the row without cross-project leakage | Planned |
+| TC-018.3 | Lifecycle actions | Approve, block, cancel, and reopen mutate lifecycle state, append events, and update queue summary | Planned |
+| TC-018.4 | Federated bead write | Hub create/edit for a spoke project forwards to the owning spoke and appears in federated reads with origin/forwarding audit metadata | Planned |
+| TC-018.5 | Invalid state refusal | Empty required reason/note, stale state, or non-owned target is rejected with a visible error | Planned |
+
+### TC-019: Cross-Project Spec Editing
+
+Verifies FEAT-021 US-104. Spec editing is scoped to project documents,
+especially `docs/helix/**`.
+
+| ID | Test | Acceptance | Status |
+|----|------|------------|--------|
+| TC-019.1 | Save FEAT doc | Editing and saving a `docs/helix/**` document writes through `documentWrite`, refreshes rendered content, and stays in the selected project | Planned |
+| TC-019.2 | Path confinement | Absolute paths and `../` traversal writes are rejected and no file is written | Planned |
+| TC-019.3 | Stale write refusal | Saving after the document changed externally fails with a conflict/stale-write message instead of overwriting | Planned |
+| TC-019.4 | Federated document write | Hub save for a spoke project forwards to the owning spoke and preserves origin/forwarding audit metadata | Planned |
+| TC-019.5 | Graph/staleness refresh | After a spec save, document graph/staleness views refresh or expose a clear refresh affordance | Planned |
+
+### TC-020: Managed-Node Remote Control
 
 Verifies FEAT-029 / ADR-028 outbound managed-node behavior. The fixture must
 start the managed node without an inbound ts-net listener; all hub visibility
@@ -317,26 +371,26 @@ comes from the outbound channel and pushed state.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-016.1 | Outbound registration | A managed node dials the hub by DNS/MagicDNS name and registers node/project/capability metadata | Planned |
-| TC-016.2 | Derived state | Hub UI renders managed-node projects, beads, workers, runs, and logs from snapshots/events/backfill | Planned |
-| TC-016.3 | Remote worker start | Hub command starts a local autonomous worker on the managed node and progress appears in the hub UI | Planned |
-| TC-016.4 | Remote worker stop/cancel | Hub command requests local stop/cancel; managed node records the command and worker honors it at a safe point | Planned |
-| TC-016.5 | Operator prompt write-through | Hub submit/approve/cancel for an operator prompt persists on the managed node with origin/forwarding audit | Planned |
-| TC-016.6 | Idempotency | Retrying a mutating command with the same request id returns the original result without duplicate state | Planned |
-| TC-016.7 | Conflict rejection | A command targeting stale or changed local state is rejected and the rejection is shown in the hub UI | Planned |
-| TC-016.8 | Offline refusal | Hub refuses new commands for an offline managed node and renders stale derived state clearly | Planned |
+| TC-020.1 | Outbound registration | A managed node dials the hub by DNS/MagicDNS name and registers node/project/capability metadata | Planned |
+| TC-020.2 | Derived state | Hub UI renders managed-node projects, beads, workers, runs, and logs from snapshots/events/backfill | Planned |
+| TC-020.3 | Remote worker start | Hub command starts a local autonomous worker on the managed node and progress appears in the hub UI | Planned |
+| TC-020.4 | Remote worker stop/cancel | Hub command requests local stop/cancel; managed node records the command and worker honors it at a safe point | Planned |
+| TC-020.5 | Operator prompt write-through | Hub submit/approve/cancel for an operator prompt persists on the managed node with origin/forwarding audit | Planned |
+| TC-020.6 | Idempotency | Retrying a mutating command with the same request id returns the original result without duplicate state | Planned |
+| TC-020.7 | Conflict rejection | A command targeting stale or changed local state is rejected and the rejection is shown in the hub UI | Planned |
+| TC-020.8 | Offline refusal | Hub refuses new commands for an offline managed node and renders stale derived state clearly | Planned |
 
-### TC-017: Hermetic E2E Gate
+### TC-021: Hermetic E2E Gate
 
 Verifies that server/web/federation e2e tests are suitable as reliability
 gates.
 
 | ID | Test | Acceptance | Status |
 |----|------|------------|--------|
-| TC-017.1 | Fixture isolation | E2E tests run against temp projects and isolated `XDG_DATA_HOME`, not the developer's live DDx state | Planned |
-| TC-017.2 | No tracked dirtiness | Running the e2e suite leaves `git status --short` clean except for pre-existing unrelated changes | Planned |
-| TC-017.3 | Quarantined known failures | Not-yet-implemented UI features are skipped or isolated, not part of the reliability gate | Planned |
-| TC-017.4 | Screenshot determinism | Visual baselines are pinned or regenerated only by an explicit update flow | Planned |
+| TC-021.1 | Fixture isolation | E2E tests run against temp projects and isolated `XDG_DATA_HOME`, not the developer's live DDx state | Planned |
+| TC-021.2 | No tracked dirtiness | Running the e2e suite leaves `git status --short` clean except for pre-existing unrelated changes | Planned |
+| TC-021.3 | Quarantined known failures | Not-yet-implemented UI features are skipped or isolated, not part of the reliability gate | Planned |
+| TC-021.4 | Screenshot determinism | Visual baselines are pinned or regenerated only by an explicit update flow | Planned |
 
 ## Out of Scope
 

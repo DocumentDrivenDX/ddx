@@ -3808,6 +3808,38 @@ func TestListProjects(t *testing.T) {
 	}
 }
 
+func TestCurrentProject(t *testing.T) {
+	workDir := setupNodeTestDir(t)
+	srv := New(":0", workDir)
+
+	otherDir := t.TempDir()
+	srv.state.RegisterProject(otherDir)
+
+	req := httptest.NewRequest("GET", "/api/projects/current", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var project struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &project); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if project.Path != workDir {
+		t.Fatalf("expected current project path=%s, got %s", workDir, project.Path)
+	}
+	if project.Name != filepath.Base(workDir) {
+		t.Errorf("expected current project name=%s, got %s", filepath.Base(workDir), project.Name)
+	}
+}
+
 func TestRegisterProject(t *testing.T) {
 	workDir := setupNodeTestDir(t)
 	srv := New(":0", workDir)

@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` still fails in `cli/internal/agent` on `TestIdleTimer_ProgressEventsResetTimer` and `TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker` after the review-audit and shared state-root fixes; the targeted Niflheim evidence tests and `ac`/`work` spot checks pass, but the full acceptance gate remains red.

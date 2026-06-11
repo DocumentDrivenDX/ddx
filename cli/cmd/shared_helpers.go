@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -35,6 +36,20 @@ func resolveDDxProjectRoot(workingDir string) string {
 		return workspaceRoot
 	}
 	return workingDir
+}
+
+// resolveBeadStoreRoot prefers an existing in-tree .ddx directory when one is
+// already present, which keeps command fixtures that seed a bare tracker store
+// in-tree from drifting to the XDG convention root.
+func resolveBeadStoreRoot(projectRoot string) string {
+	if projectRoot == "" {
+		return ddxroot.JoinProject(projectRoot)
+	}
+	inTree := filepath.Join(projectRoot, ddxroot.DirName)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return inTree
+	}
+	return ddxroot.JoinProject(projectRoot)
 }
 
 func commandStatePath(workingDir string, elems ...string) string {

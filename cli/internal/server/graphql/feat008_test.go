@@ -13,6 +13,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
 func TestIntegration_FEAT008BackendOperations(t *testing.T) {
@@ -291,5 +292,57 @@ install:
 	}
 	if !strings.Contains(string(cfgData), "code-reviewer") {
 		t.Fatalf("personaBind did not write .ddx/config.yaml: %s", cfgData)
+	}
+}
+
+func TestGraphQLQueueSummaryInProgressCountsFreshActiveWorkers(t *testing.T) {
+	workDir, store := setupIntegrationDir(t)
+
+	active := &bead.Bead{Title: "active bead", Status: bead.StatusOpen}
+	if err := store.Create(context.Background(), active); err != nil {
+		t.Fatal(err)
+	}
+	if err := workerstatus.WriteLiveness(workDir, "worker-queue-summary", workerstatus.LivenessRecord{
+		WorkerID:       "worker-queue-summary",
+		ProjectRoot:    workDir,
+		CurrentBead:    active.ID,
+		AttemptID:      "att-queue-summary",
+		Phase:          "running",
+		LastActivityAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	state := newTestStateProvider(workDir, store)
+	projectID := state.projects[0].ID
+	h := newGQLHandler(state, workDir, nil)
+
+	resp := gqlPost(t, h, `{
+		queueSummary(projectId: "`+projectID+`") {
+			ready
+			blocked
+			inProgress
+			operatorAttention
+			dependencyWaiting
+			externalBlocked
+			cancelled
+		}
+	}`)
+	var data struct {
+		QueueSummary struct {
+			Ready             int `json:"ready"`
+			Blocked           int `json:"blocked"`
+			InProgress        int `json:"inProgress"`
+			OperatorAttention int `json:"operatorAttention"`
+			DependencyWaiting int `json:"dependencyWaiting"`
+			ExternalBlocked   int `json:"externalBlocked"`
+			Cancelled         int `json:"cancelled"`
+		} `json:"queueSummary"`
+	}
+	if err := json.Unmarshal(resp["data"], &data); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if data.QueueSummary.InProgress != 1 {
+		t.Fatalf("queueSummary.inProgress: want 1 fresh active worker, got %d", data.QueueSummary.InProgress)
 	}
 }

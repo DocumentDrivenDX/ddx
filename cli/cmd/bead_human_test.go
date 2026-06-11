@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -118,31 +120,101 @@ func TestBeadStatusIncludesSixLifecycleStates(t *testing.T) {
 	text, err := executeCommand(factory.NewRootCommand(), "bead", "status")
 	require.NoError(t, err)
 	assert.Contains(t, text, "Open:")
-	assert.Contains(t, text, "In progress:")
+	assert.Contains(t, text, "Lifecycle in progress:")
 	assert.Contains(t, text, "Closed:")
 	assert.Contains(t, text, "Blocked:")
 	assert.Contains(t, text, "Proposed:")
 	assert.Contains(t, text, "Cancelled:")
 	assert.Contains(t, text, "Operator attention:")
 	assert.Contains(t, text, "Worker ready:")
+	assert.Contains(t, text, "Active workers:     1")
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
 	require.NoError(t, err)
-	var counts map[string]any
+	var counts BeadStatusReport
 	require.NoError(t, json.Unmarshal([]byte(out), &counts))
-	assert.Equal(t, float64(8), counts["total"])
-	assert.Equal(t, float64(3), counts["open"])
-	assert.Equal(t, float64(1), counts["in_progress"])
-	assert.Equal(t, float64(1), counts["closed"])
-	assert.Equal(t, float64(1), counts["blocked"])
-	assert.Equal(t, float64(1), counts["proposed"])
-	assert.Equal(t, float64(1), counts["cancelled"])
-	assert.Equal(t, float64(1), counts["needs_human"])
-	assert.Equal(t, float64(1), counts["operator_attention"])
-	assert.Equal(t, float64(2), counts["ready"])
-	assert.Equal(t, float64(2), counts["worker_ready"])
-	assert.Equal(t, float64(1), counts["dependency_waiting"])
-	assert.Equal(t, float64(1), counts["external_blocked"])
+	assert.Equal(t, 8, counts.Total)
+	assert.Equal(t, 3, counts.Open)
+	assert.Equal(t, 1, counts.InProgress)
+	assert.Equal(t, 1, counts.Closed)
+	assert.Equal(t, 1, counts.Blocked)
+	assert.Equal(t, 1, counts.Proposed)
+	assert.Equal(t, 1, counts.Cancelled)
+	assert.Equal(t, 1, counts.NeedsHuman)
+	assert.Equal(t, 1, counts.OperatorAttention)
+	assert.Equal(t, 2, counts.Ready)
+	assert.Equal(t, 2, counts.WorkerReady)
+	assert.Equal(t, 1, counts.DependencyWaiting)
+	assert.Equal(t, 1, counts.ExternalBlocked)
+	assert.Equal(t, 1, counts.ActiveWork.Count)
+	assert.Contains(t, counts.ActiveWork.BeadIDs, inProgress.ID)
+}
+
+func TestBeadStatusCountsFreshActiveWorkers(t *testing.T) {
+	workingDir, factory, _ := setupBeadHumanEnv(t,
+		&bead.Bead{ID: "ddx-status-active-a", Title: "Active A"},
+		&bead.Bead{ID: "ddx-status-active-b", Title: "Active B"},
+	)
+	projectRoot := workingDir
+
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-active-a", workerstatus.LivenessRecord{
+		WorkerID:       "worker-active-a",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-status-active-a",
+		AttemptID:      "att-active-a",
+		Phase:          "running",
+		LastActivityAt: time.Now().UTC(),
+	}))
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-active-b", workerstatus.LivenessRecord{
+		WorkerID:       "worker-active-b",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-status-active-b",
+		AttemptID:      "att-active-b",
+		Phase:          "running",
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	text, err := executeCommand(factory.NewRootCommand(), "bead", "status")
+	require.NoError(t, err)
+	assert.Contains(t, text, "Lifecycle in progress: 0")
+	assert.Contains(t, text, "Active workers:     2")
+	assert.Contains(t, text, "ddx-status-active-a")
+	assert.Contains(t, text, "ddx-status-active-b")
+}
+
+func TestBeadStatusJSONReportsActiveWorkers(t *testing.T) {
+	workingDir, factory, _ := setupBeadHumanEnv(t,
+		&bead.Bead{ID: "ddx-status-json-a", Title: "JSON A"},
+		&bead.Bead{ID: "ddx-status-json-b", Title: "JSON B"},
+	)
+	projectRoot := workingDir
+
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-json-a", workerstatus.LivenessRecord{
+		WorkerID:       "worker-json-a",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-status-json-a",
+		AttemptID:      "att-json-a",
+		Phase:          "running",
+		LastActivityAt: time.Now().UTC(),
+	}))
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-json-b", workerstatus.LivenessRecord{
+		WorkerID:       "worker-json-b",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-status-json-b",
+		AttemptID:      "att-json-b",
+		Phase:          "running",
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
+	require.NoError(t, err)
+
+	var report BeadStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.Equal(t, 2, report.ActiveWork.Count)
+	assert.ElementsMatch(t, []string{"ddx-status-json-a", "ddx-status-json-b"}, report.ActiveWork.BeadIDs)
+	assert.Equal(t, 2, report.Total)
+	assert.Equal(t, 0, report.InProgress)
 }
 
 func TestBeadHumanResolveRetryRequiresNote(t *testing.T) {

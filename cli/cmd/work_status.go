@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
@@ -71,6 +74,7 @@ type WorkStatusReport struct {
 	ProjectRoot string                    `json:"project_root,omitempty"`
 	Scope       string                    `json:"scope"`
 	Workers     []workerstatus.LiveWorker `json:"workers"`
+	ActiveWork  activework.Snapshot       `json:"active_work"`
 }
 
 func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
@@ -94,6 +98,11 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 			workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
 			now,
 		),
+	}
+	if active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now); err == nil {
+		report.ActiveWork = active
+	} else {
+		return fmt.Errorf("work status: active work query: %w", err)
 	}
 	if allProjects {
 		report.Scope = "all-projects"
@@ -195,6 +204,14 @@ func writeWorkStatusJSON(out io.Writer, report WorkStatusReport) error {
 }
 
 func writeWorkStatusText(out io.Writer, report WorkStatusReport) {
+	if report.ActiveWork.Count > 0 {
+		fmt.Fprintf(out, "active work for %s: %d bead(s)\n", report.ProjectRoot, report.ActiveWork.Count)
+		if len(report.ActiveWork.BeadIDs) > 0 {
+			fmt.Fprintf(out, "  beads: %s\n", strings.Join(report.ActiveWork.BeadIDs, ", "))
+		}
+	} else {
+		fmt.Fprintf(out, "active work for %s: 0 bead(s)\n", report.ProjectRoot)
+	}
 	if len(report.Workers) == 0 {
 		if report.Scope == "all-projects" {
 			fmt.Fprintln(out, "No live ddx workers found on this host.")

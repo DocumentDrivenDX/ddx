@@ -29,8 +29,15 @@ model:
 - Spokes remain full ddx-servers; if the hub dies, spokes keep working
   autonomously and their UIs remain directly reachable as a fallback path.
 - Reads are aggregated by the hub via fan-out over the spokes' existing
-  `/graphql` endpoints. Writes are **never broadcast** — the hub may forward a
-  mutation to the owning spoke, but federation itself is read-only in v1.
+  `/graphql` endpoints. Writes are **never broadcast**. Basic operator writes
+  may be forwarded to the owning spoke when the row/project advertises
+  `write_capability=forwardable`; the owning spoke remains authoritative.
+
+**2026-06-08 amendment:** FEAT-026 now includes owner-targeted basic operator
+writes for worker start/stop, bead queue mutations, and project-confined
+document/spec writes. Earlier "read-only in v1" wording is historical for the
+initial federation slice; the invariant that remains load-bearing is "never
+broadcast writes, always route to exactly one owner."
 
 ### Naming Convention
 
@@ -123,10 +130,10 @@ re-confirm on their next heartbeat.
   letting users build worse external tunnels around an over-strict default.
   This mirrors ADR-006's posture on transport-layer auth.
 
-### Write Routing Contract (Story 15 Hand-off)
+### Write Routing Contract
 
-Federation is **read-only aggregation in v1**. Federated read models expose
-per-row routing metadata so a future write path can resolve the owning node:
+Federated read models expose per-row routing metadata so write paths can resolve
+the owning node:
 
 | Field | Type | Purpose |
 |-------|------|---------|
@@ -137,10 +144,14 @@ per-row routing metadata so a future write path can resolve the owning node:
 | `write_capability` | enum | `local`, `forwardable`, `read_only` |
 | `status` | enum | `live`, `stale`, `offline` of the owning node |
 
-When Story 15 (server-side prompt execution) lands, the hub may **forward** a
-mutation to the owning spoke based on this metadata, but it must **never
-broadcast** writes. ADR-007 documents the contract; Story 15's design
-references it.
+The hub may **forward** a mutation to the owning spoke based on this metadata,
+but it must **never broadcast** writes. Owner-targeted forwarding is limited to
+commands with a single node/project owner: worker start/stop, bead lifecycle and
+content mutations, and project-confined document/spec writes. Forwarded writes
+carry origin identity, forwarding path, request id, target node/project, and any
+expected version needed for stale-write protection. Offline, stale-without-write
+capability, read-only, or version-conflicted targets are refused with an
+operator-visible reason.
 
 ### Relationship To Managed Nodes
 
@@ -224,10 +235,10 @@ ADR-007 is implemented across three feature specs:
   per-call timeouts cap the cost; a single slow spoke cannot block the view.
 - **Plain-HTTP escape valve is documented and noisy:** the dangerous mode is
   explicit, log-loud, and gated behind both `--hub-mode` and a separate flag.
-- **Future write path is preserved:** routing metadata fields are part of
-  every federated row, so owner-targeted forwarding can be layered without a
-  v2 schema migration. Managed-node remote control is specified separately in
-  ADR-028 and FEAT-029.
+- **Owner-targeted write path is preserved:** routing metadata fields are part
+  of every federated row, so owner-targeted forwarding works without a v2 schema
+  migration. Managed-node remote control is specified separately in ADR-028 and
+  FEAT-029.
 - **Naming discipline:** `coordinator`, `primary`, `replica`, `leader` are
   reserved/avoided so the federation vocabulary does not collide with
   pre-existing per-project subsystems.

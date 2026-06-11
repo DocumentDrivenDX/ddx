@@ -1,0 +1,2 @@
+status: open
+reason: `go test ./internal/agent/... ./cmd/... -count=1` fails in unrelated pre-existing cmd integration/diagnostic tests (for example doctor_housekeeping, skills install topology, update backup, and routing-evidence path fixtures). The targeted acceptance slice for this bead passes, but the full suite is not green in the current repo state.

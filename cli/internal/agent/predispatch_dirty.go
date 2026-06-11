@@ -177,10 +177,14 @@ func preservePreDispatchDirtyPathsLocked(projectRoot string, dirtyPaths []string
 }
 
 func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
-	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+	workTreeOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").CombinedOutput()
+	if err != nil {
 		return false, nil
 	}
-	headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").Output()
+	if strings.TrimSpace(string(workTreeOut)) != "true" {
+		return false, fmt.Errorf("verifying project worktree for pre-dispatch checkpoint: git rev-parse --is-inside-work-tree returned %q", strings.TrimSpace(string(workTreeOut)))
+	}
+	headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").CombinedOutput()
 	if err != nil {
 		return false, nil
 	}
@@ -288,9 +292,9 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 }
 
 func checkpointSkipWorktreePaths(projectRoot string) ([]string, error) {
-	out, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "-t", "-z").Output()
+	out, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "-t", "-z").CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("listing skip-worktree paths: %w", err)
+		return nil, fmt.Errorf("listing skip-worktree paths: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	var paths []string
 	for len(out) > 0 {
@@ -376,9 +380,9 @@ func isMaterializedSkillSymlink(projectRoot, path string) bool {
 
 func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 	out, err := internalgit.Command(context.Background(), projectRoot,
-		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").Output()
+		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("listing checkpoint dirt: %w", err)
+		return nil, fmt.Errorf("listing checkpoint dirt: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	if len(out) == 0 {
 		return nil, nil

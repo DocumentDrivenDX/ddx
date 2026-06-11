@@ -1,0 +1,2 @@
+status: blocked
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` fails in pre-existing `cmd` maintenance tests unrelated to this bead (for example `TestSkillsCheckDefaultPathsIncludesShippedPluginSkills`, `TestDoctor_ReportsAndAppliesHousekeepingCounts`, `TestDDxSkillCopiedTreesMatchSource`, `TestUpdate_DiscardLocalOverwritesDirty`, `TestWorkStopsWhenDurableAuditCommitFails`, and `TestExecutionsRetention_ArchivesOldEvidence`). The scoped agent regression pass itself is green, but the required full package gate does not pass in this worktree.

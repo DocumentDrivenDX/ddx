@@ -92,18 +92,29 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		now = time.Now
 	}
 
-	reviewSkipped := in.Reviewer == nil || in.NoReview
-	if !reviewSkipped && HasBeadLabel(in.Bead.Labels, "review:skip") {
-		reviewSkipped = HasBeadLabelPrefix(in.Bead.Labels, "review:skip-reason:")
-	}
-
-	if reviewSkipped {
+	reviewSkipReason := durableReviewSkipReason(in.Bead.Labels)
+	if reviewSkipReason != "" {
+		report.ReviewSkipReason = reviewSkipReason
 		if err := in.Store.CloseWithEvidence(in.Bead.ID, report.SessionID, report.ResultRev); err != nil {
 			out.StoreErrOp = "CloseWithEvidence"
 			out.StoreErr = err
 			return out
 		}
 		out.Report = report
+		return out
+	}
+	if in.NoReview || in.Reviewer == nil {
+		class := evidence.OutcomeReviewReviewerUnavailable
+		reason := "reviewer is nil and bead lacks review:skip plus review:skip-reason:* labels"
+		if in.NoReview {
+			class = evidence.OutcomeReviewUnparseable
+			reason = "--no-review requires durable review:skip plus review:skip-reason:* labels before close"
+		}
+		appendReviewGateError(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.ResultRev, class, reason)
+		report.Status = ExecuteBeadStatusReviewMalfunction
+		report.Detail = "pre-close review: " + reason
+		out.Report = report
+		out.Approved = false
 		return out
 	}
 
@@ -425,6 +436,14 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		report.Status = ExecuteBeadStatusReviewRequestClarification
 		report.Detail = "pre-close review: REQUEST_CLARIFICATION"
 		out.Approved = false
+	default:
+		reason := "empty or malformed review result before close"
+		appendReviewGateError(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.ResultRev, evidence.OutcomeReviewUnparseable, reason)
+		report.Status = ExecuteBeadStatusReviewMalfunction
+		report.Detail = "pre-close review: " + reason
+		out.Report = report
+		out.Approved = false
+		return out
 	}
 	if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
 		_ = applyReviewTriageDecision(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.PowerClass)
@@ -456,6 +475,60 @@ func runPreCloseReviewGroup(ctx context.Context, reviewer BeadReviewer, beadID, 
 		group.Slots[0].Error = err.Error()
 	}
 	return group, err
+}
+
+func hasDurableReviewSkipReason(labels []string) bool {
+	return durableReviewSkipReason(labels) != ""
+}
+
+func durableReviewSkipReason(labels []string) string {
+	if !HasBeadLabel(labels, "review:skip") {
+		return ""
+	}
+	for _, label := range labels {
+		if strings.HasPrefix(label, "review:skip-reason:") {
+			return strings.TrimSpace(label)
+		}
+	}
+	return ""
+}
+
+func successReportHasEmptyReviewResult(report ExecuteBeadReport) bool {
+	for _, trace := range report.CycleTrace {
+		if executionCycleTraceHasReviewActivity(trace) && executionCycleReviewResultIsEmpty(trace.ReviewResult) {
+			return true
+		}
+	}
+	return false
+}
+
+func executionCycleTraceHasReviewActivity(trace ExecutionCycleTrace) bool {
+	return strings.TrimSpace(trace.ReviewGroupID) != "" ||
+		len(trace.ReviewerIndices) > 0 ||
+		len(trace.ReviewVerdicts) > 0
+}
+
+func executionCycleReviewResultIsEmpty(res ExecutionCycleReviewResult) bool {
+	return strings.TrimSpace(res.Verdict) == "" &&
+		strings.TrimSpace(res.Rationale) == "" &&
+		strings.TrimSpace(res.Classification) == "" &&
+		len(res.PerAC) == 0 &&
+		len(res.Findings) == 0
+}
+
+func appendReviewGateError(store ExecuteBeadLoopStore, beadID, actor string, at time.Time, resultRev, class, reason string) {
+	if store == nil {
+		return
+	}
+	body := ReviewErrorEventBody(class, CountPriorReviewErrors(store, beadID, resultRev)+1, resultRev, reason)
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "review-error",
+		Summary:   class,
+		Body:      body,
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
 }
 
 func reviewErrorReviewerIndex(group *ReviewGroupResult, res *ReviewResult) (int, bool) {

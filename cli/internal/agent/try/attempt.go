@@ -13,6 +13,8 @@ import (
 const (
 	StatusExecutionFailed            = "execution_failed"
 	StatusLandConflict               = "land_conflict"
+	StatusLandRetry                  = "land_retry"
+	StatusLandOperatorAttention      = "land_operator_attention"
 	StatusSuccess                    = "success"
 	StatusNoChanges                  = "no_changes"
 	StatusAlreadySatisfied           = "already_satisfied"
@@ -63,6 +65,8 @@ type Report struct {
 	FinalPowerClass             string
 	DecompositionRecommendation []string
 	DecompositionRationale      string
+	DecomposedChildIDs          []string
+	ExecutionDecision           string
 	Disrupted                   bool
 	DisruptionReason            string
 	OutcomeReason               string
@@ -81,6 +85,17 @@ type ExecutionCycleRouteFacts struct {
 	ResolvedBaseURL string
 }
 
+type ExecutionCycleRequestedRouteFacts struct {
+	Harness             string
+	Provider            string
+	Model               string
+	Profile             string
+	RoutingIntentSource string
+	EstimatedDifficulty string
+	InferredPowerClass  string
+	RequestedPowerClass string
+}
+
 type ExecutionCycleReviewResult struct {
 	Verdict        string
 	Rationale      string
@@ -90,15 +105,27 @@ type ExecutionCycleReviewResult struct {
 }
 
 type ExecutionCycleTrace struct {
-	CycleIndex       int
-	AttemptID        string
-	ResultRev        string
-	ImplementerRoute ExecutionCycleRouteFacts
-	ReviewGroupID    string
-	ReviewerIndices  []int
-	ReviewVerdicts   []string
-	ReviewResult     ExecutionCycleReviewResult
-	FinalDecision    string
+	CycleIndex           int
+	AttemptID            string
+	ResultRev            string
+	ImplementerRoute     ExecutionCycleRouteFacts
+	RequestedRoute       ExecutionCycleRequestedRouteFacts
+	ActualRoute          ExecutionCycleRouteFacts
+	ReviewGroupID        string
+	ReviewerIndices      []int
+	ReviewVerdicts       []string
+	ReviewResult         ExecutionCycleReviewResult
+	FinalDecision        string
+	FailureClass         string
+	RetryAction          string
+	EscalationCount      int
+	ReviewStatus         string
+	ReviewSkipReason     string
+	ReviewClassification string
+	LandStatus           string
+	ReconcileStatus      string
+	DecomposedChildIDs   []string
+	ExecutionDecision    string
 }
 
 type ReviewAC struct {

@@ -20,11 +20,13 @@ ddx:
 ## Overview
 
 Federation lets multiple `ddx server` nodes present a unified view of beads,
-runs, and projects across machines while each node remains fully usable on
-its own. One node runs as the **hub**; the others run as **spokes** that
+runs, workers, and projects across machines while each node remains fully usable
+on its own. One node runs as the **hub**; the others run as **spokes** that
 register and heartbeat to the hub. The hub aggregates reads by fanning out to
-spokes' existing GraphQL APIs over ts-net; writes are never broadcast and may
-be forwarded to the owning spoke in a future iteration (Story 15).
+spokes' existing GraphQL APIs over ts-net. Basic operator writes are
+owner-targeted: worker start/stop, bead queue mutations, and spec/document
+writes may be forwarded to the node that owns the selected project, but writes
+are never broadcast.
 
 This feature covers **read-federation spokes**: nodes with inbound DDx server
 surfaces that the hub can query. FEAT-029 / ADR-028 cover **managed nodes**:
@@ -58,8 +60,9 @@ separately and stitch the picture together by hand.
 **Desired outcome:** An operator can run `ddx server --hub-mode` on one node
 and `ddx server --hub=<host>` on the others. The hub UI surfaces a
 `/federation` overview, all `/nodes/:nodeId/...` routes resolve across the
-federation, and combined views accept `?scope=federation` to fan out across
-spokes. Spoke UIs continue to work directly as a fallback.
+federation, combined views accept `?scope=federation` to fan out across spokes,
+and the hub can start/stop workers plus mutate beads/specs on the owning node.
+Spoke UIs continue to work directly as a fallback.
 
 ## Architecture
 
@@ -144,6 +147,35 @@ Every federated row carries the routing-metadata fields described in
 ADR-007 (`node_id`, `project_id`, `project_url`, `project_path`,
 `write_capability`, `status`).
 
+### Owner-Targeted Write Surface
+
+Federation write routing is a narrow operator-control path, not data
+replication. The hub may forward only commands that target one owning node and
+one owning project. It must never broadcast a write to multiple spokes.
+
+Forwardable basic-operator commands:
+
+| Command | Owning target | Purpose |
+|---|---|---|
+| `startWorker` / `workerDispatch(kind: "work")` | project owner | Start one or more autonomous `ddx work` workers on that node. |
+| `stopWorker` | worker owner | Request stop for a running worker on the node that owns the worker id. |
+| `beadCreate`, `beadUpdate`, `beadApprove`, `beadBlock`, `beadCancel`, `beadReopen` | project owner | Modify the owning project's bead queue. |
+| `documentWrite` | project owner | Save project-confined spec/document changes, especially `docs/helix/**`. |
+
+Forwarded writes carry:
+
+- origin identity: the operator identity seen by the hub
+- forwarding path: hub node id plus target spoke node id
+- request id / idempotency key
+- target node id and project id
+- target revision or expected version when the mutation needs stale-write
+  protection
+
+The owning node is authoritative. It may reject a forwarded write because the
+project is missing, the node is offline/stale, the requested write capability is
+absent, path confinement fails, the worker cap would be exceeded, the bead state
+changed, or the idempotency key maps to a previous result.
+
 ### CLI Flags
 
 ```
@@ -193,7 +225,13 @@ follow-up).
 9. Federated rows expose routing metadata (`node_id`, `project_id`,
    `project_url`, `project_path`, `write_capability`, `status`) so Story 15
    can later forward writes to the owning node.
-10. The hub UI exposes `/federation` and resolves `/nodes/:nodeId/...` for
+10. The hub forwards basic operator writes only to the owner node/project
+    identified by routing metadata. Broadcast writes are rejected.
+11. Forwarded write responses preserve origin/forwarding audit metadata and are
+    idempotent on request id.
+12. The hub refuses worker, bead, and document writes for offline spokes or
+    spokes whose `write_capability` is `read_only`.
+13. The hub UI exposes `/federation` and resolves `/nodes/:nodeId/...` for
     registered spokes; spoke UIs remain directly reachable as a fallback.
 
 ### Non-Functional
@@ -248,6 +286,32 @@ follow-up).
   with a `stale` badge
 - Given I click a row originating from a spoke, then I navigate to
   `/nodes/:spokeId/...` resolved through the hub
+
+### US-097b: Operator Controls Spoke Work from the Hub
+**As an** operator using the federation hub
+**I want** to start and stop workers, mutate bead queues, and save specs on the
+owning spoke through the hub UI
+**So that** the hub is a single pane of glass without taking authority away
+from the node that owns each project
+
+**Acceptance Criteria:**
+- Given a spoke project advertises `write_capability=forwardable`, when I start
+  a worker for that project from the hub, then the command is forwarded to that
+  spoke and exactly one spoke-local worker starts.
+- Given I create or edit a bead for a spoke project from the hub, then the bead
+  is persisted on the spoke's project and appears in hub federated reads.
+- Given I save a `docs/helix/**` spec for a spoke project from the hub, then the
+  write is path-confined and persisted on the spoke.
+- Given the target spoke is offline or read-only, then the hub refuses the
+  command with an operator-visible reason and does not create local phantom
+  state.
+- Given a forwarded command is retried with the same request id, then the owner
+  returns the original result without duplicating workers, bead events, or file
+  writes.
+
+**E2E Test:** `federation-owner-writes.spec.ts` — start hub+spoke, forward a
+worker start, forward bead create/update, forward spec save, simulate offline
+spoke, and verify refusal plus idempotency.
 
 ### US-098: Operator Falls Back to a Spoke UI Directly
 **As an** operator when the hub is unreachable

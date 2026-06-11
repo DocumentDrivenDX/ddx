@@ -707,6 +707,17 @@ func (s *Server) resolveProject(key string) (ProjectEntry, bool) {
 	return s.state.GetProjectByPath(key)
 }
 
+func (s *Server) currentProject() ProjectEntry {
+	canonical := resolvedProjectPath(s.WorkingDir)
+	if canonical == "" {
+		canonical = s.WorkingDir
+	}
+	if entry, ok := s.state.GetProjectByPath(canonical); ok {
+		return entry
+	}
+	return s.state.RegisterProject(s.WorkingDir)
+}
+
 // mcpResolveWorkingDir resolves a project argument passed to a project-local
 // MCP tool into a working directory. Semantics mirror the HTTP routing layer:
 //
@@ -874,6 +885,7 @@ func (s *Server) routes() {
 	// Node + project registry
 	trusted("GET /api/node", s.handleGetNode)
 	trusted("GET /api/projects", s.handleListProjects)
+	trusted("GET /api/projects/current", s.handleCurrentProject)
 	trusted("POST /api/projects/register", s.handleRegisterProject)
 	trusted("GET /api/projects/{project}/commits", s.handleProjectCommits)
 
@@ -1140,6 +1152,12 @@ func (s *Server) federationRole() string {
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	includeUnreachable := r.URL.Query().Get("include_unreachable") == "true"
 	writeJSON(w, http.StatusOK, s.state.GetProjects(includeUnreachable))
+}
+
+func (s *Server) handleCurrentProject(w http.ResponseWriter, r *http.Request) {
+	entry := s.currentProject()
+	_ = s.state.save()
+	writeJSON(w, http.StatusOK, entry)
 }
 
 func (s *Server) handleRegisterProject(w http.ResponseWriter, r *http.Request) {

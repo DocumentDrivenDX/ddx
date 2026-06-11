@@ -21,7 +21,6 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
@@ -151,6 +150,19 @@ type ExecutionCycleRouteFacts struct {
 	ResolvedBaseURL string `json:"resolved_base_url,omitempty"`
 }
 
+// ExecutionCycleRequestedRouteFacts captures the operator/request-side routing
+// facts available to the worker for one execution cycle.
+type ExecutionCycleRequestedRouteFacts struct {
+	Harness             string `json:"harness,omitempty"`
+	Provider            string `json:"provider,omitempty"`
+	Model               string `json:"model,omitempty"`
+	Profile             string `json:"profile,omitempty"`
+	RoutingIntentSource string `json:"routing_intent_source,omitempty"`
+	EstimatedDifficulty string `json:"estimated_difficulty,omitempty"`
+	InferredPowerClass  string `json:"inferred_power_class,omitempty"`
+	RequestedPowerClass string `json:"requested_power_class,omitempty"`
+}
+
 // ExecutionCycleReviewResult captures the reduced review outcome for one
 // execution cycle.
 type ExecutionCycleReviewResult struct {
@@ -164,15 +176,27 @@ type ExecutionCycleReviewResult struct {
 // ExecutionCycleTrace records one implementation or repair cycle and its
 // durable review/final-decision metadata.
 type ExecutionCycleTrace struct {
-	CycleIndex       int                        `json:"cycle_index"`
-	AttemptID        string                     `json:"attempt_id,omitempty"`
-	ResultRev        string                     `json:"result_rev,omitempty"`
-	ImplementerRoute ExecutionCycleRouteFacts   `json:"implementer_route"`
-	ReviewGroupID    string                     `json:"review_group_id,omitempty"`
-	ReviewerIndices  []int                      `json:"reviewer_indices,omitempty"`
-	ReviewVerdicts   []string                   `json:"review_verdicts,omitempty"`
-	ReviewResult     ExecutionCycleReviewResult `json:"review_result,omitempty"`
-	FinalDecision    string                     `json:"final_decision,omitempty"`
+	CycleIndex           int                               `json:"cycle_index"`
+	AttemptID            string                            `json:"attempt_id,omitempty"`
+	ResultRev            string                            `json:"result_rev,omitempty"`
+	ImplementerRoute     ExecutionCycleRouteFacts          `json:"implementer_route"`
+	RequestedRoute       ExecutionCycleRequestedRouteFacts `json:"requested_route"`
+	ActualRoute          ExecutionCycleRouteFacts          `json:"actual_route"`
+	ReviewGroupID        string                            `json:"review_group_id,omitempty"`
+	ReviewerIndices      []int                             `json:"reviewer_indices,omitempty"`
+	ReviewVerdicts       []string                          `json:"review_verdicts,omitempty"`
+	ReviewResult         ExecutionCycleReviewResult        `json:"review_result,omitempty"`
+	FinalDecision        string                            `json:"final_decision,omitempty"`
+	FailureClass         string                            `json:"failure_class"`
+	RetryAction          string                            `json:"retry_action"`
+	EscalationCount      int                               `json:"escalation_count"`
+	ReviewStatus         string                            `json:"review_status"`
+	ReviewSkipReason     string                            `json:"review_skip_reason"`
+	ReviewClassification string                            `json:"review_classification"`
+	LandStatus           string                            `json:"land_status"`
+	ReconcileStatus      string                            `json:"reconcile_status"`
+	DecomposedChildIDs   []string                          `json:"decomposed_child_ids,omitempty"`
+	ExecutionDecision    string                            `json:"execution_decision,omitempty"`
 }
 
 // AttemptDiagnostic captures infrastructure state when an attempt cannot be
@@ -786,6 +810,29 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		evidenceDir := filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)
 		lockmetrics.SetCapEnforcement(projectRoot, evidenceDir)
 		defer lockmetrics.SetCapEnforcement(projectRoot, "")
+	}
+	gitRepair := defaultPreDispatchGitRepairer(ctx, projectRoot)
+	if detail, failed := preDispatchGitRepairFailure(gitRepair); failed {
+		res := &ExecuteBeadResult{
+			BeadID:      beadID,
+			WorkerID:    runtime.WorkerID,
+			AttemptID:   attemptID,
+			ExitCode:    1,
+			Error:       preDispatchGitRepairFailedMarker + detail,
+			Reason:      preDispatchGitRepairFailedReason,
+			Outcome:     ExecuteBeadOutcomeTaskFailed,
+			Status:      ExecuteBeadStatusExecutionFailed,
+			ProjectRoot: projectRoot,
+		}
+		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+		return res, nil
+	}
+	if runtime.Output != nil && len(gitRepair.RepairedTypes) > 0 {
+		_, _ = fmt.Fprintf(runtime.Output,
+			"repaired project git config before execute-bead: %s (%s)\n",
+			strings.Join(gitRepair.RepairedTypes, ", "),
+			strings.Join(gitRepair.Commands, "; "),
+		)
 	}
 
 	// Serialize only the parent-repo writes in pre-dispatch (tracker commit
@@ -1519,7 +1566,7 @@ func cleanupAttemptWorktree(gitOps GitOps, workDir, wtPath, outcome string, pres
 // single critical section so concurrent workers do not race on the parent's
 // HEAD ref.
 func commitTrackerLocked(projectRoot string) error {
-	trackerFile := ddxroot.JoinProject(projectRoot, "beads.jsonl")
+	trackerFile := filepath.Join(beadStoreRoot(projectRoot), "beads.jsonl")
 	info, err := os.Stat(trackerFile)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1591,7 +1638,7 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 }
 
 func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, *bead.Bead, error) {
-	b, refs, err := loadBeadContext(wtPath, beadID)
+	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1651,13 +1698,27 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 	return artifacts, b, nil
 }
 
-func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
-	store := bead.NewStore(ddxroot.JoinProject(wtPath))
-	b, err := store.Get(context.Background(), beadID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
+func loadBeadContext(projectRoot, wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
+	roots := []string{wtPath}
+	if projectRoot != "" && projectRoot != wtPath {
+		roots = append(roots, projectRoot)
 	}
-	return b, ResolveGoverningRefs(wtPath, b), nil
+	var lastErr error
+	for _, root := range roots {
+		if strings.TrimSpace(root) == "" {
+			continue
+		}
+		store := bead.NewStore(beadStoreRoot(root))
+		b, err := store.Get(context.Background(), beadID)
+		if err == nil {
+			return b, ResolveGoverningRefs(root, b), nil
+		}
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("bead: not found: %s", beadID)
+	}
+	return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, lastErr)
 }
 
 func noChangesMinPowerOverride(b *bead.Bead, currentMinPower int) int {
@@ -2129,7 +2190,7 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 		return 0
 	}
 
-	store := bead.NewStore(ddxroot.JoinProject(workDir))
+	store := bead.NewStore(beadStoreRoot(workDir))
 	depth := beadDecomposedChildDepth(b)
 	seen := map[string]struct{}{}
 	current := b

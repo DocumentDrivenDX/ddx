@@ -31,6 +31,35 @@ func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
 	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
 }
 
+func normalizeProviderConnectivityRetryReport(report *agent.ExecuteBeadReport) {
+	if report == nil || report.Status != agent.ExecuteBeadStatusExecutionFailed {
+		return
+	}
+	if !isProviderConnectivityAttemptReport(*report) {
+		return
+	}
+	report.OutcomeReason = agent.FailureModeProviderConnectivity
+	report.Disrupted = true
+	report.DisruptionReason = "provider_connectivity"
+}
+
+func isProviderConnectivityAttemptReport(report agent.ExecuteBeadReport) bool {
+	if strings.TrimSpace(report.Provider) == "" {
+		return false
+	}
+	combined := strings.ToLower(strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n"))
+	for _, marker := range []string{"provider_connectivity", "connection refused", "connection reset", "no route to host", "network is unreachable", "i/o timeout", "dial tcp"} {
+		if strings.Contains(combined, marker) {
+			return true
+		}
+	}
+	return false
+}
+
 func nextEscalationFloor(l escalationFloorFinder, actualPower int) (int, error) {
 	if l == nil {
 		return 0, powerladder.ErrLadderExhausted
@@ -338,11 +367,13 @@ func runEscalatingPowerAttempts(
 				return report, nil
 			}
 		}
+		normalizeProviderConnectivityRetryReport(&report)
 		transition := executeloop.DecideAttemptTransition(executeloop.AttemptTransitionInput{
 			Status:                   report.Status,
 			Detail:                   report.Detail,
 			CurrentMinPower:          minPower,
 			ActualPower:              report.ActualPower,
+			OutcomeReason:            report.OutcomeReason,
 			Disrupted:                report.Disrupted,
 			BudgetExhausted:          isBudgetExhaustedFailure(report),
 			AllowInfrastructureRetry: allowInfrastructureRetry,

@@ -1,0 +1,2 @@
+status: blocked
+reason: `cd cli && go test ./internal/agent/... ./cmd/... -count=1` fails in `./cmd/...` with widespread command-suite errors unrelated to the review-gating change. The targeted regression command for `EmptyReviewResult` and `NilReviewer` passes, and `./internal/agent/...` is green, but the full acceptance matrix is not green in this workspace.

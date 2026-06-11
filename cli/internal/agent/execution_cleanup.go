@@ -1355,6 +1355,14 @@ func workerDirPID(dirPath string) int {
 	return rec.PID
 }
 
+func workerDirsRoot(projectRoot string) string {
+	inTree := ddxroot.InTree(projectRoot)
+	if info, err := os.Stat(inTree); err == nil && info.IsDir() {
+		return filepath.Join(inTree, "workers")
+	}
+	return ddxroot.JoinProject(projectRoot, "workers")
+}
+
 // pruneWorkerDirs deletes .ddx/workers/<id>/ directories whose mtime is older
 // than m.RetainDays. Directories whose status.json PID is still alive are
 // skipped. No-op when RetainDays == 0.
@@ -1367,7 +1375,7 @@ func (m *ExecutionCleanupManager) pruneWorkerDirs(ctx context.Context, summary *
 	}
 	cutoff := now.AddDate(0, 0, -m.RetainDays)
 
-	root := ddxroot.JoinProject(m.ProjectRoot, "workers")
+	root := workerDirsRoot(m.ProjectRoot)
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {

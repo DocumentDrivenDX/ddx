@@ -37,10 +37,33 @@
 
 	onMount(async () => {
 		const client = createClient();
-		const data = await client.request<ProjectsResult>(PROJECTS_QUERY);
-		projects = data.projects.edges.map((e) => e.node);
-		loading = false;
+		try {
+			const [data, current] = await Promise.all([
+				client.request<ProjectsResult>(PROJECTS_QUERY),
+				fetch('/api/projects/current')
+					.then((resp) => (resp.ok ? (resp.json() as Promise<ProjectNode>) : null))
+					.catch(() => null)
+			]);
+			projects = data.projects.edges.map((e) => e.node);
+			if (current) {
+				projects = [current, ...projects.filter((p) => p.id !== current.id)];
+			}
+			if (!projectStore.value && current) {
+				selectProject(current, false);
+			}
+		} finally {
+			loading = false;
+		}
 	});
+
+	function selectProject(project: ProjectNode, navigate: boolean) {
+		projectStore.set({ id: project.id, name: project.name, path: project.path });
+
+		const nodeId = nodeStore.value?.id;
+		if (navigate && nodeId) {
+			goto(`/nodes/${nodeId}/projects/${project.id}`);
+		}
+	}
 
 	function handleChange(event: Event) {
 		const select = event.target as HTMLSelectElement;
@@ -50,12 +73,7 @@
 		const project = projects.find((p) => p.id === projectId);
 		if (!project) return;
 
-		projectStore.set({ id: project.id, name: project.name, path: project.path });
-
-		const nodeId = nodeStore.value?.id;
-		if (nodeId) {
-			goto(`/nodes/${nodeId}/projects/${projectId}`);
-		}
+		selectProject(project, true);
 	}
 </script>
 

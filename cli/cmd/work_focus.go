@@ -1,15 +1,13 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
-	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +48,7 @@ type WorkFocusReport struct {
 	BlockedOrPlanning    []WorkFocusBlockedBead  `json:"blocked_or_planning"`
 	ReadySummary         WorkFocusReadySummary   `json:"ready_summary"`
 	ActiveWorkers        []WorkFocusActiveWorker `json:"active_workers,omitempty"`
+	ActiveWork           activework.Snapshot     `json:"active_work"`
 	WorkerRecommendation string                  `json:"worker_recommendation"`
 	Unknowns             []string                `json:"unknowns"`
 }
@@ -70,12 +69,10 @@ func workerReadyDepthLabel(count int) string {
 
 // buildWorkFocusReport queries the store and returns a WorkFocusReport.
 //
-// projectRoot, when non-empty, enables the active_workers section: any
-// .ddx/workers/<id>/status.json sidecar with a last_activity_at within
-// workerstatus.LivenessTTL is reported as a live worker. This lets the
-// operator-facing view treat a long-running attempt as active even when the
-// bead tracker's claim timestamp has not changed (heartbeats are written
-// outside beads.jsonl to avoid tracker churn).
+// projectRoot, when non-empty, enables the active_workers section and active
+// work summary: fresh claim heartbeats, liveness sidecars, and run-state files
+// are reconciled into one project-scoped view so the operator-facing answer
+// stays aligned across bead, work, and GraphQL status surfaces.
 func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusReport, error) {
 	// Collect operator-attention beads (status=proposed, any dep state).
 	operatorAttentionBeads, err := store.ProposedOperatorAttention()
@@ -154,22 +151,33 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 	}
 	inProgressCount := len(inProgressBeads)
 
-	// Active worker sidecars: workers whose status.json was updated within
-	// workerstatus.LivenessTTL are treated as active even when the bead
-	// tracker claim timestamp is older. This is the operator-facing answer
-	// to "is the worker alive?" — the bead row alone cannot answer it
-	// because heartbeats are recorded outside beads.jsonl.
-	activeWorkers := collectActiveWorkers(projectRoot, time.Now())
+	// Shared active-work snapshot: claim heartbeats, worker liveness
+	// sidecars, and run-state records are reconciled into one project-scoped
+	// view so operator surfaces can agree on what is actually active.
+	activeWork, err := collectActiveWorkSnapshot(projectRoot, store, time.Now())
+	if err != nil {
+		return WorkFocusReport{}, fmt.Errorf("work focus: active work query: %w", err)
+	}
+	activeWorkers := activeWorkRecordsForFocus(activeWork)
 
-	// Conservative worker recommendation. Treat each active sidecar as
-	// observed capacity in addition to in_progress beads.
-	workerRec := buildWorkerRecommendation(readyCount, inProgressCount+len(activeWorkers))
+	// Conservative worker recommendation. Treat fresh active work as the
+	// capacity signal rather than the raw lifecycle count.
+	workerRec := buildWorkerRecommendation(readyCount, activeWork.Count)
 
-	// Unknowns: worker process liveness is not verifiable from the bead store.
+	// Unknowns: worker process liveness is not verifiable from the bead store
+	// alone; only add the hazard when we have in-progress beads but the only
+	// active evidence is a claim heartbeat.
 	var unknowns []string
-	if inProgressCount > 0 && len(activeWorkers) == 0 {
+	hasNonClaimActive := false
+	for _, rec := range activeWork.Records {
+		if rec.Source != "claim" {
+			hasNonClaimActive = true
+			break
+		}
+	}
+	if inProgressCount > 0 && !hasNonClaimActive {
 		unknowns = append(unknowns, fmt.Sprintf(
-			"worker process liveness: %d bead(s) are in_progress but no active worker sidecar is fresh; check `ddx work status` for live processes",
+			"worker process liveness: %d bead(s) are in_progress but no active worker snapshot is fresh; check `ddx work status` for live processes",
 			inProgressCount,
 		))
 	}
@@ -179,49 +187,22 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 		BlockedOrPlanning:    blockedOrPlanning,
 		ReadySummary:         readySummary,
 		ActiveWorkers:        activeWorkers,
+		ActiveWork:           activeWork,
 		WorkerRecommendation: workerRec,
 		Unknowns:             unknowns,
 	}, nil
 }
 
-// collectActiveWorkers reads .ddx/workers/*/status.json sidecars under
-// projectRoot and returns the ones whose last_activity_at is within
-// workerstatus.LivenessTTL. Empty projectRoot or a missing workers dir
-// yields nil.
-func collectActiveWorkers(projectRoot string, now time.Time) []WorkFocusActiveWorker {
-	if projectRoot == "" {
-		return nil
-	}
-	records, err := workerstatus.ListLiveness(projectRoot)
-	if err != nil {
-		return nil
-	}
-	var out []WorkFocusActiveWorker
-	for _, rec := range records {
-		if !rec.IsFresh(now) {
-			continue
-		}
-		out = append(out, WorkFocusActiveWorker{
-			WorkerID:       rec.WorkerID,
-			CurrentBead:    rec.CurrentBead,
-			AttemptID:      rec.AttemptID,
-			Phase:          rec.Phase,
-			LastActivityAt: rec.LastActivityAt.UTC().Format(time.RFC3339Nano),
-		})
-	}
-	return out
-}
-
 // buildWorkerRecommendation returns a conservative recommendation string.
 // It suggests another worker only when ready depth is high and capacity is observable.
-func buildWorkerRecommendation(readyCount, inProgressCount int) string {
+func buildWorkerRecommendation(readyCount, activeCount int) string {
 	switch {
 	case readyCount == 0:
 		return "Queue is empty; no worker action needed."
-	case inProgressCount > 0 && readyCount > 0:
+	case activeCount > 0 && readyCount > 0:
 		return fmt.Sprintf(
-			"%d bead(s) ready; %d bead(s) currently claimed (in_progress). Monitor progress or run 'ddx work' to add capacity.",
-			readyCount, inProgressCount,
+			"%d bead(s) ready; %d active worker(s) observed. Monitor progress or run 'ddx work' to add capacity.",
+			readyCount, activeCount,
 		)
 	case readyCount >= 3:
 		return fmt.Sprintf(
@@ -250,10 +231,10 @@ it surfaces the items workers will NOT pick up and recommends operator actions.
 Worker-ready beads are not listed as primary intervention items; they appear
 only as a depth summary.
 
-Use --json for machine-readable output with stable keys:
-  human_required, blocked_or_planning, ready_summary,
-  worker_recommendation, unknowns
-`,
+	Use --json for machine-readable output with stable keys:
+	  human_required, blocked_or_planning, ready_summary,
+	  active_work, worker_recommendation, unknowns
+	`,
 		Example: `  # Show intervention queue in human-readable format
   ddx work focus
 
@@ -269,7 +250,7 @@ Use --json for machine-readable output with stable keys:
 func (f *CommandFactory) runWorkFocus(cmd *cobra.Command, _ []string) error {
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	ddxDir := ddxroot.Path(context.Background(), f.WorkingDir)
+	ddxDir := resolveBeadStoreRoot(f.WorkingDir)
 	store := bead.NewStore(ddxDir)
 
 	report, err := buildWorkFocusReport(store, f.WorkingDir)

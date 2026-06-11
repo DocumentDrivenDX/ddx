@@ -2,6 +2,7 @@ package axon
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -108,4 +109,101 @@ func TestAxonClient_SchemaBindingsCompile(t *testing.T) {
 
 	_, err = client.UpdateBead(context.Background(), local.ID, 7, input)
 	require.NoError(t, err)
+}
+
+type manualChangeEventsTransport struct {
+	mu      sync.Mutex
+	query   string
+	vars    map[string]any
+	stream  chan ChangeEvent
+	cancel  func()
+	closing sync.Once
+}
+
+func newManualChangeEventsTransport() *manualChangeEventsTransport {
+	return &manualChangeEventsTransport{
+		stream: make(chan ChangeEvent, 1),
+	}
+}
+
+func (t *manualChangeEventsTransport) Subscribe(_ context.Context, query string, variables map[string]any) (<-chan ChangeEvent, func(), error) {
+	t.mu.Lock()
+	t.query = query
+	t.vars = variables
+	t.mu.Unlock()
+
+	cancel := func() {
+		t.closing.Do(func() {
+			close(t.stream)
+		})
+	}
+	t.cancel = cancel
+	return t.stream, cancel, nil
+}
+
+func TestAxonSubscription_ChangeEventsStream(t *testing.T) {
+	t.Parallel()
+
+	transport := newManualChangeEventsTransport()
+	client := NewSubscriptionClient(transport)
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	stream, cancel, err := client.ChangeEvents(ctx, "project-123")
+	require.NoError(t, err)
+	require.NotNil(t, stream)
+
+	transport.mu.Lock()
+	require.Equal(t, changeEventsSubscriptionQuery, transport.query)
+	require.Equal(t, "project-123", transport.vars["projectID"])
+	transport.mu.Unlock()
+
+	want := ChangeEvent{
+		EventID:   "evt-1",
+		BeadID:    "ddx-00000001",
+		Kind:      "updated",
+		Summary:   "bead updated",
+		Body:      "body",
+		Actor:     "actor",
+		Timestamp: time.Unix(40, 0).UTC(),
+	}
+	transport.stream <- want
+
+	got, ok := <-stream
+	require.True(t, ok)
+	require.Equal(t, want, got)
+
+	cancel()
+	_, ok = <-stream
+	require.False(t, ok)
+}
+
+func TestAxonSubscription_ChangeEventsMapToLifecycle(t *testing.T) {
+	t.Parallel()
+
+	transport := newManualChangeEventsTransport()
+	client := NewSubscriptionClient(transport)
+
+	ctx, cancelCtx := context.WithCancel(context.Background())
+	defer cancelCtx()
+
+	stream, cancel, err := client.SubscribeLifecycle(ctx, "project-123")
+	require.NoError(t, err)
+	defer cancel()
+
+	want := ChangeEvent{
+		EventID:   "evt-2",
+		BeadID:    "ddx-00000002",
+		Kind:      "created",
+		Summary:   "bead created",
+		Body:      "body-2",
+		Actor:     "actor-2",
+		Timestamp: time.Unix(50, 0).UTC(),
+	}
+	transport.stream <- want
+
+	got, ok := <-stream
+	require.True(t, ok)
+	require.Equal(t, want.ToLifecycleEvent(), got)
 }

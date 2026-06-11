@@ -37,6 +37,11 @@ type AttemptTransitionInput struct {
 	Detail          string
 	CurrentMinPower int
 	ActualPower     int
+	// OutcomeReason carries the worker's typed failure classification. When
+	// populated, only semantic acceptance/review reasons are allowed to
+	// advance the power ladder; structural and infrastructure reasons stop
+	// without escalating MinPower.
+	OutcomeReason string
 
 	Disrupted                bool
 	BudgetExhausted          bool
@@ -59,11 +64,17 @@ type AttemptTransition struct {
 // current attempt; a smarter model cannot fix an absent service with no
 // alternate power signal.
 func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) AttemptTransition {
-	if input.Disrupted {
+	if input.Disrupted && strings.TrimSpace(input.OutcomeReason) != "provider_connectivity" && !isProviderConnectivityDetail(input.Detail) {
 		return stopTransition("disrupted")
 	}
 	if input.BudgetExhausted {
 		return stopTransition("budget_exhausted")
+	}
+	if strings.TrimSpace(input.Status) == "land_conflict" {
+		return stopTransition("land_conflict")
+	}
+	if reason := strings.TrimSpace(input.OutcomeReason); reason != "" && !isSemanticRetryOutcomeReason(reason) && reason != "provider_connectivity" {
+		return stopTransition("non_semantic_outcome_reason")
 	}
 	if !escalation.ShouldEscalate(input.Status) {
 		return stopTransition("terminal_status")
@@ -98,6 +109,20 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 		Action:       TryLoopActionRetryPower,
 		NextMinPower: next,
 		Reason:       "semantic_retry_with_higher_min_power",
+	}
+}
+
+func isSemanticRetryOutcomeReason(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case "tests_red",
+		"test_failure",
+		"build_failure",
+		"review_block",
+		"review_request_changes",
+		"post_run_check_failed":
+		return true
+	default:
+		return false
 	}
 }
 
