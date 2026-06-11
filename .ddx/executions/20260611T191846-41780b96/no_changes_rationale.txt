@@ -1,0 +1,2 @@
+status: blocked
+reason: `lefthook run pre-commit` fails in `go test -short -race ./internal/agent` with pre-existing failures in `TestPreDispatchDirtyPreserveRequiresStableImplementationDirt` and `TestWorkCleanup_ShutdownPassRunsOnSignal`; `cd cli && go test ./internal/agent -run TestExecuteBeadResult_NiflheimEvidence_PreClaimDecisionAudit` passes, but I cannot land a clean commit from this worktree.
