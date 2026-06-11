@@ -1006,8 +1006,34 @@ func TestWorkDefaultOutput_PrintsCompactTerminalSummary(t *testing.T) {
 
 	got := out.String()
 	assert.Contains(t, got, "worker exited: drained current execution-ready queue")
-	assert.Contains(t, got, "attempts: 2  |  closed: 2  |  changed: 1  |  already-satisfied: 1  |  failures: 0")
+	assert.Contains(t, got, "attempts: 2  |  closed: 2  |  changed: 1  |  already-satisfied: 1  |  preserved: 0  |  failures: 0")
 	assert.NotContains(t, got, "completed:")
+}
+
+func TestWorkDefaultOutput_PreservedNeedsReviewIsNotFailed(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:      1,
+		Successes:     0,
+		Failures:      0,
+		StopCondition: "Drained",
+		ExitReason:    "drained",
+		Results: []agent.ExecuteBeadReport{
+			{
+				BeadID:      "ddx-preserved",
+				Status:      agent.ExecuteBeadStatusPreservedNeedsReview,
+				Detail:      "large-deletion gate: gateway.rs deleted 250 lines (threshold 200)",
+				PreserveRef: "refs/ddx/iterations/ddx-preserved/attempt-1",
+			},
+		},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	assert.Contains(t, got, "attempts: 1  |  closed: 0  |  changed: 0  |  already-satisfied: 0  |  preserved: 1  |  failures: 0")
+	assert.Contains(t, got, "\npreserved:\n")
+	assert.Contains(t, got, "ddx-preserved: large-deletion gate: gateway.rs deleted 250 lines (threshold 200) (refs/ddx/iterations/ddx-preserved/attempt-1)")
+	assert.NotContains(t, got, "\nfailed:\n")
 }
 
 func TestWorkDirtyTreeCheckpointReturnsOperatorAttention(t *testing.T) {
@@ -1121,7 +1147,7 @@ func TestWorkStopSummary_CompletedThenDrainedIncludesNoReadyDetail(t *testing.T)
 	require.NoError(t, err)
 
 	got := out.String()
-	assert.Contains(t, got, "attempts: 1  |  closed: 1  |  changed: 1  |  already-satisfied: 0  |  failures: 0")
+	assert.Contains(t, got, "attempts: 1  |  closed: 1  |  changed: 1  |  already-satisfied: 0  |  preserved: 0  |  failures: 0")
 	assert.Contains(t, got, "No execution-ready beads.")
 	assert.Contains(t, got, "operator attention: 1 proposed bead(s) stop autonomous work")
 	assert.Contains(t, got, "waiting on dependencies: 1 open bead(s): ddx-waiting")

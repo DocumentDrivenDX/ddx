@@ -268,6 +268,28 @@ func TestLandBeadResult_MergeConflictPreserves(t *testing.T) {
 	}
 }
 
+func TestApplyLandResult_LargeDeletionPreserveNeedsReview(t *testing.T) {
+	res := makeWorkerResult("ddx-orch-large-delete", "aaa0007", "bbb0007", 0)
+	ApplyLandResultToExecuteBeadResult(res, &LandResult{
+		Status:      "preserved",
+		PreserveRef: "refs/ddx/iterations/ddx-orch-large-delete/attempt-1",
+		Reason:      "large-deletion gate: gateway.rs deleted 250 lines (threshold 200) without intentional large deletion acknowledgement",
+	})
+
+	if res.Outcome != "preserved" {
+		t.Errorf("expected outcome=preserved, got %q", res.Outcome)
+	}
+	if res.Status != ExecuteBeadStatusPreservedNeedsReview {
+		t.Errorf("expected status=preserved_needs_review, got %q", res.Status)
+	}
+	if res.PreserveRef == "" {
+		t.Error("expected preserve ref after safety gate")
+	}
+	if !strings.Contains(res.Detail, "large-deletion gate") {
+		t.Errorf("expected safety-gate detail, got %q", res.Detail)
+	}
+}
+
 // TestLandBeadResult_RequiresIndependentVerificationBeforeMergedOutcome
 // verifies that a lander returning a preserved result after the merged tree
 // verification fails does not get reported as merged by LandBeadResult.

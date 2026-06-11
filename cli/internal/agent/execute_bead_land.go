@@ -1837,10 +1837,11 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 	// Re-classify loop-visible status from the landing outcome.
 	reasonForStatus := res.Reason
 	if land.Status == "preserved" {
-		// Route preserve reasons through the land-conflict classifier so the
-		// loop sees land_conflict (not generic success).
+		// Only legacy/generic preserve reasons should fall back to
+		// land_conflict. Safety gates preserve good output for operator
+		// review and must not be reported as merge failures.
 		if strings.HasPrefix(res.Reason, PreMergeChecksReason) ||
-			strings.HasPrefix(res.Reason, "evidence commit failed:") {
+			isPreservedNeedsReviewReason(res.Reason) {
 			reasonForStatus = res.Reason
 		} else {
 			reasonForStatus = "merge conflict"

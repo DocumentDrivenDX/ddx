@@ -4175,8 +4175,6 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				}
 				return executeBeadIterationOutcome{Continue: true}, nil
 			}
-			result.Failures++
-			result.LastFailureStatus = report.Status
 		} else if report.Status == ExecuteBeadStatusRepairCycleExhausted {
 			if err := applyRepairCycleExhaustedEscalation(w.Store, candidate.ID, assignee, report.ActualPower, now(), w.EscalationNextFloor); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
@@ -5595,6 +5593,12 @@ func formatLoopResult(report ExecuteBeadReport) string {
 			detail = "agent exited without a commit or no_changes_rationale.txt"
 		}
 		return fmt.Sprintf("no_evidence_produced: %s", detail)
+	case ExecuteBeadStatusPreservedNeedsReview:
+		detail := report.Detail
+		if detail == "" {
+			detail = "safety gate preserved result"
+		}
+		return fmt.Sprintf("preserved: %s", detail)
 	default:
 		detail := report.Detail
 		if detail == "" {
@@ -5618,7 +5622,7 @@ func loopResultMarker(report ExecuteBeadReport) string {
 	switch report.Status {
 	case ExecuteBeadStatusSuccess, ExecuteBeadStatusAlreadySatisfied:
 		return "✓"
-	case ExecuteBeadStatusNoChanges, ExecuteBeadStatusResourceExhausted:
+	case ExecuteBeadStatusNoChanges, ExecuteBeadStatusPreservedNeedsReview, ExecuteBeadStatusResourceExhausted:
 		return "•"
 	default:
 		return "✗"

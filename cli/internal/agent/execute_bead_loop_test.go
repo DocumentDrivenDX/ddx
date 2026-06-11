@@ -551,7 +551,6 @@ func TestFormatLoopResultLine_FailuresDoNotUseSuccessMarker(t *testing.T) {
 		{Status: ExecuteBeadStatusExecutionFailed, Detail: "provider failed"},
 		{Status: ExecuteBeadStatusPostRunCheckFailed, Detail: "tests failed"},
 		{Status: ExecuteBeadStatusNoEvidenceProduced, Detail: "no evidence"},
-		{Status: ExecuteBeadStatusPreservedNeedsReview, Detail: "preserved for review"},
 		{Status: ExecuteBeadStatusNoChanges, NoChangesRationale: "blocked by stale test"},
 	}
 
@@ -560,6 +559,15 @@ func TestFormatLoopResultLine_FailuresDoNotUseSuccessMarker(t *testing.T) {
 			assert.NotRegexp(t, `^✓\b`, formatLoopResultLine("ddx-result", report))
 		})
 	}
+}
+
+func TestFormatLoopResultLine_PreservedNeedsReviewIsNeutral(t *testing.T) {
+	line := formatLoopResultLine("ddx-result", ExecuteBeadReport{
+		Status: ExecuteBeadStatusPreservedNeedsReview,
+		Detail: "large-deletion gate: gateway.rs deleted 250 lines (threshold 200)",
+	})
+
+	assert.Equal(t, "• ddx-result → preserved: large-deletion gate: gateway.rs deleted 250 lines (threshold 200)", line)
 }
 
 func TestExecuteBeadLoop_LogLineDoesNotUseSuccessMarkerForReviewError(t *testing.T) {
@@ -990,8 +998,8 @@ func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, result.LastFailureStatus)
+	assert.Equal(t, 0, result.Failures)
+	assert.Empty(t, result.LastFailureStatus)
 
 	got, err := store.Get(context.Background(), first.ID)
 	require.NoError(t, err)

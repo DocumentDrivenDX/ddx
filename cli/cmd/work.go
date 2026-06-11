@@ -179,16 +179,26 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 	fmt.Fprintf(w, "\nproject: %s\n", projectRoot)
 	writeWorkTerminalSummary(w, result)
 	writeOperatorAttentionSummary(w, result.OperatorAttention)
-	if result.Failures > 0 {
-		fmt.Fprintf(w, "\nfailed:\n")
-		for _, attempt := range result.Results {
-			if attempt.Status != "success" {
-				fmt.Fprintf(w, "  - %s: %s", attempt.BeadID, attempt.Detail)
-				if attempt.PreserveRef != "" {
-					fmt.Fprintf(w, " (preserved)")
-				}
-				fmt.Fprintln(w)
+	preserved := preservedWorkAttempts(result)
+	if len(preserved) > 0 {
+		fmt.Fprintf(w, "\npreserved:\n")
+		for _, attempt := range preserved {
+			fmt.Fprintf(w, "  - %s: %s", attempt.BeadID, attempt.Detail)
+			if attempt.PreserveRef != "" {
+				fmt.Fprintf(w, " (%s)", attempt.PreserveRef)
 			}
+			fmt.Fprintln(w)
+		}
+	}
+	failed := failedWorkAttempts(result)
+	if len(failed) > 0 {
+		fmt.Fprintf(w, "\nfailed:\n")
+		for _, attempt := range failed {
+			fmt.Fprintf(w, "  - %s: %s", attempt.BeadID, attempt.Detail)
+			if attempt.PreserveRef != "" {
+				fmt.Fprintf(w, " (preserved)")
+			}
+			fmt.Fprintln(w)
 		}
 	}
 	if result.NoReadyWork {
@@ -200,10 +210,10 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 }
 
 func writeWorkTerminalSummary(w io.Writer, result *agent.ExecuteBeadLoopResult) {
-	closed, changed, alreadySatisfied := countWorkTerminalOutcomes(result)
+	closed, changed, alreadySatisfied, preserved := countWorkTerminalOutcomes(result)
 	fmt.Fprintf(w, "worker exited: %s\n", workExitSummary(result))
-	fmt.Fprintf(w, "attempts: %d  |  closed: %d  |  changed: %d  |  already-satisfied: %d  |  failures: %d\n",
-		result.Attempts, closed, changed, alreadySatisfied, result.Failures)
+	fmt.Fprintf(w, "attempts: %d  |  closed: %d  |  changed: %d  |  already-satisfied: %d  |  preserved: %d  |  failures: %d\n",
+		result.Attempts, closed, changed, alreadySatisfied, preserved, result.Failures)
 }
 
 func writeOperatorAttentionSummary(w io.Writer, stop *agent.OperatorAttentionStop) {
@@ -226,7 +236,7 @@ func writeOperatorAttentionSummary(w io.Writer, stop *agent.OperatorAttentionSto
 	}
 }
 
-func countWorkTerminalOutcomes(result *agent.ExecuteBeadLoopResult) (closed, changed, alreadySatisfied int) {
+func countWorkTerminalOutcomes(result *agent.ExecuteBeadLoopResult) (closed, changed, alreadySatisfied, preserved int) {
 	for _, attempt := range result.Results {
 		switch attempt.Status {
 		case agent.ExecuteBeadStatusSuccess:
@@ -235,12 +245,45 @@ func countWorkTerminalOutcomes(result *agent.ExecuteBeadLoopResult) (closed, cha
 		case agent.ExecuteBeadStatusAlreadySatisfied:
 			closed++
 			alreadySatisfied++
+		case agent.ExecuteBeadStatusPreservedNeedsReview:
+			preserved++
 		}
 	}
 	if closed == 0 && result.Successes > 0 {
 		closed = result.Successes
 	}
-	return closed, changed, alreadySatisfied
+	return closed, changed, alreadySatisfied, preserved
+}
+
+func preservedWorkAttempts(result *agent.ExecuteBeadLoopResult) []agent.ExecuteBeadReport {
+	if result == nil {
+		return nil
+	}
+	var out []agent.ExecuteBeadReport
+	for _, attempt := range result.Results {
+		if attempt.Status == agent.ExecuteBeadStatusPreservedNeedsReview {
+			out = append(out, attempt)
+		}
+	}
+	return out
+}
+
+func failedWorkAttempts(result *agent.ExecuteBeadLoopResult) []agent.ExecuteBeadReport {
+	if result == nil {
+		return nil
+	}
+	var out []agent.ExecuteBeadReport
+	for _, attempt := range result.Results {
+		switch attempt.Status {
+		case agent.ExecuteBeadStatusSuccess,
+			agent.ExecuteBeadStatusAlreadySatisfied,
+			agent.ExecuteBeadStatusPreservedNeedsReview:
+			continue
+		default:
+			out = append(out, attempt)
+		}
+	}
+	return out
 }
 
 func workExitSummary(result *agent.ExecuteBeadLoopResult) string {
