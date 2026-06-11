@@ -150,23 +150,27 @@ func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 // model string directly into ServiceExecuteRequest.Model without normalizing,
 // fuzzy-matching, or aliasing it. Model resolution is Fizeau-owned per CONTRACT-003.
 func TestFizeauPassthrough_RawModelUnchanged(t *testing.T) {
-	stub := &passthroughTestService{}
-	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
-		return stub, nil
-	})
-	t.Cleanup(func() { SetServiceRunFactory(nil) })
+	for _, model := range []string{"qwen36", "fable"} {
+		t.Run(model, func(t *testing.T) {
+			stub := &passthroughTestService{}
+			SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+				return stub, nil
+			})
+			t.Cleanup(func() { SetServiceRunFactory(nil) })
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "qwen36",
-	}).Resolve(config.CLIOverrides{Harness: "agent"})
+			rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+				Model: model,
+			}).Resolve(config.CLIOverrides{Harness: "agent"})
 
-	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
-		Prompt: "test",
-	})
-	require.NoError(t, err)
-	require.True(t, stub.executeCalled)
-	assert.Equal(t, "qwen36", stub.lastReq.Model,
-		"DDx must not normalize or transform the raw model string before passing to Fizeau")
+			_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
+				Prompt: "test",
+			})
+			require.NoError(t, err)
+			require.True(t, stub.executeCalled)
+			assert.Equal(t, model, stub.lastReq.Model,
+				"DDx must not normalize or transform the raw model string before passing to Fizeau")
+		})
+	}
 }
 
 // TestFizeauPassthrough_RecordsActualModelFromRouting proves DDx records the
