@@ -395,6 +395,7 @@
 		</div>
 	{/if}
 
+	{#if !activeWorker}
 	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
 		<table class="w-full text-body-sm">
 			<thead>
@@ -462,7 +463,7 @@
 							{/if}
 						</td>
 						<td class="px-4 py-3 text-right">
-							{#if edge.node.state === 'running'}
+							{#if edge.node.state === 'running' && !activeWorker}
 								<button
 									type="button"
 									onclick={(event) => stopWorker(event, edge.node.id)}
@@ -488,6 +489,7 @@
 			</tbody>
 		</table>
 	</div>
+	{/if}
 
 	<!--
 		ADR-022 step 5b: reported-workers panel surfaces the worker_ingest
