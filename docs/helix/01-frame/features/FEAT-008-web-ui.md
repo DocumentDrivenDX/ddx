@@ -446,17 +446,25 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
 ### Performance Contract: Artifact Listing
 
-The artifact listing view carries a provisional performance contract for design
-work. These budgets shape the current implementation, but the gating numbers
-stay provisional until the B7-C1 baseline measurement is recorded and published
-in the perf docs. Treat the values below as design-time budgets, not final
-thresholds.
+The B7-C1 baseline is recorded (`docs/helix/06-iterate/perf/2026-04-22-baseline.md`).
+The gating test (`cli/internal/server/perf/perf_test.go` —
+`TestGraphQLPerfMatrix_Baseline`) enforces the server-side budgets below on the
+default fixture (10 projects × 500 beads). These are the locked, final numbers.
 
-| Budget | Provisional contract | Revisit when |
+**Server-side GraphQL (gated by `TestGraphQLPerfMatrix_Baseline`):**
+
+| Target | In-process p95 | HTTP p95 |
 |---|---|---|
-| Initial load | First usable content within 2s on the reference fixture | Baseline measurement lands with different gating numbers |
-| Search/filter latency | Interactions settle within 200ms once the current list data is already loaded | Search becomes data-loading bound instead of DOM-bound |
-| Steady-state DOM rows | Default list view stays flat and non-virtualized at up to 500 visible artifact rows | The default state needs 500-1000 visible rows, more than 1000 visible rows, or sticky group headers |
+| `bead(id:)` | ≤ 50 ms | ≤ 200 ms |
+| `beadsByProject(first=50)` | ≤ 75 ms | ≤ 250 ms |
+
+**Frontend (locked):**
+
+| Budget | Contract |
+|---|---|
+| Initial load | First usable content within 2s on the reference fixture |
+| Search/filter latency | Interactions settle within 200ms once the current list data is already loaded |
+| Steady-state DOM rows | Default list view stays flat and non-virtualized at up to 500 visible artifact rows |
 
 - Revisit the contract before shipping if the artifact listing design adds any
   of the following:
