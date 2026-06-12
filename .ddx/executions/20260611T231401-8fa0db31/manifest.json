@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260611T231401-8fa0db31",
+  "bead_id": "ddx-51411563",
+  "base_rev": "f445d78c12f4b751e7da995223cd4effa63074fb",
+  "created_at": "2026-06-11T23:14:22.628305819Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-51411563",
+    "title": "web: implement node-wide worker workbench and project worker dispatch",
+    "description": "PROBLEM\nOperators need a single web pane showing every worker across local projects, plus ergonomic project-scoped controls to start and stop autonomous ddx work workers.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:157 specifies `/nodes/:nodeId/workers`, but `cli/internal/server/frontend/src/routes/nodes/[nodeId]/workers/+page.svelte` is absent.\n- cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:57 derives running drain count only from `data.workers` for one project.\n- cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:115 starts a single worker through `startWorker` and has no count-aware form.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:320 requires node-wide worker rows with project badge, current bead, phase, route/model, elapsed time, and freshness.\n\nPROPOSED FIX\n- Add the node-wide worker route and load function for `/nodes/:nodeId/workers`.\n- Render all registered-project workers with node/project badges, state, current bead id/title, attempt id, phase, route/model, elapsed, freshness, and mode.\n- Add detail navigation/drawer behavior with recent events, output, prompt, current bead link, attempt link, and stop action.\n- Update project worker controls to request count, mode, harness/profile/effort, idle interval, and label filter through the GraphQL mutation once server support lands.\n- Keep polling fallback or subscriptions for live row updates.\n\nNON-SCOPE\nDo not implement federation forwarding in this bead beyond reading/displaying fields already exposed by the local or federated query layer. Do not implement Axon or managed-node outbound control.",
+    "acceptance": "1. `/nodes/:nodeId/workers` exists and renders workers from at least two registered local projects.\n2. Worker rows include project badge, worker id, state, current bead id/title, attempt id, phase, route/model, elapsed time, freshness, and command mode.\n3. Worker detail shows recent phase events, captured output, prompt, attempt id, current bead link, and stop action.\n4. Project worker controls can request `count=2`, mode, optional label filter, and show workers.max_count refusal.\n5. Named Playwright tests from `workers-single-pane.spec.ts` and `workers-dispatch.spec.ts` pass.\n6. `cd cli/internal/server/frontend \u0026\u0026 bun run check` passes.\n7. `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/workers-single-pane.spec.ts e2e/workers-dispatch.spec.ts` passes.\n8. `cd cli \u0026\u0026 go test -short ./internal/server/...` passes.\n9. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:web",
+      "area:server-ui",
+      "kind:feature",
+      "plan:server-operator-workbench",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"`/nodes/:nodeId/workers` exists and renders workers from at least two registered local projects.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Worker rows include project badge, worker id, state, current bead id/title, attempt id, phase, route/model, elapsed time, freshness, and command mode.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"Worker detail shows recent phase events, captured output, prompt, attempt id, current bead link, and stop action.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Project worker controls can request `count=2`, mode, optional label filter, and show workers.max_count refusal.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Named Playwright tests from `workers-single-pane.spec.ts` and `workers-dispatch.spec.ts` pass.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"`cd cli/internal/server/frontend \\u0026\\u0026 bun run check` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":7,\"text\":\"`cd cli/internal/server/frontend \\u0026\\u0026 bunx playwright test e2e/workers-single-pane.spec.ts e2e/workers-dispatch.spec.ts` passes.\",\"kind\":\"command\",\"verifiable\":true},{\"ac\":8,\"text\":\"`cd cli \\u0026\\u0026 go test -short ./internal/server/...` passes.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":9,\"text\":\"`lefthook run pre-commit` passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-06-11T23:11:12.909591633Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.44 threshold=0.50 verifiable=4/9"
+        }
+      ],
+      "spec-id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH",
+      "path": "docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md",
+      "title": "Server Operator Workbench Plan"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260611T231401-8fa0db31",
+    "prompt": ".ddx/executions/20260611T231401-8fa0db31/prompt.md",
+    "manifest": ".ddx/executions/20260611T231401-8fa0db31/manifest.json",
+    "result": ".ddx/executions/20260611T231401-8fa0db31/result.json",
+    "checks": ".ddx/executions/20260611T231401-8fa0db31/checks.json",
+    "usage": ".ddx/executions/20260611T231401-8fa0db31/usage.json",
+    "worktree": "home/erik/.cache/ddx/exec-wt/.execute-bead-wt-ddx-51411563-20260611T231401-8fa0db31"
+  },
+  "prompt_sha": "d120e99d158c7c270e7e0f9c0d06e560d65ae585da541f81137fc44d59d49636"
+}

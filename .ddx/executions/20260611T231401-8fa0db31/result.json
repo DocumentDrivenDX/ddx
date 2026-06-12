@@ -1,0 +1,61 @@
+{
+  "bead_id": "ddx-51411563",
+  "attempt_id": "20260611T231401-8fa0db31",
+  "base_rev": "f445d78c12f4b751e7da995223cd4effa63074fb",
+  "result_rev": "d275ab83a01aefdf71f9211226ad6a74b90c6750",
+  "implementation_rev": "d275ab83a01aefdf71f9211226ad6a74b90c6750",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "post-land gate failed: sh -c export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli \u0026\u0026 go vet ./...: exit status 1: internal/server/embed.go:8:12: pattern all:frontend/build: no matching files found",
+  "orchestrator_status": "land_conflict",
+  "reason": "post-land gate failed: sh -c export PATH=/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:$PATH; cd cli \u0026\u0026 go vet ./...: exit status 1: internal/server/embed.go:8:12: pattern all:frontend/build: no matching files found",
+  "preserve_ref": "refs/ddx/iterations/ddx-51411563/20260611T231401-8fa0db31-f445d78c12f4",
+  "candidate_ref": "refs/ddx/iterations/20260611T231401-8fa0db31/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260611T231401-8fa0db31",
+      "result_rev": "d275ab83a01aefdf71f9211226ad6a74b90c6750",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-580e90e1",
+  "duration_ms": 5484291,
+  "tokens": 193757,
+  "cost_usd": 10.344756600000004,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260611T231401-8fa0db31",
+  "prompt_file": ".ddx/executions/20260611T231401-8fa0db31/prompt.md",
+  "manifest_file": ".ddx/executions/20260611T231401-8fa0db31/manifest.json",
+  "result_file": ".ddx/executions/20260611T231401-8fa0db31/result.json",
+  "usage_file": ".ddx/executions/20260611T231401-8fa0db31/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-11T23:14:22.776420691Z",
+  "finished_at": "2026-06-12T00:45:47.067566088Z"
+}
