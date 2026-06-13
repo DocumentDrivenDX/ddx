@@ -41,6 +41,64 @@ func TestBeadMergeCommandReadsGitStages(t *testing.T) {
 	require.Contains(t, records, "ddx-theirs")
 }
 
+func TestBeadMergeReadsConflictStagesInLinkedWorktree(t *testing.T) {
+	baseDir := t.TempDir()
+	primaryDir := filepath.Join(baseDir, "primary")
+	require.NoError(t, os.MkdirAll(primaryDir, 0o755))
+
+	// Set up primary repo with an initial commit so git worktree add can check it out.
+	runGit(t, primaryDir, "init")
+	runGit(t, primaryDir, "config", "user.email", "test@test.com")
+	runGit(t, primaryDir, "config", "user.name", "Test")
+	require.NoError(t, os.MkdirAll(ddxroot.InTree(primaryDir), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxroot.InTree(primaryDir), ".keep"), nil, 0o644))
+	runGit(t, primaryDir, "add", ".ddx")
+	runGit(t, primaryDir, "commit", "-m", "init")
+
+	// Create a linked worktree at a sibling path.
+	linkedDir := filepath.Join(baseDir, "linked")
+	runGit(t, primaryDir, "worktree", "add", "--detach", linkedDir)
+
+	// Stage a three-way conflict in the LINKED worktree's index only.
+	base := `{"id":"ddx-base","title":"Base","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`
+	ours := base + "\n" + `{"id":"ddx-ours","title":"Ours","status":"open","priority":1,"issue_type":"task","created_at":"2026-04-30T01:00:00Z","updated_at":"2026-04-30T01:00:00Z"}`
+	theirs := base + "\n" + `{"id":"ddx-theirs","title":"Theirs","status":"open","priority":1,"issue_type":"task","created_at":"2026-04-30T02:00:00Z","updated_at":"2026-04-30T02:00:00Z"}`
+
+	baseBlob := gitHashObject(t, linkedDir, base+"\n")
+	oursBlob := gitHashObject(t, linkedDir, ours+"\n")
+	theirsBlob := gitHashObject(t, linkedDir, theirs+"\n")
+	stageBeadConflict(t, linkedDir, baseBlob, oursBlob, theirsBlob)
+
+	// Factory working directory is the LINKED worktree, not the primary.
+	factory := newBeadTestRoot(t, linkedDir)
+	rootCmd := factory.NewRootCommand()
+	output, err := executeCommand(rootCmd, "bead", "merge")
+	require.NoError(t, err)
+	require.Contains(t, output, "Merged .ddx/beads.jsonl: 3 records")
+
+	data, err := os.ReadFile(ddxroot.InTree(linkedDir, "beads.jsonl"))
+	require.NoError(t, err)
+	records := readCommandMergeRecords(t, data)
+	require.Contains(t, records, "ddx-base")
+	require.Contains(t, records, "ddx-ours")
+	require.Contains(t, records, "ddx-theirs")
+}
+
+func TestBeadMergeVerboseReportsStageReadCommand(t *testing.T) {
+	workingDir := t.TempDir()
+	runGit(t, workingDir, "init")
+
+	// No conflict stages; stage read must fail and include diagnostics.
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+	_, err := executeCommand(rootCmd, "bead", "merge")
+	require.Error(t, err)
+	errMsg := err.Error()
+	require.Contains(t, errMsg, "stage 1", "error must include the stage number that failed")
+	require.Contains(t, errMsg, workingDir, "error must include the repo root used for git show")
+	require.Contains(t, errMsg, ".ddx/beads.jsonl", "error must include the repo-relative path")
+}
+
 func TestBeadMergeHelpDescribesSupportedEscapeHatch(t *testing.T) {
 	factory := newBeadTestRoot(t, t.TempDir())
 	rootCmd := factory.NewRootCommand()

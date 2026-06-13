@@ -2015,9 +2015,13 @@ This command is not a general hand-edit workflow for bead tracker data.`,
 			if len(args) > 0 {
 				path = args[0]
 			}
-			workspaceRoot := f.beadWorkspaceRoot()
+			// Use the working directory to locate the repo containing the conflict.
+			// beadWorkspaceRoot() redirects to the primary workspace in a linked
+			// worktree, but conflict stages live in the index of the worktree where
+			// the merge actually failed — not the primary bead workspace.
+			workspaceRoot := f.WorkingDir
 			if workspaceRoot == "" {
-				workspaceRoot = f.WorkingDir
+				workspaceRoot = "."
 			}
 			repoRoot := gitpkg.FindProjectRoot(workspaceRoot)
 			relPath, err := filepath.Rel(repoRoot, filepath.Join(workspaceRoot, path))
@@ -2067,7 +2071,7 @@ func gitStageBlob(ctx context.Context, repoRoot string, stage int, path string) 
 	spec := fmt.Sprintf(":%d:%s", stage, path)
 	out, err := gitpkg.Command(ctx, repoRoot, "show", spec).Output()
 	if err != nil {
-		return nil, fmt.Errorf("bead merge: read Git stage %d for %s: %w", stage, path, err)
+		return nil, fmt.Errorf("bead merge: read Git stage %d for %s (repo root: %s): %w", stage, path, repoRoot, err)
 	}
 	return out, nil
 }
