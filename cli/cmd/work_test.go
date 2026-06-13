@@ -461,6 +461,128 @@ func TestWorkHarnessOnlyAutoRoutesOrFailsBeforeClaim(t *testing.T) {
 	assert.True(t, stub.executeCalled, "execute path must run after the route preflight succeeds")
 }
 
+func TestWorkExplicitHarnessScopesModelInventoryToHarness(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	stub.resolveRouteFn = func(req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		return &agentlib.RouteDecision{
+			Harness:  req.Harness,
+			Provider: "openai",
+			Model:    "gpt-5.4-mini",
+			Reason:   "test-route",
+		}, nil
+	}
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-work-harness-model-scoped-inventory",
+		Title:     "Work with explicit harness and profile",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--harness", "codex",
+		"--profile", "smart",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "output=%q", out)
+
+	requests := capturedImplementationRequests(stub)
+	require.Len(t, requests, 1, "explicit harness work must execute exactly one implementer attempt; output=%q", out)
+	assert.Equal(t, "codex", requests[0].Harness)
+	assert.Equal(t, "smart", requests[0].Policy)
+	filters := capturedModelFilters(stub)
+	require.NotEmpty(t, filters, "work ladder inventory must list models through the preflight service")
+	for _, filter := range filters {
+		assert.Equal(t, "codex", filter.Harness, "pinned workers must not request all-harness model inventory")
+	}
+}
+
+func TestWorkHarnessPinSkipsUnpinnedRouteExclusionPreflight(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	stub.resolveRouteFn = func(req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		return &agentlib.RouteDecision{
+			Harness:  req.Harness,
+			Provider: "openai",
+			Model:    "gpt-5.4-mini",
+			Reason:   "test-route",
+		}, nil
+	}
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-work-harness-pin-skips-unpinned-exclusions",
+		Title:     "Work with harness pin and stale failed route evidence",
+		IssueType: "bug",
+		Extra: map[string]any{
+			"work-failed-routes": []map[string]any{{
+				"provider": "gemini",
+				"model":    "gemini-3-pro",
+				"at":       time.Now().UTC().Format(time.RFC3339),
+			}},
+		},
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--harness", "codex",
+		"--profile", "smart",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "output=%q", out)
+
+	requests := capturedRouteRequests(stub)
+	require.NotEmpty(t, requests, "harness-only workers still perform harness-scoped route viability preflight")
+	for _, req := range requests {
+		assert.Equal(t, "codex", req.Harness, "pinned work must not run an unpinned route-resolution probe")
+		assert.Empty(t, req.ExcludedRoutes, "pinned work must not run the unpinned failed-route exclusion probe")
+	}
+}
+
 func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)

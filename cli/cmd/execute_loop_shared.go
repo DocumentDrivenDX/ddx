@@ -351,7 +351,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	})
 
 	harnessBilledLookup := func(harnessName string) bool {
-		svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+		svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(f.WorkingDir)
 		if svcErr != nil {
 			return true
 		}
@@ -368,7 +368,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, harnessBilledLookup)
-	profileSelector := newImplementationProfileSelector(projectRoot)
+	profileSelector := newImplementationProfileSelector(projectRoot, spec.Harness)
 	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 		costCap.Add(report.Harness, report.CostUSD)
 	}
@@ -480,7 +480,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
 			ladder = powerladder.NewLadder(nil)
-			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
+			svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
 			}
@@ -513,7 +513,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 				return unavailableReport, nil
 			}
-			if spec.Provider == "" && spec.Model == "" {
+			if spec.Harness == "" && spec.Provider == "" && spec.Model == "" {
 				if learnedMinPower, learnedUnavailableReport, learned := recentProviderConnectivityMinPower(store, time.Now().UTC(), initialMinPower, spec.MaxPower, loadLadder()); learned {
 					if learnedUnavailableReport.Status != "" {
 						learnedUnavailableReport.BeadID = beadID
@@ -528,7 +528,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				// the requested floor is still inside the exclusion window,
 				// skip this dispatch and let the retry policy raise MinPower
 				// in memory for the next attempt.
-				if svcForExcl, svcExclErr := agent.ResolveServiceFromWorkDir(projectRoot); svcExclErr == nil {
+				if svcForExcl, svcExclErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot); svcExclErr == nil {
 					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
 						ctx, svcForExcl, store, beadID, resolveClaimAssignee(),
 						targetBead.Extra, time.Now().UTC(), initialMinPower,

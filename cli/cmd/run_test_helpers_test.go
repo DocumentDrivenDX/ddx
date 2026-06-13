@@ -95,6 +95,8 @@ type executeCapturingStub struct {
 	resolveRouteFn func(agentlib.RouteRequest) (*agentlib.RouteDecision, error)
 	listModels     []agentlib.ModelInfo
 	listPolicies   []agentlib.PolicyInfo
+	routeRequests  []agentlib.RouteRequest
+	modelFilters   []agentlib.ModelFilter
 }
 
 func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -113,6 +115,9 @@ func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceEx
 }
 
 func (s *executeCapturingStub) ResolveRoute(_ context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+	s.mu.Lock()
+	s.routeRequests = append(s.routeRequests, req)
+	s.mu.Unlock()
 	if s.resolveRouteFn != nil {
 		return s.resolveRouteFn(req)
 	}
@@ -133,7 +138,10 @@ func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.Prov
 	return nil, nil
 }
 
-func (s *executeCapturingStub) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+func (s *executeCapturingStub) ListModels(_ context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	s.mu.Lock()
+	s.modelFilters = append(s.modelFilters, filter)
+	s.mu.Unlock()
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
@@ -202,6 +210,18 @@ func capturedImplementationRequests(stub *executeCapturingStub) []agentlib.Servi
 		}
 	}
 	return out
+}
+
+func capturedRouteRequests(stub *executeCapturingStub) []agentlib.RouteRequest {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return append([]agentlib.RouteRequest(nil), stub.routeRequests...)
+}
+
+func capturedModelFilters(stub *executeCapturingStub) []agentlib.ModelFilter {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return append([]agentlib.ModelFilter(nil), stub.modelFilters...)
 }
 
 func minimalProjectDir(t *testing.T) string {

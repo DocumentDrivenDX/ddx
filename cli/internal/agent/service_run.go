@@ -56,6 +56,17 @@ func ResolveServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	return resolveService(workDir)
 }
 
+// ResolvePreflightServiceFromWorkDir returns a short-lived service instance for
+// pre-dispatch model/route checks. Production uses a constructor with disabled
+// background provider probes; tests still honor SetServiceRunFactory so they can
+// observe requests without a real service.
+func ResolvePreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
+	if serviceRunFactory != nil {
+		return serviceRunFactory(workDir)
+	}
+	return NewPreflightServiceFromWorkDir(workDir)
+}
+
 // resolveService returns a FizeauService for workDir, using the test-injected
 // factory when set and the production NewServiceFromWorkDir otherwise. All
 // internal callers (RunWithConfigViaService, ValidateForExecuteLoopViaService,
@@ -138,7 +149,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		})
 	}
 
-	svc, err := resolveService(workDir)
+	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -624,7 +635,7 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	svc, err := resolveService(workDir)
+	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}

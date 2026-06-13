@@ -278,13 +278,17 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
 			ladder = powerladder.NewLadder(nil)
-			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
+			svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
 			}
 			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
 			defer cancel()
-			models, listErr := svc.ListModels(modelCtx, agentlib.ModelFilter{})
+			modelFilter := agentlib.ModelFilter{}
+			if harness != "" {
+				modelFilter.Harness = harness
+			}
+			models, listErr := svc.ListModels(modelCtx, modelFilter)
 			if listErr != nil {
 				return
 			}
@@ -293,7 +297,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return ladder
 	}
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
-	profileSelector := newImplementationProfileSelector(projectRoot)
+	profileSelector := newImplementationProfileSelector(projectRoot, harness)
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}
 	if f.executeBeadGitOverride != nil {

@@ -111,6 +111,16 @@ func NewServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.Fiz
 	return agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx})
 }
 
+// NewPreflightServiceFromWorkDir constructs a service for route/model inventory
+// preflight paths. It disables Fizeau's background quota/aliveness/probe loops at
+// construction time; callers still pass live request contexts to ListModels,
+// ResolveRoute, and other foreground service methods.
+func NewPreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	return NewServiceFromWorkDirCtx(ctx, workDir)
+}
+
 // NewStatusProbeServiceFromWorkDir constructs a service for status surfaces
 // without pre-filtering .legacy agent endpoints by /models reachability. The
 // returned service still probes when ListProviders is called, but unreachable
