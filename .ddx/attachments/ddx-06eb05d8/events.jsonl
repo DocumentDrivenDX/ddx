@@ -1,1 +1,1 @@
-{"actor":"ddx","body":"","created_at":"2026-05-07T05:58:24.158470799Z","kind":"lifecycle_reconciled","source":"ddx bead reconcile","summary":"closed bead has stale no_changes lifecycle metadata"}
+{"actor":"ddx bead doctor","body":"dependencies→removed dangling ddx-b669bb9f (1 edge(s))","created_at":"2026-06-08T04:25:18.437797228Z","kind":"repair","source":"ddx bead doctor --fix","summary":"doctor repair applied: 1 change(s)"}
