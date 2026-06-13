@@ -126,13 +126,12 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     "bead-lifecycle-lint",
-			ClearRoutingPins: true,
-			ClearProfile:     true,
-			ClearMinPower:    true,
-			ClearMaxPower:    true,
+			Prompt:        prompt,
+			WorkDir:       projectRoot,
+			PromptSource:  "bead-lifecycle-lint",
+			ClearProfile:  true,
+			ClearMinPower: true,
+			ClearMaxPower: true,
 		}
 		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {

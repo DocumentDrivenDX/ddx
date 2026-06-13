@@ -9,6 +9,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/easel/fizeau"
@@ -33,6 +34,9 @@ import (
 // matching rcfg accessors when non-empty, so callers can override one knob
 // for a single invocation without re-resolving the full ResolvedConfig.
 func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
+	if err := validateRuntimeRoutingPins(rcfg, runtime); err != nil {
+		return nil, err
+	}
 	if runner != nil {
 		return runner.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
@@ -61,6 +65,23 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 		svc = built
 	}
 	return executeOnService(ctx, svc, projectRoot, rcfg, runtime)
+}
+
+func validateRuntimeRoutingPins(rcfg config.ResolvedConfig, runtime AgentRunRuntime) error {
+	if !runtime.ClearRoutingPins {
+		return nil
+	}
+	pt := rcfg.Passthrough()
+	if strings.TrimSpace(pt.Harness) == "" && strings.TrimSpace(pt.Provider) == "" && strings.TrimSpace(pt.Model) == "" {
+		return nil
+	}
+	if strings.TrimSpace(runtime.HarnessOverride) != "" ||
+		strings.TrimSpace(runtime.ProviderOverride) != "" ||
+		strings.TrimSpace(runtime.ModelOverride) != "" ||
+		strings.TrimSpace(runtime.ProfileOverride) != "" {
+		return nil
+	}
+	return fmt.Errorf("agent: lifecycle dispatch cannot clear pinned routing without an explicit replacement route")
 }
 
 // buildRunArgsFromConfig assembles a RunArgs value for the test

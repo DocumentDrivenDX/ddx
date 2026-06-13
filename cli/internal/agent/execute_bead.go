@@ -1041,6 +1041,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	} else if !os.IsNotExist(statErr) || runtime.AgentRunner == nil {
 		return nil, fmt.Errorf("preparing execute-bead git isolation: stat worktree .git: %w", statErr)
 	}
+	if guardedEnv, err := applyPinnedProviderGuard(gitIsolationEnv, rcfg.Harness(), embeddedStateDir); err != nil {
+		return nil, fmt.Errorf("preparing pinned provider guard: %w", err)
+	} else {
+		gitIsolationEnv = guardedEnv
+	}
 
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()

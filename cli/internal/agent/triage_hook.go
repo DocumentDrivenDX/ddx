@@ -112,13 +112,12 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 		}
 
 		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     postAttemptTriagePromptSource,
-			ClearRoutingPins: true,
-			ClearProfile:     true,
-			ClearMinPower:    true,
-			ClearMaxPower:    true,
+			Prompt:        prompt,
+			WorkDir:       projectRoot,
+			PromptSource:  postAttemptTriagePromptSource,
+			ClearProfile:  true,
+			ClearMinPower: true,
+			ClearMaxPower: true,
 		})
 		if err != nil {
 			return TriageResult{}, fmt.Errorf("triage hook: dispatch: %w", err)
