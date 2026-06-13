@@ -34,6 +34,10 @@ type passthroughTestService struct {
 	listModels          []agentlib.ModelInfo
 	listPolicies        []agentlib.PolicyInfo
 	executeEvents       []agentlib.ServiceEvent
+	// executeErr, when non-nil, is returned as the pre-dispatch error from
+	// Execute so tests can exercise typed provider-failure classification
+	// (ddx-3b721804) without a real agent server.
+	executeErr error
 	// harnessInfos, when non-nil, overrides the harness list returned by
 	// ListHarnesses. Lets tests report a harness as available + subscription
 	// so seedRecentRouteAttemptsFromTracker skips exclusion-seeding for it.
@@ -53,6 +57,9 @@ func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.Servi
 	}
 	s.executeCalled = true
 	s.lastReq = req
+	if s.executeErr != nil {
+		return nil, s.executeErr
+	}
 	ch := make(chan agentlib.ServiceEvent, len(s.executeEvents)+1)
 	if len(s.executeEvents) > 0 {
 		for _, evt := range s.executeEvents {

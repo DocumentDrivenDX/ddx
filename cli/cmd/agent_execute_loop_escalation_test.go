@@ -332,6 +332,7 @@ func TestWorkRetryEscalation_NiflheimEvidence_OnlySemanticFailuresRaiseMinPower(
 				nil,
 				nil,
 				true,
+				agent.ProviderPin{},
 			)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantRequested, requested)
@@ -381,6 +382,7 @@ func TestWorkRetryEscalation_ProviderConnectivityRetriesAtExactHigherFloor(t *te
 		nil,
 		nil,
 		true,
+		agent.ProviderPin{},
 	)
 
 	require.NoError(t, err)

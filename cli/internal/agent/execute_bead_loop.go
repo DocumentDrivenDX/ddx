@@ -785,6 +785,11 @@ type ExecuteBeadReport struct {
 	// the attempt outcome. It complements Disrupted/DisruptionReason without
 	// changing their mechanical interruption semantics.
 	OutcomeReason string `json:"outcome_reason,omitempty"`
+	// ProviderFailureEvidence is the durable route-health record attached when
+	// the attempt failed for a typed provider reason (ddx-3b721804): requested
+	// constraints, resolved route if any, typed failure, retryability, and the
+	// fallback decision.
+	ProviderFailureEvidence *ProviderFailureEvidence `json:"provider_failure_evidence,omitempty"`
 	// ResourceExhausted carries the execution-root preflight result when the
 	// attempt stopped before the agent could safely continue.
 	ResourceExhausted any `json:"resource_exhausted,omitempty"`
@@ -6307,6 +6312,10 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeLandRetry,
 		FailureModeLandOperatorAttention,
 		FailureModeWorktreeLost,
+		// Non-retryable typed provider failures (ddx-3b721804): a config bug
+		// or unclassified provider fault is not an implementation attempt.
+		FailureModeProviderConfigInvalid,
+		FailureModeUnknownProviderFailure,
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
 		"operator_required":
@@ -6372,7 +6381,15 @@ func isTransientOutcomeReason(reason string) bool {
 		FailureModeLandRetry,
 		FailureModeNoViableProvider,
 		FailureModeServerUnavailable,
-		FailureModeWorktreeLost:
+		FailureModeWorktreeLost,
+		// Typed provider-availability failures (ddx-3b721804): transient
+		// route-health conditions, not implementation attempts.
+		FailureModeProviderConnectivity,
+		FailureModeProviderAuth,
+		FailureModeProviderRateLimit,
+		FailureModeProviderQuota,
+		FailureModeProviderModelUnavailable,
+		FailureModeProviderHarnessUnavailable:
 		return true
 	default:
 		return false

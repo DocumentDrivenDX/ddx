@@ -470,7 +470,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			}
 			return runEscalatingPowerAttempts(ctx, minPower, loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return singleAttempt(ctx, execBeadID, requestedMinPower)
-			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "")
+			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "",
+				agent.ProviderPin{Harness: harness, Provider: provider, Model: model})
 		})
 	}
 

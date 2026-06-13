@@ -64,7 +64,8 @@ type AttemptTransition struct {
 // current attempt; a smarter model cannot fix an absent service with no
 // alternate power signal.
 func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) AttemptTransition {
-	if input.Disrupted && strings.TrimSpace(input.OutcomeReason) != "provider_connectivity" && !isProviderConnectivityDetail(input.Detail) {
+	retryableProvider := isRetryableProviderReason(input.OutcomeReason)
+	if input.Disrupted && !retryableProvider && !isProviderConnectivityDetail(input.Detail) {
 		return stopTransition("disrupted")
 	}
 	if input.BudgetExhausted {
@@ -73,7 +74,7 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 	if strings.TrimSpace(input.Status) == "land_conflict" {
 		return stopTransition("land_conflict")
 	}
-	if reason := strings.TrimSpace(input.OutcomeReason); reason != "" && !isSemanticRetryOutcomeReason(reason) && reason != "provider_connectivity" {
+	if reason := strings.TrimSpace(input.OutcomeReason); reason != "" && !isSemanticRetryOutcomeReason(reason) && !retryableProvider {
 		return stopTransition("non_semantic_outcome_reason")
 	}
 	if !escalation.ShouldEscalate(input.Status) {
@@ -81,7 +82,7 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 	}
 
 	if escalation.IsInfrastructureFailure(input.Status, input.Detail) {
-		if !input.AllowInfrastructureRetry || input.ActualPower <= 0 || !isProviderConnectivityDetail(input.Detail) {
+		if !input.AllowInfrastructureRetry || input.ActualPower <= 0 || (!isProviderConnectivityDetail(input.Detail) && !retryableProvider) {
 			return stopTransition("infrastructure_no_retry_route")
 		}
 		next := input.ActualPower + 1
@@ -109,6 +110,27 @@ func DecideAttemptTransition(input AttemptTransitionInput, ladder FloorFinder) A
 		Action:       TryLoopActionRetryPower,
 		NextMinPower: next,
 		Reason:       "semantic_retry_with_higher_min_power",
+	}
+}
+
+// isRetryableProviderReason reports whether reason is a typed provider-failure
+// taxonomy value (ddx-3b721804) that an unpinned worker may fall back from by
+// retrying another eligible route / higher floor. Mirrors the agent package's
+// retryable subset; literals are used here (as with "provider_connectivity"
+// above) so executeloop does not import agent. Non-retryable provider failures
+// (provider_config_invalid, no_viable_provider, unknown_provider_failure) are
+// intentionally excluded so they stop rather than spin.
+func isRetryableProviderReason(reason string) bool {
+	switch strings.TrimSpace(reason) {
+	case "provider_connectivity",
+		"provider_auth",
+		"provider_rate_limit",
+		"provider_quota",
+		"provider_model_unavailable",
+		"provider_harness_unavailable":
+		return true
+	default:
+		return false
 	}
 }
 

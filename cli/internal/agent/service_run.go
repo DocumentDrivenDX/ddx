@@ -286,7 +286,15 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	start := time.Now().UTC()
 	events, err := svc.Execute(cancelCtx, req)
 	if err != nil {
-		return nil, fmt.Errorf("agent: execute: %w", err)
+		// A pre-dispatch Execute error means routing never produced a viable
+		// dispatch — a provider-boundary failure. Wrap it with its typed
+		// classification (ddx-3b721804) so callers recover the taxonomy via
+		// errors.As instead of re-parsing free text, and so the failure
+		// surfaces as a typed outcome_reason rather than generic execution_failed.
+		return nil, &ProviderFailureError{
+			Failure: ClassifyServiceExecuteError(err),
+			Err:     fmt.Errorf("agent: execute: %w", err),
+		}
 	}
 
 	workPhase := strings.TrimSpace(runtime.WorkLogPhase)
