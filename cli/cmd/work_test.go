@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,6 +44,76 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	assert.Equal(t, "10", workCmd.Flags().Lookup("claim-rate-window").DefValue, "ddx work must default claim-rate window to 10")
 	assert.Equal(t, "0", workCmd.Flags().Lookup("claim-rate-threshold").DefValue, "ddx work must default claim-rate threshold to 0.0")
 	assert.Equal(t, "5", workCmd.Flags().Lookup("preclaim-warn-threshold").DefValue, "ddx work must default preclaim warn threshold to 5")
+}
+
+func TestWorkCommandSuppressesUsageAndRawErrorOnInterrupt(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err, "ddx work must exist")
+	require.NotNil(t, workCmd)
+
+	assert.True(t, workCmd.SilenceUsage, "interrupted work must not print usage")
+	assert.True(t, workCmd.SilenceErrors, "interrupted work must not print a duplicate raw error")
+}
+
+func TestWork_CtrlC_ExitsCleanlyNoUsageNoRawError(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	env := NewTestEnvironment(t)
+	env.CreateDefaultConfig()
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "work-interrupt-001",
+		Title: "Interrupted work bead",
+	}))
+
+	factory := NewCommandFactory(env.Dir)
+	runner := &blockingTryExecutor{started: make(chan struct{})}
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = runner
+	root := factory.NewRootCommand()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	root.SetContext(ctx)
+
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"work", "--once", "--no-review", "--no-review-i-know-what-im-doing"})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- root.Execute()
+	}()
+
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("work executor did not start")
+	}
+	cancel()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("work command did not return after cancel")
+	}
+
+	var exitErr *ExitError
+	require.ErrorAs(t, err, &exitErr)
+	assert.Equal(t, 130, exitErr.Code)
+	assert.Empty(t, exitErr.Message)
+	assert.Empty(t, err.Error())
+
+	out := buf.String()
+	assert.Contains(t, out, "worker exited:")
+	assert.Contains(t, out, "failed:")
+	assert.NotContains(t, out, "Usage:")
+	assert.NotContains(t, out, "Error: context canceled")
+	assert.False(t, errors.Is(err, context.Canceled), "work should convert plain interrupt to exit 130 after writing its summary")
 }
 
 func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {

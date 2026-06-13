@@ -212,10 +212,25 @@ library:
 		IssueType: "docs",
 	})
 
-	checker := &workResourceExhaustedChecker{projectRoot: projectRoot, failOn: 3}
+	checker := &workResourceExhaustedChecker{projectRoot: projectRoot, failOn: -1}
 	factory := NewCommandFactory(projectRoot)
 	factory.resourceCheckerOverride = checker
 	factory.AgentRunnerOverride = &panicAgentRunner{t: t}
+	var executeCalls int32
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		_ = ctx
+		atomic.AddInt32(&executeCalls, 1)
+		resourceResult, _ := checker.Check(context.Background())
+		return agent.ExecuteBeadReport{
+			BeadID:            beadID,
+			AttemptID:         "resource-e2e-attempt",
+			Status:            agent.ExecuteBeadStatusResourceExhausted,
+			Detail:            agent.ResourceExhaustedStopMessage,
+			BaseRev:           "feedface",
+			ResultRev:         "feedface",
+			ResourceExhausted: &resourceResult,
+		}, nil
+	})
 
 	outStr, err := executeCommand(
 		factory.NewRootCommand(),
@@ -227,6 +242,7 @@ library:
 	require.NoError(t, err)
 	require.Contains(t, outStr, agent.ResourceExhaustedStopMessage)
 	require.Equal(t, int32(3), atomic.LoadInt32(&checker.calls))
+	require.Equal(t, int32(1), atomic.LoadInt32(&executeCalls))
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
 	first, err := store.Get(context.Background(), "resource-e2e-first")

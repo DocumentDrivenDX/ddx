@@ -684,6 +684,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
+		if errors.Is(err, context.Canceled) {
+			return NewExitError(130, "")
+		}
 	}
 	if err != nil {
 		return err
