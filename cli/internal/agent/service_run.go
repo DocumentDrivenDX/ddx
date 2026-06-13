@@ -311,6 +311,20 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
 	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, runtime.OnRouteResolved)
+	if final == nil {
+		// Provider process exited before emitting a final event — a harness-level
+		// failure (crash, OOM, binary restart) the model never saw. Classify as
+		// harness unavailable (retryable) so an unpinned worker can fall back to
+		// another eligible route without operator intervention.
+		return nil, &ProviderFailureError{
+			Failure: ProviderFailure{
+				Reason:     FailureModeProviderHarnessUnavailable,
+				Retryable:  true,
+				Disruption: FailureModeProviderHarnessUnavailable,
+			},
+			Err: fmt.Errorf("agent: provider process exited without emitting a final event"),
+		}
+	}
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 
