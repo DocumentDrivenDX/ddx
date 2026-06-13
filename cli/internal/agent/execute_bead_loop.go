@@ -2438,7 +2438,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		emit("picker.claim_race", map[string]any{
 			"bead_id":    candidate.ID,
 			"priority":   candidate.Priority,
-			"queue_rank": queueRankValue(candidate.Extra["queue-rank"]),
+			"queue_rank": queueRankValue(candidate.Extra),
 			"reason":     claimErr.Error(),
 		})
 		recordClaimAttempt(false, candidate.ID)
@@ -4666,7 +4666,13 @@ func trackerContentionSkipDetail(reason string) string {
 }
 
 func queueRankValue(raw any) any {
-	rank, ok := parseQueueRank(raw)
+	var rank int
+	var ok bool
+	if extra, isExtra := raw.(map[string]any); isExtra {
+		rank, ok = bead.QueueRank(extra)
+	} else {
+		rank, ok = parseQueueRank(raw)
+	}
 	if !ok {
 		return nil
 	}
@@ -5025,21 +5031,21 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 		}
 		if w.transientCandidateSkips != nil {
 			if _, skipped := w.transientCandidateSkips[candidate.ID]; skipped {
-				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: staleCandidateSkipReason})
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: staleCandidateSkipReason})
 				continue
 			}
 		}
 		if targetBeadID != "" && candidate.ID != targetBeadID {
-			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "target_bead"})
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: "target_bead"})
 			continue
 		}
 		if hasResultForBead(results, candidate.ID) {
-			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "in_attempted"})
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: "in_attempted"})
 			continue
 		}
 		if entry.FilterDecision == FilterDecisionSkipped {
 			// PreviewQueue already applied label_filter; record as skip.
-			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "label_filter"})
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: "label_filter"})
 			continue
 		}
 		allowed := true
@@ -5055,7 +5061,7 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 			allowed = false
 			reason = guardReason
 			if reason != "" {
-				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: reason})
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: reason})
 			}
 			break
 		}

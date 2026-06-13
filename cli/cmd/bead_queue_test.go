@@ -70,6 +70,28 @@ func TestBeadQueueTopSetsRankWithoutChangingPriority(t *testing.T) {
 	assert.Equal(t, "ddx-queue-b", ids[0])
 }
 
+func TestBeadUpdateQueueRankAliasCanonicalizes(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	now := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	seedQueueBeads(t, workingDir, []bead.Bead{
+		{ID: "ddx-alias-ranked", Title: "Alias ranked", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now.Add(time.Minute), UpdatedAt: now.Add(time.Minute)},
+		{ID: "ddx-unranked", Title: "Unranked", Status: bead.StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+	})
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "update", "ddx-alias-ranked", "--set", "queue_rank=0")
+	require.NoError(t, err)
+
+	got := readBeadJSON(t, factory, "ddx-alias-ranked")
+	assert.Equal(t, float64(0), got["queue-rank"])
+	_, hasAlias := got["queue_rank"]
+	assert.False(t, hasAlias, "queue_rank alias should not be persisted beside canonical queue-rank")
+
+	ids := readReadyIDs(t, factory)
+	require.Equal(t, []string{"ddx-alias-ranked", "ddx-unranked"}, ids)
+}
+
 func TestBeadQueueMoveBeforeAfterUsesSparseRanks(t *testing.T) {
 	t.Run("before", func(t *testing.T) {
 		workingDir := t.TempDir()

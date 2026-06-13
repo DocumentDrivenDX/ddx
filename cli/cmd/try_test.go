@@ -325,6 +325,38 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, b.Status, "bead must be closed after successful execution")
 }
 
+func TestTryUsesSameStoreAsBeadShowInLinkedWorktree(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	const beadID = "ddx-try-linked-store"
+	primary, linked := setupLinkedWorktreeWithConflictingBeads(t, beadID, bead.StatusOpen)
+
+	factory := NewCommandFactory(linked)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	executorCalled := false
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, gotID string) (agent.ExecuteBeadReport, error) {
+		executorCalled = true
+		assert.Equal(t, beadID, gotID)
+		return agent.ExecuteBeadReport{
+			BeadID:    gotID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "deadbeef01234567",
+		}, nil
+	})
+
+	showOut, showErr := executeCommand(factory.NewRootCommand(), "bead", "show", beadID, "--json")
+	require.NoError(t, showErr)
+	assert.Contains(t, showOut, beadID)
+
+	out, err := executeCommand(factory.NewRootCommand(), "try", beadID, "--no-review", "--no-review-i-know-what-im-doing")
+	require.NoError(t, err, "try must use the same canonical store as bead show; output=%s", out)
+	assert.True(t, executorCalled, "try must reach the executor instead of failing bead lookup")
+
+	primaryStore := bead.NewStore(filepath.Join(primary, ddxroot.DirName))
+	got, getErr := primaryStore.Get(context.Background(), beadID)
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
 func TestTry_ForceClaimBypassesCooldown(t *testing.T) {
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")

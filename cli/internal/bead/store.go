@@ -2712,8 +2712,8 @@ func sortBeadsForQueue(beads []Bead) {
 		if beads[i].Priority != beads[j].Priority {
 			return beads[i].Priority < beads[j].Priority
 		}
-		ir, iok := parseQueueRank(beads[i].Extra["queue-rank"])
-		jr, jok := parseQueueRank(beads[j].Extra["queue-rank"])
+		ir, iok := QueueRank(beads[i].Extra)
+		jr, jok := QueueRank(beads[j].Extra)
 		if iok != jok {
 			return iok
 		}

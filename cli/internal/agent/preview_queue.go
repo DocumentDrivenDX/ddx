@@ -78,7 +78,7 @@ func PreviewQueue(store PreviewQueueStore, filters PickerFilters, limit int) ([]
 			BeadID:    b.ID,
 			Title:     b.Title,
 			Priority:  b.Priority,
-			QueueRank: queueRankPtr(b.Extra["queue-rank"]),
+			QueueRank: queueRankPtr(b.Extra),
 			UpdatedAt: b.UpdatedAt,
 			Status:    b.Status,
 		}
@@ -115,8 +115,8 @@ func PreviewQueue(store PreviewQueueStore, filters PickerFilters, limit int) ([]
 	return entries, nil
 }
 
-func queueRankPtr(raw any) *int {
-	rank, ok := parseQueueRank(raw)
+func queueRankPtr(extra map[string]any) *int {
+	rank, ok := bead.QueueRank(extra)
 	if !ok {
 		return nil
 	}

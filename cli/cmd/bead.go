@@ -315,11 +315,19 @@ func (f *CommandFactory) beadWorkspaceRoot() string {
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
-	workspaceRoot := f.beadWorkspaceRoot()
-	if workspaceRoot == "" {
+	storeRoot := f.beadStoreRoot()
+	if storeRoot == "" {
 		return bead.NewStore("")
 	}
-	return bead.NewStore(resolveBeadStoreRoot(workspaceRoot))
+	return bead.NewStore(storeRoot)
+}
+
+func (f *CommandFactory) beadStoreRoot() string {
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		return ""
+	}
+	return resolveBeadStoreRoot(workspaceRoot)
 }
 
 func (f *CommandFactory) beadStatusStore(projectRoot string) *bead.Store {
@@ -415,13 +423,8 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 					if !ok {
 						return fmt.Errorf("--set requires key=value format, got: %s", kv)
 					}
-					switch v {
-					case "true":
-						b.Extra[k] = true
-					case "false":
-						b.Extra[k] = false
-					default:
-						b.Extra[k] = v
+					if err := bead.SetExtraValue(b.Extra, k, v); err != nil {
+						return err
 					}
 				}
 			}
@@ -803,6 +806,17 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 					setFlags = append(setFlags, k+"="+v)
 				}
 			}
+			for _, kv := range setFlags {
+				k, v, ok := strings.Cut(kv, "=")
+				if !ok {
+					continue
+				}
+				if bead.CanonicalizeQueueRankKey(k) == "queue-rank" {
+					if _, ok := bead.ParseQueueRankValue(v); !ok {
+						return &bead.QueueRankParseError{Value: v}
+					}
+				}
+			}
 
 			statusValue, _ := cmd.Flags().GetString("status")
 			statusChanged := cmd.Flags().Changed("status")
@@ -859,14 +873,8 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						case "issue_type":
 							b.IssueType = v
 						default:
-							// Parse booleans and numbers for proper typing
-							switch v {
-							case "true":
-								b.Extra[k] = true
-							case "false":
-								b.Extra[k] = false
-							default:
-								b.Extra[k] = v
+							if err := bead.SetExtraValue(b.Extra, k, v); err != nil {
+								return err
 							}
 						}
 					}
@@ -874,7 +882,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if unsetFlags, _ := cmd.Flags().GetStringArray("unset"); len(unsetFlags) > 0 {
 					for _, key := range unsetFlags {
 						if b.Extra != nil {
-							delete(b.Extra, key)
+							bead.UnsetExtraKey(b.Extra, key)
 						}
 					}
 				}

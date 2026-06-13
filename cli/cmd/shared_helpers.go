@@ -52,6 +52,16 @@ func resolveBeadStoreRoot(projectRoot string) string {
 	return ddxroot.JoinProject(projectRoot)
 }
 
+func (f *CommandFactory) commandBeadStoreRoot(projectFlag, projectRoot string) string {
+	if projectFlag != "" || os.Getenv("DDX_PROJECT_ROOT") != "" {
+		return resolveBeadStoreRoot(projectRoot)
+	}
+	if root := f.beadStoreRoot(); root != "" {
+		return root
+	}
+	return resolveBeadStoreRoot(projectRoot)
+}
+
 func commandStatePath(workingDir string, elems ...string) string {
 	return ddxroot.JoinProject(resolveDDxProjectRoot(workingDir), elems...)
 }

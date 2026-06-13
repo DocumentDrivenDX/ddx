@@ -86,6 +86,24 @@ func TestPreviewQueue_QueueRankSort(t *testing.T) {
 	assert.Nil(t, entries[2].QueueRank)
 }
 
+func TestPreviewQueue_QueueRankAliasSort(t *testing.T) {
+	store, qs := newPreviewTestStore(t)
+
+	now := time.Now().UTC()
+	unranked := &bead.Bead{ID: "ddx-unranked", Title: "Unranked", Priority: 0, CreatedAt: now}
+	aliasRanked := &bead.Bead{ID: "ddx-alias-ranked", Title: "Alias ranked", Priority: 0, CreatedAt: now.Add(time.Second), Extra: map[string]any{"queue_rank": "0"}}
+	for _, b := range []*bead.Bead{unranked, aliasRanked} {
+		require.NoError(t, store.Create(context.Background(), b))
+	}
+
+	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+	assert.Equal(t, "ddx-alias-ranked", entries[0].BeadID)
+	require.NotNil(t, entries[0].QueueRank)
+	assert.Equal(t, 0, *entries[0].QueueRank)
+}
+
 // TestPreviewQueue_QueueRankJSONOmit verifies that ranked entries serialize
 // queue_rank while unranked entries keep the field omitted.
 func TestPreviewQueue_QueueRankJSONOmit(t *testing.T) {

@@ -185,8 +185,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if err != nil {
 		return err
 	}
-	projectRoot := resolveProjectRoot(spec.ProjectRoot, f.WorkingDir)
+	projectFlag := spec.ProjectRoot
+	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	spec.ProjectRoot = projectRoot
+	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
 	if tryTargetBeadID != "" {
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
@@ -202,7 +204,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
 	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
 
-	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
+	store := bead.NewStore(beadStoreRoot)
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {
 		workerStore = newIgnoreCooldownStore(store)
@@ -262,8 +264,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if !spec.NoReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(resolveBeadStoreRoot(projectRoot)),
-			BeadEvents:  bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			BeadStore:   bead.NewStore(beadStoreRoot),
+			BeadEvents:  bead.NewStore(beadStoreRoot),
 			Harness:     spec.ReviewHarness,
 			Model:       spec.ReviewModel,
 		}
@@ -339,7 +341,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
-			Events:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			Events:      bead.NewStore(beadStoreRoot),
 			Actor:       resolveClaimAssignee(),
 			Source:      "ddx work",
 		})
@@ -427,7 +429,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, executeLoopAttemptRuntime(
 			spec,
 			cmd.OutOrStdout(),
-			bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			bead.NewStore(beadStoreRoot),
 			f.AgentRunnerOverride,
 			resourceChecker,
 		), gitOps)
@@ -449,7 +451,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-				bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+				bead.NewStore(beadStoreRoot),
 				resolveClaimAssignee(), "ddx work",
 				nil,
 			)
