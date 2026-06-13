@@ -17,9 +17,23 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+)
+
+const (
+	// MaxActiveSizeBytes is the maximum size of the active locks.jsonl before
+	// it is rotated to a timestamped archive. Set to 4 MiB so the file stays
+	// safely below the 5 MiB pre-commit large-file guard (lefthook.yml).
+	MaxActiveSizeBytes = 4 * 1024 * 1024
+
+	// MaxRotatedArchives is the number of timestamped archives retained
+	// alongside the active file. Archives beyond this count are pruned oldest-first.
+	MaxRotatedArchives = 3
 )
 
 // Event is one lock lifecycle event. An acquire event carries the
@@ -115,6 +129,9 @@ func appendEvent(path string, ev Event) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
+	if fi, err := os.Stat(path); err == nil && fi.Size() >= MaxActiveSizeBytes {
+		_ = rotateLockMetrics(path)
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
@@ -127,6 +144,49 @@ func appendEvent(path string, ev Event) error {
 	data = append(data, '\n')
 	_, err = f.Write(data)
 	return err
+}
+
+// RotateIfNeeded renames path to a timestamped archive when its size is at or
+// above MaxActiveSizeBytes, then prunes archives beyond MaxRotatedArchives.
+// It is a no-op when the file does not exist or is within the size limit.
+func RotateIfNeeded(path string) error {
+	fi, err := os.Stat(path)
+	if os.IsNotExist(err) || (err == nil && fi.Size() < MaxActiveSizeBytes) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return rotateLockMetrics(path)
+}
+
+func rotateLockMetrics(path string) error {
+	archive := path + "." + time.Now().UTC().Format("20060102T150405")
+	if err := os.Rename(path, archive); err != nil {
+		return err
+	}
+	return pruneOldArchives(path)
+}
+
+func pruneOldArchives(activePath string) error {
+	dir := filepath.Dir(activePath)
+	prefix := filepath.Base(activePath) + "."
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	var archives []string
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), prefix) && !e.IsDir() {
+			archives = append(archives, filepath.Join(dir, e.Name()))
+		}
+	}
+	sort.Strings(archives)
+	for len(archives) > MaxRotatedArchives {
+		_ = os.Remove(archives[0])
+		archives = archives[1:]
+	}
+	return nil
 }
 
 // Load reads all events from Path(projectRoot). Malformed lines are skipped.
