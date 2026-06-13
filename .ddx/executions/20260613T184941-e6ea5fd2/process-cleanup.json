@@ -1,0 +1,83 @@
+{
+  "attempt_id": "20260613T184941-e6ea5fd2",
+  "bead_id": "ddx-7952776a",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2",
+  "trigger": "context canceled",
+  "started_at": "2026-06-13T19:26:48.148575908Z",
+  "finished_at": "2026-06-13T19:26:48.196591921Z",
+  "scanned": 158,
+  "candidates": [
+    {
+      "pid": 1385019,
+      "ppid": 1346527,
+      "pgid": 1385019,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli/cmd",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    },
+    {
+      "pid": 1346527,
+      "ppid": 1346419,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build148644275/b001/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build148644275/b001/testlog.txt -test.paniconexit0 -test.timeout=5m0s"
+    },
+    {
+      "pid": 1346420,
+      "ppid": 1346409,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli",
+      "command": "tail -20"
+    },
+    {
+      "pid": 1346419,
+      "ppid": 1346409,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli",
+      "command": "go test ./cmd/... -timeout 300s"
+    },
+    {
+      "pid": 1346409,
+      "ppid": 1,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781376620302-rfvsh9.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'go test ./cmd/... -timeout 300s 2\u003e\u00261 | tail -20' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /home/erik/.cache/fleet-tmp/claude-2b8a-cwd"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1385019,
+      "ppid": 1346527,
+      "pgid": 1385019,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli/cmd",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen"
+    },
+    {
+      "pid": 1346527,
+      "ppid": 1346419,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build148644275/b001/cmd.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build148644275/b001/testlog.txt -test.paniconexit0 -test.timeout=5m0s"
+    },
+    {
+      "pid": 1346420,
+      "ppid": 1346409,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli",
+      "command": "tail -20"
+    },
+    {
+      "pid": 1346419,
+      "ppid": 1346409,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli",
+      "command": "go test ./cmd/... -timeout 300s"
+    },
+    {
+      "pid": 1346409,
+      "ppid": 1,
+      "pgid": 1346409,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7952776a-20260613T184941-e6ea5fd2/cli",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781376620302-rfvsh9.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'go test ./cmd/... -timeout 300s 2\u003e\u00261 | tail -20' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /home/erik/.cache/fleet-tmp/claude-2b8a-cwd"
+    }
+  ]
+}
