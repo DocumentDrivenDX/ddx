@@ -1,0 +1,59 @@
+{
+  "bead_id": "ddx-81e3adcd",
+  "attempt_id": "20260613T204433-6b293a74",
+  "base_rev": "f63f62d48d3840f0d63f465da41822dc8e28d4db",
+  "result_rev": "4ff896507b0a33031191b966b80027683774ce68",
+  "implementation_rev": "4ff896507b0a33031191b966b80027683774ce68",
+  "landed_rev": "4ff896507b0a33031191b966b80027683774ce68",
+  "landed_branch": "dogfood/provider-failure-20260613",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260613T204433-6b293a74/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260613T204433-6b293a74",
+      "result_rev": "4ff896507b0a33031191b966b80027683774ce68",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-30cb8b84",
+  "duration_ms": 911181,
+  "tokens": 26970,
+  "cost_usd": 1.5266071000000003,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx-provider-failure-20260613",
+  "execution_dir": ".ddx/executions/20260613T204433-6b293a74",
+  "prompt_file": ".ddx/executions/20260613T204433-6b293a74/prompt.md",
+  "manifest_file": ".ddx/executions/20260613T204433-6b293a74/manifest.json",
+  "result_file": ".ddx/executions/20260613T204433-6b293a74/result.json",
+  "usage_file": ".ddx/executions/20260613T204433-6b293a74/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-13T20:44:42.357635801Z",
+  "finished_at": "2026-06-13T20:59:53.53954677Z"
+}
