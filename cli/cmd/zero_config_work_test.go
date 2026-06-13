@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,7 @@ default_provider: testprov
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
 
 	factory := NewCommandFactory(projectDir)
+	factory.AgentRunnerOverride = &fakeAgentRunner{result: &agent.Result{ExitCode: 1, Error: "stubbed provider failure"}}
 	root := factory.NewRootCommand()
 	out, err := executeCommand(root, "work", "--once", "--project", projectDir)
 

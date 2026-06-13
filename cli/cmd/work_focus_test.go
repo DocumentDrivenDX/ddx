@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -236,7 +237,7 @@ func TestWorkFocusReportsActiveLongRunningWorkerFromWorkerStatus(t *testing.T) {
 		Phase:          "running",
 		Harness:        "claude",
 		Model:          "opus",
-		PID:            4242,
+		PID:            os.Getpid(),
 		LastActivityAt: time.Now().UTC(),
 	}))
 
@@ -285,7 +286,7 @@ func TestWorkFocusActiveWorkerSummaryUsesSharedSnapshot(t *testing.T) {
 	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
 		BeadID:      freshRunState.ID,
 		AttemptID:   "att-focus-summary-runstate",
-		PID:         4243,
+		PID:         os.Getpid(),
 		StartedAt:   now.Add(-time.Minute),
 		RefreshedAt: now,
 		ExpiresAt:   now.Add(time.Minute),

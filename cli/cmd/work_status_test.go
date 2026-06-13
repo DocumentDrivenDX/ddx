@@ -528,13 +528,13 @@ func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {
 		CurrentBead:    sidecarBead.ID,
 		AttemptID:      "att-status-sidecar",
 		Phase:          "running",
-		PID:            5151,
+		PID:            os.Getpid(),
 		LastActivityAt: now,
 	}))
 	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
 		BeadID:      runStateBead.ID,
 		AttemptID:   "att-status-runstate",
-		PID:         5152,
+		PID:         os.Getpid(),
 		StartedAt:   now.Add(-time.Minute),
 		RefreshedAt: now,
 		ExpiresAt:   now.Add(time.Minute),

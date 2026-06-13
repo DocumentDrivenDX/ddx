@@ -425,6 +425,9 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 					}
 				}
 			}
+			if err := f.validateExecuteBeadCreate(cmd, s, b); err != nil {
+				return err
+			}
 
 			if err := f.withBeadTrackerWriteLock(func() error {
 				if err := s.Create(context.Background(), b); err != nil {
@@ -457,6 +460,100 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
 
 	return cmd
+}
+
+func (f *CommandFactory) validateExecuteBeadCreate(cmd *cobra.Command, s *bead.Store, b *bead.Bead) error {
+	if os.Getenv(agentpkg.DDXModeEnvKey) != agentpkg.DDXModeBeadExecution {
+		return nil
+	}
+	currentID := strings.TrimSpace(os.Getenv(agentpkg.DDXBeadIDEnvKey))
+	if currentID == "" {
+		return nil
+	}
+	reason := ""
+	switch {
+	case strings.HasPrefix(strings.ToLower(strings.TrimSpace(b.Title)), "sample:"):
+		reason = "sample_fixture_title"
+	case strings.TrimSpace(b.Parent) == "":
+		reason = "missing_current_parent"
+	case strings.TrimSpace(b.Parent) != currentID:
+		reason = "parent_must_equal_current_bead"
+	default:
+		parent, err := s.Get(context.Background(), currentID)
+		if err != nil {
+			return fmt.Errorf("execute-bead child create guard: load parent %s: %w", currentID, err)
+		}
+		if parent == nil {
+			reason = "current_parent_not_found"
+		} else if missing := missingExecuteChildLabels(parent.Labels, b.Labels); len(missing) > 0 {
+			reason = "missing_parent_labels:" + strings.Join(missing, ",")
+		} else if parentSpec := stringExtra(parent.Extra, "spec-id"); parentSpec != "" && stringExtra(b.Extra, "spec-id") != parentSpec {
+			reason = "missing_parent_spec_id"
+		}
+	}
+	if reason == "" {
+		return nil
+	}
+	f.appendExecuteBeadCreateRejection(s, currentID, b, reason)
+	return fmt.Errorf("execute-bead child create rejected: %s (title=%q parent=%q current=%q)", reason, b.Title, b.Parent, currentID)
+}
+
+func (f *CommandFactory) appendExecuteBeadCreateRejection(s *bead.Store, currentID string, b *bead.Bead, reason string) {
+	if s == nil || currentID == "" {
+		return
+	}
+	body, _ := json.Marshal(map[string]any{
+		"attempt_id":      strings.TrimSpace(os.Getenv(agentpkg.DDXAttemptIDEnvKey)),
+		"attempted_title": b.Title,
+		"parent":          b.Parent,
+		"current_bead_id": currentID,
+		"reason":          reason,
+	})
+	_ = s.AppendEvent(currentID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   "execute_bead_child_create_rejected",
+		Body:      string(body),
+		Actor:     "ddx bead create",
+		Source:    "ddx bead create",
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func missingExecuteChildLabels(parentLabels, childLabels []string) []string {
+	child := make(map[string]struct{}, len(childLabels))
+	for _, label := range childLabels {
+		label = strings.TrimSpace(label)
+		if label != "" {
+			child[label] = struct{}{}
+		}
+	}
+	var missing []string
+	for _, label := range parentLabels {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			continue
+		}
+		if _, ok := child[label]; !ok {
+			missing = append(missing, label)
+		}
+	}
+	return missing
+}
+
+func stringExtra(extra map[string]any, key string) string {
+	if extra == nil {
+		return ""
+	}
+	v, ok := extra[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch v := v.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
 }
 
 func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
