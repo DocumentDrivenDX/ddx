@@ -148,6 +148,9 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
 	onRouteResolved := func(harness, provider, model string) {
+		harness = firstNonEmpty(harness, fizeauHarness(strings.TrimSpace(opts.Harness)))
+		provider = firstNonEmpty(provider, strings.TrimSpace(opts.Provider))
+		model = firstNonEmpty(model, strings.TrimSpace(opts.Model))
 		route := providerRouteLabel(provider, model)
 		_, _ = reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, time.Now().UTC())
 	}

@@ -155,6 +155,9 @@ func reapProviderChildren(ctx context.Context, rootPID int, now time.Time, reaso
 }
 
 func reapSupersededProviderChildren(ctx context.Context, rootPID int, routeLabel, harness string, now time.Time) ([]providerChildReapRecord, []workerstatus.ProviderChild) {
+	if strings.TrimSpace(routeLabel) == "" && strings.TrimSpace(harness) == "" {
+		return nil, nil
+	}
 	reaped, survivors, err := reapProviderChildren(ctx, rootPID, now, func(proc providerChildProcess) string {
 		if routeOwnsProvider(proc.Provider, routeLabel, harness) {
 			return ""

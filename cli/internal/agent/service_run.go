@@ -311,6 +311,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
 	onRouteResolved := func(harness, provider, model string) {
+		harness = firstNonEmpty(harness, fizeauHarness(strings.TrimSpace(runtime.HarnessOverride)), fizeauHarness(strings.TrimSpace(pt.Harness)))
+		provider = firstNonEmpty(provider, strings.TrimSpace(runtime.ProviderOverride), strings.TrimSpace(pt.Provider))
+		model = firstNonEmpty(model, strings.TrimSpace(runtime.ModelOverride), strings.TrimSpace(pt.Model))
 		route := providerRouteLabel(provider, model)
 		now := time.Now().UTC()
 		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, now)

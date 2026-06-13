@@ -119,6 +119,78 @@ func TestSupersededProviderChildrenAreReapedWithEvidence(t *testing.T) {
 	}
 }
 
+func TestSupersededProviderChildrenWithoutRouteIdentityDoesNotReap(t *testing.T) {
+	now := time.Now().UTC()
+	const activePID = 525252
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{{
+			PID:       activePID,
+			Provider:  "claude",
+			Command:   "/usr/local/bin/claude --print --model sonnet",
+			StartedAt: now,
+		}}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "", now)
+
+	if len(reaped) != 0 {
+		t.Fatalf("expected no reaped children without route identity; got %+v", reaped)
+	}
+	if len(survivors) != 0 {
+		t.Fatalf("expected no survivor report when cleanup is skipped; got %+v", survivors)
+	}
+	if len(killed) != 0 {
+		t.Fatalf("active provider child was terminated without route identity: %v", killed)
+	}
+}
+
+func TestSupersededProviderChildrenUsesHarnessAsOwnerWhenProviderBlank(t *testing.T) {
+	now := time.Now().UTC()
+	const activePID = 626262
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{{
+			PID:       activePID,
+			Provider:  "claude",
+			Command:   "/usr/local/bin/claude --print --model sonnet",
+			StartedAt: now,
+		}}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "", "claude", now)
+
+	if len(reaped) != 0 {
+		t.Fatalf("expected active harness provider to survive; got reaped %+v", reaped)
+	}
+	if len(survivors) != 1 || survivors[0].Provider != "claude" {
+		t.Fatalf("expected claude survivor; got %+v", survivors)
+	}
+	if len(killed) != 0 {
+		t.Fatalf("active provider child was terminated despite harness ownership: %v", killed)
+	}
+}
+
 func TestAttemptEndReapsAllProviderChildren(t *testing.T) {
 	for _, mode := range []string{"success", "failure", "interrupt"} {
 		t.Run(mode, func(t *testing.T) {
