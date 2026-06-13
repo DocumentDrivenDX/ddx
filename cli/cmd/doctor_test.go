@@ -274,7 +274,7 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 				t.Fatalf("doctor returned error: %v\noutput:\n%s", err, output)
 			}
 
-			projectPath := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
+			projectPath := filepath.Join(ddxroot.JoinProject(workDir), "plugins", "ddx")
 			globalPath := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
 
 			if !strings.Contains(output, "Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {

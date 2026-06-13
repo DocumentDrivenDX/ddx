@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -101,7 +100,7 @@ func TestWorkResourcePreflight_FailsBeforeClaim(t *testing.T) {
 
 	out, err := executeCommand(factory.NewRootCommand(), "work", "--once")
 	require.Error(t, err)
-	assert.Contains(t, strings.ToLower(out), "resource_exhausted")
+	assert.Contains(t, out, agent.ResourceExhaustedStopMessage)
 	assert.Equal(t, 1, checker.calls)
 
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
