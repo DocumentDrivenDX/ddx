@@ -31,8 +31,19 @@ type decomposerChild struct {
 }
 
 type decomposerEventBody struct {
-	ChildIDs []string `json:"child_ids"`
-	CostUSD  float64  `json:"cost_usd,omitempty"`
+	ChildIDs          []string `json:"child_ids,omitempty"`
+	CostUSD           float64  `json:"cost_usd,omitempty"`
+	RequestedHarness  string   `json:"requested_harness,omitempty"`
+	RequestedProvider string   `json:"requested_provider,omitempty"`
+	RequestedModel    string   `json:"requested_model,omitempty"`
+	RequestedProfile  string   `json:"requested_profile,omitempty"`
+	RequestedMinPower int      `json:"requested_min_power,omitempty"`
+	RequestedMaxPower int      `json:"requested_max_power,omitempty"`
+	SelectedHarness   string   `json:"selected_harness,omitempty"`
+	SelectedProvider  string   `json:"selected_provider,omitempty"`
+	SelectedModel     string   `json:"selected_model,omitempty"`
+	SelectedPower     int      `json:"selected_power,omitempty"`
+	FallbackReason    string   `json:"fallback_reason,omitempty"`
 }
 
 // NewPreClaimDecompositionHook dispatches an orchestrator splitter for beads
@@ -57,21 +68,17 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 	if err != nil {
 		return nil, err
 	}
-	runtime := AgentRunRuntime{
-		Prompt:           prompt,
-		PromptSource:     preClaimDecomposerPromptSource,
-		ProfileOverride:  selectProfileForDispatch(tctx, projectRoot, nil, runner, SelectStrongestProfile),
-		ClearRoutingPins: true,
-		ClearProfile:     true,
-		ClearMinPower:    true,
-		ClearMaxPower:    true,
-	}
+	runtime := decomposerRuntime(tctx, projectRoot, runner, rcfg)
+	runtime.Prompt = prompt
+	runtime.PromptSource = preClaimDecomposerPromptSource
 	result, err := dispatchLifecycleRun(tctx, projectRoot, nil, runner, rcfg, runtime)
 	if err != nil {
 		if tctx.Err() != nil {
 			return nil, tctx.Err()
 		}
-		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, fmt.Sprintf("dispatch error: %s", err.Error())); fallbackErr == nil {
+		reason := fmt.Sprintf("dispatch error: %s", err.Error())
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, reason); fallbackErr == nil {
+			appendPreClaimDecomposeEvent(store, b.ID, nil, rcfg, reason)
 			return fallback, nil
 		}
 		return nil, fmt.Errorf("decomposer: dispatch: %w", err)
@@ -81,24 +88,31 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 		output = strings.TrimSpace(result.Output)
 	}
 	if output == "" {
-		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, "empty output"); fallbackErr == nil {
+		reason := "empty output"
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, reason); fallbackErr == nil {
+			appendPreClaimDecomposeEvent(store, b.ID, result, rcfg, reason)
 			return fallback, nil
 		}
 		return nil, fmt.Errorf("decomposer: empty output")
 	}
 	decomp, ok := parsePreClaimDecompositionOutput(output)
 	if !ok {
-		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, "invalid output"); fallbackErr == nil {
+		reason := "invalid output"
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, reason); fallbackErr == nil {
+			appendPreClaimDecomposeEvent(store, b.ID, result, rcfg, reason)
 			return fallback, nil
 		}
 		return nil, fmt.Errorf("decomposer: invalid output")
 	}
 	if err := validatePreClaimDecomposition(decomp); err != nil {
-		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, err.Error()); fallbackErr == nil {
+		reason := err.Error()
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, reason); fallbackErr == nil {
+			appendPreClaimDecomposeEvent(store, b.ID, result, rcfg, reason)
 			return fallback, nil
 		}
 		return nil, err
 	}
+	appendPreClaimDecomposeEvent(store, b.ID, result, rcfg, "")
 	return decomp, nil
 }
 
@@ -146,15 +160,9 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		return DecomposeResult{Failed: true, Reason: "prompt_error"}
 	}
 
-	runtime := AgentRunRuntime{
-		Prompt:           prompt,
-		PromptSource:     decomposerPromptSource,
-		ProfileOverride:  selectProfileForDispatch(tctx, projectRoot, nil, runner, SelectStrongestProfile),
-		ClearRoutingPins: true,
-		ClearProfile:     true,
-		ClearMinPower:    true,
-		ClearMaxPower:    true,
-	}
+	runtime := decomposerRuntime(tctx, projectRoot, runner, rcfg)
+	runtime.Prompt = prompt
+	runtime.PromptSource = decomposerPromptSource
 
 	result, err := dispatchLifecycleRun(tctx, projectRoot, nil, runner, rcfg, runtime)
 	if err != nil && result == nil {
@@ -209,10 +217,7 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		b.Extra[bead.ExtraExecutionElig] = false
 	})
 
-	body, _ := json.Marshal(decomposerEventBody{
-		ChildIDs: childIDs,
-		CostUSD:  result.CostUSD,
-	})
+	body, _ := json.Marshal(decomposerEventBodyForResult(childIDs, result, rcfg, ""))
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      "decompose-applied",
 		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
@@ -227,6 +232,67 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		ChildIDs: childIDs,
 		CostUSD:  result.CostUSD,
 	}
+}
+
+func decomposerRuntime(ctx context.Context, projectRoot string, runner AgentRunner, rcfg config.ResolvedConfig) AgentRunRuntime {
+	if !decomposerCanAutoselect(rcfg) {
+		return AgentRunRuntime{}
+	}
+	return AgentRunRuntime{
+		ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, nil, runner, SelectStrongestProfile),
+		ClearRoutingPins: true,
+		ClearProfile:     true,
+		ClearMinPower:    true,
+		ClearMaxPower:    true,
+	}
+}
+
+func decomposerCanAutoselect(rcfg config.ResolvedConfig) bool {
+	pt := rcfg.Passthrough()
+	return strings.TrimSpace(pt.Harness) == "" &&
+		strings.TrimSpace(pt.Provider) == "" &&
+		strings.TrimSpace(pt.Model) == "" &&
+		strings.TrimSpace(rcfg.Profile()) == "" &&
+		rcfg.MinPower() == 0 &&
+		rcfg.MaxPower() == 0
+}
+
+func appendPreClaimDecomposeEvent(store ExecuteBeadLoopStore, beadID string, result *Result, rcfg config.ResolvedConfig, fallbackReason string) {
+	body, _ := json.Marshal(decomposerEventBodyForResult(nil, result, rcfg, fallbackReason))
+	summary := "preclaim decomposition routed"
+	if strings.TrimSpace(fallbackReason) != "" {
+		summary = "preclaim decomposition used deterministic fallback"
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "preclaim-decompose-routing",
+		Summary:   summary,
+		Body:      string(body),
+		Actor:     "ddx work",
+		Source:    "ddx work",
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func decomposerEventBodyForResult(childIDs []string, result *Result, rcfg config.ResolvedConfig, fallbackReason string) decomposerEventBody {
+	pt := rcfg.Passthrough()
+	body := decomposerEventBody{
+		ChildIDs:          append([]string(nil), childIDs...),
+		RequestedHarness:  strings.TrimSpace(pt.Harness),
+		RequestedProvider: strings.TrimSpace(pt.Provider),
+		RequestedModel:    strings.TrimSpace(pt.Model),
+		RequestedProfile:  strings.TrimSpace(rcfg.Profile()),
+		RequestedMinPower: rcfg.MinPower(),
+		RequestedMaxPower: rcfg.MaxPower(),
+		FallbackReason:    strings.TrimSpace(fallbackReason),
+	}
+	if result != nil {
+		body.CostUSD = result.CostUSD
+		body.SelectedHarness = strings.TrimSpace(result.Harness)
+		body.SelectedProvider = strings.TrimSpace(result.Provider)
+		body.SelectedModel = strings.TrimSpace(result.Model)
+		body.SelectedPower = result.ActualPower
+	}
+	return body
 }
 
 func buildDecomposerPrompt(store ExecuteBeadLoopStore, b *bead.Bead) (string, error) {
