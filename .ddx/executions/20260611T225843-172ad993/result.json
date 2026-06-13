@@ -1,0 +1,59 @@
+{
+  "bead_id": "ddx-216c8dbd",
+  "attempt_id": "20260611T225843-172ad993",
+  "base_rev": "dcde2f13c533f652d701241c0e6c67b17840e796",
+  "result_rev": "cc026d631d9d467baf67a516a83219c6c9bdc8a8",
+  "implementation_rev": "cc026d631d9d467baf67a516a83219c6c9bdc8a8",
+  "landed_rev": "cc026d631d9d467baf67a516a83219c6c9bdc8a8",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260611T225843-172ad993/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260611T225843-172ad993",
+      "result_rev": "cc026d631d9d467baf67a516a83219c6c9bdc8a8",
+      "implementer_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "requested_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "actual_route": {
+        "harness": "claude",
+        "model": "sonnet"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude",
+  "model": "sonnet",
+  "session_id": "eb-debc261a",
+  "duration_ms": 635370,
+  "tokens": 18445,
+  "cost_usd": 1.2342011000000002,
+  "exit_code": 0,
+  "project_root": "/home/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260611T225843-172ad993",
+  "prompt_file": ".ddx/executions/20260611T225843-172ad993/prompt.md",
+  "manifest_file": ".ddx/executions/20260611T225843-172ad993/manifest.json",
+  "result_file": ".ddx/executions/20260611T225843-172ad993/result.json",
+  "usage_file": ".ddx/executions/20260611T225843-172ad993/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-11T22:58:59.763722552Z",
+  "finished_at": "2026-06-11T23:09:35.134276821Z"
+}

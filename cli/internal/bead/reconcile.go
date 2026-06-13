@@ -113,11 +113,11 @@ type ReconcilePlan struct {
 	Applied        bool           `json:"applied"`
 }
 
-// ReconcileLifecycleMetadata returns conservative repairs for stale
+// reconcileLifecycleMetadata returns conservative repairs for stale
 // no_changes management fields. With Apply=false it is a dry run; with
 // Apply=true it mutates through the Store API and appends reconciliation
 // evidence.
-func (s *Store) ReconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePlan, error) {
+func (s *Store) reconcileLifecycleMetadata(opts ReconcileOptions) ([]ReconcilePlan, error) {
 	if opts.Now.IsZero() {
 		opts.Now = time.Now().UTC()
 	}

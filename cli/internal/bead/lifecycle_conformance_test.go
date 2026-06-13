@@ -315,7 +315,7 @@ func TestStartupGateRefusesUnmigratedQueue(t *testing.T) {
 	require.NoError(t, os.WriteFile(s.File, []byte(row), 0o644))
 
 	// No lifecycle-schema.json marker exists — should require migration.
-	status, err := s.DetectLifecycleMigrationRequired()
+	status, err := (&storeMigrator{store: s}).DetectLifecycleMigrationRequired(testCtx())
 	require.NoError(t, err)
 	require.True(t, status.Required(), "DetectLifecycleMigrationRequired must return Required=true for unmigrated queue with needs_human label")
 	require.Equal(t, LifecycleMigrationGateCodeRequired, status.Code)

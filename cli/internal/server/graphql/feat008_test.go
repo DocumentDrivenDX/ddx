@@ -74,7 +74,7 @@ install:
 	if err := store.Create(context.Background(), blocked); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DepAdd(blocked.ID, dep.ID); err != nil {
+	if err := store.DepAdd(context.Background(), blocked.ID, dep.ID); err != nil {
 		t.Fatal(err)
 	}
 	inProgress := &bead.Bead{Title: "Running bead", Status: bead.StatusOpen}

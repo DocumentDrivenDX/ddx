@@ -289,17 +289,17 @@ func TestAxonBackend_DepAddRemoveAndTree(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), root))
 	require.NoError(t, s.Create(testCtx(), child))
 
-	require.NoError(t, s.DepAdd(child.ID, root.ID))
+	require.NoError(t, s.DepAdd(testCtx(), child.ID, root.ID))
 	got, err := s.Get(testCtx(), child.ID)
 	require.NoError(t, err)
 	require.Len(t, got.Dependencies, 1)
 	assert.Equal(t, root.ID, got.Dependencies[0].DependsOnID)
 
-	tree, err := s.DepTree(root.ID)
+	tree, err := s.DepTree(testCtx(), root.ID)
 	require.NoError(t, err)
 	assert.Contains(t, tree, root.ID)
 
-	require.NoError(t, s.DepRemove(child.ID, root.ID))
+	require.NoError(t, s.DepRemove(testCtx(), child.ID, root.ID))
 	got, err = s.Get(testCtx(), child.ID)
 	require.NoError(t, err)
 	assert.Empty(t, got.Dependencies)
@@ -361,7 +361,7 @@ func TestAxonBackend_ListReadyBlocked(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), proposedStatus))
 	require.NoError(t, s.Create(testCtx(), cancelledStatus))
 	// b depends on a; c depends on a closed-bead-to-be.
-	require.NoError(t, s.DepAdd(b.ID, a.ID))
+	require.NoError(t, s.DepAdd(testCtx(), b.ID, a.ID))
 
 	all, err := s.List("", "", nil)
 	require.NoError(t, err)
@@ -418,7 +418,7 @@ func TestAxonBackend_JSONLImportExportRoundTrip(t *testing.T) {
 	bb := &Bead{Title: "beta"}
 	require.NoError(t, src.Create(context.Background(), a))
 	require.NoError(t, src.Create(context.Background(), bb))
-	require.NoError(t, src.DepAdd(bb.ID, a.ID))
+	require.NoError(t, src.DepAdd(testCtx(), bb.ID, a.ID))
 	require.NoError(t, src.AppendEvent(a.ID, BeadEvent{Kind: "k", Summary: "s"}))
 
 	var buf bytes.Buffer

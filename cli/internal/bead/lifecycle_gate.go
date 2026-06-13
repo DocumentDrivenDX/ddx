@@ -104,7 +104,7 @@ func (r LifecycleMigrationGateStatus) summary() string {
 	return strings.Join(parts, "; ")
 }
 
-// DetectLifecycleMigrationRequired reports whether the active JSONL bead queue still
+// detectLifecycleMigrationRequired reports whether the active JSONL bead queue still
 // contains unmigrated lifecycle routing state.
 //
 // The detector is intentionally cheap:
@@ -116,7 +116,7 @@ func (r LifecycleMigrationGateStatus) summary() string {
 //   - the lifecycle schema marker is reported when present/absent, but
 //     marker absence alone does not fail the gate unless legacy rows are
 //     also present.
-func (s *Store) DetectLifecycleMigrationRequired() (LifecycleMigrationGateStatus, error) {
+func (s *Store) detectLifecycleMigrationRequired() (LifecycleMigrationGateStatus, error) {
 	var report LifecycleMigrationGateStatus
 	if s == nil || s.Collection != DefaultCollection || s.backend != nil {
 		report.Code = LifecycleMigrationGateCodeNotRequired

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { goto } from '$app/navigation';
+	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { subscribeWorkerProgress } from '$lib/gql/subscriptions';
 	import { wsConnection, type WsState } from '$lib/stores/connection.svelte';
@@ -9,6 +9,37 @@
 	import type { WorkerRecentEvent } from './+page';
 
 	let { data }: { data: PageData } = $props();
+
+	let stopping = $state(false);
+	let stopError = $state<string | null>(null);
+
+	const STOP_WORKER_MUTATION = gql`
+		mutation StopWorker($id: ID!) {
+			stopWorker(id: $id) {
+				id
+				state
+				kind
+			}
+		}
+	`;
+
+	const isRunning = $derived(data.worker?.state === 'running');
+
+	async function stopWorker() {
+		if (!data.worker) return;
+		if (!window.confirm(`Stop worker ${data.worker.id}?`)) return;
+		stopError = null;
+		stopping = true;
+		try {
+			const client = createClient(fetch);
+			await client.request(STOP_WORKER_MUTATION, { id: data.worker.id });
+			await invalidateAll();
+		} catch (err) {
+			stopError = err instanceof Error ? err.message : 'Stop failed.';
+		} finally {
+			stopping = false;
+		}
+	}
 
 	let logLines = $state<string[]>([]);
 	let logContainer = $state<HTMLPreElement | null>(null);
@@ -300,14 +331,32 @@
 				</h2>
 				<p class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{data.worker.id}</p>
 			</div>
-			<button
-				onclick={handleClose}
-				class="p-1.5 text-fg-muted hover:bg-bg-surface hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface dark:hover:text-dark-fg-ink"
-				aria-label="Close"
-			>
-				✕
-			</button>
+			<div class="flex items-center gap-2">
+				{#if isRunning}
+					<button
+						type="button"
+						onclick={() => void stopWorker()}
+						disabled={stopping}
+						class="border border-border-line px-3 py-1.5 text-body-sm font-medium text-status-failed hover:bg-bg-canvas disabled:cursor-not-allowed disabled:opacity-60 dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+					>
+						{stopping ? 'Stopping…' : 'Stop'}
+					</button>
+				{/if}
+				<button
+					onclick={handleClose}
+					class="p-1.5 text-fg-muted hover:bg-bg-surface hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface dark:hover:text-dark-fg-ink"
+					aria-label="Close"
+				>
+					✕
+				</button>
+			</div>
 		</div>
+
+		{#if stopError}
+			<div class="shrink-0 border-b border-border-line px-6 py-2 text-body-sm text-status-failed dark:border-dark-border-line">
+				{stopError}
+			</div>
+		{/if}
 
 		<!-- Metadata grid -->
 		<div
@@ -426,25 +475,18 @@
 			{#if lifecycleEvents.length === 0}
 				<p class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No lifecycle actions recorded.</p>
 			{:else}
-				<ul class="space-y-2">
-					{#each lifecycleEvents as event (`${event.action}-${event.timestamp}`)}
-						<li class="flex items-start justify-between gap-3 text-body-sm">
-							<div>
-								<span class="font-medium text-fg-ink dark:text-dark-fg-ink">{event.action}</span>
-								<span class="text-fg-muted dark:text-dark-fg-muted"> by {event.actor}</span>
-								{#if event.beadId}
-									<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"> · {event.beadId}</span>
-								{/if}
-								{#if event.detail}
-									<div class="mt-0.5 text-fg-muted dark:text-dark-fg-muted">{event.detail}</div>
-								{/if}
-							</div>
-							<time class="shrink-0 text-fg-muted dark:text-dark-fg-muted" datetime={event.timestamp}>
-								{fmtDate(event.timestamp)}
-							</time>
-						</li>
-					{/each}
-				</ul>
+				{@const lastEvent = lifecycleEvents[lifecycleEvents.length - 1]}
+				<div class="flex items-start justify-between gap-3 text-body-sm">
+					<div>
+						<span class="text-fg-muted dark:text-dark-fg-muted">by {lastEvent.actor}</span>
+						{#if lastEvent.beadId}
+							<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"> · {lastEvent.beadId}</span>
+						{/if}
+					</div>
+					<time class="shrink-0 text-fg-muted dark:text-dark-fg-muted" datetime={lastEvent.timestamp}>
+						{fmtDate(lastEvent.timestamp)}
+					</time>
+				</div>
 			{/if}
 		</section>
 

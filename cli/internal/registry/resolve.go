@@ -9,11 +9,17 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
+// GlobalPluginsDir returns the global plugins root: ${XDG_DATA_HOME}/ddx/global/plugins.
+// The directory may not exist; callers that need it present must create it.
+func GlobalPluginsDir() string {
+	return filepath.Join(ddxroot.GlobalDir(), "plugins")
+}
+
 // GlobalPluginDir returns the filesystem path for a named plugin in the global
 // tier: ${XDG_DATA_HOME}/ddx/global/plugins/<name>.
 // The directory may not exist; callers that need it present must create it.
 func GlobalPluginDir(name string) string {
-	return filepath.Join(ddxroot.GlobalDir(), "plugins", name)
+	return filepath.Join(GlobalPluginsDir(), name)
 }
 
 // ResolvePlugin returns the on-disk path and the resolution layer for a plugin.

@@ -334,11 +334,20 @@
         },
         "timeout_ms": {
           "type": "integer",
-          "description": "Default timeout in milliseconds",
+          "description": "Default idle timeout in milliseconds",
           "default": 300000,
           "examples": [
             300000,
             600000
+          ]
+        },
+        "wall_clock_ms": {
+          "type": "integer",
+          "description": "Default absolute wall-clock cap in milliseconds",
+          "default": 10800000,
+          "examples": [
+            10800000,
+            21600000
           ]
         },
         "session_log_dir": {

@@ -112,18 +112,6 @@ func (s *Store) WriteLifecycleSchemaMarker(now time.Time) error {
 	return writeAtomicFile(s.LifecycleSchemaMarkerPath(), data)
 }
 
-// MigrateLifecycleDryRun reports the one-way lifecycle migration without
-// mutating the tracker or marker.
-func (s *Store) MigrateLifecycleDryRun() (LifecycleMigrationStats, error) {
-	return s.migrateLifecycle(false, time.Now().UTC())
-}
-
-// MigrateLifecycle converts legacy lifecycle labels and pseudo-statuses into
-// status-owned lifecycle state, then writes the lifecycle schema marker.
-func (s *Store) MigrateLifecycle() (LifecycleMigrationStats, error) {
-	return s.migrateLifecycle(true, time.Now().UTC())
-}
-
 func (s *Store) migrateLifecycle(apply bool, now time.Time) (LifecycleMigrationStats, error) {
 	var stats LifecycleMigrationStats
 	stats.DryRun = !apply
@@ -495,10 +483,10 @@ func (s *Store) Migrate() (MigrateStats, error) {
 	return s.ArchiveWithEvents(migratePolicy())
 }
 
-// MigrateDryRun reports what Migrate would do without mutating disk. It uses
+// migrateDryRun reports what Migrate would do without mutating disk. It uses
 // the same eligibility logic as Migrate (Statuses=[closed], no MinAge floor,
 // preserve_dependencies retention).
-func (s *Store) MigrateDryRun() (MigrateStats, error) {
+func (s *Store) migrateDryRun() (MigrateStats, error) {
 	var stats MigrateStats
 	if s.Collection != DefaultCollection {
 		return stats, fmt.Errorf("bead: migrate dry-run only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
@@ -626,7 +614,7 @@ type MigrateAxonStats struct {
 	EventsMigrated int
 }
 
-// MigrateToAxon reads beads from the JSONL active collection
+// migrateToAxon reads beads from the JSONL active collection
 // (.ddx/beads.jsonl) and the JSONL archive partner
 // (.ddx/beads-archive.jsonl) rooted under s.Dir and writes them losslessly
 // into the axon backend (.ddx/axon/). Source files are not modified.
@@ -639,7 +627,7 @@ type MigrateAxonStats struct {
 // Idempotent: AxonBackend.WriteAll overwrites both collection files in
 // temp+rename style, so re-running on the same source state produces an
 // identical axon snapshot with no duplicates.
-func (s *Store) MigrateToAxon() (MigrateAxonStats, error) {
+func (s *Store) migrateToAxon() (MigrateAxonStats, error) {
 	var stats MigrateAxonStats
 
 	activeSpec := DefaultRegistry().Resolve(DefaultCollection)

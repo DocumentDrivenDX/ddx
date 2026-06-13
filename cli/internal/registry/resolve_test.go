@@ -87,6 +87,28 @@ func TestPluginLookup_FallsBackToGlobal(t *testing.T) {
 	}
 }
 
+func TestGlobalPluginsDir_HonorsXDGDataHome(t *testing.T) {
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	got := GlobalPluginsDir()
+	want := filepath.Join(xdg, "ddx", "global", "plugins")
+	if got != want {
+		t.Errorf("GlobalPluginsDir() = %q, want %q", got, want)
+	}
+
+	// Fallback: without XDG_DATA_HOME, uses ~/.local/share.
+	t.Setenv("XDG_DATA_HOME", "")
+	home, err := os.UserHomeDir()
+	if err == nil {
+		got2 := GlobalPluginsDir()
+		want2 := filepath.Join(home, ".local", "share", "ddx", "global", "plugins")
+		if got2 != want2 {
+			t.Errorf("GlobalPluginsDir() without XDG = %q, want %q", got2, want2)
+		}
+	}
+}
+
 func TestGlobalPluginDir_HonorsXDGDataHome(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdg)

@@ -236,9 +236,9 @@ func TestChaos_ConcurrentDepManagement(t *testing.T) {
 					from := pool[fromIdx]
 					to := pool[toIdx]
 					if rng.Intn(2) == 0 {
-						_ = s.DepAdd(from, to) // cycle detection may reject
+						_ = s.DepAdd(testCtx(), from, to) // cycle detection may reject
 					} else {
-						_ = s.DepRemove(from, to) // idempotent
+						_ = s.DepRemove(testCtx(), from, to) // idempotent
 					}
 				}
 			}()

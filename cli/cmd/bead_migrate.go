@@ -8,6 +8,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func (f *CommandFactory) beadMigrator(s *bead.Store) (bead.Migrator, error) {
+	return bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
+}
+
 func (f *CommandFactory) newBeadMigrateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "migrate",
@@ -31,6 +35,10 @@ the migration via 'ddx bead export | diff'.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
+			mig, err := f.beadMigrator(s)
+			if err != nil {
+				return err
+			}
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			applyLifecycle, _ := cmd.Flags().GetBool("apply")
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -53,7 +61,7 @@ the migration via 'ddx bead export | diff'.`,
 				if dryRun {
 					return fmt.Errorf("bead: --dry-run is not supported with --to axon")
 				}
-				ax, err := s.MigrateToAxon()
+				ax, err := mig.MigrateToAxon(cmd.Context())
 				if err != nil {
 					return err
 				}
@@ -80,7 +88,7 @@ the migration via 'ddx bead export | diff'.`,
 				)
 				if applyLifecycle {
 					err = f.withBeadTrackerWriteLock(func() error {
-						st, err = s.MigrateLifecycle()
+						st, err = mig.MigrateLifecycle(cmd.Context())
 						if err != nil {
 							return err
 						}
@@ -96,7 +104,7 @@ the migration via 'ddx bead export | diff'.`,
 						return nil
 					})
 				} else {
-					st, err = s.MigrateLifecycleDryRun()
+					st, err = mig.MigrateLifecycleDryRun(cmd.Context())
 				}
 				if err != nil {
 					return err
@@ -135,7 +143,7 @@ the migration via 'ddx bead export | diff'.`,
 				arch int
 			)
 			if dryRun {
-				st, err := s.MigrateDryRun()
+				st, err := mig.MigrateDryRun(cmd.Context())
 				if err != nil {
 					return err
 				}

@@ -306,6 +306,20 @@ func TestResolveNilCfg(t *testing.T) {
 	}
 }
 
+func TestResolveAgentWallClockFromProjectConfig(t *testing.T) {
+	wallClock := 90 * time.Minute
+	cfg := &NewConfig{
+		Agent: &AgentConfig{
+			WallClockMS: int(wallClock / time.Millisecond),
+		},
+	}
+
+	rcfg := cfg.Resolve(CLIOverrides{})
+	if got := rcfg.WallClock(); got != wallClock {
+		t.Fatalf("WallClock = %v, want %v", got, wallClock)
+	}
+}
+
 func TestResolveDeepCopy(t *testing.T) {
 	mirrorAsync := true
 	cfg := &NewConfig{

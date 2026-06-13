@@ -91,7 +91,7 @@ func TestQueueRank_PreservedAcrossReopen(t *testing.T) {
 func TestQueueRank_PreservedAcrossReconcile(t *testing.T) {
 	s := newTestStore(t)
 	b := createBeadWithQueueRank(t, s, 5)
-	_, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true, Now: time.Now().UTC()})
+	_, err := (&storeMigrator{store: s}).ReconcileLifecycleMetadata(testCtx(), ReconcileOptions{Apply: true, Now: time.Now().UTC()})
 	require.NoError(t, err)
 	assertQueueRank(t, s, b.ID, 5)
 }
@@ -101,7 +101,7 @@ func TestQueueRank_PreservedAcrossReconcile(t *testing.T) {
 func TestQueueRank_PreservedAcrossMigrateLifecycle(t *testing.T) {
 	s := newTestStore(t)
 	b := createBeadWithQueueRank(t, s, 5)
-	_, err := s.MigrateLifecycle()
+	_, err := (&storeMigrator{store: s}).MigrateLifecycle(testCtx())
 	require.NoError(t, err)
 	assertQueueRank(t, s, b.ID, 5)
 }

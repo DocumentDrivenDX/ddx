@@ -113,9 +113,9 @@ func (s *Store) ExportToFile(filePath string) error {
 	return s.ExportTo(f)
 }
 
-// MigrateFromHelix checks for .helix/issues.jsonl and imports beads into the
+// migrateFromHelix checks for .helix/issues.jsonl and imports beads into the
 // DDx store if it exists and the DDx store is empty. Returns (count, migrated, error).
-func (s *Store) MigrateFromHelix() (int, bool, error) {
+func (s *Store) migrateFromHelix() (int, bool, error) {
 	helixFile := ".helix/issues.jsonl"
 	if _, err := os.Stat(helixFile); err != nil {
 		return 0, false, nil // no HELIX tracker, nothing to do

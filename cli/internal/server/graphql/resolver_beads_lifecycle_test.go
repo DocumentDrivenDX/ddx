@@ -29,7 +29,7 @@ func TestGraphQLBeadsReadyAndBlockedUseLifecycleBuckets(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.DepAdd(waiting.ID, dep.ID); err != nil {
+	if err := store.DepAdd(context.Background(), waiting.ID, dep.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Transition extBlocked to blocked with an external reason
@@ -140,7 +140,7 @@ func TestGraphQLBeadStatusCountsLifecycleStates(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Add dep to waitingBead
-	if err := store.DepAdd(waitingBead.ID, depBead.ID); err != nil {
+	if err := store.DepAdd(context.Background(), waitingBead.ID, depBead.ID); err != nil {
 		t.Fatal(err)
 	}
 	// Close closedBead
@@ -315,7 +315,7 @@ func TestGraphQLBeadCancelTerminal(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := store.DepAdd(dependent.ID, openBead.ID); err != nil {
+	if err := store.DepAdd(context.Background(), dependent.ID, openBead.ID); err != nil {
 		t.Fatal(err)
 	}
 

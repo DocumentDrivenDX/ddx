@@ -343,11 +343,13 @@ func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized bead storage at %s\n", s.File)
 
 			// Auto-migrate from .helix/issues.jsonl if present
-			n, migrated, err := s.MigrateFromHelix()
-			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "Warning: migration from .helix/issues.jsonl failed: %v\n", err)
-			} else if migrated {
-				fmt.Fprintf(cmd.OutOrStdout(), "Migrated %d beads from .helix/issues.jsonl\n", n)
+			if mig, merr := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir}); merr == nil {
+				n, migrated, merr := mig.MigrateFromHelix(context.Background())
+				if merr != nil {
+					fmt.Fprintf(cmd.ErrOrStderr(), "Warning: migration from .helix/issues.jsonl failed: %v\n", merr)
+				} else if migrated {
+					fmt.Fprintf(cmd.OutOrStdout(), "Migrated %d beads from .helix/issues.jsonl\n", n)
+				}
 			}
 			return nil
 		},
@@ -1409,7 +1411,7 @@ func (f *CommandFactory) newBeadHumanCommand() *cobra.Command {
 			action, _ := cmd.Flags().GetString("action")
 			note, _ := cmd.Flags().GetString("note")
 			children, _ := cmd.Flags().GetStringSlice("children")
-			return f.resolveNeedsHumanBead(args[0], action, note, children)
+			return f.resolveNeedsHumanBead(cmd.Context(), args[0], action, note, children)
 		},
 	}
 	resolveCmd.Flags().String("action", "", "Resolution action: retry, split, obsolete, defer")
@@ -1420,7 +1422,7 @@ func (f *CommandFactory) newBeadHumanCommand() *cobra.Command {
 	return cmd
 }
 
-func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children []string) error {
+func (f *CommandFactory) resolveNeedsHumanBead(ctx context.Context, id, action, note string, children []string) error {
 	action = strings.TrimSpace(action)
 	note = strings.TrimSpace(note)
 	if note == "" {
@@ -1455,7 +1457,7 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 				return err
 			}
 			for _, childID := range children {
-				if err := s.DepAdd(id, childID); err != nil {
+				if err := s.DepAdd(ctx, id, childID); err != nil {
 					return err
 				}
 			}
@@ -1647,29 +1649,34 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 			_, _ = cmd.Flags().GetBool("dry-run")
 			asJSON, _ := cmd.Flags().GetBool("json")
 			s := f.beadStore()
+			mig, err := bead.NewMigrator(bead.MigratorOptions{Dir: s.Dir})
+			if err != nil {
+				return err
+			}
 			var (
 				plans []bead.ReconcilePlan
-				err   error
 			)
 			runReconcile := func() error {
-				plans, err = s.ReconcileLifecycleMetadata(bead.ReconcileOptions{Apply: apply, IDs: args})
-				if err != nil {
-					return err
+				var rerr error
+				plans, rerr = mig.ReconcileLifecycleMetadata(context.Background(), bead.ReconcileOptions{Apply: apply, IDs: args})
+				if rerr != nil {
+					return rerr
 				}
 				if apply {
-					if _, err := f.beadAutoCommit("reconcile lifecycle metadata"); err != nil {
-						return err
+					if _, rerr := f.beadAutoCommit("reconcile lifecycle metadata"); rerr != nil {
+						return rerr
 					}
 				}
 				return nil
 			}
+			var rerr error
 			if apply {
-				err = f.withBeadTrackerWriteLock(runReconcile)
+				rerr = f.withBeadTrackerWriteLock(runReconcile)
 			} else {
-				err = runReconcile()
+				rerr = runReconcile()
 			}
-			if err != nil {
-				return err
+			if rerr != nil {
+				return rerr
 			}
 			if plans == nil {
 				plans = []bead.ReconcilePlan{}
@@ -1787,7 +1794,7 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return f.withBeadTrackerWriteLock(func() error {
-				if err := f.beadStore().DepAdd(args[0], args[1]); err != nil {
+				if err := f.beadStore().DepAdd(cmd.Context(), args[0], args[1]); err != nil {
 					return err
 				}
 				if _, err := f.beadAutoCommit("dep-add " + args[0]); err != nil {
@@ -1804,7 +1811,7 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return f.withBeadTrackerWriteLock(func() error {
-				if err := f.beadStore().DepRemove(args[0], args[1]); err != nil {
+				if err := f.beadStore().DepRemove(cmd.Context(), args[0], args[1]); err != nil {
 					return err
 				}
 				if _, err := f.beadAutoCommit("dep-remove " + args[0]); err != nil {
@@ -1824,7 +1831,7 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 			if len(args) > 0 {
 				rootID = args[0]
 			}
-			tree, err := f.beadStore().DepTree(rootID)
+			tree, err := f.beadStore().DepTree(cmd.Context(), rootID)
 			if err != nil {
 				return err
 			}
