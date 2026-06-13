@@ -1120,6 +1120,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		cleanupTrigger = agentErr.Error()
 	}
 	_ = cleanupAttemptProcesses(context.Background(), projectRoot, beadID, attemptID, wtPath, processBaseline, cleanupTrigger)
+	if reaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC()); len(reaped) > 0 {
+		writeProviderChildCleanupArtifact(projectRoot, attemptID, &providerChildCleanupReport{
+			AttemptID: attemptID,
+			BeadID:    beadID,
+			Trigger:   firstNonEmpty(cleanupTrigger, reasonAttemptEnded),
+			ScannedAt: time.Now().UTC(),
+			Reaped:    reaped,
+		})
+	}
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0

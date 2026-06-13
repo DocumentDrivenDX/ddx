@@ -1532,6 +1532,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	var liveness *work.SidecarLivenessReporter
 	if runtime.ProjectRoot != "" && runtime.SessionID != "" {
 		liveness = work.NewSidecarLivenessReporter(runtime.ProjectRoot, runtime.SessionID, runtime.SessionID, runtime.EventSink)
+		workerPID := os.Getpid()
+		liveness.SetChildProbe(func(route, harness, phase string) []workerstatus.ProviderChild {
+			return scanProviderChildrenForStatus(context.Background(), workerPID, route, harness, phase, time.Now().UTC())
+		})
 	}
 	serverOutage := newServerOutageTracker(
 		runtime.effectiveServerFailureWindow(),

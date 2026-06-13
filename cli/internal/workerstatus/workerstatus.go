@@ -19,20 +19,31 @@ import (
 
 // LiveWorker describes one running ddx worker process.
 type LiveWorker struct {
-	PID               int       `json:"pid"`
-	Command           string    `json:"command"`
-	StartedAt         time.Time `json:"started_at"`
-	AgeSeconds        float64   `json:"age_seconds"`
-	Age               string    `json:"age"`
-	ProjectRoot       string    `json:"project_root"`
-	BeadID            string    `json:"bead_id,omitempty"`
-	AttemptID         string    `json:"attempt_id,omitempty"`
-	Phase             string    `json:"phase,omitempty"`
-	Message           string    `json:"message,omitempty"`
-	ChildPID          int       `json:"child_pid,omitempty"`
-	LastActivityAt    time.Time `json:"last_activity_at,omitempty"`
-	ExecutionWorktree string    `json:"execution_worktree,omitempty"`
-	Cwd               string    `json:"cwd,omitempty"`
+	PID               int             `json:"pid"`
+	Command           string          `json:"command"`
+	StartedAt         time.Time       `json:"started_at"`
+	AgeSeconds        float64         `json:"age_seconds"`
+	Age               string          `json:"age"`
+	ProjectRoot       string          `json:"project_root"`
+	BeadID            string          `json:"bead_id,omitempty"`
+	AttemptID         string          `json:"attempt_id,omitempty"`
+	Phase             string          `json:"phase,omitempty"`
+	Message           string          `json:"message,omitempty"`
+	ChildPID          int             `json:"child_pid,omitempty"`
+	LastActivityAt    time.Time       `json:"last_activity_at,omitempty"`
+	ExecutionWorktree string          `json:"execution_worktree,omitempty"`
+	Cwd               string          `json:"cwd,omitempty"`
+	ProviderChildren  []ProviderChild `json:"provider_children,omitempty"`
+}
+
+// ProviderChild describes a provider CLI subprocess observed under a worker.
+type ProviderChild struct {
+	PID        int     `json:"pid"`
+	Provider   string  `json:"provider"`
+	Harness    string  `json:"harness,omitempty"`
+	RouteOwner string  `json:"route_owner,omitempty"`
+	Phase      string  `json:"phase,omitempty"`
+	AgeSeconds float64 `json:"age_seconds"`
 }
 
 // Scanner discovers live ddx worker processes on the host.

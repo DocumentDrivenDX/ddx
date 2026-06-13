@@ -564,3 +564,54 @@ func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {
 	assert.Equal(t, workStatus.ActiveWork.Count, beadStatus.ActiveWork.Count)
 	assert.ElementsMatch(t, workStatus.ActiveWork.BeadIDs, beadStatus.ActiveWork.BeadIDs)
 }
+
+func TestWorkerStatusReportsProviderChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 7676
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-pc", workerstatus.LivenessRecord{
+		WorkerID:    "worker-pc",
+		ProjectRoot: projectRoot,
+		CurrentBead: "ddx-pc000001",
+		AttemptID:   "20260613T202003-18b8bd7e",
+		Phase:       "running",
+		Route:       "claude/sonnet",
+		Harness:     "claude",
+		PID:         pid,
+		StartedAt:   procStartedAt,
+		ProviderChildren: []workerstatus.ProviderChild{
+			{PID: 1882389, Provider: "claude", Harness: "claude", RouteOwner: "claude/sonnet", Phase: "running", AgeSeconds: 42},
+		},
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	children := report.Workers[0].ProviderChildren
+	require.Len(t, children, 1, "provider_children must be surfaced; got %s", out)
+	child := children[0]
+	assert.Equal(t, 1882389, child.PID)
+	assert.Equal(t, "claude", child.Provider)
+	assert.Equal(t, "claude", child.Harness)
+	assert.Equal(t, "claude/sonnet", child.RouteOwner)
+	assert.Equal(t, "running", child.Phase)
+	assert.Equal(t, float64(42), child.AgeSeconds)
+	assert.Contains(t, out, "provider_children")
+}

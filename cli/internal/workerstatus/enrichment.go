@@ -115,6 +115,9 @@ func applyLivenessRecord(worker *LiveWorker, rec LivenessRecord) {
 	if worker.ChildPID == 0 && rec.ChildPID > 0 {
 		worker.ChildPID = rec.ChildPID
 	}
+	if len(worker.ProviderChildren) == 0 && len(rec.ProviderChildren) > 0 {
+		worker.ProviderChildren = rec.ProviderChildren
+	}
 	if worker.LastActivityAt.IsZero() && !rec.LastActivityAt.IsZero() {
 		worker.LastActivityAt = rec.LastActivityAt.UTC()
 	}

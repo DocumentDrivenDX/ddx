@@ -147,7 +147,11 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		idleTimeout:     timeout,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
-	final, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), watchdog, nil)
+	onRouteResolved := func(harness, provider, model string) {
+		route := providerRouteLabel(provider, model)
+		_, _ = reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, time.Now().UTC())
+	}
+	final, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), watchdog, onRouteResolved)
 	elapsed := time.Since(start)
 
 	result := &Result{

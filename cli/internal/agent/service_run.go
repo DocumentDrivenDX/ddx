@@ -310,7 +310,26 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
-	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, runtime.OnRouteResolved)
+	onRouteResolved := func(harness, provider, model string) {
+		route := providerRouteLabel(provider, model)
+		now := time.Now().UTC()
+		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, now)
+		if len(reaped) > 0 {
+			writeProviderChildCleanupArtifact(workDir, runtime.Correlation["attempt_id"], &providerChildCleanupReport{
+				AttemptID:   runtime.Correlation["attempt_id"],
+				BeadID:      runtime.Correlation["bead_id"],
+				Trigger:     reasonSupersededProviderChild,
+				ActiveRoute: firstNonEmpty(route, harness),
+				ScannedAt:   now,
+				Survivors:   survivors,
+				Reaped:      reaped,
+			})
+		}
+		if runtime.OnRouteResolved != nil {
+			runtime.OnRouteResolved(harness, provider, model)
+		}
+	}
+	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, onRouteResolved)
 	if final == nil {
 		// Provider process exited before emitting a final event — a harness-level
 		// failure (crash, OOM, binary restart) the model never saw. Classify as

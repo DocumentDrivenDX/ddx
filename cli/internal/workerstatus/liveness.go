@@ -19,20 +19,21 @@ import (
 // the high-frequency liveness signal so operators can answer "is the worker
 // alive and what is it doing?" without inflating tracker churn.
 type LivenessRecord struct {
-	WorkerID       string    `json:"worker_id"`
-	ProjectRoot    string    `json:"project_root,omitempty"`
-	CurrentBead    string    `json:"current_bead,omitempty"`
-	AttemptID      string    `json:"attempt_id,omitempty"`
-	Phase          string    `json:"phase,omitempty"`
-	Message        string    `json:"message,omitempty"`
-	Route          string    `json:"route,omitempty"`
-	Harness        string    `json:"harness,omitempty"`
-	Model          string    `json:"model,omitempty"`
-	Profile        string    `json:"profile,omitempty"`
-	PID            int       `json:"pid,omitempty"`
-	ChildPID       int       `json:"child_pid,omitempty"`
-	StartedAt      time.Time `json:"started_at,omitempty"`
-	LastActivityAt time.Time `json:"last_activity_at"`
+	WorkerID         string          `json:"worker_id"`
+	ProjectRoot      string          `json:"project_root,omitempty"`
+	CurrentBead      string          `json:"current_bead,omitempty"`
+	AttemptID        string          `json:"attempt_id,omitempty"`
+	Phase            string          `json:"phase,omitempty"`
+	Message          string          `json:"message,omitempty"`
+	Route            string          `json:"route,omitempty"`
+	Harness          string          `json:"harness,omitempty"`
+	Model            string          `json:"model,omitempty"`
+	Profile          string          `json:"profile,omitempty"`
+	PID              int             `json:"pid,omitempty"`
+	ChildPID         int             `json:"child_pid,omitempty"`
+	ProviderChildren []ProviderChild `json:"provider_children,omitempty"`
+	StartedAt        time.Time       `json:"started_at,omitempty"`
+	LastActivityAt   time.Time       `json:"last_activity_at"`
 }
 
 // LivenessTTL is the freshness window for treating a worker sidecar as
