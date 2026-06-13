@@ -79,12 +79,9 @@ func (f *CommandFactory) runWorkPlan(cmd *cobra.Command, _ []string) error {
 	limit, _ := cmd.Flags().GetInt("limit")
 	asJSON, _ := cmd.Flags().GetBool("json")
 
-	// Resolve the project root (same logic work.go uses).
-	projectRoot := f.WorkingDir
-
-	// Open the bead store directly, preferring an existing in-tree store when
-	// the fixture seeded one without a config.yaml.
-	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
+	// Use beadStore() so that linked-worktree invocations resolve to the
+	// primary worktree's canonical store (same path as bead show/list/export).
+	store := f.beadStore()
 
 	filters := agent.PickerFilters{
 		LabelFilter:  labelFilter,

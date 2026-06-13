@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -226,4 +228,112 @@ func TestWorkPlanUsesDDxRootPath(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &entries))
 	require.Len(t, entries, 1)
 	assert.Equal(t, "ddx-convention-plan", entries[0].BeadID)
+}
+
+// setupLinkedWorktreeWithConflictingBeads creates a primary git repo and a
+// linked git worktree, seeds the primary's canonical .ddx/ with a bead in
+// the given canonicalStatus, and seeds the linked worktree's stale .ddx/ with
+// the same bead left open. Returns (primary, linked) directory paths.
+func setupLinkedWorktreeWithConflictingBeads(t *testing.T, beadID, canonicalStatus string) (string, string) {
+	t.Helper()
+
+	primary := t.TempDir()
+	runLinkedWorktreeGit(t, primary, "init")
+	runLinkedWorktreeGit(t, primary, "config", "user.email", "test@example.com")
+	runLinkedWorktreeGit(t, primary, "config", "user.name", "Test User")
+	runLinkedWorktreeGit(t, primary, "config", "commit.gpgsign", "false")
+
+	// Initial commit is required for git worktree add.
+	require.NoError(t, os.WriteFile(filepath.Join(primary, "README.md"), []byte("# test"), 0o644))
+	runLinkedWorktreeGit(t, primary, "add", "README.md")
+	runLinkedWorktreeGit(t, primary, "commit", "-m", "init")
+
+	// Create the linked worktree as a sibling of primary.
+	linked := filepath.Join(t.TempDir(), ".execute-bead-wt-test")
+	runLinkedWorktreeGit(t, primary, "worktree", "add", "-b", "exec-branch", linked)
+
+	ctx := context.Background()
+
+	// Seed the CANONICAL store (in primary) with the bead.
+	primaryDDx := filepath.Join(primary, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(primaryDDx, 0o755))
+	canonicalStore := bead.NewStore(primaryDDx)
+	require.NoError(t, canonicalStore.Init(ctx))
+	b := &bead.Bead{ID: beadID, Title: "Store unification test bead", Priority: 0}
+	require.NoError(t, canonicalStore.Create(ctx, b))
+	if canonicalStatus == "closed" {
+		require.NoError(t, canonicalStore.Close(ctx, beadID))
+	}
+
+	// Seed the STALE local snapshot (in linked) with the bead left open.
+	linkedDDx := filepath.Join(linked, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(linkedDDx, 0o755))
+	staleStore := bead.NewStore(linkedDDx)
+	require.NoError(t, staleStore.Init(ctx))
+	stale := &bead.Bead{ID: beadID, Title: "Store unification test bead", Priority: 0}
+	require.NoError(t, staleStore.Create(ctx, stale))
+	// Leave stale as "open" — simulates a snapshot taken before the canonical close.
+
+	return primary, linked
+}
+
+func runLinkedWorktreeGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = gitpkg.CleanEnv()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v in %s: %v\n%s", args, dir, err, out)
+	}
+}
+
+// TestBeadAndWorkPlanUseSameStoreInLinkedWorktree verifies that from inside a
+// git linked worktree both "ddx bead show" and "ddx work plan" resolve to the
+// canonical (primary) bead store rather than the linked worktree's stale local
+// .ddx/ snapshot. This is the regression test for ddx-d94f1857.
+func TestBeadAndWorkPlanUseSameStoreInLinkedWorktree(t *testing.T) {
+	const beadID = "ddx-wt-unify-001"
+	_, linked := setupLinkedWorktreeWithConflictingBeads(t, beadID, "closed")
+
+	factory := NewCommandFactory(linked)
+
+	// bead show must read the canonical closed status.
+	showOut, err := executeCommand(factory.NewRootCommand(), "bead", "show", beadID, "--json")
+	require.NoError(t, err)
+	var shown map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &shown))
+	assert.Equal(t, "closed", shown["status"],
+		"bead show must use the canonical (primary) store, not the stale linked snapshot")
+
+	// work plan must also read the canonical store and not return the closed bead as next claim.
+	planOut, err := executeCommand(factory.NewRootCommand(), "work", "plan", "--json", "--limit=0")
+	require.NoError(t, err)
+	var entries []agent.QueueEntry
+	require.NoError(t, json.Unmarshal([]byte(planOut), &entries))
+	for _, e := range entries {
+		if e.BeadID == beadID {
+			assert.NotEqual(t, agent.FilterDecisionNext, e.FilterDecision,
+				"closed bead must not appear as 'next claim' in work plan")
+		}
+	}
+}
+
+// TestWorkPlanDoesNotPreferStaleLocalSnapshotWhenCanonicalStoreExists covers
+// the observed ddx-d94f1857 failure mode: a bead closed in the canonical
+// primary store must not be returned as next claim from a stale local .ddx/
+// snapshot in a linked worktree.
+func TestWorkPlanDoesNotPreferStaleLocalSnapshotWhenCanonicalStoreExists(t *testing.T) {
+	const beadID = "ddx-wt-stale-002"
+	_, linked := setupLinkedWorktreeWithConflictingBeads(t, beadID, "closed")
+
+	planOut, err := executeCommand(NewCommandFactory(linked).NewRootCommand(), "work", "plan", "--json", "--limit=0")
+	require.NoError(t, err)
+
+	var entries []agent.QueueEntry
+	require.NoError(t, json.Unmarshal([]byte(planOut), &entries))
+
+	for _, e := range entries {
+		require.NotEqual(t, agent.FilterDecisionNext, e.FilterDecision,
+			"canonical closed bead %s must not appear as next claim (stale local snapshot must be ignored)", beadID)
+	}
 }

@@ -173,6 +173,19 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		issues = append(issues, repoIssues...)
 	}
 
+	// Check 4c: Worktrees master — detect stale execute-bead paths in worktrees.json.
+	fmt.Print("✓ Checking Worktrees Registry... ")
+	if masterIssue := checkStaleWorktreesMaster(f.WorkingDir); masterIssue != nil {
+		fmt.Println("⚠️  Stale worktrees.json master pointer")
+		fmt.Printf("   ⚠️  %s\n", masterIssue.Description)
+		for _, r := range masterIssue.Remediation {
+			fmt.Printf("   💡 %s\n", r)
+		}
+		issues = append(issues, *masterIssue)
+	} else {
+		fmt.Println("✅ Worktrees Registry")
+	}
+
 	// Check 5: Network Connectivity
 	fmt.Print("✓ Checking Network... ")
 	if checkNetwork() {
@@ -1113,4 +1126,48 @@ func checkMetaPromptSync(workingDir string) error {
 	}
 
 	return nil
+}
+
+// checkStaleWorktreesMaster detects when worktrees.json contains a Master
+// pointer that no longer exists on disk. A stale master causes ddx bead
+// commands and ddx work plan to potentially resolve different physical stores,
+// producing split-brain state where a bead appears open in one view and
+// closed in another.
+func checkStaleWorktreesMaster(workingDir string) *DiagnosticIssue {
+	projectRoot := resolveProjectRoot("", workingDir)
+	if projectRoot == "" {
+		projectRoot = workingDir
+	}
+
+	ctx := context.Background()
+	registry, err := ddxroot.LoadWorktreeRegistry(ctx, projectRoot)
+	if err != nil || registry.Master == "" {
+		return nil
+	}
+
+	if _, statErr := os.Stat(registry.Master); statErr == nil {
+		return nil
+	}
+
+	desc := fmt.Sprintf("worktrees.json master path does not exist: %s", registry.Master)
+	remediation := []string{
+		"Run 'ddx project worktree master <correct-path>' to update the master pointer",
+		"Or remove the stale master entry from .ddx/worktrees.json manually",
+	}
+
+	if strings.Contains(registry.Master, "execute-bead-wt") {
+		desc = fmt.Sprintf("worktrees.json master points at a missing execute-bead temporary path: %s", registry.Master)
+		remediation = append([]string{
+			"The master pointer was set from an ephemeral execute-bead worktree that no longer exists; bead commands may read a stale store",
+		}, remediation...)
+	}
+
+	return &DiagnosticIssue{
+		Type:        "stale_worktrees_master",
+		Description: desc,
+		Remediation: remediation,
+		SystemInfo: map[string]string{
+			"master_path": registry.Master,
+		},
+	}
 }
