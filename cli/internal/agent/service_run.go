@@ -721,3 +721,49 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	}
 	return nil
 }
+
+// ValidateHarnessOnlyRouteViaService preflights a harness-only request shape
+// using the same route resolver the execute path will hit. It is used for
+// harness-pinned work/try requests that intentionally leave model empty while
+// relying on profile or MinPower to make the route viable.
+func ValidateHarnessOnlyRouteViaService(ctx context.Context, workDir, harnessName, provider, profile string, minPower, maxPower int) error {
+	if harnessName == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	svc, err := resolveService(workDir)
+	if err != nil {
+		return fmt.Errorf("agent: build service: %w", err)
+	}
+	infos, err := svc.ListHarnesses(ctx)
+	if err != nil {
+		return fmt.Errorf("agent: list harnesses: %w", err)
+	}
+	found := false
+	for _, info := range infos {
+		if info.Name == harnessName {
+			found = true
+			if !info.Available {
+				return fmt.Errorf("agent: harness %s not available", harnessName)
+			}
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("agent: unknown harness: %s", harnessName)
+	}
+
+	_, err = svc.ResolveRoute(ctx, agentlib.RouteRequest{
+		Harness:  fizeauHarness(harnessName),
+		Provider: provider,
+		Policy:   profile,
+		MinPower: minPower,
+		MaxPower: maxPower,
+	})
+	if err != nil {
+		return fmt.Errorf("agent: route preflight failed: %w", err)
+	}
+	return nil
+}

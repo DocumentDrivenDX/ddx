@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -400,6 +401,108 @@ func TestWorkZeroConfigStandardPolicyDoesNotDowngradeToCheapPolicy(t *testing.T)
 	lastReq := requests[0]
 	assert.Equal(t, "default", lastReq.Policy, "standard-powerClass work must not downgrade to the weak policy when the model snapshot is stale")
 	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must keep power as Fizeau policy metadata, not DDx hardcoded floor")
+}
+
+func TestWorkHarnessOnlyAutoRoutesOrFailsBeforeClaim(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	stub.resolveRouteFn = func(req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		return &agentlib.RouteDecision{
+			Harness:  req.Harness,
+			Provider: "anthropic",
+			Model:    "claude-3-7-sonnet",
+			Reason:   "test-route",
+		}, nil
+	}
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-work-harness-only-auto-route",
+		Title:     "Work with explicit harness and profile-driven routing",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--harness", "codex",
+		"--profile", "smart",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.NoError(t, err, "output=%q", out)
+
+	requests := capturedImplementationRequests(stub)
+	require.Len(t, requests, 1, "explicit harness/profile work must execute exactly one implementer attempt; output=%q", out)
+	lastReq := requests[0]
+	assert.Equal(t, "codex", lastReq.Harness)
+	assert.Equal(t, "smart", lastReq.Policy)
+	assert.Equal(t, 9, lastReq.MinPower)
+	assert.Empty(t, lastReq.Model, "harness-only routing must keep model empty on the request")
+	assert.True(t, stub.executeCalled, "execute path must run after the route preflight succeeds")
+}
+
+func TestWorkDoesNotSpawnProviderAfterUnderSpecifiedRouting(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.resolveRouteFn = func(req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+		return nil, fmt.Errorf("under-specified routing for harness=%q: supply --model, --policy, or --min-power", req.Harness)
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	beadID := "ddx-work-harness-only-underspecified"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "Work should stop before claim when routing is under-specified",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--harness", "codex",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	assert.NoError(t, err)
+	assert.Contains(t, out, "preflight failed", "under-specified harness-only routing should fail before claim")
+	assert.False(t, stub.executeCalled, "provider execute must not start when route preflight fails")
+
+	got, getErr := store.Get(context.Background(), beadID)
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open when route preflight fails")
+	assert.Empty(t, got.Owner, "bead lease must not be held when route preflight fails")
 }
 
 // TestProjectHasRoutingConfig_EndpointsAreTransportNotRoutingPin covers

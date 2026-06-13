@@ -156,9 +156,20 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if forceClaim && forceReason == "" {
 		return fmt.Errorf("--force-claim requires --reason \"<text>\"")
 	}
+	profile = agent.NormalizeRoutingProfile(profile)
 
 	if f.tryExecutorOverride == nil {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
+		if harness != "" && model == "" {
+			routeTimeout := agent.DefaultRouteResolutionTimeout
+			if timeout, _ := cmd.Flags().GetDuration("route-resolution-timeout"); timeout > 0 {
+				routeTimeout = timeout
+			}
+			preflightCtx, cancel := context.WithTimeout(cmd.Context(), routeTimeout)
+			defer cancel()
+			if err := agent.ValidateHarnessOnlyRouteViaService(preflightCtx, f.WorkingDir, harness, provider, profile, minPower, maxPower); err != nil {
+				return err
+			}
+		} else if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
 			return err
 		}
 	}
@@ -256,8 +267,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	profile = agent.NormalizeRoutingProfile(profile)
-
 	// Determine whether zero-config auto-route applies (same logic as runWork).
 	noRoutingFlags := harness == "" && model == "" && provider == "" &&
 		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
@@ -311,6 +320,20 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
 					applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 					return report
+				}
+				if harness != "" && model == "" && requestProfile != "" && requestMinPower == 0 {
+					if selection, selectErr := profileSelector.Select(ctx, escalation.PowerClass(requestProfile), requestMinPower); selectErr == nil && selection.Name != "" {
+						requestProfile = selection.Name
+						routingNote = selection.Note
+						if selection.MinPower > requestMinPower {
+							requestMinPower = selection.MinPower
+						}
+						if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
+							unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
+							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
+							return unavailableReport, nil
+						}
+					}
 				}
 				if autoInferPowerClass {
 					var unavailableReport agent.ExecuteBeadReport

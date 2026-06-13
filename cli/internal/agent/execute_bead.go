@@ -1075,7 +1075,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 
 	if runtime.AgentRunner == nil && runtime.Service == nil {
-		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" {
+		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" && strings.TrimSpace(rcfg.Model()) != "" {
 			runner := NewRunner(Config{SessionLogDir: ResolveLogDir(projectRoot, "")})
 			runner.WorkDir = projectRoot
 			runtime.AgentRunner = runner

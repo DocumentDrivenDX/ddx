@@ -882,6 +882,26 @@ func TestFizeauAutoRoutingExplicitPinsRemainPassthrough(t *testing.T) {
 	assert.True(t, runRuntime.ClearMaxPower)
 }
 
+// TestRunServiceRequestCarriesPolicyForProfileDrivenHarnessRouting verifies
+// that an explicit harness plus profile-only route forwards the profile as a
+// Fizeau policy so empty-model requests remain routable without a model pin.
+func TestRunServiceRequestCarriesPolicyForProfileDrivenHarnessRouting(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness: "codex",
+		Profile: "smart",
+	})
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "codex", svc.lastReq.Harness)
+	assert.Equal(t, "smart", svc.lastReq.Policy)
+	assert.Empty(t, svc.lastReq.Model, "profile-driven harness routing must keep the model empty")
+}
+
 func TestExecuteOnService_InvalidPowerBoundsFailBeforeService(t *testing.T) {
 	svc := &passthroughTestService{}
 	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 90, 8)

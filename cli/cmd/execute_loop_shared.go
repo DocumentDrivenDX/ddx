@@ -191,6 +191,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
 	}
+	spec.Profile = agent.NormalizeRoutingProfile(spec.Profile)
 
 	noRoutingFlags := spec.Harness == "" && spec.Model == "" && spec.Provider == "" &&
 		spec.Profile == "" && spec.MinPower == 0 &&
@@ -200,12 +201,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
 	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
 	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
-
-	if !spec.OpaquePassthrough {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider); err != nil {
-			return fmt.Errorf("work: %w", err)
-		}
-	}
 
 	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
 	workerStore := agent.ExecuteBeadLoopStore(store)
@@ -273,8 +268,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			Model:       spec.ReviewModel,
 		}
 	}
-
-	spec.Profile = agent.NormalizeRoutingProfile(spec.Profile)
 
 	overrides := config.CLIOverrides{
 		Assignee:          resolveClaimAssignee(),
@@ -552,6 +545,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
+			if spec.Harness != "" && spec.Model == "" && initialMinPower == 0 && spec.Profile != "" {
+				if selection, selectErr := profileSelector.Select(ctx, escalation.PowerClass(spec.Profile), initialMinPower); selectErr == nil && selection.Name != "" {
+					initialProfile = selection.Name
+					initialRoutingNote = selection.Note
+					if selection.MinPower > initialMinPower {
+						initialMinPower = selection.MinPower
+					}
+					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
+						unavailableReport := routeUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
+						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, initialProfile, initialRoutingNote)
+						return unavailableReport, nil
+					}
+				}
+			}
 			if autoInferPowerClass {
 				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, initialMinPower); selectErr == nil && selection.Name != "" {
 					initialProfile = selection.Name
@@ -626,24 +633,39 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		progressLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                         spec.Mode,
-		IdleInterval:                 spec.IdleInterval.Duration,
-		IgnoreCooldown:               spec.IgnoreCooldown,
-		CooldownOverrideReason:       spec.CooldownOverrideReason,
-		Log:                          progressLog,
-		CleanupLog:                   cleanupLog,
-		EventSink:                    loopSink,
-		WorkerID:                     resolveClaimAssignee(),
-		ProjectRoot:                  projectRoot,
-		CleanupRunner:                cleanupRunner,
-		ResourceChecker:              resourceChecker,
-		ServerHealthProbe:            serverHealthProbe,
-		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
-		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,
-		SessionID:                    loopSessionID,
-		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:           intakeHook,
-		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
+		Mode:                   spec.Mode,
+		IdleInterval:           spec.IdleInterval.Duration,
+		IgnoreCooldown:         spec.IgnoreCooldown,
+		CooldownOverrideReason: spec.CooldownOverrideReason,
+		Log:                    progressLog,
+		CleanupLog:             cleanupLog,
+		EventSink:              loopSink,
+		WorkerID:               resolveClaimAssignee(),
+		ProjectRoot:            projectRoot,
+		CleanupRunner:          cleanupRunner,
+		ResourceChecker:        resourceChecker,
+		ServerHealthProbe:      serverHealthProbe,
+		BinaryRefreshCheck:     f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
+		ProjectRootDirtyCheck:  agent.CanonicalRootDirtyPaths,
+		SessionID:              loopSessionID,
+		PreClaimHook:           buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:     intakeHook,
+		PreClaimTimeout:        spec.PreClaimTimeout.Duration,
+		RoutePreflight: func(ctx context.Context, harness, model string) error {
+			if spec.Harness == "" {
+				return nil
+			}
+			routeTimeout := spec.RouteResolutionTimeout.Duration
+			if routeTimeout <= 0 {
+				routeTimeout = agent.DefaultRouteResolutionTimeout
+			}
+			preflightCtx, cancel := context.WithTimeout(ctx, routeTimeout)
+			defer cancel()
+			if spec.Model != "" {
+				return agent.ValidateForExecuteLoopViaService(preflightCtx, projectRoot, spec.Harness, spec.Model, spec.Provider)
+			}
+			return agent.ValidateHarnessOnlyRouteViaService(preflightCtx, projectRoot, spec.Harness, spec.Provider, spec.Profile, spec.MinPower, spec.MaxPower)
+		},
 		RouteResolutionTimeout:       spec.RouteResolutionTimeout.Duration,
 		ClaimSuccessRateWindow:       optionalIntFlag(cmd, "claim-rate-window", agent.DefaultClaimSuccessRateWindow),
 		ClaimSuccessRateThreshold:    optionalFloat64Flag(cmd, "claim-rate-threshold", agent.DefaultClaimSuccessRateThreshold),
