@@ -1098,6 +1098,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
+	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
 	agentResult, agentErr := attemptBackend.Run(dispatchCtx, AttemptBackendRunRequest{
 		ProjectRoot: projectRoot,
@@ -1108,6 +1109,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Runtime:     runRuntime,
 	})
 	stopRunStateRefresh()
+	cleanupTrigger := ""
+	if dispatchCtx.Err() != nil {
+		cleanupTrigger = dispatchCtx.Err().Error()
+	} else if agentErr != nil {
+		cleanupTrigger = agentErr.Error()
+	}
+	_ = cleanupAttemptProcesses(context.Background(), projectRoot, beadID, attemptID, wtPath, processBaseline, cleanupTrigger)
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
