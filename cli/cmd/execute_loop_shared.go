@@ -147,10 +147,11 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
 	return true
 }
 
-func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker) agent.ExecuteBeadRuntime {
+func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string) agent.ExecuteBeadRuntime {
 	return agent.ExecuteBeadRuntime{
 		FromRev:          spec.FromRev,
 		Output:           output,
+		BeadStoreRoot:    beadStoreRoot,
 		BeadEvents:       events,
 		AgentRunner:      runner,
 		ResourceChecker:  checker,
@@ -432,6 +433,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			bead.NewStore(beadStoreRoot),
 			f.AgentRunnerOverride,
 			resourceChecker,
+			beadStoreRoot,
 		), gitOps)
 		if res != nil {
 			safetyNetAttemptID = res.AttemptID

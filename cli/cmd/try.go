@@ -382,6 +382,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
 					FromRev:         fromRev,
 					Output:          cmd.OutOrStdout(),
+					BeadStoreRoot:   beadStoreRoot,
 					BeadEvents:      bead.NewStore(beadStoreRoot),
 					ResourceChecker: resourceChecker,
 				}, gitOps)

@@ -96,6 +96,50 @@ func setupArtifactTestWorktree(t *testing.T, wtPath, beadID, specID string, with
 	}
 }
 
+func TestExecuteBeadRuntimeUsesCanonicalBeadStoreRoot(t *testing.T) {
+	const beadID = "ddx-canonical-store-root"
+
+	projectRoot := setupArtifactTestProjectRoot(t)
+	canonicalRoot := testutils.MakeInitializedDDxRoot(t, t.TempDir())
+	store := bead.NewStore(canonicalRoot)
+	if err := store.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Create(context.Background(), &bead.Bead{
+		ID:    beadID,
+		Title: "Canonical store bead",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	gitOps := &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     "aaaabbbbccccdddd",
+		resultRev:   "aaaabbbbccccdddd",
+		wtSetupFn: func(wtPath string) {
+			// Simulate a linked attempt worktree whose local .ddx exists but
+			// does not contain the canonical queue bead.
+			testutils.MakeInitializedDDxRoot(t, wtPath)
+		},
+	}
+	runner := &capturingAgentRunner{}
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner:   runner,
+		BeadStoreRoot: canonicalRoot,
+	}, gitOps)
+	if err != nil {
+		t.Fatalf("ExecuteBeadWithConfig: %v", err)
+	}
+	if res == nil {
+		t.Fatal("nil result")
+	}
+	if got := runner.lastOpts.Env["DDX_BEAD_DIR"]; got != canonicalRoot {
+		t.Fatalf("DDX_BEAD_DIR = %q, want %q", got, canonicalRoot)
+	}
+}
+
 // TestArtifactBundle_Paths verifies that createArtifactBundle produces
 // deterministic, correctly scoped relative paths for all six artifacts.
 func TestArtifactBundle_Paths(t *testing.T) {

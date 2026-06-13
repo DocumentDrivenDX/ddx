@@ -271,6 +271,7 @@ type ExecuteBeadRuntime struct {
 	PromptFile      string // override prompt file (auto-generated if empty)
 	Output          io.Writer
 	WorkerID        string // from DDX_WORKER_ID env or caller
+	BeadStoreRoot   string // canonical bead store for linked/external tracker roots
 	BeadEvents      BeadEventAppender
 	BeadCancel      BeadCancelStore // optional: enables operator-cancel mid-attempt poll
 	ResourceChecker ExecutionResourceChecker
@@ -1077,6 +1078,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if minPowerOverride > 0 {
 		runRuntime.MinPowerOverride = minPowerOverride
 	}
+	if runtime.BeadStoreRoot != "" {
+		runRuntime.Env["DDX_BEAD_DIR"] = runtime.BeadStoreRoot
+	}
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 	runRuntime.Env[DDXBeadIDEnvKey] = beadID
 	runRuntime.Env[DDXAttemptIDEnvKey] = attemptID
@@ -1653,7 +1657,7 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 }
 
 func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, *bead.Bead, error) {
-	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID)
+	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID, runtime.BeadStoreRoot)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1713,20 +1717,38 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 	return artifacts, b, nil
 }
 
-func loadBeadContext(projectRoot, wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
-	roots := []string{wtPath}
+func loadBeadContext(projectRoot, wtPath, beadID, canonicalStoreRoot string) (*bead.Bead, []executeBeadGoverningRef, error) {
+	type candidate struct {
+		storeRoot string
+		refRoot   string
+	}
+	var candidates []candidate
+	if strings.TrimSpace(canonicalStoreRoot) != "" {
+		candidates = append(candidates, candidate{storeRoot: canonicalStoreRoot, refRoot: wtPath})
+	}
+	candidates = append(candidates, candidate{storeRoot: beadStoreRoot(wtPath), refRoot: wtPath})
 	if projectRoot != "" && projectRoot != wtPath {
-		roots = append(roots, projectRoot)
+		candidates = append(candidates, candidate{storeRoot: beadStoreRoot(projectRoot), refRoot: projectRoot})
 	}
 	var lastErr error
-	for _, root := range roots {
-		if strings.TrimSpace(root) == "" {
+	seen := map[string]struct{}{}
+	for _, c := range candidates {
+		if strings.TrimSpace(c.storeRoot) == "" {
 			continue
 		}
-		store := bead.NewStore(beadStoreRoot(root))
+		cleanStore := filepath.Clean(c.storeRoot)
+		if _, ok := seen[cleanStore]; ok {
+			continue
+		}
+		seen[cleanStore] = struct{}{}
+		store := bead.NewStore(c.storeRoot)
 		b, err := store.Get(context.Background(), beadID)
 		if err == nil {
-			return b, ResolveGoverningRefs(root, b), nil
+			refRoot := c.refRoot
+			if strings.TrimSpace(refRoot) == "" {
+				refRoot = projectRoot
+			}
+			return b, ResolveGoverningRefs(refRoot, b), nil
 		}
 		lastErr = err
 	}

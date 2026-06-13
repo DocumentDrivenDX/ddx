@@ -1055,6 +1055,7 @@ func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {
 		nil,
 		nil,
 		nil,
+		"",
 	)
 
 	assert.Equal(t, "HEAD~1", runtime.FromRev)
