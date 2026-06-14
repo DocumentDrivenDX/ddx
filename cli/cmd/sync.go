@@ -195,15 +195,27 @@ func (s *syncer) runOnce(ctx context.Context, isRetry bool) error {
 		return s.writeFailure(fmt.Sprintf("commit failed: %v", err))
 	}
 
-	// f. git push origin main; retry once on non-fast-forward
+	// f. git push origin HEAD:main; on rejection check if HEAD already equals
+	// origin/main (e.g. operating from a non-main branch already aligned),
+	// then retry once on real divergence.
 	fmt.Fprintln(s.out, "sync: pushing to origin...")
-	pushOut, pushErr := s.git(ctx, "push", "origin", "main")
+	pushOut, pushErr := s.git(ctx, "push", "origin", "HEAD:main")
 	if pushErr != nil {
 		pushMsg := string(pushOut)
-		if isRetry {
-			return s.writeFailure(fmt.Sprintf("push failed twice: %s", strings.TrimSpace(pushMsg)))
-		}
 		if strings.Contains(pushMsg, "non-fast-forward") || strings.Contains(pushMsg, "rejected") {
+			headOut, _ := s.git(ctx, "rev-parse", "HEAD")
+			originOut, _ := s.git(ctx, "rev-parse", "origin/main")
+			headSHA := strings.TrimSpace(string(headOut))
+			originSHA := strings.TrimSpace(string(originOut))
+			if headSHA != "" && headSHA == originSHA {
+				// HEAD is already at origin/main; nothing to push.
+				_ = os.Remove(filepath.Join(s.ddxDir, "sync-failure.json"))
+				fmt.Fprintln(s.out, "sync: done")
+				return nil
+			}
+			if isRetry {
+				return s.writeFailure(fmt.Sprintf("push failed twice: %s", strings.TrimSpace(pushMsg)))
+			}
 			fmt.Fprintln(s.out, "sync: push rejected (non-fast-forward), retrying from fetch...")
 			return s.runOnce(ctx, true)
 		}
