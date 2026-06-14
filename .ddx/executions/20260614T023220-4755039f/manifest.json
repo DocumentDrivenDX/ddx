@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260614T023220-4755039f",
+  "bead_id": "ddx-824079ce",
+  "base_rev": "b91b2aede6072b69a6094009f86940636450d74a",
+  "created_at": "2026-06-14T02:32:28.368229396Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-824079ce",
+    "title": "agent: supervise background monitor shells during execute-bead",
+    "description": "PROBLEM\nDuring dogfood of ddx-3b721804 on 2026-06-13, a Claude execute-bead attempt repeatedly spawned shell monitor commands such as `until ! kill -0 $(pgrep -f \"lefthook run pre-commit\") ...`. After the real `lefthook`/`go test` process exited, the watcher shells remained alive because `pgrep -f` matched the watcher command text itself. The worker made no progress until the operator killed only those watcher PIDs. DDx must not let provider/tool monitor children create an unbounded hidden stall.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/agent_runner_service.go:337-366 arms idle and tool-call timers around service events, but it does not track or bound shell children that remain alive after the useful tool process exits.\ncli/internal/agent/execute_bead.go:1992-1996 tells agents to run tests and pre-commit, but the execute-bead contract does not prohibit self-matching background watchers or require bounded monitor commands.\ncli/internal/agent/execute_bead.go:2010 tells the agent to stop after the commit, but DDx has no enforcement that stale background monitor shells are terminated and reported before the provider resumes.\n\nPROPOSED FIX\nAdd attempt-scoped supervision for background shell/monitor children launched under the execution worktree. Detect stale monitor commands whose watched process has exited or whose command pattern matches themselves, terminate them without killing the main provider process, and record durable evidence. Expose the stale command count/oldest age in worker status or attempt evidence so operators do not have to inspect `ps`.\n\nNON-SCOPE\nDo not ban all background commands. Do not assume only Claude can produce this pattern. Do not rely on real provider CLIs in tests.",
+    "acceptance": "1. TestWorkDetectsAndCancelsSelfMatchingMonitorShells simulates an execute-bead attempt with a real child shell whose command includes `pgrep -f` matching its own command; after the useful child exits, DDx terminates only the stale monitor shell and the attempt continues.\n2. TestAttemptBackgroundMonitorEvidenceRecordsCommandAndAge proves `.ddx/executions/\u003cattempt-id\u003e/` contains a structured record with PID, command, age, action=terminated, and reason=self_matching_monitor or stale_monitor.\n3. TestBackgroundMonitorCleanupDoesNotKillProviderProcess proves the primary provider process and unrelated same-user processes survive monitor cleanup.\n4. TestWorkStatusSurfacesStaleAttemptChildren proves `ddx work status --json` includes stale/cleaned attempt-child counts or equivalent evidence while the attempt is active.\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TestWorkDetectsAndCancelsSelfMatchingMonitorShells|TestAttemptBackgroundMonitorEvidenceRecordsCommandAndAge|TestBackgroundMonitorCleanupDoesNotKillProviderProcess|TestWorkStatusSurfacesStaleAttemptChildren' passes.\\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"unknown classification \\\"refinable\\\": expected one of ready, needs_refine, needs_split, operator_required, system_unready\",\"fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"02553f0ef79948438d572808ca581f572282a55519385a869e44cfbcb8713efe\"}",
+          "created_at": "2026-06-14T02:30:32.993208542Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": "-140",
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260614T023220-4755039f",
+    "prompt": ".ddx/executions/20260614T023220-4755039f/prompt.md",
+    "manifest": ".ddx/executions/20260614T023220-4755039f/manifest.json",
+    "result": ".ddx/executions/20260614T023220-4755039f/result.json",
+    "checks": ".ddx/executions/20260614T023220-4755039f/checks.json",
+    "usage": ".ddx/executions/20260614T023220-4755039f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-824079ce-20260614T023220-4755039f"
+  },
+  "prompt_sha": "c52726ae4293f37db9575e4ac015b2ce09350870ac772acd3494a7be1c56ea24"
+}
