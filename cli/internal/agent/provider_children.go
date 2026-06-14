@@ -74,6 +74,16 @@ func providerForCommand(cmdline string) string {
 	if _, ok := providerCLINames[base]; ok {
 		return base
 	}
+	// Node-wrapper detection: "node /path/to/provider-cli ..." where argv[0]
+	// is the Node.js runtime and argv[1] is the provider CLI path
+	// (e.g. Gemini installed via npm: "node /home/linuxbrew/.linuxbrew/bin/gemini").
+	if base == "node" && len(parts) >= 2 {
+		if argBase := filepath.Base(parts[1]); argBase != "" && argBase != "." {
+			if _, ok := providerCLINames[argBase]; ok {
+				return argBase
+			}
+		}
+	}
 	return ""
 }
 

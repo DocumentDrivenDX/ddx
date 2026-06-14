@@ -437,3 +437,105 @@ func waitForProviderChildren(t *testing.T, rootPID int, pids ...int) {
 	}
 	t.Fatalf("scanner did not observe all provider children %v under pid %d", pids, rootPID)
 }
+
+// TestProviderForCommandDetectsNodeWrappedGemini proves that
+// providerForCommand correctly classifies "node /path/to/gemini ..." as
+// provider "gemini" while ordinary non-provider Node invocations return empty.
+func TestProviderForCommandDetectsNodeWrappedGemini(t *testing.T) {
+	cases := []struct {
+		cmdline  string
+		expected string
+	}{
+		{"node /home/linuxbrew/.linuxbrew/bin/gemini --interactive", "gemini"},
+		{"node /usr/local/bin/gemini", "gemini"},
+		{"/usr/bin/node /opt/homebrew/bin/gemini --no-sandbox", "gemini"},
+		{"/usr/bin/node /usr/local/bin/codex", "codex"},
+		{"node /some/other/script.js", ""},
+		{"node script.js", ""},
+		{"node", ""},
+		{"node -e 'console.log(1)'", ""},
+		{"python /usr/local/bin/gemini", ""},
+		{"gemini --interactive", "gemini"},
+	}
+	for _, tc := range cases {
+		got := providerForCommand(tc.cmdline)
+		if got != tc.expected {
+			t.Errorf("providerForCommand(%q) = %q, want %q", tc.cmdline, got, tc.expected)
+		}
+	}
+}
+
+// TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup starts a fake
+// Node wrapper process whose argv includes a gemini path and proves the running
+// guard reports and reaps that Gemini process group while preserving the
+// active-route Claude child.
+func TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup(t *testing.T) {
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skipf("sh not available: %v", err)
+	}
+	dir := t.TempDir()
+
+	// geminiScript is the script that sh will interpret; sh's own process
+	// retains the original argv (nodeBin, geminiScript) visible in ps.
+	geminiScript := filepath.Join(dir, "gemini")
+	if err := os.WriteFile(geminiScript, []byte("#!/bin/sh\nsleep 120\n"), 0755); err != nil {
+		t.Fatalf("write gemini script: %v", err)
+	}
+
+	// nodeBin is the fake "node" path used as argv[0]; the actual binary run
+	// is sh so that the process blocks while ps shows "node /tmp/.../gemini".
+	nodeBin := filepath.Join(dir, "node")
+
+	// Run sh with custom argv: [nodeBin, geminiScript].  ps reports the command
+	// as "/tmp/.../node /tmp/.../gemini" — the real-world Node-wrapper shape.
+	cmd := &exec.Cmd{
+		Path:        shPath,
+		Args:        []string{nodeBin, geminiScript},
+		SysProcAttr: &syscall.SysProcAttr{Setpgid: true},
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start fake node-wrapped gemini: %v", err)
+	}
+	nodeGeminiPID := cmd.Process.Pid
+	go func() { _, _ = cmd.Process.Wait() }()
+	t.Cleanup(func() { _ = syscall.Kill(-nodeGeminiPID, syscall.SIGKILL) })
+
+	claudePID := startFakeProviderChild(t, dir, "claude")
+	waitForProviderChildren(t, os.Getpid(), claudePID, nodeGeminiPID)
+
+	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/sonnet", "", "running", time.Now().UTC())
+
+	assertProcessGone(t, nodeGeminiPID)
+	if !signalProcessAlive(claudePID) {
+		t.Fatalf("active-route claude child %d was reaped by running guard", claudePID)
+	}
+
+	var sawGeminiReaped bool
+	for _, r := range reaped {
+		if r.Provider == "gemini" {
+			sawGeminiReaped = true
+			if r.Reason != reasonRunningPhaseGuard {
+				t.Fatalf("node-wrapped gemini reap reason = %q, want %q", r.Reason, reasonRunningPhaseGuard)
+			}
+		}
+	}
+	if !sawGeminiReaped {
+		t.Fatalf("running guard must reap node-wrapped gemini; reaped=%+v", reaped)
+	}
+
+	byProvider := map[string]workerstatus.ProviderChild{}
+	for _, c := range children {
+		byProvider[c.Provider] = c
+	}
+	if claude, ok := byProvider["claude"]; !ok || claude.RouteOwner == "" || claude.NonRoute {
+		t.Fatalf("claude must be route-owned: %+v", byProvider["claude"])
+	}
+	gemini, ok := byProvider["gemini"]
+	if !ok {
+		t.Fatalf("gemini must appear in status view: %+v", children)
+	}
+	if !gemini.NonRoute || gemini.RouteOwner != "" || gemini.Diagnostic == "" {
+		t.Fatalf("node-wrapped gemini must be non-route with diagnostic: %+v", gemini)
+	}
+}
