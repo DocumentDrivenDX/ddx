@@ -1420,7 +1420,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			paths := dirtyWorktreePaths(wtPath)
 			res.NoEvidencePaths = paths
 			if len(paths) > 0 {
-				res.Error = fmt.Sprintf("%s; dirty paths: %s", res.Reason, strings.Join(paths, ", "))
+				rescueRef := preserveDirtyNoEvidenceAttempt(wtPath, artifacts.DirAbs, artifacts.DirRel)
+				if rescueRef != "" {
+					res.PreserveRef = rescueRef
+					res.Error = fmt.Sprintf("%s; dirty paths: %s; rescue: %s", res.Reason, strings.Join(paths, ", "), rescueRef)
+				} else {
+					res.Error = fmt.Sprintf("%s; dirty paths: %s", res.Reason, strings.Join(paths, ", "))
+				}
 			} else {
 				res.Error = res.Reason
 			}
@@ -1586,6 +1592,36 @@ func cleanupAttemptWorktree(gitOps GitOps, workDir, wtPath, outcome string, pres
 	}
 	_ = gitOps.WorktreeRemove(workDir, wtPath)
 	return true
+}
+
+// preserveDirtyNoEvidenceAttempt stages all dirty files in the attempt
+// worktree, generates a binary patch of staged content, and writes it to the
+// artifact bundle directory so operators can recover the agent's uncommitted
+// work. Returns the bundle-relative path of the patch on success, or "" if
+// nothing was staged or the write failed. The patch survives worktree cleanup
+// because publishEvidenceBundleToProjectRoot copies the artifact dir to the
+// project root before cleanup runs.
+func preserveDirtyNoEvidenceAttempt(wtPath, artifactsDirAbs, artifactsDirRel string) string {
+	// Use the same exclusion pathspecs as SynthesizeCommit so that DDx-managed
+	// execution-bundle files (prompt.md, manifest.json, embedded/, etc.) are not
+	// included in the rescue patch. If only those noise files are dirty, the
+	// staging produces an empty index and we return "" (clean no-evidence).
+	addArgs := append([]string{"add", "-A", "--", "."}, synthesizeCommitExcludePathspecs(wtPath)...)
+	if err := internalgit.Command(context.Background(), wtPath, addArgs...).Run(); err != nil {
+		return ""
+	}
+	patchData, err := internalgit.Command(context.Background(), wtPath, "diff", "--cached", "--binary").Output()
+	if err != nil || len(bytes.TrimSpace(patchData)) == 0 {
+		return ""
+	}
+	if err := os.MkdirAll(artifactsDirAbs, 0o755); err != nil {
+		return ""
+	}
+	patchPath := filepath.Join(artifactsDirAbs, "dirty_rescue.patch")
+	if err := os.WriteFile(patchPath, patchData, 0o644); err != nil {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join(artifactsDirRel, "dirty_rescue.patch"))
 }
 
 // commitTrackerLocked commits beads.jsonl if it has uncommitted changes.

@@ -33,7 +33,10 @@ func (r *RealGitOps) WorktreeAdd(dir, wtPath, rev string) error {
 }
 
 func (r *RealGitOps) WorktreeRemove(dir, wtPath string) error {
-	_ = internalgit.Command(context.Background(), dir, "worktree", "remove", "--force", wtPath).Run()
+	out, err := internalgit.Command(context.Background(), dir, "worktree", "remove", "--force", wtPath).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree remove: %s: %w", strings.TrimSpace(string(out)), err)
+	}
 	return nil
 }
 
