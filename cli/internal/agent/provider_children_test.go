@@ -7,10 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 )
 
 func startFakeProviderChild(t *testing.T, dir, provider string) int {
@@ -189,6 +193,143 @@ func TestSupersededProviderChildrenUsesHarnessAsOwnerWhenProviderBlank(t *testin
 	if len(killed) != 0 {
 		t.Fatalf("active provider child was terminated despite harness ownership: %v", killed)
 	}
+}
+
+func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
+	dir := t.TempDir()
+	claudePID := startFakeProviderChild(t, dir, "claude")
+	codexPID := startFakeProviderChild(t, dir, "codex")
+	geminiPID := startFakeProviderChild(t, dir, "gemini")
+	waitForProviderChildren(t, os.Getpid(), claudePID, codexPID, geminiPID)
+
+	children, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/sonnet", "", "running", time.Now().UTC())
+
+	assertProcessGone(t, codexPID)
+	assertProcessGone(t, geminiPID)
+	if !signalProcessAlive(claudePID) {
+		t.Fatalf("active-route claude child %d was reaped by running guard", claudePID)
+	}
+
+	reapedProviders := map[string]bool{}
+	for _, r := range reaped {
+		reapedProviders[r.Provider] = true
+		if r.Reason != reasonRunningPhaseGuard {
+			t.Fatalf("unexpected reap reason for %s: %q", r.Provider, r.Reason)
+		}
+	}
+	if !reapedProviders["codex"] || !reapedProviders["gemini"] || reapedProviders["claude"] {
+		t.Fatalf("running guard must reap codex+gemini but not claude; got %+v", reaped)
+	}
+
+	byProvider := map[string]workerstatus.ProviderChild{}
+	for _, c := range children {
+		byProvider[c.Provider] = c
+	}
+	if claude, ok := byProvider["claude"]; !ok || claude.RouteOwner == "" || claude.NonRoute {
+		t.Fatalf("claude child must report as route-owned, not non-route: %+v", byProvider["claude"])
+	}
+	for _, name := range []string{"codex", "gemini"} {
+		child, ok := byProvider[name]
+		if !ok {
+			t.Fatalf("status view missing non-route child %s: %+v", name, children)
+		}
+		if !child.NonRoute || child.RouteOwner != "" || child.Diagnostic == "" {
+			t.Fatalf("%s must report as non-route with a diagnostic: %+v", name, child)
+		}
+	}
+}
+
+func TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup(t *testing.T) {
+	shPath, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skipf("sh not available: %v", err)
+	}
+	sleepPath, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+	dir := t.TempDir()
+	nodeBin := filepath.Join(dir, "node")
+	if err := os.Symlink(sleepPath, nodeBin); err != nil {
+		t.Fatalf("symlink fake node: %v", err)
+	}
+	geminiBin := filepath.Join(dir, "gemini")
+	if err := os.Symlink(shPath, geminiBin); err != nil {
+		t.Fatalf("symlink fake gemini: %v", err)
+	}
+	pidFile := filepath.Join(dir, "node.pid")
+
+	// argv[0] is the gemini symlink path so the scanner classifies the parent as
+	// a "gemini" provider; the backgrounded fake node inherits gemini's process
+	// group (non-interactive sh keeps no separate group for background jobs), so
+	// it is a grandchild reachable only by killing the group.
+	cmd := exec.Command(geminiBin, "-c", `"$1" 120 & echo $! > "$2"; wait`, "gemini", nodeBin, pidFile)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start fake gemini: %v", err)
+	}
+	geminiPID := cmd.Process.Pid
+	go func() { _, _ = cmd.Process.Wait() }()
+	t.Cleanup(func() { _ = syscall.Kill(-geminiPID, syscall.SIGKILL) })
+
+	waitForProviderChildren(t, os.Getpid(), geminiPID)
+	nodePID := waitForPIDFile(t, pidFile)
+
+	_, reaped := runningProviderChildGuard(context.Background(), os.Getpid(), "claude/sonnet", "", "running", time.Now().UTC())
+
+	assertProcessGone(t, geminiPID)
+	assertProcessGone(t, nodePID)
+
+	var sawGemini bool
+	for _, r := range reaped {
+		if r.Provider == "gemini" {
+			sawGemini = true
+		}
+	}
+	if !sawGemini {
+		t.Fatalf("running guard must reap the gemini parent; got %+v", reaped)
+	}
+}
+
+func TestAttemptEndCleanupStillReapsAllProviderChildren(t *testing.T) {
+	dir := t.TempDir()
+	claudePID := startFakeProviderChild(t, dir, "claude")
+	codexPID := startFakeProviderChild(t, dir, "codex")
+	waitForProviderChildren(t, os.Getpid(), claudePID, codexPID)
+
+	reaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC())
+
+	// The attempt-end backstop reaps every provider child regardless of route,
+	// including the active-route claude child the running guard would preserve.
+	assertProcessGone(t, claudePID)
+	assertProcessGone(t, codexPID)
+
+	reapedProviders := map[string]bool{}
+	for _, r := range reaped {
+		reapedProviders[r.Provider] = true
+		if r.Reason != reasonAttemptEnded {
+			t.Fatalf("attempt-end reap reason for %s = %q, want %q", r.Provider, r.Reason, reasonAttemptEnded)
+		}
+	}
+	if !reapedProviders["claude"] || !reapedProviders["codex"] {
+		t.Fatalf("attempt-end backstop must reap all provider children; got %+v", reaped)
+	}
+}
+
+func waitForPIDFile(t *testing.T, path string) int {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(path)
+		if err == nil {
+			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(data))); convErr == nil && pid > 0 {
+				return pid
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("pid file %s was not written", path)
+	return 0
 }
 
 func TestAttemptEndReapsAllProviderChildren(t *testing.T) {

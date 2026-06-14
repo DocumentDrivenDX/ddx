@@ -615,3 +615,68 @@ func TestWorkerStatusReportsProviderChildren(t *testing.T) {
 	assert.Equal(t, float64(42), child.AgeSeconds)
 	assert.Contains(t, out, "provider_children")
 }
+
+func TestWorkStatusMarksNonRouteProviderChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 8787
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	const nonRouteDiagnostic = "non-route provider codex terminated by running-phase guard (active route claude/sonnet)"
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-nr", workerstatus.LivenessRecord{
+		WorkerID:    "worker-nr",
+		ProjectRoot: projectRoot,
+		CurrentBead: "ddx-nr000001",
+		AttemptID:   "20260614T004103-afc1d8f7",
+		Phase:       "running",
+		Route:       "claude/sonnet",
+		Harness:     "claude",
+		PID:         pid,
+		StartedAt:   procStartedAt,
+		ProviderChildren: []workerstatus.ProviderChild{
+			{PID: 111, Provider: "claude", Harness: "claude", RouteOwner: "claude/sonnet", Phase: "running", AgeSeconds: 30},
+			{PID: 222, Provider: "codex", Harness: "codex", Phase: "running", AgeSeconds: 12, NonRoute: true, Diagnostic: nonRouteDiagnostic},
+		},
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	children := report.Workers[0].ProviderChildren
+	require.Len(t, children, 2, "both provider children must be surfaced; got %s", out)
+
+	byProvider := map[string]workerstatus.ProviderChild{}
+	for _, c := range children {
+		byProvider[c.Provider] = c
+	}
+
+	route, ok := byProvider["claude"]
+	require.True(t, ok, "active-route claude child must be present: %s", out)
+	assert.Equal(t, "claude/sonnet", route.RouteOwner, "active-route child must carry its route owner")
+	assert.False(t, route.NonRoute, "active-route child must not be flagged non-route")
+	assert.Empty(t, route.Diagnostic, "active-route child must not carry a quarantine diagnostic")
+
+	nonRoute, ok := byProvider["codex"]
+	require.True(t, ok, "non-route codex child must be present: %s", out)
+	assert.True(t, nonRoute.NonRoute, "non-route child must be flagged for operator attention")
+	assert.Empty(t, nonRoute.RouteOwner, "non-route child must not claim a route owner")
+	assert.Equal(t, nonRouteDiagnostic, nonRoute.Diagnostic, "non-route child must carry an operator-attention diagnostic")
+
+	assert.Contains(t, out, "non_route")
+	assert.Contains(t, out, "diagnostic")
+}

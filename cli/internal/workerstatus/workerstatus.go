@@ -37,6 +37,12 @@ type LiveWorker struct {
 }
 
 // ProviderChild describes a provider CLI subprocess observed under a worker.
+//
+// RouteOwner is set when the child's provider matches the worker's active
+// route/harness; such a child is legitimate route work and is never reaped.
+// NonRoute is set on a provider CLI whose provider does not match the active
+// route — an unrelated harness the running-phase guard terminates — and
+// Diagnostic carries an operator-facing explanation for that quarantine.
 type ProviderChild struct {
 	PID        int     `json:"pid"`
 	Provider   string  `json:"provider"`
@@ -44,6 +50,8 @@ type ProviderChild struct {
 	RouteOwner string  `json:"route_owner,omitempty"`
 	Phase      string  `json:"phase,omitempty"`
 	AgeSeconds float64 `json:"age_seconds"`
+	NonRoute   bool    `json:"non_route,omitempty"`
+	Diagnostic string  `json:"diagnostic,omitempty"`
 }
 
 // Scanner discovers live ddx worker processes on the host.
