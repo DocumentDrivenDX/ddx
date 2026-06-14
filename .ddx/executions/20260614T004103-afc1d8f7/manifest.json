@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260614T004103-afc1d8f7",
+  "bead_id": "ddx-2c973f8c",
+  "base_rev": "e9179169b3952c318e4e660109e2e3b1ccc58a8f",
+  "created_at": "2026-06-14T00:41:12.066264903Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2c973f8c",
+    "title": "agent: quarantine non-route provider descendants during attempts",
+    "description": "PROBLEM\n\nDogfood on 2026-06-14 while executing ddx-3141b561 exposed a provider-supervision failure. The worker route was Claude (`claude/sonnet`), but the Claude-run attempt repeatedly spawned Codex and Gemini provider CLIs as direct children of the `ddx work` process: `/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen` on TTYs and `/home/linuxbrew/.linuxbrew/bin/gemini` with Node grandchildren. DDx status sometimes surfaced Codex as a provider child, but DDx did not continuously quarantine it and did not surface Gemini in status. The operator manually killed multiple Codex/Gemini process groups during one successful bead. A routed DDx execution must not depend on, leak, or silently fan out to unrelated provider CLIs whose local configuration may be absent or incompatible.\n\nROOT CAUSE WITH FILE:LINE\n\n- `cli/internal/agent/service_run.go:313-330` only calls `reapSupersededProviderChildren` when a route is resolved. Provider CLIs spawned after route resolution are not continuously checked during the long running phase.\n- `cli/internal/agent/provider_children.go:100-123` reports provider children to status, but non-route children remain observational unless another route-resolution or attempt-end cleanup happens.\n- `cli/internal/agent/provider_children.go:157-170` can reap superseded providers, but it is only invoked at route-start rather than as a watchdog while the active route is running.\n- `cli/internal/agent/execute_bead.go:1105-1123` captures a process baseline and performs cleanup only after `attemptBackend.Run` returns. If a provider keeps itself alive by spawning provider CLIs or background monitors, DDx waits for the provider instead of enforcing the route boundary.\n\nPROPOSED FIX\n\nAdd a running-phase provider child guard owned by `ddx work`/`ddx try`: after the active route is known, periodically scan descendants of the worker process, terminate provider CLIs whose provider does not match the active route/harness, include grandchildren such as Gemini's Node child process group, and write durable evidence (`provider-children.json` plus an operator-attention event or work status detail). The active route provider must not be killed. The guard must be covered by tests that use fake provider binaries and process groups rather than real Claude/Codex/Gemini installs.\n\nIN-SCOPE FILES\n\n- cli/internal/agent/provider_children.go\n- cli/internal/agent/provider_children_test.go\n- cli/internal/agent/service_run.go\n- cli/internal/agent/execute_bead.go\n- cli/cmd/work_status_test.go\n\nNON-SCOPE\n\nDo not change Fizeau route selection or provider catalog behavior. Do not require Claude, Codex, or Gemini to be installed for tests. Do not hand-edit `.ddx/beads.jsonl`. Do not remove the attempt-end cleanup path; this is an additional running-phase guard.\n\nDOGFOOD EVIDENCE\n\nDuring attempt `20260613T235859-7bf046b7` for ddx-3141b561, DDx status showed the active route as Claude while `ps` showed repeated non-route provider children: Codex PIDs 3629941, 3662216, 3669904, 3731569, 3791392, 3835991 and Gemini process groups 3630001, 3662292, 3669978, 3731696, 3791479, 3836056. The operator manually ran `kill -TERM -\u003cpgid\u003e` for each non-route provider group. The bead still completed, proving the extra providers were not legitimate required route work.",
+    "acceptance": "1. `TestRunningProviderGuardReapsNonRouteProviderChildren` starts fake Claude, Codex, and Gemini provider CLIs after route resolution and proves a running-phase guard terminates Codex/Gemini while preserving Claude.\n2. `TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup` proves a fake Gemini parent with a Node-like grandchild is fully cleaned up by process group, with no child left after the guard fires.\n3. `TestWorkStatusMarksNonRouteProviderChildren` proves `ddx work status --json` distinguishes active-route provider children from non-route provider children and includes a diagnostic suitable for operator attention.\n4. `TestAttemptEndCleanupStillReapsAllProviderChildren` continues to pass, proving the new running guard does not remove the final cleanup backstop.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TestRunningProviderGuardReapsNonRouteProviderChildren|TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup|TestWorkStatusMarksNonRouteProviderChildren|TestAttemptEndCleanupStillReapsAllProviderChildren' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "provider-supervision",
+      "dogfood"
+    ],
+    "metadata": {
+      "queue-rank": -700
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260614T004103-afc1d8f7",
+    "prompt": ".ddx/executions/20260614T004103-afc1d8f7/prompt.md",
+    "manifest": ".ddx/executions/20260614T004103-afc1d8f7/manifest.json",
+    "result": ".ddx/executions/20260614T004103-afc1d8f7/result.json",
+    "checks": ".ddx/executions/20260614T004103-afc1d8f7/checks.json",
+    "usage": ".ddx/executions/20260614T004103-afc1d8f7/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2c973f8c-20260614T004103-afc1d8f7"
+  },
+  "prompt_sha": "e5c470246778ee79b06f8ab8cfc9d9e8655fff284c81a978b3c4a1bbd2f488ac"
+}
