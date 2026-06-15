@@ -229,6 +229,52 @@ func TestWorkerManagerStopSIGTERMtoSIGKILL(t *testing.T) {
 	assert.Equal(t, "stopped", state)
 }
 
+func TestWorkerManagerStopPidlessWorkerReapsServerProviderDescendant(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ps-based descendant cleanup is Unix-only")
+	}
+
+	root := t.TempDir()
+	seedClaimedBead(t, root, "ddx-stop-pidless")
+
+	fakeBin := t.TempDir()
+	fakeCodex := filepath.Join(fakeBin, "codex")
+	require.NoError(t, os.Symlink("/bin/sleep", fakeCodex))
+
+	cmd := exec.Command(fakeCodex, "60")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		if syscall.Kill(pid, 0) != syscall.ESRCH {
+			_ = cmd.Process.Kill()
+		}
+	})
+
+	m := NewWorkerManager(root)
+	m.WatchdogKillGrace = 300 * time.Millisecond
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	h, _ := newIdleHandle(t, m, "worker-stop-pidless", "ddx-stop-pidless",
+		now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	h.record.PID = 0
+	h.record.CurrentAttempt.AttemptID = "attempt-pidless-stop"
+	m.mu.Unlock()
+
+	require.NoError(t, m.Stop("worker-stop-pidless"))
+
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if syscall.Kill(pid, 0) == syscall.ESRCH {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("pidless Stop did not reap provider descendant pid=%d", pid)
+}
+
 // TestRunWorkerPreservesStoppedState: when runWorker finishes after Stop()
 // has already flipped state=stopped, its final record write must keep the
 // terminal state rather than overwriting it with "exited" or "failed".

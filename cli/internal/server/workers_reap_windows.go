@@ -40,3 +40,7 @@ func terminateProcessGroup(pid int, grace time.Duration) {
 	}
 	_ = p.Kill()
 }
+
+func terminateWorkerDescendants(rootPID int, attemptID string, grace time.Duration) {
+	// Windows server-managed workers currently rely on context cancellation.
+}

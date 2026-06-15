@@ -1284,6 +1284,32 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	return m.writeRecord(dir, rec)
 }
 
+func resolveWorkerAttemptID(projectRoot, beadID, fallback string) string {
+	fallback = strings.TrimSpace(fallback)
+	projectRoot = strings.TrimSpace(projectRoot)
+	beadID = strings.TrimSpace(beadID)
+	if projectRoot == "" {
+		return fallback
+	}
+	if state, err := agent.ReadRunState(projectRoot); err == nil && state != nil {
+		stateAttemptID := strings.TrimSpace(state.AttemptID)
+		stateBeadID := strings.TrimSpace(state.BeadID)
+		if stateAttemptID != "" && (beadID == "" || stateBeadID == "" || stateBeadID == beadID) {
+			return stateAttemptID
+		}
+	}
+	if states, err := agent.ReadRunStates(projectRoot); err == nil {
+		for _, state := range states {
+			stateAttemptID := strings.TrimSpace(state.AttemptID)
+			stateBeadID := strings.TrimSpace(state.BeadID)
+			if stateAttemptID != "" && (beadID == "" || stateBeadID == "" || stateBeadID == beadID) {
+				return stateAttemptID
+			}
+		}
+	}
+	return fallback
+}
+
 func (m *WorkerManager) Stop(id string) error {
 	m.mu.Lock()
 	handle := m.workers[id]
@@ -1306,12 +1332,15 @@ func (m *WorkerManager) Stop(id string) error {
 	}
 	pid := handle.record.PID
 	beadID := ""
+	attemptID := ""
 	if handle.record.CurrentAttempt != nil {
 		beadID = handle.record.CurrentAttempt.BeadID
+		attemptID = handle.record.CurrentAttempt.AttemptID
 	}
 	if beadID == "" {
 		beadID = handle.record.CurrentBead
 	}
+	attemptID = resolveWorkerAttemptID(projectRoot, beadID, attemptID)
 	startedAt := handle.record.StartedAt
 	handle.record.State = "stopping"
 	handle.record.Status = "stopping"
@@ -1360,6 +1389,9 @@ func (m *WorkerManager) Stop(id string) error {
 
 	// Cancel the worker goroutine so any in-process code sees context.Canceled.
 	cancel()
+	if pid == 0 {
+		terminateWorkerDescendants(os.Getpid(), attemptID, grace)
+	}
 
 	// Flip in-memory state to the terminal "stopped" label. For real
 	// workers, runWorker's final writeRecord (with preservedState) will
@@ -1502,7 +1534,12 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	if projectRoot == "" {
 		projectRoot = m.projectRoot
 	}
+	attemptID := ""
+	if rec.CurrentAttempt != nil {
+		attemptID = rec.CurrentAttempt.AttemptID
+	}
 	m.mu.Unlock()
+	attemptID = resolveWorkerAttemptID(projectRoot, beadID, attemptID)
 
 	// 1. Emit the reap event and release the bead claim before killing, so
 	//    the claim is not leaked even if the kill blocks for the full grace.
@@ -1532,6 +1569,9 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	// 3. Cancel the goroutine so any in-process code sees context.Canceled.
 	if handle.cancel != nil {
 		handle.cancel()
+	}
+	if pid == 0 {
+		terminateWorkerDescendants(os.Getpid(), attemptID, grace)
 	}
 
 	// 4. Flip state=reaped and persist. runWorker may still race to
