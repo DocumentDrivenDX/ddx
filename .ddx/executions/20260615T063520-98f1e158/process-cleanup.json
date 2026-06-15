@@ -1,0 +1,223 @@
+{
+  "attempt_id": "20260615T063520-98f1e158",
+  "bead_id": "ddx-34ea2a74",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+  "trigger": "context canceled",
+  "started_at": "2026-06-15T06:45:43.017047513Z",
+  "finished_at": "2026-06-15T06:45:43.184659923Z",
+  "scanned": 100,
+  "candidates": [
+    {
+      "pid": 1775564,
+      "ppid": 1774363,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2551735538/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2551735538/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 1774363,
+      "ppid": 1774266,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 1789567,
+      "ppid": 1761834,
+      "pgid": 1789567,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/cmd",
+      "command": "/home/erik/.local/bin/claude"
+    },
+    {
+      "pid": 1789451,
+      "ppid": 1761834,
+      "pgid": 1789451,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/cmd",
+      "command": "/home/erik/.local/bin/claude"
+    },
+    {
+      "pid": 1774266,
+      "ppid": 1774252,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/agent/preclaim_intake_hook.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    },
+    {
+      "pid": 1774252,
+      "ppid": 1774158,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/agent/preclaim_intake_hook.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    },
+    {
+      "pid": 1761834,
+      "ppid": 1761710,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2371389061/b001/cmd.test -test.paniconexit0 -test.timeout=10m0s -test.run=PreClaim|Readiness|Intake|Work -test.count=1"
+    },
+    {
+      "pid": 1774159,
+      "ppid": 1774147,
+      "pgid": 1774147,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "tail -40"
+    },
+    {
+      "pid": 1774158,
+      "ppid": 1774147,
+      "pgid": 1774147,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 1761711,
+      "ppid": 1761700,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "tail -15"
+    },
+    {
+      "pid": 1761710,
+      "ppid": 1761700,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "go test ./cmd/ -run PreClaim|Readiness|Intake|Work -count=1"
+    },
+    {
+      "pid": 1774147,
+      "ppid": 1699878,
+      "pgid": 1774147,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781505355094-2a71mv.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'cd \"$(git rev-parse --show-toplevel)\" \u0026\u0026 lefthook run pre-commit 2\u003e\u00261 | tail -40' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-e018-cwd"
+    },
+    {
+      "pid": 1761700,
+      "ppid": 1699878,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781505355094-2a71mv.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'go test ./cmd/ -run '\"'\"'PreClaim|Readiness|Intake|Work'\"'\"' -count=1 2\u003e\u00261 | tail -15' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-2027-cwd"
+    },
+    {
+      "pid": 1699878,
+      "ppid": 1695276,
+      "pgid": 1699878,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-1426632516\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-1426632516\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"bd7b02944ced4098f31324b519f46162\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-1426632516/stop-hook-payload.json\\\"\"}]}]}} --model opus"
+    },
+    {
+      "pid": 1805460,
+      "ppid": 661,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/internal/agent",
+      "command": "sleep 60"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1775564,
+      "ppid": 1774363,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2551735538/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build2551735538/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 1774363,
+      "ppid": 1774266,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 1789567,
+      "ppid": 1761834,
+      "pgid": 1789567,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/cmd",
+      "command": "/home/erik/.local/bin/claude"
+    },
+    {
+      "pid": 1789451,
+      "ppid": 1761834,
+      "pgid": 1789451,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/cmd",
+      "command": "/home/erik/.local/bin/claude"
+    },
+    {
+      "pid": 1774266,
+      "ppid": 1774252,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/agent/preclaim_intake_hook.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    },
+    {
+      "pid": 1774252,
+      "ppid": 1774158,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/agent/preclaim_intake_hook.go ./internal/agent/readiness_classification.go ./internal/agent/readiness_classification_test.go"
+    },
+    {
+      "pid": 1761834,
+      "ppid": 1761710,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/cmd",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build2371389061/b001/cmd.test -test.paniconexit0 -test.timeout=10m0s -test.run=PreClaim|Readiness|Intake|Work -test.count=1"
+    },
+    {
+      "pid": 1774159,
+      "ppid": 1774147,
+      "pgid": 1774147,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "tail -40"
+    },
+    {
+      "pid": 1774158,
+      "ppid": 1774147,
+      "pgid": 1774147,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 1761711,
+      "ppid": 1761700,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "tail -15"
+    },
+    {
+      "pid": 1761710,
+      "ppid": 1761700,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "go test ./cmd/ -run PreClaim|Readiness|Intake|Work -count=1"
+    },
+    {
+      "pid": 1774147,
+      "ppid": 1699878,
+      "pgid": 1774147,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781505355094-2a71mv.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'cd \"$(git rev-parse --show-toplevel)\" \u0026\u0026 lefthook run pre-commit 2\u003e\u00261 | tail -40' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-e018-cwd"
+    },
+    {
+      "pid": 1761700,
+      "ppid": 1699878,
+      "pgid": 1761700,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781505355094-2a71mv.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'go test ./cmd/ -run '\"'\"'PreClaim|Readiness|Intake|Work'\"'\"' -count=1 2\u003e\u00261 | tail -15' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-2027-cwd"
+    },
+    {
+      "pid": 1699878,
+      "ppid": 1695276,
+      "pgid": 1699878,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-1426632516\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-1426632516\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"bd7b02944ced4098f31324b519f46162\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-1426632516/stop-hook-payload.json\\\"\"}]}]}} --model opus"
+    },
+    {
+      "pid": 1805460,
+      "ppid": 661,
+      "pgid": 1774252,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T063520-98f1e158/cli/internal/agent",
+      "command": "sleep 60"
+    }
+  ]
+}
