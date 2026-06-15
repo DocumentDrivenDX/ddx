@@ -344,6 +344,7 @@ test('workers page starts and stops an work worker with IA links', async ({ page
 	let workers: Record<string, unknown>[] = [...WORKERS.filter((worker) => worker.state !== 'running')];
 	let startCalled = false;
 	let stopCalled = false;
+	let startInput: Record<string, unknown> | null = null;
 
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
@@ -363,6 +364,7 @@ test('workers page starts and stops an work worker with IA links', async ({ page
 			});
 		} else if (body.query.includes('StartWorker') || body.query.includes('startWorker')) {
 			startCalled = true;
+			startInput = (body.variables?.input ?? {}) as Record<string, unknown>;
 			const worker = {
 				id: 'worker-ui-started',
 				kind: 'work',
@@ -466,8 +468,10 @@ test('workers page starts and stops an work worker with IA links', async ({ page
 	await page.getByRole('button', { name: 'Start worker' }).click();
 	await page.getByLabel('Harness').fill('codex');
 	await page.getByLabel('Label filter').fill('ui');
+	await page.getByLabel('Timeout').fill('15m');
 	await page.getByRole('button', { name: 'Start', exact: true }).click();
 	await expect.poll(() => startCalled).toBe(true);
+	expect(startInput).toMatchObject({ harness: 'codex', labelFilter: 'ui', requestTimeout: '15m' });
 	await expect(page.getByText('worker-u')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(1);
 
