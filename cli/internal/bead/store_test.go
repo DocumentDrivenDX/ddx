@@ -1890,9 +1890,14 @@ func TestWriteClaimHeartbeatRemovesLegacyTempLease(t *testing.T) {
 
 	legacy := legacyClaimLivenessPaths(s.Dir, beadID)
 	require.NotEmpty(t, legacy)
+	var sawFleetTmp bool
 	for _, path := range legacy {
+		if strings.Contains(path, filepath.Join("cache", "fleet-tmp", claimLivenessNamespace)) {
+			sawFleetTmp = true
+		}
 		require.NoError(t, writeAtomicClaimFile(path, []byte(`{"bead_id":"`+beadID+`","owner":"old"}`+"\n")))
 	}
+	require.True(t, sawFleetTmp, "fleet temp compatibility path should be cleaned")
 
 	require.NoError(t, s.ClaimWithOptions(beadID, "worker-new", "session-new", ""))
 

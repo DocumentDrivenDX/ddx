@@ -51,7 +51,11 @@ func legacyClaimLivenessPaths(ddxDir, id string) []string {
 	hash := hex.EncodeToString(sum[:])
 	seen := map[string]struct{}{claimLivenessPath(ddxDir, id): {}}
 	var paths []string
-	for _, dir := range []string{os.TempDir(), os.Getenv("TMPDIR"), "/tmp"} {
+	candidateDirs := []string{os.TempDir(), os.Getenv("TMPDIR"), "/tmp"}
+	if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
+		candidateDirs = append(candidateDirs, filepath.Join(cacheDir, "fleet-tmp"))
+	}
+	for _, dir := range candidateDirs {
 		if dir == "" {
 			continue
 		}
