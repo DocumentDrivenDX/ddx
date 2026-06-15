@@ -214,9 +214,10 @@ func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
 
 	calls := make(chan []string, 4)
 	oldCleanup := reapCurrentProcessProviderProbes
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) {
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
 		copied := append([]string(nil), scopeDirs...)
 		calls <- copied
+		return 0
 	}
 	t.Cleanup(func() {
 		reapCurrentProcessProviderProbes = oldCleanup
@@ -255,8 +256,9 @@ func TestCleanupCurrentProcessProviderProbesRunsFollowupSweeps(t *testing.T) {
 	calls := make(chan []string, 4)
 	oldCleanup := reapCurrentProcessProviderProbes
 	oldDelays := providerProbeCleanupFollowupDelays
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) {
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
 		calls <- append([]string(nil), scopeDirs...)
+		return 0
 	}
 	providerProbeCleanupFollowupDelays = []time.Duration{5 * time.Millisecond, 10 * time.Millisecond}
 	t.Cleanup(func() {
@@ -266,14 +268,63 @@ func TestCleanupCurrentProcessProviderProbesRunsFollowupSweeps(t *testing.T) {
 
 	cleanupCurrentProcessProviderProbes(root)
 
-	for i := 0; i < 3; i++ {
+	matched := 0
+	deadline := time.After(200 * time.Millisecond)
+	for matched < 3 {
 		select {
 		case got := <-calls:
-			assert.Contains(t, got, root)
-		case <-time.After(200 * time.Millisecond):
-			t.Fatalf("cleanup call %d did not run", i+1)
+			if testScopeContains(got, root) {
+				matched++
+			}
+		case <-deadline:
+			t.Fatalf("cleanup call %d did not run", matched+1)
 		}
 	}
+}
+
+func TestCleanupCurrentProcessProviderProbesSettledWaitsForQuietWindow(t *testing.T) {
+	root := t.TempDir()
+	oldCleanup := reapCurrentProcessProviderProbes
+	oldFollowups := providerProbeCleanupFollowupDelays
+	oldQuiet := providerProbeCleanupSettleQuiet
+	oldDeadline := providerProbeCleanupSettleDeadline
+	oldInterval := providerProbeCleanupSettleInterval
+	calls := 0
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
+		if !testScopeContains(scopeDirs, root) {
+			return 0
+		}
+		calls++
+		if calls == 2 {
+			return 1
+		}
+		return 0
+	}
+	providerProbeCleanupFollowupDelays = nil
+	providerProbeCleanupSettleQuiet = 15 * time.Millisecond
+	providerProbeCleanupSettleDeadline = 200 * time.Millisecond
+	providerProbeCleanupSettleInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		reapCurrentProcessProviderProbes = oldCleanup
+		providerProbeCleanupFollowupDelays = oldFollowups
+		providerProbeCleanupSettleQuiet = oldQuiet
+		providerProbeCleanupSettleDeadline = oldDeadline
+		providerProbeCleanupSettleInterval = oldInterval
+	})
+
+	reaped := cleanupCurrentProcessProviderProbesSettled(root)
+
+	assert.Equal(t, 1, reaped)
+	assert.GreaterOrEqual(t, calls, 5, "cleanup must keep sweeping after a delayed reap until the quiet window elapses")
+}
+
+func testScopeContains(scopes []string, root string) bool {
+	for _, scope := range scopes {
+		if scope == root {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
@@ -287,13 +338,14 @@ func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
 	calls := make(chan cleanupCall, 8)
 	oldRouteCleanup := reapCurrentProcessNonRouteProviderProbes
 	oldInterval := preClaimProviderProbeCleanupInterval
-	reapCurrentProcessNonRouteProviderProbes = func(harness, provider, model string, scopeDirs ...string) {
+	reapCurrentProcessNonRouteProviderProbes = func(harness, provider, model string, scopeDirs ...string) int {
 		calls <- cleanupCall{
 			harness:  harness,
 			provider: provider,
 			model:    model,
 			scopes:   append([]string(nil), scopeDirs...),
 		}
+		return 0
 	}
 	preClaimProviderProbeCleanupInterval = 5 * time.Millisecond
 	t.Cleanup(func() {

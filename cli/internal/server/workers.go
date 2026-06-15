@@ -843,7 +843,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
-	defer cleanupCurrentProcessProviderProbes(projectRoot)
+	defer cleanupCurrentProcessProviderProbesSettled(projectRoot)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	overrides := config.CLIOverrides{
 		Assignee:          "ddx",
