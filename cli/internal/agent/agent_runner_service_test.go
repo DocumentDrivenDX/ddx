@@ -312,6 +312,34 @@ func TestRunWithConfigViaServiceScrubsParentWorkerRoutingEnvForService(t *testin
 	assert.Equal(t, "worker-real", os.Getenv("DDX_WORKER_ID"), "worker env must be restored after service dispatch")
 }
 
+func TestRunWithConfigViaServiceScrubsParentWorkerRoutingEnvForServiceFactory(t *testing.T) {
+	t.Setenv("DDX_PROJECT_ROOT", "/real/project")
+	t.Setenv("DDX_AGENT_NAME", "worker-real")
+	t.Setenv("DDX_SERVER_MANAGED_WORKER_ID", "worker-real")
+	t.Setenv("DDX_WORKER_ID", "worker-real")
+
+	stub := &passthroughTestService{}
+	var envAtFactory map[string]string
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		envAtFactory = captureEnvKeys("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
+		return stub, nil
+	})
+	t.Cleanup(func() {
+		SetServiceRunFactory(nil)
+	})
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "claude-sonnet-4-6",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
+
+	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{Prompt: "hello"})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, envAtFactory, "service construction must not inherit parent worker routing env")
+	assert.Empty(t, stub.envAtExecute, "service execution must not inherit parent worker routing env")
+	assert.Equal(t, "worker-real", os.Getenv("DDX_WORKER_ID"), "worker env must be restored after service dispatch")
+}
+
 func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {
 	stub := &passthroughTestService{
 		executeEvents: []agentlib.ServiceEvent{

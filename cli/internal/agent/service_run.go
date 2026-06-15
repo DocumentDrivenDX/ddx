@@ -180,6 +180,9 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		})
 	}
 
+	restoreProcessEnv := scrubCurrentProcessEnv("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
+	defer restoreProcessEnv()
+
 	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
