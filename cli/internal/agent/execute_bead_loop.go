@@ -155,6 +155,10 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID              string
 	WorkerID               string
 	ProjectRoot            string
+	// DisableLivenessSidecar is used by server-managed workers whose
+	// authoritative status.json is owned by the server WorkerRecord. The loop
+	// still emits run state and workerprobe events.
+	DisableLivenessSidecar bool
 	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
 	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
 	// to dispatch a single specific bead through the same claim → executor →
@@ -1530,7 +1534,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	// claimed — that order keeps loop.start as the first envelope on the
 	// EventSink so structured-event consumers continue to see it.
 	var liveness *work.SidecarLivenessReporter
-	if runtime.ProjectRoot != "" && runtime.SessionID != "" {
+	if runtime.ProjectRoot != "" && runtime.SessionID != "" && !runtime.DisableLivenessSidecar {
 		liveness = work.NewSidecarLivenessReporter(runtime.ProjectRoot, runtime.SessionID, runtime.SessionID, runtime.EventSink)
 		workerPID := os.Getpid()
 		liveness.SetChildProbe(func(route, harness, phase string) []workerstatus.ProviderChild {

@@ -279,6 +279,7 @@ func (s *Server) Shutdown() error {
 		cancel()
 	}
 	s.beadHub.Close()
+	s.workers.StopAll()
 	s.workers.LandCoordinators.StopAll()
 	return nil
 }

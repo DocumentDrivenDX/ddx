@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -125,6 +126,11 @@ type WorkerRecord struct {
 	// autonomous watchdog can send SIGTERM/SIGKILL to the process group when
 	// cancelling the context is not enough.
 	PID int `json:"pid,omitempty"`
+	// PGID is the process group id for PID when the worker was launched as an
+	// external process. On Unix server-managed workers are spawned in a new
+	// group, so PID == PGID. Persisting both makes the process boundary visible
+	// to operators and tests.
+	PGID int `json:"pgid,omitempty"`
 	// ReapReason is populated when the watchdog forcibly terminates a worker;
 	// set to "watchdog" today.
 	ReapReason string `json:"reap_reason,omitempty"`
@@ -197,6 +203,10 @@ type WorkerManager struct {
 	// ExecuteBeadWorker instead of building one from the real agent runner.
 	// Override in tests to inject a fake executor.
 	BeadWorkerFactory func(store agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker
+	// workerBinaryPath overrides the executable used for server-managed
+	// external workers. Tests set this to a fake binary that spawns provider
+	// descendants; production uses the current ddx executable.
+	workerBinaryPath string
 
 	// LandCoordinators is the per-project registry of land coordinators.
 	// Exported so tests and server integration tests can stop coordinators
@@ -476,9 +486,208 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	m.ensureWatchdog()
 
 	go m.drainProgress(id, handle, progressCh)
+	if m.shouldRunExternalWorker() {
+		if err := m.startExternalWorker(ctx, id, dir, spec, effectiveRoot, handle, logFile, eventsFile, progressCh); err != nil {
+			cancel()
+			close(progressCh)
+			<-handle.progressDone
+			m.mu.Lock()
+			delete(m.workers, id)
+			m.mu.Unlock()
+			_ = logFile.Close()
+			if eventsFile != nil {
+				_ = eventsFile.Close()
+			}
+			record.State = "failed"
+			record.Status = "failed"
+			record.Error = err.Error()
+			record.LastError = err.Error()
+			record.FinishedAt = time.Now().UTC()
+			_ = m.writeRecord(dir, record)
+			return WorkerRecord{}, err
+		}
+		m.mu.Lock()
+		startedRecord := handle.record
+		m.mu.Unlock()
+		return startedRecord, nil
+	}
 	go m.runWorker(ctx, id, dir, spec, effectiveRoot, handle, multiLog, eventsFile, progressCh)
 
 	return record, nil
+}
+
+func (m *WorkerManager) shouldRunExternalWorker() bool {
+	if m.BeadWorkerFactory != nil {
+		return false
+	}
+	if m.workerBinaryPath != "" {
+		return true
+	}
+	return !strings.HasSuffix(os.Args[0], ".test")
+}
+
+func (m *WorkerManager) workerExecutable() (string, error) {
+	if strings.TrimSpace(m.workerBinaryPath) != "" {
+		return m.workerBinaryPath, nil
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	return exe, nil
+}
+
+func (m *WorkerManager) startExternalWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, logFile *os.File, eventsFile *os.File, progressCh chan agent.ProgressEvent) error {
+	exe, err := m.workerExecutable()
+	if err != nil {
+		return err
+	}
+	args := externalWorkerArgs(id, projectRoot, spec)
+	cmd := exec.Command(exe, args...)
+	cmd.Dir = projectRoot
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	cmd.Env = append(os.Environ(),
+		"DDX_AGENT_NAME="+id,
+		"DDX_SERVER_MANAGED_WORKER_ID="+id,
+	)
+	configureWorkerProcessGroup(cmd)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	pid := cmd.Process.Pid
+	pgid := processGroupID(pid)
+	now := time.Now().UTC()
+	m.mu.Lock()
+	handle.record.PID = pid
+	handle.record.PGID = pgid
+	handle.record.Lifecycle = append(handle.record.Lifecycle, WorkerLifecycleEvent{
+		Action:    "process-start",
+		Actor:     "ddx-server",
+		Timestamp: now,
+		Detail:    fmt.Sprintf("pid=%d pgid=%d", pid, pgid),
+	})
+	snapshot := handle.record
+	m.mu.Unlock()
+	_ = m.writeRecord(dir, snapshot)
+
+	go m.runExternalWorker(ctx, id, dir, handle, cmd, eventsFile, progressCh)
+	return nil
+}
+
+func externalWorkerArgs(id, projectRoot string, spec ExecuteLoopWorkerSpec) []string {
+	args := []string{"work", "--project", projectRoot, "--server-managed-worker-id", id, "--no-self-refresh"}
+	switch spec.Mode {
+	case executeloop.ModeOnce:
+		args = append(args, "--once")
+	case executeloop.ModeWatch:
+		args = append(args, "--watch")
+		if spec.IdleInterval.Duration > 0 {
+			args = append(args, "--idle-interval", spec.IdleInterval.String())
+		}
+	}
+	if spec.FromRev != "" {
+		args = append(args, "--from", spec.FromRev)
+	}
+	if spec.Harness != "" {
+		args = append(args, "--harness", spec.Harness)
+	}
+	if spec.Model != "" {
+		args = append(args, "--model", spec.Model)
+	}
+	if spec.Profile != "" {
+		args = append(args, "--profile", spec.Profile)
+	}
+	if spec.Provider != "" {
+		args = append(args, "--provider", spec.Provider)
+	}
+	if spec.Effort != "" {
+		args = append(args, "--effort", spec.Effort)
+	}
+	if spec.AttemptBackend != "" {
+		args = append(args, "--attempt-backend", spec.AttemptBackend)
+	}
+	if spec.IgnoreCooldown {
+		args = append(args, "--ignore-cooldown")
+		if spec.CooldownOverrideReason != "" {
+			args = append(args, "--reason", spec.CooldownOverrideReason)
+		}
+	}
+	if spec.NoReview {
+		args = append(args, "--no-review", "--no-review-i-know-what-im-doing")
+	}
+	if spec.ReviewHarness != "" {
+		args = append(args, "--review-harness", spec.ReviewHarness)
+	}
+	if spec.ReviewModel != "" {
+		args = append(args, "--review-model", spec.ReviewModel)
+	}
+	if spec.MaxCostUSD > 0 {
+		args = append(args, "--max-cost", fmt.Sprintf("%g", spec.MaxCostUSD))
+	}
+	if spec.MaxBeadCostUSD > 0 {
+		args = append(args, "--max-bead-cost", fmt.Sprintf("%g", spec.MaxBeadCostUSD))
+	}
+	if spec.MaxRecoveryCostUSD > 0 {
+		args = append(args, "--max-recovery-cost", fmt.Sprintf("%g", spec.MaxRecoveryCostUSD))
+	}
+	if spec.PreClaimTimeout.Duration > 0 {
+		args = append(args, "--preclaim-timeout", spec.PreClaimTimeout.String())
+	}
+	if spec.RouteResolutionTimeout.Duration > 0 {
+		args = append(args, "--route-resolution-timeout", spec.RouteResolutionTimeout.String())
+	}
+	if spec.RequestTimeout.Duration > 0 {
+		args = append(args, "--request-timeout", spec.RequestTimeout.String())
+	}
+	if spec.RateLimitMaxWait.Duration != 0 {
+		args = append(args, "--rate-limit-max-wait", spec.RateLimitMaxWait.String())
+	}
+	if spec.MinPower > 0 {
+		args = append(args, "--min-power", fmt.Sprintf("%d", spec.MinPower))
+	}
+	if spec.MaxPower > 0 {
+		args = append(args, "--max-power", fmt.Sprintf("%d", spec.MaxPower))
+	}
+	return args
+}
+
+func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, handle *workerHandle, cmd *exec.Cmd, eventsFile *os.File, progressCh chan agent.ProgressEvent) {
+	waitErr := cmd.Wait()
+	_ = ctx.Err()
+	close(progressCh)
+	<-handle.progressDone
+	if eventsFile != nil {
+		_ = eventsFile.Close()
+	}
+
+	m.mu.Lock()
+	record := handle.record
+	preservedState := ""
+	if record.State == "stopped" || record.State == "reaped" {
+		preservedState = record.State
+	}
+	record.FinishedAt = time.Now().UTC()
+	record.Substate = ""
+	_ = handle.logFile.Close()
+	if waitErr != nil {
+		record.State = "failed"
+		record.Status = "failed"
+		record.Error = waitErr.Error()
+		record.LastError = waitErr.Error()
+	} else {
+		record.State = "exited"
+		record.Status = "exited"
+	}
+	if preservedState != "" {
+		record.State = preservedState
+		record.Status = preservedState
+		record.Error = ""
+	}
+	_ = m.writeRecord(dir, record)
+	handle.record = record
+	m.mu.Unlock()
 }
 
 func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run PluginActionExecutor) (WorkerRecord, error) {
@@ -1373,6 +1582,11 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 		_ = store.Unclaim(beadID)
 	}
 
+	_, _, _, grace := m.watchdogDeadlines()
+	if rec.PID > 0 {
+		terminateProcessGroup(rec.PID, grace)
+	}
+
 	rec.State = "stopped"
 	rec.Status = "stopped"
 	if rec.FinishedAt.IsZero() {
@@ -1386,6 +1600,25 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 		BeadID:    beadID,
 	})
 	return m.writeRecord(dir, rec)
+}
+
+func (m *WorkerManager) StopAll() {
+	m.mu.Lock()
+	ids := make([]string, 0, len(m.workers))
+	for id, handle := range m.workers {
+		if handle == nil {
+			continue
+		}
+		state := handle.record.State
+		if state == "" || state == "running" || state == "stopping" || !isTerminalWorkerState(state) {
+			ids = append(ids, id)
+		}
+	}
+	m.mu.Unlock()
+	for _, id := range ids {
+		_ = m.Stop(id)
+	}
+	m.StopWatchdog()
 }
 
 func resolveWorkerAttemptID(projectRoot, beadID, fallback string) string {

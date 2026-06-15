@@ -27,6 +27,21 @@ func isPIDAlive(pid int) bool {
 	return syscall.Kill(pid, 0) != syscall.ESRCH
 }
 
+func configureWorkerProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+}
+
+func processGroupID(pid int) int {
+	if pid <= 0 {
+		return 0
+	}
+	pgid, err := syscall.Getpgid(pid)
+	if err != nil {
+		return pid
+	}
+	return pgid
+}
+
 // terminateProcessGroup sends SIGTERM to the worker's process group; if the
 // process is still alive after grace, follows up with SIGKILL. The negative
 // pid argument to syscall.Kill targets the whole process group, which is

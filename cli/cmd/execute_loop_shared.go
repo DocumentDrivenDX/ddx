@@ -186,6 +186,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if err != nil {
 		return err
 	}
+	claimAssignee := resolveClaimAssignee()
+	serverManagedWorkerID := ""
+	if cmd.Flags().Lookup("server-managed-worker-id") != nil {
+		serverManagedWorkerID, _ = cmd.Flags().GetString("server-managed-worker-id")
+		serverManagedWorkerID = strings.TrimSpace(serverManagedWorkerID)
+	}
+	if serverManagedWorkerID != "" {
+		claimAssignee = serverManagedWorkerID
+	}
 	projectFlag := spec.ProjectRoot
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	spec.ProjectRoot = projectRoot
@@ -273,7 +282,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	overrides := config.CLIOverrides{
-		Assignee:          resolveClaimAssignee(),
+		Assignee:          claimAssignee,
 		Harness:           spec.Harness,
 		Model:             spec.Model,
 		Provider:          spec.Provider,
@@ -343,7 +352,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
 			Events:      bead.NewStore(beadStoreRoot),
-			Actor:       resolveClaimAssignee(),
+			Actor:       claimAssignee,
 			Source:      "ddx work",
 		})
 	}
@@ -454,7 +463,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
 				bead.NewStore(beadStoreRoot),
-				resolveClaimAssignee(), "ddx work",
+				claimAssignee, "ddx work",
 				nil,
 			)
 			if landErr == nil {
@@ -534,7 +543,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				// in memory for the next attempt.
 				if svcForExcl, svcExclErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot); svcExclErr == nil {
 					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
-						ctx, svcForExcl, store, beadID, resolveClaimAssignee(),
+						ctx, svcForExcl, store, beadID, claimAssignee,
 						targetBead.Extra, time.Now().UTC(), initialMinPower,
 						svcForExcl.ResolveRoute,
 						func(p int) (int, error) { return nextEscalationFloor(loadLadder(), p) },
@@ -645,8 +654,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Log:                    progressLog,
 		CleanupLog:             cleanupLog,
 		EventSink:              loopSink,
-		WorkerID:               resolveClaimAssignee(),
+		WorkerID:               claimAssignee,
 		ProjectRoot:            projectRoot,
+		DisableLivenessSidecar: serverManagedWorkerID != "",
 		CleanupRunner:          cleanupRunner,
 		ResourceChecker:        resourceChecker,
 		ServerHealthProbe:      serverHealthProbe,

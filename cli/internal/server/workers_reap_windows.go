@@ -4,6 +4,7 @@ package server
 
 import (
 	"os"
+	"os/exec"
 	"time"
 )
 
@@ -17,6 +18,13 @@ func isPIDAlive(pid int) bool {
 	}
 	_, err := os.FindProcess(pid)
 	return err == nil
+}
+
+func configureWorkerProcessGroup(cmd *exec.Cmd) {
+}
+
+func processGroupID(pid int) int {
+	return 0
 }
 
 // terminateProcessGroup on Windows has no process-group primitive. We call
