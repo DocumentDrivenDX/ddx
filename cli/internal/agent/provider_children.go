@@ -14,6 +14,7 @@ const (
 	providerChildActionTerminated = "terminated"
 	reasonSupersededProviderChild = "superseded_provider_child"
 	reasonRunningPhaseGuard       = "running_phase_non_route_provider_child"
+	reasonDefunctProviderChild    = "defunct_provider_child"
 	reasonAttemptEnded            = "attempt_ended"
 	providerChildCleanupArtifact  = "provider-children.json"
 )
@@ -43,6 +44,7 @@ type providerChildProcess struct {
 	Provider  string
 	Command   string
 	StartedAt time.Time
+	Defunct   bool
 }
 
 type providerChildReapRecord struct {
@@ -77,6 +79,9 @@ func providerForCommand(cmdline string) string {
 		return ""
 	}
 	base := filepath.Base(parts[0])
+	if strings.HasPrefix(base, "[") && strings.HasSuffix(base, "]") {
+		base = strings.TrimSuffix(strings.TrimPrefix(base, "["), "]")
+	}
 	if _, ok := providerCLINames[base]; ok {
 		return base
 	}
@@ -204,6 +209,21 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, routeLabel, har
 	var reaped []providerChildReapRecord
 	for _, proc := range procs {
 		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
+		if proc.Defunct {
+			terminateProviderChild(proc.PID)
+			child.Phase = "defunct"
+			child.Diagnostic = "defunct provider child reaped"
+			reaped = append(reaped, providerChildReapRecord{
+				PID:        proc.PID,
+				Provider:   proc.Provider,
+				Command:    proc.Command,
+				AgeSeconds: child.AgeSeconds,
+				Action:     providerChildActionTerminated,
+				Reason:     reasonDefunctProviderChild,
+			})
+			children = append(children, child)
+			continue
+		}
 		if child.NonRoute {
 			terminateProviderChild(proc.PID)
 			reaped = append(reaped, providerChildReapRecord{
@@ -335,6 +355,18 @@ func reapProviderChildren(ctx context.Context, rootPID int, now time.Time, reaso
 	var reaped []providerChildReapRecord
 	var survivors []workerstatus.ProviderChild
 	for _, proc := range procs {
+		if proc.Defunct {
+			terminateProviderChild(proc.PID)
+			reaped = append(reaped, providerChildReapRecord{
+				PID:        proc.PID,
+				Provider:   proc.Provider,
+				Command:    proc.Command,
+				AgeSeconds: childAgeSeconds(proc, now),
+				Action:     providerChildActionTerminated,
+				Reason:     reasonDefunctProviderChild,
+			})
+			continue
+		}
 		reason := reasonFor(proc)
 		if reason == "" {
 			survivors = append(survivors, workerstatus.ProviderChild{

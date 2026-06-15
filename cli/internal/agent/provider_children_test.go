@@ -231,6 +231,43 @@ func TestSupersededProviderChildrenTreatsClaudeTUIRouteAsClaudeOwner(t *testing.
 	}
 }
 
+func TestDefunctRouteOwnedProviderChildIsReaped(t *testing.T) {
+	now := time.Now().UTC()
+	const defunctPID = 737373
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{{
+			PID:       defunctPID,
+			Provider:  "claude",
+			Command:   "[claude] <defunct>",
+			StartedAt: now.Add(-2 * time.Minute),
+			Defunct:   true,
+		}}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "claude-tui/sonnet-4.6", "claude-tui", now)
+
+	if len(survivors) != 0 {
+		t.Fatalf("defunct child must not survive even when route-owned; got %+v", survivors)
+	}
+	if len(reaped) != 1 || reaped[0].PID != defunctPID || reaped[0].Reason != reasonDefunctProviderChild {
+		t.Fatalf("expected defunct child reap evidence; got %+v", reaped)
+	}
+	if len(killed) != 1 || killed[0] != defunctPID {
+		t.Fatalf("expected terminate(%d), got %v", defunctPID, killed)
+	}
+}
+
 func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	dir := t.TempDir()
 	claudePID := startFakeProviderChild(t, dir, "claude")
@@ -518,6 +555,7 @@ func TestProviderForCommandDetectsNodeWrappedGemini(t *testing.T) {
 		{"node -e 'console.log(1)'", ""},
 		{"python /usr/local/bin/gemini", ""},
 		{"gemini --interactive", "gemini"},
+		{"[claude] <defunct>", "claude"},
 	}
 	for _, tc := range cases {
 		got := providerForCommand(tc.cmdline)

@@ -51,6 +51,7 @@ func scanProviderChildProcessesImpl(ctx context.Context, rootPID int, now time.T
 			Provider:  provider,
 			Command:   r.Command,
 			StartedAt: started,
+			Defunct:   isDefunctProviderCommand(r.Command),
 		})
 	}
 	return out2, nil
@@ -84,6 +85,10 @@ func parseProviderPS(out []byte) []providerPSRow {
 		})
 	}
 	return rows
+}
+
+func isDefunctProviderCommand(command string) bool {
+	return strings.Contains(command, "<defunct>")
 }
 
 func parseEtime(s string) int64 {
