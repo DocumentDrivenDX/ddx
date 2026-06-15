@@ -1846,6 +1846,66 @@ func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
 	assert.Equal(t, "worker-a", got.Owner)
 }
 
+func TestClaimLeasePathIgnoresTempDir(t *testing.T) {
+	root := t.TempDir()
+	cacheRoot := filepath.Join(root, "cache")
+	tmpA := filepath.Join(root, "tmp-a")
+	tmpB := filepath.Join(root, "tmp-b")
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+	t.Setenv("TMPDIR", tmpA)
+
+	ddxDir := filepath.Join(root, "repo", ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	s := NewStore(ddxDir)
+
+	pathA := claimLivenessPath(s.Dir, "ddx-temp-stable")
+	t.Setenv("TMPDIR", tmpB)
+	pathB := claimLivenessPath(s.Dir, "ddx-temp-stable")
+
+	require.Equal(t, pathA, pathB)
+	assert.Contains(t, pathA, filepath.Join("cache", "ddx", claimLivenessNamespace))
+	assert.NotContains(t, pathA, "tmp-a")
+	assert.NotContains(t, pathA, "tmp-b")
+}
+
+func TestWriteClaimHeartbeatRemovesLegacyTempLease(t *testing.T) {
+	root := t.TempDir()
+	cacheRoot := filepath.Join(root, "cache")
+	tmpRoot := filepath.Join(root, "tmp")
+	t.Setenv("XDG_CACHE_HOME", cacheRoot)
+	t.Setenv("TMPDIR", tmpRoot)
+
+	ddxDir := filepath.Join(root, "repo", ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	s := NewStore(ddxDir)
+	require.NoError(t, s.Init(context.Background()))
+
+	const beadID = "ddx-legacy-lease"
+	require.NoError(t, s.Create(context.Background(), &Bead{
+		ID:        beadID,
+		Title:     "legacy lease cleanup",
+		IssueType: DefaultType,
+		Status:    StatusOpen,
+	}))
+
+	legacy := legacyClaimLivenessPaths(s.Dir, beadID)
+	require.NotEmpty(t, legacy)
+	for _, path := range legacy {
+		require.NoError(t, writeAtomicClaimFile(path, []byte(`{"bead_id":"`+beadID+`","owner":"old"}`+"\n")))
+	}
+
+	require.NoError(t, s.ClaimWithOptions(beadID, "worker-new", "session-new", ""))
+
+	lease, found, err := s.ClaimLease(beadID)
+	require.NoError(t, err)
+	require.True(t, found)
+	assert.Equal(t, "worker-new", lease.Owner)
+	for _, path := range legacy {
+		_, err := os.Stat(path)
+		assert.True(t, os.IsNotExist(err), "legacy lease should be removed: %s", path)
+	}
+}
+
 func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-hb-no-tracker", Title: "Heartbeat stays out of JSONL"}
