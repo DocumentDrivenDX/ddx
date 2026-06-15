@@ -17,7 +17,7 @@
 DDx + HELIX takes a project from zero to working software:
 
 1. `ddx init` — create a document library
-2. `ddx plugin install helix` — pin HELIX and materialize local adapters
+2. `ddx plugin install helix` — pin HELIX and generate local adapters
 3. Agent frames the project — creates PRD, feature specs, and tracker beads
 4. Agent builds it — TDD, one commit per bead, all tests passing
 5. Agent evolves it — adds a feature, updates specs, extends code
@@ -159,7 +159,7 @@ bound to the metric artifact.
 | Command | What it does |
 |---------|-------------|
 | `ddx init` | Initialize document library |
-| `ddx plugin install <name>` | Pin a workflow plugin and materialize local adapters |
+| `ddx plugin install <name>` | Pin a workflow plugin and generate local adapters |
 | `ddx doctor` | Validate installation health |
 | [Prose quality support](docs/prose-quality.md) | Guidance for `ddx doc prose --changed` and prose config |
 | `ddx bead create/list/ready` | Track work items |

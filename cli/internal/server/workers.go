@@ -2743,6 +2743,14 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 	}
 }
 
+// ReconcileDesiredWorkers brings server-managed workers in line with the
+// persisted desired state for this manager's project.
+func (m *WorkerManager) ReconcileDesiredWorkers() (ReconcileResult, error) {
+	m.ReconcileStaleWorkers()
+	sup := NewWorkerSupervisor(m.projectRoot, m)
+	return sup.Reconcile()
+}
+
 func randomSuffix(n int) string {
 	if n <= 0 {
 		n = 4

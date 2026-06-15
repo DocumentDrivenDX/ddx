@@ -136,7 +136,7 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "✅ DDx initialized successfully!\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Next steps:\n")
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx plugin install helix   - Pin HELIX and materialize local adapters (optional)\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx plugin install helix   - Pin HELIX and generate local adapters (optional)\n")
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx doctor                 - Check installation health\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
@@ -684,8 +684,8 @@ func ddxAgentsBlock() string {
 This project uses [DDx](https://github.com/DocumentDrivenDX/ddx) for
 document-driven development. Use the ` + "`" + `ddx` + "`" + ` skill for beads, work,
 review, agents, and status — every skills-compatible harness (Claude
-Code, OpenAI Codex, Gemini CLI, etc.) discovers it from
-` + "`" + `.claude/skills/ddx/` + "`" + ` and ` + "`" + `.agents/skills/ddx/` + "`" + `.
+Code, OpenAI Codex, Gemini CLI, etc.) discovers it through generated
+adapters under ` + "`" + `.claude/skills/ddx/` + "`" + ` and ` + "`" + `.agents/skills/ddx/` + "`" + `.
 
 ## Default Interactive Mode
 
@@ -717,9 +717,12 @@ After modifying any of these paths, stage and commit them:
 
 - ` + "`" + `.ddx/beads.jsonl` + "`" + ` — work item tracker
 - ` + "`" + `.ddx/config.yaml` + "`" + ` — project configuration
-- ` + "`" + `.agents/skills/ddx/` + "`" + ` — the ddx skill (shipped by ddx init)
-- ` + "`" + `.claude/skills/ddx/` + "`" + ` — same skill, Claude Code location
 - ` + "`" + `docs/` + "`" + ` — project documentation and artifacts
+
+Do not commit generated plugin payloads or agent adapters under
+` + "`" + `.ddx/plugins/` + "`" + `, ` + "`" + `.agents/skills/` + "`" + `, or ` + "`" + `.claude/skills/` + "`" + `.
+` + "`" + `ddx plugin sync` + "`" + ` recreates those local files from the project lock,
+the XDG plugin cache, or the baked-in default ` + "`" + `ddx` + "`" + ` package.
 
 ## Conventions
 

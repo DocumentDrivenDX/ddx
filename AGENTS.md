@@ -224,8 +224,8 @@ regress this:
 This project uses [DDx](https://github.com/DocumentDrivenDX/ddx) for
 document-driven development. Use the `ddx` skill for beads, work,
 review, agents, and status — every skills-compatible harness (Claude
-Code, OpenAI Codex, Gemini CLI, etc.) discovers it from
-`.claude/skills/ddx/` and `.agents/skills/ddx/`.
+Code, OpenAI Codex, Gemini CLI, etc.) discovers it through generated
+adapters under `.claude/skills/ddx/` and `.agents/skills/ddx/`.
 
 ## Files to commit
 
@@ -233,9 +233,12 @@ After modifying any of these paths, stage and commit them:
 
 - `.ddx/beads.jsonl` — work item tracker
 - `.ddx/config.yaml` — project configuration
-- `.agents/skills/ddx/` — the ddx skill (shipped by ddx init)
-- `.claude/skills/ddx/` — same skill, Claude Code location
 - `docs/` — project documentation and artifacts
+
+Do not commit generated plugin payloads or agent adapters under
+`.ddx/plugins/`, `.agents/skills/`, or `.claude/skills/`.
+`ddx plugin sync` recreates those local files from the project lock,
+the XDG plugin cache, or the baked-in default `ddx` package.
 
 ## Conventions
 

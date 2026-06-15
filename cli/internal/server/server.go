@@ -294,6 +294,7 @@ func (s *Server) ListenAndServe() error {
 	defer release()
 	s.installSingletonReleaseOnSignal(release)
 	s.writeAddrFile("http")
+	s.reconcileDesiredWorkersAfterStartup()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 
@@ -331,6 +332,7 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		}
 	}
 	s.writeAddrFile("https")
+	s.reconcileDesiredWorkersAfterStartup()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 		go func() {
@@ -342,6 +344,18 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		return <-errCh
 	}
 	return http.ListenAndServeTLS(s.Addr, certFile, keyFile, s.mux)
+}
+
+func (s *Server) reconcileDesiredWorkersAfterStartup() {
+	if s == nil || s.workers == nil {
+		return
+	}
+	go func() {
+		// Let the listener enter Serve before child workers report lifecycle
+		// events back through the server.
+		time.Sleep(250 * time.Millisecond)
+		_, _ = s.workers.ReconcileDesiredWorkers()
+	}()
 }
 
 // writeAddrFile writes the server's address to a user-level file so CLI
