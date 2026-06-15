@@ -58,3 +58,23 @@ func TestSynthesizeCommit_GitignoredDirsDoNotFail(t *testing.T) {
 	require.NotContains(t, trackedOut, ".ddx/workers", "gitignored path must not be committed")
 	require.NotContains(t, trackedOut, ".ddx/executions", "gitignored path must not be committed")
 }
+
+func TestSynthesizeCommit_SkipsPreCommitHooks(t *testing.T) {
+	root, _ := newScriptHarnessRepo(t, 0)
+
+	marker := filepath.Join(t.TempDir(), "pre-commit-ran")
+	hookPath := filepath.Join(root, ".git", "hooks", "pre-commit")
+	hook := "#!/bin/sh\nprintf ran > " + marker + "\nexit 42\n"
+	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(hook), 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "feature.txt"), []byte("feature\n"), 0o644))
+
+	ops := &RealGitOps{}
+	committed, err := ops.SynthesizeCommit(root, "chore: test synthesized commit")
+	require.NoError(t, err, "SynthesizeCommit must not invoke repository pre-commit hooks")
+	require.True(t, committed, "real file change should be committed")
+
+	_, statErr := os.Stat(marker)
+	require.True(t, os.IsNotExist(statErr), "pre-commit hook should be skipped for mechanical synthesized commits")
+}

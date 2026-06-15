@@ -172,7 +172,7 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	if msg == "" {
 		msg = "chore: execute-bead synthesized result commit"
 	}
-	out, err := internalgit.Command(context.Background(), dir, "commit", "-m", msg).CombinedOutput()
+	out, err := internalgit.Command(context.Background(), dir, "commit", "--no-verify", "-m", msg).CombinedOutput()
 	if err != nil {
 		return false, fmt.Errorf("synthesize commit: %s: %w", strings.TrimSpace(string(out)), err)
 	}
