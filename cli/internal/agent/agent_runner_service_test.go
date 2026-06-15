@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -268,6 +269,47 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
 	assert.Equal(t, "done", result.Output)
 	assert.Equal(t, 0, result.ExitCode)
+}
+
+func TestRunWithConfigViaServiceScrubsParentWorkerRoutingEnvForService(t *testing.T) {
+	t.Setenv("DDX_PROJECT_ROOT", "/real/project")
+	t.Setenv("DDX_AGENT_NAME", "worker-real")
+	t.Setenv("DDX_SERVER_MANAGED_WORKER_ID", "worker-real")
+	t.Setenv("DDX_WORKER_ID", "worker-real")
+
+	stub := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
+				Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
+			},
+		},
+	}
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "claude-sonnet-4-6",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
+
+	result, err := executeOnService(context.Background(), stub, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+		Env: map[string]string{
+			"DDX_PROJECT_ROOT":             "/metadata/project",
+			"DDX_AGENT_NAME":               "metadata-worker",
+			"DDX_SERVER_MANAGED_WORKER_ID": "metadata-worker",
+			"DDX_WORKER_ID":                "worker-attempt",
+			DDXModeEnvKey:                  DDXModeBeadExecution,
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Empty(t, stub.envAtExecute, "service provider launch must not inherit parent worker routing env")
+	require.NotNil(t, stub.lastReq.Metadata)
+	assert.NotContains(t, stub.lastReq.Metadata, "DDX_PROJECT_ROOT")
+	assert.NotContains(t, stub.lastReq.Metadata, "DDX_AGENT_NAME")
+	assert.NotContains(t, stub.lastReq.Metadata, "DDX_SERVER_MANAGED_WORKER_ID")
+	assert.Equal(t, "worker-attempt", stub.lastReq.Metadata["DDX_WORKER_ID"])
+	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
+	assert.Equal(t, "worker-real", os.Getenv("DDX_WORKER_ID"), "worker env must be restored after service dispatch")
 }
 
 func TestRunWithConfigViaService_CapturesCacheReadTokens(t *testing.T) {

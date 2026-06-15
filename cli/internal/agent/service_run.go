@@ -176,7 +176,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 			WorkDir:       runtime.WorkDir,
 			Permissions:   rcfg.Permissions(),
 			SessionLogDir: sessionLogDir,
-			Env:           runtime.Env,
+			Env:           scrubbedExecutionEnvOverrides(runtime.Env),
 		})
 	}
 
@@ -303,7 +303,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		IdleTimeout:           idle,
 		ProviderTimeout:       providerTimeout,
 		SessionLogDir:         sessionLogDir,
-		Metadata:              metadataWithEnv(runtime.Correlation, runtime.Env),
+		Metadata:              metadataWithEnv(runtime.Correlation, scrubbedExecutionEnvOverrides(runtime.Env)),
 		Role:                  runtime.Role,
 		CorrelationID:         runtime.CorrelationID,
 		MinPower:              minPower,
@@ -322,6 +322,8 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	// fizeau returns ErrHarnessModelIncompatible (typed, non-nil) on pre-dispatch
 	// errors and a failed final event for post-dispatch errors.
 	start := time.Now().UTC()
+	restoreProcessEnv := scrubCurrentProcessEnv("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
+	defer restoreProcessEnv()
 	events, err := svc.Execute(cancelCtx, req)
 	if err != nil {
 		// A pre-dispatch Execute error means routing never produced a viable

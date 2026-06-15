@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -49,6 +50,7 @@ type passthroughTestService struct {
 	// land at indices >= routeAttemptsAtExecute. Lets tests verify the seed
 	// happens before the dispatched Execute call.
 	routeAttemptsAtExecute int
+	envAtExecute           map[string]string
 }
 
 func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -57,6 +59,7 @@ func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.Servi
 	}
 	s.executeCalled = true
 	s.lastReq = req
+	s.envAtExecute = captureEnvKeys("DDX_PROJECT_ROOT", "DDX_AGENT_NAME", "DDX_SERVER_MANAGED_WORKER_ID", "DDX_WORKER_ID")
 	if s.executeErr != nil {
 		return nil, s.executeErr
 	}
@@ -70,6 +73,16 @@ func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.Servi
 	}
 	close(ch)
 	return ch, nil
+}
+
+func captureEnvKeys(keys ...string) map[string]string {
+	out := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := os.LookupEnv(key); ok {
+			out[key] = value
+		}
+	}
+	return out
 }
 
 func (s *passthroughTestService) ListHarnesses(ctx context.Context) ([]agentlib.HarnessInfo, error) {
