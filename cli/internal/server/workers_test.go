@@ -157,6 +157,57 @@ func TestWorkerSuccessDoesNotPopulateLastError(t *testing.T) {
 	assert.Equal(t, "success", final.LastResult.Detail)
 }
 
+func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	initGitRepo(t, root)
+	ddxDir := ddxroot.JoinProject(root)
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-final-cleanup",
+		Title:     "final cleanup",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+
+	calls := make(chan []string, 4)
+	oldCleanup := reapCurrentProcessProviderProbes
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) {
+		copied := append([]string(nil), scopeDirs...)
+		calls <- copied
+	}
+	t.Cleanup(func() {
+		reapCurrentProcessProviderProbes = oldCleanup
+	})
+
+	m := NewWorkerManager(root)
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-final-cleanup",
+					Status:    agent.ExecuteBeadStatusSuccess,
+					Detail:    "success",
+				}, nil
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
+	require.NoError(t, err)
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, "success", final.Status)
+
+	select {
+	case got := <-calls:
+		assert.Contains(t, got, root)
+	default:
+		t.Fatal("server-managed worker did not run provider-probe cleanup at finalization")
+	}
+}
+
 func TestWorkerManagerStartPluginActionPublishesTerminalProgress(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
