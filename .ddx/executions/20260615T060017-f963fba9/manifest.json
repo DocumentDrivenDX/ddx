@@ -1,0 +1,390 @@
+{
+  "attempt_id": "20260615T060017-f963fba9",
+  "bead_id": "ddx-34ea2a74",
+  "base_rev": "a58bb82be440506243fdc534c644b6fe9d64721e",
+  "created_at": "2026-06-15T06:00:24.348870017Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-34ea2a74",
+    "title": "agent: normalize readiness refinable aliases and diagnose schema drift",
+    "description": "PROBLEM\nDuring the 2026-06-14 dogfood worker restart, readiness for ddx-824079ce returned classification=\"refinable\" after useful inspection, but DDx rejected it with `unknown classification \"refinable\": expected one of ready, needs_refine, needs_split, operator_required, system_unready` and then fail-opened with `readiness check unavailable`. A similar helix readiness pass returned executable prose but surfaced as `system_unready`. DDx/FIZ must make provider/schema drift actionable and must not disguise common near-miss readiness output as project unreadiness.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/readiness_classification.go:126-140 normalizes several aliases, including actionable_but_rewritten, rewritten, and safely_refinable, but omits the plain `refinable` alias that providers naturally emit. cli/internal/agent/execute_bead_loop.go:2751-2804 and :2830-2854 convert intake errors into `pre_claim_intake.system_unready` warnings with the generic suggested action `check the readiness route or harness configuration and retry`, losing whether the problem was an output-schema/normalization issue versus a real project readiness blocker.\n\nPROPOSED FIX\n- Normalize `classification: \"refinable\"` to `needs_refine` in the readiness classifier.\n- Add regression coverage proving `refinable` does not become an unknown classification and is handled according to the existing warn/block quality mode.\n- Improve intake-error diagnostics so unknown readiness classifications are recorded as provider/schema drift with the raw classification and accepted enum set, not as generic system_unready project failure.\n- Preserve the existing fail-open behavior unless quality mode says to block; this bead is about correct classification and observability, not making readiness stricter.\n\nNON-SCOPE\n- Do not change the canonical readiness enum names.\n- Do not alter FIZ route selection.\n- Do not change the worker claim/lease policy beyond diagnostics for unknown readiness classification.",
+    "acceptance": "1. `TestNormalizeReadinessClassificationRefinableAlias` proves `ClassifyReadinessWithMode(\"refinable\", ...)` normalizes to `needs_refine` rather than returning an unknown classification.\n2. `TestReadinessUnknownClassificationDiagnosticNamesSchemaDrift` proves an unknown readiness classification records a diagnostic that includes the raw classification and the accepted enum set, and does not describe the bead itself as system-unready without that schema-drift context.\n3. `TestPreClaimIntakeRefinableAliasFollowsNeedsRefinePolicy` proves the work/pre-claim path treats `classification: \"refinable\"` like `needs_refine` under existing warn/block quality modes.\n4. Existing readiness classification tests in `cli/internal/agent/readiness_schema_test.go` and work readiness tests continue to pass.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TestNormalizeReadinessClassificationRefinableAlias|TestReadinessUnknownClassificationDiagnosticNamesSchemaDrift|TestPreClaimIntakeRefinableAliasFollowsNeedsRefinePolicy' -count=1` passes.\\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "kind:observability",
+      "severity:high",
+      "provider-supervision",
+      "dogfood"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T04:22:32.701210035Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nsession closed before Stop hook",
+          "created_at": "2026-06-15T04:22:34.611975605Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-15T04:22:54.766438715Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nsession closed before Stop hook",
+          "created_at": "2026-06-15T04:22:56.496069875Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[],\"requested_min_power\":7}",
+          "created_at": "2026-06-15T04:23:27.20507237Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nsession closed before Stop hook",
+          "created_at": "2026-06-15T04:23:29.158341942Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[],\"requested_min_power\":8}",
+          "created_at": "2026-06-15T04:23:57.132779655Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260615T042127-6113 runtime=2m30s pid=0 reason=stop",
+          "created_at": "2026-06-15T04:23:57.340569924Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nsession closed before Stop hook",
+          "created_at": "2026-06-15T04:23:59.190020174Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"power_attempts\":[{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":11542},{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":11817},{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":12044},{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":11525}],\"winning_power_class\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-06-15T04:23:59.35505281Z",
+          "kind": "escalation-summary",
+          "source": "legacy agent work",
+          "summary": "winning_power_class=exhausted attempts=4 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T04:38:00.797570173Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nturn timeout exceeded",
+          "created_at": "2026-06-15T04:38:02.648814457Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260615T042942-c049 runtime=9m32s pid=0 reason=stop",
+          "created_at": "2026-06-15T04:39:14.390146555Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-15T04:39:15.71042677Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness= model=\nagent: provider process exited without emitting a final event",
+          "created_at": "2026-06-15T04:39:17.573949964Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"power_attempts\":[{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":310997},{\"power_class\":\"\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":64895}],\"winning_power_class\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-06-15T04:39:17.847019948Z",
+          "kind": "escalation-summary",
+          "source": "legacy agent work",
+          "summary": "winning_power_class=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260615T044347-8a4d runtime=7m53s pid=0 reason=stop",
+          "created_at": "2026-06-15T04:51:40.754456129Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T04:52:08.217888076Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T05:08:59.357295541Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nturn timeout exceeded",
+          "created_at": "2026-06-15T05:09:01.474888104Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260615T050038-3fe1 runtime=15m55s pid=0 reason=stop",
+          "created_at": "2026-06-15T05:16:33.782620449Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=125.0\",\"fallback_chain\":[],\"requested_min_power\":5}",
+          "created_at": "2026-06-15T05:16:33.890439902Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=125.0"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=sonnet-4.6\nturn timeout exceeded",
+          "created_at": "2026-06-15T05:16:35.906314734Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"power_attempts\":[{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":310819},{\"power_class\":\"\",\"harness\":\"claude-tui\",\"model\":\"sonnet-4.6\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":310971}],\"winning_power_class\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-06-15T05:16:36.185424976Z",
+          "kind": "escalation-summary",
+          "source": "legacy agent work",
+          "summary": "winning_power_class=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: signal: terminated\",\"fingerprint\":\"74debd57843837e5df55f8ccd3aaf718a2b0e7750c7a48fd40c5bed2e0d57b0a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"74debd57843837e5df55f8ccd3aaf718a2b0e7750c7a48fd40c5bed2e0d57b0a\"}",
+          "created_at": "2026-06-15T05:28:15.260371526Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T05:30:35.864446847Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T053016-76d16bf6\",\"bead_id\":\"ddx-34ea2a74\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T05:30:36.282161601Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"773f9ba367f34e33cdf1d3b2f3f319f077db3ee2\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"signal: terminated\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"773f9ba367f34e33cdf1d3b2f3f319f077db3ee2\",\"session_id\":\"eb-94e7f156\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-15T05:30:49.082250738Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "signal: terminated\npowerClass=standard\ndecision_audit={\"failure_class\":\"unknown\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=773f9ba367f34e33cdf1d3b2f3f319f077db3ee2\nbase_rev=773f9ba367f34e33cdf1d3b2f3f319f077db3ee2\nretry_after=2026-06-15T11:30:49Z\noutcome_reason=unknown",
+          "created_at": "2026-06-15T05:30:49.18547616Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: signal: terminated\",\"fingerprint\":\"74debd57843837e5df55f8ccd3aaf718a2b0e7750c7a48fd40c5bed2e0d57b0a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"74debd57843837e5df55f8ccd3aaf718a2b0e7750c7a48fd40c5bed2e0d57b0a\"}",
+          "created_at": "2026-06-15T05:31:11.743487228Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T05:33:31.892686758Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T053312-71d4ac6b\",\"bead_id\":\"ddx-34ea2a74\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T05:33:32.307901775Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"121002ff0ac66795f9b9103c132138355d1c238f\",\"classification\":\"\",\"decode_warnings\":[{\"field\":\"output\",\"warning\":\"empty output\"}],\"detail\":\"signal: terminated\",\"malformed\":true,\"rationale\":\"\",\"recommended_action\":\"\",\"result_rev\":\"121002ff0ac66795f9b9103c132138355d1c238f\",\"session_id\":\"eb-b19de542\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-15T05:33:45.08560041Z",
+          "kind": "bead-quality.triage-warning",
+          "source": "ddx work",
+          "summary": "empty output"
+        },
+        {
+          "actor": "erik",
+          "body": "signal: terminated\npowerClass=standard\ndecision_audit={\"failure_class\":\"unknown\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=121002ff0ac66795f9b9103c132138355d1c238f\nbase_rev=121002ff0ac66795f9b9103c132138355d1c238f\nretry_after=2026-06-15T11:33:45Z\noutcome_reason=unknown",
+          "created_at": "2026-06-15T05:33:45.210574863Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260615T052033-0977 runtime=15m34s pid=0 reason=stop",
+          "created_at": "2026-06-15T05:36:07.356676472Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T05:37:14.43520986Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness= model=\nagent: provider process exited without emitting a final event",
+          "created_at": "2026-06-15T05:37:16.517941743Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"power_attempts\":[{\"power_class\":\"\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":878630}],\"winning_power_class\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-06-15T05:37:16.86730309Z",
+          "kind": "escalation-summary",
+          "source": "legacy agent work",
+          "summary": "winning_power_class=exhausted attempts=1 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260615T054252-7b9f runtime=9m44s pid=0 reason=stop",
+          "created_at": "2026-06-15T05:52:36.761608314Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T05:52:37.282292424Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness= model=\nagent: provider process exited without emitting a final event",
+          "created_at": "2026-06-15T05:52:37.367199042Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"power_attempts\":[{\"power_class\":\"\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":531535}],\"winning_power_class\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-06-15T05:52:37.701266166Z",
+          "kind": "escalation-summary",
+          "source": "legacy agent work",
+          "summary": "winning_power_class=exhausted attempts=1 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        }
+      ],
+      "queue-rank": -690,
+      "spec-id": "IP-2026-06-13-server-managed-workers",
+      "work-cooldown-base-rev": "121002ff0ac66795f9b9103c132138355d1c238f",
+      "work-last-detail": "signal: terminated",
+      "work-last-status": "execution_failed",
+      "work-retry-after": "2026-06-15T11:33:45Z"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260615T060017-f963fba9",
+    "prompt": ".ddx/executions/20260615T060017-f963fba9/prompt.md",
+    "manifest": ".ddx/executions/20260615T060017-f963fba9/manifest.json",
+    "result": ".ddx/executions/20260615T060017-f963fba9/result.json",
+    "checks": ".ddx/executions/20260615T060017-f963fba9/checks.json",
+    "usage": ".ddx/executions/20260615T060017-f963fba9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T060017-f963fba9"
+  },
+  "prompt_sha": "7247968204227c73c2f2b4986f310306ee8e292259926a0cf501392f879dac70"
+}
