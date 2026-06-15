@@ -181,6 +181,17 @@ func optionalFloat64Flag(cmd *cobra.Command, name string, defaultValue float64) 
 	return value
 }
 
+func scrubServerManagedWorkerProcessEnv() {
+	for _, key := range []string{
+		"DDX_PROJECT_ROOT",
+		"DDX_AGENT_NAME",
+		"DDX_SERVER_MANAGED_WORKER_ID",
+		"DDX_WORKER_ID",
+	} {
+		_ = os.Unsetenv(key)
+	}
+}
+
 func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
 	spec, dispatch, err := parseExecuteLoopSpec(cmd, treatPassthroughAsOpaque)
 	if err != nil {
@@ -198,6 +209,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	projectFlag := spec.ProjectRoot
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	spec.ProjectRoot = projectRoot
+	if serverManagedWorkerID != "" {
+		scrubServerManagedWorkerProcessEnv()
+	}
 	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
 	if tryTargetBeadID != "" {
 		spec.Mode = executeloop.ModeOnce
