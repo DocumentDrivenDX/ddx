@@ -2650,9 +2650,11 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 
 // ReconcileStaleWorkers scans the on-disk worker registry and marks entries
 // that are still in state=running/stopping but have a dead (or missing) PID as
-// "exited". Called once at server startup to repair records left running by a
-// previous server crash without starting new goroutines for them. Bead claims
-// are released so the queue drainer can pick up the work again.
+// "exited". It also releases any bead claim still owned by terminal worker
+// records, which can happen when an earlier restart marked the worker exited
+// before its tracked claim was cleared. Called once at server startup to repair
+// records left by a previous server crash without starting new goroutines for
+// them.
 func (m *WorkerManager) ReconcileStaleWorkers() {
 	entries, err := os.ReadDir(m.rootDir)
 	if err != nil {
@@ -2665,7 +2667,32 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		}
 		dir := filepath.Join(m.rootDir, entry.Name())
 		rec, err := m.readRecord(dir)
-		if err != nil || (rec.State != "running" && rec.State != "stopping") {
+		if err != nil {
+			continue
+		}
+		if isTerminalWorkerState(rec.State) {
+			projectRoot := rec.ProjectRoot
+			if projectRoot == "" {
+				projectRoot = m.projectRoot
+			}
+			body := fmt.Sprintf("worker=%s state=%s reason=terminal-worker-claim", rec.ID, rec.State)
+			released := releaseWorkerClaims(projectRoot, rec.ID, "", now, bead.BeadEvent{
+				Kind:      "bead.reaped",
+				Summary:   "terminal-worker-claim",
+				Body:      body,
+				Actor:     "ddx-server",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			if len(released) > 0 {
+				if rec.ReapReason == "" {
+					rec.ReapReason = "terminal-worker-claim"
+				}
+				_ = m.writeRecord(dir, rec)
+			}
+			continue
+		}
+		if rec.State != "running" && rec.State != "stopping" {
 			continue
 		}
 

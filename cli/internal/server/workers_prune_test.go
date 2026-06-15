@@ -166,6 +166,49 @@ func TestWorkerManagerReconcileStaleWorkersReleasesOwnedClaimWithoutCurrentBead(
 	assert.Equal(t, "server-restart", rec.ReapReason)
 }
 
+func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOwnedClaim(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBeadByOwner(t, root, "ddx-terminal-owned", "worker-terminal-owned")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-terminal-owned"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, m.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-time.Hour),
+		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
+		PID:         9999998,
+	}))
+
+	m.ReconcileStaleWorkers()
+
+	b, err := store.Get(context.Background(), "ddx-terminal-owned")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+	assert.Empty(t, b.Owner)
+
+	_, found, err := store.ClaimLease("ddx-terminal-owned")
+	require.NoError(t, err)
+	assert.False(t, found, "terminal-worker reconcile must remove stale owned claim lease")
+
+	events, err := store.EventsByKind("ddx-terminal-owned", "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "terminal-worker-claim", events[0].Summary)
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "exited", rec.State)
+	assert.Equal(t, "terminal-worker-claim", rec.ReapReason)
+}
+
 // TestWorkerManagerPruneByMaxAge verifies that Prune reaps a worker older
 // than the maxAge threshold. A PID=0 goroutine-only worker not in m.workers
 // is already caught by the goroutine-not-running path; we just verify the
