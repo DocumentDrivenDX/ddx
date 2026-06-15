@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260615T043802-166c5539",
+  "bead_id": "ddx-34ea2a74",
+  "trigger": "superseded_provider_child",
+  "active_route": "claude-tui",
+  "scanned_at": "2026-06-15T04:38:21.205844783Z",
+  "survivors": [
+    {
+      "pid": 672943,
+      "provider": "claude",
+      "harness": "claude",
+      "age_seconds": 0
+    }
+  ],
+  "reaped": [
+    {
+      "pid": 654239,
+      "provider": "gemini",
+      "command": "/home/linuxbrew/.linuxbrew/opt/node/bin/node /home/linuxbrew/.linuxbrew/bin/gemini",
+      "age_seconds": 67,
+      "action": "terminated",
+      "reason": "superseded_provider_child"
+    },
+    {
+      "pid": 672925,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "superseded_provider_child"
+    }
+  ]
+}

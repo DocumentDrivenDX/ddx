@@ -1,0 +1,26 @@
+{
+  "attempt_id": "20260615T043802-166c5539",
+  "bead_id": "ddx-34ea2a74",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T043802-166c5539",
+  "trigger": "context canceled",
+  "started_at": "2026-06-15T04:39:14.629746747Z",
+  "finished_at": "2026-06-15T04:39:15.393677906Z",
+  "scanned": 77,
+  "candidates": [
+    {
+      "pid": 672943,
+      "ppid": 599806,
+      "pgid": 672943,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-34ea2a74-20260615T043802-166c5539",
+      "command": "[claude]"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 672943,
+      "ppid": 599806,
+      "pgid": 672943,
+      "command": "[claude] \u003cdefunct\u003e"
+    }
+  ]
+}
