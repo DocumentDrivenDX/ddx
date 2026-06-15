@@ -137,6 +137,9 @@ func LoadWithWorkingDir(workingDir string) (*Config, error) {
 	if err := mergeGlobalExecutionConfig(config, workingDir); err != nil {
 		return nil, err
 	}
+	if err := mergeGlobalAgentConfig(config, workingDir); err != nil {
+		return nil, err
+	}
 
 	// Override library path with environment variable if set
 	if envLibraryPath := os.Getenv("DDX_LIBRARY_BASE_PATH"); envLibraryPath != "" {
@@ -155,31 +158,51 @@ func mergeGlobalExecutionConfig(projectCfg *Config, workingDir string) error {
 	if projectCfg == nil {
 		return nil
 	}
+	globalCfg, err := loadGlobalConfigForMerge(workingDir)
+	if err != nil || globalCfg == nil {
+		return err
+	}
+	mergeExecutionsConfig(projectCfg, globalCfg)
+	return nil
+}
+
+func mergeGlobalAgentConfig(projectCfg *Config, workingDir string) error {
+	if projectCfg == nil {
+		return nil
+	}
+	globalCfg, err := loadGlobalConfigForMerge(workingDir)
+	if err != nil || globalCfg == nil {
+		return err
+	}
+	mergeAgentConfig(projectCfg, globalCfg)
+	return nil
+}
+
+func loadGlobalConfigForMerge(workingDir string) (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	globalPath := ddxroot.JoinHome(home, "config.yaml")
 	projectPath := projectStatePath(workingDir, "config.yaml")
 	if filepath.Clean(globalPath) == filepath.Clean(projectPath) {
-		return nil
+		return nil, nil
 	}
 	if _, err := os.Stat(globalPath); err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return nil, nil
 		}
-		return fmt.Errorf("stat global configuration %s: %w", globalPath, err)
+		return nil, fmt.Errorf("stat global configuration %s: %w", globalPath, err)
 	}
 	loader, err := NewConfigLoaderWithWorkingDir(filepath.Dir(globalPath))
 	if err != nil {
-		return fmt.Errorf("failed to create global config loader: %w", err)
+		return nil, fmt.Errorf("failed to create global config loader: %w", err)
 	}
 	globalCfg, err := loader.LoadConfigFromPath(globalPath)
 	if err != nil {
-		return fmt.Errorf("failed to load global configuration from %s: %w", globalPath, err)
+		return nil, fmt.Errorf("failed to load global configuration from %s: %w", globalPath, err)
 	}
-	mergeExecutionsConfig(projectCfg, globalCfg)
-	return nil
+	return globalCfg, nil
 }
 
 func mergeExecutionsConfig(projectCfg, globalCfg *Config) {
@@ -203,6 +226,18 @@ func mergeExecutionsConfig(projectCfg, globalCfg *Config) {
 		return
 	}
 	mergeDockerConfig(projectCfg.Executions.Docker, globalCfg.Executions.Docker)
+}
+
+func mergeAgentConfig(projectCfg, globalCfg *Config) {
+	if projectCfg == nil || globalCfg == nil || globalCfg.Agent == nil || len(globalCfg.Agent.Endpoints) == 0 {
+		return
+	}
+	if projectCfg.Agent == nil {
+		projectCfg.Agent = &AgentConfig{}
+	}
+	if len(projectCfg.Agent.Endpoints) == 0 {
+		projectCfg.Agent.Endpoints = append([]AgentEndpoint(nil), globalCfg.Agent.Endpoints...)
+	}
 }
 
 func mergeDockerConfig(projectDocker, globalDocker *ExecutionsDockerConfig) {

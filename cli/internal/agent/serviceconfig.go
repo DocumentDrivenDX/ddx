@@ -96,7 +96,7 @@ func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Dur
 // leak for the lifetime of the process and accumulate under repeated calls
 // (see bead ddx-server-fizeau-leak).
 func NewServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
-	return agentlib.New(agentlib.ServiceOptions{})
+	return newServiceFromWorkDir(context.Background(), workDir)
 }
 
 // NewServiceFromWorkDirCtx is the context-scoped variant of
@@ -108,7 +108,19 @@ func NewServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.Fiz
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	return agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx})
+	return newServiceFromWorkDir(ctx, workDir)
+}
+
+func newServiceFromWorkDir(ctx context.Context, workDir string) (agentlib.FizeauService, error) {
+	opts := agentlib.ServiceOptions{QuotaRefreshContext: ctx}
+	sc, err := serviceConfigFromDDxEndpointsNoFilter(workDir)
+	if err != nil {
+		return nil, err
+	}
+	if sc != nil {
+		opts.ServiceConfig = sc
+	}
+	return agentlib.New(opts)
 }
 
 // NewStatusProbeServiceFromWorkDir constructs a service for status surfaces

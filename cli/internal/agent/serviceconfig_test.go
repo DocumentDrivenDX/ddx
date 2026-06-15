@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -77,4 +79,47 @@ agent:
 	}
 	assert.True(t, hasLmstudio, "unreachable lmstudio endpoint must be passed to service, not removed by DDx")
 	assert.True(t, hasOmlx, "live omlx endpoint must be present")
+}
+
+func TestNewServiceFromWorkDirUsesInheritedGlobalEndpoints(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	globalDir := filepath.Join(homeDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(globalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(`version: "1.0"
+agent:
+  endpoints:
+    - type: lmstudio
+      host: 127.0.0.1
+      port: 1234
+      api_key: lmstudio
+`), 0o644))
+
+	workDir := t.TempDir()
+	testutils.MakeInitializedDDxRoot(t, workDir)
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: .ddx/plugins/ddx
+  repository:
+    url: https://github.com/project/repo
+    branch: main
+`), 0o644))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	svc, err := NewServiceFromWorkDirCtx(ctx, workDir)
+	require.NoError(t, err)
+
+	providers, err := svc.ListProviders(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, providerNames(providers), "lmstudio-127-0-0-1-1234")
+}
+
+func providerNames(providers []agentlib.ProviderInfo) []string {
+	names := make([]string, 0, len(providers))
+	for _, provider := range providers {
+		names = append(names, provider.Name)
+	}
+	return names
 }

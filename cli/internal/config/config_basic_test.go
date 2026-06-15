@@ -84,6 +84,74 @@ executions:
 	assert.Equal(t, "4", cfg.Executions.Docker.CPUs)
 }
 
+func TestLoadWithWorkingDir_InheritsGlobalAgentEndpointsWhenProjectHasNone(t *testing.T) {
+	homeDir := t.TempDir()
+	projectDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	globalDir := filepath.Join(homeDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(globalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(`version: "1.0"
+agent:
+  endpoints:
+    - type: lmstudio
+      host: 127.0.0.1
+      port: 1234
+      api_key: lmstudio
+`), 0o644))
+
+	projectDirDDX := filepath.Join(projectDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(projectDirDDX, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDirDDX, "config.yaml"), []byte(`version: "1.0"
+library:
+  path: .ddx/plugins/ddx
+  repository:
+    url: https://github.com/project/repo
+    branch: main
+`), 0o644))
+
+	cfg, err := LoadWithWorkingDir(projectDir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Agent)
+	require.Len(t, cfg.Agent.Endpoints, 1)
+	assert.Equal(t, "lmstudio", cfg.Agent.Endpoints[0].Type)
+	assert.Equal(t, "127.0.0.1", cfg.Agent.Endpoints[0].Host)
+	assert.Equal(t, 1234, cfg.Agent.Endpoints[0].Port)
+}
+
+func TestLoadWithWorkingDir_ProjectAgentEndpointsOverrideGlobal(t *testing.T) {
+	homeDir := t.TempDir()
+	projectDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	globalDir := filepath.Join(homeDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(globalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(globalDir, "config.yaml"), []byte(`version: "1.0"
+agent:
+  endpoints:
+    - type: lmstudio
+      host: 127.0.0.1
+      port: 1234
+`), 0o644))
+
+	projectDirDDX := filepath.Join(projectDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(projectDirDDX, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectDirDDX, "config.yaml"), []byte(`version: "1.0"
+agent:
+  endpoints:
+    - type: omlx
+      host: 127.0.0.1
+      port: 1235
+`), 0o644))
+
+	cfg, err := LoadWithWorkingDir(projectDir)
+	require.NoError(t, err)
+	require.NotNil(t, cfg.Agent)
+	require.Len(t, cfg.Agent.Endpoints, 1)
+	assert.Equal(t, "omlx", cfg.Agent.Endpoints[0].Type)
+	assert.Equal(t, 1235, cfg.Agent.Endpoints[0].Port)
+}
+
 // TestLoadConfig_LocalConfig tests loading with local .ddx.yml
 func TestLoadConfig_LocalConfig_Basic(t *testing.T) {
 	tempDir := t.TempDir()
