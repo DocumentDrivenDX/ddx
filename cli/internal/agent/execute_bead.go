@@ -1060,6 +1060,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Seed it with any pinned harness/model and refresh it when fizeau resolves
 	// the route, then chain to the caller-supplied OnRouteResolved callback.
 	providerGuard := newRunningProviderGuard(projectRoot, beadID, attemptID, os.Getpid())
+	providerGuard.SetScopeDir(wtPath)
 	providerGuard.UpdateRoute(rcfg.Harness(), "", rcfg.Model())
 	baseOnRouteResolved := onRouteResolvedFromContext(ctx)
 
@@ -1139,7 +1140,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Attempt-end backstop: reap every remaining provider child regardless of
 	// route, then fold the running-phase guard's evidence into the final
 	// provider-children.json so mid-attempt reaps survive in the audit trail.
-	attemptEndReaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC())
+	attemptEndReaped := reapAllProviderChildren(context.Background(), os.Getpid(), wtPath, time.Now().UTC())
 	if allReaped := append(providerGuard.Reaped(), attemptEndReaped...); len(allReaped) > 0 {
 		writeProviderChildCleanupArtifact(projectRoot, attemptID, &providerChildCleanupReport{
 			AttemptID: attemptID,

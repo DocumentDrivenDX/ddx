@@ -328,7 +328,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		model = firstNonEmpty(model, strings.TrimSpace(runtime.ModelOverride), strings.TrimSpace(pt.Model))
 		route := providerRouteLabel(provider, model)
 		now := time.Now().UTC()
-		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, now)
+		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), wd, route, harness, now)
 		if len(reaped) > 0 {
 			writeProviderChildCleanupArtifact(workDir, runtime.Correlation["attempt_id"], &providerChildCleanupReport{
 				AttemptID:   runtime.Correlation["attempt_id"],

@@ -152,7 +152,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		provider = firstNonEmpty(provider, strings.TrimSpace(opts.Provider))
 		model = firstNonEmpty(model, strings.TrimSpace(opts.Model))
 		route := providerRouteLabel(provider, model)
-		_, _ = reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, time.Now().UTC())
+		_, _ = reapSupersededProviderChildren(context.Background(), os.Getpid(), wd, route, harness, time.Now().UTC())
 	}
 	final, routing, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}), watchdog, onRouteResolved)
 	elapsed := time.Since(start)

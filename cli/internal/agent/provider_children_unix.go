@@ -50,11 +50,23 @@ func scanProviderChildProcessesImpl(ctx context.Context, rootPID int, now time.T
 			PID:       pid,
 			Provider:  provider,
 			Command:   r.Command,
+			CWD:       providerProcessCWD(pid),
 			StartedAt: started,
 			Defunct:   isDefunctProviderCommand(r.Command),
 		})
 	}
 	return out2, nil
+}
+
+func providerProcessCWD(pid int) string {
+	if pid <= 0 {
+		return ""
+	}
+	cwd, err := os.Readlink("/proc/" + strconv.Itoa(pid) + "/cwd")
+	if err != nil {
+		return ""
+	}
+	return cwd
 }
 
 type providerPSRow struct {
