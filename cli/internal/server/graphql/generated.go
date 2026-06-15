@@ -45727,7 +45727,7 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "harness", "provider", "model", "profile", "effort", "labelFilter", "mode", "idleInterval"}
+	fieldsInOrder := [...]string{"projectId", "harness", "provider", "model", "profile", "effort", "labelFilter", "mode", "idleInterval", "requestTimeout"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -45797,6 +45797,13 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 				return it, err
 			}
 			it.IdleInterval = data
+		case "requestTimeout":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("requestTimeout"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RequestTimeout = data
 		}
 	}
 	return it, nil

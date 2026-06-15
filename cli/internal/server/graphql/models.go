@@ -2352,6 +2352,8 @@ type StartWorkerInput struct {
 	Mode *string `json:"mode,omitempty"`
 	// Sleep duration between empty-queue scans in watch mode (for example "30s").
 	IdleInterval *string `json:"idleInterval,omitempty"`
+	// Absolute provider request timeout for each worker attempt (for example "20m").
+	RequestTimeout *string `json:"requestTimeout,omitempty"`
 }
 
 // Subscription is the root entry point for all real-time events

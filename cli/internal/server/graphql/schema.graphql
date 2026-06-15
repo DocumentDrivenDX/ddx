@@ -1948,6 +1948,8 @@ input StartWorkerInput {
   mode: String
   """Sleep duration between empty-queue scans in watch mode (for example "30s")."""
   idleInterval: String
+  """Absolute provider request timeout for each worker attempt (for example "20m")."""
+  requestTimeout: String
 }
 
 """PluginDispatchResult describes the worker started by a plugin action."""

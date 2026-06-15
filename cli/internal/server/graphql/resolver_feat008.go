@@ -143,6 +143,9 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	} else if mode == "watch" {
 		args["idle_interval"] = "30s"
 	}
+	if input.RequestTimeout != nil && strings.TrimSpace(*input.RequestTimeout) != "" {
+		args["request_timeout"] = strings.TrimSpace(*input.RequestTimeout)
+	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, err

@@ -144,6 +144,7 @@ func TestReviewRetryThresholdFromConfigGraphQL(t *testing.T) {
 		harnessCfg  = "claude"
 		providerCfg = "anthropic"
 		modelCfg    = "opus-4.7"
+		timeoutCfg  = "53s"
 	)
 
 	projectRoot := t.TempDir()
@@ -177,10 +178,11 @@ review_max_retries: 5
 	mr := &mutationResolver{Resolver: resolver}
 
 	res, err := mr.StartWorker(context.Background(), StartWorkerInput{
-		ProjectID: "",
-		Harness:   strPtr(harnessCfg),
-		Provider:  strPtr(providerCfg),
-		Model:     strPtr(modelCfg),
+		ProjectID:      "",
+		Harness:        strPtr(harnessCfg),
+		Provider:       strPtr(providerCfg),
+		Model:          strPtr(modelCfg),
+		RequestTimeout: strPtr(timeoutCfg),
 	})
 	require.NoError(t, err, "StartWorker must succeed against a valid on-disk config")
 	require.NotNil(t, res)
@@ -205,6 +207,8 @@ review_max_retries: 5
 		"GraphQL startWorker defaults server-managed workers to watch mode")
 	assert.Equal(t, "30s", got.args["idle_interval"],
 		"GraphQL startWorker defaults watch workers to a 30s idle interval")
+	assert.Equal(t, timeoutCfg, got.args["request_timeout"],
+		"GraphQL startWorker must forward requestTimeout to the worker spec")
 
 	// Half 2: drive ExecuteBeadWorker.RunWithConfig with the same
 	// ResolvedConfig production would produce. This mirrors what
