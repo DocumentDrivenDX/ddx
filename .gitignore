@@ -434,6 +434,13 @@ cli/internal/agent/.ddx/
 .ddx/exec-runs.d/
 .ddx/tsnet/
 .ddx/metrics/*.jsonl.*
+
+# DDx marketplace plugin payloads and generated agent adapters.
+# Project source keeps .ddx/plugins.lock.yaml plus canonical library/embed
+# assets; these paths are restored by ddx plugin sync or local overlays.
+.ddx/plugins/*/
+.agents/skills/*/
+.claude/skills/*/
 .helix-logs/
 
 .ddx/executions/
