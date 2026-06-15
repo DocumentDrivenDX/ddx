@@ -11,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/gitrepohealth"
+	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -132,9 +133,36 @@ func parseLifecycleProjectStatus(raw string) map[string]string {
 		if path == "" {
 			continue
 		}
+		if isLifecycleProjectStatusIgnoredPath(path) {
+			continue
+		}
 		entries[path] = status
 	}
 	return entries
+}
+
+func isLifecycleProjectStatusIgnoredPath(path string) bool {
+	path = strings.TrimSpace(filepath.ToSlash(path))
+	switch {
+	case trackerpaths.IsManagedTrackerPath(path):
+		return true
+	case path == ".ddx/dirty-root-guard.json":
+		return true
+	case path == ".ddx/metrics/locks.jsonl":
+		return true
+	case path == ".ddx/run-state.json":
+		return true
+	case path == ".ddx/run-state":
+		return true
+	case strings.HasPrefix(path, ".ddx/run-state/"):
+		return true
+	case path == ".ddx/workers":
+		return true
+	case strings.HasPrefix(path, ".ddx/workers/"):
+		return true
+	default:
+		return false
+	}
 }
 
 func guardLifecycleProjectStatus(projectRoot string, before lifecycleProjectStatusSnapshot, beadID string) error {
