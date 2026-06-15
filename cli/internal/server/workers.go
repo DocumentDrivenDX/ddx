@@ -260,6 +260,17 @@ func (m *WorkerManager) WakeProject(projectRoot string) int {
 	return signalled
 }
 
+// HasLiveWorker reports whether the manager currently holds a live in-memory
+// handle (goroutine) for id. False for disk-only records left behind by a
+// previous server run. Used by WorkerSupervisor to distinguish a crashed
+// managed worker from a stale disk record it never started.
+func (m *WorkerManager) HasLiveWorker(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, ok := m.workers[id]
+	return ok
+}
+
 func NewWorkerManager(projectRoot string) *WorkerManager {
 	m := &WorkerManager{
 		projectRoot:      projectRoot,
