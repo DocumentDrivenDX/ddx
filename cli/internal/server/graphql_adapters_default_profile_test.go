@@ -92,6 +92,9 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	if spec.ReviewModel != "" {
 		t.Errorf("ReviewModel must be empty on default path, got %q", spec.ReviewModel)
 	}
+	if !spec.OpaquePassthrough {
+		t.Errorf("OpaquePassthrough: got false")
+	}
 }
 
 // TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis pins ddx-755f5881

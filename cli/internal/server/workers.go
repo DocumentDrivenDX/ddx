@@ -312,6 +312,11 @@ func prepareExecuteLoopWorkerSpec(projectRoot string, spec executeloop.ExecuteLo
 	if spec.Mode == "" && defaultMode != "" {
 		spec.Mode = defaultMode
 	}
+	// Server-managed work workers mirror `ddx work`: route selection belongs to
+	// the agent service, not a DDx-side preflight. This keeps REST and GraphQL
+	// dispatch on the same path as the CLI and prevents stale local routing
+	// checks from rejecting viable providers.
+	spec.OpaquePassthrough = true
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
 		return ExecuteLoopWorkerSpec{}, err
@@ -727,6 +732,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Provider:          spec.Provider,
 		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:            spec.Effort,
+		AttemptBackend:    spec.AttemptBackend,
 		MinPower:          spec.MinPower,
 		MaxPower:          spec.MaxPower,
 		OpaquePassthrough: spec.OpaquePassthrough,
@@ -778,6 +784,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Provider:          attemptProvider,
 				Profile:           rcfg.Profile(),
 				Effort:            spec.Effort,
+				AttemptBackend:    spec.AttemptBackend,
 				MinPower:          requestedMinPower,
 				MaxPower:          spec.MaxPower,
 				OpaquePassthrough: spec.OpaquePassthrough,

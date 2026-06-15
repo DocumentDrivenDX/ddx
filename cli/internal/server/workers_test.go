@@ -30,6 +30,20 @@ func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 	return executeloop.Duration{Duration: duration}
 }
 
+func TestPrepareExecuteLoopWorkerSpecDefaultsOpaquePassthrough(t *testing.T) {
+	root := t.TempDir()
+
+	spec, err := prepareExecuteLoopWorkerSpec(root, executeloop.ExecuteLoopSpec{
+		Profile:        "default",
+		AttemptBackend: agent.AttemptBackendInTree,
+	}, executeloop.ModeWatch)
+	require.NoError(t, err)
+	assert.Equal(t, root, spec.ProjectRoot)
+	assert.Equal(t, executeloop.ModeWatch, spec.Mode)
+	assert.True(t, spec.OpaquePassthrough)
+	assert.Equal(t, agent.AttemptBackendInTree, spec.AttemptBackend)
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
@@ -1242,6 +1256,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		"provider":            "openrouter",
 		"effort":              "high",
 		"label_filter":        "phase:reliability",
+		"attempt_backend":     agent.AttemptBackendInTree,
 		"mode":                "watch",
 		"idle_interval":       "17s",
 		"no_review":           true,
@@ -1289,6 +1304,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, "openrouter", persisted.Provider)
 	assert.Equal(t, "high", persisted.Effort)
 	assert.Equal(t, "phase:reliability", persisted.LabelFilter)
+	assert.Equal(t, agent.AttemptBackendInTree, persisted.AttemptBackend)
 	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)
 	assert.Equal(t, 17*time.Second, persisted.IdleInterval.Duration)
 	assert.True(t, persisted.NoReview)
