@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -509,6 +510,114 @@ func TestWorkStatusReportsServerUnavailableState(t *testing.T) {
 	require.Len(t, report.Workers, 1)
 	assert.Equal(t, "server.unavailable", report.Workers[0].Phase)
 	assert.Equal(t, "server unreachable: holding queue until /api/health returns", report.Workers[0].Message)
+}
+
+func TestWorkStatusIncludesServerManagedWorkerRecord(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	rec := serverpkg.WorkerRecord{
+		ID:          "worker-status-server-managed",
+		Kind:        "execute-loop",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: projectRoot,
+		Harness:     "claude",
+		Profile:     "default",
+		StartedAt:   now.Add(-7 * time.Minute),
+		CurrentBead: "ddx-server1",
+		CurrentAttempt: &serverpkg.CurrentAttemptInfo{
+			AttemptID: "20260615T061500-server1",
+			BeadID:    "ddx-server1",
+			Harness:   "claude",
+			Profile:   "default",
+			Phase:     "running",
+			StartedAt: now.Add(-6 * time.Minute),
+			ElapsedMS: int64((6 * time.Minute).Milliseconds()),
+		},
+		RecentPhases: []serverpkg.PhaseTransition{
+			{Phase: "queueing", TS: now.Add(-6 * time.Minute), PhaseSeq: 1},
+			{Phase: "running", TS: now.Add(-5 * time.Minute), PhaseSeq: 2},
+		},
+	}
+	writeServerWorkerRecordForStatusTest(t, projectRoot, rec)
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: nil}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1, "server-managed pidless workers must be visible; got %s", out)
+	w := report.Workers[0]
+	assert.Equal(t, 0, w.PID)
+	assert.Equal(t, projectRoot, w.ProjectRoot)
+	assert.Equal(t, "ddx-server1", w.BeadID)
+	assert.Equal(t, "20260615T061500-server1", w.AttemptID)
+	assert.Equal(t, "running", w.Phase)
+	assert.Contains(t, w.Command, "server-managed ddx work")
+	assert.NotZero(t, w.AgeSeconds)
+	assert.NotZero(t, w.LastActivityAt)
+
+	textOut, err := executeCommand(factory.NewRootCommand(), "work", "status", "--project", projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "live ddx workers for "+projectRoot+": 1")
+	assert.Contains(t, textOut, "pid=0")
+	assert.Contains(t, textOut, "bead=ddx-server1")
+	assert.Contains(t, textOut, "attempt=20260615T061500-server1")
+}
+
+func TestWorkStatusServerManagedWorkerRecordHonorsProjectScopeAndTerminalState(t *testing.T) {
+	projectRoot := t.TempDir()
+	otherRoot := t.TempDir()
+	now := time.Now().UTC()
+	writeServerWorkerRecordForStatusTest(t, projectRoot, serverpkg.WorkerRecord{
+		ID:          "worker-status-server-other-project",
+		Kind:        "execute-loop",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: otherRoot,
+		StartedAt:   now.Add(-3 * time.Minute),
+		CurrentAttempt: &serverpkg.CurrentAttemptInfo{
+			AttemptID: "20260615T061600-other",
+			BeadID:    "ddx-other01",
+			Phase:     "running",
+			StartedAt: now.Add(-3 * time.Minute),
+		},
+	})
+	writeServerWorkerRecordForStatusTest(t, projectRoot, serverpkg.WorkerRecord{
+		ID:          "worker-status-server-stopped",
+		Kind:        "execute-loop",
+		State:       "stopped",
+		Status:      "stopped",
+		ProjectRoot: projectRoot,
+		StartedAt:   now.Add(-10 * time.Minute),
+		FinishedAt:  now.Add(-1 * time.Minute),
+		CurrentBead: "ddx-stopped",
+	})
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: nil}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.Empty(t, report.Workers, "default project scope must not show other-project or terminal server records: %s", out)
+}
+
+func writeServerWorkerRecordForStatusTest(t *testing.T, projectRoot string, rec serverpkg.WorkerRecord) {
+	t.Helper()
+	require.NotEmpty(t, rec.ID)
+	dir := filepath.Join(workerstatus.LivenessDir(projectRoot), rec.ID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	data, err := json.MarshalIndent(rec, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "status.json"), append(data, '\n'), 0o644))
 }
 
 func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {

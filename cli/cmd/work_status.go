@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -11,6 +13,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
@@ -91,13 +94,15 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	now := time.Now().UTC()
+	liveWorkers := enrichWorkersWithRunState(
+		workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
+		now,
+	)
+	liveWorkers = mergeServerManagedWorkers(liveWorkers, projectRoot, allProjects, now)
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
-		Workers: enrichWorkersWithRunState(
-			workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
-			now,
-		),
+		Workers:     liveWorkers,
 	}
 	if active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now); err == nil {
 		report.ActiveWork = active
@@ -192,6 +197,147 @@ func filterAndSortWorkers(all []workerstatus.LiveWorker, projectRoot string, all
 		return filtered[i].StartedAt.Before(filtered[j].StartedAt)
 	})
 	return filtered
+}
+
+func mergeServerManagedWorkers(workers []workerstatus.LiveWorker, projectRoot string, allProjects bool, now time.Time) []workerstatus.LiveWorker {
+	records, err := readServerManagedWorkerRecords(projectRoot)
+	if err != nil || len(records) == 0 {
+		return workers
+	}
+	seen := make(map[string]bool, len(workers))
+	for _, w := range workers {
+		if w.AttemptID != "" {
+			seen["attempt:"+w.AttemptID] = true
+		}
+		if w.PID > 0 {
+			seen[fmt.Sprintf("pid:%d", w.PID)] = true
+		}
+	}
+	for _, rec := range records {
+		if !isLiveServerManagedWorker(rec) {
+			continue
+		}
+		if !allProjects && !workerstatus.SamePath(rec.ProjectRoot, projectRoot) {
+			continue
+		}
+		w := liveWorkerFromServerRecord(rec, now)
+		if w.AttemptID != "" && seen["attempt:"+w.AttemptID] {
+			continue
+		}
+		if w.PID > 0 && seen[fmt.Sprintf("pid:%d", w.PID)] {
+			continue
+		}
+		if w.AttemptID != "" {
+			seen["attempt:"+w.AttemptID] = true
+		}
+		if w.PID > 0 {
+			seen[fmt.Sprintf("pid:%d", w.PID)] = true
+		}
+		workers = append(workers, w)
+	}
+	sort.SliceStable(workers, func(i, j int) bool {
+		if workers[i].StartedAt.Equal(workers[j].StartedAt) {
+			return workers[i].PID < workers[j].PID
+		}
+		return workers[i].StartedAt.Before(workers[j].StartedAt)
+	})
+	return workers
+}
+
+func readServerManagedWorkerRecords(projectRoot string) ([]serverpkg.WorkerRecord, error) {
+	dir := workerstatus.LivenessDir(projectRoot)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := make([]serverpkg.WorkerRecord, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(dir, entry.Name(), "status.json"))
+		if err != nil {
+			continue
+		}
+		var rec serverpkg.WorkerRecord
+		if err := json.Unmarshal(data, &rec); err != nil {
+			continue
+		}
+		if rec.Status == "" {
+			rec.Status = rec.State
+		}
+		if rec.ID == "" || rec.Kind == "" || rec.State == "" {
+			continue
+		}
+		out = append(out, rec)
+	}
+	return out, nil
+}
+
+func isLiveServerManagedWorker(rec serverpkg.WorkerRecord) bool {
+	if rec.State != "running" && rec.State != "stopping" {
+		return false
+	}
+	if !rec.FinishedAt.IsZero() {
+		return false
+	}
+	return true
+}
+
+func liveWorkerFromServerRecord(rec serverpkg.WorkerRecord, now time.Time) workerstatus.LiveWorker {
+	startedAt := rec.StartedAt.UTC()
+	if startedAt.IsZero() && rec.CurrentAttempt != nil {
+		startedAt = rec.CurrentAttempt.StartedAt.UTC()
+	}
+	age := now.Sub(startedAt)
+	if startedAt.IsZero() || age < 0 {
+		age = 0
+	}
+	beadID := rec.CurrentBead
+	attemptID := ""
+	phase := rec.State
+	if rec.CurrentAttempt != nil {
+		if rec.CurrentAttempt.BeadID != "" {
+			beadID = rec.CurrentAttempt.BeadID
+		}
+		attemptID = rec.CurrentAttempt.AttemptID
+		if rec.CurrentAttempt.Phase != "" {
+			phase = rec.CurrentAttempt.Phase
+		}
+	}
+	message := ""
+	if rec.LastError != "" && rec.LastError != "success" {
+		message = rec.LastError
+	}
+	return workerstatus.LiveWorker{
+		PID:            rec.PID,
+		Command:        "server-managed ddx work " + rec.ID,
+		StartedAt:      startedAt,
+		AgeSeconds:     age.Seconds(),
+		Age:            workerstatus.FormatAge(age),
+		ProjectRoot:    rec.ProjectRoot,
+		BeadID:         beadID,
+		AttemptID:      attemptID,
+		Phase:          phase,
+		Message:        message,
+		LastActivityAt: serverWorkerLastActivity(rec, now),
+	}
+}
+
+func serverWorkerLastActivity(rec serverpkg.WorkerRecord, fallback time.Time) time.Time {
+	if n := len(rec.RecentPhases); n > 0 {
+		return rec.RecentPhases[n-1].TS.UTC()
+	}
+	if rec.CurrentAttempt != nil {
+		return rec.CurrentAttempt.StartedAt.UTC()
+	}
+	if !rec.StartedAt.IsZero() {
+		return rec.StartedAt.UTC()
+	}
+	return fallback.UTC()
 }
 
 func writeWorkStatusJSON(out io.Writer, report WorkStatusReport) error {
