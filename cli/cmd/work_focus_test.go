@@ -195,6 +195,33 @@ func TestWorkFocusRecommendsWorkerForDeepReadyQueue(t *testing.T) {
 		"worker recommendation must suggest 'ddx work' for deep ready queue")
 }
 
+func TestWorkFocusDirtyProjectRootSuppressesWorkerRecommendation(t *testing.T) {
+	var beads []*bead.Bead
+	for i := 0; i < 4; i++ {
+		beads = append(beads, &bead.Bead{
+			ID:    "ddx-focus-dirty-" + string(rune('a'+i)),
+			Title: "Dirty root queue bead",
+		})
+	}
+
+	env := setupWorkFocusEnv(t, beads...)
+	initGitRepo(t, env.Dir)
+	require.NoError(t, os.WriteFile(filepath.Join(env.Dir, "README.md"), []byte("dirty\n"), 0o644))
+
+	root := NewCommandFactory(env.Dir).NewRootCommand()
+	out, err := executeCommand(root, "work", "focus", "--json")
+	require.NoError(t, err)
+
+	var report WorkFocusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	assert.Equal(t, 4, report.ReadySummary.Count)
+	assert.Equal(t, []string{"README.md"}, report.ProjectRootDirtyPaths)
+	assert.Contains(t, report.WorkerRecommendation, "project root has uncommitted tracked changes")
+	assert.Contains(t, report.WorkerRecommendation, "README.md")
+	assert.NotContains(t, report.WorkerRecommendation, "consider running: ddx work")
+}
+
 // TestWorkFocusEmptyQueueExitsSuccessfully verifies AC1: ddx work focus is
 // read-only and exits successfully on an empty queue.
 func TestWorkFocusEmptyQueueExitsSuccessfully(t *testing.T) {

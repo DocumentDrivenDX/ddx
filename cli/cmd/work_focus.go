@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
@@ -44,13 +45,14 @@ type WorkFocusReadySummary struct {
 
 // WorkFocusReport is the structured result of "ddx work focus".
 type WorkFocusReport struct {
-	HumanRequired        []WorkFocusBead         `json:"human_required"`
-	BlockedOrPlanning    []WorkFocusBlockedBead  `json:"blocked_or_planning"`
-	ReadySummary         WorkFocusReadySummary   `json:"ready_summary"`
-	ActiveWorkers        []WorkFocusActiveWorker `json:"active_workers,omitempty"`
-	ActiveWork           activework.Snapshot     `json:"active_work"`
-	WorkerRecommendation string                  `json:"worker_recommendation"`
-	Unknowns             []string                `json:"unknowns"`
+	HumanRequired         []WorkFocusBead         `json:"human_required"`
+	BlockedOrPlanning     []WorkFocusBlockedBead  `json:"blocked_or_planning"`
+	ReadySummary          WorkFocusReadySummary   `json:"ready_summary"`
+	ActiveWorkers         []WorkFocusActiveWorker `json:"active_workers,omitempty"`
+	ActiveWork            activework.Snapshot     `json:"active_work"`
+	ProjectRootDirtyPaths []string                `json:"project_root_dirty_paths"`
+	WorkerRecommendation  string                  `json:"worker_recommendation"`
+	Unknowns              []string                `json:"unknowns"`
 }
 
 // workerReadyDepthLabel returns a human-readable depth label for the ready count.
@@ -159,10 +161,11 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 		return WorkFocusReport{}, fmt.Errorf("work focus: active work query: %w", err)
 	}
 	activeWorkers := activeWorkRecordsForFocus(activeWork)
+	dirtyPaths := agent.CanonicalRootDirtyPaths(projectRoot)
 
 	// Conservative worker recommendation. Treat fresh active work as the
 	// capacity signal rather than the raw lifecycle count.
-	workerRec := buildWorkerRecommendation(readyCount, activeWork.Count)
+	workerRec := buildWorkerRecommendation(readyCount, activeWork.Count, dirtyPaths)
 
 	// Unknowns: worker process liveness is not verifiable from the bead store
 	// alone; only add the hazard when we have in-progress beads but the only
@@ -183,19 +186,27 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 	}
 
 	return WorkFocusReport{
-		HumanRequired:        humanRequired,
-		BlockedOrPlanning:    blockedOrPlanning,
-		ReadySummary:         readySummary,
-		ActiveWorkers:        activeWorkers,
-		ActiveWork:           activeWork,
-		WorkerRecommendation: workerRec,
-		Unknowns:             unknowns,
+		HumanRequired:         humanRequired,
+		BlockedOrPlanning:     blockedOrPlanning,
+		ReadySummary:          readySummary,
+		ActiveWorkers:         activeWorkers,
+		ActiveWork:            activeWork,
+		ProjectRootDirtyPaths: dirtyPaths,
+		WorkerRecommendation:  workerRec,
+		Unknowns:              unknowns,
 	}, nil
 }
 
 // buildWorkerRecommendation returns a conservative recommendation string.
 // It suggests another worker only when ready depth is high and capacity is observable.
-func buildWorkerRecommendation(readyCount, activeCount int) string {
+func buildWorkerRecommendation(readyCount, activeCount int, dirtyPaths []string) string {
+	if len(dirtyPaths) > 0 {
+		return fmt.Sprintf(
+			"%d bead(s) ready, but the project root has uncommitted tracked changes (%s); commit or clean those paths before starting ddx work.",
+			readyCount,
+			strings.Join(dirtyPaths, ", "),
+		)
+	}
 	switch {
 	case readyCount == 0:
 		return "Queue is empty; no worker action needed."
@@ -303,6 +314,9 @@ func printWorkFocusText(cmd *cobra.Command, r WorkFocusReport) error {
 	// Section: Worker-ready summary
 	fmt.Fprintf(out, "\n=== Worker-ready summary ===\n")
 	fmt.Fprintf(out, "  %d bead(s) ready for worker execution (%s)\n", r.ReadySummary.Count, r.ReadySummary.Depth)
+	if len(r.ProjectRootDirtyPaths) > 0 {
+		fmt.Fprintf(out, "  project root dirty paths: %s\n", strings.Join(r.ProjectRootDirtyPaths, ", "))
+	}
 
 	// Section: Active workers (sidecar-derived). Surfaced so an operator
 	// asking "is the worker alive?" gets a positive answer even when the
