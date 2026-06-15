@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260615T145159-c03fb934",
+  "bead_id": "ddx-cd99987d",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-06-15T15:00:55.521309195Z",
+  "reaped": [
+    {
+      "pid": 186101,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 186103,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 186104,
+      "provider": "gemini",
+      "command": "/home/linuxbrew/.linuxbrew/opt/node/bin/node /home/linuxbrew/.linuxbrew/bin/gemini --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 186194,
+      "provider": "gemini",
+      "command": "/home/linuxbrew/.linuxbrew/opt/node/bin/node /home/linuxbrew/.linuxbrew/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 202542,
+      "provider": "gemini",
+      "command": "/home/linuxbrew/.linuxbrew/opt/node/bin/node /home/linuxbrew/.linuxbrew/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 145746,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 516,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
+    }
+  ]
+}

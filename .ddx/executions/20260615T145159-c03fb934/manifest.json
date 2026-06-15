@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260615T145159-c03fb934",
+  "bead_id": "ddx-cd99987d",
+  "base_rev": "ef5ddfa295a439261f697353c71117dc7aa930ea",
+  "created_at": "2026-06-15T14:52:07.633863366Z",
+  "requested": {
+    "harness": "claude-tui",
+    "model": "opus-4.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cd99987d",
+    "title": "agent: force-stage DDx-managed durable audit paths when ignored",
+    "description": "PROBLEM\nA worker can finish a bead and then fail durable audit commit because .ddx/metrics or .ddx/attachments are ignored by the project. That leaves successful worker output requiring manual git add -f cleanup, which is incompatible with unattended server-managed draining.\n\nROOT CAUSE WITH FILE:LINE\nDuring dogfood on pqueue, a worker closed pqueue-6381a300 but exited operator attention with 'failed to commit durable audit outputs' because git add refused ignored .ddx/metrics/.ddx/attachments paths. cli/internal/agent/durable_audit.go:93 commitDurableAuditOutputsLocked scopes to trackerpaths.ManagedPathspecs, but :112-116 stages dirty paths using git add -A -- without -f. DDx-managed audit paths may be intentionally ignored by projects, but they still must be force-stageable when DDx commits durable audit output.\n\nPROPOSED FIX\nChange durable audit staging so DDx-managed tracker/audit pathspecs are staged even when ignored, likely by using git add -f -A for managed audit paths or a narrower force-add path that preserves ordinary ignored-file safety. Add regression coverage with a fixture repo that ignores .ddx/metrics and .ddx/attachments but still commits managed durable audit output.\n\nNON-SCOPE\nDo not globally force-add arbitrary ignored files. Do not change tracker storage formats. Do not manually edit .ddx/beads.jsonl.",
+    "acceptance": "1. TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths creates a fixture repo with .gitignore entries for .ddx/metrics and .ddx/attachments, writes managed audit outputs, and proves commitDurableAuditOutputsLocked commits them.\n2. TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles proves unrelated ignored files outside trackerpaths.ManagedPathspecs are not staged or committed.\n3. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths|TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles' passes.\n4. A local reproduction using an ignored .ddx/metrics/attempts.jsonl no longer fails with git add refused ignored path.\n5. make install is run after the code change lands.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:agent",
+      "area:tracker",
+      "kind:bug",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: empty output\",\"fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\"}",
+          "created_at": "2026-06-15T14:51:59.38559871Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 60,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260615T145159-c03fb934",
+    "prompt": ".ddx/executions/20260615T145159-c03fb934/prompt.md",
+    "manifest": ".ddx/executions/20260615T145159-c03fb934/manifest.json",
+    "result": ".ddx/executions/20260615T145159-c03fb934/result.json",
+    "checks": ".ddx/executions/20260615T145159-c03fb934/checks.json",
+    "usage": ".ddx/executions/20260615T145159-c03fb934/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cd99987d-20260615T145159-c03fb934"
+  },
+  "prompt_sha": "356f9e5e0c52c9daada26d688fc778aafce4fe19e099bbb6b7aee60586dd9825"
+}
