@@ -135,17 +135,28 @@ func (f *CommandFactory) workerScanner() workerStatusScanner {
 	return workerstatus.New()
 }
 
-// enrichWorkersWithRunState fills bead/attempt/worktree from a fresh
+// enrichWorkersWithRunState reconciles each live worker with the freshest
 // per-attempt run-state record (.ddx/run-state/<attempt>.json) whose PID
-// matches a live worker, when liveness enrichment did not supply them — e.g.
-// the liveness sidecar was absent, start-time-skewed, or its attempt id was
-// stale (ddx-f9b41107). Run-state is read from each worker's own project root,
-// so all-projects scope does not leak attempts across projects.
+// matches it. Run-state is read from each worker's own project root, so
+// all-projects scope does not leak attempts across projects.
+//
+// Two cases are handled so that workers[], active_work.records[], and text
+// status all report one stable canonical attempt id for a single live worker
+// (ddx-f93e6ef9):
+//
+//   - Fill: liveness enrichment did not supply bead/attempt/worktree (sidecar
+//     absent, start-time-skewed, or its attempt id missing) — run-state fills
+//     the empty fields (ddx-f9b41107).
+//   - Canonical override: the liveness sidecar supplied a *stale* attempt id
+//     while run-state holds a fresher record for the same PID. When run-state
+//     reports a different attempt and was refreshed more recently than the
+//     liveness record's last activity, run-state is the canonical execution
+//     attempt and its bead/attempt/worktree win over the stale liveness fields.
 func enrichWorkersWithRunState(workers []workerstatus.LiveWorker, now time.Time) []workerstatus.LiveWorker {
 	byProject := make(map[string][]agent.RunState)
 	for i := range workers {
 		w := &workers[i]
-		if w.PID <= 0 || (w.BeadID != "" && w.AttemptID != "" && w.ExecutionWorktree != "") {
+		if w.PID <= 0 {
 			continue
 		}
 		states, ok := byProject[w.ProjectRoot]
@@ -155,6 +166,20 @@ func enrichWorkersWithRunState(workers []workerstatus.LiveWorker, now time.Time)
 		}
 		rec, ok := freshestRunStateForPID(states, w.PID, now)
 		if !ok {
+			continue
+		}
+		if rec.AttemptID != "" && rec.AttemptID != w.AttemptID && rec.RefreshedAt.After(w.LastActivityAt) {
+			// Stale liveness attempt; run-state is canonical for this PID.
+			if rec.BeadID != "" {
+				w.BeadID = rec.BeadID
+			}
+			w.AttemptID = rec.AttemptID
+			if rec.WorktreePath != "" {
+				w.ExecutionWorktree = rec.WorktreePath
+			}
+			if !rec.RefreshedAt.IsZero() {
+				w.LastActivityAt = rec.RefreshedAt.UTC()
+			}
 			continue
 		}
 		if w.BeadID == "" {
