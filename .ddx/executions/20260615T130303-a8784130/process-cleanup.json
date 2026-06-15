@@ -1,0 +1,27 @@
+{
+  "attempt_id": "20260615T130303-a8784130",
+  "bead_id": "ddx-9febbad2",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9febbad2-20260615T130303-a8784130",
+  "trigger": "",
+  "started_at": "2026-06-15T13:28:14.461377736Z",
+  "finished_at": "2026-06-15T13:28:14.493172532Z",
+  "scanned": 80,
+  "candidates": [
+    {
+      "pid": 3859984,
+      "ppid": 7458,
+      "pgid": 3859984,
+      "cwd": "/Users/erik/Projects/ddx",
+      "command": "/bin/zsh -c wt=/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9febbad2-20260615T130303-a8784130; git -C \"$wt\" diff --binary HEAD \u003e /tmp/ddx-9febbad2-20260615T130303-a8784130.patch; git -C \"$wt\" diff --cached --binary HEAD \u003e /tmp/ddx-9febbad2-20260615T130303-a8784130.cached.patch; ls -lh /tmp/ddx-9febbad2-20260615T130303-a8784130*.patch; kill -TERM -3682748; sleep 5; ps -eo pid,ppid,pgid,stat,etime,command | rg '(3682748|/home/erik/.local/bin/claude|/home/erik/.local/bin/ddx server)' || true; ddx server workers show worker-20260615T130152-7933 --json || true; ddx work status --json || true"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3859984,
+      "ppid": 7458,
+      "pgid": 3859984,
+      "cwd": "/Users/erik/Projects/ddx",
+      "command": "/bin/zsh -c wt=/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9febbad2-20260615T130303-a8784130; git -C \"$wt\" diff --binary HEAD \u003e /tmp/ddx-9febbad2-20260615T130303-a8784130.patch; git -C \"$wt\" diff --cached --binary HEAD \u003e /tmp/ddx-9febbad2-20260615T130303-a8784130.cached.patch; ls -lh /tmp/ddx-9febbad2-20260615T130303-a8784130*.patch; kill -TERM -3682748; sleep 5; ps -eo pid,ppid,pgid,stat,etime,command | rg '(3682748|/home/erik/.local/bin/claude|/home/erik/.local/bin/ddx server)' || true; ddx server workers show worker-20260615T130152-7933 --json || true; ddx work status --json || true"
+    }
+  ]
+}
