@@ -350,11 +350,32 @@ func (s *Server) reconcileDesiredWorkersAfterStartup() {
 	if s == nil || s.workers == nil {
 		return
 	}
+	if strings.HasSuffix(os.Args[0], ".test") {
+		return
+	}
 	go func() {
 		// Let the listener enter Serve before child workers report lifecycle
 		// events back through the server.
 		time.Sleep(250 * time.Millisecond)
-		_, _ = s.workers.ReconcileDesiredWorkers()
+		projects := s.state.GetProjects(false)
+		if len(projects) == 0 {
+			_, _ = s.workers.ReconcileDesiredWorkers()
+			return
+		}
+		for _, project := range projects {
+			projectRoot := strings.TrimSpace(project.Path)
+			if projectRoot == "" {
+				continue
+			}
+			if _, err := LoadWorkerDesiredState(projectRoot); err != nil {
+				continue
+			}
+			manager := s.workers
+			if projectRoot != s.WorkingDir {
+				manager = NewWorkerManager(projectRoot)
+			}
+			_, _ = manager.ReconcileDesiredWorkers()
+		}
 	}()
 }
 
@@ -2741,6 +2762,10 @@ func (s *Server) handleSetWorkerDesiredState(w http.ResponseWriter, r *http.Requ
 	projectRoot := input.ProjectRoot
 	if projectRoot == "" {
 		projectRoot = s.workingDirForRequest(r)
+	}
+	if s.state != nil {
+		s.state.RegisterProject(projectRoot)
+		_ = s.state.save()
 	}
 	state := &WorkerDesiredState{
 		Version:      WorkerDesiredStateVersion,
