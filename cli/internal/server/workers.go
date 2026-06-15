@@ -444,7 +444,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	logBuf := &bytes.Buffer{}
 	multiLog := io.MultiWriter(logBuf, logFile)
 
-	progressCh := make(chan agent.ProgressEvent, 64)
+	progressCh := make(chan agent.ProgressEvent, 512)
 	wakeCh := make(chan struct{}, 1)
 	handle := &workerHandle{
 		record:       record,
@@ -634,6 +634,56 @@ func sendProgress(ch chan<- agent.ProgressEvent, evt agent.ProgressEvent) {
 	case ch <- evt:
 	default:
 	}
+}
+
+func refreshWorkerCurrentAttemptFromRunState(rec WorkerRecord) WorkerRecord {
+	if rec.State != "running" && rec.State != "stopping" {
+		return rec
+	}
+	projectRoot := rec.ProjectRoot
+	if projectRoot == "" {
+		return rec
+	}
+	state, err := agent.ReadRunState(projectRoot)
+	if err != nil || state == nil || strings.TrimSpace(state.AttemptID) == "" {
+		return rec
+	}
+	beadID := strings.TrimSpace(state.BeadID)
+	if beadID == "" {
+		return rec
+	}
+	if rec.CurrentAttempt != nil && rec.CurrentAttempt.BeadID != "" && rec.CurrentAttempt.BeadID != beadID {
+		return rec
+	}
+	phase := "running"
+	phaseSeq := 0
+	elapsedMS := int64(0)
+	if rec.CurrentAttempt != nil {
+		phase = rec.CurrentAttempt.Phase
+		phaseSeq = rec.CurrentAttempt.PhaseSeq
+		elapsedMS = rec.CurrentAttempt.ElapsedMS
+	}
+	if elapsedMS == 0 && !state.StartedAt.IsZero() {
+		elapsedMS = time.Since(state.StartedAt).Milliseconds()
+	}
+	rec.CurrentAttempt = &CurrentAttemptInfo{
+		AttemptID: state.AttemptID,
+		BeadID:    beadID,
+		Harness:   state.Harness,
+		Model:     state.Model,
+		Profile:   rec.Profile,
+		Phase:     phase,
+		PhaseSeq:  phaseSeq,
+		StartedAt: state.StartedAt,
+		ElapsedMS: elapsedMS,
+	}
+	if rec.Harness == "" {
+		rec.Harness = state.Harness
+	}
+	if rec.Model == "" {
+		rec.Model = state.Model
+	}
+	return rec
 }
 
 func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
@@ -1065,7 +1115,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			record.CurrentBead = last.BeadID
 			record.LastResult = &r
-			if last.Detail != "" {
+			if last.Status == agent.ExecuteBeadStatusSuccess || last.Status == agent.ExecuteBeadStatusAlreadySatisfied {
+				record.LastError = ""
+			} else if last.Detail != "" {
 				record.LastError = last.Detail
 			}
 			if last.Harness != "" && record.Harness == "" {
@@ -1121,6 +1173,9 @@ func (m *WorkerManager) List() ([]WorkerRecord, error) {
 		}
 	}
 	m.mu.Unlock()
+	for i := range out {
+		out[i] = refreshWorkerCurrentAttemptFromRunState(out[i])
+	}
 
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].StartedAt.After(out[j].StartedAt)
@@ -1148,10 +1203,14 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 	if handle, ok := m.workers[id]; ok {
 		rec := handle.record
 		m.mu.Unlock()
-		return rec, nil
+		return refreshWorkerCurrentAttemptFromRunState(rec), nil
 	}
 	m.mu.Unlock()
-	return m.readRecord(filepath.Join(m.rootDir, id))
+	rec, err := m.readRecord(filepath.Join(m.rootDir, id))
+	if err != nil {
+		return WorkerRecord{}, err
+	}
+	return refreshWorkerCurrentAttemptFromRunState(rec), nil
 }
 
 // Stop performs a graceful termination of the worker:
@@ -1576,9 +1635,17 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 
 			// Move CurrentAttempt → LastAttempt
 			if rec.CurrentAttempt != nil {
+				lastAttemptID := rec.CurrentAttempt.AttemptID
+				if evt.AttemptID != "" {
+					lastAttemptID = evt.AttemptID
+				}
+				lastBeadID := rec.CurrentAttempt.BeadID
+				if evt.BeadID != "" {
+					lastBeadID = evt.BeadID
+				}
 				rec.LastAttempt = &LastAttemptInfo{
-					AttemptID: rec.CurrentAttempt.AttemptID,
-					BeadID:    rec.CurrentAttempt.BeadID,
+					AttemptID: lastAttemptID,
+					BeadID:    lastBeadID,
 					Phase:     evt.Phase,
 					StartedAt: rec.CurrentAttempt.StartedAt,
 					EndedAt:   evt.TS,
@@ -1588,7 +1655,7 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 			rec.CurrentAttempt = nil
 		} else {
 			// Update or initialise CurrentAttempt
-			if rec.CurrentAttempt == nil {
+			if rec.CurrentAttempt == nil || (evt.AttemptID != "" && rec.CurrentAttempt.AttemptID != evt.AttemptID) {
 				rec.CurrentAttempt = &CurrentAttemptInfo{
 					AttemptID: evt.AttemptID,
 					BeadID:    evt.BeadID,

@@ -53,6 +53,49 @@ func TestWorkerRuntimeWiresPreClaimDeadlines(t *testing.T) {
 	assert.Contains(t, body, "RouteResolutionTimeout: spec.RouteResolutionTimeout.Duration")
 }
 
+func TestWorkerShowRefreshesCurrentAttemptFromRunState(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	m := NewWorkerManager(root)
+	started := time.Now().UTC().Add(-2 * time.Minute)
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:    "ddx-live",
+		AttemptID: "attempt-live",
+		Harness:   "claude-tui",
+		Model:     "sonnet-4.6",
+		StartedAt: started,
+	}))
+
+	m.mu.Lock()
+	m.workers["worker-live"] = &workerHandle{
+		record: WorkerRecord{
+			ID:          "worker-live",
+			Kind:        "work",
+			State:       "running",
+			Status:      "running",
+			ProjectRoot: root,
+			Profile:     "default",
+			CurrentAttempt: &CurrentAttemptInfo{
+				AttemptID: "attempt-provisional",
+				BeadID:    "ddx-live",
+				Phase:     "running",
+				PhaseSeq:  2,
+				StartedAt: started.Add(-time.Minute),
+			},
+		},
+	}
+	m.mu.Unlock()
+
+	rec, err := m.Show("worker-live")
+	require.NoError(t, err)
+	require.NotNil(t, rec.CurrentAttempt)
+	assert.Equal(t, "attempt-live", rec.CurrentAttempt.AttemptID)
+	assert.Equal(t, "ddx-live", rec.CurrentAttempt.BeadID)
+	assert.Equal(t, "claude-tui", rec.CurrentAttempt.Harness)
+	assert.Equal(t, "sonnet-4.6", rec.CurrentAttempt.Model)
+	assert.Equal(t, started.Unix(), rec.CurrentAttempt.StartedAt.Unix())
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
@@ -75,6 +118,43 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	// Wait for the worker to finish (it will fail quickly since there's no real agent)
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
 	assert.Equal(t, "exited", final.State)
+}
+
+func TestWorkerSuccessDoesNotPopulateLastError(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	initGitRepo(t, root)
+	ddxDir := ddxroot.JoinProject(root)
+	store := bead.NewStore(ddxDir)
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-success",
+		Title:     "success status hygiene",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+
+	m := NewWorkerManager(root)
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-success",
+					Status:    agent.ExecuteBeadStatusSuccess,
+					Detail:    "success",
+				}, nil
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
+	require.NoError(t, err)
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, "success", final.Status)
+	assert.Empty(t, final.LastError)
+	require.NotNil(t, final.LastResult)
+	assert.Equal(t, "success", final.LastResult.Detail)
 }
 
 func TestWorkerManagerStartPluginActionPublishesTerminalProgress(t *testing.T) {
@@ -487,7 +567,8 @@ func TestDrainProgressUpdatesRecord(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	handle := &workerHandle{
-		record: WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
+		record:       WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
+		progressDone: make(chan struct{}),
 	}
 	ch := make(chan agent.ProgressEvent, 10)
 
@@ -549,6 +630,55 @@ func TestDrainProgressUpdatesRecord(t *testing.T) {
 	assert.Equal(t, "queueing", rec.RecentPhases[0].Phase)
 	assert.Equal(t, "running", rec.RecentPhases[1].Phase)
 	assert.Equal(t, "done", rec.RecentPhases[2].Phase)
+}
+
+func TestDrainProgressResetsCurrentAttemptWhenAttemptIDChanges(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+
+	handle := &workerHandle{
+		record:       WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
+		progressDone: make(chan struct{}),
+	}
+	ch := make(chan agent.ProgressEvent, 10)
+	go m.drainProgress("w-test", handle, ch)
+
+	first := time.Now().UTC()
+	second := first.Add(30 * time.Second)
+	ch <- agent.ProgressEvent{
+		EventID: "evt-1", AttemptID: "attempt-1", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "running", PhaseSeq: 1, Heartbeat: false,
+		TS: first,
+	}
+	ch <- agent.ProgressEvent{
+		EventID: "evt-2", AttemptID: "attempt-2", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "running", PhaseSeq: 1, Heartbeat: false,
+		TS: second,
+	}
+
+	require.Eventually(t, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return handle.record.CurrentAttempt != nil &&
+			handle.record.CurrentAttempt.AttemptID == "attempt-2" &&
+			handle.record.CurrentAttempt.StartedAt.Equal(second)
+	}, 2*time.Second, 10*time.Millisecond)
+	ch <- agent.ProgressEvent{
+		EventID: "evt-3", AttemptID: "attempt-2", WorkerID: "w-test",
+		BeadID: "ddx-1", Phase: "failed", PhaseSeq: 2, Heartbeat: false,
+		TS: second.Add(time.Second), ElapsedMS: 1000,
+	}
+	close(ch)
+	<-handle.progressDone
+
+	m.mu.Lock()
+	rec := handle.record
+	m.mu.Unlock()
+	require.Nil(t, rec.CurrentAttempt)
+	require.Len(t, rec.RecentPhases, 3)
+	require.NotNil(t, rec.LastAttempt)
+	assert.Equal(t, "attempt-2", rec.LastAttempt.AttemptID)
+	assert.Equal(t, second.Unix(), rec.LastAttempt.StartedAt.Unix())
 }
 
 // TestRecentPhasesCap verifies that RecentPhases is capped at 20 entries.
