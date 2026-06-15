@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -136,6 +138,9 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 	commitArgs = ddxStateCommitArgs(projectRoot, gitDir, commitArgs...)
 	commitOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, commitArgs...)
 	if err != nil {
+		if durableAuditPathsClean(gitDir, dirtyPaths) {
+			return nil
+		}
 		return fmt.Errorf("committing durable audit outputs: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
 	return nil
@@ -150,13 +155,17 @@ func runDurableAuditGit(gitDir string, args ...string) ([]byte, error) {
 func runDurableAuditGitWithIndexLockRecovery(gitDir string, args ...string) ([]byte, error) {
 	var out []byte
 	op := durableAuditIndexOperation(args)
+	timeout := durableAuditIndexGitTimeout()
 	err := lockmetrics.Instrument("index.lock", op, func() error {
 		var lastErr error
 		var lastDiag string
 		for attempt := 0; attempt < gitlock.RecoveryAttempts; attempt++ {
-			out, lastErr = runDurableAuditGit(gitDir, args...)
+			out, lastErr = runDurableAuditGitWithTimeout(gitDir, timeout, args...)
 			if lastErr == nil {
 				return nil
+			}
+			if errors.Is(lastErr, context.DeadlineExceeded) || errors.Is(lastErr, context.Canceled) {
+				return lastErr
 			}
 			if !gitlock.IsTransientGitContention(string(out), lastErr) {
 				return lastErr
@@ -172,7 +181,54 @@ func runDurableAuditGitWithIndexLockRecovery(gitDir string, args ...string) ([]b
 		}
 		return fmt.Errorf("%s; index-lock recovery exhausted after %d attempts: %s", strings.TrimSpace(string(out)), gitlock.RecoveryAttempts, lastDiag)
 	})
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.LockPath != "" {
+			_ = os.RemoveAll(cfg.LockPath)
+		}
+	}
 	return out, err
+}
+
+func runDurableAuditGitWithTimeout(gitDir string, timeout time.Duration, args ...string) ([]byte, error) {
+	if timeout <= 0 || timeout == durableAuditGitTimeout {
+		return runDurableAuditGit(gitDir, args...)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	out, err := durableAuditGitRunner(ctx, gitDir, args...)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return out, ctxErr
+		}
+	}
+	return out, err
+}
+
+func durableAuditIndexGitTimeout() time.Duration {
+	timeout := durableAuditGitTimeout
+	if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.Cap > 0 && (timeout <= 0 || cfg.Cap < timeout) {
+		timeout = cfg.Cap
+	}
+	return timeout
+}
+
+func durableAuditPathsClean(gitDir string, paths []string) bool {
+	if len(paths) == 0 {
+		return true
+	}
+	statusArgs := []string{"status", "--short", "--untracked-files=all", "--ignored=matching", "--"}
+	statusArgs = append(statusArgs, paths...)
+	statusOut, err := runDurableAuditGit(gitDir, statusArgs...)
+	if err != nil {
+		return false
+	}
+	if strings.TrimSpace(string(statusOut)) != "" {
+		return false
+	}
+	cachedArgs := []string{"diff", "--cached", "--"}
+	cachedArgs = append(cachedArgs, paths...)
+	cachedOut, err := runDurableAuditGit(gitDir, cachedArgs...)
+	return err == nil && strings.TrimSpace(string(cachedOut)) == ""
 }
 
 func durableAuditIndexOperation(args []string) string {

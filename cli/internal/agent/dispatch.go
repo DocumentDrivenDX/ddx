@@ -26,8 +26,8 @@ import (
 //  1. runner (test injection seam) — used directly via runner.Run after
 //     applying any AgentRunRuntime overrides.
 //  2. svc (pre-built service) — used via executeOnService.
-//  3. Fallback: construct a fresh service via NewServiceFromWorkDir(projectRoot)
-//     and dispatch via executeOnService.
+//  3. Fallback: construct the same short-lived preflight service used by
+//     RunWithConfigViaService and dispatch via executeOnService.
 //
 // Override fields on runtime (HarnessOverride, ModelOverride,
 // PermissionsOverride, SessionLogDirOverride) take precedence over the
@@ -54,15 +54,12 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 		return r.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
 	}
 	if svc == nil {
-		factory := serviceRunFactory
-		if factory == nil {
-			factory = NewServiceFromWorkDir
-		}
-		built, err := factory(projectRoot)
+		built, err := ResolvePreflightServiceFromWorkDir(projectRoot)
 		if err != nil {
 			return nil, fmt.Errorf("agent: build service: %w", err)
 		}
 		svc = built
+		defer cleanupCurrentProcessProviderProbes(ctx, projectRoot)
 	}
 	return executeOnService(ctx, svc, projectRoot, rcfg, runtime)
 }

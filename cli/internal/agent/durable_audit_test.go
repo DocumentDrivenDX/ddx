@@ -199,6 +199,85 @@ func TestCommitDurableAuditOutputsDoesNotHoldTrackerLockAcrossIndexWork(t *testi
 	}
 }
 
+func TestDurableAuditIndexGitCommandUsesIndexLockCap(t *testing.T) {
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".git"), 0o755))
+	lockPath := filepath.Join(projectRoot, ".git", "index.lock")
+	require.NoError(t, os.WriteFile(lockPath, nil, 0o644))
+
+	t.Setenv("DDX_LOCK_CAP_INDEX_MS", "25")
+	lockmetrics.SetCapEnforcement(projectRoot, "")
+	t.Cleanup(func() { lockmetrics.SetCapEnforcement("", "") })
+
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() { durableAuditGitRunner = origRunner })
+
+	var sawDeadline atomic.Bool
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		<-ctx.Done()
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			sawDeadline.Store(true)
+		}
+		return nil, ctx.Err()
+	}
+
+	start := time.Now()
+	_, err := runDurableAuditGitWithIndexLockRecovery(projectRoot, "commit", "--no-verify")
+	require.Error(t, err)
+	assert.True(t, sawDeadline.Load(), "index-mutating git command must receive the cap-bounded deadline")
+	assert.Less(t, time.Since(start), 250*time.Millisecond, "git command must not outlive the index lock cap by the old 30s budget")
+
+	_, statErr := os.Stat(lockPath)
+	assert.True(t, os.IsNotExist(statErr), "cap release must clear the stale index lock")
+}
+
+func TestCommitDurableAuditOutputsTreatsCleanTreeAfterCommitTimeoutAsSuccess(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() { durableAuditGitRunner = origRunner })
+
+	var committed atomic.Bool
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		require.NotEmpty(t, args)
+		switch durableAuditTestGitSubcommand(args) {
+		case "rev-parse":
+			return []byte("true\n"), nil
+		case "status":
+			if committed.Load() {
+				return nil, nil
+			}
+			return []byte("?? .ddx/metrics/attempts.jsonl\n"), nil
+		case "add":
+			return nil, nil
+		case "diff":
+			if committed.Load() {
+				return nil, nil
+			}
+			return []byte("diff --git a/.ddx/metrics/attempts.jsonl b/.ddx/metrics/attempts.jsonl\n"), nil
+		case "commit":
+			committed.Store(true)
+			return []byte("context deadline exceeded"), context.DeadlineExceeded
+		default:
+			return nil, fmt.Errorf("unexpected git command: %v", args)
+		}
+	}
+
+	require.NoError(t, commitDurableAuditOutputsLocked(projectRoot, "20260615T214000-timeout-clean"))
+	assert.True(t, committed.Load(), "test must exercise the timeout-after-commit path")
+}
+
+func durableAuditTestGitSubcommand(args []string) string {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "-c" {
+			i++
+			continue
+		}
+		return args[i]
+	}
+	return ""
+}
+
 func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
 	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
 	projectRoot := testutils.NewFixtureRepo(t, "standard")
