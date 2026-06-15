@@ -278,6 +278,227 @@ func TestWorkStatusUsesRunStateWhenLivenessAttemptIsMissingOrStale(t *testing.T)
 	assert.Equal(t, worktree, report.Workers[0].ExecutionWorktree)
 }
 
+// TestWorkStatusPrefersFreshRunStateAttemptIDOverStaleLiveness proves that
+// when the liveness sidecar carries an old claim/liveness attempt id but a
+// fresher per-attempt run-state record exists for the same PID, work status
+// reports the run-state (canonical execution) attempt — not the stale liveness
+// one (ddx-f93e6ef9).
+func TestWorkStatusPrefersFreshRunStateAttemptIDOverStaleLiveness(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	pid := os.Getpid()
+	worktree := filepath.Join(t.TempDir(), ".execute-bead-wt-ddx-f93e6ef9-20260613T174040-2199519f")
+
+	const staleAttempt = "20260613T173837-18b8b4af"
+	const canonicalAttempt = "20260613T174040-2199519f"
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   now.Add(-5 * time.Minute),
+		Age:         "5m",
+		AgeSeconds:  300,
+	}}
+	// Fresh sidecar (it is applied) but its attempt id is the old claim attempt.
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-stale-attempt", workerstatus.LivenessRecord{
+		WorkerID:       "worker-stale-attempt",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-f93e6ef9",
+		AttemptID:      staleAttempt,
+		Phase:          "running",
+		PID:            pid,
+		StartedAt:      now.Add(-5 * time.Minute),
+		LastActivityAt: now.Add(-30 * time.Second),
+	}))
+	// Run-state holds the canonical execution attempt, refreshed more recently.
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-f93e6ef9",
+		AttemptID:    canonicalAttempt,
+		WorktreePath: worktree,
+		PID:          pid,
+		StartedAt:    now.Add(-4 * time.Minute),
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(2 * time.Minute),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, canonicalAttempt, report.Workers[0].AttemptID,
+		"work status must report the fresher run-state attempt, not the stale liveness one")
+	assert.Equal(t, worktree, report.Workers[0].ExecutionWorktree)
+}
+
+// TestWorkStatusActiveWorkAndWorkerAttemptIDsMatch proves workers[0].attempt_id,
+// active_work.records[0].attempt_id, and the worker execution_worktree all agree
+// on the canonical run-state attempt for a single active worker (ddx-f93e6ef9).
+func TestWorkStatusActiveWorkAndWorkerAttemptIDsMatch(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	pid := os.Getpid()
+	worktree := filepath.Join(t.TempDir(), ".execute-bead-wt-ddx-f93e6ef9-20260613T174040-2199519f")
+
+	const staleAttempt = "20260613T173837-18b8b4af"
+	const canonicalAttempt = "20260613T174040-2199519f"
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   now.Add(-5 * time.Minute),
+		Age:         "5m",
+		AgeSeconds:  300,
+	}}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-match", workerstatus.LivenessRecord{
+		WorkerID:       "worker-match",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-f93e6ef9",
+		AttemptID:      staleAttempt,
+		Phase:          "running",
+		PID:            pid,
+		StartedAt:      now.Add(-5 * time.Minute),
+		LastActivityAt: now.Add(-30 * time.Second),
+	}))
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-f93e6ef9",
+		AttemptID:    canonicalAttempt,
+		WorktreePath: worktree,
+		PID:          pid,
+		StartedAt:    now.Add(-4 * time.Minute),
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(2 * time.Minute),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	require.NotEmpty(t, report.ActiveWork.Records)
+	assert.Equal(t, canonicalAttempt, report.Workers[0].AttemptID)
+	assert.Equal(t, report.Workers[0].AttemptID, report.ActiveWork.Records[0].AttemptID,
+		"worker attempt and active_work attempt must agree on the canonical execution attempt")
+	assert.Equal(t, worktree, report.Workers[0].ExecutionWorktree)
+}
+
+// TestWorkStatusTextUsesCanonicalAttemptID proves the text renderer emits the
+// same canonical run-state attempt as the JSON renderer (ddx-f93e6ef9).
+func TestWorkStatusTextUsesCanonicalAttemptID(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	pid := os.Getpid()
+	worktree := filepath.Join(t.TempDir(), ".execute-bead-wt-ddx-f93e6ef9-20260613T174040-2199519f")
+
+	const staleAttempt = "20260613T173837-18b8b4af"
+	const canonicalAttempt = "20260613T174040-2199519f"
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   now.Add(-5 * time.Minute),
+		Age:         "5m",
+		AgeSeconds:  300,
+	}}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-text", workerstatus.LivenessRecord{
+		WorkerID:       "worker-text",
+		ProjectRoot:    projectRoot,
+		CurrentBead:    "ddx-f93e6ef9",
+		AttemptID:      staleAttempt,
+		Phase:          "running",
+		PID:            pid,
+		StartedAt:      now.Add(-5 * time.Minute),
+		LastActivityAt: now.Add(-30 * time.Second),
+	}))
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-f93e6ef9",
+		AttemptID:    canonicalAttempt,
+		WorktreePath: worktree,
+		PID:          pid,
+		StartedAt:    now.Add(-4 * time.Minute),
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(2 * time.Minute),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	textOut, err := executeCommand(root, "work", "status", "--project", projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "attempt="+canonicalAttempt)
+	assert.NotContains(t, textOut, staleAttempt,
+		"text output must not render the stale liveness attempt")
+}
+
+// TestWorkStatusDoesNotLeakRunStateAcrossProjects proves that canonical-attempt
+// resolution reads run-state from each worker's own project root, so an
+// all-projects scan never attributes one project's attempt to another
+// (ddx-f93e6ef9).
+func TestWorkStatusDoesNotLeakRunStateAcrossProjects(t *testing.T) {
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+	now := time.Now().UTC()
+
+	scannerWorkers := []workerstatus.LiveWorker{
+		{PID: 3001, Command: "ddx work --watch --project " + projectA, ProjectRoot: projectA, StartedAt: now.Add(-5 * time.Minute), Age: "5m", AgeSeconds: 300},
+		{PID: 3002, Command: "ddx work --watch --project " + projectB, ProjectRoot: projectB, StartedAt: now.Add(-3 * time.Minute), Age: "3m", AgeSeconds: 180},
+	}
+	require.NoError(t, agent.WriteRunState(projectA, agent.RunState{
+		BeadID:       "ddx-aaaa1111",
+		AttemptID:    "20260613T170000-aaaa1111",
+		WorktreePath: filepath.Join(projectA, "wt-a"),
+		PID:          3001,
+		StartedAt:    now.Add(-5 * time.Minute),
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(2 * time.Minute),
+	}))
+	require.NoError(t, agent.WriteRunState(projectB, agent.RunState{
+		BeadID:       "ddx-bbbb2222",
+		AttemptID:    "20260613T171000-bbbb2222",
+		WorktreePath: filepath.Join(projectB, "wt-b"),
+		PID:          3002,
+		StartedAt:    now.Add(-3 * time.Minute),
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(2 * time.Minute),
+	}))
+
+	factory := NewCommandFactory(projectA)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectA, "--all-projects", "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 2)
+
+	byProject := make(map[string]workerstatus.LiveWorker, len(report.Workers))
+	for _, w := range report.Workers {
+		byProject[w.ProjectRoot] = w
+	}
+	require.Contains(t, byProject, projectA)
+	require.Contains(t, byProject, projectB)
+	assert.Equal(t, "20260613T170000-aaaa1111", byProject[projectA].AttemptID)
+	assert.Equal(t, "ddx-aaaa1111", byProject[projectA].BeadID)
+	assert.Equal(t, "20260613T171000-bbbb2222", byProject[projectB].AttemptID)
+	assert.Equal(t, "ddx-bbbb2222", byProject[projectB].BeadID)
+}
+
 func TestWorkStatusUsesFreshLivenessSidecarForActiveAttempt(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("process cwd inspection for sidecar child pid is linux-only")
