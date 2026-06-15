@@ -178,6 +178,120 @@ func TestValidateAttemptIntegrity_SingleCommitNoEvidenceSkips(t *testing.T) {
 	}
 }
 
+// TestAttemptIntegrityRejectsVerificationWrongCWD (AC1) feeds a transcript
+// where a required Go verification command returned `go.mod file not found`,
+// and asserts DDx classifies it as wrong_cwd_verification and does not accept
+// it as passing evidence.
+func TestAttemptIntegrityRejectsVerificationWrongCWD(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging: true,
+		TranscriptCommands: []TranscriptCommand{
+			{
+				Command: "go test ./internal/agent/...",
+				Output:  "go: go.mod file not found in current directory or any parent directory; see 'go help modules'",
+			},
+		},
+	})
+	if verdict.OK {
+		t.Fatal("expected wrong-cwd verification to be rejected, got OK")
+	}
+	if verdict.Reason != IntegrityReasonWrongCWDVerification {
+		t.Errorf("expected reason %q, got %q", IntegrityReasonWrongCWDVerification, verdict.Reason)
+	}
+	if !strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") ||
+		!strings.Contains(strings.ToLower(verdict.Detail), "not an implementation failure") {
+		t.Errorf("detail should mark this as a DDx validation rejection, got %q", verdict.Detail)
+	}
+}
+
+// TestAttemptIntegrityRejectsMissingExecutionBundleLookup (AC2) feeds a
+// command/output pair that tries `.ddx/executions/` from the wrong cwd and
+// asserts DDx records evidence_path_wrong_cwd.
+func TestAttemptIntegrityRejectsMissingExecutionBundleLookup(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging: true,
+		TranscriptCommands: []TranscriptCommand{
+			{
+				Command: "ls .ddx/executions/20260615T140747-d0d32f0e",
+				Output:  "ls: cannot access '.ddx/executions/20260615T140747-d0d32f0e': No such file or directory",
+			},
+		},
+	})
+	if verdict.OK {
+		t.Fatal("expected missing-bundle lookup to be rejected, got OK")
+	}
+	if verdict.Reason != IntegrityReasonEvidencePathWrongCWD {
+		t.Errorf("expected reason %q, got %q", IntegrityReasonEvidencePathWrongCWD, verdict.Reason)
+	}
+	if !strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") {
+		t.Errorf("detail should mark this as a DDx validation rejection, got %q", verdict.Detail)
+	}
+}
+
+// TestAttemptIntegrityRejectsTmpRoundTripForSourceFiles (AC3) feeds transcript
+// commands that move a tracked source file through /tmp and asserts DDx records
+// tmp_roundtrip_tracked_file and rejects the attempt.
+func TestAttemptIntegrityRejectsTmpRoundTripForSourceFiles(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging: true,
+		TranscriptCommands: []TranscriptCommand{
+			{Command: "mv cli/internal/agent/execute_bead.go /tmp/execute_bead.go"},
+			{Command: "mv /tmp/execute_bead.go cli/internal/agent/execute_bead.go"},
+		},
+	})
+	if verdict.OK {
+		t.Fatal("expected /tmp round-trip of a tracked source file to be rejected, got OK")
+	}
+	if verdict.Reason != IntegrityReasonTmpRoundtripTrackedFile {
+		t.Errorf("expected reason %q, got %q", IntegrityReasonTmpRoundtripTrackedFile, verdict.Reason)
+	}
+	if !strings.Contains(strings.ToLower(verdict.Detail), "ddx validation") {
+		t.Errorf("detail should mark this as a DDx validation rejection, got %q", verdict.Detail)
+	}
+}
+
+// TestAttemptIntegrityAllowsBenignBuildToolTempUsage (AC4) proves build
+// cache/temp paths that do not move repo source or evidence are not rejected.
+func TestAttemptIntegrityAllowsBenignBuildToolTempUsage(t *testing.T) {
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "do work [x]"},
+		},
+		CodeChanging: true,
+		GateRuns: []PreCommitGateRun{
+			{Command: "lefthook run pre-commit", Output: "go-test\n✔ go-test (executed in 2.0s)"},
+		},
+		TranscriptCommands: []TranscriptCommand{
+			// Build cache + binary written to /tmp — no tracked source moved.
+			{Command: "GOCACHE=/tmp/go-cache go build -o /tmp/ddx-bin ./cmd/ddx", Output: ""},
+			// A normal in-module verification run that actually succeeded.
+			{Command: "go test ./internal/agent/...", Output: "ok  github.com/DocumentDrivenDX/ddx/internal/agent  1.21s"},
+			// Reading a temp scratch note that is not a source/evidence file.
+			{Command: "cat /tmp/scratch-notes.txt", Output: "reminder: run gofmt"},
+		},
+	})
+	if !verdict.OK {
+		t.Fatalf("expected benign build-tool temp usage to pass, got reason=%q detail=%q", verdict.Reason, verdict.Detail)
+	}
+}
+
 // TestLandBeadResult_AttemptIntegrityPreserved (AC1 + AC4 at the orchestrator
 // boundary) verifies a worker result flagged with FailureModeAttemptIntegrity
 // and commits is preserved for review — not merged — and that the final result

@@ -1493,12 +1493,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// an implementation failure. The evidence-bundle commit (below) has not run
 	// yet, so the reflog only carries the agent's own commits.
 	if res.Outcome == ExecuteBeadOutcomeTaskSucceeded && res.ExitCode == 0 && res.ImplementationRev != "" {
+		var transcriptCommands []TranscriptCommand
+		if agentResult != nil {
+			transcriptCommands = transcriptCommandsFromToolCalls(agentResult.ToolCalls)
+		}
 		verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
-			BaseRev:           baseRev,
-			ImplementationRev: res.ImplementationRev,
-			CommitEvents:      readWorktreeCommitEvents(wtPath),
-			DirtyPaths:        integrityDirtyPaths(wtPath),
-			CodeChanging:      true,
+			BaseRev:            baseRev,
+			ImplementationRev:  res.ImplementationRev,
+			CommitEvents:       readWorktreeCommitEvents(wtPath),
+			DirtyPaths:         integrityDirtyPaths(wtPath),
+			CodeChanging:       true,
+			TranscriptCommands: transcriptCommands,
 		})
 		if !verdict.OK {
 			res.Outcome = ExecuteBeadOutcomeTaskFailed

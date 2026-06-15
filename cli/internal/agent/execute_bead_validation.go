@@ -37,6 +37,19 @@ type PreCommitGateRun struct {
 	Output  string
 }
 
+// TranscriptCommand is one observed shell/tool invocation from an execute-bead
+// attempt: the command (or tool input) the agent ran, the working directory it
+// ran from when DDx could observe it, and the combined output/result it
+// produced. ValidateAttemptIntegrity inspects these for high-signal
+// attempt-integrity defects DDx can detect from command arguments and output —
+// verification commands run from the wrong cwd, evidence-path lookups outside
+// the execution bundle, and source/evidence files moved through /tmp.
+type TranscriptCommand struct {
+	Command string
+	CWD     string
+	Output  string
+}
+
 // AttemptIntegrityInput is the structured snapshot the post-agent validation
 // step compares before marking an attempt successful: the commit events the
 // agent produced, the final implementation revision, the worktree dirty state,
@@ -50,6 +63,11 @@ type AttemptIntegrityInput struct {
 	// i.e. the bead changed tracked files and the gate/dirty contracts apply.
 	CodeChanging bool
 	GateRuns     []PreCommitGateRun
+	// TranscriptCommands is the observed stream of shell/tool invocations and
+	// their output, used for the cwd/evidence-path/tmp-roundtrip checks. Empty
+	// when DDx could not observe the transcript, in which case those checks are
+	// skipped rather than failed.
+	TranscriptCommands []TranscriptCommand
 }
 
 // AttemptIntegrityVerdict is the result of ValidateAttemptIntegrity. OK is true
@@ -68,6 +86,12 @@ const (
 	IntegrityReasonPostCommitMutation = "post_commit_mutation"
 	IntegrityReasonEmptyGateEvidence  = "empty_gate_evidence"
 	IntegrityReasonDirtyAfterCommit   = "dirty_after_commit"
+	// Transcript-level reason codes (ddx-c5c755f6). These classify attempt
+	// integrity defects DDx observes from the command/output transcript rather
+	// than from git state.
+	IntegrityReasonWrongCWDVerification    = "wrong_cwd_verification"
+	IntegrityReasonEvidencePathWrongCWD    = "evidence_path_wrong_cwd"
+	IntegrityReasonTmpRoundtripTrackedFile = "tmp_roundtrip_tracked_file"
 )
 
 // reflogLineRe matches a `git reflog show HEAD` line:
@@ -144,6 +168,109 @@ func classifyLefthookOutput(output string) string {
 	}
 }
 
+// goVerificationCmdRe matches a Go verification command (the high-signal class
+// the execute-bead contract requires to be run from the module root). It looks
+// for `go test`, `go build`, or `go vet` anywhere in the command line so it
+// still matches when the verb is prefixed with env assignments or `cd`.
+var goVerificationCmdRe = regexp.MustCompile(`\bgo\s+(test|build|vet)\b`)
+
+// goModNotFoundRe matches the output Go prints when invoked outside a module —
+// the exact wrong-cwd symptom from the ddx-3b721804 dogfood (`go: go.mod file
+// not found in current directory or any parent directory`).
+var goModNotFoundRe = regexp.MustCompile(`(?i)go\.mod file not found`)
+
+// fileMoveVerbRe matches a file relocation verb as a standalone word so the tmp
+// round-trip check fires on `mv`/`cp`/`rsync` of a tracked file regardless of
+// leading env assignments or JSON tool-input wrapping. `go install` and other
+// build verbs are deliberately excluded.
+var fileMoveVerbRe = regexp.MustCompile(`\b(mv|cp|rsync)\b`)
+
+// sourceFilePathRe matches a path token that looks like a tracked source/test
+// file (a recognized source extension). Build artifacts and config files
+// (.yaml, binaries without an extension) do not match, so benign build-tool
+// temp usage is not flagged.
+var sourceFilePathRe = regexp.MustCompile(`[\w./-]+\.(go|ts|tsx|js|jsx|py|rs|java|rb|c|h|cc|cpp|hpp)\b`)
+
+// classifyTranscriptCommands scans the observed command/output transcript for
+// the three high-signal attempt-integrity defects from ddx-c5c755f6:
+//
+//   - a required Go verification command that returned "go.mod file not found",
+//     proving it ran from the wrong cwd (wrong_cwd_verification);
+//   - an evidence lookup under .ddx/executions/ that returned "No such file or
+//     directory", proving the bundle was inspected from the wrong cwd
+//     (evidence_path_wrong_cwd);
+//   - a move/copy of a tracked source/test/evidence file through /tmp
+//     (tmp_roundtrip_tracked_file).
+//
+// It returns bad=false (no opinion) when no command matches, so an unobservable
+// or clean transcript never rejects the attempt. Benign build-tool temp usage
+// (build caches, `go build -o /tmp/...`) does not match the move/copy verb and
+// source-path requirements and is therefore not flagged.
+func classifyTranscriptCommands(cmds []TranscriptCommand) (reason, detail string, bad bool) {
+	for _, c := range cmds {
+		if goVerificationCmdRe.MatchString(c.Command) && goModNotFoundRe.MatchString(c.Output) {
+			return IntegrityReasonWrongCWDVerification,
+				fmt.Sprintf("DDx validation: a Go verification command (%q) returned a 'go.mod file not found' error, so it ran from the wrong directory instead of the module root and did not actually verify the change; this is not passing evidence. Detected by DDx, not an implementation failure.", strings.TrimSpace(c.Command)),
+				true
+		}
+		if strings.Contains(c.Command, ".ddx/executions") && evidencePathNotFound(c.Output) {
+			return IntegrityReasonEvidencePathWrongCWD,
+				fmt.Sprintf("DDx validation: an evidence lookup under .ddx/executions/ (%q) returned 'No such file or directory', so the execution bundle was inspected from the wrong directory rather than the execution worktree. Detected by DDx, not an implementation failure.", strings.TrimSpace(c.Command)),
+				true
+		}
+		if isTmpRoundtripOfTrackedFile(c.Command) {
+			return IntegrityReasonTmpRoundtripTrackedFile,
+				fmt.Sprintf("DDx validation: a tracked source/evidence file was moved through /tmp (%q); repo source and evidence must stay inside the execution worktree, never round-tripped through /tmp. Detected by DDx, not an implementation failure.", strings.TrimSpace(c.Command)),
+				true
+		}
+	}
+	return "", "", false
+}
+
+// evidencePathNotFound reports whether output indicates a missing path (the
+// wrong-cwd symptom for an .ddx/executions/ lookup).
+func evidencePathNotFound(output string) bool {
+	return containsAny(strings.ToLower(output),
+		"no such file or directory",
+		"cannot access",
+		"not a directory",
+	)
+}
+
+// isTmpRoundtripOfTrackedFile reports whether a command moves/copies a tracked
+// source-looking file into or out of /tmp. It requires all three signals — a
+// move/copy verb, a /tmp/ path, and a source-file token — so build-tool temp
+// usage (no source file moved) and ordinary in-tree moves (no /tmp/) are not
+// flagged.
+func isTmpRoundtripOfTrackedFile(command string) bool {
+	if !strings.Contains(command, "/tmp/") {
+		return false
+	}
+	if !fileMoveVerbRe.MatchString(command) {
+		return false
+	}
+	return sourceFilePathRe.MatchString(command)
+}
+
+// transcriptCommandsFromToolCalls maps the normalized tool-call stream captured
+// during an attempt into TranscriptCommands for ValidateAttemptIntegrity. The
+// tool Input carries the command (raw or JSON-wrapped); substring/regex checks
+// tolerate either form. Returns nil when no tool calls were observed, so the
+// transcript checks are skipped.
+func transcriptCommandsFromToolCalls(calls []ToolCallEntry) []TranscriptCommand {
+	if len(calls) == 0 {
+		return nil
+	}
+	out := make([]TranscriptCommand, 0, len(calls))
+	for _, c := range calls {
+		out = append(out, TranscriptCommand{
+			Command: c.Input,
+			Output:  c.Output,
+		})
+	}
+	return out
+}
+
 // ValidateAttemptIntegrity performs the structured post-agent integrity check.
 // It is pure so it can be exercised directly by regression tests that simulate
 // an execute-bead transcript. It rejects an attempt when:
@@ -160,6 +287,10 @@ func classifyLefthookOutput(output string) string {
 // are skipped rather than failed, so the validator never rejects an attempt it
 // could not actually observe.
 func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict {
+	if reason, detail, bad := classifyTranscriptCommands(in.TranscriptCommands); bad {
+		return AttemptIntegrityVerdict{Reason: reason, Detail: detail}
+	}
+
 	if mutated, detail := detectPostCommitMutation(in.CommitEvents, in.ImplementationRev); mutated {
 		return AttemptIntegrityVerdict{
 			Reason: IntegrityReasonPostCommitMutation,
