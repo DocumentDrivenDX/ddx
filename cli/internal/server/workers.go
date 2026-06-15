@@ -381,6 +381,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	// Skipped when OpaquePassthrough=true (ddx work path): routing belongs to
 	// the agent service; DDx must not pre-resolve or validate the route.
 	if !spec.OpaquePassthrough {
+		defer cleanupCurrentProcessProviderProbes(effectiveRoot)
 		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider); err != nil {
 			return WorkerRecord{}, fmt.Errorf("work: %w", err)
 		}
@@ -848,6 +849,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if svcErr != nil {
 				return agent.ExecuteBeadReport{}, fmt.Errorf("agent: build service: %w", svcErr)
 			}
+			defer cleanupCurrentProcessProviderProbes(projectRoot)
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				FromRev:          spec.FromRev,
 				BeadEvents:       beadStore,
@@ -917,6 +919,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				// Tie the fizeau service to modelCtx so its background probe
 				// goroutines terminate when this short-lived lookup ends.
 				if svc, svcErr := agent.ResolveServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
+					defer cleanupCurrentProcessProviderProbes(projectRoot)
 					modelFilter := agentlib.ModelFilter{}
 					if harness := rcfg.Harness(); harness != "" {
 						modelFilter.Harness = harness
@@ -937,6 +940,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if svcErr != nil {
 				return true
 			}
+			defer cleanupCurrentProcessProviderProbes(projectRoot)
 			infos, err := svc.ListHarnesses(cbCtx)
 			if err != nil {
 				return true

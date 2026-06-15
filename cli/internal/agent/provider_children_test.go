@@ -410,6 +410,74 @@ func TestReapDefunctRootProviderChildrenIgnoresLiveChildren(t *testing.T) {
 	}
 }
 
+func TestReapRootProviderChildrenInScopesReapsOnlyScopedRootChildren(t *testing.T) {
+	now := time.Now().UTC()
+	scopeA := filepath.Join(t.TempDir(), "server-state")
+	scopeB := filepath.Join(t.TempDir(), "project")
+	outside := filepath.Join(t.TempDir(), "attempt")
+	const (
+		rootPID   = 747490
+		inScopeA  = 747491
+		inScopeB  = 747492
+		outScope  = 747493
+		nestedPID = 747494
+	)
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{
+			{
+				PID:       inScopeA,
+				PPID:      rootPID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+				CWD:       scopeA,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       inScopeB,
+				PPID:      rootPID,
+				Provider:  "gemini",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/gemini",
+				CWD:       filepath.Join(scopeB, "subdir"),
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       outScope,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "/home/erik/.local/bin/claude --model opus",
+				CWD:       outside,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       nestedPID,
+				PPID:      outScope,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
+				CWD:       scopeA,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+		}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	if got := ReapRootProviderChildrenInScopes(context.Background(), rootPID, scopeA, scopeB, scopeA, ""); got != 2 {
+		t.Fatalf("ReapRootProviderChildrenInScopes() = %d, want 2", got)
+	}
+	if len(killed) != 2 || killed[0] != inScopeA || killed[1] != inScopeB {
+		t.Fatalf("expected only scoped root children [%d %d], got %v", inScopeA, inScopeB, killed)
+	}
+}
+
 func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	dir := t.TempDir()
 	claudePID := startFakeProviderChild(t, dir, "claude")

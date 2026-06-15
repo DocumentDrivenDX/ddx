@@ -469,6 +469,30 @@ func ReapRootProviderChildrenInScope(ctx context.Context, rootPID int, scopeDir 
 	return len(reaped)
 }
 
+// ReapRootProviderChildrenInScopes terminates direct provider CLI children
+// whose cwd falls under any supplied scope. It intentionally does not treat an
+// empty scope as "everything"; callers use this after short-lived probes where
+// the safe scopes are the process cwd and the requested project root.
+func ReapRootProviderChildrenInScopes(ctx context.Context, rootPID int, scopeDirs ...string) int {
+	if rootPID <= 0 {
+		return 0
+	}
+	seen := map[string]struct{}{}
+	total := 0
+	for _, scopeDir := range scopeDirs {
+		scopeDir = strings.TrimSpace(scopeDir)
+		if scopeDir == "" {
+			continue
+		}
+		if _, ok := seen[scopeDir]; ok {
+			continue
+		}
+		seen[scopeDir] = struct{}{}
+		total += ReapRootProviderChildrenInScope(ctx, rootPID, scopeDir)
+	}
+	return total
+}
+
 func ReapDefunctRootProviderChildren(ctx context.Context, rootPID int) int {
 	if rootPID <= 0 {
 		return 0

@@ -79,6 +79,25 @@ func ResolvePreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService,
 	return NewPreflightServiceFromWorkDir(workDir)
 }
 
+func cleanupCurrentProcessProviderProbes(ctx context.Context, workDir string) {
+	if serviceRunFactory != nil {
+		return
+	}
+	var scopes []string
+	if cwd, err := os.Getwd(); err == nil && cwd != "" {
+		scopes = append(scopes, cwd)
+	}
+	if workDir = strings.TrimSpace(workDir); workDir != "" {
+		scopes = append(scopes, workDir)
+	}
+	if len(scopes) == 0 {
+		return
+	}
+	cctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	_ = ReapRootProviderChildrenInScopes(cctx, os.Getpid(), scopes...)
+}
+
 // resolveService returns a FizeauService for workDir, using the test-injected
 // factory when set and the production NewServiceFromWorkDir otherwise. All
 // internal callers (RunWithConfigViaService, ValidateForExecuteLoopViaService,
@@ -165,6 +184,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
+	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	return executeOnService(ctx, svc, workDir, rcfg, runtime)
 }
 
@@ -698,6 +718,7 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
+	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("agent: list harnesses: %w", err)
@@ -760,6 +781,7 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	if err != nil {
 		return fmt.Errorf("agent: build service: %w", err)
 	}
+	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return fmt.Errorf("agent: list harnesses: %w", err)
@@ -807,6 +829,7 @@ func ValidateHarnessOnlyRouteViaService(ctx context.Context, workDir, harnessNam
 	if err != nil {
 		return fmt.Errorf("agent: build service: %w", err)
 	}
+	defer cleanupCurrentProcessProviderProbes(ctx, workDir)
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return fmt.Errorf("agent: list harnesses: %w", err)
