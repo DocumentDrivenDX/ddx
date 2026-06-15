@@ -1,0 +1,166 @@
+{
+  "attempt_id": "20260615T212331-dd7f7f6d",
+  "bead_id": "ddx-94e3921b",
+  "base_rev": "54a2cd47afae17a483ab32e34c60f1eed72c392f",
+  "created_at": "2026-06-15T21:23:39.334226317Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-94e3921b",
+    "title": "agent: ignore dirty-root guard state as DDx runtime scratch",
+    "description": "PROBLEM\n  During the 2026-06-11 dogfood drill, running `ddx work --once` against a dirty project root wrote `.ddx/dirty-root-guard.json`. `git status --short` then showed the guard file as untracked. A worker preflight that exits before claiming work should not leave new, unignored repository noise for the operator to triage.\n\nROOT CAUSE\n  `cli/internal/agent/execute_bead_loop.go:958` defines the guard state filename as `dirty-root-guard.json`. `cli/internal/agent/execute_bead_loop.go:1256-1266` writes that state under the project's `.ddx` directory, and `cli/internal/agent/execute_bead_loop.go:1329-1390` updates it during dirty-root preflight. `.gitignore:420-435` ignores other DDx runtime scratch paths such as `.ddx/run-state.json`, `.ddx/run-state/`, `.ddx/workers/`, and `.ddx/*.tmp`, but does not ignore `.ddx/dirty-root-guard.json`.\n\nPROPOSED FIX\n  - Treat dirty-root guard state as DDx runtime scratch, not tracked project state.\n  - Add `.ddx/dirty-root-guard.json` to the repository `.gitignore` and to the DDx init/default ignore entries in `cli/cmd/init.go` so new projects do not see the file as untracked.\n  - Add or update tests in `cli/cmd/init_test.go` to prove generated gitignore content ignores `.ddx/dirty-root-guard.json` while still preserving intentionally tracked execution evidence exceptions.\n  - Keep the existing dirty-root escalation behavior and state file format unchanged unless a smaller existing runtime-state helper makes the ignore behavior cleaner.\n\nNON-SCOPE\n  - Do not remove the dirty-root cooldown/escalation state machine.\n  - Do not make `ddx work` proceed on a dirty project root.\n  - Do not broaden ignores to all of `.ddx/`, because beads, attachments, metrics, and selected execution evidence remain intentionally tracked.\n\nPARENT + DEPS\n  No parent. No deps.",
+    "acceptance": "1. `TestInitGitignoreIgnoresDirtyRootGuard` or an updated existing init gitignore test proves generated DDx gitignore content contains `.ddx/dirty-root-guard.json`.\n2. A test or scripted assertion proves `git check-ignore -q .ddx/dirty-root-guard.json` succeeds in a freshly initialized fixture project.\n3. Existing init gitignore evidence-preservation assertions still prove `.ddx/executions/*/{manifest,result,checks,usage}.json` are not ignored.\n4. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestInit.*Gitignore|TestInit.*RunState'` passes.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestDirtyRootPreventsClaimLoop|TestExecuteBeadLoop_RepeatedDirtyRootEscalatesWithCooldown'` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:git",
+      "dogfood",
+      "kind:bug",
+      "phase:iterate",
+      "preclaim"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260615T205242-90cd",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-94e3921b\",\"fingerprint\":\"2485cbe85ec2b2719f93ed6ba1035ecb0d4561e8dedbbe8e47d0f6f99ffcc645\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"2485cbe85ec2b2719f93ed6ba1035ecb0d4561e8dedbbe8e47d0f6f99ffcc645\"}",
+          "created_at": "2026-06-15T20:55:54.706668208Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T20:56:28.688756716Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "worker-20260615T205242-90cd",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2184 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-06-15T20:56:30.361900639Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T205607-737e5b10\",\"bead_id\":\"ddx-94e3921b\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T20:56:30.405540307Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "worker-20260615T205242-90cd",
+          "body": "ResolveRoute: no live provider supports prompt of 2184 tokens with tools=false at policy default\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_viable_provider\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=55361731e90688db2f4ca426df342b3d666660bf\nbase_rev=55361731e90688db2f4ca426df342b3d666660bf\noutcome_reason=no_viable_provider",
+          "created_at": "2026-06-15T20:56:30.456444552Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "worker-20260615T210043-ecb4",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1829 tokens with tools=false at policy smart\",\"fingerprint\":\"e95107d309d8e8ba716a47973e80da721c37c043179c0dba48bbe99f5346e30e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e95107d309d8e8ba716a47973e80da721c37c043179c0dba48bbe99f5346e30e\"}",
+          "created_at": "2026-06-15T21:04:48.74605446Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T21:05:24.803089727Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "worker-20260615T210043-ecb4",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2184 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-06-15T21:05:27.099644454Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T210501-4fd0147c\",\"bead_id\":\"ddx-94e3921b\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T21:05:27.147868666Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "worker-20260615T210043-ecb4",
+          "body": "ResolveRoute: no live provider supports prompt of 2184 tokens with tools=false at policy default\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_viable_provider\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=2cbbc11cc5ba7629a2b4f0a11fc187e22dd3b61e\nbase_rev=2cbbc11cc5ba7629a2b4f0a11fc187e22dd3b61e\noutcome_reason=no_viable_provider",
+          "created_at": "2026-06-15T21:05:27.193705954Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "worker-20260615T211044-4c17",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 2039 tokens with tools=false at policy smart\",\"fingerprint\":\"18ee024839abc3b7cd89388705b6731ed880430924387cfb2bf2ae132b4e2d1e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"18ee024839abc3b7cd89388705b6731ed880430924387cfb2bf2ae132b4e2d1e\"}",
+          "created_at": "2026-06-15T21:14:18.206867022Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T21:14:56.319672167Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "worker-20260615T211044-4c17",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2184 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-06-15T21:14:58.441483476Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T211432-93ce5e15\",\"bead_id\":\"ddx-94e3921b\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T21:14:58.497664053Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "worker-20260615T211044-4c17",
+          "body": "ResolveRoute: no live provider supports prompt of 2184 tokens with tools=false at policy default\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_viable_provider\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=d9f2fa9e843d2597d6f2ba6e4038bd11d516d41e\nbase_rev=d9f2fa9e843d2597d6f2ba6e4038bd11d516d41e\noutcome_reason=no_viable_provider",
+          "created_at": "2026-06-15T21:14:58.546795178Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "worker-20260615T211904-5e45",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 2249 tokens with tools=false at policy smart\",\"fingerprint\":\"471f32d741889b7558bd07da9348a409ee00a9a97b171742041bfd956fc0ec5d\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"471f32d741889b7558bd07da9348a409ee00a9a97b171742041bfd956fc0ec5d\"}",
+          "created_at": "2026-06-15T21:23:17.7997858Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 150
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260615T212331-dd7f7f6d",
+    "prompt": ".ddx/executions/20260615T212331-dd7f7f6d/prompt.md",
+    "manifest": ".ddx/executions/20260615T212331-dd7f7f6d/manifest.json",
+    "result": ".ddx/executions/20260615T212331-dd7f7f6d/result.json",
+    "checks": ".ddx/executions/20260615T212331-dd7f7f6d/checks.json",
+    "usage": ".ddx/executions/20260615T212331-dd7f7f6d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-94e3921b-20260615T212331-dd7f7f6d"
+  },
+  "prompt_sha": "52b4c27613f68566bdbb4deca5b6dd912a7120d61d492f78a6616c0433655c76"
+}
