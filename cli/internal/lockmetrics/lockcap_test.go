@@ -84,6 +84,28 @@ func TestLockCap_ExceedingCapForceReleases(t *testing.T) {
 		"lock file must be force-released after exceeding the cap")
 }
 
+// TestLockCap_ExceedingCapRemovesLockRecreatedAfterWatchdog asserts the
+// release path cleans up a lock file recreated by a slow git subprocess after
+// the watchdog's first forced removal.
+func TestLockCap_ExceedingCapRemovesLockRecreatedAfterWatchdog(t *testing.T) {
+	SetSink(nil)
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, "index.lock")
+	require.NoError(t, os.WriteFile(lockPath, []byte("held"), 0o644))
+
+	cfg := CapConfig{Cap: 30 * time.Millisecond, LockPath: lockPath, EvidenceDir: dir}
+	err := InstrumentCapped("index.lock", "index.commit", cfg, func() error {
+		time.Sleep(100 * time.Millisecond)
+		require.NoError(t, os.WriteFile(lockPath, []byte("recreated"), 0o644))
+		return nil
+	})
+	require.NoError(t, err)
+
+	_, statErr := os.Stat(lockPath)
+	assert.True(t, os.IsNotExist(statErr),
+		"release path must remove lock files recreated after the cap watchdog fires")
+}
+
 // TestLockCap_ViolationWrittenToEvidence asserts a lock-violation.json appears
 // under the worker's evidence directory carrying the required fields.
 func TestLockCap_ViolationWrittenToEvidence(t *testing.T) {
