@@ -96,6 +96,48 @@ func TestWorkerShowRefreshesCurrentAttemptFromRunState(t *testing.T) {
 	assert.Equal(t, started.Unix(), rec.CurrentAttempt.StartedAt.Unix())
 }
 
+func TestWorkerShowDoesNotOverwriteNewerCurrentAttemptWithStaleRunState(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	m := NewWorkerManager(root)
+
+	oldStarted := time.Now().UTC().Add(-10 * time.Minute)
+	newStarted := time.Now().UTC()
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:    "ddx-live",
+		AttemptID: "attempt-old",
+		Harness:   "claude-tui",
+		Model:     "opus-4.7",
+		StartedAt: oldStarted,
+	}))
+
+	m.mu.Lock()
+	m.workers["worker-live"] = &workerHandle{
+		record: WorkerRecord{
+			ID:          "worker-live",
+			Kind:        "work",
+			State:       "running",
+			Status:      "running",
+			ProjectRoot: root,
+			CurrentBead: "ddx-live",
+			CurrentAttempt: &CurrentAttemptInfo{
+				BeadID:    "ddx-live",
+				Phase:     "pre_claim_intake",
+				StartedAt: newStarted,
+			},
+		},
+	}
+	m.mu.Unlock()
+
+	rec, err := m.Show("worker-live")
+	require.NoError(t, err)
+	require.NotNil(t, rec.CurrentAttempt)
+	assert.Empty(t, rec.CurrentAttempt.AttemptID)
+	assert.Equal(t, "ddx-live", rec.CurrentAttempt.BeadID)
+	assert.Equal(t, "pre_claim_intake", rec.CurrentAttempt.Phase)
+	assert.Equal(t, newStarted.Unix(), rec.CurrentAttempt.StartedAt.Unix())
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

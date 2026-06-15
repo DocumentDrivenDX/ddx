@@ -656,6 +656,13 @@ func refreshWorkerCurrentAttemptFromRunState(rec WorkerRecord) WorkerRecord {
 	if rec.CurrentAttempt != nil && rec.CurrentAttempt.BeadID != "" && rec.CurrentAttempt.BeadID != beadID {
 		return rec
 	}
+	if rec.CurrentAttempt != nil &&
+		rec.CurrentAttempt.BeadID == beadID &&
+		!rec.CurrentAttempt.StartedAt.IsZero() &&
+		!state.StartedAt.IsZero() &&
+		state.StartedAt.Before(rec.CurrentAttempt.StartedAt) {
+		return rec
+	}
 	phase := "running"
 	phaseSeq := 0
 	elapsedMS := int64(0)
