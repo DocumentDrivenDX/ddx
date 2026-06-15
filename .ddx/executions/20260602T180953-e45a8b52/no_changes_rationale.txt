@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./... && cd internal/server/frontend && bun run test:e2e:functional

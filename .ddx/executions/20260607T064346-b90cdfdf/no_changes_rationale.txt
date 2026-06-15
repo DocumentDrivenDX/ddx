@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test ./...` fails in unrelated pre-existing tests outside this bead's scope, including `cli/internal/bead` performance, `cli/internal/server` snapshot latency, and worker route resolution timeouts. The bead-specific doctor implementation is already present, but the required acceptance command cannot pass without fixing those external failures.

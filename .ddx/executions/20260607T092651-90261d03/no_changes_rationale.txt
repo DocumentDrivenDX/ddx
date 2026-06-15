@@ -1,2 +1,0 @@
-status: blocked
-reason: cd cli && go test ./... is already red in unrelated cmd package tests (for example TestAcRun_*, TestBeadArchive*, TestWorkPlan_*, and TestWork* failures), so this bead cannot prove its acceptance without fixing a broader pre-existing baseline failure outside its scope.

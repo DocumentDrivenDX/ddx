@@ -1,2 +1,0 @@
-status: open
-reason: retryable repo-wide gate failure from unrelated pre-existing perf/integration tests in `cd cli && go test ./...`

@@ -1,2 +1,0 @@
-status: open
-reason: `go test ./...` fails in unrelated packages (`cmd`, `internal/bead`, `internal/integration`, `internal/server`) with existing performance/flaky failures, so AC 3 and AC 4 cannot be satisfied in this pass.

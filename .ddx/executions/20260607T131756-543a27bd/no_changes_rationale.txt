@@ -1,2 +1,0 @@
-status: open
-reason: retryable internal/server package gate failures block pre-commit in this environment. The bead-specific regression test passes (`go test -run TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel -count=3 ./internal/server`), but the hook-equivalent package run (`CGO_ENABLED=1 SKIP_INTEGRATION_TESTS=true go test -short -race -timeout 30m ./internal/server`) fails across many unrelated server tests before commit can be made.

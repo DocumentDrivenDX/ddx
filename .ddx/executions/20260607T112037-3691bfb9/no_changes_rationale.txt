@@ -1,2 +1,0 @@
-status: open
-reason: internal/server and related package tests still require a broader bare-.ddx fixture sweep; the agent and graphql slices are green, but the remaining failures are outside the fixture set listed in this bead and need a separate follow-up.

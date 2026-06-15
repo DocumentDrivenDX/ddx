@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./internal/server/graphql/... -run TestAuditEvent_RawTranscriptViewed

@@ -1,2 +1,0 @@
-status: open
-reason: lefthook run pre-commit is stalled in the staged `go test -short -race -timeout 30m ./internal/agent` package check; the process has remained in futex wait for >10m and did not complete during this pass

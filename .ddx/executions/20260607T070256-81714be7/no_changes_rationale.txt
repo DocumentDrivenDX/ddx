@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test ./...` fails in unrelated baseline performance tests outside this bead's scope: `internal/bead/TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` and `internal/server/TestServerStateBeadSnapshotLatencyBudget`. The bead-specific acceptance tests pass (`go test ./cmd -run 'TestBeadCreateRejectsDependsOnParentAncestor|TestBeadDepAddRejectsParentAncestor'`) and `lefthook run pre-commit` passes, but the repo-wide gate remains red without cross-scope fixes.

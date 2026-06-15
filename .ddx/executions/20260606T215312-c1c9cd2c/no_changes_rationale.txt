@@ -1,2 +1,0 @@
-status: blocked
-reason: This bead depends on the sibling ctx-first signature migration work, but the current checkout still has the pre-migration variadic Store read methods and ctx-less Apply path, so the requested compile-time assertions cannot be made true here without the upstream method/caller updates.

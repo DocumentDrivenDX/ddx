@@ -1,2 +1,0 @@
-status: open
-reason: retryable - run loop extraction still needs a broader mechanical rewrite of ExecuteBeadWorker.Run and its iteration state than was safe to finish in this pass

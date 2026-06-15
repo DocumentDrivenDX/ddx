@@ -1,2 +1,0 @@
-status: open
-reason: `go test ./internal/bead/... ./cmd/...` is blocked by a pre-existing performance-budget failure in `cli/internal/bead/store_perf_test.go` on this host, while the bead-specific ancestor-rejection tests and `lefthook run pre-commit` pass. The requested ancestor-validation behavior is already present in `cli/internal/bead/store.go` and `cli/cmd/bead.go`; the remaining work is to rerun the broad sweep on a less contended runner or after the host load settles.

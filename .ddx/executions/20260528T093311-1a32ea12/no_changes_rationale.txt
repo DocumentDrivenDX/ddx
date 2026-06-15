@@ -1,1 +1,0 @@
-verification_command: cd /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b4edab35-20260528T093311-1a32ea12/cli && go test ./cmd/... -run "TestBeadReview" -timeout=30s && go test ./internal/agent/... -run "TestBeadReviewProse|TestRunPostMergeReviewIgnoresProseFindingsForClosure" -timeout=30s

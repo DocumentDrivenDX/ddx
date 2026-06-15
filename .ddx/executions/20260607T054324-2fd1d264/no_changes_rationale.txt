@@ -1,2 +1,0 @@
-status: open
-reason: repo-wide test suite remains blocked by a pre-existing internal/bead performance flake. `go test -p 1 -parallel 1 ./...` still fails in `cli/internal/bead` at `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` with p99 lock wait just over the 1000ms budget. The bead-scoped dependency-rejection changes and focused tests pass, but I cannot fix this unrelated performance threshold without leaving the bead's named scope.

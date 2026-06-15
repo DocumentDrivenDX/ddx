@@ -1,1 +1,0 @@
-verification_command: grep -q "Run-detail page" docs/helix/01-frame/features/FEAT-008-web-ui.md && grep -qi "Trust boundary" docs/helix/01-frame/features/FEAT-008-web-ui.md && grep -q "Run resolver contract" docs/helix/01-frame/features/FEAT-010-task-execution.md && grep -q "ToolCallEntry" docs/helix/01-frame/features/FEAT-010-task-execution.md

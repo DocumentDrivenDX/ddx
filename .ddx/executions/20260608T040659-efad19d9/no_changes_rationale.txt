@@ -1,3 +1,0 @@
-status: open
-reason: mechanical hoist of ExecuteBeadWorker.Run into runIteration is too large to complete safely in this pass without a scripted AST rewrite
-orchestrator_action: decompose
