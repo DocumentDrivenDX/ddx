@@ -933,7 +933,7 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
 	}
 	switch strings.ToLower(strings.TrimSpace(out.Classification)) {
-	case "atomic", "ok", "ready", "actionable", "pass":
+	case "atomic", "ok", "ready", "actionable", "pass", "executable", "executable_as_written":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
 	case "rewritten":
 		return PreClaimIntakeResult{

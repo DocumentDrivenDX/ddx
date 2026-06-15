@@ -266,6 +266,18 @@ func TestReadinessClassification_LegacyDecodesEstimatedDifficulty(t *testing.T) 
 	assert.Equal(t, "hard", got.EstimatedDifficulty)
 }
 
+func TestReadinessClassification_NormalizesExecutableAsReady(t *testing.T) {
+	classified := ClassifyReadiness("executable", nil, "")
+	assert.Equal(t, ReadinessClassificationReady, classified.Classification)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, classified.IntakeOutcome)
+	assert.Empty(t, classified.SystemReason)
+
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"executable","rationale":"single executable slice","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Empty(t, got.SystemReason)
+}
+
 func TestReadinessUsesBeadDifficultyPrecedence(t *testing.T) {
 	b := &bead.Bead{
 		Extra: map[string]any{
