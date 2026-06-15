@@ -124,6 +124,48 @@ func TestWorkerManagerPruneReapsDeadPID(t *testing.T) {
 	assert.Equal(t, "prune", events[0].Summary)
 }
 
+func TestWorkerManagerReconcileStaleWorkersReleasesOwnedClaimWithoutCurrentBead(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBeadByOwner(t, root, "ddx-restart-owned", "worker-restart-owned")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-restart-owned"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, m.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-time.Minute),
+		PID:         9999999,
+	}))
+
+	m.ReconcileStaleWorkers()
+
+	b, err := store.Get(context.Background(), "ddx-restart-owned")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+	assert.Empty(t, b.Owner)
+
+	_, found, err := store.ClaimLease("ddx-restart-owned")
+	require.NoError(t, err)
+	assert.False(t, found, "server-restart reconcile must remove the stale owned claim lease")
+
+	events, err := store.EventsByKind("ddx-restart-owned", "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "server-restart", events[0].Summary)
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "exited", rec.State)
+	assert.Equal(t, "server-restart", rec.ReapReason)
+}
+
 // TestWorkerManagerPruneByMaxAge verifies that Prune reaps a worker older
 // than the maxAge threshold. A PID=0 goroutine-only worker not in m.workers
 // is already caught by the goroutine-not-running path; we just verify the

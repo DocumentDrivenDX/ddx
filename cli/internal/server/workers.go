@@ -2542,18 +2542,17 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 			projectRoot = m.projectRoot
 		}
 
-		if beadID != "" {
-			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-			body := fmt.Sprintf("worker=%s pid=%d reason=prune %s", rec.ID, rec.PID, reason)
-			_ = store.AppendEvent(beadID, bead.BeadEvent{
-				Kind:      "bead.reaped",
-				Summary:   "prune",
-				Body:      body,
-				Actor:     "ddx",
-				Source:    "server-workers",
-				CreatedAt: now,
-			})
-			_ = store.Unclaim(beadID)
+		body := fmt.Sprintf("worker=%s pid=%d reason=prune %s", rec.ID, rec.PID, reason)
+		released := releaseWorkerClaims(projectRoot, rec.ID, beadID, now, bead.BeadEvent{
+			Kind:      "bead.reaped",
+			Summary:   "prune",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		if beadID == "" && len(released) > 0 {
+			beadID = released[0]
 		}
 
 		rec.State = "reaped"
@@ -2636,19 +2635,15 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 			projectRoot = m.projectRoot
 		}
 
-		if beadID != "" {
-			store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-			body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
-			_ = store.AppendEvent(beadID, bead.BeadEvent{
-				Kind:      "bead.reaped",
-				Summary:   "server-restart",
-				Body:      body,
-				Actor:     "ddx-server",
-				Source:    "server-workers",
-				CreatedAt: now,
-			})
-			_ = store.Unclaim(beadID)
-		}
+		body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
+		releaseWorkerClaims(projectRoot, rec.ID, beadID, now, bead.BeadEvent{
+			Kind:      "bead.reaped",
+			Summary:   "server-restart",
+			Body:      body,
+			Actor:     "ddx-server",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
 
 		rec.State = "exited"
 		rec.Status = "exited"
