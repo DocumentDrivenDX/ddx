@@ -1,0 +1,17 @@
+{
+  "attempt_id": "20260615T042212-fb75280a",
+  "bead_id": "ddx-34ea2a74",
+  "trigger": "superseded_provider_child",
+  "active_route": "claude-tui",
+  "scanned_at": "2026-06-15T04:22:31.044786311Z",
+  "reaped": [
+    {
+      "pid": 532923,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-875543390\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-875543390\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"d960e45a94fc75ad36403e6a3542d151\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-875543390/stop-hook-payload.json\\\"\"}]}]}} --model sonnet",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "superseded_provider_child"
+    }
+  ]
+}
