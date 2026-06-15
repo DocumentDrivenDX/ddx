@@ -27,6 +27,16 @@ type drainWatchdog struct {
 	// catches individually hung subprocesses, not loops (loopDetector handles
 	// loops).
 	toolCallTimeout time.Duration
+	// requestTimeout is the absolute provider-session wall-clock cap for the
+	// attempt (the operator's --request-timeout). Unlike idleTimeout and
+	// toolCallTimeout it is armed once at the start of the drain and is NEVER
+	// reset by activity: a provider session that keeps emitting tool events
+	// past this window is still cancelled at the cap. Zero disables it.
+	requestTimeout time.Duration
+	// onRequestTimeout, when non-nil, is invoked with the elapsed wall-clock
+	// time the instant requestTimeout fires, before cancel(). It reaps the
+	// provider process tree and writes durable request-timeout evidence.
+	onRequestTimeout func(elapsed time.Duration)
 }
 
 // loopDetector maintains a window of the last 8 (tool_call, tool_result) pair
@@ -255,7 +265,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 	var progress []agentlib.ServiceProgressData
 
 	// Fast path: no watchdog, simple range loop with no timer overhead.
-	if wd == nil || (wd.idleTimeout == 0 && wd.toolCallTimeout == 0) {
+	if wd == nil || (wd.idleTimeout == 0 && wd.toolCallTimeout == 0 && wd.requestTimeout == 0) {
 		for ev := range events {
 			decoded, err := agentlib.DecodeServiceEvent(ev)
 			if err != nil {
@@ -347,12 +357,28 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 		idleTimer = time.NewTimer(wd.idleTimeout)
 		idleTimerC = idleTimer.C
 	}
+
+	// Arm the absolute request-timeout cap once. It is intentionally NOT reset
+	// by activity: it bounds the whole provider session by wall-clock so a
+	// session that emits tool events indefinitely cannot outlive the operator's
+	// --request-timeout (ddx-9febbad2).
+	start := time.Now()
+	var requestTimer *time.Timer
+	var requestTimerC <-chan time.Time
+	if wd.requestTimeout > 0 {
+		requestTimer = time.NewTimer(wd.requestTimeout)
+		requestTimerC = requestTimer.C
+	}
+
 	defer func() {
 		if idleTimer != nil {
 			idleTimer.Stop()
 		}
 		if toolCallTimer != nil {
 			toolCallTimer.Stop()
+		}
+		if requestTimer != nil {
+			requestTimer.Stop()
 		}
 	}()
 
@@ -423,6 +449,17 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 				name = pendingCall.Name
 			}
 			_, _ = fmt.Fprintf(os.Stderr, "agent: tool call timeout (%s, tool=%q): cancelling\n", wd.toolCallTimeout, name)
+			if wd.cancel != nil {
+				wd.cancel()
+			}
+			return final, routing, progress
+
+		case <-requestTimerC:
+			elapsed := time.Since(start)
+			_, _ = fmt.Fprintf(os.Stderr, "agent: request timeout (%s absolute wall-clock cap exceeded after %s): cancelling\n", wd.requestTimeout, elapsed.Round(time.Millisecond))
+			if wd.onRequestTimeout != nil {
+				wd.onRequestTimeout(elapsed)
+			}
 			if wd.cancel != nil {
 				wd.cancel()
 			}

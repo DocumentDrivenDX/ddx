@@ -268,6 +268,12 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}
 
 	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, rcfg.ProviderRequestTimeout())
+	// requestTimeoutCap is the DDx-side absolute provider-session wall-clock cap
+	// (the operator's --request-timeout). It is distinct from providerTimeout
+	// (the per-Chat-call timeout forwarded to fizeau) and from the idle/tool
+	// timers: when set it cancels and reaps a session that keeps emitting tool
+	// events past the window (ddx-9febbad2). Unset → 0 → no absolute cap.
+	requestTimeoutCap := ResolveRequestTimeoutCap(workDir, provider, rcfg.ProviderRequestTimeout())
 
 	minPower := rcfg.MinPower()
 	if runtime.MinPowerOverride > 0 {
@@ -341,6 +347,22 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		cancel:          cancel,
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
+		requestTimeout:  requestTimeoutCap,
+	}
+	if requestTimeoutCap > 0 {
+		watchdog.onRequestTimeout = func(elapsed time.Duration) {
+			reapRequestTimeoutAttempt(
+				workDir,
+				runtime.Correlation["attempt_id"],
+				runtime.Correlation["bead_id"],
+				workPhase,
+				wd,
+				os.Getpid(),
+				requestTimeoutCap,
+				elapsed,
+				time.Now().UTC(),
+			)
+		}
 	}
 	onRouteResolved := func(harness, provider, model string) {
 		harness = firstNonEmpty(harness, fizeauHarness(strings.TrimSpace(runtime.HarnessOverride)), fizeauHarness(strings.TrimSpace(pt.Harness)))

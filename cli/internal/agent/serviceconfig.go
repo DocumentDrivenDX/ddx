@@ -61,6 +61,32 @@ func ResolveProviderRequestTimeout(workDir, providerName, _ string, override tim
 	return DefaultProviderRequestTimeout
 }
 
+// ResolveRequestTimeoutCap returns the absolute provider-session wall-clock cap
+// for an execute-bead/work attempt drain: the explicit --request-timeout
+// override if set (override > 0), else the per-endpoint
+// request_timeout_seconds from .ddx/config.yaml for the named provider.
+//
+// Unlike ResolveProviderRequestTimeout this does NOT fall back to
+// DefaultProviderRequestTimeout — when neither is configured it returns 0 and
+// the attempt drain applies no absolute cap, preserving genuinely long-running
+// attempts. The operator opts into bounded unattended burn-down by setting the
+// timeout explicitly. This is the DDx-side absolute cap that cancels and reaps
+// a provider session which keeps emitting tool events past the window; it is
+// distinct from the idle-read and per-tool-call timers (ddx-9febbad2).
+func ResolveRequestTimeoutCap(workDir, providerName string, override time.Duration) time.Duration {
+	if override > 0 {
+		return override
+	}
+	if workDir != "" && providerName != "" {
+		if cfg, err := ddxconfig.LoadWithWorkingDir(workDir); err == nil {
+			if t := endpointRequestTimeout(cfg, providerName); t > 0 {
+				return t
+			}
+		}
+	}
+	return 0
+}
+
 // endpointRequestTimeout looks up the request_timeout_seconds for the named
 // provider in cfg.Agent.Endpoints. Returns 0 if not configured or not found.
 func endpointRequestTimeout(cfg *ddxconfig.Config, providerName string) time.Duration {

@@ -827,6 +827,18 @@ func wrapPreClaimIntakeProviderCleanup(projectRoot string, spec ExecuteLoopWorke
 	}
 }
 
+// applyRequestTimeoutOverride forwards a server-managed worker's request
+// timeout into CLI overrides so it becomes the absolute provider-session
+// wall-clock cap the agent enforces during the attempt drain (ddx-9febbad2).
+// A zero or negative duration leaves the override unset, so the attempt keeps
+// the default per-call provider timeout without an absolute drain cap.
+func applyRequestTimeoutOverride(overrides *config.CLIOverrides, requestTimeout time.Duration) {
+	if overrides == nil || requestTimeout <= 0 {
+		return
+	}
+	overrides.ProviderRequestTimeout = &requestTimeout
+}
+
 func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
@@ -846,9 +858,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		OpaquePassthrough: spec.OpaquePassthrough,
 	}
 	requestTimeout := spec.RequestTimeout.Duration
-	if requestTimeout > 0 {
-		overrides.ProviderRequestTimeout = &requestTimeout
-	}
+	applyRequestTimeoutOverride(&overrides, requestTimeout)
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	var lintHook func(ctx context.Context, beadID string) (agent.LintResult, error)
@@ -898,9 +908,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				MaxPower:          spec.MaxPower,
 				OpaquePassthrough: spec.OpaquePassthrough,
 			}
-			if requestTimeout > 0 {
-				loopOverrides.ProviderRequestTimeout = &requestTimeout
-			}
+			applyRequestTimeoutOverride(&loopOverrides, requestTimeout)
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 			beadStore := bead.NewStore(ddxroot.JoinProject(projectRoot))
 			attemptSvc, svcErr := agent.ResolveServiceFromWorkDirCtx(ctx, projectRoot)
