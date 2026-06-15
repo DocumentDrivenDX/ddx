@@ -53,6 +53,7 @@
 	let profile = $state('smart');
 	let effort = $state('medium');
 	let labelFilter = $state('');
+	let requestTimeout = $state('20m');
 	let adding = $state(false);
 	let removing = $state(false);
 
@@ -131,7 +132,8 @@
 					model: model.trim() || null,
 					profile: profile.trim(),
 					effort: effort.trim(),
-					labelFilter: labelFilter.trim() || null
+					labelFilter: labelFilter.trim() || null,
+					requestTimeout: requestTimeout.trim() || null
 				}
 			});
 			showStartForm = false;
@@ -139,6 +141,7 @@
 			provider = '';
 			model = '';
 			labelFilter = '';
+			requestTimeout = '20m';
 			await invalidateAll();
 		} catch (err) {
 			actionError = errorText(err);
@@ -330,7 +333,7 @@
 
 	{#if showStartForm}
 		<form
-			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-6"
+			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-2 lg:grid-cols-7"
 			onsubmit={(event) => {
 				event.preventDefault();
 				void startWorker();
@@ -392,7 +395,15 @@
 					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
 			</label>
-			<div class="flex items-end gap-2 sm:col-span-6">
+			<label class="space-y-1">
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Timeout</span>
+				<input
+					bind:value={requestTimeout}
+					placeholder="20m"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+				/>
+			</label>
+			<div class="flex items-end gap-2 sm:col-span-2 lg:col-span-7">
 				<button
 					type="submit"
 					disabled={starting || !profile.trim() || !effort.trim()}

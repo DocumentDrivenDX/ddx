@@ -68,6 +68,7 @@ function makeSessionsResponse() {
 test('starts two server managed work workers', async ({ page }) => {
 	let workers: Record<string, unknown>[] = [];
 	let startCallCount = 0;
+	const startInputs: Array<Record<string, unknown>> = [];
 
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
@@ -97,6 +98,7 @@ test('starts two server managed work workers', async ({ page }) => {
 			});
 		} else if (body.query.includes('StartWorker') || body.query.includes('startWorker')) {
 			startCallCount++;
+			startInputs.push((body.variables?.input ?? {}) as Record<string, unknown>);
 			const newWorker = makeBaseWorker({
 				id: `worker-dispatch-${startCallCount.toString().padStart(8, '0')}`,
 				kind: 'work',
@@ -153,6 +155,7 @@ test('starts two server managed work workers', async ({ page }) => {
 	await page.getByRole('button', { name: 'Start worker' }).click();
 	await page.getByRole('button', { name: 'Start', exact: true }).click();
 	await expect.poll(() => startCallCount, { timeout: 3000 }).toBe(1);
+	expect(startInputs[0]).toMatchObject({ projectId: PROJECT_ID, requestTimeout: '20m' });
 
 	// Reload or await re-query: first worker row appears.
 	await expect(page.getByText('worker-d').first()).toBeVisible();
@@ -162,6 +165,7 @@ test('starts two server managed work workers', async ({ page }) => {
 	await page.getByRole('button', { name: 'Start worker' }).click();
 	await page.getByRole('button', { name: 'Start', exact: true }).click();
 	await expect.poll(() => startCallCount, { timeout: 3000 }).toBe(2);
+	expect(startInputs[1]).toMatchObject({ projectId: PROJECT_ID, requestTimeout: '20m' });
 
 	// Both worker rows must appear.
 	await expect(page.getByText('2 total')).toBeVisible();
