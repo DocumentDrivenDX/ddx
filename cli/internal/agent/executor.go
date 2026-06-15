@@ -159,7 +159,7 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	if dir != "" {
 		cmd.Dir = dir
 	}
-	cmd.Env = envWithOverrides(internalgit.CleanEnv(), executionEnvFromContext(ctx))
+	cmd.Env = envWithOverrides(scrubbedExecutionProcessEnv(), executionEnvFromContext(ctx))
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -364,6 +364,38 @@ func envWithOverrides(base []string, overrides map[string]string) []string {
 	}
 	for _, key := range keys {
 		env = append(env, key+"="+overrides[key])
+	}
+	return env
+}
+
+func scrubbedExecutionProcessEnv() []string {
+	return scrubEnvKeys(internalgit.CleanEnv(),
+		"DDX_PROJECT_ROOT",
+		"DDX_AGENT_NAME",
+		"DDX_SERVER_MANAGED_WORKER_ID",
+		"DDX_WORKER_ID",
+	)
+}
+
+func scrubEnvKeys(base []string, keys ...string) []string {
+	if len(base) == 0 || len(keys) == 0 {
+		return append([]string{}, base...)
+	}
+	drop := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		drop[key] = struct{}{}
+	}
+	env := make([]string, 0, len(base))
+	for _, kv := range base {
+		eq := strings.IndexByte(kv, '=')
+		if eq < 0 {
+			env = append(env, kv)
+			continue
+		}
+		if _, ok := drop[kv[:eq]]; ok {
+			continue
+		}
+		env = append(env, kv)
 	}
 	return env
 }

@@ -355,9 +355,9 @@ func gitCommitAll(dir, msg string, extraEnv map[string]string) error {
 	return nil
 }
 
-// scrubbedGitEnvScript returns the environment with all GIT_* variables removed.
+// scrubbedGitEnvScript returns an environment safe for commands that may spawn ddx.
 func scrubbedGitEnvScript() []string {
-	return internalgit.CleanEnv()
+	return scrubbedExecutionProcessEnv()
 }
 
 // isReadableFile returns true if path points to a regular, readable file.

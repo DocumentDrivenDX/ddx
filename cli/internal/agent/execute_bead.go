@@ -1103,6 +1103,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
 	runRuntime.Env[DDXBeadIDEnvKey] = beadID
 	runRuntime.Env[DDXAttemptIDEnvKey] = attemptID
+	if runtime.WorkerID != "" {
+		runRuntime.Env["DDX_WORKER_ID"] = runtime.WorkerID
+	}
 
 	if runtime.AgentRunner == nil && runtime.Service == nil {
 		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" && strings.TrimSpace(rcfg.Model()) != "" {

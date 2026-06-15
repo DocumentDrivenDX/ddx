@@ -128,6 +128,35 @@ func TestOSExecutorIncludesDDXModeEnv(t *testing.T) {
 	assert.Equal(t, DDXModeBeadExecution, result.Stdout)
 }
 
+func TestOSExecutorScrubsParentWorkerRoutingEnv(t *testing.T) {
+	t.Setenv("DDX_PROJECT_ROOT", "/real/project")
+	t.Setenv("DDX_AGENT_NAME", "worker-real")
+	t.Setenv("DDX_SERVER_MANAGED_WORKER_ID", "worker-real")
+	t.Setenv("DDX_WORKER_ID", "worker-real")
+
+	executor := &OSExecutor{}
+	result, err := executor.Execute(context.Background(), "sh", []string{"-c", "printf '%s|%s|%s|%s' \"$DDX_PROJECT_ROOT\" \"$DDX_AGENT_NAME\" \"$DDX_SERVER_MANAGED_WORKER_ID\" \"$DDX_WORKER_ID\""}, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Equal(t, "|||", result.Stdout)
+}
+
+func TestOSExecutorAllowsAttemptWorkerIDOverride(t *testing.T) {
+	t.Setenv("DDX_WORKER_ID", "worker-real")
+
+	executor := &OSExecutor{}
+	ctx := withExecutionEnv(context.Background(), map[string]string{
+		"DDX_WORKER_ID": "worker-attempt",
+	})
+
+	result, err := executor.Execute(ctx, "sh", []string{"-c", "printf %s \"$DDX_WORKER_ID\""}, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Equal(t, "worker-attempt", result.Stdout)
+}
+
 // --- Arg construction tests ---
 
 func TestBuildArgsCodexBasic(t *testing.T) {
