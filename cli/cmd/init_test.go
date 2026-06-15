@@ -408,6 +408,56 @@ persona_bindings: {}
 	}
 }
 
+func TestInitCommand_AcceptsPathArgument(t *testing.T) {
+	t.Run("current directory dot", func(t *testing.T) {
+		te := NewTestEnvironment(t, WithGitInit(false))
+
+		output, err := te.RunCommand("init", "--no-git", ".")
+		require.NoError(t, err)
+
+		assert.FileExists(t, filepath.Join(te.Dir, ddxroot.DirName, "config.yaml"))
+		assert.Contains(t, output, te.Dir)
+	})
+
+	t.Run("relative child directory", func(t *testing.T) {
+		te := NewTestEnvironment(t, WithGitInit(false))
+
+		_, err := te.RunCommand("init", "--no-git", "child/project")
+		require.NoError(t, err)
+
+		childDir := filepath.Join(te.Dir, "child", "project")
+		assert.FileExists(t, filepath.Join(childDir, ddxroot.DirName, "config.yaml"))
+		assert.NoFileExists(t, filepath.Join(te.Dir, ddxroot.DirName, "config.yaml"))
+	})
+
+	t.Run("absolute child directory", func(t *testing.T) {
+		te := NewTestEnvironment(t, WithGitInit(false))
+		childDir := filepath.Join(te.Dir, "absolute-target")
+
+		_, err := te.RunCommand("init", "--no-git", childDir)
+		require.NoError(t, err)
+
+		assert.FileExists(t, filepath.Join(childDir, ddxroot.DirName, "config.yaml"))
+	})
+
+	t.Run("rejects too many paths", func(t *testing.T) {
+		te := NewTestEnvironment(t, WithGitInit(false))
+
+		_, err := te.RunCommand("init", "--no-git", ".", "other")
+		require.Error(t, err)
+	})
+
+	t.Run("rejects file path", func(t *testing.T) {
+		te := NewTestEnvironment(t, WithGitInit(false))
+		target := filepath.Join(te.Dir, "not-a-dir")
+		require.NoError(t, os.WriteFile(target, []byte("file\n"), 0644))
+
+		_, err := te.RunCommand("init", "--no-git", target)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "exists and is not a directory")
+	})
+}
+
 // TestInitCommand_Help tests the help output
 func TestInitCommand_Help(t *testing.T) {
 	te := NewTestEnvironment(t)
@@ -415,6 +465,8 @@ func TestInitCommand_Help(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Contains(t, output, "Initialize DDx")
+	assert.Contains(t, output, "init [path]")
+	assert.Contains(t, output, "ddx init .")
 	assert.Contains(t, output, "--force")
 	assert.Contains(t, output, "--no-git")
 }

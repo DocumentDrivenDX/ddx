@@ -73,6 +73,10 @@ type InitResult struct {
 func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 	// --global mode: one-time machine setup, bypasses project checks.
 	if globalMode, _ := cmd.Flags().GetBool("global"); globalMode {
+		if len(args) > 0 {
+			cmd.SilenceUsage = true
+			return fmt.Errorf("ddx init --global does not accept a path")
+		}
 		if err := initGlobal(); err != nil {
 			cmd.SilenceUsage = true
 			return err
@@ -91,6 +95,16 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 	initRepository, _ := cmd.Flags().GetString("repository")
 	initBranch, _ := cmd.Flags().GetString("branch")
 
+	targetDir, err := resolveInitTargetDir(f.WorkingDir, args)
+	if err != nil {
+		cmd.SilenceUsage = true
+		return err
+	}
+	if err := ensureInitTargetDir(targetDir); err != nil {
+		cmd.SilenceUsage = true
+		return err
+	}
+
 	// Create options struct for business logic
 	opts := InitOptions{
 		Force:               initForce,
@@ -104,12 +118,12 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 
 	// Handle user output
 	if !opts.Silent {
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "🚀 Initializing DDx in current project...\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "🚀 Initializing DDx in %s...\n", targetDir)
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
 	// Call pure business logic function
-	_, err := initProject(f.WorkingDir, opts)
+	_, err = initProject(targetDir, opts)
 	if err != nil {
 		cmd.SilenceUsage = true
 		return err
@@ -125,6 +139,46 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
+	return nil
+}
+
+func resolveInitTargetDir(workingDir string, args []string) (string, error) {
+	target := workingDir
+	if len(args) > 0 {
+		target = strings.TrimSpace(args[0])
+		if target == "" {
+			return "", fmt.Errorf("init path cannot be empty")
+		}
+	}
+	if target == "" {
+		target = "."
+	}
+	if !filepath.IsAbs(target) {
+		if workingDir != "" {
+			target = filepath.Join(workingDir, target)
+		}
+	}
+	abs, err := filepath.Abs(target)
+	if err != nil {
+		return "", fmt.Errorf("resolve init path: %w", err)
+	}
+	return filepath.Clean(abs), nil
+}
+
+func ensureInitTargetDir(targetDir string) error {
+	info, err := os.Stat(targetDir)
+	if err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("init path %s exists and is not a directory", targetDir)
+		}
+		return nil
+	}
+	if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect init path %s: %w", targetDir, err)
+	}
+	if err := os.MkdirAll(targetDir, 0755); err != nil {
+		return fmt.Errorf("create init path %s: %w", targetDir, err)
+	}
 	return nil
 }
 

@@ -7,9 +7,9 @@ import (
 // newInitCommand creates a fresh init command
 func (f *CommandFactory) newInitCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "init",
-		Short: "Initialize DDx in current project",
-		Long: `Initialize DDx in the current project.
+		Use:   "init [path]",
+		Short: "Initialize DDx in a project directory",
+		Long: `Initialize DDx in a project directory.
 
 This command:
 • Creates a .ddx/config.yaml configuration file
@@ -18,9 +18,11 @@ This command:
 
 Examples:
   ddx init                  # Initialize DDx in current project
+  ddx init .                # Initialize DDx in the current directory
+  ddx init ../project       # Initialize DDx in another directory
   ddx init --force          # Reinitialize existing project
   ddx init --no-git         # Skip git operations`,
-		Args: cobra.NoArgs,
+		Args: cobra.MaximumNArgs(1),
 		RunE: f.runInit,
 	}
 
