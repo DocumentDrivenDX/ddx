@@ -1,0 +1,5 @@
+#!/bin/sh
+log="${DDX_PINNED_PROVIDER_GUARD_LOG:-/dev/null}"
+printf '{"blocked_harness":"claude-code","requested_harness":"claude-tui","argv":"%s","pwd":"%s"}\n' "$*" "$(pwd)" >> "$log" 2>/dev/null || true
+echo "ddx: blocked unrequested provider harness "claude-code" during pinned "claude-tui" execution" >&2
+exit 126
