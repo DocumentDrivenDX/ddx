@@ -575,7 +575,19 @@ func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agen
 }
 
 func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
-	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
+	payload, err := dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
+	if err == nil {
+		return payload, nil
+	}
+	if !shouldRetryPreClaimIntakeWithStrongestProfile(err, runtime) {
+		return "", err
+	}
+	retryRuntime := runtime
+	retryRuntime.ProfileOverride = selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile)
+	if retryRuntime.ProfileOverride == "" || retryRuntime.ProfileOverride == runtime.ProfileOverride {
+		return "", err
+	}
+	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, retryRuntime)
 }
 
 func preClaimIntakeRouteUnavailableDetail(err error) string {
@@ -589,6 +601,20 @@ func preClaimIntakeRouteUnavailableDetail(err error) string {
 		return "readiness route unavailable"
 	}
 	return "readiness route unavailable: " + detail
+}
+
+func shouldRetryPreClaimIntakeWithStrongestProfile(err error, runtime AgentRunRuntime) bool {
+	if err == nil || strings.TrimSpace(runtime.ProfileOverride) == "" {
+		return false
+	}
+	if strings.TrimSpace(runtime.HarnessOverride) != "" ||
+		strings.TrimSpace(runtime.ProviderOverride) != "" ||
+		strings.TrimSpace(runtime.ModelOverride) != "" {
+		return false
+	}
+	text := strings.ToLower(err.Error())
+	return strings.Contains(text, "no live provider supports") ||
+		strings.Contains(text, "no viable routing candidate")
 }
 
 func dispatchPreClaimIntakePayloadOnce(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {

@@ -196,6 +196,44 @@ func TestPreClaimIntakeHook_DispatchesWithStandardProfileNoStrongPowerTrick(t *t
 	assert.False(t, svc.lastReq.RequiresTools)
 }
 
+func TestPreClaimIntakeHook_RetriesStrongestProfileWhenStandardRouteUnavailable(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	var policies []string
+	svc := &preClaimIntakeHookServiceStub{
+		listPolicies: []agentlib.PolicyInfo{
+			preClaimPolicyInfo("cheap", 5, 5),
+			preClaimPolicyInfo("default", 7, 8),
+			preClaimPolicyInfo("smart", 9, 10),
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "cheap", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "default", Power: 7, Available: true, AutoRoutable: true},
+			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
+		},
+	}
+	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		policies = append(policies, req.Policy)
+		if req.Policy == "default" {
+			return nil, fmt.Errorf("runner error: ResolveRoute: no live provider supports prompt of 1528 tokens with tools=false at policy default")
+		}
+		require.Equal(t, "smart", req.Policy)
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.97,\"reasoning\":\"strongest profile routed\"}"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, []string{"default", "smart"}, policies)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&svc.executeCalls))
+}
+
 func TestPreClaimIntakeHookDispatchesOutsideProjectRoot(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
