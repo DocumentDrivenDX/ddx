@@ -1606,12 +1606,11 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 	}
 
 	if beadID != "" {
-		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		body := fmt.Sprintf(
 			"worker=%s pid=%d reason=stop-stale",
 			id, rec.PID,
 		)
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
+		released := releaseWorkerClaims(projectRoot, id, beadID, now, bead.BeadEvent{
 			Kind:      "bead.stopped",
 			Summary:   "stop (stale)",
 			Body:      body,
@@ -1619,7 +1618,25 @@ func (m *WorkerManager) stopStaleDiskEntry(id string) error {
 			Source:    "server-workers",
 			CreatedAt: now,
 		})
-		_ = store.Unclaim(beadID)
+		if len(released) > 0 {
+			beadID = released[0]
+		}
+	} else {
+		body := fmt.Sprintf(
+			"worker=%s pid=%d reason=stop-stale",
+			id, rec.PID,
+		)
+		released := releaseWorkerClaims(projectRoot, id, "", now, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "stop (stale)",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
+		if len(released) > 0 {
+			beadID = released[0]
+		}
 	}
 
 	_, _, _, grace := m.watchdogDeadlines()
@@ -1687,6 +1704,54 @@ func resolveWorkerAttemptID(projectRoot, beadID, fallback string) string {
 	return fallback
 }
 
+func releaseWorkerClaims(projectRoot, workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
+	projectRoot = strings.TrimSpace(projectRoot)
+	workerID = strings.TrimSpace(workerID)
+	primaryBeadID = strings.TrimSpace(primaryBeadID)
+	if projectRoot == "" || workerID == "" {
+		return nil
+	}
+
+	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	beads, err := store.ReadAll(context.Background())
+	if err != nil {
+		return nil
+	}
+
+	seen := make(map[string]struct{})
+	var released []string
+	for _, b := range beads {
+		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
+			continue
+		}
+		matched := primaryBeadID != "" && b.ID == primaryBeadID
+		if !matched && strings.TrimSpace(b.Owner) == workerID {
+			matched = true
+		}
+		if !matched {
+			if lease, found, err := store.ClaimLease(b.ID); err == nil && found && strings.TrimSpace(lease.Owner) == workerID {
+				matched = true
+			}
+		}
+		if !matched {
+			continue
+		}
+		if _, ok := seen[b.ID]; ok {
+			continue
+		}
+		seen[b.ID] = struct{}{}
+
+		ev := event
+		if ev.CreatedAt.IsZero() {
+			ev.CreatedAt = now
+		}
+		_ = store.AppendEvent(b.ID, ev)
+		_ = store.Unclaim(b.ID)
+		released = append(released, b.ID)
+	}
+	return released
+}
+
 func (m *WorkerManager) Stop(id string) error {
 	m.mu.Lock()
 	handle := m.workers[id]
@@ -1738,7 +1803,6 @@ func (m *WorkerManager) Stop(id string) error {
 	// Release the bead claim first — this is durable and must not be
 	// leaked even if the SIGKILL path blocks for the full grace window.
 	if beadID != "" {
-		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 		runtime := time.Duration(0)
 		if !startedAt.IsZero() {
 			runtime = now.Sub(startedAt)
@@ -1747,7 +1811,7 @@ func (m *WorkerManager) Stop(id string) error {
 			"worker=%s runtime=%s pid=%d reason=stop",
 			id, runtime.Round(time.Second), pid,
 		)
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
+		releaseWorkerClaims(projectRoot, id, beadID, now, bead.BeadEvent{
 			Kind:      "bead.stopped",
 			Summary:   "stop",
 			Body:      body,
@@ -1755,7 +1819,23 @@ func (m *WorkerManager) Stop(id string) error {
 			Source:    "server-workers",
 			CreatedAt: now,
 		})
-		_ = store.Unclaim(beadID)
+	} else {
+		runtime := time.Duration(0)
+		if !startedAt.IsZero() {
+			runtime = now.Sub(startedAt)
+		}
+		body := fmt.Sprintf(
+			"worker=%s runtime=%s pid=%d reason=stop",
+			id, runtime.Round(time.Second), pid,
+		)
+		releaseWorkerClaims(projectRoot, id, "", now, bead.BeadEvent{
+			Kind:      "bead.stopped",
+			Summary:   "stop",
+			Body:      body,
+			Actor:     "ddx",
+			Source:    "server-workers",
+			CreatedAt: now,
+		})
 	}
 
 	// Escalate to the process group if we know the PID.

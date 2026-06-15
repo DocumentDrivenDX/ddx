@@ -55,6 +55,10 @@ func newIdleHandle(t *testing.T, m *WorkerManager, id string, beadID string, sta
 // seedClaimedBead creates a ready bead and claims it so Unclaim() has work
 // to do. Returns the bead store.
 func seedClaimedBead(t *testing.T, root string, beadID string) *bead.Store {
+	return seedClaimedBeadByOwner(t, root, beadID, "worker-test")
+}
+
+func seedClaimedBeadByOwner(t *testing.T, root string, beadID string, owner string) *bead.Store {
 	t.Helper()
 	ddx := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddx)
@@ -64,7 +68,7 @@ func seedClaimedBead(t *testing.T, root string, beadID string) *bead.Store {
 		Status:    bead.StatusOpen,
 		IssueType: bead.DefaultType,
 	}))
-	require.NoError(t, store.Claim(beadID, "worker-test"))
+	require.NoError(t, store.Claim(beadID, owner))
 	return store
 }
 

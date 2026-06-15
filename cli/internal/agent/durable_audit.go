@@ -50,12 +50,14 @@ func FinalizeDurableAttemptAudit(projectRoot string, store durableAuditBeadReade
 }
 
 // CommitDurableAuditOutputs stages and commits the DDx-managed durable audit
-// paths when they are dirty. The commit is serialized through the main git lock
-// so concurrent workers cannot interleave tracker and audit commits.
+// paths when they are dirty. It waits for any in-flight tracker mutation to
+// finish, then releases tracker.lock before running git status/add/commit so
+// durable audit commits never hold the tracker lock across index operations.
 func CommitDurableAuditOutputs(projectRoot, attemptID string) error {
-	return withTrackerLock(projectRoot, "durable_audit", func() error {
-		return commitDurableAuditOutputsLocked(projectRoot, attemptID)
-	})
+	if err := withTrackerLock(projectRoot, "durable_audit", func() error { return nil }); err != nil {
+		return err
+	}
+	return commitDurableAuditOutputsLocked(projectRoot, attemptID)
 }
 
 func buildAttemptMetricsRow(store durableAuditBeadReader, report ExecuteBeadReport, finishedAt time.Time) attemptmetrics.AttemptRow {

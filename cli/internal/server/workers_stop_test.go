@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -144,6 +145,84 @@ func TestWorkerManagerStopReleasesBeadClaim(t *testing.T) {
 	assert.Contains(t, events[0].Body, "runtime=")
 	assert.Contains(t, events[0].Body, "pid=")
 	assert.Contains(t, events[0].Body, "reason=stop")
+}
+
+func TestWorkerManagerManagedStopReleasesClaimWithoutCurrentBead(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBeadByOwner(t, root, "ddx-stop-owned-claim", "worker-stop-owned")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	h, cancelled := newIdleHandle(t, m, "worker-stop-owned", "",
+		now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	h.record.CurrentAttempt = nil
+	h.record.CurrentBead = ""
+	m.mu.Unlock()
+
+	require.NoError(t, m.Stop("worker-stop-owned"))
+	assert.True(t, cancelled.Load(), "Stop must still cancel a worker without current attempt state")
+
+	b, err := store.Get(context.Background(), "ddx-stop-owned-claim")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+	assert.Empty(t, b.Owner)
+
+	_, found, err := store.ClaimLease("ddx-stop-owned-claim")
+	require.NoError(t, err)
+	assert.False(t, found, "owned claim lease must be removed")
+
+	snapshot, err := activework.Collect(root, store, time.Now().UTC())
+	require.NoError(t, err)
+	assert.Zero(t, snapshot.Count, "work status active_work must be empty after stop cleanup")
+
+	events, err := store.EventsByKind("ddx-stop-owned-claim", "bead.stopped")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Contains(t, events[0].Body, "worker=worker-stop-owned")
+	assert.Contains(t, events[0].Body, "reason=stop")
+}
+
+func TestWorkerManagerManagedStopDoesNotReleaseUnrelatedClaimWithoutCurrentBead(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBeadByOwner(t, root, "ddx-stop-owned-target", "worker-stop-owned-target")
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-stop-unrelated",
+		Title:     "unrelated claim",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+	require.NoError(t, store.Claim("ddx-stop-unrelated", "external-worker"))
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	h, _ := newIdleHandle(t, m, "worker-stop-owned-target", "",
+		now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	h.record.CurrentAttempt = nil
+	h.record.CurrentBead = ""
+	m.mu.Unlock()
+
+	require.NoError(t, m.Stop("worker-stop-owned-target"))
+
+	target, err := store.Get(context.Background(), "ddx-stop-owned-target")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, target.Status)
+	assert.Empty(t, target.Owner)
+
+	unrelated, err := store.Get(context.Background(), "ddx-stop-unrelated")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusInProgress, unrelated.Status)
+	assert.Equal(t, "external-worker", unrelated.Owner)
+
+	lease, found, err := store.ClaimLease("ddx-stop-unrelated")
+	require.NoError(t, err)
+	require.True(t, found, "unrelated claim lease must remain")
+	assert.Equal(t, "external-worker", lease.Owner)
 }
 
 // TestWorkerManagerStopPersistsStoppedToDisk: the graceful path writes the

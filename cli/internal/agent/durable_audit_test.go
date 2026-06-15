@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/DocumentDrivenDX/ddx/internal/trackerpaths"
 	"github.com/stretchr/testify/assert"
@@ -134,6 +135,68 @@ func TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles(t *test
 	// The unmanaged ignored files remain untracked/ignored, never committed.
 	tracked := runGitInteg(t, projectRoot, "ls-files", "--", "build/output.bin", "secrets.env")
 	assert.Empty(t, tracked)
+}
+
+func TestCommitDurableAuditOutputsDoesNotHoldTrackerLockAcrossIndexWork(t *testing.T) {
+	projectRoot := testutils.NewFixtureRepo(t, "standard")
+	attemptID := "20260615T200000-lock-scope"
+	evidenceDir := filepath.Join(t.TempDir(), "evidence")
+	trackerPath := trackerLockPath(projectRoot)
+
+	t.Setenv("DDX_LOCK_CAP_INDEX_MS", "100")
+	t.Setenv("DDX_LOCK_CAP_TRACKER_MS", "100")
+	lockmetrics.SetCapEnforcement(projectRoot, evidenceDir)
+	t.Cleanup(func() { lockmetrics.SetCapEnforcement("", "") })
+
+	var eventsMu sync.Mutex
+	var events []lockmetrics.Event
+	lockmetrics.SetSink(func(ev lockmetrics.Event) {
+		eventsMu.Lock()
+		events = append(events, ev)
+		eventsMu.Unlock()
+	})
+	t.Cleanup(func() { lockmetrics.SetSink(nil) })
+
+	origRunner := durableAuditGitRunner
+	t.Cleanup(func() { durableAuditGitRunner = origRunner })
+
+	var sawAdd, sawCommit atomic.Bool
+	durableAuditGitRunner = func(ctx context.Context, gitDir string, args ...string) ([]byte, error) {
+		require.NotEmpty(t, args)
+		switch args[0] {
+		case "rev-parse":
+			return []byte("true\n"), nil
+		case "status":
+			return []byte("?? .ddx/metrics/attempts.jsonl\n"), nil
+		case "add":
+			sawAdd.Store(true)
+			_, statErr := os.Stat(trackerPath)
+			assert.True(t, os.IsNotExist(statErr), "git add must run after tracker.lock is released")
+			return nil, nil
+		case "diff":
+			return []byte("diff --git a/.ddx/metrics/attempts.jsonl b/.ddx/metrics/attempts.jsonl\n"), nil
+		case "commit":
+			sawCommit.Store(true)
+			_, statErr := os.Stat(trackerPath)
+			assert.True(t, os.IsNotExist(statErr), "git commit must run after tracker.lock is released")
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("unexpected git command: %v", args)
+		}
+	}
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, attemptID))
+	assert.True(t, sawAdd.Load(), "test must exercise git add")
+	assert.True(t, sawCommit.Load(), "test must exercise git commit")
+
+	eventsMu.Lock()
+	defer eventsMu.Unlock()
+	for _, ev := range events {
+		assert.NotEqual(t, "violation", ev.Event, "durable audit lock scope must stay under low test caps")
+		if ev.Event == "release" && ev.LockName == "tracker.lock" && ev.Operation == "durable_audit" {
+			assert.Less(t, ev.DurationMS, int64(100))
+		}
+	}
 }
 
 func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
