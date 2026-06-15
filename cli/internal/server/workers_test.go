@@ -44,6 +44,15 @@ func TestPrepareExecuteLoopWorkerSpecDefaultsOpaquePassthrough(t *testing.T) {
 	assert.Equal(t, agent.AttemptBackendInTree, spec.AttemptBackend)
 }
 
+func TestWorkerRuntimeWiresPreClaimDeadlines(t *testing.T) {
+	src, err := os.ReadFile("workers.go")
+	require.NoError(t, err)
+	body := string(src)
+	assert.Contains(t, body, "PreClaimTimeout:")
+	assert.Contains(t, body, "spec.PreClaimTimeout.Duration")
+	assert.Contains(t, body, "RouteResolutionTimeout: spec.RouteResolutionTimeout.Duration")
+}
+
 func TestWorkerManagerStartAndShow(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
