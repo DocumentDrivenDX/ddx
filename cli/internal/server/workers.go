@@ -553,7 +553,7 @@ func (m *WorkerManager) startExternalWorker(ctx context.Context, id, dir string,
 	cmd.Dir = projectRoot
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(serverManagedWorkerEnv(exe),
 		"DDX_AGENT_NAME="+id,
 		"DDX_SERVER_MANAGED_WORKER_ID="+id,
 	)
@@ -580,6 +580,66 @@ func (m *WorkerManager) startExternalWorker(ctx context.Context, id, dir string,
 
 	go m.runExternalWorker(ctx, id, dir, handle, cmd, eventsFile, progressCh)
 	return nil
+}
+
+func serverManagedWorkerEnv(exe string) []string {
+	return setEnvValue(os.Environ(), "PATH", serverManagedWorkerPath(exe))
+}
+
+func serverManagedWorkerPath(exe string) string {
+	parts := make([]string, 0, 16)
+	seen := map[string]struct{}{}
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		parts = append(parts, path)
+	}
+
+	if dir := filepath.Dir(exe); dir != "." && dir != "" {
+		add(dir)
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		add(filepath.Join(home, ".local", "bin"))
+		add(filepath.Join(home, ".local", "share", "mise", "shims"))
+		add(filepath.Join(home, "bin"))
+	}
+	add("/home/linuxbrew/.linuxbrew/bin")
+	add("/home/linuxbrew/.linuxbrew/sbin")
+	for _, part := range filepath.SplitList(os.Getenv("PATH")) {
+		add(part)
+	}
+	if len(parts) == 0 {
+		add("/usr/local/bin")
+		add("/usr/bin")
+		add("/bin")
+	}
+	return strings.Join(parts, string(os.PathListSeparator))
+}
+
+func setEnvValue(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			if !replaced {
+				out = append(out, prefix+value)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, kv)
+	}
+	if !replaced {
+		out = append(out, prefix+value)
+	}
+	return out
 }
 
 func externalWorkerArgs(id, projectRoot string, spec ExecuteLoopWorkerSpec) []string {

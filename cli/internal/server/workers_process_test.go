@@ -96,6 +96,51 @@ wait
 	return workerPath
 }
 
+func TestServerManagedWorkerEnvExtendsSparseServicePath(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "home")
+	exe := filepath.Join(home, ".local", "bin", "ddx")
+	systemBin := filepath.Join(t.TempDir(), "system-bin")
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", systemBin+string(os.PathListSeparator)+filepath.Join(home, ".local", "bin"))
+
+	env := serverManagedWorkerEnv(exe)
+	var path string
+	pathEntries := 0
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			pathEntries++
+			path = strings.TrimPrefix(kv, "PATH=")
+		}
+	}
+	require.Equal(t, 1, pathEntries)
+
+	parts := filepath.SplitList(path)
+	expected := []string{
+		filepath.Join(home, ".local", "bin"),
+		filepath.Join(home, ".local", "share", "mise", "shims"),
+		filepath.Join(home, "bin"),
+		"/home/linuxbrew/.linuxbrew/bin",
+		"/home/linuxbrew/.linuxbrew/sbin",
+		systemBin,
+	}
+	for _, want := range expected {
+		assert.Contains(t, parts, want)
+	}
+	assert.Equal(t, filepath.Join(home, ".local", "bin"), parts[0])
+	assert.Equal(t, systemBin, parts[5])
+	assert.Equal(t, 1, countPathEntry(parts, filepath.Join(home, ".local", "bin")))
+}
+
+func countPathEntry(values []string, needle string) int {
+	count := 0
+	for _, value := range values {
+		if value == needle {
+			count++
+		}
+	}
+	return count
+}
+
 func TestManagedWorkerRecordsProcessGroup(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
