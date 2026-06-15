@@ -210,18 +210,9 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir, route
 	children := make([]workerstatus.ProviderChild, 0, len(procs))
 	var reaped []providerChildReapRecord
 	for _, proc := range procs {
-		if !providerChildInScope(proc, scopeDir) {
-			continue
-		}
-		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
-		if !providerChildOwnedByRoot(proc, rootPID) {
-			if child.NonRoute {
-				child.Diagnostic = "nested provider child observed under active agent; not terminated"
-			}
-			children = append(children, child)
-			continue
-		}
-		if proc.Defunct {
+		ownedByRoot := providerChildOwnedByRoot(proc, rootPID)
+		if proc.Defunct && ownedByRoot {
+			child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
 			terminateProviderChild(proc.PID)
 			child.Phase = "defunct"
 			child.Diagnostic = "defunct provider child reaped"
@@ -233,6 +224,17 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir, route
 				Action:     providerChildActionTerminated,
 				Reason:     reasonDefunctProviderChild,
 			})
+			children = append(children, child)
+			continue
+		}
+		if !providerChildInScope(proc, scopeDir) {
+			continue
+		}
+		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
+		if !ownedByRoot {
+			if child.NonRoute {
+				child.Diagnostic = "nested provider child observed under active agent; not terminated"
+			}
 			children = append(children, child)
 			continue
 		}
@@ -383,20 +385,8 @@ func reapProviderChildren(ctx context.Context, rootPID int, scopeDir string, now
 	var reaped []providerChildReapRecord
 	var survivors []workerstatus.ProviderChild
 	for _, proc := range procs {
-		if !providerChildInScope(proc, scopeDir) {
-			continue
-		}
-		if !providerChildOwnedByRoot(proc, rootPID) {
-			survivors = append(survivors, workerstatus.ProviderChild{
-				PID:        proc.PID,
-				Provider:   proc.Provider,
-				Harness:    proc.Provider,
-				AgeSeconds: childAgeSeconds(proc, now),
-				Diagnostic: "nested provider child observed under active agent; cleanup is root-owned",
-			})
-			continue
-		}
-		if proc.Defunct {
+		ownedByRoot := providerChildOwnedByRoot(proc, rootPID)
+		if proc.Defunct && ownedByRoot {
 			terminateProviderChild(proc.PID)
 			reaped = append(reaped, providerChildReapRecord{
 				PID:        proc.PID,
@@ -405,6 +395,19 @@ func reapProviderChildren(ctx context.Context, rootPID int, scopeDir string, now
 				AgeSeconds: childAgeSeconds(proc, now),
 				Action:     providerChildActionTerminated,
 				Reason:     reasonDefunctProviderChild,
+			})
+			continue
+		}
+		if !providerChildInScope(proc, scopeDir) {
+			continue
+		}
+		if !ownedByRoot {
+			survivors = append(survivors, workerstatus.ProviderChild{
+				PID:        proc.PID,
+				Provider:   proc.Provider,
+				Harness:    proc.Provider,
+				AgeSeconds: childAgeSeconds(proc, now),
+				Diagnostic: "nested provider child observed under active agent; cleanup is root-owned",
 			})
 			continue
 		}
@@ -464,6 +467,25 @@ func reapAllProviderChildren(ctx context.Context, rootPID int, scopeDir string, 
 func ReapRootProviderChildrenInScope(ctx context.Context, rootPID int, scopeDir string) int {
 	reaped := reapAllProviderChildren(ctx, rootPID, scopeDir, time.Now().UTC())
 	return len(reaped)
+}
+
+func ReapDefunctRootProviderChildren(ctx context.Context, rootPID int) int {
+	if rootPID <= 0 {
+		return 0
+	}
+	procs, err := providerChildScanner(ctx, rootPID, time.Now().UTC())
+	if err != nil {
+		return 0
+	}
+	reaped := 0
+	for _, proc := range procs {
+		if !proc.Defunct || !providerChildOwnedByRoot(proc, rootPID) {
+			continue
+		}
+		terminateProviderChild(proc.PID)
+		reaped++
+	}
+	return reaped
 }
 
 func providerChildOwnedByRoot(proc providerChildProcess, rootPID int) bool {

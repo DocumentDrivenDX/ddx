@@ -325,6 +325,91 @@ func TestDefunctRouteOwnedProviderChildIsReaped(t *testing.T) {
 	}
 }
 
+func TestDefunctRootProviderChildIsReapedWithoutCWD(t *testing.T) {
+	now := time.Now().UTC()
+	scopeDir := filepath.Join(t.TempDir(), "attempt")
+	const (
+		rootPID    = 747470
+		defunctPID = 747471
+	)
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{{
+			PID:       defunctPID,
+			PPID:      rootPID,
+			Provider:  "claude",
+			Command:   "[claude] <defunct>",
+			StartedAt: now.Add(-45 * time.Second),
+			Defunct:   true,
+		}}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	reaped := reapAllProviderChildren(context.Background(), rootPID, scopeDir, now)
+
+	if len(reaped) != 1 || reaped[0].PID != defunctPID || reaped[0].Reason != reasonDefunctProviderChild {
+		t.Fatalf("expected defunct child without cwd to be reaped; got %+v", reaped)
+	}
+	if len(killed) != 1 || killed[0] != defunctPID {
+		t.Fatalf("expected terminate(%d), got %v", defunctPID, killed)
+	}
+}
+
+func TestReapDefunctRootProviderChildrenIgnoresLiveChildren(t *testing.T) {
+	now := time.Now().UTC()
+	const (
+		rootPID    = 747480
+		livePID    = 747481
+		defunctPID = 747482
+	)
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{
+			{
+				PID:       livePID,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "/home/erik/.local/bin/claude --model opus",
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       defunctPID,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "[claude] <defunct>",
+				StartedAt: now.Add(-30 * time.Second),
+				Defunct:   true,
+			},
+		}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	if got := ReapDefunctRootProviderChildren(context.Background(), rootPID); got != 1 {
+		t.Fatalf("ReapDefunctRootProviderChildren() = %d, want 1", got)
+	}
+	if len(killed) != 1 || killed[0] != defunctPID {
+		t.Fatalf("expected only defunct child %d to be terminated, got %v", defunctPID, killed)
+	}
+}
+
 func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	dir := t.TempDir()
 	claudePID := startFakeProviderChild(t, dir, "claude")
@@ -564,11 +649,19 @@ func TestAttemptEndCleanupScopeIgnoresSiblingAndUnknownCWDProviders(t *testing.T
 
 	reaped := reapAllProviderChildren(context.Background(), os.Getpid(), scopeDir, now)
 
-	if len(reaped) != 1 || reaped[0].PID != insidePID || reaped[0].Reason != reasonAttemptEnded {
-		t.Fatalf("expected only in-scope provider to be reaped at attempt end; got %+v", reaped)
+	byPID := map[int]providerChildReapRecord{}
+	for _, rec := range reaped {
+		byPID[rec.PID] = rec
 	}
-	if len(killed) != 1 || killed[0] != insidePID {
-		t.Fatalf("expected only terminate(%d), got %v", insidePID, killed)
+	if len(reaped) != 2 || byPID[insidePID].Reason != reasonAttemptEnded || byPID[siblingPID].Reason != reasonDefunctProviderChild {
+		t.Fatalf("expected in-scope provider plus direct defunct sibling to be reaped; got %+v", reaped)
+	}
+	killedSet := map[int]bool{}
+	for _, pid := range killed {
+		killedSet[pid] = true
+	}
+	if len(killedSet) != 2 || !killedSet[insidePID] || !killedSet[siblingPID] || killedSet[unknownCWDPID] {
+		t.Fatalf("expected terminate(%d,%d) only, got %v", insidePID, siblingPID, killed)
 	}
 }
 

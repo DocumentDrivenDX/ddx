@@ -105,6 +105,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
+	defer ReapDefunctRootProviderChildren(context.Background(), os.Getpid())
 
 	// Resolve where to write the per-request session log.
 	logDir := opts.SessionLogDir
