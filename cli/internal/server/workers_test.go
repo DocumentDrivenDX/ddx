@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1887,6 +1888,49 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, 8, persisted.MaxPower)
 	assert.Equal(t, "HEAD~1", persisted.FromRev)
 	assert.Equal(t, executeloop.SpecCurrentVersion, persisted.SpecVersion)
+}
+
+func TestRESTWorkerReconcileQueryProjectStartsTargetProjectWorker(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-rest-reconcile-project")
+
+	projectA := setupTestDir(t)
+	projectB := t.TempDir()
+	setupBeadStore(t, projectB)
+
+	srv := New(":0", projectA)
+	srv.state.RegisterProject(projectB)
+	installFastSuccessWorker(srv.workers)
+
+	require.NoError(t, SaveWorkerDesiredState(projectB, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "once"},
+	}))
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/agent/workers/reconcile?project="+url.QueryEscape(projectB),
+		nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	var result ReconcileResult
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
+	require.Len(t, result.Started, 1)
+
+	records, err := srv.workers.List()
+	require.NoError(t, err)
+	var got WorkerRecord
+	for _, rec := range records {
+		if rec.ID == result.Started[0] {
+			got = rec
+			break
+		}
+	}
+	require.NotEmpty(t, got.ID, "started worker record must be listed")
+	assert.Equal(t, projectB, got.ProjectRoot)
 }
 
 func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {

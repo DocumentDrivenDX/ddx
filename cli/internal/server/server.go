@@ -799,6 +799,18 @@ func (s *Server) workingDirForRequest(r *http.Request) string {
 	return s.WorkingDir
 }
 
+func (s *Server) workerControlProjectRootForRequest(r *http.Request) (string, bool) {
+	project := strings.TrimSpace(r.URL.Query().Get("project"))
+	if project == "" {
+		return s.workingDirForRequest(r), true
+	}
+	entry, ok := s.resolveProject(project)
+	if !ok {
+		return "", false
+	}
+	return entry.Path, true
+}
+
 // libraryPathForRequest returns the library path for the request's project.
 func (s *Server) libraryPathForRequest(r *http.Request) string {
 	return s.libraryPathFor(s.workingDirForRequest(r))
@@ -2758,7 +2770,11 @@ func (s *Server) handleReconcileWorkers(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
 		return
 	}
-	wd := s.workingDirForRequest(r)
+	wd, ok := s.workerControlProjectRootForRequest(r)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+		return
+	}
 	m := s.workerManagerForRequest(r)
 	sup := NewWorkerSupervisor(wd, m)
 	result, err := sup.Reconcile()
@@ -2774,7 +2790,11 @@ func (s *Server) handleCleanupWorkers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
 		return
 	}
-	wd := s.workingDirForRequest(r)
+	wd, ok := s.workerControlProjectRootForRequest(r)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+		return
+	}
 	m := s.workerManagerForRequest(r)
 	sup := NewWorkerSupervisor(wd, m)
 	result, err := sup.Reconcile()
