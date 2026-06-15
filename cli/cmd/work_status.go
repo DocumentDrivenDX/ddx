@@ -214,7 +214,7 @@ func mergeServerManagedWorkers(workers []workerstatus.LiveWorker, projectRoot st
 		}
 	}
 	for _, rec := range records {
-		if !isLiveServerManagedWorker(rec) {
+		if !isLiveServerManagedWorker(rec, now) {
 			continue
 		}
 		if !allProjects && !workerstatus.SamePath(rec.ProjectRoot, projectRoot) {
@@ -277,17 +277,21 @@ func readServerManagedWorkerRecords(projectRoot string) ([]serverpkg.WorkerRecor
 	return out, nil
 }
 
-func isLiveServerManagedWorker(rec serverpkg.WorkerRecord) bool {
+func isLiveServerManagedWorker(rec serverpkg.WorkerRecord, now time.Time) bool {
 	if rec.State != "running" && rec.State != "stopping" {
 		return false
 	}
 	if !rec.FinishedAt.IsZero() {
 		return false
 	}
+	if rec.State == "stopping" && now.Sub(serverWorkerLastActivity(rec, rec.StartedAt)) > 2*time.Minute {
+		return false
+	}
 	return true
 }
 
 func liveWorkerFromServerRecord(rec serverpkg.WorkerRecord, now time.Time) workerstatus.LiveWorker {
+	rec = enrichServerRecordWithRunState(rec, now)
 	startedAt := rec.StartedAt.UTC()
 	if startedAt.IsZero() && rec.CurrentAttempt != nil {
 		startedAt = rec.CurrentAttempt.StartedAt.UTC()
@@ -327,17 +331,69 @@ func liveWorkerFromServerRecord(rec serverpkg.WorkerRecord, now time.Time) worke
 	}
 }
 
+func enrichServerRecordWithRunState(rec serverpkg.WorkerRecord, now time.Time) serverpkg.WorkerRecord {
+	if rec.State != "running" || rec.ProjectRoot == "" {
+		return rec
+	}
+	if rec.CurrentAttempt != nil && rec.CurrentAttempt.AttemptID != "" {
+		return rec
+	}
+	state, err := agent.ReadRunState(rec.ProjectRoot)
+	if err != nil || state == nil || state.AttemptID == "" {
+		return rec
+	}
+	if rec.CurrentBead != "" && state.BeadID != "" && rec.CurrentBead != state.BeadID {
+		return rec
+	}
+	if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
+		return rec
+	}
+	if rec.CurrentBead == "" {
+		rec.CurrentBead = state.BeadID
+	}
+	rec.CurrentAttempt = &serverpkg.CurrentAttemptInfo{
+		AttemptID: state.AttemptID,
+		BeadID:    state.BeadID,
+		Harness:   state.Harness,
+		Model:     state.Model,
+		Profile:   rec.Profile,
+		Phase:     "running",
+		StartedAt: state.StartedAt,
+	}
+	if rec.Harness == "" {
+		rec.Harness = state.Harness
+	}
+	if rec.Model == "" {
+		rec.Model = state.Model
+	}
+	return rec
+}
+
 func serverWorkerLastActivity(rec serverpkg.WorkerRecord, fallback time.Time) time.Time {
-	if n := len(rec.RecentPhases); n > 0 {
-		return rec.RecentPhases[n-1].TS.UTC()
+	best := fallback.UTC()
+	if best.IsZero() && !rec.StartedAt.IsZero() {
+		best = rec.StartedAt.UTC()
+	}
+	consider := func(ts time.Time) {
+		if ts.IsZero() {
+			return
+		}
+		ts = ts.UTC()
+		if best.IsZero() || ts.After(best) {
+			best = ts
+		}
+	}
+	consider(rec.StartedAt)
+	for _, evt := range rec.Lifecycle {
+		consider(evt.Timestamp)
+	}
+	for _, phase := range rec.RecentPhases {
+		consider(phase.TS)
 	}
 	if rec.CurrentAttempt != nil {
-		return rec.CurrentAttempt.StartedAt.UTC()
+		consider(rec.CurrentAttempt.StartedAt)
 	}
-	if !rec.StartedAt.IsZero() {
-		return rec.StartedAt.UTC()
-	}
-	return fallback.UTC()
+	return best
 }
 
 func writeWorkStatusJSON(out io.Writer, report WorkStatusReport) error {

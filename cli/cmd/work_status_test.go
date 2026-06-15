@@ -569,6 +569,44 @@ func TestWorkStatusIncludesServerManagedWorkerRecord(t *testing.T) {
 	assert.Contains(t, textOut, "attempt=20260615T061500-server1")
 }
 
+func TestWorkStatusFillsServerManagedAttemptFromRunState(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	rec := serverpkg.WorkerRecord{
+		ID:          "worker-status-server-runstate",
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: projectRoot,
+		Profile:     "default",
+		StartedAt:   now.Add(-2 * time.Minute),
+	}
+	writeServerWorkerRecordForStatusTest(t, projectRoot, rec)
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:      "ddx-runstate-server",
+		AttemptID:   "20260615T062000-runstate",
+		Harness:     "claude",
+		Model:       "sonnet-4.6",
+		StartedAt:   now.Add(-90 * time.Second),
+		RefreshedAt: now,
+		ExpiresAt:   now.Add(time.Minute),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: nil}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, "ddx-runstate-server", report.Workers[0].BeadID)
+	assert.Equal(t, "20260615T062000-runstate", report.Workers[0].AttemptID)
+	assert.Equal(t, "running", report.Workers[0].Phase)
+}
+
 func TestWorkStatusServerManagedWorkerRecordHonorsProjectScopeAndTerminalState(t *testing.T) {
 	projectRoot := t.TempDir()
 	otherRoot := t.TempDir()
@@ -596,6 +634,25 @@ func TestWorkStatusServerManagedWorkerRecordHonorsProjectScopeAndTerminalState(t
 		StartedAt:   now.Add(-10 * time.Minute),
 		FinishedAt:  now.Add(-1 * time.Minute),
 		CurrentBead: "ddx-stopped",
+	})
+	writeServerWorkerRecordForStatusTest(t, projectRoot, serverpkg.WorkerRecord{
+		ID:          "worker-status-server-stale-stopping",
+		Kind:        "work",
+		State:       "stopping",
+		Status:      "stopping",
+		ProjectRoot: projectRoot,
+		StartedAt:   now.Add(-30 * time.Minute),
+		CurrentBead: "ddx-stale-stop",
+		CurrentAttempt: &serverpkg.CurrentAttemptInfo{
+			AttemptID: "20260615T061700-stalestop",
+			BeadID:    "ddx-stale-stop",
+			Phase:     "running",
+			StartedAt: now.Add(-30 * time.Minute),
+		},
+		Lifecycle: []serverpkg.WorkerLifecycleEvent{
+			{Action: "start", Actor: "local-operator", Timestamp: now.Add(-30 * time.Minute)},
+			{Action: "stop", Actor: "local-operator", Timestamp: now.Add(-10 * time.Minute), Detail: "reason=stop pid=0"},
+		},
 	})
 
 	factory := NewCommandFactory(projectRoot)

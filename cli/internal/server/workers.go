@@ -1973,7 +1973,8 @@ type WorkerPruneResult struct {
 
 // Prune reaps registry entries whose recorded PID is no longer alive, or
 // whose age exceeds maxAge (when maxAge > 0). Only entries with state=running
-// that are not attached to a live goroutine in this manager are eligible.
+// or state=stopping that are not attached to a live goroutine in this manager
+// are eligible.
 // For each pruned entry the bead claim is released and the on-disk record is
 // updated to state=reaped. Returns the list of reaped entries.
 func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error) {
@@ -1986,7 +1987,7 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 	var results []WorkerPruneResult
 
 	for _, rec := range recs {
-		if rec.State != "running" {
+		if rec.State != "running" && rec.State != "stopping" {
 			continue
 		}
 
@@ -2085,7 +2086,7 @@ func (m *WorkerManager) Prune(maxAge time.Duration) ([]WorkerPruneResult, error)
 }
 
 // ReconcileStaleWorkers scans the on-disk worker registry and marks entries
-// that are still in state=running but have a dead (or missing) PID as
+// that are still in state=running/stopping but have a dead (or missing) PID as
 // "exited". Called once at server startup to repair records left running by a
 // previous server crash without starting new goroutines for them. Bead claims
 // are released so the queue drainer can pick up the work again.
@@ -2101,7 +2102,7 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		}
 		dir := filepath.Join(m.rootDir, entry.Name())
 		rec, err := m.readRecord(dir)
-		if err != nil || rec.State != "running" {
+		if err != nil || (rec.State != "running" && rec.State != "stopping") {
 			continue
 		}
 

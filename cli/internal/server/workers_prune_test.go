@@ -162,6 +162,51 @@ func TestWorkerManagerPruneByMaxAge(t *testing.T) {
 	assert.Equal(t, "reaped", rec.State)
 }
 
+func TestWorkerManagerPruneReapsStaleStoppingWorker(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBead(t, root, "ddx-prune-stopping")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000000-stopprune"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	stale := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "stopping",
+		Status:      "stopping",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-2 * time.Hour),
+		PID:         0,
+		CurrentBead: "ddx-prune-stopping",
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: workerID + "-a1",
+			BeadID:    "ddx-prune-stopping",
+			Phase:     "running",
+			StartedAt: time.Now().UTC().Add(-2 * time.Hour),
+		},
+	}
+	require.NoError(t, m.writeRecord(dir, stale))
+
+	results, err := m.Prune(0)
+	require.NoError(t, err)
+	require.Len(t, results, 1, "Prune must reap disk-only stopping workers")
+	assert.Equal(t, workerID, results[0].ID)
+
+	rec, err := m.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "reaped", rec.State)
+	assert.Equal(t, "reaped", rec.Status)
+	assert.False(t, rec.FinishedAt.IsZero())
+
+	b, err := store.Get(context.Background(), "ddx-prune-stopping")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+}
+
 // TestWorkerManagerPruneByMaxAgeOnly verifies that Prune reaps a worker solely
 // on age when neither PID check applies (dead PID already pruned, so use age
 // as the only criterion by supplying a very high PID and a maxAge).
@@ -419,4 +464,48 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"ReconcileStaleWorkers must release bead claims for dead workers")
+}
+
+func TestReconcileStaleWorkersOnStartupHandlesStopping(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBead(t, root, "ddx-reconcile-stopping")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000000-rcn-stop"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	stale := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "stopping",
+		Status:      "stopping",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-3 * time.Hour),
+		PID:         0,
+		CurrentBead: "ddx-reconcile-stopping",
+		CurrentAttempt: &CurrentAttemptInfo{
+			AttemptID: workerID + "-a1",
+			BeadID:    "ddx-reconcile-stopping",
+			Phase:     "running",
+			StartedAt: time.Now().UTC().Add(-3 * time.Hour),
+		},
+	}
+	require.NoError(t, m.writeRecord(dir, stale))
+
+	m2 := NewWorkerManager(root)
+	defer m2.StopWatchdog()
+	m2.ReconcileStaleWorkers()
+
+	rec, err := m2.readRecord(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "exited", rec.State)
+	assert.Equal(t, "exited", rec.Status)
+	assert.False(t, rec.FinishedAt.IsZero())
+
+	b, err := store.Get(context.Background(), "ddx-reconcile-stopping")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
 }
