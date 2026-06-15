@@ -98,7 +98,11 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 		return nil
 	}
 
-	statusArgs := []string{"status", "--short", "--untracked-files=all", "--"}
+	// --ignored=matching surfaces DDx-managed audit paths that the project
+	// intentionally gitignores (e.g. .ddx/metrics, .ddx/attachments) so they are
+	// still detected as dirty here. The pathspec scope keeps this limited to
+	// managed paths, so unrelated ignored files are never reported.
+	statusArgs := []string{"status", "--short", "--untracked-files=all", "--ignored=matching", "--"}
 	statusArgs = append(statusArgs, managedPathspecs...)
 	statusOut, err := runDurableAuditGit(gitDir, statusArgs...)
 	if err != nil {
@@ -109,7 +113,10 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 		return nil
 	}
 
-	addArgs := []string{"add", "-A", "--"}
+	// -f force-stages DDx-managed audit paths even when the project gitignores
+	// them; the pathspec list is restricted to managed dirty paths reported by
+	// the status above, so this never force-adds arbitrary ignored files.
+	addArgs := []string{"add", "-f", "-A", "--"}
 	addArgs = append(addArgs, dirtyPaths...)
 	addOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, addArgs...)
 	if err != nil {

@@ -60,6 +60,82 @@ func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *
 	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
 }
 
+// TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths proves that
+// DDx-managed durable audit paths are committed even when the project
+// gitignores them (ddx-cd99987d). Before the fix git add refused the ignored
+// paths and the worker exited needing manual `git add -f` cleanup.
+func TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	// The project intentionally ignores the managed audit directories.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectRoot, ".gitignore"),
+		[]byte(".ddx/metrics\n.ddx/attachments\n"),
+		0o644,
+	))
+	runGitInteg(t, projectRoot, "add", ".gitignore")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: ignore managed audit dirs")
+
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	attachmentsDir := filepath.Join(ddxDir, "attachments", "ddx-cd99987d")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.MkdirAll(attachmentsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("row\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(attachmentsDir, "events.jsonl"), []byte("event\n"), 0o644))
+
+	require.NoError(t, commitDurableAuditOutputsLocked(projectRoot, "20260615T145159-ignored"))
+
+	subject := runGitInteg(t, projectRoot, "log", "-1", "--pretty=%s")
+	assert.Equal(t, "chore: update tracker (execute-bead 20260615T145159-ignored)", subject)
+
+	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
+	assert.Contains(t, show, ".ddx/attachments/ddx-cd99987d/events.jsonl")
+
+	// The committed files are no longer dirty.
+	status := runGitInteg(t, projectRoot, "status", "--short", "--ignored=matching", "--",
+		".ddx/metrics/attempts.jsonl", ".ddx/attachments")
+	assert.Empty(t, status)
+}
+
+// TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles proves
+// that ignored files outside trackerpaths.ManagedPathspecs are never staged or
+// committed by the durable audit commit (ddx-cd99987d non-scope guard).
+func TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	require.NoError(t, os.WriteFile(
+		filepath.Join(projectRoot, ".gitignore"),
+		[]byte(".ddx/metrics\nbuild/\nsecrets.env\n"),
+		0o644,
+	))
+	runGitInteg(t, projectRoot, "add", ".gitignore")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: ignore dirs")
+
+	// A managed dirty path to force a commit to happen at all.
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("row\n"), 0o644))
+
+	// Unmanaged ignored files outside the managed pathspecs.
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, "build"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "build", "output.bin"), []byte("binary\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "secrets.env"), []byte("TOKEN=abc\n"), 0o644))
+
+	require.NoError(t, commitDurableAuditOutputsLocked(projectRoot, "20260615T145159-unmanaged"))
+
+	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
+	assert.NotContains(t, show, "build/output.bin")
+	assert.NotContains(t, show, "secrets.env")
+
+	// The unmanaged ignored files remain untracked/ignored, never committed.
+	tracked := runGitInteg(t, projectRoot, "ls-files", "--", "build/output.bin", "secrets.env")
+	assert.Empty(t, tracked)
+}
+
 func TestCommitDurableAuditOutputs_ConcurrentLockHolderRetriesAndRecovers(t *testing.T) {
 	t.Setenv("DDX_BIN", testutils.BuildDDxBinary(t))
 	projectRoot := testutils.NewFixtureRepo(t, "standard")
