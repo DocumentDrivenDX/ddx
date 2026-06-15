@@ -369,6 +369,70 @@ func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	}
 }
 
+func TestRunningProviderGuardDoesNotReapNestedProviderChildren(t *testing.T) {
+	now := time.Now().UTC()
+	scopeDir := filepath.Join(t.TempDir(), "attempt")
+	if err := os.MkdirAll(scopeDir, 0o755); err != nil {
+		t.Fatalf("mkdir scope dir: %v", err)
+	}
+	const (
+		rootPID        = 111111
+		claudePID      = 111112
+		nestedCodexPID = 111113
+	)
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{
+			{
+				PID:       claudePID,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "/home/erik/.local/bin/claude --model opus",
+				CWD:       scopeDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       nestedCodexPID,
+				PPID:      claudePID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec --json",
+				CWD:       scopeDir,
+				StartedAt: now.Add(-5 * time.Second),
+			},
+		}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	children, reaped := runningProviderChildGuard(context.Background(), rootPID, scopeDir, "claude/opus", "", "running", now)
+
+	if len(reaped) != 0 {
+		t.Fatalf("nested provider child must not be reaped; got %+v", reaped)
+	}
+	if len(killed) != 0 {
+		t.Fatalf("nested provider child was terminated: %v", killed)
+	}
+	byPID := map[int]workerstatus.ProviderChild{}
+	for _, child := range children {
+		byPID[child.PID] = child
+	}
+	nested, ok := byPID[nestedCodexPID]
+	if !ok {
+		t.Fatalf("status view missing nested provider child: %+v", children)
+	}
+	if !nested.NonRoute || !strings.Contains(nested.Diagnostic, "not terminated") {
+		t.Fatalf("nested child should be reported as observed but not terminated: %+v", nested)
+	}
+}
+
 func TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup(t *testing.T) {
 	shPath, err := exec.LookPath("sh")
 	if err != nil {

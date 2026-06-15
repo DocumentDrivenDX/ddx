@@ -87,6 +87,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 	if err != nil {
 		return []*ProviderStatus{}, nil //nolint:nilerr
 	}
+	defer cleanupCurrentProcessProviderProbes()
 	infos, err := svc.ListHarnesses(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing harnesses: %w", err)
@@ -103,6 +104,7 @@ func (r *queryResolver) DefaultRouteStatus(ctx context.Context) (*DefaultRouteSt
 	if err != nil {
 		return nil, nil //nolint:nilerr
 	}
+	defer cleanupCurrentProcessProviderProbes()
 	dec, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{})
 	if err != nil {
 		return &DefaultRouteStatus{}, nil //nolint:nilerr
@@ -194,6 +196,7 @@ func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string,
 		return ProviderKindHarness, detectedFromQuota(QuotaFromRateLimitSignal(sig))
 	}
 	if svc, err := agentlib.New(agentlib.ServiceOptions{QuotaRefreshContext: ctx}); err == nil {
+		defer cleanupCurrentProcessProviderProbes()
 		harnesses, _ := svc.ListHarnesses(ctx)
 		for _, h := range harnesses {
 			if strings.EqualFold(h.Name, name) {
@@ -313,6 +316,7 @@ func liveProviderInfos(ctx context.Context, workDir string) ([]agentlib.Provider
 	if err != nil {
 		return nil, err
 	}
+	defer cleanupCurrentProcessProviderProbes()
 	return svc.ListProviders(ctx)
 }
 

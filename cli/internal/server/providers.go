@@ -429,6 +429,7 @@ func listHarnessInfos(ctx context.Context, workDir string) ([]agentlib.HarnessIn
 	if err != nil {
 		return nil, err
 	}
+	defer cleanupCurrentProcessProviderProbes()
 	type result struct {
 		infos []agentlib.HarnessInfo
 		err   error
@@ -479,6 +480,7 @@ func liveRouteStatusReport(ctx context.Context, workDir string) *agentlib.RouteS
 	if err != nil {
 		return nil
 	}
+	defer cleanupCurrentProcessProviderProbes()
 	type result struct {
 		report *agentlib.RouteStatusReport
 		err    error

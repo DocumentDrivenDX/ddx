@@ -48,6 +48,7 @@ func scanProviderChildProcessesImpl(ctx context.Context, rootPID int, now time.T
 		}
 		out2 = append(out2, providerChildProcess{
 			PID:       pid,
+			PPID:      r.PPID,
 			Provider:  provider,
 			Command:   r.Command,
 			CWD:       providerProcessCWD(pid),

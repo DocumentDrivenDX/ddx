@@ -41,6 +41,7 @@ var providerRouteAliases = map[string]string{
 
 type providerChildProcess struct {
 	PID       int
+	PPID      int
 	Provider  string
 	Command   string
 	CWD       string
@@ -213,6 +214,13 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir, route
 			continue
 		}
 		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
+		if !providerChildOwnedByRoot(proc, rootPID) {
+			if child.NonRoute {
+				child.Diagnostic = "nested provider child observed under active agent; not terminated"
+			}
+			children = append(children, child)
+			continue
+		}
 		if proc.Defunct {
 			terminateProviderChild(proc.PID)
 			child.Phase = "defunct"
@@ -378,6 +386,16 @@ func reapProviderChildren(ctx context.Context, rootPID int, scopeDir string, now
 		if !providerChildInScope(proc, scopeDir) {
 			continue
 		}
+		if !providerChildOwnedByRoot(proc, rootPID) {
+			survivors = append(survivors, workerstatus.ProviderChild{
+				PID:        proc.PID,
+				Provider:   proc.Provider,
+				Harness:    proc.Provider,
+				AgeSeconds: childAgeSeconds(proc, now),
+				Diagnostic: "nested provider child observed under active agent; cleanup is root-owned",
+			})
+			continue
+		}
 		if proc.Defunct {
 			terminateProviderChild(proc.PID)
 			reaped = append(reaped, providerChildReapRecord{
@@ -437,6 +455,25 @@ func reapAllProviderChildren(ctx context.Context, rootPID int, scopeDir string, 
 		return nil
 	}
 	return reaped
+}
+
+// ReapRootProviderChildrenInScope terminates provider CLI processes that are
+// direct children of rootPID and whose cwd is within scopeDir. Status and model
+// inventory surfaces use this after foreground Fizeau probes so server-owned
+// probe CLIs do not survive without touching worker-owned agent children.
+func ReapRootProviderChildrenInScope(ctx context.Context, rootPID int, scopeDir string) int {
+	reaped := reapAllProviderChildren(ctx, rootPID, scopeDir, time.Now().UTC())
+	return len(reaped)
+}
+
+func providerChildOwnedByRoot(proc providerChildProcess, rootPID int) bool {
+	if rootPID <= 0 {
+		return false
+	}
+	if proc.PPID == 0 {
+		return true
+	}
+	return proc.PPID == rootPID
 }
 
 func providerChildInScope(proc providerChildProcess, scopeDir string) bool {

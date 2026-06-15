@@ -92,10 +92,16 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		wd, _ = os.Getwd()
 	}
 
-	// Construct the service. Reuses NewServiceFromWorkDir so provider/model
-	// routing data lands on the agent the same way every other DDx command
-	// constructs it (see serviceconfig.go).
-	svc, err := NewServiceFromWorkDir(wd)
+	parentCtx := opts.Context
+	if parentCtx == nil {
+		parentCtx = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
+
+	// Construct the service against the request context so any background
+	// provider probes it owns are cancelled when the caller stops this run.
+	svc, err := ResolveServiceFromWorkDirCtx(ctx, wd)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -128,13 +134,6 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		Role:            opts.Role,
 		CorrelationID:   opts.CorrelationID,
 	}
-
-	parentCtx := opts.Context
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
-	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
 
 	start := time.Now()
 	events, err := svc.Execute(ctx, req)

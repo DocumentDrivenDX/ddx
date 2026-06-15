@@ -40,6 +40,7 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	defer cleanupCurrentProcessProviderProbes()
 
 	providers, err := svc.ListProviders(ctx)
 	if err != nil {
@@ -139,6 +140,7 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
+	defer cleanupCurrentProcessProviderProbes()
 
 	providers, err := svc.ListProviders(ctx)
 	if err != nil {
