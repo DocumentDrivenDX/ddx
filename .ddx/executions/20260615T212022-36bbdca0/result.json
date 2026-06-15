@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-2b15342f",
+  "attempt_id": "20260615T212022-36bbdca0",
+  "base_rev": "85f1228f27bbdb8af00475849a15e688a76c9d94",
+  "result_rev": "85f1228f27bbdb8af00475849a15e688a76c9d94",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "ResolveRoute: no live provider supports prompt of 2073 tokens with tools=false at policy default",
+  "session_id": "eb-207ff2fe",
+  "duration_ms": 13234,
+  "exit_code": 1,
+  "error": "ResolveRoute: no live provider supports prompt of 2073 tokens with tools=false at policy default",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_viable_provider",
+  "execution_dir": ".ddx/executions/20260615T212022-36bbdca0",
+  "prompt_file": ".ddx/executions/20260615T212022-36bbdca0/prompt.md",
+  "manifest_file": ".ddx/executions/20260615T212022-36bbdca0/manifest.json",
+  "result_file": ".ddx/executions/20260615T212022-36bbdca0/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-15T21:20:31.601007904Z",
+  "finished_at": "2026-06-15T21:20:44.83594555Z"
+}
