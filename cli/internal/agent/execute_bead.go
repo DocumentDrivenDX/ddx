@@ -1061,6 +1061,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// the route, then chain to the caller-supplied OnRouteResolved callback.
 	providerGuard := newRunningProviderGuard(projectRoot, beadID, attemptID, os.Getpid())
 	providerGuard.SetScopeDir(wtPath)
+	if cwd, err := os.Getwd(); err == nil {
+		providerGuard.AddProbeScopeDir(cwd)
+	}
+	providerGuard.AddProbeScopeDir(projectRoot)
 	providerGuard.UpdateRoute(rcfg.Harness(), "", rcfg.Model())
 	baseOnRouteResolved := onRouteResolvedFromContext(ctx)
 

@@ -201,7 +201,7 @@ func nonRouteProviderDiagnostic(provider, owner string) string {
 // diagnostic. When the active route is not yet known (route and harness both
 // empty) the guard observes without reaping, so it never quarantines a child it
 // cannot yet attribute. Returns the status view and the reap evidence records.
-func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir, routeLabel, harness, phase string, now time.Time) ([]workerstatus.ProviderChild, []providerChildReapRecord) {
+func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir string, probeScopeDirs []string, routeLabel, harness, phase string, now time.Time) ([]workerstatus.ProviderChild, []providerChildReapRecord) {
 	procs, err := providerChildScanner(ctx, rootPID, now)
 	if err != nil || len(procs) == 0 {
 		return nil, nil
@@ -227,10 +227,28 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir, route
 			children = append(children, child)
 			continue
 		}
-		if !providerChildInScope(proc, scopeDir) {
+		inAttemptScope := providerChildInScope(proc, scopeDir)
+		inProbeScope := providerChildInAnyScope(proc, probeScopeDirs)
+		if !inAttemptScope && (!ownedByRoot || !inProbeScope) {
 			continue
 		}
 		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
+		if !inAttemptScope && inProbeScope {
+			child.NonRoute = true
+			child.RouteOwner = ""
+			child.Diagnostic = "provider probe outside active attempt scope terminated by running-phase guard"
+			terminateProviderChild(proc.PID)
+			reaped = append(reaped, providerChildReapRecord{
+				PID:        proc.PID,
+				Provider:   proc.Provider,
+				Command:    proc.Command,
+				AgeSeconds: child.AgeSeconds,
+				Action:     providerChildActionTerminated,
+				Reason:     reasonRunningPhaseGuard,
+			})
+			children = append(children, child)
+			continue
+		}
 		if !ownedByRoot {
 			if child.NonRoute {
 				child.Diagnostic = "nested provider child observed under active agent; not terminated"
@@ -265,6 +283,7 @@ type runningProviderGuard struct {
 	attemptID   string
 	rootPID     int
 	scopeDir    string
+	probeScopes []string
 	interval    time.Duration
 
 	mu         sync.Mutex
@@ -290,6 +309,24 @@ func (g *runningProviderGuard) SetScopeDir(scopeDir string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.scopeDir = strings.TrimSpace(scopeDir)
+}
+
+func (g *runningProviderGuard) AddProbeScopeDir(scopeDir string) {
+	if g == nil {
+		return
+	}
+	scopeDir = strings.TrimSpace(scopeDir)
+	if scopeDir == "" {
+		return
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	for _, existing := range g.probeScopes {
+		if existing == scopeDir {
+			return
+		}
+	}
+	g.probeScopes = append(g.probeScopes, scopeDir)
 }
 
 // UpdateRoute records the active route. Non-empty harness/route values overwrite
@@ -319,6 +356,12 @@ func (g *runningProviderGuard) snapshotScopeDir() string {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.scopeDir
+}
+
+func (g *runningProviderGuard) snapshotProbeScopes() []string {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]string(nil), g.probeScopes...)
 }
 
 // Reaped returns a copy of the running-phase reap evidence accumulated so far,
@@ -359,7 +402,7 @@ func (g *runningProviderGuard) Start(ctx context.Context) func() {
 
 func (g *runningProviderGuard) tick(ctx context.Context, now time.Time) {
 	route, harness := g.snapshotRoute()
-	_, reaped := runningProviderChildGuard(ctx, g.rootPID, g.snapshotScopeDir(), route, harness, "running", now)
+	_, reaped := runningProviderChildGuard(ctx, g.rootPID, g.snapshotScopeDir(), g.snapshotProbeScopes(), route, harness, "running", now)
 	if len(reaped) == 0 {
 		return
 	}
@@ -532,6 +575,15 @@ func providerChildInScope(proc providerChildProcess, scopeDir string) bool {
 		return false
 	}
 	return isPathWithin(cwd, scopeDir)
+}
+
+func providerChildInAnyScope(proc providerChildProcess, scopeDirs []string) bool {
+	for _, scopeDir := range scopeDirs {
+		if providerChildInScope(proc, scopeDir) {
+			return true
+		}
+	}
+	return false
 }
 
 func childAgeSeconds(proc providerChildProcess, now time.Time) float64 {
