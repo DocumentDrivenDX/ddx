@@ -6,13 +6,17 @@ ddx:
 ---
 # Feature: Online Library & Plugin Registry
 
-> **FEAT-015 amendment (2026-05-12):** Plugin lifecycle is project-local and
-> lives under `ddx plugin *`. Registry plugins install as real files under
-> `<projectRoot>/.ddx/plugins/`, `.agents/skills/`, and `.claude/skills/`.
-> Local developer overlays use `ddx plugin install <name> --local <path>` and
-> symlink project-local plugin and skill paths to the checkout. `ddx upgrade`
-> is reserved for the DDx binary. No plugin command writes home-directory DDx
-> state.
+> **FEAT-015/ADR-027 amendment (2026-06-15):** Plugin lifecycle is
+> project-local and lives under `ddx plugin *`. Registry plugins install like
+> `npx` dependencies: the project records intent in `.ddx/plugins.lock.yaml`,
+> payload bytes live under `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`,
+> and `.agents/skills/*` plus `.claude/skills/*` are generated adapters that
+> can be recreated with `ddx plugin sync`. Normal marketplace installs do not
+> copy full plugin payloads into `<projectRoot>/.ddx/plugins/`. Local developer
+> overlays remain the exception: `ddx plugin install <name> --local <path>`
+> symlinks `.ddx/plugins/<name>` and generated skill targets to the checkout.
+> `ddx upgrade` is reserved for the DDx binary. No plugin command writes
+> home-directory DDx state.
 
 **ID:** FEAT-009
 **Status:** Complete
@@ -110,11 +114,12 @@ requires:
 
 ### Install Flow
 
-> **Amended by FEAT-015 (2026-05-12):** `ddx plugin install <plugin>` is the
-> forward plugin install command. Registry plugins land in project-local
-> `.ddx/plugins/`, `.agents/skills/`, and `.claude/skills/` as real files.
-> Local overlays use symlinks only for `--local`. Project plugin state lives in
-> `.ddx/plugins.yaml`; no home plugin state exists.
+> **Amended by FEAT-015/ADR-027 (2026-06-15):** `ddx plugin install <plugin>`
+> is the forward plugin install command. Registry installs write project lock
+> metadata, resolve payloads into the XDG plugin cache, and generate
+> agent-facing adapters under `.agents/skills/` and `.claude/skills/`. Local
+> overlays use symlinks for `--local`. Project plugin state lives in
+> `.ddx/plugins.lock.yaml`; no home plugin state exists.
 
 ```bash
 ddx plugin install helix
@@ -123,23 +128,26 @@ ddx plugin install helix
 1. Fetch `registry.yaml` from ddx-library
 2. Find the `helix` entry → read `package.yaml`
 3. Clone/download the source repo (shallow, to temp dir)
-4. Copy plugin files to `<projectRoot>/.ddx/plugins/helix/`
-5. Copy skills to `<projectRoot>/.agents/skills/helix` and `<projectRoot>/.claude/skills/helix`
-6. Record registry plugin state in `.ddx/plugins.yaml`
+4. Copy the package payload into
+   `${XDG_DATA_HOME}/ddx/cache/plugins/helix/<version>/`
+5. Generate adapter links under `<projectRoot>/.agents/skills/` and
+   `<projectRoot>/.claude/skills/`
+6. Record registry plugin state in `.ddx/plugins.lock.yaml`
 
 For simple resources (individual personas, templates):
 
-```bash
-ddx install persona/strict-code-reviewer
-```
+The forward resource command is separate from plugin lifecycle work and must not
+reuse the retired top-level `ddx install` surface.
 
-1. Fetch the file directly from ddx-library (via GitHub raw URL or git archive)
-2. Copy to `.ddx/library/personas/strict-code-reviewer.md`
+1. Resolve the resource through the plugin/library registry
+2. Materialize the persona into the project library area or configured persona
+   target
 
 ### Cache and State
 
 - **Registry cache:** `.ddx/cache/registries/<name>/registry.yaml` (one per registry)
-- **Plugin state:** `.ddx/plugins.yaml` (project plugins, versions, timestamps, source registry)
+- **Plugin state:** `.ddx/plugins.lock.yaml` (project plugins, versions, cache
+  paths, timestamps, source registry)
 - **Library cache:** `~/.cache/ddx/library/` (downloaded resources)
 - **Plugin cache:** `~/.cache/ddx/library/plugins/` (populated for dun discovery)
 
@@ -149,19 +157,23 @@ ddx install persona/strict-code-reviewer
 
 1. **Registry fetch** — download latest `registry.yaml` from ddx-library as part of plugin install/list/upgrade
 2. **Search** (`ddx search <query>`) — search available resources by name, type, or keyword
-3. **Install plugin** (`ddx plugin install <name>`) — download and install a workflow/plugin package
+3. **Install plugin** (`ddx plugin install <name>`) — download and cache a
+   workflow/plugin package, write the project lock, and generate adapters
 4. **Install local plugin overlay** (`ddx plugin install <name> --local <path>`) — symlink a project to a local checkout
 5. **List installed plugins** (`ddx plugin list`) — show project plugins and local overlays
 6. **Uninstall plugin** (`ddx plugin uninstall <name>`) — remove an installed plugin
-7. **Populate plugin cache** — on install, copy dun-compatible plugins to `~/.cache/ddx/library/plugins/`
+7. **Populate plugin cache** — on install, copy plugin payloads to
+   `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`
 8. **Version tracking** — record installed versions, detect available updates
-9. **Update detection** (`ddx outdated`) — compare installed package versions
+9. **Update detection** (`ddx plugin upgrade --check`, or the equivalent
+   staleness surface) — compare installed package versions
    against source repo tags (via `git ls-remote --tags`) to determine if
    updates are available. Output: package name, installed version, latest
    available, update available (yes/no).
 10. **Plugin upgrade** (`ddx plugin upgrade <name>`) — re-install a plugin at the
     latest available version. Performs a fresh shallow clone at the latest tag,
-    copies new files, updates `.ddx/plugins.yaml`. Safe to run repeatedly.
+    refreshes the cache, updates `.ddx/plugins.lock.yaml`, and regenerates
+    adapters. Safe to run repeatedly.
 11. **Startup update check** — on `ddx` startup (async, non-blocking), check
     if installed packages have newer versions available. If so, print a
     one-line notice: `Plugin update available: helix 0.1.0 → 0.2.0 (run
@@ -182,7 +194,7 @@ ddx search <query>                  # Search available resources
 ddx plugin install helix            # Install HELIX workflow/plugin
 ddx plugin install helix --local ../helix  # Link local checkout for development
 ddx plugin list                     # List project plugins
-ddx outdated                        # Check for available updates
+ddx plugin upgrade                  # Check/apply available plugin updates
 ddx plugin upgrade <name>           # Update a registry plugin to latest version
 ddx plugin uninstall <name>         # Remove an installed plugin
 ```
@@ -196,7 +208,9 @@ ddx plugin uninstall <name>         # Remove an installed plugin
 
 **Acceptance Criteria:**
 - Given I run `ddx search workflow`, then I see HELIX and any other registered workflows with descriptions
-- Given I run `ddx plugin install helix`, then HELIX skills are installed to `.agents/skills/` and `.claude/skills/` as project-local files
+- Given I run `ddx plugin install helix`, then HELIX payloads are cached under
+  XDG and HELIX skills are exposed through generated adapters in
+  `.agents/skills/` and `.claude/skills/`
 
 ### US-091: Developer Installs Individual Resources
 **As a** developer customizing my project
@@ -204,7 +218,8 @@ ddx plugin uninstall <name>         # Remove an installed plugin
 **So that** I get exactly what I need without bulk downloading
 
 **Acceptance Criteria:**
-- Given I run `ddx install persona/strict-code-reviewer`, then the persona file is copied to `.ddx/library/personas/`
+- Given I install an individual persona resource, then the persona file is
+  copied to `.ddx/library/personas/`
 - Given I run `ddx plugin list`, then I see installed project plugins with version and install date
 
 ## Dependencies

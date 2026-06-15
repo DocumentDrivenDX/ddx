@@ -60,9 +60,9 @@ layer for top-level plugin commands.
 |---|---|
 | `ddx upgrade [--check] [--force]` | Binary update only. Runs installer path; no project/plugin mutation. |
 | `ddx init [--force]` | Project bootstrap only. Writes `.ddx/`, `.agents/skills/ddx`, `.claude/skills/ddx`, `AGENTS.md`, `CLAUDE.md`. |
-| `ddx plugin install <name> [--force]` | Registry plugin install as real project files. Records project state in `.ddx/plugins.yaml`. |
-| `ddx plugin install <name> --local <path> [--force]` | Local symlink overlay. Replaces `.ddx/plugins/<name>`, `.agents/skills/<skill>`, `.claude/skills/<skill>` with direct symlinks to the checkout. Does not mutate `.ddx/plugins.yaml`. Does not auto-commit. |
-| `ddx plugin list [--json]` | Lists registry plugins from `.ddx/plugins.yaml` plus symlink overlays discovered under `.ddx/plugins/`. |
+| `ddx plugin install <name> [--force]` | Registry plugin install as project lock metadata plus XDG cache payload. Records project state in `.ddx/plugins.lock.yaml` and generates agent adapters. |
+| `ddx plugin install <name> --local <path> [--force]` | Local symlink overlay. Replaces `.ddx/plugins/<name>`, `.agents/skills/<skill>`, `.claude/skills/<skill>` with direct symlinks to the checkout. Does not mutate `.ddx/plugins.lock.yaml`. Does not auto-commit. |
+| `ddx plugin list [--json]` | Lists registry plugins from `.ddx/plugins.lock.yaml` plus symlink overlays discovered under `.ddx/plugins/`. |
 | `ddx plugin upgrade [name] [--force]` | Upgrades one or all registry plugins. Skips local overlays with explicit output. |
 | `ddx plugin uninstall <name>` | Removes plugin root and plugin-owned skills. For local overlays, removes only project symlinks and leaves checkout target untouched. |
 | `ddx search <query>` | May remain top-level for library discovery, but must not imply top-level plugin install/list/uninstall. |
@@ -102,27 +102,28 @@ cleanup. They are already governed by
 Create a project-local plugin state file:
 
 ```yaml
-# .ddx/plugins.yaml
+# .ddx/plugins.lock.yaml
 plugins:
   - name: helix
     version: 1.2.3
     type: plugin
     source: https://github.com/DocumentDrivenDX/helix
     installed_at: 2026-05-13T12:00:00Z
-    files:
-      - .ddx/plugins/helix
+    cache_path: ${XDG_DATA_HOME}/ddx/cache/plugins/helix/1.2.3
+    generated_files:
       - .agents/skills/helix
       - .claude/skills/helix
 ```
 
 Rules:
 
-- Replace installed-package state naming with plugin-state naming:
-  `registry.LoadPluginState(projectRoot)`, `SavePluginState(projectRoot, state)`,
-  `PluginState`, and `PluginEntry`. Avoid preserving `InstalledState` /
-  `InstalledEntry` names for new plugin lifecycle code.
-- The plugin-state APIs must be project-root aware and read/write
-  `.ddx/plugins.yaml`.
+- Replace installed-package state naming with plugin-lock naming:
+  `registry.LoadProjectPluginLock(ctx, projectRoot)`,
+  `SaveProjectPluginLock(ctx, projectRoot, lock)`, `PluginLock`, and
+  `PluginLockEntry`. Avoid preserving `InstalledState` / `InstalledEntry`
+  names for new plugin lifecycle code.
+- The plugin-lock APIs must be project-root aware and read/write
+  `.ddx/plugins.lock.yaml`.
 - No production path reads or writes `~/.ddx/installed.yaml`.
 - State entries describe registry-installed plugins only.
 - Local overlays are derived from `os.Lstat(".ddx/plugins/<name>")` returning a
@@ -134,7 +135,8 @@ Rules:
 Plugin-owned skill entries should be attributable without following symlinks into
 developer checkouts:
 
-- Registry install ownership comes from `.ddx/plugins.yaml.files`.
+- Registry install ownership comes from `.ddx/plugins.lock.yaml.generated_files`
+  plus the cache path.
 - Local overlay ownership is discovered at uninstall/list time from the current
   symlinked plugin checkout. Remove only `.agents/skills/<skill>` and
   `.claude/skills/<skill>` entries that are symlinks pointing directly into that
@@ -195,7 +197,7 @@ Files:
 Work:
 
 1. Replace `installedStatePath()` with `PluginStatePath(projectRoot)` returning
-   `<projectRoot>/.ddx/plugins.yaml`.
+   `<projectRoot>/.ddx/plugins.lock.yaml`.
 2. Replace `LoadState()` / `SaveState()` call sites with
    `LoadPluginState(projectRoot)` / `SavePluginState(projectRoot, state)`.
    Avoid package-level cwd assumptions.
@@ -203,18 +205,18 @@ Work:
 4. Rename new lifecycle structs and helper methods from installed/package terms
    to plugin terms.
 5. Remove any production code that creates `~/.ddx`.
-6. Update doctor/plugin audit code to inspect `.ddx/plugins.yaml` and discovered
+6. Update doctor/plugin audit code to inspect `.ddx/plugins.lock.yaml` and discovered
    local overlays.
 
 Acceptance:
 
-- Plugin install/list/upgrade/uninstall creates or updates `.ddx/plugins.yaml`.
+- Plugin install/list/upgrade/uninstall creates or updates `.ddx/plugins.lock.yaml`.
 - Running plugin commands in a temp project leaves `~/.ddx`, `~/.agents`, and
   `~/.claude` absent.
 - Tests do not use `~/.ddx/installed.yaml` except, if retained at all, as a
   negative assertion that it is ignored.
 
-### Phase 3: Registry Plugin Install as Real Files
+### Phase 3: Registry Plugin Install as Lock/Cache/Adapters
 
 Files:
 
@@ -228,24 +230,28 @@ Files:
 
 Work:
 
-1. Keep registry plugin root installation as real files under
-   `.ddx/plugins/<name>/`.
-2. Keep registry skill installation as real files under `.agents/skills/<skill>`
-   and `.claude/skills/<skill>`.
-3. Remove manifest-declared install symlink behavior from registry installs or
-   reject it during validation. Symlinks are reserved for `--local`.
+1. Cache registry plugin payloads under
+   `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`; do not copy the
+   payload tree into `.ddx/plugins/<name>/` for normal marketplace installs.
+2. Keep registry skill exposure as generated adapter links/directories under
+   `.agents/skills/<skill>` and `.claude/skills/<skill>`.
+3. Reject manifest-declared install behavior that requires committing generated
+   adapters or copying payload trees into the project. Symlinked plugin roots
+   are reserved for `--local`.
 4. Reject every manifest install target beginning with `~` or escaping the project
    root, including root, skills, scripts, symlinks, hooks, and executables.
-5. Remove registry install auto-commit unless an explicit command-level policy is
-   approved separately. The implementation should leave normal git diff for the
-   operator.
-6. Preserve stale file cleanup using project-relative file lists and `os.Lstat`.
+5. Registry install may commit only durable project lock metadata when project
+   policy allows auto-commit; generated adapters and cache payloads are
+   generated state.
+6. Preserve stale generated-adapter cleanup using project-relative file lists
+   and `os.Lstat`.
 
 Acceptance:
 
-- `ddx plugin install helix` writes real directories, not symlinks.
-- `.ddx/plugins/helix`, `.agents/skills/helix`, and `.claude/skills/helix` are
-  project-local.
+- `ddx plugin install helix` writes `.ddx/plugins.lock.yaml` and XDG cache
+  payloads, not `.ddx/plugins/helix`.
+- `.agents/skills/helix` and `.claude/skills/helix` are generated adapters
+  pointing at the resolved cache payload.
 - Home-rooted or project-escaping manifest targets fail before writes.
 - Registry reinstall removes stale plugin-owned files without touching unrelated
   bootstrap skills or other plugins.
@@ -273,7 +279,7 @@ Work:
    symlinks to the checkout skill directory. Do not create chained symlinks.
 6. Require `--force` before replacing an existing non-symlink plugin root or skill
    directory.
-7. Do not update `.ddx/plugins.yaml`.
+7. Do not update `.ddx/plugins.lock.yaml`.
 8. Do not auto-commit.
 
 Acceptance:
@@ -281,7 +287,7 @@ Acceptance:
 - `readlink .ddx/plugins/helix` returns the absolute checkout path.
 - `readlink .agents/skills/helix` and `.claude/skills/helix` point directly to
   the checkout skill directory.
-- `ddx plugin list` shows the overlay as `local` even when `.ddx/plugins.yaml`
+- `ddx plugin list` shows the overlay as `local` even when `.ddx/plugins.lock.yaml`
   has no helix entry.
 - `ddx plugin upgrade helix` skips the overlay with `helix is local-linked; skipped`.
 - `ddx plugin uninstall helix` removes only project symlinks and leaves the
@@ -299,7 +305,7 @@ Files:
 Work:
 
 1. Implement `ddx plugin list` from two sources:
-   - `.ddx/plugins.yaml` registry entries.
+   - `.ddx/plugins.lock.yaml` registry entries.
    - symlinked directories under `.ddx/plugins/` as local overlays.
 2. Implement `ddx plugin upgrade [name]`:
    - Named: upgrade one registry plugin, skip if local-linked.
@@ -372,9 +378,9 @@ Recommended execution slices:
 1. **CLI surface lockdown** — root registration and dedicated `plugin` command
    tree, with help/unknown-command tests.
 2. **Project plugin state** — move state from `~/.ddx/installed.yaml` to
-   `.ddx/plugins.yaml`, update audit/list helpers.
-3. **Registry install cleanup** — real-file install, manifest target validation,
-   stale cleanup, no auto-commit.
+   `.ddx/plugins.lock.yaml`, update audit/list helpers.
+3. **Registry install cleanup** — lock/cache install, manifest target
+   validation, stale generated-adapter cleanup, durable-metadata-only commits.
 4. **Local overlay mode** — symlink behavior, validation, no pin mutation,
    uninstall safety.
 5. **Plugin upgrade/list/uninstall** — lifecycle commands and skip semantics for

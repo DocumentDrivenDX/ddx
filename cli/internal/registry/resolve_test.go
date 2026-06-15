@@ -87,6 +87,76 @@ func TestPluginLookup_FallsBackToGlobal(t *testing.T) {
 	}
 }
 
+func TestPluginLookup_ResolvesProjectLockCache(t *testing.T) {
+	projectRoot := makeInTreeRoot(t)
+	pluginName := "myplugin"
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
+	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
+		t.Fatalf("mkdir cache plugin: %v", err)
+	}
+	lock := &PluginLock{Plugins: []PluginLockEntry{{
+		Name:      pluginName,
+		Version:   "1.2.3",
+		Type:      PackageTypePlugin,
+		Source:    "https://example.com/myplugin",
+		CachePath: cachePlugin,
+	}}}
+	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
+		t.Fatalf("save plugin lock: %v", err)
+	}
+
+	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
+	if err != nil {
+		t.Fatalf("ResolvePlugin: unexpected error: %v", err)
+	}
+	if gotLayer != "cache" {
+		t.Errorf("layer = %q, want %q", gotLayer, "cache")
+	}
+	if gotPath != cachePlugin {
+		t.Errorf("path = %q, want %q", gotPath, cachePlugin)
+	}
+}
+
+func TestPluginLookup_PrefersLocalOverlayOverProjectLockCache(t *testing.T) {
+	projectRoot := makeInTreeRoot(t)
+	pluginName := "myplugin"
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
+	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
+		t.Fatalf("mkdir cache plugin: %v", err)
+	}
+	projectPlugin := filepath.Join(projectRoot, ddxroot.DirName, "plugins", pluginName)
+	if err := os.MkdirAll(projectPlugin, 0o755); err != nil {
+		t.Fatalf("mkdir project plugin: %v", err)
+	}
+	lock := &PluginLock{Plugins: []PluginLockEntry{{
+		Name:      pluginName,
+		Version:   "1.2.3",
+		Type:      PackageTypePlugin,
+		Source:    "https://example.com/myplugin",
+		CachePath: cachePlugin,
+	}}}
+	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
+		t.Fatalf("save plugin lock: %v", err)
+	}
+
+	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
+	if err != nil {
+		t.Fatalf("ResolvePlugin: unexpected error: %v", err)
+	}
+	if gotLayer != "project" {
+		t.Errorf("layer = %q, want %q", gotLayer, "project")
+	}
+	if gotPath != projectPlugin {
+		t.Errorf("path = %q, want %q", gotPath, projectPlugin)
+	}
+}
+
 func TestGlobalPluginsDir_HonorsXDGDataHome(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdg)

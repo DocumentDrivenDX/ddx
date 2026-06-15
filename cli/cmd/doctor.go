@@ -451,6 +451,8 @@ func reportSkillInstallTopology(projectRoot string) {
 			switch layer {
 			case "project":
 				projectStatus = "ok"
+			case "cache":
+				projectStatus = "lazy-resolves-to-cache"
 			case "global":
 				projectStatus = "lazy-resolves-to-global"
 			case "baked-in":

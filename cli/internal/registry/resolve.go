@@ -23,11 +23,16 @@ func GlobalPluginDir(name string) string {
 }
 
 // ResolvePlugin returns the on-disk path and the resolution layer for a plugin.
-// Precedence: project → global → baked-in.
+// Precedence: local project overlay → project lock/cache → global legacy →
+// baked-in default.
 //
 // Layer values:
-//   - "project": found under <projectRoot>/.ddx/plugins/<name>
-//   - "global":  found under ${XDG_DATA_HOME}/ddx/global/plugins/<name>
+//   - "project": found under <projectRoot>/.ddx/plugins/<name>, normally a
+//     local developer overlay
+//   - "cache": found through <ddx-root>/plugins.lock.yaml and the XDG payload
+//     cache
+//   - "global": found under ${XDG_DATA_HOME}/ddx/global/plugins/<name>
+//     (legacy/developer escape hatch)
 //   - "baked-in": embedded default; only valid for the "ddx" plugin name
 //
 // For baked-in, path is empty — callers should use defaultplugin.FS().
@@ -36,6 +41,18 @@ func ResolvePlugin(ctx context.Context, projectRoot, name string) (path string, 
 	projectPluginPath := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
 	if info, statErr := os.Stat(projectPluginPath); statErr == nil && info.IsDir() {
 		return projectPluginPath, "project", nil
+	}
+
+	if lock, lockErr := LoadProjectPluginLock(ctx, projectRoot); lockErr == nil {
+		if entry := lock.Find(name); entry != nil {
+			cachePath := entry.CachePath
+			if cachePath == "" {
+				cachePath = PluginCacheDir(entry.Name, entry.Version)
+			}
+			if info, statErr := os.Stat(cachePath); statErr == nil && info.IsDir() {
+				return cachePath, "cache", nil
+			}
+		}
 	}
 
 	globalPluginPath := filepath.Join(ddxroot.GlobalDir(), "plugins", name)
