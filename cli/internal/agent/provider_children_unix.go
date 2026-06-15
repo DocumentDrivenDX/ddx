@@ -151,16 +151,35 @@ func terminateProviderChildImpl(pid int) {
 	signalProviderChildGroup(pid, syscall.SIGTERM)
 	deadline := time.Now().Add(750 * time.Millisecond)
 	for time.Now().Before(deadline) {
+		if waitProviderChildNoHang(pid) {
+			return
+		}
 		if !signalProcessAlive(pid) {
 			return
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
 	signalProviderChildGroup(pid, syscall.SIGKILL)
+	killDeadline := time.Now().Add(750 * time.Millisecond)
+	for time.Now().Before(killDeadline) {
+		if waitProviderChildNoHang(pid) {
+			return
+		}
+		if !signalProcessAlive(pid) {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
 }
 
 func signalProviderChildGroup(pid int, sig syscall.Signal) {
 	if err := syscall.Kill(-pid, sig); err != nil && err != syscall.ESRCH {
 		_ = syscall.Kill(pid, sig)
 	}
+}
+
+func waitProviderChildNoHang(pid int) bool {
+	var status syscall.WaitStatus
+	waited, err := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
+	return err == nil && waited == pid
 }

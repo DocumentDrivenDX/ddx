@@ -32,6 +32,12 @@ var providerCLINames = map[string]struct{}{
 	"pi":       {},
 }
 
+var providerRouteAliases = map[string]string{
+	"claude-code": "claude",
+	"claude-tui":  "claude",
+	"gemini-cli":  "gemini",
+}
+
 type providerChildProcess struct {
 	PID       int
 	Provider  string
@@ -101,18 +107,29 @@ func routeOwnsProvider(provider string, routeTokens ...string) bool {
 		return false
 	}
 	for _, tok := range routeTokens {
-		tok = strings.ToLower(strings.TrimSpace(tok))
-		if tok == "" {
+		owner := routeTokenProvider(tok)
+		if owner == "" {
 			continue
 		}
-		if tok == p {
-			return true
-		}
-		if seg := strings.SplitN(tok, "/", 2); len(seg) > 0 && seg[0] == p {
+		if owner == p {
 			return true
 		}
 	}
 	return false
+}
+
+func routeTokenProvider(token string) string {
+	token = strings.ToLower(strings.TrimSpace(token))
+	if token == "" {
+		return ""
+	}
+	if seg := strings.SplitN(token, "/", 2); len(seg) > 0 {
+		token = strings.TrimSpace(seg[0])
+	}
+	if alias, ok := providerRouteAliases[token]; ok {
+		return alias
+	}
+	return token
 }
 
 func scanProviderChildrenForStatus(ctx context.Context, rootPID int, routeLabel, harness, phase string, now time.Time) []workerstatus.ProviderChild {

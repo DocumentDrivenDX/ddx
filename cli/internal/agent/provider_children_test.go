@@ -195,6 +195,42 @@ func TestSupersededProviderChildrenUsesHarnessAsOwnerWhenProviderBlank(t *testin
 	}
 }
 
+func TestSupersededProviderChildrenTreatsClaudeTUIRouteAsClaudeOwner(t *testing.T) {
+	now := time.Now().UTC()
+	const activePID = 727272
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{{
+			PID:       activePID,
+			Provider:  "claude",
+			Command:   "/home/erik/.local/bin/claude --permission-mode bypassPermissions --model sonnet",
+			StartedAt: now,
+		}}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), "claude-tui/sonnet-4.6", "claude-tui", now)
+
+	if len(reaped) != 0 {
+		t.Fatalf("expected active claude-tui child to survive; got reaped %+v", reaped)
+	}
+	if len(survivors) != 1 || survivors[0].Provider != "claude" {
+		t.Fatalf("expected claude survivor for claude-tui route; got %+v", survivors)
+	}
+	if len(killed) != 0 {
+		t.Fatalf("active claude-tui provider child was terminated: %v", killed)
+	}
+}
+
 func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	dir := t.TempDir()
 	claudePID := startFakeProviderChild(t, dir, "claude")
@@ -313,6 +349,32 @@ func TestAttemptEndCleanupStillReapsAllProviderChildren(t *testing.T) {
 	}
 	if !reapedProviders["claude"] || !reapedProviders["codex"] {
 		t.Fatalf("attempt-end backstop must reap all provider children; got %+v", reaped)
+	}
+}
+
+func TestTerminateProviderChildReapsDirectChild(t *testing.T) {
+	sleepPath, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skipf("sleep not available: %v", err)
+	}
+	cmd := exec.Command(sleepPath, "120")
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start child: %v", err)
+	}
+	pid := cmd.Process.Pid
+	t.Cleanup(func() {
+		_ = syscall.Kill(-pid, syscall.SIGKILL)
+		_, _ = cmd.Process.Wait()
+	})
+
+	terminateProviderChildImpl(pid)
+
+	assertProcessGone(t, pid)
+	var status syscall.WaitStatus
+	waited, waitErr := syscall.Wait4(pid, &status, syscall.WNOHANG, nil)
+	if waitErr != syscall.ECHILD {
+		t.Fatalf("expected child pid %d to be reaped (ECHILD), got waited=%d err=%v", pid, waited, waitErr)
 	}
 }
 
