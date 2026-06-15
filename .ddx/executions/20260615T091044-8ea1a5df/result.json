@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-9febbad2",
+  "attempt_id": "20260615T091044-8ea1a5df",
+  "base_rev": "738e1bb923b14d936efd7f6b610e6ed3c90e8cba",
+  "result_rev": "738e1bb923b14d936efd7f6b610e6ed3c90e8cba",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "ResolveRoute: no live provider supports prompt of 2274 tokens with tools=false at policy smart",
+  "harness": "claude-tui",
+  "session_id": "eb-68b63f67",
+  "duration_ms": 10565,
+  "exit_code": 1,
+  "error": "ResolveRoute: no live provider supports prompt of 2274 tokens with tools=false at policy smart",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "no_viable_provider",
+  "execution_dir": ".ddx/executions/20260615T091044-8ea1a5df",
+  "prompt_file": ".ddx/executions/20260615T091044-8ea1a5df/prompt.md",
+  "manifest_file": ".ddx/executions/20260615T091044-8ea1a5df/manifest.json",
+  "result_file": ".ddx/executions/20260615T091044-8ea1a5df/result.json",
+  "started_at": "2026-06-15T09:10:50.889847953Z",
+  "finished_at": "2026-06-15T09:11:01.455779156Z"
+}
