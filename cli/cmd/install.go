@@ -27,9 +27,9 @@ func (f *CommandFactory) newInstallCommand() *cobra.Command {
 		Long: `Install a package or resource from the DDx registry.
 
 Without --global, installs into the current project:
-  - In-tree mode (.ddx/ exists): <project>/.ddx/plugins/<name>/
-  - Convention mode (no .ddx/): ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/
-Skill links are created under <project>/.claude/skills/ and <project>/.agents/skills/.
+  - Project metadata: <ddx-root>/plugins.lock.yaml
+  - Payload cache: ${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/
+Generated skill shims are created under <project>/.claude/skills/ and <project>/.agents/skills/.
 
 With --global, installs into the machine-wide DDx plugin tree:
   ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
@@ -105,10 +105,7 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Select the correct state file for global vs project installs.
-	loadState, saveState := selectInstallState(global)
-
-	reg := registry.BuiltinRegistry()
+	reg := f.pluginRegistry()
 	pkg, err := reg.Find(name)
 	if err != nil {
 		return err
@@ -119,24 +116,29 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		pkg.Version = strings.TrimPrefix(release.TagName, "v")
 	}
 
-	// Check if already installed at the latest version.
+	if !global {
+		return f.installProjectRegistryPlugin(cmd.Context(), out, pkg, force)
+	}
+
+	// Select the correct state file for global installs.
+	loadState, saveState := selectInstallState(global)
 	state, err := loadState()
 	if err == nil {
 		for _, e := range state.Installed {
-			if e.Name == name {
-				if e.Version == pkg.Version {
-					if !force {
-						fmt.Fprintf(out, "%s %s is already up to date\n", e.Name, e.Version)
-						return nil
-					}
-					fmt.Fprintf(out, "Reinstalling %s %s...\n", e.Name, e.Version)
-				} else {
-					fmt.Fprintf(out, "Updating %s from %s to %s...\n", e.Name, e.Version, pkg.Version)
+			if e.Name != name {
+				continue
+			}
+			if e.Version == pkg.Version {
+				if !force {
+					fmt.Fprintf(out, "%s %s is already up to date\n", e.Name, e.Version)
+					return nil
 				}
+				fmt.Fprintf(out, "Reinstalling %s %s...\n", e.Name, e.Version)
+			} else {
+				fmt.Fprintf(out, "Updating %s from %s to %s...\n", e.Name, e.Version, pkg.Version)
 			}
 		}
 	}
-
 	// Capture old file list before installing so we can remove stale files.
 	var oldFiles []string
 	if state != nil {
@@ -175,6 +177,49 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		commitPluginChanges(name, pkg.Version)
 	}
 
+	return nil
+}
+
+func (f *CommandFactory) pluginRegistry() *registry.Registry {
+	if f.registryOverride != nil {
+		return f.registryOverride
+	}
+	return registry.BuiltinRegistry()
+}
+
+func (f *CommandFactory) installProjectRegistryPlugin(ctx context.Context, out io.Writer, pkg *registry.Package, force bool) error {
+	lock, err := registry.LoadProjectPluginLock(ctx, f.WorkingDir)
+	if err != nil {
+		return err
+	}
+	if existing := lock.Find(pkg.Name); existing != nil {
+		if existing.Version == pkg.Version {
+			if !force {
+				fmt.Fprintf(out, "%s %s is already up to date\n", existing.Name, existing.Version)
+				return nil
+			}
+			fmt.Fprintf(out, "Reinstalling %s %s...\n", existing.Name, existing.Version)
+		} else {
+			fmt.Fprintf(out, "Updating %s from %s to %s...\n", existing.Name, existing.Version, pkg.Version)
+		}
+	}
+
+	fmt.Fprintf(out, "Installing %s %s from %s...\n", pkg.Name, pkg.Version, pkg.Source)
+	entry, err := registry.CachePackageFromRemote(pkg)
+	if err != nil {
+		return fmt.Errorf("install package: %w", err)
+	}
+	result, err := registry.SyncProjectPlugin(ctx, f.WorkingDir, entry, force)
+	if err != nil {
+		return fmt.Errorf("sync plugin shims: %w", err)
+	}
+	entry.GeneratedFiles = result.GeneratedFiles
+	lock.AddOrUpdate(entry)
+	if err := registry.SaveProjectPluginLock(ctx, f.WorkingDir, lock); err != nil {
+		return fmt.Errorf("saving plugin lock: %w", err)
+	}
+	fmt.Fprintf(out, "Installed %s %s (cache: %s, shims: %d)\n", entry.Name, entry.Version, entry.CachePath, len(entry.GeneratedFiles))
+	commitPluginChanges(entry.Name, entry.Version)
 	return nil
 }
 
@@ -264,6 +309,7 @@ func (f *CommandFactory) newPluginCommand() *cobra.Command {
 	cmd.AddCommand(installCmd)
 	cmd.AddCommand(f.newPluginListCommand())
 	cmd.AddCommand(f.newPluginShowCommand())
+	cmd.AddCommand(f.newPluginSyncCommand())
 	return cmd
 }
 
@@ -281,6 +327,24 @@ func (f *CommandFactory) newPluginListCommand() *cobra.Command {
 func (f *CommandFactory) runPluginList(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	global, _ := cmd.Flags().GetBool("global")
+
+	if !global {
+		lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
+		if err != nil {
+			return fmt.Errorf("loading plugin lock: %w", err)
+		}
+		if len(lock.Plugins) == 0 {
+			fmt.Fprintln(out, "No plugins installed.")
+			return nil
+		}
+		w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+		fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS")
+		for _, e := range lock.Plugins {
+			status := projectPluginLockStatus(cmd.Context(), f.WorkingDir, e)
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Version, string(e.Type), status)
+		}
+		return w.Flush()
+	}
 
 	loadState, _ := selectInstallState(global)
 	state, err := loadState()
@@ -321,6 +385,35 @@ func (f *CommandFactory) runPluginShow(cmd *cobra.Command, args []string) error 
 	name := args[0]
 	global, _ := cmd.Flags().GetBool("global")
 
+	if !global {
+		lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
+		if err != nil {
+			return fmt.Errorf("loading plugin lock: %w", err)
+		}
+		entry := lock.Find(name)
+		if entry == nil {
+			return fmt.Errorf("plugin %q is not installed", name)
+		}
+		result, err := registry.SyncProjectPlugin(cmd.Context(), f.WorkingDir, *entry, false)
+		if err != nil {
+			return err
+		}
+		if !sameStringSlices(entry.GeneratedFiles, result.GeneratedFiles) {
+			entry.GeneratedFiles = result.GeneratedFiles
+			if err := registry.SaveProjectPluginLock(cmd.Context(), f.WorkingDir, lock); err != nil {
+				return fmt.Errorf("saving plugin lock: %w", err)
+			}
+		}
+		fmt.Fprintf(out, "Name:         %s\n", entry.Name)
+		fmt.Fprintf(out, "Version:      %s\n", entry.Version)
+		fmt.Fprintf(out, "Type:         %s\n", string(entry.Type))
+		fmt.Fprintf(out, "Source:       %s\n", entry.Source)
+		fmt.Fprintf(out, "Cache:        %s\n", entry.CachePath)
+		fmt.Fprintf(out, "Installed at: %s\n", entry.InstalledAt.Format("2006-01-02"))
+		fmt.Fprintf(out, "Shims:        %d\n", len(entry.GeneratedFiles))
+		return nil
+	}
+
 	loadState, _ := selectInstallState(global)
 	state, err := loadState()
 	if err != nil {
@@ -339,6 +432,78 @@ func (f *CommandFactory) runPluginShow(cmd *cobra.Command, args []string) error 
 	fmt.Fprintf(out, "Installed at: %s\n", entry.InstalledAt.Format("2006-01-02"))
 	fmt.Fprintf(out, "Files:        %d\n", len(entry.Files))
 	return nil
+}
+
+func sameStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (f *CommandFactory) newPluginSyncCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sync",
+		Short: "Recreate generated plugin shims from the project lock",
+		Args:  cobra.NoArgs,
+		RunE:  f.runPluginSync,
+	}
+	cmd.Flags().BoolP("force", "f", false, "Replace existing generated skill directories")
+	return cmd
+}
+
+func (f *CommandFactory) runPluginSync(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+	force, _ := cmd.Flags().GetBool("force")
+	results, err := registry.SyncProjectPlugins(cmd.Context(), f.WorkingDir, force)
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		fmt.Fprintln(out, "No plugins installed.")
+		return nil
+	}
+	for _, result := range results {
+		status := "ok"
+		if result.LocalOverlay {
+			status = "local-overlay"
+		} else if !result.CachePresent {
+			status = "cache-missing"
+		}
+		fmt.Fprintf(out, "%s %s: %s (%d shim(s))\n", result.Name, result.Version, status, len(result.GeneratedFiles))
+	}
+	return nil
+}
+
+func projectPluginLockStatus(ctx context.Context, projectRoot string, entry registry.PluginLockEntry) string {
+	if projectPluginLocalOverlay(ctx, projectRoot, entry.Name) {
+		return "local-overlay"
+	}
+	cachePath := entry.CachePath
+	if cachePath == "" {
+		cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
+	}
+	if info, err := os.Stat(cachePath); err != nil || !info.IsDir() {
+		return "cache-missing"
+	}
+	for _, generated := range entry.GeneratedFiles {
+		path := filepath.Join(projectRoot, filepath.FromSlash(generated))
+		if _, err := os.Stat(path); err != nil {
+			return "shims-missing"
+		}
+	}
+	return "ok"
+}
+
+func projectPluginLocalOverlay(ctx context.Context, projectRoot, name string) bool {
+	path := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
 }
 
 func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
@@ -386,10 +551,8 @@ func installPathContainsAny(parent string, files []string) bool {
 // commitPluginChanges stages and commits plugin-related changes in the working tree.
 // Non-fatal: if git operations fail (not a repo, nothing to commit), it's silently skipped.
 func commitPluginChanges(name, version string) {
-	// Stage the project-local plugin tree and the skill copies.
-	paths := []string{ddxroot.JoinRelative("plugins", name) + string(filepath.Separator), ".agents/skills/",
-		".claude/skills/",
-	}
+	// Stage project plugin intent. Skill shims are generated adapter state.
+	paths := []string{ddxroot.JoinRelative(registry.ProjectPluginLockFile)}
 	ctx := context.Background()
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {

@@ -41,7 +41,9 @@ ddx:
 > `ddx verify`, and generic `ddx update` are not part of the forward public
 > interface.
 >
-> Registry plugin installs write real project files for clone portability.
+> Registry plugin installs write project lock metadata and generated adapter
+> state for clone portability; payload bytes live in the shared cache/global
+> layer.
 > Local developer plugin installs use symlinks intentionally: `.ddx/plugins/<name>`
 > links to the local checkout, and `.agents/skills/<skill>` plus
 > `.claude/skills/<skill>` link directly to that checkout's skill directory.
@@ -53,8 +55,8 @@ ddx:
 > FEAT-011, DDx now ships a **single portable `ddx` skill** with
 > `SKILL.md` + `reference/*.md` (progressive disclosure, agentskills.io
 > standard). The installation flow described below is still accurate
-> in structure — binary separate from library, `ddx init` copies skills
-> as real files, `ddx plugin install <plugin>` adds plugin-scoped content —
+> in structure — binary separate from project metadata, `ddx init` creates
+> generated adapters, `ddx plugin install <plugin>` records plugin intent —
 > but any reference to the 7-skill roster should be read as historical
 > context. Sections that specifically describe the bootstrap
 > allowlist are now ["ddx"] instead of ["ddx-doctor", "ddx-run"], and
@@ -150,9 +152,11 @@ Desired behavior:
 
 3. **Project Structure Creation**
    - Creates `.ddx/` directory with config.yaml, library structure, and versions.yaml
-   - Installs the default `ddx` plugin through the embedded package installer
-   - Produces `.agents/skills/ddx/` and `.claude/skills/ddx/` as **real files** (no symlinks)
-   - All files are git-trackable for project portability
+   - Leaves the default `ddx` plugin available through the baked-in fallback
+     and generated harness skill adapters
+   - Produces `.agents/skills/ddx/` and `.claude/skills/ddx/` as generated
+     adapter state that can be recreated
+   - Commits only durable project metadata and guidance files
 
 3a. **Bootstrap Skill Cleanup (Stale ddx-* Removal)**
    - Before copying bootstrap skills, scans each target directory (`.ddx/skills/`, `.agents/skills/`, `.claude/skills/`) for existing `ddx-*` subdirectories
@@ -170,10 +174,11 @@ Desired behavior:
 
 5. **Project-Scoped Plugin Install**
    - Default: downloads released tarball from plugin's GitHub releases
-   - Extracts real files to `$PROJECT/.ddx/plugins/<name>/`
-   - Copies plugin skills as project files into `.agents/skills/<skill>` and
-     `.claude/skills/<skill>`
-   - Records project-local plugin state in `.ddx/plugins.yaml`
+   - Records plugin intent and the resolved version in `.ddx/plugins.lock.yaml`
+   - Extracts payload files to
+     `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`
+   - Materializes generated skill shims/links into
+     `.agents/skills/<skill>` and `.claude/skills/<skill>`
    - `ddx install <plugin>` is not the forward public interface and is not
      retained as a compatibility alias
 
@@ -183,7 +188,7 @@ Desired behavior:
      checkout path
    - Replaces `.agents/skills/<skill>` and `.claude/skills/<skill>` with direct
      symlinks to the local checkout skill directory
-   - Does not update `.ddx/plugins.yaml` version pin/state
+   - Does not update `.ddx/plugins.lock.yaml` version pin/state
    - Never auto-commits
    - Local overlay detection is `os.Lstat(".ddx/plugins/<name>")` returning a
      symlink
@@ -195,15 +200,15 @@ Desired behavior:
    - Real bootstrap skills and other plugins' skills are never removed
 
 5c. **Stale Install File Removal**
-   - The plugin registry tracks the set of files written by each install
-   - On registry reinstall or plugin upgrade, files from the previous install
-     that are absent from the new install's file list are removed
-   - Cleanup must use `os.Lstat` and must not follow symlinked plugin roots into
-     a developer checkout
+   - The plugin lock tracks generated adapter paths for each registry install
+   - `ddx plugin sync --force` may replace stale generated adapter paths
+   - Cleanup must use `os.Lstat` and must not follow symlinked local overlays
+     into a developer checkout
 
 6. **Plugin Manifest**
-   - Records registry-installed plugins in `.ddx/plugins.yaml`
-   - Tracks name, version, install source (release vs source), install date
+   - Records registry-installed plugins in `.ddx/plugins.lock.yaml`
+   - Tracks name, version, source, cache path, install date, and generated
+     adapter paths
    - Enables `ddx plugin list` to show project-scoped plugins
    - Enables `ddx plugin upgrade` to check for newer released versions
    - Local overlays are discovered from symlinked `.ddx/plugins/<name>` paths
@@ -237,7 +242,7 @@ Desired behavior:
       ```
       💡 Project skills from DDx v0.3.0 (you have v0.4.0). Run 'ddx init --force' to update.
       ```
-    - Plugin staleness: compare `.ddx/plugins.yaml` entries vs `BuiltinRegistry()` → soft hint:
+    - Plugin staleness: compare `.ddx/plugins.lock.yaml` entries vs `BuiltinRegistry()` → soft hint:
       ```
       💡 helix 1.0.0 installed, 2.0.0 available. Run 'ddx plugin upgrade helix' to update.
       ```
@@ -263,14 +268,16 @@ Desired behavior:
    - Checks plugin's GitHub releases for newer version
    - With a plugin name, upgrades that one registry-installed plugin
    - Without a plugin name, upgrades all registry-installed plugins
-   - Downloads new release tarball to `.ddx/plugins/<name>/` as real files
-   - Reinstalls plugin skills as project files
+   - Downloads new release tarball to the shared cache and updates
+     `.ddx/plugins.lock.yaml`
+   - Recreates generated plugin skill adapters with `ddx plugin sync`
    - Skips symlinked local overlays with explicit output:
      `helix is local-linked; skipped`
 
 ### Non-Functional
 
-- **No Repo Bloat:** plugins live in `.ddx/plugins/` (gitignored or committed per user preference)
+- **No Repo Bloat:** registry plugin payloads live in the shared cache/global
+  layer, not in project repositories.
 - **No Checked-In Plugin Payloads:** registry plugin assets resolve from a
   cache/global install and are materialized on demand, similar to `npx`.
 - **Generated Skills:** `ddx init` and `ddx plugin sync` may create
@@ -288,7 +295,7 @@ Desired behavior:
 - **Offline-First:** bootstrap skills work without network; version gate is local-only
 - **Idempotent:** multiple runs of same command produce same result
 - **Separation of Concerns:** `.ddx/config.yaml` for user preferences,
-  `.ddx/versions.yaml` for DDx binary compatibility, `.ddx/plugins.yaml` for
+  `.ddx/versions.yaml` for DDx binary compatibility, `.ddx/plugins.lock.yaml` for
   project-local plugin state
 
 ## Architecture
@@ -304,19 +311,18 @@ project/
 ├── .ddx/
 │   ├── config.yaml       (user preferences)
 │   ├── versions.yaml     (system-managed: ddx_version)
-│   ├── plugins.yaml      (project plugin state)
+│   ├── plugins.lock.yaml (project plugin intent + version lock)
 │   ├── library/
 │   ├── executions/       (tracked execute-bead attempt bundles; see FEAT-006)
 │   │   └── <attempt-id>/ (prompt.md, manifest.json, result.json, ...)
 │   └── plugins/
-│       └── helix/        (registry install: real files; local install: symlink)
-│           └── skills/helix/
+│       └── helix/        (local install overlay only: symlink to checkout)
 ├── .agents/skills/
-│   ├── ddx/              (real files, installed by package installer)
-│   └── helix/            (registry: real files; local: symlink to checkout)
+│   ├── ddx/              (generated adapter)
+│   └── helix/            (generated adapter or local checkout symlink)
 ├── .claude/skills/
-│   ├── ddx/              (real files, installed by package installer)
-│   └── helix/            (registry: real files; local: symlink to checkout)
+│   ├── ddx/              (generated adapter)
+│   └── helix/            (generated adapter or local checkout symlink)
 └── ...
 ```
 
@@ -327,7 +333,7 @@ project/
 | `curl install.sh \| bash` | Machine | Binary to `~/.local/bin/ddx` + PATH/completions |
 | `ddx upgrade` | Machine | Upgrade only the DDx binary |
 | `ddx init [--force]` | Project | `.ddx/` structure + built-in `ddx` skill + AGENTS/CLAUDE guidance |
-| `ddx plugin install <name>` | Project | Install registry plugin as real project files |
+| `ddx plugin install <name>` | Project | Record plugin lock metadata, cache payload, and materialize generated shims |
 | `ddx plugin install <name> --local <path>` | Project/dev | Symlink project plugin and skill paths to a local checkout |
 | `ddx plugin list` | Project | List project plugins and local overlays |
 | `ddx plugin upgrade [name]` | Project | Upgrade one or all registry-installed plugins; skip local overlays |
@@ -338,16 +344,19 @@ project/
 1. **Binary-only machine install**: The only DDx-owned home path is
    `~/.local/bin/ddx`. Plugins, skills, and state are project-local.
 
-2. **Copy for project bootstrap and registry plugins**: `ddx init` and
-   registry plugin installs write real files so clones and CI are portable.
+2. **Metadata plus cache for registry plugins**: `ddx init` and registry
+   plugin installs avoid checked-in payload copies. Clones and CI become
+   portable through `.ddx/plugins.lock.yaml` plus lazy cache/shim
+   materialization.
 
 3. **Symlink only for local plugin overlays**: `ddx plugin install --local`
    symlinks to a developer checkout for live iteration. This is machine-local
    state and is never a registry install artifact.
 
-4. **Project-scoped plugins**: Plugins install to the project, not globally.
+4. **Project-scoped plugin intent**: Plugin dependencies are recorded in the
+   project, while payload bytes resolve from the cache/global layer.
    This lets different projects use different plugin versions and keeps plugin
-   state in `.ddx/plugins.yaml`.
+   state in `.ddx/plugins.lock.yaml`.
 
 5. **Noun-owned plugin lifecycle**: `ddx plugin *` owns plugin install, list,
    upgrade, and uninstall. `ddx upgrade` owns the DDx binary.
@@ -383,22 +392,22 @@ test ! -e ~/.claude
 ```bash
 # In empty project directory
 ddx init
-ls .agents/skills/ddx/      # → real files (installed by package installer)
-ls .claude/skills/ddx/      # → real files (installed by package installer)
-git add .agents/ .claude/     # → works (real files tracked by git)
+ls .agents/skills/ddx/      # → generated adapter exists
+ls .claude/skills/ddx/      # → generated adapter exists
+git check-ignore .agents/skills/ddx .claude/skills/ddx
 ```
 
 ### AC-004: Plugin Installation (Project-Scoped)
 ```bash
 # In initialized project
 ddx plugin install helix
-test -d .ddx/plugins/helix
-test ! -L .ddx/plugins/helix
-test -f .agents/skills/helix/SKILL.md
-test ! -L .agents/skills/helix
-test -f .claude/skills/helix/SKILL.md
-test ! -L .claude/skills/helix
-test -f .ddx/plugins.yaml
+test -f .ddx/plugins.lock.yaml
+test ! -e .ddx/plugins/helix
+test -L .agents/skills/helix
+test -L .claude/skills/helix
+ddx plugin sync
+test -L .agents/skills/helix
+test -L .claude/skills/helix
 ```
 
 ### AC-004a: Local Plugin Overlay

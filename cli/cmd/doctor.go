@@ -301,6 +301,11 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	checkInstalledLaunchers(verbose)
 
 	if auditPlugins {
+		projectPluginIssues := checkProjectPluginLockState(cmd.Context(), projectRoot, verbose)
+		if len(projectPluginIssues) > 0 {
+			allGood = false
+			issues = append(issues, projectPluginIssues...)
+		}
 		pluginIssues := checkInstalledPlugins(verbose)
 		if len(pluginIssues) > 0 {
 			allGood = false
@@ -966,6 +971,66 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 	}
 
 	return issues
+}
+
+func checkProjectPluginLockState(ctx context.Context, projectRoot string, verbose bool) []DiagnosticIssue {
+	lock, err := registry.LoadProjectPluginLock(ctx, projectRoot)
+	if err != nil || len(lock.Plugins) == 0 {
+		return nil
+	}
+
+	fmt.Print("✓ Checking Project Plugin Lock... ")
+	var issues []DiagnosticIssue
+	var details []string
+	for _, entry := range lock.Plugins {
+		status := projectPluginLockStatus(ctx, projectRoot, entry)
+		cachePath := entry.CachePath
+		if cachePath == "" {
+			cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
+		}
+		detail := fmt.Sprintf("%s %s: lock present, cache %s, shims %s",
+			entry.Name, entry.Version, boolWord(status != "cache-missing"), boolWord(status != "shims-missing"))
+		if status == "local-overlay" {
+			detail = fmt.Sprintf("%s %s: lock present, local overlay active", entry.Name, entry.Version)
+		}
+		if verbose && status != "local-overlay" {
+			detail += fmt.Sprintf(" (%s)", cachePath)
+		}
+		details = append(details, detail)
+		switch status {
+		case "ok", "local-overlay":
+		default:
+			issues = append(issues, DiagnosticIssue{
+				Type:        "plugin_lock_state",
+				Description: fmt.Sprintf("%s %s: %s", entry.Name, entry.Version, status),
+				Remediation: []string{
+					fmt.Sprintf("Run 'ddx plugin sync' to recreate generated shims for %s", entry.Name),
+					fmt.Sprintf("Run 'ddx plugin install %s --force' if the plugin cache is missing", entry.Name),
+				},
+				SystemInfo: map[string]string{
+					"plugin": entry.Name,
+					"cache":  cachePath,
+					"status": status,
+				},
+			})
+		}
+	}
+	if len(issues) == 0 {
+		fmt.Println("✅ Project Plugin Lock")
+	} else {
+		fmt.Printf("⚠️  Project Plugin Lock (%d issue(s))\n", len(issues))
+	}
+	for _, detail := range details {
+		fmt.Printf("   %s\n", detail)
+	}
+	return issues
+}
+
+func boolWord(ok bool) string {
+	if ok {
+		return "present"
+	}
+	return "missing"
 }
 
 func looksLikePluginInstall(entry registry.InstalledEntry) bool {

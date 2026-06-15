@@ -89,6 +89,10 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
+	// registryOverride, when non-nil, replaces the built-in plugin registry
+	// for install/list/show command tests.
+	registryOverride *registry.Registry
+
 	// workBinaryPathOverride, when non-nil, resolves the installed ddx binary
 	// used for watch-mode self-refresh checks.
 	workBinaryPathOverride func() string
