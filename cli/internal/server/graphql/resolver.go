@@ -79,12 +79,23 @@ type ActionDispatcher interface {
 	StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error)
 }
 
+// WorkerStateManager provides desired-state control and explicit restart for
+// server-managed workers. Separate from ActionDispatcher so existing tests
+// that implement ActionDispatcher are not broken.
+type WorkerStateManager interface {
+	SetWorkerDesiredState(projectRoot string, desiredCount int, restartEnabled bool) (*WorkerLifecycleResult, error)
+	RestartWorker(id string) (*WorkerLifecycleResult, error)
+	ReconcileWorkers(projectRoot string) (*WorkerLifecycleResult, error)
+}
+
 type Resolver struct {
 	State      StateProvider
 	WorkingDir string
 	Workers    ProgressSubscriber
 	BeadBus    BeadLifecycleSubscriber
 	Actions    ActionDispatcher
+	// WorkerState provides desired-state supervision control for managed workers.
+	WorkerState WorkerStateManager
 	// ExecLogs provides execution run log retrieval for the executionEvidence
 	// subscription. If nil, that subscription returns an error.
 	ExecLogs ExecLogProvider

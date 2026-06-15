@@ -985,6 +985,10 @@ func (s *Server) routes() {
 	trusted("POST /api/agent/workers/prune", s.handlePruneAgentWorkers)
 	legacy("GET /api/agent/workers/{id}", s.handleAgentWorkerShow)
 	trusted("POST /api/agent/workers/{id}/stop", s.handleStopAgentWorker)
+	trusted("PUT /api/agent/workers/desired", s.handleSetWorkerDesiredState)
+	trusted("POST /api/agent/workers/{id}/restart", s.handleRestartAgentWorker)
+	trusted("POST /api/agent/workers/reconcile", s.handleReconcileWorkers)
+	trusted("POST /api/agent/workers/cleanup", s.handleCleanupWorkers)
 	legacy("GET /api/agent/workers/{id}/log", s.handleAgentWorkerLog)
 	legacy("GET /api/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
 	legacy("GET /api/agent/coordinators", s.handleAgentCoordinators)
@@ -2692,6 +2696,93 @@ func (s *Server) handleStopAgentWorker(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "stopping"})
+}
+
+func (s *Server) handleSetWorkerDesiredState(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	var input struct {
+		ProjectRoot    string `json:"project_root"`
+		DesiredCount   int    `json:"desired_count"`
+		RestartEnabled bool   `json:"restart_enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body: " + err.Error()})
+		return
+	}
+	projectRoot := input.ProjectRoot
+	if projectRoot == "" {
+		projectRoot = s.workingDirForRequest(r)
+	}
+	state := &WorkerDesiredState{
+		Version:      WorkerDesiredStateVersion,
+		ProjectRoot:  projectRoot,
+		DesiredCount: input.DesiredCount,
+		Restart:      WorkerRestartPolicy{Enabled: input.RestartEnabled},
+	}
+	if err := SaveWorkerDesiredState(projectRoot, state); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"project_root":    projectRoot,
+		"desired_count":   input.DesiredCount,
+		"restart_enabled": input.RestartEnabled,
+		"status":          "saved",
+	})
+}
+
+func (s *Server) handleRestartAgentWorker(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+	m := s.workerManagerForRequest(r)
+	rec, err := m.RestartWorker(id, 0)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": rec.ID, "old_id": id, "status": rec.State})
+}
+
+func (s *Server) handleReconcileWorkers(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	wd := s.workingDirForRequest(r)
+	m := s.workerManagerForRequest(r)
+	sup := NewWorkerSupervisor(wd, m)
+	result, err := sup.Reconcile()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) handleCleanupWorkers(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
+		return
+	}
+	wd := s.workingDirForRequest(r)
+	m := s.workerManagerForRequest(r)
+	sup := NewWorkerSupervisor(wd, m)
+	result, err := sup.Reconcile()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (s *Server) handlePruneAgentWorkers(w http.ResponseWriter, r *http.Request) {
@@ -5235,6 +5326,7 @@ func (s *Server) graphqlHandler() http.Handler {
 		resolver.Workers = s.workers
 		resolver.BeadBus = s.beadHub
 		resolver.Actions = &workerDispatchAdapter{manager: s.workers}
+		resolver.WorkerState = &workerStateManagerAdapter{manager: s.workers}
 		resolver.ExecLogs = &execLogAdapter{}
 		resolver.CoordMetrics = &coordMetricsAdapter{reg: s.workers.LandCoordinators}
 		resolver.CSRFTokens = s.csrfTokens

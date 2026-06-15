@@ -516,6 +516,14 @@ func workerFromRecord(rec WorkerRecord) *ddxgraphql.Worker {
 	if rec.LandSummary != nil {
 		w.LandSummary = landSummaryFromRecord(rec.LandSummary)
 	}
+	if rec.Managed {
+		t := true
+		w.Managed = &t
+	}
+	if rec.RestartCount > 0 {
+		rc := rec.RestartCount
+		w.RestartCount = &rc
+	}
 	return w
 }
 

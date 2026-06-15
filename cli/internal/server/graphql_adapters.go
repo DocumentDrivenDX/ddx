@@ -209,3 +209,62 @@ func (a *workerDispatchAdapter) StopWorker(ctx context.Context, id string) (*ddx
 		Kind:  rec.Kind,
 	}, nil
 }
+
+// workerStateManagerAdapter implements ddxgraphql.WorkerStateManager using the
+// live WorkerManager and WorkerSupervisor machinery.
+type workerStateManagerAdapter struct {
+	manager *WorkerManager
+}
+
+func (a *workerStateManagerAdapter) SetWorkerDesiredState(projectRoot string, desiredCount int, restartEnabled bool) (*ddxgraphql.WorkerLifecycleResult, error) {
+	if a == nil || a.manager == nil {
+		return nil, fmt.Errorf("worker state manager is not configured")
+	}
+	state := &WorkerDesiredState{
+		Version:      WorkerDesiredStateVersion,
+		ProjectRoot:  projectRoot,
+		DesiredCount: desiredCount,
+		Restart:      WorkerRestartPolicy{Enabled: restartEnabled},
+	}
+	if err := SaveWorkerDesiredState(projectRoot, state); err != nil {
+		return nil, fmt.Errorf("set desired state: %w", err)
+	}
+	return &ddxgraphql.WorkerLifecycleResult{
+		ID:    projectRoot,
+		State: fmt.Sprintf("desired_count=%d restart=%v", desiredCount, restartEnabled),
+		Kind:  "desired-state",
+	}, nil
+}
+
+func (a *workerStateManagerAdapter) RestartWorker(id string) (*ddxgraphql.WorkerLifecycleResult, error) {
+	if a == nil || a.manager == nil {
+		return nil, fmt.Errorf("worker state manager is not configured")
+	}
+	rec, err := a.manager.RestartWorker(id, 0)
+	if err != nil {
+		return nil, err
+	}
+	return &ddxgraphql.WorkerLifecycleResult{
+		ID:    rec.ID,
+		State: rec.State,
+		Kind:  rec.Kind,
+	}, nil
+}
+
+func (a *workerStateManagerAdapter) ReconcileWorkers(projectRoot string) (*ddxgraphql.WorkerLifecycleResult, error) {
+	if a == nil || a.manager == nil {
+		return nil, fmt.Errorf("worker state manager is not configured")
+	}
+	sup := NewWorkerSupervisor(projectRoot, a.manager)
+	result, err := sup.Reconcile()
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
+	}
+	summary := fmt.Sprintf("started=%d restarted=%d stopped=%d stale=%d",
+		len(result.Started), len(result.Restarted), len(result.Stopped), len(result.StaleMarked))
+	return &ddxgraphql.WorkerLifecycleResult{
+		ID:    projectRoot,
+		State: summary,
+		Kind:  "reconcile",
+	}, nil
+}

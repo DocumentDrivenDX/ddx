@@ -138,6 +138,12 @@ type WorkerRecord struct {
 	// to disk. True when PID > 0 and the process is alive, false when PID > 0
 	// but the process has exited. Omitted (nil) when PID == 0 (goroutine-only).
 	PIDAlive *bool `json:"pid_alive,omitempty"`
+	// Managed marks a worker started by the WorkerSupervisor rather than
+	// an external caller or the operator directly.
+	Managed bool `json:"managed,omitempty"`
+	// RestartCount is the number of times this worker was restarted by
+	// the supervisor's restart policy.
+	RestartCount int `json:"restart_count,omitempty"`
 }
 
 type WorkerExecutionResult struct {
@@ -1786,6 +1792,42 @@ func (m *WorkerManager) Stop(id string) error {
 	}
 	m.mu.Unlock()
 	return nil
+}
+
+// RestartWorker stops worker id (if still alive) then starts a new worker
+// using the spec recorded at worker start time. It returns the new WorkerRecord.
+// The caller may pass restartCount to record how many times the worker has been
+// restarted; the new record will have RestartCount set to that value.
+func (m *WorkerManager) RestartWorker(id string, restartCount int) (WorkerRecord, error) {
+	old, err := m.Show(id)
+	if err != nil {
+		return WorkerRecord{}, fmt.Errorf("restart worker: show %s: %w", id, err)
+	}
+	// Stop the old worker; ignore "already stopped" errors.
+	_ = m.Stop(id)
+
+	// Read the original spec from disk.
+	dir := filepath.Join(m.rootDir, id)
+	specPath := filepath.Join(dir, "spec.json")
+	specData, err := os.ReadFile(specPath)
+	if err != nil {
+		return WorkerRecord{}, fmt.Errorf("restart worker: read spec for %s: %w", id, err)
+	}
+	var spec ExecuteLoopWorkerSpec
+	if err := json.Unmarshal(specData, &spec); err != nil {
+		return WorkerRecord{}, fmt.Errorf("restart worker: parse spec for %s: %w", id, err)
+	}
+	// Preserve project root from the old record when spec has none.
+	if spec.ProjectRoot == "" {
+		spec.ProjectRoot = old.ProjectRoot
+	}
+	rec, err := m.StartExecuteLoop(spec)
+	if err != nil {
+		return WorkerRecord{}, fmt.Errorf("restart worker: start: %w", err)
+	}
+	rec.Managed = true
+	rec.RestartCount = restartCount
+	return rec, nil
 }
 
 // ensureWatchdog starts the supervisor goroutine exactly once per manager.

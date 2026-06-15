@@ -1947,6 +1947,9 @@ type ReportedWorker struct {
 	CurrentBead *string `json:"currentBead,omitempty"`
 	// Attempt ID from the most recent event/backfill payload, if any.
 	CurrentAttempt *string `json:"currentAttempt,omitempty"`
+	// Managed is always false for reported workers; they are observed externally,
+	// not started by the server supervisor.
+	Managed bool `json:"managed"`
 }
 
 // ResultSpec describes how to interpret an execution result
@@ -2444,6 +2447,11 @@ type Worker struct {
 	RecentEvents []*WorkerRecentEvent `json:"recentEvents"`
 	// Operator lifecycle actions recorded for this worker
 	LifecycleEvents []*WorkerLifecycleEvent `json:"lifecycleEvents"`
+	// True when this worker was started by the server supervisor (managed).
+	// False for externally-started workers.
+	Managed *bool `json:"managed,omitempty"`
+	// Number of times this worker has been restarted by the supervisor.
+	RestartCount *int `json:"restartCount,omitempty"`
 }
 
 func (Worker) IsNode() {}
