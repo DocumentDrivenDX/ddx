@@ -250,6 +250,32 @@ func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
 	}
 }
 
+func TestCleanupCurrentProcessProviderProbesRunsFollowupSweeps(t *testing.T) {
+	root := t.TempDir()
+	calls := make(chan []string, 4)
+	oldCleanup := reapCurrentProcessProviderProbes
+	oldDelays := providerProbeCleanupFollowupDelays
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) {
+		calls <- append([]string(nil), scopeDirs...)
+	}
+	providerProbeCleanupFollowupDelays = []time.Duration{5 * time.Millisecond, 10 * time.Millisecond}
+	t.Cleanup(func() {
+		reapCurrentProcessProviderProbes = oldCleanup
+		providerProbeCleanupFollowupDelays = oldDelays
+	})
+
+	cleanupCurrentProcessProviderProbes(root)
+
+	for i := 0; i < 3; i++ {
+		select {
+		case got := <-calls:
+			assert.Contains(t, got, root)
+		case <-time.After(200 * time.Millisecond):
+			t.Fatalf("cleanup call %d did not run", i+1)
+		}
+	}
+}
+
 func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
 	root := t.TempDir()
 	type cleanupCall struct {
