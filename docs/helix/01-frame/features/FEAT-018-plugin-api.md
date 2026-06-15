@@ -19,7 +19,8 @@ DDx plugins extend the platform with methodology-specific capabilities. The
 plugin API is the set of contracts that plugin authors depend on: package
 descriptors, directory layout, skill format, hook scripts, and bead
 conventions. This feature documents the existing surfaces, adds schema
-versioning, and commits to backward compatibility.
+versioning, defines marketplace materialization behavior, and commits to
+backward compatibility.
 
 ## Problem Statement
 
@@ -36,7 +37,8 @@ Hook scripts work but their invocation contract is undocumented.
 
 **Desired outcome:** Plugin authors can read a single reference document,
 validate their plugin against a schema, and trust that documented surfaces
-won't break without a major version bump.
+won't break without a major version bump. Project operators can install a
+marketplace plugin without checking the plugin payload into the repository.
 
 ## Extension Surfaces
 
@@ -55,13 +57,22 @@ Should move to a `package.yaml` in each plugin repo.
 | `type` | enum | yes | `workflow`, `plugin`, `persona-pack`, `template-pack` |
 | `source` | string | yes | Repository URL |
 | `api_version` | string | yes | DDx plugin API version (e.g., `1`) |
-| `install.root` | mapping | no | Copy entire plugin to target |
-| `install.skills` | []mapping | no | Skill symlink targets |
+| `distribution` | object | no | Marketplace/release resolution metadata: registry id, version, checksum, cache key |
+| `materialize` | object | no | Generated adapter targets such as agent skill shims; these are not committed source assets |
+| `install.root` | mapping | no | Compatibility copy target for legacy/local overlays only |
+| `install.skills` | []mapping | no | Compatibility skill targets for local overlays; registry installs should use `materialize.skills` |
 | `install.scripts` | mapping | no | CLI entrypoint symlink |
 | `install.executable` | []string | no | Paths needing execute bit |
 | `requires` | []string | no | DDx version constraints |
 | `keywords` | []string | no | Search/discovery tags |
 | `artifact_type_roots` | []string | no | Glob roots for artifact-type definitions when the plugin does not ship a `workflows/` tree (see Surface 6) |
+
+Registry/marketplace packages are installed like npm/npx packages: the project
+records intent and a lock entry, DDx resolves the payload into a cache/global
+package directory, and only generated adapter files are written into the
+project worktree. `install.root` remains for local development overlays and
+legacy compatibility; new marketplace plugins should not require copying their
+payload tree into `.ddx/plugins/<name>/`.
 
 ### 2. Plugin Directory Layout
 
@@ -76,6 +87,11 @@ Should move to a `package.yaml` in each plugin repo.
   bin/                      # Binary wrappers (optional)
   docs/                     # Plugin documentation (optional)
 ```
+
+The layout above is the package payload layout. Marketplace installs keep that
+payload in the resolved package cache. Project worktrees should contain only
+metadata and generated adapters unless the operator explicitly chooses an
+in-tree/local overlay.
 
 ### 3. SKILL.md Format
 
@@ -225,14 +241,19 @@ do not affect DDx graph semantics.
    entries serve as fallback when no `package.yaml` exists.
 2. **API version field** — `package.yaml` declares `api_version: 1`. DDx
    validates compatibility on install.
-3. **Plugin validation** (`ddx doctor --plugins`) — check installed plugins
+3. **Marketplace materialization** — registry installs write project plugin
+   intent/lock metadata, resolve payloads into the DDx cache/global package
+   layer, and materialize `.agents/skills/*` / `.claude/skills/*` shims on
+   demand. The full plugin payload is not copied into the project for normal
+   marketplace installs.
+4. **Plugin validation** (`ddx doctor --plugins`) — check installed plugins
    for structural issues: missing SKILL.md, broken symlinks, missing
    required fields, duplicate artifact-type prefixes, malformed `meta.yml`.
-4. **Extension surface documentation** — ship a reference document with DDx
+5. **Extension surface documentation** — ship a reference document with DDx
    describing all surfaces, field types, and compatibility guarantees.
-5. **Backward compatibility** — changes to documented surfaces follow semver:
+6. **Backward compatibility** — changes to documented surfaces follow semver:
    additions in minor versions, removals only in major versions.
-6. **Artifact-type discovery** — DDx discovers artifact types per the
+7. **Artifact-type discovery** — DDx discovers artifact types per the
    contract in Surface 6. The new shape is mandated for plugins authored
    against `api_version: 1`; the legacy
    `.ddx/library/artifacts/<type>/{template,create,evolve,check}.md`
@@ -245,6 +266,8 @@ do not affect DDx graph semantics.
   points speculatively.
 - **Validation over convention** — prefer schema validation over naming
   conventions where possible.
+- **No project payload bloat** — registry plugin installs should leave the
+  project with metadata plus generated shims, not a copied plugin tree.
 
 ## User Stories
 
@@ -259,6 +282,10 @@ do not affect DDx graph semantics.
   installs it as a project-local symlink overlay
 - Given my package.yaml has `api_version: 1`, when DDx is at a compatible
   version, then install succeeds
+- Given my plugin is installed from the marketplace, when the project is
+  cloned, then `ddx plugin sync` or the first plugin-consuming command restores
+  the agent shims from the lockfile/cache without requiring checked-in payload
+  assets
 
 ### US-181: Plugin Author Validates Their Plugin
 **As a** plugin author checking my work

@@ -13,6 +13,20 @@ ddx:
 **Priority:** P0
 **Owner:** DDx Team
 
+> **Update 2026-06-15 (marketplace plugin materialization):** HELIX is now
+> available as a marketplace plugin, so DDx project bootstrap must move away
+> from vendoring reusable workflow assets into every repository. The forward
+> model is npm/npx-like: a project records plugin intent and version pins in
+> DDx-managed metadata, while plugin payloads resolve from the marketplace into
+> an XDG cache or global install and are materialized into agent-readable
+> directories on demand. `.agents/skills/*` and `.claude/skills/*` are generated
+> shims/links, not source assets to check in. `ddx init [path]` may still write
+> small project governance files (`.ddx/config.yaml`, `.ddx/versions.yaml`,
+> `AGENTS.md`, `.gitignore` rules), but it must not require copying HELIX, DDx,
+> or other marketplace plugin asset trees into the repository for the project
+> to work. Clone portability comes from the lockfile plus lazy resolution, not
+> from committing plugin payloads.
+>
 > **Update 2026-05-12 (single forward install model):** This feature is
 > amended to remove all global/home plugin and skill installation behavior.
 > The only DDx-managed file under a user's home directory is the DDx binary at
@@ -58,17 +72,19 @@ Redesign the DDx installation architecture with a clean separation of concerns:
 - **ddx upgrade** — binary only: upgrades `~/.local/bin/ddx`. It never mutates
   project files, plugins, skills, beads, or docs.
 - **ddx init** — project bootstrap only: writes `<projectRoot>/.ddx/`,
-  `<projectRoot>/.agents/skills/`, `<projectRoot>/.claude/skills/`,
-  `AGENTS.md`, and `CLAUDE.md` as project files.
-- **ddx plugin install <name>** — registry plugin install: writes real project
-  files under `<projectRoot>/.ddx/plugins/<name>/`, installs plugin skill
-  project files, and records plugin state in `<projectRoot>/.ddx/plugins.yaml`.
+  `AGENTS.md`, `.gitignore` rules, and version/lock metadata as project files.
+  Agent skill directories are generated from the installed plugin graph and are
+  intentionally ignored.
+- **ddx plugin install <name>** — registry plugin install: records project
+  intent and a version pin, resolves the plugin payload into the cache/global
+  install layer, and materializes local agent shims/links as needed.
 - **ddx plugin install <name> --local <path>** — developer overlay: symlinks
   project-local plugin and skill paths to the local checkout. It never updates
   the registry version pin and never auto-commits.
 - **ddx plugin list / upgrade / uninstall** — project plugin lifecycle only.
 
-DDx does not install skills, plugins, or plugin state into `$HOME`.
+DDx does not require project repositories to check in marketplace plugin
+payloads.
 
 ## Scope Invariant
 
@@ -76,19 +92,23 @@ DDx does not install skills, plugins, or plugin state into `$HOME`.
 to `~/.local/bin/ddx` and installer-owned shell integration. They must not
 write `~/.ddx`, `~/.agents`, or `~/.claude`.
 
-**Project scope:** DDx-managed project content lives under the repository:
-`.ddx/` (plugins, config, versions), `.agents/skills/`, `.claude/skills/` (installer outputs),
-`AGENTS.md`, and `CLAUDE.md`.
+**Project scope:** DDx-managed project content that should be committed lives
+under `.ddx/` (config, versions, plugin intent/lock metadata, beads and
+evidence), `AGENTS.md`, and DDx-managed ignore rules. `.agents/skills/` and
+`.claude/skills/` are generated agent adapters and should not be committed.
 
-**Registry plugin installs:** install real files for clone portability and
-cross-platform safety.
+**Registry plugin installs:** record a durable plugin dependency and lock
+version in the project. Payload files live in the plugin cache/global install
+layer and are rematerialized on demand.
 
 **Local plugin overlays:** intentionally use symlinks because they are
 machine-local developer state. Local overlays are detected by
 `.ddx/plugins/<name>` being a symlink.
 
-**Manifest validation:** Plugin manifests whose install targets begin with
-`~` are invalid. Targets must be project-relative paths under `<projectRoot>/`.
+**Manifest validation:** Plugin manifests whose install targets require
+committing generated agent adapters are invalid. Registry plugin payloads must
+be resolvable from the lockfile/cache path; local overlay symlinks remain
+developer-only state.
 
 ## No Legacy Home Compatibility
 
@@ -251,7 +271,11 @@ Desired behavior:
 ### Non-Functional
 
 - **No Repo Bloat:** plugins live in `.ddx/plugins/` (gitignored or committed per user preference)
-- **Git-Trackable Skills:** `ddx init` copies real files, not symlinks
+- **No Checked-In Plugin Payloads:** registry plugin assets resolve from a
+  cache/global install and are materialized on demand, similar to `npx`.
+- **Generated Skills:** `ddx init` and `ddx plugin sync` may create
+  `.agents/skills/*` and `.claude/skills/*`, but those directories are
+  generated shims/links and are ignored by default.
 - **Git-Trackable Versions:** `.ddx/versions.yaml` committed to git — teammates get version gate on clone
 - **Git-Trackable Execution Evidence:** `.ddx/executions/<attempt-id>/` is
   the tracked execute-bead attempt bundle defined in FEAT-006 §"Execute-Bead
