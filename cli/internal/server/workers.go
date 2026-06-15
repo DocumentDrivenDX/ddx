@@ -787,10 +787,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 			beadStore := bead.NewStore(ddxroot.JoinProject(projectRoot))
+			attemptSvc, svcErr := agent.ResolveServiceFromWorkDirCtx(ctx, projectRoot)
+			if svcErr != nil {
+				return agent.ExecuteBeadReport{}, fmt.Errorf("agent: build service: %w", svcErr)
+			}
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				FromRev:          spec.FromRev,
 				BeadEvents:       beadStore,
 				BeadCancel:       beadStore,
+				Service:          attemptSvc,
 				RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
 			}, gitOps)
 			if err != nil && res == nil {
@@ -854,7 +859,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				defer cancel()
 				// Tie the fizeau service to modelCtx so its background probe
 				// goroutines terminate when this short-lived lookup ends.
-				if svc, svcErr := agent.NewServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
+				if svc, svcErr := agent.ResolveServiceFromWorkDirCtx(modelCtx, projectRoot); svcErr == nil {
 					modelFilter := agentlib.ModelFilter{}
 					if harness := rcfg.Harness(); harness != "" {
 						modelFilter.Harness = harness
@@ -871,7 +876,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			// outlive this cost-cap check.
 			cbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
-			svc, svcErr := agent.NewServiceFromWorkDirCtx(cbCtx, projectRoot)
+			svc, svcErr := agent.ResolveServiceFromWorkDirCtx(cbCtx, projectRoot)
 			if svcErr != nil {
 				return true
 			}

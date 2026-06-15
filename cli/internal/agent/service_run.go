@@ -56,6 +56,18 @@ func ResolveServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
 	return resolveService(workDir)
 }
 
+// ResolveServiceFromWorkDirCtx returns a context-scoped service instance for
+// the workdir, honoring any test override installed via SetServiceRunFactory.
+// Production callers with request/attempt lifetimes should prefer this helper
+// so Fizeau background probes are cancelled when ctx is cancelled.
+func ResolveServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib.FizeauService, error) {
+	factory := serviceRunFactory
+	if factory != nil {
+		return factory(workDir)
+	}
+	return NewServiceFromWorkDirCtx(ctx, workDir)
+}
+
 // resolveService returns a FizeauService for workDir, using the test-injected
 // factory when set and the production NewServiceFromWorkDir otherwise. All
 // internal callers (RunWithConfigViaService, ValidateForExecuteLoopViaService,

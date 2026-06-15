@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -37,13 +38,23 @@ func (s *resolveRouteFailingService) Execute(_ context.Context, req agentlib.Ser
 	s.executeReqs = append(s.executeReqs, req)
 	s.mu.Unlock()
 
+	finalText := "ok"
+	if req.Permissions == "safe" {
+		finalText = `{"classification":"ready","score":100,"rationale":"ready","difficulty":{"estimated_difficulty":"small"},"readiness_checks":[{"name":"scope","verdict":true}]}`
+	}
 	ch := make(chan agentlib.ServiceEvent, 1)
 	final := map[string]any{
 		"status":      "success",
-		"final_text":  "ok",
+		"final_text":  finalText,
 		"exit_code":   0,
 		"error":       "",
 		"session_log": "session.log",
+		"routing_actual": map[string]any{
+			"harness":  nonEmptyOr(req.Harness, "claude-tui"),
+			"provider": nonEmptyOr(req.Provider, "anthropic"),
+			"model":    nonEmptyOr(req.Model, "opus-4.7"),
+			"power":    positiveOr(req.MinPower, 10),
+		},
 	}
 	data, err := json.Marshal(final)
 	if err != nil {
@@ -52,6 +63,28 @@ func (s *resolveRouteFailingService) Execute(_ context.Context, req agentlib.Ser
 	ch <- agentlib.ServiceEvent{Type: "final", Data: data}
 	close(ch)
 	return ch, nil
+}
+
+func nonEmptyOr(value, fallback string) string {
+	if strings.TrimSpace(value) != "" {
+		return value
+	}
+	return fallback
+}
+
+func positiveOr(value, fallback int) int {
+	if value > 0 {
+		return value
+	}
+	return fallback
+}
+
+func prefix(value string, limit int) string {
+	value = strings.ReplaceAll(value, "\n", "\\n")
+	if len(value) <= limit {
+		return value
+	}
+	return value[:limit]
 }
 
 func (s *resolveRouteFailingService) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
@@ -126,6 +159,7 @@ func installResolveRouteFailingService(t *testing.T) *resolveRouteFailingService
 func setupWorkerResolveRouteRepo(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
+	t.Setenv("DDX_EXEC_WT_DIR", filepath.Join(root, ddxroot.DirName, "exec-worktrees"))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# test\n"), 0o644))
 	runCmd(t, root, "git", "init", "-b", "main")
 	runCmd(t, root, "git", "config", "user.name", "Test")
@@ -136,6 +170,9 @@ func setupWorkerResolveRouteRepo(t *testing.T) string {
 	ddxDir := filepath.Join(root, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+bead-quality:
+  lint:
+    block_threshold_score: 0
 library:
   path: ".ddx/plugins/ddx"
   repository:
@@ -143,7 +180,22 @@ library:
     branch: "main"
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
+	skillDir := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
 	return root
+}
+
+func seedWorkerResolveRouteBead(t *testing.T, root, id string) {
+	t.Helper()
+	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    id,
+		Title: "worker resolve-route regression bead",
+	}))
+	runCmd(t, root, "git", "add", "-A")
+	runCmd(t, root, "git", "commit", "-m", "seed worker bead")
 }
 
 // TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel verifies
@@ -154,14 +206,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 
 	svc := installResolveRouteFailingService(t)
 	root := setupWorkerResolveRouteRepo(t)
-	store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
-	require.NoError(t, store.Init(context.Background()))
-	require.NoError(t, store.Create(context.Background(), &bead.Bead{
-		ID:    "ddx-worker-resolve-route-test",
-		Title: "worker resolve-route regression bead",
-	}))
-	runCmd(t, root, "git", "add", ".ddx/config.yaml", ".ddx/beads.jsonl")
-	runCmd(t, root, "git", "commit", "-m", "seed worker bead")
+	seedWorkerResolveRouteBead(t, root, "ddx-worker-resolve-route-test")
 
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()
@@ -184,7 +229,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 		return svc.executeCalled
 	}, 2*time.Second, 10*time.Millisecond, "worker must reach Execute promptly")
 
-	final := waitForWorkerExit(t, m, record.ID, 6*time.Second)
+	final := waitForWorkerExit(t, m, record.ID, 15*time.Second)
 	assert.NotEqual(t, "failed", final.State, "worker should complete without a ResolveRoute failure")
 
 	svc.mu.Lock()
@@ -204,6 +249,78 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 		}
 	}
 	assert.True(t, foundPinnedExecute, "harness/model pins must pass through to the primary Execute call")
+}
+
+// TestWorkerExecutionDefaultProfileUsesServiceExecute verifies the unpinned
+// server-managed worker path used by project canaries. A default profile must
+// still reach Fizeau Execute with unrestricted permissions and without a
+// ResolveRoute preflight.
+func TestWorkerExecutionDefaultProfileUsesServiceExecute(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	svc := installResolveRouteFailingService(t)
+	root := setupWorkerResolveRouteRepo(t)
+	seedWorkerResolveRouteBead(t, root, "ddx-worker-default-profile-route-test")
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.LandCoordinators.gitOpsOverride = &fakeLandingGitOps{}
+	t.Cleanup(func() {
+		m.LandCoordinators.StopAll()
+	})
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Profile:  "default",
+		NoReview: true,
+		Mode:     "once",
+	})
+	require.NoError(t, err)
+
+	if !assert.Eventually(t, func() bool {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		for _, req := range svc.executeReqs {
+			if req.Role == "implementer" {
+				return true
+			}
+		}
+		return false
+	}, 20*time.Second, 10*time.Millisecond, "worker must reach implementation Execute promptly") {
+		svc.mu.Lock()
+		reqs := append([]agentlib.ServiceExecuteRequest(nil), svc.executeReqs...)
+		svc.mu.Unlock()
+		for i, req := range reqs {
+			t.Logf("request[%d]: role=%q policy=%q harness=%q model=%q permissions=%q prompt_prefix=%q", i, req.Role, req.Policy, req.Harness, req.Model, req.Permissions, prefix(req.Prompt, 80))
+		}
+		current, showErr := m.Show(record.ID)
+		t.Logf("worker state: record=%+v err=%v", current, showErr)
+		if data, readErr := os.ReadFile(filepath.Join(root, record.StdoutPath)); readErr == nil {
+			t.Logf("worker log:\n%s", string(data))
+		} else {
+			t.Logf("worker log read error: %v", readErr)
+		}
+		t.FailNow()
+	}
+	require.NoError(t, m.Stop(record.ID))
+
+	svc.mu.Lock()
+	executeCalled := svc.executeCalled
+	resolveCalled := svc.resolveCalled
+	var implementerReq agentlib.ServiceExecuteRequest
+	for _, req := range svc.executeReqs {
+		if req.Role == "implementer" {
+			implementerReq = req
+			break
+		}
+	}
+	svc.mu.Unlock()
+
+	require.True(t, executeCalled, "worker must reach Execute")
+	assert.False(t, resolveCalled, "worker execution must not call ResolveRoute")
+	assert.Equal(t, "default", implementerReq.Policy, "profile must pass through to Fizeau Execute")
+	assert.Equal(t, "unrestricted", implementerReq.Permissions, "execute-bead workers must run with unrestricted permissions in the isolated worktree")
+	assert.Empty(t, implementerReq.Harness, "default worker path must not synthesize a harness pin")
+	assert.Empty(t, implementerReq.Model, "default worker path must not synthesize a model pin")
 }
 
 // TestWorkerRoutinglintNoResolveRouteInExecutionPaths guards the server-side
