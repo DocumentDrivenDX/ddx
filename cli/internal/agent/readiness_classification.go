@@ -102,6 +102,9 @@ func ClassifyReadinessWithMode(classification string, reasons []string, detail, 
 	classification = normalizeReadinessClassification(classification)
 	reason := firstReadinessReason(reasons)
 	systemReason := classifyReadinessSystemReason(detail, reasons)
+	if systemReason == ReadinessSystemReasonSchemaDrift && isCanonicalNonSystemReadinessClassification(classification) {
+		systemReason = ""
+	}
 	if classification == ReadinessClassificationSystemUnready ||
 		reason == ReadinessReasonSystemUnready ||
 		systemReason != "" {
@@ -170,6 +173,18 @@ func ClassifyReadinessWithMode(classification string, reasons []string, detail, 
 func isReadinessBlockingMode(mode string) bool {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case config.BeadQualityModeBlock, "factory":
+		return true
+	default:
+		return false
+	}
+}
+
+func isCanonicalNonSystemReadinessClassification(classification string) bool {
+	switch classification {
+	case ReadinessClassificationReady,
+		ReadinessClassificationNeedsRefine,
+		ReadinessClassificationNeedsSplit,
+		ReadinessClassificationOperatorRequired:
 		return true
 	default:
 		return false
