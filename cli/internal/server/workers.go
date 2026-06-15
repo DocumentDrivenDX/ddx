@@ -1697,9 +1697,16 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 			continue
 		case "loop.active":
 			rec.Substate = ""
+			if evt.BeadID != "" {
+				rec.CurrentBead = evt.BeadID
+			}
 			handle.record = rec
 			m.mu.Unlock()
 			continue
+		}
+
+		if evt.BeadID != "" {
+			rec.CurrentBead = evt.BeadID
 		}
 
 		if !evt.Heartbeat {
@@ -1757,8 +1764,12 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 					StartedAt: evt.TS,
 				}
 			}
-			rec.CurrentAttempt.AttemptID = evt.AttemptID
-			rec.CurrentAttempt.BeadID = evt.BeadID
+			if evt.AttemptID != "" {
+				rec.CurrentAttempt.AttemptID = evt.AttemptID
+			}
+			if evt.BeadID != "" {
+				rec.CurrentAttempt.BeadID = evt.BeadID
+			}
 			rec.CurrentAttempt.Phase = evt.Phase
 			rec.CurrentAttempt.PhaseSeq = evt.PhaseSeq
 			rec.CurrentAttempt.ElapsedMS = evt.ElapsedMS

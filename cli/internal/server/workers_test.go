@@ -788,6 +788,52 @@ func TestDrainProgressResetsCurrentAttemptWhenAttemptIDChanges(t *testing.T) {
 	assert.Equal(t, second.Unix(), rec.LastAttempt.StartedAt.Unix())
 }
 
+func TestDrainProgressPreservesCurrentBeadAcrossAnonymousRouteEvents(t *testing.T) {
+	root := t.TempDir()
+	m := NewWorkerManager(root)
+
+	handle := &workerHandle{
+		record:       WorkerRecord{ID: "w-test", Kind: "work", State: "running"},
+		progressDone: make(chan struct{}),
+	}
+	ch := make(chan agent.ProgressEvent, 10)
+	go m.drainProgress("w-test", handle, ch)
+
+	now := time.Now().UTC()
+	ch <- agent.ProgressEvent{
+		EventID: "evt-active", WorkerID: "w-test",
+		BeadID: "ddx-active", Phase: "loop.active", Heartbeat: true,
+		TS: now,
+	}
+	ch <- agent.ProgressEvent{
+		EventID: "evt-intake", WorkerID: "w-test",
+		BeadID: "ddx-active", Phase: "pre_claim_intake", Heartbeat: true,
+		TS: now.Add(time.Second),
+	}
+	ch <- agent.ProgressEvent{
+		EventID: "evt-route", WorkerID: "w-test",
+		Phase: "queueing", PhaseSeq: 1, Heartbeat: false,
+		TS: now.Add(2 * time.Second),
+	}
+	ch <- agent.ProgressEvent{
+		EventID: "evt-running", WorkerID: "w-test",
+		Phase: "running", PhaseSeq: 2, Heartbeat: false,
+		TS: now.Add(3 * time.Second),
+	}
+
+	require.Eventually(t, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return handle.record.CurrentBead == "ddx-active" &&
+			handle.record.CurrentAttempt != nil &&
+			handle.record.CurrentAttempt.BeadID == "ddx-active" &&
+			handle.record.CurrentAttempt.Phase == "running"
+	}, 2*time.Second, 10*time.Millisecond)
+
+	close(ch)
+	<-handle.progressDone
+}
+
 // TestRecentPhasesCap verifies that RecentPhases is capped at 20 entries.
 func TestRecentPhasesCap(t *testing.T) {
 	root := t.TempDir()
