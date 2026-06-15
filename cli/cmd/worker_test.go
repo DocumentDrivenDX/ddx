@@ -91,3 +91,37 @@ func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 	assert.True(t, reconcileCalled, "expected POST /api/agent/workers/reconcile to be called")
 	assert.Contains(t, out, "worker-test-003")
 }
+
+func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.Equal(t, "/api/agent/workers", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{"id": "worker-project-a", "state": "running", "project_root": projectA, "started_at": "2026-01-01T00:00:00Z"},
+			{"id": "worker-project-b", "state": "running", "project_root": projectB, "started_at": "2026-01-01T00:00:00Z"},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("DDX_SERVER_URL", srv.URL)
+
+	factory := NewCommandFactory(projectA)
+	out, err := executeCommand(factory.NewRootCommand(), "worker", "status", "--project", projectA, "--json")
+	require.NoError(t, err)
+	var workers []workerRecord
+	require.NoError(t, json.Unmarshal([]byte(out), &workers))
+	require.Len(t, workers, 1)
+	assert.Equal(t, "worker-project-a", workers[0].ID)
+	assert.Equal(t, projectA, workers[0].ProjectRoot)
+	assert.NotContains(t, out, "worker-project-b")
+	assert.NotContains(t, out, projectB)
+
+	textOut, err := executeCommand(factory.NewRootCommand(), "worker", "status", "--project", projectA)
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "worker-project-a")
+	assert.NotContains(t, textOut, "worker-project-b")
+	assert.NotContains(t, textOut, projectB)
+}

@@ -44,10 +44,6 @@ func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("reading response: %w", err)
 			}
-			if asJSON {
-				fmt.Fprintln(cmd.OutOrStdout(), string(body))
-				return nil
-			}
 			var workers []workerRecord
 			if err := json.Unmarshal(body, &workers); err != nil {
 				return fmt.Errorf("parsing response: %w", err)
@@ -60,6 +56,9 @@ func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
 						filtered = append(filtered, w)
 					}
 				}
+			}
+			if asJSON {
+				return json.NewEncoder(cmd.OutOrStdout()).Encode(filtered)
 			}
 			if len(filtered) == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "No workers.")
