@@ -3,6 +3,8 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -604,6 +606,48 @@ func TestWorkStatusFillsServerManagedAttemptFromRunState(t *testing.T) {
 	require.Len(t, report.Workers, 1)
 	assert.Equal(t, "ddx-runstate-server", report.Workers[0].BeadID)
 	assert.Equal(t, "20260615T062000-runstate", report.Workers[0].AttemptID)
+	assert.Equal(t, "running", report.Workers[0].Phase)
+}
+
+func TestWorkStatusPrefersServerManagedWorkerAPI(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	records := []serverpkg.WorkerRecord{{
+		ID:          "worker-status-api",
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: projectRoot,
+		Profile:     "default",
+		StartedAt:   now.Add(-1 * time.Minute),
+		CurrentAttempt: &serverpkg.CurrentAttemptInfo{
+			AttemptID: "20260615T063000-api",
+			BeadID:    "ddx-api0001",
+			Profile:   "default",
+			Phase:     "running",
+			StartedAt: now.Add(-30 * time.Second),
+		},
+	}}
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/api/agent/workers", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(records))
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("DDX_SERVER_URL", srv.URL)
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: nil}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, "ddx-api0001", report.Workers[0].BeadID)
+	assert.Equal(t, "20260615T063000-api", report.Workers[0].AttemptID)
 	assert.Equal(t, "running", report.Workers[0].Phase)
 }
 

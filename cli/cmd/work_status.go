@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -98,7 +99,13 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 		workerstatus.EnrichWithFreshLiveness(filterAndSortWorkers(all, projectRoot, allProjects), now),
 		now,
 	)
-	liveWorkers = mergeServerManagedWorkers(liveWorkers, projectRoot, allProjects, now)
+	liveWorkers = mergeServerManagedWorkers(
+		liveWorkers,
+		f.serverManagedWorkerRecords(projectRoot),
+		projectRoot,
+		allProjects,
+		now,
+	)
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
@@ -199,9 +206,42 @@ func filterAndSortWorkers(all []workerstatus.LiveWorker, projectRoot string, all
 	return filtered
 }
 
-func mergeServerManagedWorkers(workers []workerstatus.LiveWorker, projectRoot string, allProjects bool, now time.Time) []workerstatus.LiveWorker {
+func (f *CommandFactory) serverManagedWorkerRecords(projectRoot string) []serverpkg.WorkerRecord {
+	if f.workerScannerOverride == nil || os.Getenv("DDX_SERVER_URL") != "" {
+		if records, ok := fetchServerManagedWorkerRecords(projectRoot); ok {
+			return records
+		}
+	}
 	records, err := readServerManagedWorkerRecords(projectRoot)
-	if err != nil || len(records) == 0 {
+	if err != nil {
+		return nil
+	}
+	return records
+}
+
+func fetchServerManagedWorkerRecords(projectRoot string) ([]serverpkg.WorkerRecord, bool) {
+	base := strings.TrimRight(resolveServerURL(projectRoot), "/")
+	req, err := http.NewRequest(http.MethodGet, base+"/api/agent/workers", nil)
+	if err != nil {
+		return nil, false
+	}
+	resp, err := newLocalServerClient().Do(req)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, false
+	}
+	var records []serverpkg.WorkerRecord
+	if err := json.NewDecoder(resp.Body).Decode(&records); err != nil {
+		return nil, false
+	}
+	return records, true
+}
+
+func mergeServerManagedWorkers(workers []workerstatus.LiveWorker, records []serverpkg.WorkerRecord, projectRoot string, allProjects bool, now time.Time) []workerstatus.LiveWorker {
+	if len(records) == 0 {
 		return workers
 	}
 	seen := make(map[string]bool, len(workers))
