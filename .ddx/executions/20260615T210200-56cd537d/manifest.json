@@ -1,0 +1,126 @@
+{
+  "attempt_id": "20260615T210200-56cd537d",
+  "bead_id": "ddx-2b15342f",
+  "base_rev": "8ab72585e5cf05fe4da0fdb56bf068b6626562a7",
+  "created_at": "2026-06-15T21:02:08.634399111Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2b15342f",
+    "title": "ui: manage worker desired counts and restarts from Workers page",
+    "description": "PROBLEM\nThe Workers page should be the normal operator surface for queue-drain workers, including desired count, restart, and managed-vs-external state. Today it exposes start/stop/add controls but not durable supervision.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:12 defines START_WORKER_MUTATION, :22 defines STOP_WORKER_MUTATION, and :34 defines ADD_WORKER_MUTATION. Lines :57-72 derive only running drain count and max_count. There is no desired-count stepper, restart button, managed/external grouping, stale/backoff state, or warning that external workers are reported-only.\n\nPROPOSED FIX\nUpdate the Workers page to use the new GraphQL worker desired-state and restart operations. Show desired count vs actual managed count, a compact stepper for desired count, explicit Restart for managed workers, cleanup-needed/backoff/stale states, and a separate reported external workers section where stop/restart are unavailable. Keep the UI dense and operational rather than landing-page-like.\n\nNON-SCOPE\nDo not redesign unrelated navigation or document pages. Do not change server behavior beyond the GraphQL operations from the dependency bead. Do not add decorative marketing UI.",
+    "acceptance": "1. workers-dispatch.spec.ts or a new workers-managed-supervision.spec.ts verifies increasing desired count calls the set desired-state mutation and renders desired vs actual managed count.\n2. A frontend e2e test verifies Restart appears for managed workers and calls restartWorker, while external workers are labeled reported only and have no Stop/Restart action.\n3. A frontend e2e test verifies stale/backoff/cleanup-needed states render without overlapping controls at desktop and mobile widths.\n4. cd cli/internal/server/frontend \u0026\u0026 bun run check passes.\n5. cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/workers-dispatch.spec.ts e2e/workers-single-pane.spec.ts passes or the replacement worker supervision e2e file passes.\n6. make install is run after the code change lands.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:frontend",
+      "area:workers",
+      "kind:feature",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=119.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T20:18:48.882213728Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=119.0"
+        },
+        {
+          "actor": "worker-20260615T202805-3ad5",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"graphql mutations setworkerdesiredstate and restartworker are present in schema.graphql and generated.go: The bead instructs the frontend to call 'the new GraphQL worker desired-state and restart operations' and AC1/AC2 explicitly name a 'set desired-state mutation' and 'restartWorker' mutation call. However, the dependency bead ddx-cf0cafef was closed without adding these operations to cli/internal/server/graphql/schema.graphql or cli/internal/server/graphql/generated.go. The Go resolver methods SetWorkerDesiredState and RestartWorker exist in resolver_worker_desired.go but carry an explicit comment that they bypass the generated MutationResolver interface and are tested by calling the Go struct directly. The only external interfaces available to the frontend are REST: PUT /api/agent/workers/desired (server.go:1000) and POST /api/agent/workers/{id}/restart (server.go:1001). The frontend exclusively uses graphql-request for mutations; calling these via REST would break the established pattern and is not what the bead describes. An implementing agent faces an undirected fork: (a) add setWorkerDesiredState and restartWorker to schema.graphql and regenerate generated.go before doing any frontend work — scope not stated in this bead — or (b) call the REST API directly — contradicts the bead's explicit 'GraphQL' framing. Neither option is derivable from the bead text alone.\",\"fingerprint\":\"6314fd5708d3d648fa497797a8c66f639375c12240d69d00c0f3da693969aee8\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"6314fd5708d3d648fa497797a8c66f639375c12240d69d00c0f3da693969aee8\"}",
+          "created_at": "2026-06-15T20:31:45.892088442Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "worker-20260615T204037-b34b",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"graphql mutations setworkerdesiredstate and restartworker are present in schema.graphql: The bead instructs the frontend to call 'the new GraphQL worker desired-state and restart operations from the dependency bead' (ddx-cf0cafef), and AC1/AC2 explicitly name a 'set desired-state mutation' and 'restartWorker' mutation call. However ddx-cf0cafef closed without adding setWorkerDesiredState or restartWorker to cli/internal/server/graphql/schema.graphql or generated.go. The Go methods exist in resolver_worker_desired.go:12 and :21 but carry an explicit comment that they bypass the generated MutationResolver interface and are only tested by calling the Go struct directly. The only externally reachable surfaces are REST: PUT /api/agent/workers/desired (server.go:1000) and POST /api/agent/workers/{id}/restart (server.go:1001). The frontend exclusively uses graphql-request for mutations. An implementing agent faces an undirected fork: (a) add the mutations to schema.graphql and regenerate — scope not stated in this bead, or (b) call REST — contradicts the bead's explicit GraphQL framing and AC1/AC2. This is the same blocker logged in the intake.warn event at 2026-06-15T20:31:45Z; no subsequent event or reopen has cleared it.\",\"fingerprint\":\"0d47472320998865cf40d3d841c3d6a8669d5c2dcf40c995669da09c578e4120\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"0d47472320998865cf40d3d841c3d6a8669d5c2dcf40c995669da09c578e4120\"}",
+          "created_at": "2026-06-15T20:43:25.685687267Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T20:49:55.31935849Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "worker-20260615T205242-90cd",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1528 tokens with tools=false at policy default\",\"fingerprint\":\"977c7f30a21bed9856ba062efb8007cdadbb5f7d6943de3a9f4a3616b6d605d4\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"977c7f30a21bed9856ba062efb8007cdadbb5f7d6943de3a9f4a3616b6d605d4\"}",
+          "created_at": "2026-06-15T20:53:04.870799605Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-15T20:54:09.746968968Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "worker-20260615T205242-90cd",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2073 tokens with tools=false at policy default\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-06-15T20:54:11.371112368Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T205348-30a0b116\",\"bead_id\":\"ddx-2b15342f\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T20:54:11.421662155Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "worker-20260615T205242-90cd",
+          "body": "ResolveRoute: no live provider supports prompt of 2073 tokens with tools=false at policy default\npowerClass=standard\ndecision_audit={\"failure_class\":\"no_viable_provider\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"default\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"default\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=026055a082e0a2899e348092baeb9c5f251c0b94\nbase_rev=026055a082e0a2899e348092baeb9c5f251c0b94\noutcome_reason=no_viable_provider",
+          "created_at": "2026-06-15T20:54:11.465627907Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "worker-20260615T210043-ecb4",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: ResolveRoute: no live provider supports prompt of 1738 tokens with tools=false at policy smart\",\"fingerprint\":\"41b3e9ecc09522ffdb0d58ce1a31b58b264371e1e5f55b37121838a11564d648\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"41b3e9ecc09522ffdb0d58ce1a31b58b264371e1e5f55b37121838a11564d648\"}",
+          "created_at": "2026-06-15T21:01:27.448739055Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 110,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260615T210200-56cd537d",
+    "prompt": ".ddx/executions/20260615T210200-56cd537d/prompt.md",
+    "manifest": ".ddx/executions/20260615T210200-56cd537d/manifest.json",
+    "result": ".ddx/executions/20260615T210200-56cd537d/result.json",
+    "checks": ".ddx/executions/20260615T210200-56cd537d/checks.json",
+    "usage": ".ddx/executions/20260615T210200-56cd537d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2b15342f-20260615T210200-56cd537d"
+  },
+  "prompt_sha": "e13a85ee290f13a376e04bcd767e727cfb9f3b1541064ae4b625a90361c8e5b7"
+}
