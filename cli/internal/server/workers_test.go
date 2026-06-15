@@ -318,6 +318,144 @@ func TestCleanupCurrentProcessProviderProbesSettledWaitsForQuietWindow(t *testin
 	assert.GreaterOrEqual(t, calls, 5, "cleanup must keep sweeping after a delayed reap until the quiet window elapses")
 }
 
+func TestRunWorkerFinalCleanupRunsUnscopedSweepWhenLastWorker(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	initGitRepo(t, root)
+	store := bead.NewStore(ddxroot.JoinProject(root))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-final-unscoped",
+		Title:     "final unscoped cleanup",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+
+	oldScoped := reapCurrentProcessProviderProbes
+	oldUnscoped := reapCurrentProcessProviderProbesUnscoped
+	oldFollowups := providerProbeCleanupFollowupDelays
+	oldQuiet := providerProbeCleanupSettleQuiet
+	oldDeadline := providerProbeCleanupSettleDeadline
+	oldInterval := providerProbeCleanupSettleInterval
+	scopedCalls := 0
+	unscopedCalls := 0
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
+		scopedCalls++
+		return 0
+	}
+	reapCurrentProcessProviderProbesUnscoped = func() int {
+		unscopedCalls++
+		if unscopedCalls == 2 {
+			return 1
+		}
+		return 0
+	}
+	providerProbeCleanupFollowupDelays = nil
+	providerProbeCleanupSettleQuiet = 15 * time.Millisecond
+	providerProbeCleanupSettleDeadline = 200 * time.Millisecond
+	providerProbeCleanupSettleInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		reapCurrentProcessProviderProbes = oldScoped
+		reapCurrentProcessProviderProbesUnscoped = oldUnscoped
+		providerProbeCleanupFollowupDelays = oldFollowups
+		providerProbeCleanupSettleQuiet = oldQuiet
+		providerProbeCleanupSettleDeadline = oldDeadline
+		providerProbeCleanupSettleInterval = oldInterval
+	})
+
+	m := NewWorkerManager(root)
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-final-unscoped",
+					Status:    agent.ExecuteBeadStatusSuccess,
+					Detail:    "success",
+				}, nil
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
+	require.NoError(t, err)
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, "success", final.Status)
+	require.Eventually(t, func() bool {
+		return scopedCalls > 0 && unscopedCalls >= 5
+	}, time.Second, 5*time.Millisecond, "last-worker finalization must finish scoped and unscoped cleanup")
+	time.Sleep(2 * providerProbeCleanupSettleDeadline)
+}
+
+func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	initGitRepo(t, root)
+	store := bead.NewStore(ddxroot.JoinProject(root))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-final-scoped-only",
+		Title:     "final scoped-only cleanup",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+
+	oldScoped := reapCurrentProcessProviderProbes
+	oldUnscoped := reapCurrentProcessProviderProbesUnscoped
+	oldFollowups := providerProbeCleanupFollowupDelays
+	oldQuiet := providerProbeCleanupSettleQuiet
+	oldDeadline := providerProbeCleanupSettleDeadline
+	oldInterval := providerProbeCleanupSettleInterval
+	scopedCalls := 0
+	unscopedCalls := 0
+	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
+		scopedCalls++
+		return 0
+	}
+	reapCurrentProcessProviderProbesUnscoped = func() int {
+		unscopedCalls++
+		return 0
+	}
+	providerProbeCleanupFollowupDelays = nil
+	providerProbeCleanupSettleQuiet = 15 * time.Millisecond
+	providerProbeCleanupSettleDeadline = 50 * time.Millisecond
+	providerProbeCleanupSettleInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		reapCurrentProcessProviderProbes = oldScoped
+		reapCurrentProcessProviderProbesUnscoped = oldUnscoped
+		providerProbeCleanupFollowupDelays = oldFollowups
+		providerProbeCleanupSettleQuiet = oldQuiet
+		providerProbeCleanupSettleDeadline = oldDeadline
+		providerProbeCleanupSettleInterval = oldInterval
+	})
+
+	m := NewWorkerManager(root)
+	now := time.Now().UTC()
+	_, _ = newIdleHandle(t, m, "worker-still-running", "", now, now)
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-final-scoped-only",
+					Status:    agent.ExecuteBeadStatusSuccess,
+					Detail:    "success",
+				}, nil
+			}),
+		}
+	}
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: executeloop.ModeOnce})
+	require.NoError(t, err)
+	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	assert.Equal(t, "success", final.Status)
+	require.Eventually(t, func() bool {
+		return scopedCalls > 0
+	}, time.Second, 5*time.Millisecond, "finalization must still run scoped cleanup")
+	time.Sleep(2 * providerProbeCleanupSettleDeadline)
+	assert.Zero(t, unscopedCalls, "unscoped cleanup must not run while another worker is live")
+}
+
 func testScopeContains(scopes []string, root string) bool {
 	for _, scope := range scopes {
 		if scope == root {

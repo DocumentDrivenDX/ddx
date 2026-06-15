@@ -854,7 +854,12 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
-	defer cleanupCurrentProcessProviderProbesSettled(projectRoot)
+	defer func() {
+		cleanupCurrentProcessProviderProbesSettled(projectRoot)
+		if !m.hasOtherLiveWorker(id) {
+			cleanupCurrentProcessProviderProbesUnscopedSettled()
+		}
+	}()
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 	overrides := config.CLIOverrides{
 		Assignee:          "ddx",
@@ -1221,6 +1226,24 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	_ = m.writeRecord(dir, record)
 	handle.record = record
 	m.mu.Unlock()
+}
+
+func (m *WorkerManager) hasOtherLiveWorker(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for workerID, handle := range m.workers {
+		if workerID == id || handle == nil {
+			continue
+		}
+		state := handle.record.State
+		if state == "" || state == workerStateRunning || state == workerStateStopping {
+			return true
+		}
+		if !isTerminalWorkerState(state) {
+			return true
+		}
+	}
+	return false
 }
 
 func (m *WorkerManager) List() ([]WorkerRecord, error) {

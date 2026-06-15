@@ -30,6 +30,12 @@ var reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
 	return agent.ReapRootProviderChildrenInScopes(ctx, os.Getpid(), scopeDirs...)
 }
 
+var reapCurrentProcessProviderProbesUnscoped = func() int {
+	ctx, cancel := context.WithTimeout(context.Background(), providerProbeCleanupTimeout)
+	defer cancel()
+	return agent.ReapRootProviderChildrenInScope(ctx, os.Getpid(), "")
+}
+
 var reapCurrentProcessNonRouteProviderProbes = func(harness, provider, model string, scopeDirs ...string) int {
 	cwd, err := os.Getwd()
 	if err == nil && cwd != "" {
@@ -58,6 +64,31 @@ func cleanupCurrentProcessProviderProbesSettled(scopeDirs ...string) int {
 		timer := time.NewTimer(interval)
 		<-timer.C
 		n := reapCurrentProcessProviderProbes(scopeDirs...)
+		reaped += n
+		if n > 0 {
+			quietFor = 0
+			continue
+		}
+		quietFor += interval
+		if quietFor >= providerProbeCleanupSettleQuiet {
+			break
+		}
+	}
+	return reaped
+}
+
+func cleanupCurrentProcessProviderProbesUnscopedSettled() int {
+	reaped := reapCurrentProcessProviderProbesUnscoped()
+	quietFor := time.Duration(0)
+	deadline := time.Now().Add(providerProbeCleanupSettleDeadline)
+	interval := providerProbeCleanupSettleInterval
+	if interval <= 0 {
+		interval = 250 * time.Millisecond
+	}
+	for time.Now().Before(deadline) {
+		timer := time.NewTimer(interval)
+		<-timer.C
+		n := reapCurrentProcessProviderProbesUnscoped()
 		reaped += n
 		if n > 0 {
 			quietFor = 0
