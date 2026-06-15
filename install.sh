@@ -475,7 +475,7 @@ show_getting_started() {
     echo ""
     echo "📚 Next Steps:"
     echo "   ddx init                   Initialize DDx metadata in a project"
-    echo "   ddx plugin install helix   Pin HELIX and materialize local adapters"
+    echo "   ddx plugin install helix   Pin HELIX and generate local adapters"
     echo "   ddx doctor                 Check installation and diagnose issues"
     echo ""
     echo "📖 Documentation:"
