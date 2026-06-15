@@ -105,7 +105,7 @@ async function getFixtureIds(
 		data: { query: '{ nodeInfo { id name } }' }
 	});
 	const nodeBody = (await nodeResp.json()) as {
-		data: { nodeInfo: { id: string; name: string } }
+		data: { nodeInfo: { id: string; name: string } };
 	};
 	const projectsResp = await request.get('/api/projects');
 	const projects = (await projectsResp.json()) as Array<{
@@ -140,7 +140,8 @@ test('TC-006: sidebar nav links are active on first load for the startup project
 	const nav = page.locator('nav');
 	const base = `/nodes/${ids.nodeId}/projects/${ids.projectId}`;
 	await expect(nav.locator(`a[href="${base}/beads"]`)).toBeVisible();
-	await expect(nav.locator(`a[href="${base}/documents"]`)).toBeVisible();
+	await expect(nav.locator(`a[href="${base}/artifacts"]`)).toBeVisible();
+	await expect(nav.getByText('Documents', { exact: true })).toHaveCount(0);
 	await expect(projectSelect(page)).toHaveValue(ids.projectId);
 });
 
@@ -160,7 +161,8 @@ test('TC-007: sidebar nav links activate after project selection', async ({ page
 	const base = `/nodes/${ids.nodeId}/projects/${ids.projectId}`;
 	const nav = page.locator('nav');
 	await expect(nav.locator(`a[href="${base}/beads"]`)).toBeVisible();
-	await expect(nav.locator(`a[href="${base}/documents"]`)).toBeVisible();
+	await expect(nav.locator(`a[href="${base}/artifacts"]`)).toBeVisible();
+	await expect(nav.getByText('Documents', { exact: true })).toHaveCount(0);
 });
 
 /**

@@ -30,6 +30,7 @@ interface ShellRouteDefaultsResult {
 }
 
 export type ProjectShellSection =
+	| 'artifacts'
 	| 'beads'
 	| 'documents'
 	| 'graph'
@@ -58,3 +59,16 @@ export async function resolveDefaultProjectRoute(
 
 	return `/nodes/${nodeId}/projects/${projectId}/${section}`;
 }
+
+export const projectNavPages = [
+	{ page: '', label: 'Overview', exact: true },
+	{ page: 'beads', label: 'Beads' },
+	{ page: 'artifacts', label: 'Artifacts' },
+	{ page: 'graph', label: 'Graph' },
+	{ page: 'runs', label: 'Runs' },
+	{ page: 'workers', label: 'Workers' },
+	{ page: 'personas', label: 'Personas' },
+	{ page: 'plugins', label: 'Plugins' },
+	{ page: 'commits', label: 'Commits' },
+	{ page: 'efficacy', label: 'Efficacy' }
+] as const;

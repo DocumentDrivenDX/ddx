@@ -77,7 +77,9 @@
 	const filteredRows = $derived(
 		data.rows.filter((row) => {
 			const powerClassMatches =
-				!powerClassFilter || !rowPowerClass(row) || rowPowerClass(row).toLowerCase() === powerClassFilter.toLowerCase();
+				!powerClassFilter ||
+				!rowPowerClass(row) ||
+				rowPowerClass(row).toLowerCase() === powerClassFilter.toLowerCase();
 			const labelMatches =
 				!labelFilter ||
 				!row.labels ||
@@ -97,6 +99,9 @@
 				return rowKey(a).localeCompare(rowKey(b));
 			})
 			.slice(0, 3)
+	);
+	const routingMetricsHref = $derived(
+		`/nodes/${data.nodeId}/projects/${data.projectId}/artifacts?mediaType=text%2Fmarkdown&q=${encodeURIComponent('routing metrics')}`
 	);
 
 	$effect(() => {
@@ -497,7 +502,7 @@
 											{/if}
 											<a
 												class="ml-1 font-medium text-[#3B5B7A] underline dark:text-[#7BA3CC]"
-												href="/docs/routing-metrics"
+												href={routingMetricsHref}
 											>
 												Routing metrics
 											</a>
@@ -567,12 +572,9 @@
 				<ul class="divide-y divide-[#E4DDD0] dark:divide-[#34302A]">
 					{#each comparisonResults as comparison (comparison.id)}
 						<li class="flex items-center justify-between gap-3 py-2">
-							<a
-								href={`/comparisons/${comparison.id}`}
-								class="font-mono text-sm font-medium text-[#3B5B7A] hover:underline dark:text-[#7BA3CC]"
-							>
+							<span class="font-mono text-sm font-medium text-[#1F2125] dark:text-[#EDE6D6]">
 								{comparison.id}
-							</a>
+							</span>
 							<span class="text-xs text-[#6B6558] dark:text-[#8E8674]">
 								{comparison.state} · {comparison.armCount} arms
 							</span>

@@ -35,13 +35,23 @@ type PageSpec = {
 
 const PAGES = [
 	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}`, name: 'dashboard' },
-	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/beads`, name: 'beads' },
 	{
-		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/documents`,
-		name: 'documents'
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/beads`,
+		name: 'beads'
 	},
-	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/graph`, name: 'graph' },
-	{ path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`, name: 'agent' },
+	{
+		path: ({ nodeId, projectId }) =>
+			`/nodes/${nodeId}/projects/${projectId}/artifacts?mediaType=text%2Fmarkdown`,
+		name: 'artifacts'
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/graph`,
+		name: 'graph'
+	},
+	{
+		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/sessions`,
+		name: 'agent'
+	},
 	{
 		path: ({ nodeId, projectId }) => `/nodes/${nodeId}/projects/${projectId}/personas`,
 		name: 'personas'
@@ -83,9 +93,7 @@ test('theme toggle is operable via keyboard and persists to localStorage', async
 	const htmlClasses = async () => await page.evaluate(() => document.documentElement.className);
 	const before = await htmlClasses();
 	await toggle.click();
-	await expect
-		.poll(async () => await htmlClasses(), { timeout: 2000 })
-		.not.toEqual(before);
+	await expect.poll(async () => await htmlClasses(), { timeout: 2000 }).not.toEqual(before);
 
 	// Persists across reload.
 	const afterClick = await htmlClasses();

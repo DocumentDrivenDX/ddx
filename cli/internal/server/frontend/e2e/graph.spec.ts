@@ -379,15 +379,26 @@ test('TC-037: integrity panel groups real fixture issues by kind with counts and
 		await page.getByTestId('integrity-group-missing_dep').click();
 		await expect(panel.getByTestId('integrity-missing-dep-snippet')).toContainText('- ghost.doc');
 
-		// Clicking the path link navigates to the real document viewer for that file.
-		const pathLink = panel.getByTestId('integrity-path-link').first();
-		const href = await pathLink.getAttribute('href');
-		expect(href).toBe(
-			`/nodes/${server.nodeId}/projects/${server.projectId}/documents/docs/beta.md`
+		// Paths with a stable document ID go to canonical artifact detail; duplicate
+		// paths that cannot be resolved fall back to markdown artifact search.
+		const canonicalRelatedLink = panel
+			.getByTestId('integrity-related-link')
+			.filter({ hasText: 'docs/alpha.md' });
+		const canonicalHref = await canonicalRelatedLink.getAttribute('href');
+		expect(canonicalHref).toBe(
+			`/nodes/${server.nodeId}/projects/${server.projectId}/artifacts/${encodeURIComponent('doc:shared.id')}`
 		);
 
-		await pathLink.click();
-		await expect(page).toHaveURL(href!);
+		const fallbackPathLink = panel
+			.getByTestId('integrity-path-link')
+			.filter({ hasText: 'docs/beta.md' });
+		const fallbackHref = await fallbackPathLink.getAttribute('href');
+		expect(fallbackHref).toBe(
+			`/nodes/${server.nodeId}/projects/${server.projectId}/artifacts?mediaType=text%2Fmarkdown&q=${encodeURIComponent('docs/beta.md')}`
+		);
+
+		await canonicalRelatedLink.click();
+		await expect(page).toHaveURL(canonicalHref!);
 	} finally {
 		await page.unroute('/graphql');
 		await stopRealDdxServer(server);
@@ -410,8 +421,8 @@ test('TC-038: clean graph hides the integrity badge and panel', async ({ page })
 	}
 });
 
-// TC-039: Clicking a graph node navigates to the document page
-test('TC-039: clicking a graph node navigates to document detail page', async ({ page }) => {
+// TC-039: Clicking a graph node navigates to the artifact detail page
+test('TC-039: clicking a graph node navigates to artifact detail page', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
@@ -424,10 +435,10 @@ test('TC-039: clicking a graph node navigates to document detail page', async ({
 	// GRAPH_DOCS[0] = doc-001 with path "docs/vision.md")
 	await page.locator('[data-testid="doc-graph-svg"] circle').first().click();
 
-	// Navigation should go to the document page at the node's specific path
+	// Navigation should go to the artifact page for the node's document ID
 	// (SPA navigation, no full reload)
 	await expect(page).toHaveURL((url) => {
-		return url.pathname === `${BASE_URL.replace('/graph', '')}/documents/docs/vision.md`;
+		return url.pathname === `${BASE_URL.replace('/graph', '')}/artifacts/doc%3Adoc-001`;
 	});
 });
 
@@ -441,7 +452,7 @@ test('TC-040: Back navigation restores graph viewport from URL params', async ({
 	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
 	await page.waitForTimeout(500);
 
-	// Click a node to navigate to the document page. The bounded-convergence
+	// Click a node to navigate to the artifact page. The bounded-convergence
 	// freeze can pin the first node outside a 2x-zoomed viewport, so dispatch
 	// the click programmatically rather than relying on visible-bounds hit
 	// testing.
@@ -453,7 +464,7 @@ test('TC-040: Back navigation restores graph viewport from URL params', async ({
 		const g = c.parentNode as SVGGElement;
 		g.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 	});
-	await expect(page).toHaveURL(/\/documents\//);
+	await expect(page).toHaveURL(/\/artifacts\//);
 
 	// Navigate back
 	await page.goBack();

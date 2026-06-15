@@ -3,8 +3,9 @@ import { redirect } from '@sveltejs/kit';
 import { resolveDefaultProjectRoute } from '$lib/routing/shellRoutes';
 
 export const load: PageLoad = async ({ fetch }) => {
-	throw redirect(
-		307,
-		await resolveDefaultProjectRoute('documents', fetch as unknown as typeof globalThis.fetch)
+	const target = await resolveDefaultProjectRoute(
+		'artifacts',
+		fetch as unknown as typeof globalThis.fetch
 	);
+	throw redirect(307, `${target}?mediaType=text%2Fmarkdown`);
 };

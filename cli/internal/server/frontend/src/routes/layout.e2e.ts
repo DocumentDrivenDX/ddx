@@ -18,7 +18,7 @@ test('loads / and NavShell links exist', async ({ page }) => {
 	const nav = page.locator('nav');
 	for (const label of [
 		'Beads',
-		'Documents',
+		'Artifacts',
 		'Graph',
 		'Workers',
 		'Personas',
@@ -27,6 +27,7 @@ test('loads / and NavShell links exist', async ({ page }) => {
 	]) {
 		await expect(nav.getByText(label, { exact: true })).toBeVisible();
 	}
+	await expect(nav.getByText('Documents', { exact: true })).toHaveCount(0);
 });
 
 test('dark mode toggle updates html class', async ({ page }) => {

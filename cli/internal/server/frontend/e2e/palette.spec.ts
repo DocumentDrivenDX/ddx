@@ -1,7 +1,7 @@
 // FEAT-008 US-099: Developer Uses a Keyboard Command Palette
 //
 // These tests MUST FAIL until a Cmd+K / Ctrl+K command palette exists that
-// searches documents, beads, and actions, and honors bead-detail context.
+// searches document artifacts, beads, and actions, and honors bead-detail context.
 
 import { expect, test } from '@playwright/test';
 
@@ -19,17 +19,15 @@ const PALETTE_RESULTS_EMPTY: Record<string, unknown[]> = {
 
 const PALETTE_RESULTS_FEAT: Record<string, unknown[]> = {
 	documents: [
-		{ kind: 'document', path: 'docs/helix/01-frame/features/FEAT-008-web-ui.md', title: 'FEAT-008 Web UI' }
+		{
+			kind: 'document',
+			path: 'docs/helix/01-frame/features/FEAT-008-web-ui.md',
+			title: 'FEAT-008 Web UI'
+		}
 	],
-	beads: [
-		{ kind: 'bead', id: 'ddx-feat008-1', title: 'Implement Actions panel' }
-	],
-	actions: [
-		{ kind: 'action', id: 'drain-queue', label: 'Drain queue' }
-	],
-	navigation: [
-		{ kind: 'nav', route: `${BASE_URL}/efficacy`, title: 'Efficacy' }
-	]
+	beads: [{ kind: 'bead', id: 'ddx-feat008-1', title: 'Implement Actions panel' }],
+	actions: [{ kind: 'action', id: 'drain-queue', label: 'Drain queue' }],
+	navigation: [{ kind: 'nav', route: `${BASE_URL}/efficacy`, title: 'Efficacy' }]
 };
 
 async function mockPalette(page: import('@playwright/test').Page) {
@@ -39,15 +37,33 @@ async function mockPalette(page: import('@playwright/test').Page) {
 			variables?: Record<string, unknown>;
 		};
 		if (body.query.includes('NodeInfo')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
 		} else if (body.query.includes('Projects')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } })
+			});
 		} else if (body.query.includes('PaletteSearch') || body.query.includes('paletteSearch')) {
 			const q = ((body.variables?.query as string) ?? '').toLowerCase();
 			const results = q.length === 0 ? PALETTE_RESULTS_EMPTY : PALETTE_RESULTS_FEAT;
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { paletteSearch: results } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { paletteSearch: results } })
+			});
 		} else if (body.query.includes('Bead') && body.variables?.id) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { bead: { id: body.variables.id, title: 'Sample bead', status: 'open' } } }) });
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { bead: { id: body.variables.id, title: 'Sample bead', status: 'open' } }
+				})
+			});
 		} else {
 			await route.continue();
 		}
@@ -70,7 +86,9 @@ test('US-099.a: Cmd+K opens palette with focus in the input', async ({ page }) =
 	await expect(palette).toBeVisible();
 });
 
-test('US-099.b: typing returns documents, beads, actions, and navigation entries', async ({ page }) => {
+test('US-099.b: typing returns document artifacts, beads, actions, and navigation entries', async ({
+	page
+}) => {
 	await mockPalette(page);
 	await page.goto(BASE_URL);
 
@@ -97,6 +115,20 @@ test('US-099.c: Enter navigates to a result and closes the palette', async ({ pa
 	await palette.getByRole('option', { name: /Efficacy/i }).click();
 	await expect(palette).not.toBeVisible();
 	await expect(page).toHaveURL(/\/efficacy$/);
+});
+
+test('US-099.c2: document results navigate to the artifacts surface', async ({ page }) => {
+	await mockPalette(page);
+	await page.goto(BASE_URL);
+
+	await page.keyboard.press('Meta+k');
+	const palette = page.getByRole('dialog', { name: /command palette/i });
+	await palette.getByRole('searchbox').fill('feat');
+
+	await palette.getByRole('option', { name: /FEAT-008/i }).click();
+	await expect(page).toHaveURL(
+		/\/artifacts\?mediaType=text%2Fmarkdown&q=docs%2Fhelix%2F01-frame%2Ffeatures%2FFEAT-008-web-ui\.md$/
+	);
 });
 
 test('US-099.d: Escape closes the palette without navigation', async ({ page }) => {
@@ -128,10 +160,12 @@ test('US-099.e: on bead detail, palette shows bead-specific actions at top', asy
 	}
 });
 
-test('US-099.f: palette preserves project/node context for navigation entries', async ({ page }) => {
+test('US-099.f: palette preserves project/node context for navigation entries', async ({
+	page
+}) => {
 	await mockPalette(page);
 	// Start from a deep URL.
-	await page.goto(`${BASE_URL}/documents/docs/helix/01-frame/features/FEAT-008-web-ui.md`);
+	await page.goto(`${BASE_URL}/artifacts/doc%3AFEAT-008-web-ui`);
 
 	await page.keyboard.press('Meta+k');
 	const palette = page.getByRole('dialog', { name: /command palette/i });

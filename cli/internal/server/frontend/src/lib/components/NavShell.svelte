@@ -25,30 +25,32 @@
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { projectStore } from '$lib/stores/project.svelte';
 	import { wsConnection } from '$lib/stores/connection.svelte';
+	import { projectNavPages } from '$lib/routing/shellRoutes';
 
 	let { children } = $props();
 
-	const pages = [
-		{ page: '', label: 'Overview', Icon: Home, exact: true },
-		{ page: 'beads', label: 'Beads', Icon: LayoutDashboard },
-		{ page: 'artifacts', label: 'Artifacts', Icon: Archive },
-		{ page: 'documents', label: 'Documents', Icon: Archive },
-		{ page: 'graph', label: 'Graph', Icon: GitBranch },
-		{ page: 'runs', label: 'Runs', Icon: Activity },
-		{ page: 'workers', label: 'Workers', Icon: Cpu },
-		{ page: 'personas', label: 'Personas', Icon: Users },
-		{ page: 'plugins', label: 'Plugins', Icon: Package },
-		{ page: 'commits', label: 'Commits', Icon: GitCommit },
-		{ page: 'efficacy', label: 'Efficacy', Icon: BarChart3 }
-	];
+	const iconsByPage = {
+		'': Home,
+		beads: LayoutDashboard,
+		artifacts: Archive,
+		graph: GitBranch,
+		runs: Activity,
+		workers: Cpu,
+		personas: Users,
+		plugins: Package,
+		commits: GitCommit,
+		efficacy: BarChart3
+	};
 
 	const navLinks = $derived(
-		pages.map(({ page, label, Icon, exact }) => {
+		projectNavPages.map((navPage) => {
+			const { page, label } = navPage;
 			const nodeId = nodeStore.value?.id;
 			const projectId = projectStore.value?.id;
 			const base = nodeId && projectId ? `/nodes/${nodeId}/projects/${projectId}` : null;
 			const href = base ? (page ? `${base}/${page}` : base) : null;
-			return { href, label, Icon, exact: Boolean(exact) };
+			const Icon = iconsByPage[page];
+			return { href, label, Icon, exact: 'exact' in navPage && Boolean(navPage.exact) };
 		})
 	);
 

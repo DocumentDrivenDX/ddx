@@ -58,27 +58,19 @@ test.describe('DDx Server UI Demo', () => {
 		});
 
 		// ---------------------------------------------------------------
-		// 2. Documents — browse and read a document
+		// 2. Artifacts — browse markdown documents
 		// ---------------------------------------------------------------
-		await test.step('Documents — browse and read a document', async () => {
-			await page.goto(`${base}/documents`);
+		await test.step('Artifacts — browse markdown documents', async () => {
+			await page.goto(`${base}/artifacts?mediaType=text%2Fmarkdown`);
 			await page.waitForSelector('h1');
 			await page.waitForTimeout(1000);
 
-			// Select the first document to show rendered markdown
-			const firstDoc = page.locator('.overflow-auto button').first();
-			if (await firstDoc.isVisible({ timeout: 3000 })) {
-				await firstDoc.click();
-				await page.waitForSelector('.prose', { timeout: 5000 });
-				await page.waitForTimeout(2000);
-			}
-
 			// Demonstrate search
-			const docSearch = page.locator('input[placeholder*="Search"]');
-			if (await docSearch.isVisible()) {
-				await docSearch.fill('persona');
+			const artifactSearch = page.locator('input[placeholder*="Search"]');
+			if (await artifactSearch.isVisible()) {
+				await artifactSearch.fill('persona');
 				await page.waitForTimeout(1000);
-				await docSearch.fill('');
+				await artifactSearch.fill('');
 				await page.waitForTimeout(500);
 			}
 		});
@@ -244,7 +236,6 @@ const FEATURE_CLIPS: readonly FeatureClip[] = [
 test.use({ video: 'on' });
 
 test.describe('DDx feature-area demo videos', () => {
-
 	for (const clip of FEATURE_CLIPS) {
 		test(`feature: ${clip.id}`, async ({ page, request }, testInfo) => {
 			const ids = await getFixtureIds(request);
