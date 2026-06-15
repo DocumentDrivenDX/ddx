@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	urlpkg "net/url"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -114,6 +115,11 @@ func (f *CommandFactory) newWorkerSetCommand() *cobra.Command {
 				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), string(out))
+			reconcileOut, err := requestWorkerReconcile(base, projectRoot)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
 			return nil
 		},
 	}
@@ -158,6 +164,11 @@ func (f *CommandFactory) newWorkerStartCommand() *cobra.Command {
 				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), string(out))
+			reconcileOut, err := requestWorkerReconcile(base, projectRoot)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
 			return nil
 		},
 	}
@@ -219,6 +230,27 @@ func (f *CommandFactory) newWorkerRestartCommand() *cobra.Command {
 	return cmd
 }
 
+func requestWorkerReconcile(base, projectRoot string) ([]byte, error) {
+	reconcileURL := base + "/api/agent/workers/reconcile"
+	if projectRoot != "" {
+		reconcileURL += "?project=" + urlpkg.QueryEscape(projectRoot)
+	}
+	req, err := http.NewRequest(http.MethodPost, reconcileURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := newLocalServerClient().Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("server request: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	out, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
+	}
+	return out, nil
+}
+
 func (f *CommandFactory) newWorkerReconcileCommand() *cobra.Command {
 	var project string
 	cmd := &cobra.Command{
@@ -228,7 +260,7 @@ func (f *CommandFactory) newWorkerReconcileCommand() *cobra.Command {
 			base := resolveServerURL(f.WorkingDir)
 			url := base + "/api/agent/workers/reconcile"
 			if project != "" {
-				url += "?project=" + project
+				url += "?project=" + urlpkg.QueryEscape(project)
 			}
 			req, err := http.NewRequest(http.MethodPost, url, nil)
 			if err != nil {

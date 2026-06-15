@@ -13,9 +13,12 @@ import (
 func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 	projectRoot := t.TempDir()
 
-	// Track which endpoints were called
-	var setCalled, restartCalled, reconcileCalled bool
+	// Track which endpoints were called.
+	var restartCalled bool
+	var desiredRequests, reconcileRequests int
 	var setPayload map[string]interface{}
+	var desiredCounts []float64
+	var reconcileProjects []string
 
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -27,13 +30,14 @@ func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 			})
 
 		case r.Method == http.MethodPut && r.URL.Path == "/api/agent/workers/desired":
-			// set subcommand
-			setCalled = true
+			// set/start subcommands
+			desiredRequests++
 			_ = json.NewDecoder(r.Body).Decode(&setPayload)
+			desiredCounts = append(desiredCounts, setPayload["desired_count"].(float64))
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"project_root":    projectRoot,
-				"desired_count":   2,
+				"desired_count":   setPayload["desired_count"],
 				"restart_enabled": true,
 				"status":          "saved",
 			})
@@ -49,8 +53,9 @@ func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 			})
 
 		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/reconcile":
-			// reconcile subcommand
-			reconcileCalled = true
+			// set/start/reconcile subcommands
+			reconcileRequests++
+			reconcileProjects = append(reconcileProjects, r.URL.Query().Get("project"))
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{
 				"started":   []string{"worker-test-003"},
@@ -76,8 +81,22 @@ func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 	// Test: set
 	out, err = executeCommand(root, "worker", "set", "--project", projectRoot, "--count", "2", "--restart")
 	require.NoError(t, err)
-	assert.True(t, setCalled, "expected PUT /api/agent/workers/desired to be called")
+	assert.Equal(t, 1, desiredRequests, "expected PUT /api/agent/workers/desired to be called")
+	assert.Equal(t, 1, reconcileRequests, "worker set must reconcile after saving desired state")
+	assert.Equal(t, []float64{2}, desiredCounts)
+	assert.Equal(t, []string{projectRoot}, reconcileProjects)
 	assert.Contains(t, out, "saved")
+	assert.Contains(t, out, "worker-test-003")
+
+	// Test: start
+	out, err = executeCommand(root, "worker", "start", "--project", projectRoot)
+	require.NoError(t, err)
+	assert.Equal(t, 2, desiredRequests, "expected start to save desired state")
+	assert.Equal(t, 2, reconcileRequests, "worker start must reconcile after saving desired state")
+	assert.Equal(t, []float64{2, 1}, desiredCounts)
+	assert.Equal(t, []string{projectRoot, projectRoot}, reconcileProjects)
+	assert.Contains(t, out, "saved")
+	assert.Contains(t, out, "worker-test-003")
 
 	// Test: restart
 	out, err = executeCommand(root, "worker", "restart", "worker-test-001")
@@ -88,7 +107,7 @@ func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 	// Test: reconcile
 	out, err = executeCommand(root, "worker", "reconcile", "--project", projectRoot)
 	require.NoError(t, err)
-	assert.True(t, reconcileCalled, "expected POST /api/agent/workers/reconcile to be called")
+	assert.Equal(t, 3, reconcileRequests, "expected POST /api/agent/workers/reconcile to be called")
 	assert.Contains(t, out, "worker-test-003")
 }
 
