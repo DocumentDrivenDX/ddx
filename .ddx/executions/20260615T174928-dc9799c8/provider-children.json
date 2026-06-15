@@ -1,9 +1,8 @@
 {
   "attempt_id": "20260615T174928-dc9799c8",
   "bead_id": "ddx-cf0cafef",
-  "trigger": "running_phase_non_route_provider_child",
-  "active_route": "claude-tui",
-  "scanned_at": "2026-06-15T18:19:37.63955634Z",
+  "trigger": "context canceled",
+  "scanned_at": "2026-06-15T18:21:49.811368565Z",
   "reaped": [
     {
       "pid": 1357262,
@@ -220,6 +219,14 @@
       "age_seconds": 1,
       "action": "terminated",
       "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1346841,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 1921,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
     }
   ]
 }
