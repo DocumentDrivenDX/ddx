@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260615T151027-77a5ff14",
+  "bead_id": "ddx-e30ec0ba",
+  "base_rev": "9652142d813b7eb469764577217b44fb21cc803e",
+  "created_at": "2026-06-15T15:10:34.433411964Z",
+  "requested": {
+    "harness": "claude-tui",
+    "model": "opus-4.7",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e30ec0ba",
+    "title": "server: persist worker desired state and reconcile counts",
+    "description": "PROBLEM\nOperators need to say 'project X should have N queue-drain workers' and have DDx keep that true across server ticks and restarts. Today the server can start a worker once, but the desired count and restart policy are not durable.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/server/workers.go:192 defines WorkerManager as an in-memory goroutine manager with workers map state. cli/internal/server/workers.go:361 StartExecuteLoop writes per-worker spec/status, but there is no project-level desired-state file such as .ddx/workers/desired.json. cli/internal/server/workers.go:1971 ReconcileStaleWorkers handles stale records, not desired count, restart policy, or backoff.\n\nPROPOSED FIX\nAdd a small desired-state model and persistence layer under .ddx/workers/desired.json, then add a reconcile component around WorkerManager. The reconciler should load desired_count, default worker spec, restart enabled/backoff/max restarts, compare desired server-managed workers to actual server-owned workers, start missing workers, stop excess workers, mark stale running records stopped, and pause restart on dirty-root/operator-attention blockers.\n\nNON-SCOPE\nDo not implement process-group child cleanup here beyond using existing Stop. Do not add frontend controls here. Do not make external tmux/shell workers managed; they may be reported separately later.",
+    "acceptance": "1. TestWorkerDesiredStateRoundTrip covers load/save/validate of .ddx/workers/desired.json including desired_count, default spec, restart policy, and updated_at.\n2. TestWorkerSupervisorReconcileStartsAndStopsToDesiredCount proves reconcile starts missing server-managed workers and stops newest excess workers to match desired_count.\n3. TestWorkerSupervisorRestartBackoff proves unexpected exit restarts only when restart is enabled and max_restarts_per_hour/backoff allow it.\n4. TestWorkerSupervisorMarksStaleRunningRecordsStopped proves a disk status record that says running but has no in-memory server-owned worker is marked stale/stopped without adopting it.\n5. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestWorkerDesiredStateRoundTrip|TestWorkerSupervisorReconcileStartsAndStopsToDesiredCount|TestWorkerSupervisorRestartBackoff|TestWorkerSupervisorMarksStaleRunningRecordsStopped' passes.\n6. make install is run after the code change lands.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:server",
+      "area:workers",
+      "kind:feature",
+      "phase:build",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: empty output\",\"fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\"}",
+          "created_at": "2026-06-15T15:10:27.720205346Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 80,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260615T151027-77a5ff14",
+    "prompt": ".ddx/executions/20260615T151027-77a5ff14/prompt.md",
+    "manifest": ".ddx/executions/20260615T151027-77a5ff14/manifest.json",
+    "result": ".ddx/executions/20260615T151027-77a5ff14/result.json",
+    "checks": ".ddx/executions/20260615T151027-77a5ff14/checks.json",
+    "usage": ".ddx/executions/20260615T151027-77a5ff14/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-e30ec0ba-20260615T151027-77a5ff14"
+  },
+  "prompt_sha": "8cb0fea259910e0e796ed5bcf544881717001972290e3e01c57c7e2b461f73ef"
+}

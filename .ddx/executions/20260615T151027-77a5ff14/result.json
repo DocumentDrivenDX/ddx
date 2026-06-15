@@ -1,0 +1,56 @@
+{
+  "bead_id": "ddx-e30ec0ba",
+  "attempt_id": "20260615T151027-77a5ff14",
+  "base_rev": "9652142d813b7eb469764577217b44fb21cc803e",
+  "result_rev": "c0416ddfc3a82625208ca968e88e1dac951beac6",
+  "implementation_rev": "c0416ddfc3a82625208ca968e88e1dac951beac6",
+  "landed_rev": "c0416ddfc3a82625208ca968e88e1dac951beac6",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260615T151027-77a5ff14/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260615T151027-77a5ff14",
+      "result_rev": "c0416ddfc3a82625208ca968e88e1dac951beac6",
+      "implementer_route": {
+        "harness": "claude-tui",
+        "model": "opus-4.7"
+      },
+      "requested_route": {
+        "harness": "claude-tui",
+        "model": "opus-4.7"
+      },
+      "actual_route": {
+        "harness": "claude-tui",
+        "model": "opus-4.7"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude-tui",
+  "model": "opus-4.7",
+  "session_id": "eb-49982d58",
+  "duration_ms": 1170761,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260615T151027-77a5ff14",
+  "prompt_file": ".ddx/executions/20260615T151027-77a5ff14/prompt.md",
+  "manifest_file": ".ddx/executions/20260615T151027-77a5ff14/manifest.json",
+  "result_file": ".ddx/executions/20260615T151027-77a5ff14/result.json",
+  "usage_file": ".ddx/executions/20260615T151027-77a5ff14/usage.json",
+  "started_at": "2026-06-15T15:10:34.438510243Z",
+  "finished_at": "2026-06-15T15:30:05.200006006Z"
+}
