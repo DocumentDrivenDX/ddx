@@ -275,6 +275,76 @@ func TestWorkerManagerStopPidlessWorkerReapsServerProviderDescendant(t *testing.
 	t.Fatalf("pidless Stop did not reap provider descendant pid=%d", pid)
 }
 
+func TestWorkerManagerStopPidlessWorkerReapsDelayedFinalizationDescendant(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("ps-based descendant cleanup is Unix-only")
+	}
+
+	root := t.TempDir()
+	seedClaimedBead(t, root, "ddx-stop-delayed")
+
+	m := NewWorkerManager(root)
+	m.WatchdogKillGrace = 150 * time.Millisecond
+	defer m.StopWatchdog()
+
+	now := time.Now().UTC()
+	h, cancelled := newIdleHandle(t, m, "worker-stop-delayed", "ddx-stop-delayed",
+		now.Add(-time.Second), now.Add(-time.Second))
+	m.mu.Lock()
+	h.record.PID = 0
+	h.record.CurrentAttempt.AttemptID = "attempt-delayed-stop"
+	pidCh := make(chan int, 1)
+	waitCh := make(chan error, 1)
+	h.cancel = func() {
+		cancelled.Store(true)
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			cmd := exec.Command("sh", "-c", `trap '' TERM; sleep 60 # Ddx-Attempt-Id: attempt-delayed-stop`)
+			cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+			if err := cmd.Start(); err != nil {
+				pidCh <- -1
+				waitCh <- err
+				return
+			}
+			pidCh <- cmd.Process.Pid
+			waitCh <- cmd.Wait()
+		}()
+	}
+	m.mu.Unlock()
+
+	require.NoError(t, m.Stop("worker-stop-delayed"))
+	assert.True(t, cancelled.Load(), "Stop must invoke cancel before waiting for delayed descendants")
+
+	var pid int
+	select {
+	case pid = <-pidCh:
+		require.Positive(t, pid, "delayed finalization subprocess failed to start")
+	case <-time.After(2 * time.Second):
+		t.Fatal("delayed finalization subprocess did not start")
+	}
+	t.Cleanup(func() {
+		if syscall.Kill(pid, 0) != syscall.ESRCH {
+			_ = syscall.Kill(-pid, syscall.SIGKILL)
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+
+	select {
+	case err := <-waitCh:
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			ws, ok := exitErr.Sys().(syscall.WaitStatus)
+			require.True(t, ok, "expected syscall.WaitStatus")
+			assert.True(t, ws.Signaled(), "delayed finalization subprocess must be signaled")
+			assert.Equal(t, syscall.SIGKILL, ws.Signal())
+		} else if err != nil {
+			t.Fatalf("unexpected wait error: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatalf("pidless Stop did not reap delayed finalization descendant pid=%d", pid)
+	}
+}
+
 // TestRunWorkerPreservesStoppedState: when runWorker finishes after Stop()
 // has already flipped state=stopped, its final record write must keep the
 // terminal state rather than overwriting it with "exited" or "failed".

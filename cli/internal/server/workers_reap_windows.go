@@ -44,3 +44,7 @@ func terminateProcessGroup(pid int, grace time.Duration) {
 func terminateWorkerDescendants(rootPID int, attemptID string, grace time.Duration) {
 	// Windows server-managed workers currently rely on context cancellation.
 }
+
+func terminateWorkerDescendantsUntilQuiet(rootPID int, attemptID string, grace time.Duration) {
+	// Windows server-managed workers currently rely on context cancellation.
+}

@@ -937,6 +937,35 @@ func TestExecutionCleanup_DeletesOldDirs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "removed_evidence_dir"))
 }
 
+func TestExecutionCleanup_PreservesTrackedOldEvidenceDirs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	oldTime := time.Now().AddDate(0, 0, -10)
+	attemptID := "20260101T000000-tracked"
+	oldDir := setupEvidenceDir(t, projectRoot, attemptID, oldTime)
+	trackedRel := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID, "result.json"))
+
+	runGitInteg(t, projectRoot, "init", "-b", "main")
+	runGitInteg(t, projectRoot, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, projectRoot, "config", "user.name", "DDx Test")
+	runGitInteg(t, projectRoot, "add", trackedRel)
+	runGitInteg(t, projectRoot, "commit", "-m", "test: track execution evidence")
+	require.NoError(t, os.Chtimes(oldDir, oldTime, oldTime))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, oldDir)
+	assert.Equal(t, int64(0), summary.RemovedEvidenceDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_tracked_evidence_dir"))
+	assert.Empty(t, runGitInteg(t, projectRoot, "status", "--short", "--", filepath.ToSlash(ExecuteBeadArtifactDir)))
+}
+
 func TestExecutionCleanup_PreservesActiveDirs(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()

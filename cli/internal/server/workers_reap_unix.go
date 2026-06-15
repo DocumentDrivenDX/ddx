@@ -92,6 +92,33 @@ func terminateWorkerDescendants(rootPID int, attemptID string, grace time.Durati
 	killWorkerDescendants(candidates, grace)
 }
 
+func terminateWorkerDescendantsUntilQuiet(rootPID int, attemptID string, grace time.Duration) {
+	if rootPID <= 0 {
+		return
+	}
+	quietFor := 250 * time.Millisecond
+	deadline := time.Now().Add(grace + quietFor + 2*time.Second)
+	quietSince := time.Now()
+	for {
+		rows, err := scanWorkerProcesses(context.Background())
+		if err != nil {
+			return
+		}
+		candidates := workerDescendantCleanupCandidates(rows, rootPID, attemptID)
+		if len(candidates) > 0 {
+			killWorkerDescendants(candidates, grace)
+			quietSince = time.Now()
+		}
+		if time.Since(quietSince) >= quietFor {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 func scanWorkerProcesses(ctx context.Context) ([]workerProcessRow, error) {
 	cmd := exec.CommandContext(ctx, "ps", "-axo", "pid=,ppid=,pgid=,command=")
 	out, err := cmd.Output()

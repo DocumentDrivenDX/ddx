@@ -1390,7 +1390,7 @@ func (m *WorkerManager) Stop(id string) error {
 	// Cancel the worker goroutine so any in-process code sees context.Canceled.
 	cancel()
 	if pid == 0 {
-		terminateWorkerDescendants(os.Getpid(), attemptID, grace)
+		terminateWorkerDescendantsUntilQuiet(os.Getpid(), attemptID, grace)
 	}
 
 	// Flip in-memory state to the terminal "stopped" label. For real
@@ -1571,7 +1571,7 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 		handle.cancel()
 	}
 	if pid == 0 {
-		terminateWorkerDescendants(os.Getpid(), attemptID, grace)
+		terminateWorkerDescendantsUntilQuiet(os.Getpid(), attemptID, grace)
 	}
 
 	// 4. Flip state=reaped and persist. runWorker may still race to

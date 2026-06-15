@@ -1200,6 +1200,22 @@ func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary
 			continue
 		}
 
+		tracked, trackErr := m.evidenceDirHasTrackedFiles(ctx, relPath)
+		if trackErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    relPath,
+				Class:   "evidence_dir_track_check",
+				Message: trackErr.Error(),
+			})
+		}
+		if tracked {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    relPath,
+				Class:   "preserved_tracked_evidence_dir",
+				Message: "tracked execution evidence is audit data",
+			})
+			continue
+		}
 		if !m.DryRun {
 			m.removeEvidenceDir(ctx, dirPath, summary)
 		}
@@ -1216,8 +1232,18 @@ func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary
 	}
 }
 
-// removeEvidenceDir stages tracked files for deletion via git rm, then
-// removes any remaining files with os.RemoveAll.
+func (m *ExecutionCleanupManager) evidenceDirHasTrackedFiles(ctx context.Context, relSlash string) (bool, error) {
+	if m.ProjectRoot == "" || strings.TrimSpace(relSlash) == "" {
+		return false, nil
+	}
+	lsOut, err := internalgit.Command(ctx, m.ProjectRoot, "ls-files", "--", relSlash).Output()
+	if err != nil {
+		return false, err
+	}
+	return len(strings.TrimSpace(string(lsOut))) > 0, nil
+}
+
+// removeEvidenceDir removes an old untracked evidence directory.
 func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath string, summary *ExecutionCleanupSummary) {
 	if m.ProjectRoot == "" {
 		_ = os.RemoveAll(dirPath)
@@ -1228,21 +1254,6 @@ func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath
 		_ = os.RemoveAll(dirPath)
 		return
 	}
-	relSlash := filepath.ToSlash(rel)
-
-	// Check for tracked files; if any, stage their deletion via git rm.
-	lsOut, lsErr := internalgit.Command(ctx, m.ProjectRoot, "ls-files", relSlash).Output()
-	if lsErr == nil && len(strings.TrimSpace(string(lsOut))) > 0 {
-		rmOut, rmErr := internalgit.Command(ctx, m.ProjectRoot, "rm", "-rf", relSlash).CombinedOutput()
-		if rmErr != nil {
-			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-				Path:    dirPath,
-				Class:   "evidence_dir_git_rm",
-				Message: fmt.Sprintf("git rm: %s: %v", strings.TrimSpace(string(rmOut)), rmErr),
-			})
-		}
-	}
-	// Remove remaining untracked files.
 	_ = os.RemoveAll(dirPath)
 }
 
