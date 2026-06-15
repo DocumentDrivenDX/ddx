@@ -53,17 +53,21 @@ func TestWorkerRuntimeWiresPreClaimDeadlines(t *testing.T) {
 	assert.Contains(t, body, "RouteResolutionTimeout: spec.RouteResolutionTimeout.Duration")
 }
 
-func TestWorkerShowRefreshesCurrentAttemptFromRunState(t *testing.T) {
+func TestWorkerCurrentAttemptHydratesMatchingFreshRunState(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
 	m := NewWorkerManager(root)
 	started := time.Now().UTC().Add(-2 * time.Minute)
+	pid := os.Getpid()
 	require.NoError(t, agent.WriteRunState(root, agent.RunState{
-		BeadID:    "ddx-live",
-		AttemptID: "attempt-live",
-		Harness:   "claude-tui",
-		Model:     "sonnet-4.6",
-		StartedAt: started,
+		BeadID:      "ddx-live",
+		AttemptID:   "attempt-live",
+		Harness:     "claude-tui",
+		Model:       "sonnet-4.6",
+		StartedAt:   started,
+		PID:         pid,
+		RefreshedAt: time.Now().UTC(),
+		ExpiresAt:   time.Now().UTC().Add(time.Minute),
 	}))
 
 	m.mu.Lock()
@@ -75,6 +79,7 @@ func TestWorkerShowRefreshesCurrentAttemptFromRunState(t *testing.T) {
 			Status:      "running",
 			ProjectRoot: root,
 			Profile:     "default",
+			PID:         pid,
 			CurrentAttempt: &CurrentAttemptInfo{
 				AttemptID: "attempt-provisional",
 				BeadID:    "ddx-live",
@@ -96,19 +101,21 @@ func TestWorkerShowRefreshesCurrentAttemptFromRunState(t *testing.T) {
 	assert.Equal(t, started.Unix(), rec.CurrentAttempt.StartedAt.Unix())
 }
 
-func TestWorkerShowDoesNotOverwriteNewerCurrentAttemptWithStaleRunState(t *testing.T) {
+func TestWorkerCurrentAttemptIgnoresExpiredRunState(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
 	m := NewWorkerManager(root)
-
-	oldStarted := time.Now().UTC().Add(-10 * time.Minute)
-	newStarted := time.Now().UTC()
+	pid := os.Getpid()
+	now := time.Now().UTC()
 	require.NoError(t, agent.WriteRunState(root, agent.RunState{
-		BeadID:    "ddx-live",
-		AttemptID: "attempt-old",
-		Harness:   "claude-tui",
-		Model:     "opus-4.7",
-		StartedAt: oldStarted,
+		BeadID:      "ddx-old",
+		AttemptID:   "attempt-old",
+		Harness:     "claude-tui",
+		Model:       "opus-4.7",
+		StartedAt:   now.Add(-10 * time.Minute),
+		PID:         pid,
+		RefreshedAt: now.Add(-8 * time.Minute),
+		ExpiresAt:   now.Add(-7 * time.Minute),
 	}))
 
 	m.mu.Lock()
@@ -119,6 +126,78 @@ func TestWorkerShowDoesNotOverwriteNewerCurrentAttemptWithStaleRunState(t *testi
 			State:       "running",
 			Status:      "running",
 			ProjectRoot: root,
+			PID:         pid,
+		},
+	}
+	m.mu.Unlock()
+
+	rec, err := m.Show("worker-live")
+	require.NoError(t, err)
+	assert.Nil(t, rec.CurrentAttempt)
+}
+
+func TestWorkerCurrentAttemptRequiresMatchingPID(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	m := NewWorkerManager(root)
+	now := time.Now().UTC()
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:      "ddx-other",
+		AttemptID:   "attempt-other",
+		Harness:     "claude-tui",
+		Model:       "opus-4.7",
+		StartedAt:   now.Add(-time.Minute),
+		PID:         os.Getpid(),
+		RefreshedAt: now,
+		ExpiresAt:   now.Add(time.Minute),
+	}))
+
+	m.mu.Lock()
+	m.workers["worker-live"] = &workerHandle{
+		record: WorkerRecord{
+			ID:          "worker-live",
+			Kind:        "work",
+			State:       "running",
+			Status:      "running",
+			ProjectRoot: root,
+			PID:         os.Getpid() + 1000000,
+		},
+	}
+	m.mu.Unlock()
+
+	rec, err := m.Show("worker-live")
+	require.NoError(t, err)
+	assert.Nil(t, rec.CurrentAttempt)
+}
+
+func TestWorkerCurrentAttemptPrefersInMemoryProgress(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	m := NewWorkerManager(root)
+	pid := os.Getpid()
+
+	oldStarted := time.Now().UTC().Add(-10 * time.Minute)
+	newStarted := time.Now().UTC()
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:      "ddx-other",
+		AttemptID:   "attempt-old",
+		Harness:     "claude-tui",
+		Model:       "opus-4.7",
+		StartedAt:   oldStarted,
+		PID:         pid,
+		RefreshedAt: time.Now().UTC(),
+		ExpiresAt:   time.Now().UTC().Add(time.Minute),
+	}))
+
+	m.mu.Lock()
+	m.workers["worker-live"] = &workerHandle{
+		record: WorkerRecord{
+			ID:          "worker-live",
+			Kind:        "work",
+			State:       "running",
+			Status:      "running",
+			ProjectRoot: root,
+			PID:         pid,
 			CurrentBead: "ddx-live",
 			CurrentAttempt: &CurrentAttemptInfo{
 				BeadID:    "ddx-live",

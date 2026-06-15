@@ -865,8 +865,12 @@ func refreshWorkerCurrentAttemptFromRunState(rec WorkerRecord) WorkerRecord {
 	if projectRoot == "" {
 		return rec
 	}
-	state, err := agent.ReadRunState(projectRoot)
-	if err != nil || state == nil || strings.TrimSpace(state.AttemptID) == "" {
+	states, err := agent.ReadRunStates(projectRoot)
+	if err != nil {
+		return rec
+	}
+	state, ok := matchingWorkerRunState(rec, states, time.Now().UTC())
+	if !ok {
 		return rec
 	}
 	beadID := strings.TrimSpace(state.BeadID)
@@ -912,6 +916,36 @@ func refreshWorkerCurrentAttemptFromRunState(rec WorkerRecord) WorkerRecord {
 		rec.Model = state.Model
 	}
 	return rec
+}
+
+func matchingWorkerRunState(rec WorkerRecord, states []agent.RunState, now time.Time) (agent.RunState, bool) {
+	var best agent.RunState
+	found := false
+	for _, state := range states {
+		if strings.TrimSpace(state.AttemptID) == "" || strings.TrimSpace(state.BeadID) == "" {
+			continue
+		}
+		if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
+			continue
+		}
+		if rec.PID > 0 {
+			if state.PID != rec.PID {
+				continue
+			}
+		} else if state.PID > 0 && !isPIDAlive(state.PID) {
+			continue
+		}
+		if state.PID > 0 && !isPIDAlive(state.PID) {
+			continue
+		}
+		if !found ||
+			state.StartedAt.After(best.StartedAt) ||
+			(state.StartedAt.Equal(best.StartedAt) && state.RefreshedAt.After(best.RefreshedAt)) {
+			best = state
+			found = true
+		}
+	}
+	return best, found
 }
 
 func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
