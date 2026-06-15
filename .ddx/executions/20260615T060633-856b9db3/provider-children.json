@@ -1,0 +1,17 @@
+{
+  "attempt_id": "20260615T060633-856b9db3",
+  "bead_id": "ddx-34ea2a74",
+  "trigger": "superseded_provider_child",
+  "active_route": "claude-tui",
+  "scanned_at": "2026-06-15T06:06:50.752302986Z",
+  "reaped": [
+    {
+      "pid": 1404747,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
+    }
+  ]
+}
