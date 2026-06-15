@@ -45727,7 +45727,7 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "harness", "profile", "effort", "labelFilter", "mode", "idleInterval"}
+	fieldsInOrder := [...]string{"projectId", "harness", "provider", "model", "profile", "effort", "labelFilter", "mode", "idleInterval"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -45748,6 +45748,20 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 				return it, err
 			}
 			it.Harness = data
+		case "provider":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("provider"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Provider = data
+		case "model":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("model"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Model = data
 		case "profile":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("profile"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)

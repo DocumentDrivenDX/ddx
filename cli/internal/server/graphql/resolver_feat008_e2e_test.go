@@ -142,6 +142,8 @@ func TestReviewRetryThresholdFromConfigGraphQL(t *testing.T) {
 		fixedRev    = "cafebabe00112233"
 		assigneeStr = "graphql-e2e-worker"
 		harnessCfg  = "claude"
+		providerCfg = "anthropic"
+		modelCfg    = "opus-4.7"
 	)
 
 	projectRoot := t.TempDir()
@@ -174,7 +176,12 @@ review_max_retries: 5
 	}
 	mr := &mutationResolver{Resolver: resolver}
 
-	res, err := mr.StartWorker(context.Background(), StartWorkerInput{ProjectID: "", Harness: strPtr(harnessCfg)})
+	res, err := mr.StartWorker(context.Background(), StartWorkerInput{
+		ProjectID: "",
+		Harness:   strPtr(harnessCfg),
+		Provider:  strPtr(providerCfg),
+		Model:     strPtr(modelCfg),
+	})
 	require.NoError(t, err, "StartWorker must succeed against a valid on-disk config")
 	require.NotNil(t, res)
 	require.Len(t, dispatcher.calls, 1, "StartWorker must dispatch exactly once")
@@ -185,6 +192,12 @@ review_max_retries: 5
 	assert.Equal(t, harnessCfg, got.args["harness"],
 		"input harness override (%s) must reach dispatcher args via LoadAndResolve",
 		harnessCfg)
+	assert.Equal(t, providerCfg, got.args["provider"],
+		"input provider override (%s) must reach dispatcher args via LoadAndResolve",
+		providerCfg)
+	assert.Equal(t, modelCfg, got.args["model"],
+		"input model override (%s) must reach dispatcher args via LoadAndResolve",
+		modelCfg)
 	assert.Equal(t, "smart", got.args["profile"],
 		"with no agent.profile configured and no input override, the "+
 			"resolver's legacy fallback of \"smart\" must continue to apply")

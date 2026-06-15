@@ -2338,6 +2338,10 @@ type StartWorkerInput struct {
 	ProjectID string `json:"projectId"`
 	// Optional harness override
 	Harness *string `json:"harness,omitempty"`
+	// Optional provider override
+	Provider *string `json:"provider,omitempty"`
+	// Optional model override
+	Model *string `json:"model,omitempty"`
 	// Routing profile, defaulting to smart when omitted
 	Profile *string `json:"profile,omitempty"`
 	// Reasoning effort, defaulting to medium when omitted

@@ -48,6 +48,8 @@
 	let stoppingId = $state<string | null>(null);
 	let actionError = $state<string | null>(null);
 	let harness = $state('');
+	let provider = $state('');
+	let model = $state('');
 	let profile = $state('smart');
 	let effort = $state('medium');
 	let labelFilter = $state('');
@@ -125,6 +127,8 @@
 				input: {
 					projectId: data.projectId,
 					harness: harness.trim() || null,
+					provider: provider.trim() || null,
+					model: model.trim() || null,
 					profile: profile.trim(),
 					effort: effort.trim(),
 					labelFilter: labelFilter.trim() || null
@@ -132,6 +136,8 @@
 			});
 			showStartForm = false;
 			harness = '';
+			provider = '';
+			model = '';
 			labelFilter = '';
 			await invalidateAll();
 		} catch (err) {
@@ -324,7 +330,7 @@
 
 	{#if showStartForm}
 		<form
-			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-4"
+			class="grid gap-3 border border-border-line bg-bg-surface p-4 text-body-sm dark:border-dark-border-line dark:bg-dark-bg-surface sm:grid-cols-6"
 			onsubmit={(event) => {
 				event.preventDefault();
 				void startWorker();
@@ -334,6 +340,22 @@
 				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</span>
 				<input
 					bind:value={harness}
+					placeholder="auto"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+				/>
+			</label>
+			<label class="space-y-1">
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Provider</span>
+				<input
+					bind:value={provider}
+					placeholder="auto"
+					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+				/>
+			</label>
+			<label class="space-y-1">
+				<span class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Model</span>
+				<input
+					bind:value={model}
 					placeholder="auto"
 					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
@@ -370,7 +392,7 @@
 					class="w-full border border-border-line bg-bg-elevated px-2 py-1.5 text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
 				/>
 			</label>
-			<div class="flex items-end gap-2 sm:col-span-4">
+			<div class="flex items-end gap-2 sm:col-span-6">
 				<button
 					type="submit"
 					disabled={starting || !profile.trim() || !effort.trim()}

@@ -1934,6 +1934,10 @@ input StartWorkerInput {
   projectId: String!
   """Optional harness override"""
   harness: String
+  """Optional provider override"""
+  provider: String
+  """Optional model override"""
+  model: String
   """Routing profile, defaulting to smart when omitted"""
   profile: String
   """Reasoning effort, defaulting to medium when omitted"""

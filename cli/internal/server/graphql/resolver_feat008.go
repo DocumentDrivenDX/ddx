@@ -96,6 +96,12 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	if input.Harness != nil {
 		overrides.Harness = strings.TrimSpace(*input.Harness)
 	}
+	if input.Provider != nil {
+		overrides.Provider = strings.TrimSpace(*input.Provider)
+	}
+	if input.Model != nil {
+		overrides.Model = strings.TrimSpace(*input.Model)
+	}
 	if input.Profile != nil {
 		overrides.Profile = strings.TrimSpace(*input.Profile)
 	}
@@ -107,6 +113,12 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	args := map[string]string{}
 	if v := rcfg.Harness(); v != "" {
 		args["harness"] = v
+	}
+	if v := rcfg.Provider(); v != "" {
+		args["provider"] = v
+	}
+	if v := rcfg.Model(); v != "" {
+		args["model"] = v
 	}
 	profile := rcfg.Profile()
 	if profile == "" {
