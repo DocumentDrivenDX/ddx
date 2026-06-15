@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-9febbad2",
+  "attempt_id": "20260615T092944-600c1f0c",
+  "base_rev": "0692d6eb13bcea0075f099171072f67b44b78d54",
+  "result_rev": "0692d6eb13bcea0075f099171072f67b44b78d54",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "turn timeout exceeded",
+  "harness": "claude-tui",
+  "model": "opus-4.7",
+  "session_id": "eb-91c9d3a5",
+  "duration_ms": 311771,
+  "exit_code": 124,
+  "error": "turn timeout exceeded",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "timeout",
+  "execution_dir": ".ddx/executions/20260615T092944-600c1f0c",
+  "prompt_file": ".ddx/executions/20260615T092944-600c1f0c/prompt.md",
+  "manifest_file": ".ddx/executions/20260615T092944-600c1f0c/manifest.json",
+  "result_file": ".ddx/executions/20260615T092944-600c1f0c/result.json",
+  "started_at": "2026-06-15T09:29:52.063382049Z",
+  "finished_at": "2026-06-15T09:35:03.834902467Z"
+}

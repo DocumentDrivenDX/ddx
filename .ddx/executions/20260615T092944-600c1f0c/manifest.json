@@ -1,0 +1,123 @@
+{
+  "attempt_id": "20260615T092944-600c1f0c",
+  "bead_id": "ddx-9febbad2",
+  "base_rev": "0692d6eb13bcea0075f099171072f67b44b78d54",
+  "created_at": "2026-06-15T09:29:52.056218205Z",
+  "requested": {
+    "harness": "claude-tui",
+    "model": "opus-4.7",
+    "effort": "medium",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9febbad2",
+    "title": "agent: enforce request-timeout as provider wall-clock cap",
+    "description": "PROBLEM\nDuring dogfood of ddx-3b721804 on 2026-06-13, the worker was started with `ddx work --once --request-timeout 25m`, but the primary Claude provider process stayed alive for roughly 56 minutes while tool activity and watcher stalls continued. The operator expectation for `--request-timeout` is a bounded provider/attempt wall-clock cap with cleanup. DDx currently allowed the provider leg to run more than twice the configured timeout, which makes unattended burn-down unreliable.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/serviceconfig.go:24-33 documents `DefaultProviderRequestTimeout` and says `--request-timeout` applies to execute-bead/work one-off debugging.\ncli/internal/agent/agent_runner_service.go:112-125 resolves and forwards `ProviderTimeout` into the service request.\ncli/internal/agent/agent_runner_service.go:337-366 resets idle/tool-call timers on service events, but there is no absolute wall-clock timer that cancels a provider session that remains active through endless tool events.\ncli/internal/server/workers.go:734-787 forwards server worker request timeout into loop overrides, so server-managed workers will inherit the same ambiguity unless the boundary is made explicit and tested.\n\nPROPOSED FIX\nMake `--request-timeout` an absolute provider-session wall-clock cap for execute-bead/work attempts, distinct from idle-read and per-tool-call timers. On expiry, cancel the provider context, reap the attempt process tree, release/park the lease according to existing timeout policy, and write durable evidence naming configured_timeout, elapsed, phase, provider PID, and cleanup result.\n\nNON-SCOPE\nDo not remove idle-read timeout or tool-call timeout. Do not call real providers in tests. Do not make long-running project tests impossible; if a longer cap is needed, the operator can set one explicitly.",
+    "acceptance": "1. TestWorkRequestTimeoutCancelsActiveToolSession uses a fake service/provider that emits regular tool events past a 2s request timeout; DDx cancels at the absolute timeout instead of resetting the cap on activity.\n2. TestRequestTimeoutReapsProviderAndAttemptChildren proves the provider process and its attempt-scoped children are gone after timeout and process-cleanup evidence is written.\n3. TestRequestTimeoutEvidenceIncludesWallClockFields proves evidence includes configured_timeout, elapsed, phase, provider_pid, cleanup_result, and reason=request_timeout.\n4. TestServerManagedWorkerForwardsRequestTimeoutToAbsoluteCap proves the server worker path in cli/internal/server/workers.go honors the same cap.\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... -run 'TestWorkRequestTimeoutCancelsActiveToolSession|TestRequestTimeoutReapsProviderAndAttemptChildren|TestRequestTimeoutEvidenceIncludesWallClockFields|TestServerManagedWorkerForwardsRequestTimeoutToAbsoluteCap' passes.\\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: under-specified routing for harness=\\\"claude-tui\\\": supply --model, --policy, or --min-power\",\"fingerprint\":\"fe8be60738babaca9b85dab192edc48fc0607bce8ba1c835c792802d75ac12e9\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"fe8be60738babaca9b85dab192edc48fc0607bce8ba1c835c792802d75ac12e9\"}",
+          "created_at": "2026-06-15T09:10:44.061356282Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"fallback_chain\":[],\"requested_harness\":\"claude-tui\"}",
+          "created_at": "2026-06-15T09:11:01.950148981Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui"
+        },
+        {
+          "actor": "ddx",
+          "body": "powerClass= harness=claude-tui model=\nResolveRoute: no live provider supports prompt of 2274 tokens with tools=false at policy smart",
+          "created_at": "2026-06-15T09:11:03.500451154Z",
+          "kind": "power-attempt",
+          "source": "legacy agent work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"power_attempts\":[{\"power_class\":\"\",\"harness\":\"claude-tui\",\"status\":\"execution_failed\",\"cost_usd\":0,\"duration_ms\":10565}],\"winning_power_class\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-06-15T09:11:03.555525907Z",
+          "kind": "escalation-summary",
+          "source": "legacy agent work",
+          "summary": "winning_power_class=exhausted attempts=1 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"ResolveRoute: no live provider supports prompt of 2274 tokens with tools=false at policy smart\",\"harness\":\"claude-tui\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-06-15T09:11:03.705110444Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude-tui\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260615T091044-8ea1a5df\",\"bead_id\":\"ddx-9febbad2\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-15T09:11:03.744725558Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard harness=claude-tui note=actual route facts unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "ResolveRoute: no live provider supports prompt of 2274 tokens with tools=false at policy smart\ndecision_audit={\"failure_class\":\"no_viable_provider\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"claude-tui\"},\"actual_route\":{\"harness\":\"claude-tui\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=738e1bb923b14d936efd7f6b610e6ed3c90e8cba\nbase_rev=738e1bb923b14d936efd7f6b610e6ed3c90e8cba\noutcome_reason=no_viable_provider",
+          "created_at": "2026-06-15T09:11:03.784292964Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: agent: provider process exited without emitting a final event\",\"fingerprint\":\"577f0982952c5eda7245249fb8e28efa371e5078b45661ac02984c0b143657bc\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"577f0982952c5eda7245249fb8e28efa371e5078b45661ac02984c0b143657bc\"}",
+          "created_at": "2026-06-15T09:20:47.484849537Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: empty output\",\"fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\"}",
+          "created_at": "2026-06-15T09:29:44.364170825Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": "-139",
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260615T092944-600c1f0c",
+    "prompt": ".ddx/executions/20260615T092944-600c1f0c/prompt.md",
+    "manifest": ".ddx/executions/20260615T092944-600c1f0c/manifest.json",
+    "result": ".ddx/executions/20260615T092944-600c1f0c/result.json",
+    "checks": ".ddx/executions/20260615T092944-600c1f0c/checks.json",
+    "usage": ".ddx/executions/20260615T092944-600c1f0c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9febbad2-20260615T092944-600c1f0c"
+  },
+  "prompt_sha": "a4ff7f06930a63cf848ad568ef317e1afa545ec426f01f2558832ac54ec7cba0"
+}
