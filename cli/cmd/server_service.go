@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/service"
@@ -27,6 +28,7 @@ func buildServerServiceConfig(execPath, projectRoot string) service.Config {
 	runtimeDir := service.ServerRuntimeDir()
 	env := map[string]string{
 		"DDX_PROJECT_ROOT": projectRoot,
+		"PATH":             serverServicePath(execPath),
 	}
 	for _, k := range envKeysForService {
 		if v := os.Getenv(k); v != "" {
@@ -40,6 +42,39 @@ func buildServerServiceConfig(execPath, projectRoot string) service.Config {
 		LogPath:     filepath.Join(runtimeDir, "ddx-server.log"),
 		Env:         env,
 	}
+}
+
+func serverServicePath(execPath string) string {
+	parts := make([]string, 0, 16)
+	seen := map[string]struct{}{}
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			return
+		}
+		if _, ok := seen[path]; ok {
+			return
+		}
+		seen[path] = struct{}{}
+		parts = append(parts, path)
+	}
+
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		add(filepath.Join(home, ".local", "bin"))
+		add(filepath.Join(home, "bin"))
+	}
+	if dir := filepath.Dir(execPath); dir != "." && dir != "" {
+		add(dir)
+	}
+	for _, part := range filepath.SplitList(os.Getenv("PATH")) {
+		add(part)
+	}
+	if len(parts) == 0 {
+		add("/usr/local/bin")
+		add("/usr/bin")
+		add("/bin")
+	}
+	return strings.Join(parts, string(os.PathListSeparator))
 }
 
 func (f *CommandFactory) newServerInstallCommand() *cobra.Command {
