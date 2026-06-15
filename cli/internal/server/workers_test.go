@@ -801,8 +801,7 @@ func TestWorkerLiveCounters(t *testing.T) {
 		t.Skip("requires work goroutine timing; too slow for -short")
 	}
 	root := t.TempDir()
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 
 	// Initialise a git repo so CloseWithEvidence can write bead events.
 	initGitRepo(t, root)
@@ -818,6 +817,8 @@ func TestWorkerLiveCounters(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+	runCmd(t, root, "git", "add", filepath.Join(ddxroot.DirName, "config.yaml"), filepath.Join(ddxroot.DirName, "beads.jsonl"))
+	runCmd(t, root, "git", "commit", "-m", "seed live counter beads")
 
 	m := NewWorkerManager(root)
 
@@ -901,15 +902,8 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 	runCmd(t, root, "git", "add", "-A")
 	runCmd(t, root, "git", "commit", "-m", "init")
 
-	// Get the initial main tip for comparison later.
-	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
-	initialTipOut, err := initialTipCmd.Output()
-	require.NoError(t, err)
-	initialTip := strings.TrimSpace(string(initialTipOut))
-
 	// Seed the bead store with one ready bead.
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:         "ddx-integration-01",
@@ -919,6 +913,16 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 		IssueType:  bead.DefaultType,
 		Acceptance: "Worker lands commit via coordinator",
 	}))
+	runCmd(t, root, "git", "add", filepath.Join(ddxroot.DirName, "config.yaml"), filepath.Join(ddxroot.DirName, "beads.jsonl"))
+	runCmd(t, root, "git", "commit", "-m", "seed worker bead")
+
+	// Get the initial main tip for comparison later. This must include the
+	// seeded tracker state, otherwise the pre-claim dirty-root guard correctly
+	// refuses to claim work.
+	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	initialTipOut, err := initialTipCmd.Output()
+	require.NoError(t, err)
+	initialTip := strings.TrimSpace(string(initialTipOut))
 
 	m := NewWorkerManager(root)
 
@@ -1022,13 +1026,7 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 	runCmd(t, root, "git", "add", "-A")
 	runCmd(t, root, "git", "commit", "-m", "init")
 
-	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
-	initialTipOut, err := initialTipCmd.Output()
-	require.NoError(t, err)
-	initialTip := strings.TrimSpace(string(initialTipOut))
-
-	ddxDir := filepath.Join(root, ddxroot.DirName)
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	ddxDir := testutils.MakeInitializedDDxRoot(t, root)
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{
 		ID:        "ddx-evidence-integ",
@@ -1036,6 +1034,13 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 		Status:    bead.StatusOpen,
 		IssueType: bead.DefaultType,
 	}))
+	runCmd(t, root, "git", "add", filepath.Join(ddxroot.DirName, "config.yaml"), filepath.Join(ddxroot.DirName, "beads.jsonl"))
+	runCmd(t, root, "git", "commit", "-m", "seed evidence bead")
+
+	initialTipCmd := exec.Command("git", "-C", root, "rev-parse", "refs/heads/main")
+	initialTipOut, err := initialTipCmd.Output()
+	require.NoError(t, err)
+	initialTip := strings.TrimSpace(string(initialTipOut))
 
 	m := NewWorkerManager(root)
 
