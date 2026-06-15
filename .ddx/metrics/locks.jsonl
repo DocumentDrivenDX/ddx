@@ -465,3 +465,4 @@
 {"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":2935851,"acquired_at":"2026-06-15T21:53:22.210730625Z","released_at":"2026-06-15T21:53:22.265638299Z","duration_ms":54}
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":2935851,"acquired_at":"2026-06-15T21:53:22.290062464Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":2935851,"acquired_at":"2026-06-15T21:53:22.290062464Z","released_at":"2026-06-15T21:53:22.403377651Z","duration_ms":113}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2985417,"acquired_at":"2026-06-15T22:01:02.052761086Z"}
