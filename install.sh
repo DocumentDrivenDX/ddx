@@ -34,6 +34,16 @@ warn() {
     echo -e "${YELLOW}[DDx]${NC} $1" >&2
 }
 
+file_sha256() {
+    if command -v sha256sum &> /dev/null; then
+        sha256sum "$1" | awk '{print $1}'
+    elif command -v shasum &> /dev/null; then
+        shasum -a 256 "$1" | awk '{print $1}'
+    else
+        return 1
+    fi
+}
+
 error() {
     echo -e "${RED}[DDx]${NC} $1" >&2
     exit 1
@@ -106,6 +116,75 @@ parse_args() {
     fi
 }
 
+cleanup_stale_ddx_copies() {
+    CANONICAL_DDX="${INSTALL_PREFIX}/bin/ddx"
+    [ -x "$CANONICAL_DDX" ] || return 0
+
+    CANONICAL_HASH=$(file_sha256 "$CANONICAL_DDX" 2>/dev/null || true)
+    if [ -z "$CANONICAL_HASH" ]; then
+        warn "No sha256sum or shasum found; skipping stale ddx PATH cleanup."
+        return 0
+    fi
+
+    log "Checking for stale ddx copies on PATH..."
+
+    LEGACY_GOPATH_BIN=""
+    if command -v go &> /dev/null; then
+        GOPATH_VALUE=$(go env GOPATH 2>/dev/null || true)
+        if [ -n "$GOPATH_VALUE" ]; then
+            LEGACY_GOPATH_BIN="${GOPATH_VALUE}/bin"
+        fi
+    elif [ -n "${GOPATH:-}" ]; then
+        LEGACY_GOPATH_BIN="${GOPATH}/bin"
+    else
+        LEGACY_GOPATH_BIN="${HOME}/go/bin"
+    fi
+
+    SCAN_PATH="${PATH}"
+    if [ -n "$LEGACY_GOPATH_BIN" ]; then
+        SCAN_PATH="${SCAN_PATH}:${LEGACY_GOPATH_BIN}"
+    fi
+
+    REMOVED=0
+    SKIPPED=0
+    SEEN=":"
+    IFS=':' read -r -a PATH_DIRS <<< "$SCAN_PATH"
+    for DIR in "${PATH_DIRS[@]}"; do
+        [ -n "$DIR" ] || continue
+        CANDIDATE="${DIR}/ddx"
+        case "$SEEN" in
+            *":${CANDIDATE}:"*) continue ;;
+        esac
+        SEEN="${SEEN}${CANDIDATE}:"
+
+        [ -f "$CANDIDATE" ] && [ -x "$CANDIDATE" ] || continue
+        if [ "$CANDIDATE" = "$CANONICAL_DDX" ]; then
+            continue
+        fi
+
+        CANDIDATE_HASH=$(file_sha256 "$CANDIDATE" 2>/dev/null || true)
+        if [ -z "$CANDIDATE_HASH" ] || [ "$CANDIDATE_HASH" = "$CANONICAL_HASH" ]; then
+            continue
+        fi
+
+        if rm -f "$CANDIDATE"; then
+            warn "Removed stale ddx copy: ${CANDIDATE}"
+            REMOVED=$((REMOVED + 1))
+        else
+            warn "Could not remove stale ddx copy: ${CANDIDATE}"
+            SKIPPED=$((SKIPPED + 1))
+        fi
+    done
+
+    if [ "$REMOVED" -eq 0 ] && [ "$SKIPPED" -eq 0 ]; then
+        success "No stale ddx copies found"
+    elif [ "$SKIPPED" -gt 0 ]; then
+        warn "Removed ${REMOVED} stale ddx copy/copies; ${SKIPPED} could not be removed"
+    else
+        success "Removed ${REMOVED} stale ddx copy/copies"
+    fi
+}
+
 # Check prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
@@ -174,13 +253,9 @@ install_cli() {
         fi
         log "Installing DDx from build artifact: ${INSTALL_SOURCE}"
         install -m 0755 "${INSTALL_SOURCE}" "${LOCAL_BIN}/ddx"
-        if command -v sha256sum &> /dev/null; then
-            SOURCE_HASH=$(sha256sum "${INSTALL_SOURCE}" | awk '{print $1}')
-            INSTALLED_HASH=$(sha256sum "${LOCAL_BIN}/ddx" | awk '{print $1}')
-        elif command -v shasum &> /dev/null; then
-            SOURCE_HASH=$(shasum -a 256 "${INSTALL_SOURCE}" | awk '{print $1}')
-            INSTALLED_HASH=$(shasum -a 256 "${LOCAL_BIN}/ddx" | awk '{print $1}')
-        else
+        SOURCE_HASH=$(file_sha256 "${INSTALL_SOURCE}" 2>/dev/null || true)
+        INSTALLED_HASH=$(file_sha256 "${LOCAL_BIN}/ddx" 2>/dev/null || true)
+        if [ -z "$SOURCE_HASH" ] || [ -z "$INSTALLED_HASH" ]; then
             SOURCE_HASH=""
             INSTALLED_HASH=""
             warn "No sha256sum or shasum found; skipping local binary verification."
@@ -188,6 +263,7 @@ install_cli() {
         if [ -n "$SOURCE_HASH" ] && [ "$SOURCE_HASH" != "$INSTALLED_HASH" ]; then
             error "Installed binary hash mismatch. Expected ${SOURCE_HASH}, got ${INSTALLED_HASH}."
         fi
+        cleanup_stale_ddx_copies
         success "CLI tool installed from build artifact"
         return
     fi
@@ -280,6 +356,7 @@ install_cli() {
     # Install binary directly to local bin
     # Install binary directly to local bin instead of DDx home.
     install -m 0755 "${BINARY_NAME}" "${LOCAL_BIN}/ddx"
+    cleanup_stale_ddx_copies
 
     success "CLI tool installed (${TAG})"
 }
