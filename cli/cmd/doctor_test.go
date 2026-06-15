@@ -274,7 +274,7 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 				t.Fatalf("doctor returned error: %v\noutput:\n%s", err, output)
 			}
 
-			projectPath := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
+			projectPath := filepath.Join(ddxroot.JoinProject(workDir), "plugins", "ddx")
 			globalPath := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
 
 			if !strings.Contains(output, "Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
@@ -477,5 +477,51 @@ func TestLegacySkillSymlinkDirs_NoSymlinks(t *testing.T) {
 	got := legacySkillSymlinkDirs(workDir)
 	if len(got) != 0 {
 		t.Errorf("expected no legacy dirs, got %v", got)
+	}
+}
+
+// TestStaleWorktreeMasterDiagnosticReportsMissingExecuteBeadPath seeds
+// worktrees.json with an old .execute-bead-wt master path that no longer
+// exists and verifies that ddx doctor surfaces it as a stale-master issue.
+func TestStaleWorktreeMasterDiagnosticReportsMissingExecuteBeadPath(t *testing.T) {
+	workDir := t.TempDir()
+	xdgDir := filepath.Join(t.TempDir(), "xdg")
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+
+	// Seed .ddx/worktrees.json with a master pointing at a nonexistent
+	// execute-bead temp worktree path.
+	ddxDir := filepath.Join(workDir, ddxroot.DirName)
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatalf("mkdir .ddx: %v", err)
+	}
+	staleMaster := filepath.Join(workDir, ".execute-bead-wt-ddx-0be85773-20260613T202206")
+	// The path must NOT exist so the diagnostic fires.
+	registry := `{"paths":[{"path":"` + staleMaster + `","first_seen_at":"2026-06-13T00:00:00Z","last_seen_at":"2026-06-13T00:00:00Z","hostname":"test"}],"master":"` + staleMaster + `"}`
+	if err := os.WriteFile(filepath.Join(ddxDir, "worktrees.json"), []byte(registry), 0o644); err != nil {
+		t.Fatalf("write worktrees.json: %v", err)
+	}
+
+	// checkStaleWorktreesMaster must detect and describe the stale master.
+	issue := checkStaleWorktreesMaster(workDir)
+	if issue == nil {
+		t.Fatal("expected stale master issue, got nil")
+	}
+	if issue.Type != "stale_worktrees_master" {
+		t.Fatalf("issue.Type = %q, want stale_worktrees_master", issue.Type)
+	}
+	if !strings.Contains(issue.Description, "execute-bead-wt") {
+		t.Fatalf("expected description to mention execute-bead-wt path, got: %q", issue.Description)
+	}
+	if !strings.Contains(issue.Description, staleMaster) {
+		t.Fatalf("expected description to include the stale master path, got: %q", issue.Description)
+	}
+
+	// ddx doctor must include the stale master warning in its output.
+	output, err := executeWithStdoutCapture(t, NewCommandFactory(workDir).NewRootCommand(), "doctor")
+	if err != nil {
+		t.Fatalf("doctor returned error: %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "execute-bead-wt") {
+		t.Fatalf("expected doctor output to mention execute-bead-wt stale path, got:\n%s", output)
 	}
 }

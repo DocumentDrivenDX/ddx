@@ -81,16 +81,10 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		return ReframeResult{Failed: true, Reason: "prompt_error"}
 	}
 
-	runtime := AgentRunRuntime{
-		Prompt:           prompt,
-		WorkDir:          projectRoot,
-		PromptSource:     reframerPromptSource,
-		ProfileOverride:  selectProfileForDispatch(tctx, projectRoot, nil, runner, SelectStrongestProfile),
-		ClearRoutingPins: true,
-		ClearProfile:     true,
-		ClearMinPower:    true,
-		ClearMaxPower:    true,
-	}
+	runtime := decomposerRuntime(tctx, projectRoot, runner, rcfg)
+	runtime.Prompt = prompt
+	runtime.WorkDir = projectRoot
+	runtime.PromptSource = reframerPromptSource
 
 	result, err := dispatchViaResolvedConfig(tctx, projectRoot, nil, runner, rcfg, runtime)
 	if err != nil && result == nil {

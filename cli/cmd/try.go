@@ -118,6 +118,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
 	f.warnIfInstalledBinaryBehindSource(cmd)
 
 	if _, err := newStartupHousekeepingRunner(projectRoot).Cleanup(cmd.Context()); err != nil {
@@ -156,14 +157,25 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if forceClaim && forceReason == "" {
 		return fmt.Errorf("--force-claim requires --reason \"<text>\"")
 	}
+	profile = agent.NormalizeRoutingProfile(profile)
 
 	if f.tryExecutorOverride == nil {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
+		if harness != "" && model == "" {
+			routeTimeout := agent.DefaultRouteResolutionTimeout
+			if timeout, _ := cmd.Flags().GetDuration("route-resolution-timeout"); timeout > 0 {
+				routeTimeout = timeout
+			}
+			preflightCtx, cancel := context.WithTimeout(cmd.Context(), routeTimeout)
+			defer cancel()
+			if err := agent.ValidateHarnessOnlyRouteViaService(preflightCtx, f.WorkingDir, harness, provider, profile, minPower, maxPower); err != nil {
+				return err
+			}
+		} else if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
 			return err
 		}
 	}
 
-	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
+	store := bead.NewStore(beadStoreRoot)
 
 	// Pre-flight: look up the bead.
 	target, err := store.Get(context.Background(), beadID)
@@ -249,14 +261,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if !noReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(resolveBeadStoreRoot(projectRoot)),
-			BeadEvents:  bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			BeadStore:   bead.NewStore(beadStoreRoot),
+			BeadEvents:  bead.NewStore(beadStoreRoot),
 			Harness:     reviewHarness,
 			Model:       reviewModel,
 		}
 	}
-
-	profile = agent.NormalizeRoutingProfile(profile)
 
 	// Determine whether zero-config auto-route applies (same logic as runWork).
 	noRoutingFlags := harness == "" && model == "" && provider == "" &&
@@ -269,13 +279,17 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
 			ladder = powerladder.NewLadder(nil)
-			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
+			svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
 			}
 			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
 			defer cancel()
-			models, listErr := svc.ListModels(modelCtx, agentlib.ModelFilter{})
+			modelFilter := agentlib.ModelFilter{}
+			if harness != "" {
+				modelFilter.Harness = harness
+			}
+			models, listErr := svc.ListModels(modelCtx, modelFilter)
 			if listErr != nil {
 				return
 			}
@@ -284,7 +298,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return ladder
 	}
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
-	profileSelector := newImplementationProfileSelector(projectRoot)
+	profileSelector := newImplementationProfileSelector(projectRoot, harness)
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}
 	if f.executeBeadGitOverride != nil {
@@ -311,6 +325,20 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					report := agent.ReportFromExecuteBeadResult(res, string(routingIntent.InferredPowerClass))
 					applyExecutionRoutingIntentReport(&report, routingIntent, requestProfile, routingNote)
 					return report
+				}
+				if harness != "" && model == "" && requestProfile != "" && requestMinPower == 0 {
+					if selection, selectErr := profileSelector.Select(ctx, escalation.PowerClass(requestProfile), requestMinPower); selectErr == nil && selection.Name != "" {
+						requestProfile = selection.Name
+						routingNote = selection.Note
+						if selection.MinPower > requestMinPower {
+							requestMinPower = selection.MinPower
+						}
+						if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
+							unavailableReport := routeUnavailableReport(targetBead, requestMinPower, maxPower, nil)
+							applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, requestProfile, routingNote)
+							return unavailableReport, nil
+						}
+					}
 				}
 				if autoInferPowerClass {
 					var unavailableReport agent.ExecuteBeadReport
@@ -354,7 +382,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
 					FromRev:         fromRev,
 					Output:          cmd.OutOrStdout(),
-					BeadEvents:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+					BeadStoreRoot:   beadStoreRoot,
+					BeadEvents:      bead.NewStore(beadStoreRoot),
 					ResourceChecker: resourceChecker,
 				}, gitOps)
 				// Safety net: commit any execution-evidence bundle that
@@ -414,7 +443,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 					landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 						ctx, projectRoot, targetBead, res,
 						func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-						bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+						bead.NewStore(beadStoreRoot),
 						resolveClaimAssignee(), "ddx try",
 						nil,
 					)
@@ -443,7 +472,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			}
 			return runEscalatingPowerAttempts(ctx, minPower, loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return singleAttempt(ctx, execBeadID, requestedMinPower)
-			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "")
+			}, nil, nil, strings.TrimSpace(harness) == "" && strings.TrimSpace(provider) == "" && strings.TrimSpace(model) == "",
+				agent.ProviderPin{Harness: harness, Provider: provider, Model: model})
 		})
 	}
 
@@ -484,7 +514,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
-			Events:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			Events:      bead.NewStore(beadStoreRoot),
 			Actor:       resolveClaimAssignee(),
 			Source:      "ddx try",
 		})

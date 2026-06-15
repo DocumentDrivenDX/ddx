@@ -433,6 +433,7 @@ cli/internal/agent/.ddx/
 .ddx/run-state/
 .ddx/exec-runs.d/
 .ddx/tsnet/
+.ddx/metrics/*.jsonl.*
 .helix-logs/
 
 .ddx/executions/

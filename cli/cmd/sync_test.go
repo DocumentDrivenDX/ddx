@@ -56,7 +56,7 @@ func cleanSyncSequence() []fakeGitResp {
 		ok(),      // merge origin/main
 		outOK(""), // status --porcelain -- .ddx/beads.jsonl (clean)
 		outOK(""), // status --porcelain -- .ddx/executions .ddx/plugins (clean)
-		ok(),      // push origin main
+		ok(),      // push origin HEAD:main
 	}
 }
 
@@ -73,7 +73,7 @@ func dirtySyncSequence() []fakeGitResp {
 		ok(),                           // git add .ddx/beads.jsonl
 		ok(),                           // git commit "chore: tracker"
 		outOK(""),                      // status before commit executions/plugins
-		ok(),                           // push origin main
+		ok(),                           // push origin HEAD:main
 	}
 }
 
@@ -186,11 +186,14 @@ func TestSync_StashPopConflictAborts(t *testing.T) {
 // ---- AC5: Double push failure aborts with structured exit ----
 
 // TestSync_DoublePushFailAborts verifies that when push fails twice (first
-// rejected non-fast-forward, then rejected again on retry), sync returns a
-// non-nil error and writes sync-failure.json.
+// rejected non-fast-forward, then rejected again on retry), and HEAD differs
+// from origin/main each time, sync returns a non-nil error and writes
+// sync-failure.json.
 func TestSync_DoublePushFailAborts(t *testing.T) {
-	// First attempt: all clean, push rejected (non-fast-forward).
-	// Second attempt (retry): all clean again, push rejected again.
+	headSHA := "aaa111bbb222ccc333ddd444eee555fff666aaa1"
+	originSHA := "bbb222ccc333ddd444eee555fff666aaa111bbb2"
+	// First attempt: all clean, push rejected (non-fast-forward), HEAD != origin/main.
+	// Second attempt (retry): all clean again, push rejected again, HEAD still != origin/main.
 	responses := []fakeGitResp{
 		// First attempt
 		ok(),      // fetch origin
@@ -199,6 +202,8 @@ func TestSync_DoublePushFailAborts(t *testing.T) {
 		outOK(""), // status beads.jsonl
 		outOK(""), // status executions/plugins
 		outErr("error: failed to push some refs\nhint: Updates were rejected because the remote contains work that you\nhint: do not have locally. Integrate the remote changes (e.g.\nhint: 'git pull ...') before pushing again.\nhint: See the 'Note about fast-forwards' in 'git push --help' for details.\nnon-fast-forward", "exit status 1"),
+		outOK(headSHA + "\n"),   // rev-parse HEAD
+		outOK(originSHA + "\n"), // rev-parse origin/main (diverged → retry)
 		// Retry (second attempt)
 		ok(),      // fetch origin
 		outOK(""), // status --porcelain -- .ddx paths
@@ -206,6 +211,8 @@ func TestSync_DoublePushFailAborts(t *testing.T) {
 		outOK(""), // status beads.jsonl
 		outOK(""), // status executions/plugins
 		outErr("non-fast-forward", "exit status 1"), // push fails again
+		outOK(headSHA + "\n"),                       // rev-parse HEAD
+		outOK(originSHA + "\n"),                     // rev-parse origin/main (still diverged → abort)
 	}
 	fake := &fakeSyncGit{responses: responses}
 	s, ddxDir := newSyncerFor(t, fake)
@@ -338,6 +345,79 @@ func TestSync_WatchExitsOnContextCancel(t *testing.T) {
 		// Exited as expected (either clean or context error).
 	case <-time.After(2 * time.Second):
 		t.Fatal("--watch mode did not exit within 2s after context cancel")
+	}
+}
+
+// ---- AC1: Push uses HEAD:main refspec ----
+
+// TestSync_PushesCurrentHEADToOriginMainWhenOnNonMainBranch verifies that sync
+// pushes the current HEAD (not the local branch named "main") to origin/main,
+// so it works correctly when the operator is on a non-main branch.
+func TestSync_PushesCurrentHEADToOriginMainWhenOnNonMainBranch(t *testing.T) {
+	fake := &fakeSyncGit{responses: cleanSyncSequence()}
+	s, _ := newSyncerFor(t, fake)
+
+	if err := s.run(context.Background()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var foundPush bool
+	for _, call := range fake.allCalls {
+		if len(call) == 0 || call[0] != "push" {
+			continue
+		}
+		foundPush = true
+		usesHEADRefspec := false
+		for _, arg := range call {
+			if arg == "HEAD:main" {
+				usesHEADRefspec = true
+				break
+			}
+		}
+		if !usesHEADRefspec {
+			t.Errorf("git push does not use HEAD:main refspec (pushes stale local main); got: %v", call)
+		}
+	}
+	if !foundPush {
+		t.Error("no git push call was made")
+	}
+}
+
+// ---- AC2: HEAD already equals origin/main → success ----
+
+// TestSync_NonFastForwardButHeadAlreadyEqualsOriginMainTreatsAsSuccess simulates
+// a push rejection (non-fast-forward) that occurs when the operator is on a
+// non-main branch whose HEAD is already aligned with origin/main. After fetch,
+// rev-parse HEAD and rev-parse origin/main return the same SHA, so sync should
+// exit 0 and remove any existing .ddx/sync-failure.json.
+func TestSync_NonFastForwardButHeadAlreadyEqualsOriginMainTreatsAsSuccess(t *testing.T) {
+	sha := "abc1234def5678abc1234def5678abc1234def56"
+	responses := []fakeGitResp{
+		ok(),      // fetch origin
+		outOK(""), // status --porcelain -- .ddx paths (clean)
+		ok(),      // merge origin/main
+		outOK(""), // status beads.jsonl (clean)
+		outOK(""), // status executions/plugins (clean)
+		outErr("error: failed to push\nnon-fast-forward", "exit status 1"), // push rejected
+		outOK(sha + "\n"), // rev-parse HEAD
+		outOK(sha + "\n"), // rev-parse origin/main (same SHA → already aligned)
+	}
+	fake := &fakeSyncGit{responses: responses}
+	s, ddxDir := newSyncerFor(t, fake)
+
+	// Pre-create a stale failure file; it must be removed on success.
+	failurePath := filepath.Join(ddxDir, "sync-failure.json")
+	if err := os.WriteFile(failurePath, []byte(`{"timestamp":"2026-01-01T00:00:00Z","reason":"old"}`), 0o644); err != nil {
+		t.Fatalf("setup: write failure file: %v", err)
+	}
+
+	err := s.run(context.Background())
+	if err != nil {
+		t.Fatalf("expected success when HEAD already equals origin/main, got: %v", err)
+	}
+
+	if _, statErr := os.Stat(failurePath); !os.IsNotExist(statErr) {
+		t.Error("sync-failure.json should be removed when HEAD already equals origin/main")
 	}
 }
 

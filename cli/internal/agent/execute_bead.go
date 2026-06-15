@@ -271,6 +271,7 @@ type ExecuteBeadRuntime struct {
 	PromptFile      string // override prompt file (auto-generated if empty)
 	Output          io.Writer
 	WorkerID        string // from DDX_WORKER_ID env or caller
+	BeadStoreRoot   string // canonical bead store for linked/external tracker roots
 	BeadEvents      BeadEventAppender
 	BeadCancel      BeadCancelStore // optional: enables operator-cancel mid-attempt poll
 	ResourceChecker ExecutionResourceChecker
@@ -1041,6 +1042,11 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	} else if !os.IsNotExist(statErr) || runtime.AgentRunner == nil {
 		return nil, fmt.Errorf("preparing execute-bead git isolation: stat worktree .git: %w", statErr)
 	}
+	if guardedEnv, err := applyPinnedProviderGuard(gitIsolationEnv, rcfg.Harness(), embeddedStateDir); err != nil {
+		return nil, fmt.Errorf("preparing pinned provider guard: %w", err)
+	} else {
+		gitIsolationEnv = guardedEnv
+	}
 
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
@@ -1048,6 +1054,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	_ = WriteRunState(projectRoot, runState)
 
 	minPowerOverride := noChangesMinPowerOverride(beadCtx, rcfg.MinPower())
+
+	// Running-phase provider guard: continuously quarantine provider CLIs that
+	// do not belong to the active route while the attempt runs (ddx-2c973f8c).
+	// Seed it with any pinned harness/model and refresh it when fizeau resolves
+	// the route, then chain to the caller-supplied OnRouteResolved callback.
+	providerGuard := newRunningProviderGuard(projectRoot, beadID, attemptID, os.Getpid())
+	providerGuard.UpdateRoute(rcfg.Harness(), "", rcfg.Model())
+	baseOnRouteResolved := onRouteResolvedFromContext(ctx)
+
 	runRuntime := AgentRunRuntime{
 		PromptFile: artifacts.PromptAbs,
 		Output:     runtime.Output,
@@ -1067,15 +1082,25 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Role:                  "implementer",
 		CorrelationID:         beadID + ":" + attemptID,
 		Env:                   gitIsolationEnv,
-		OnRouteResolved:       onRouteResolvedFromContext(ctx),
+		OnRouteResolved: func(harness, provider, model string) {
+			providerGuard.UpdateRoute(harness, provider, model)
+			if baseOnRouteResolved != nil {
+				baseOnRouteResolved(harness, provider, model)
+			}
+		},
 	}
 	if minPowerOverride > 0 {
 		runRuntime.MinPowerOverride = minPowerOverride
 	}
+	if runtime.BeadStoreRoot != "" {
+		runRuntime.Env["DDX_BEAD_DIR"] = runtime.BeadStoreRoot
+	}
 	runRuntime.Env[DDXModeEnvKey] = DDXModeBeadExecution
+	runRuntime.Env[DDXBeadIDEnvKey] = beadID
+	runRuntime.Env[DDXAttemptIDEnvKey] = attemptID
 
 	if runtime.AgentRunner == nil && runtime.Service == nil {
-		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" {
+		if harness := strings.TrimSpace(rcfg.Harness()); harness != "" && strings.TrimSpace(rcfg.Model()) != "" {
 			runner := NewRunner(Config{SessionLogDir: ResolveLogDir(projectRoot, "")})
 			runner.WorkDir = projectRoot
 			runtime.AgentRunner = runner
@@ -1091,7 +1116,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
+	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
+	stopProviderGuard := providerGuard.Start(dispatchCtx)
 	agentResult, agentErr := attemptBackend.Run(dispatchCtx, AttemptBackendRunRequest{
 		ProjectRoot: projectRoot,
 		Workspace:   workspace,
@@ -1100,7 +1127,28 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		Config:      rcfg,
 		Runtime:     runRuntime,
 	})
+	stopProviderGuard()
 	stopRunStateRefresh()
+	cleanupTrigger := ""
+	if dispatchCtx.Err() != nil {
+		cleanupTrigger = dispatchCtx.Err().Error()
+	} else if agentErr != nil {
+		cleanupTrigger = agentErr.Error()
+	}
+	_ = cleanupAttemptProcesses(context.Background(), projectRoot, beadID, attemptID, wtPath, processBaseline, cleanupTrigger)
+	// Attempt-end backstop: reap every remaining provider child regardless of
+	// route, then fold the running-phase guard's evidence into the final
+	// provider-children.json so mid-attempt reaps survive in the audit trail.
+	attemptEndReaped := reapAllProviderChildren(context.Background(), os.Getpid(), time.Now().UTC())
+	if allReaped := append(providerGuard.Reaped(), attemptEndReaped...); len(allReaped) > 0 {
+		writeProviderChildCleanupArtifact(projectRoot, attemptID, &providerChildCleanupReport{
+			AttemptID: attemptID,
+			BeadID:    beadID,
+			Trigger:   firstNonEmpty(cleanupTrigger, reasonAttemptEnded),
+			ScannedAt: time.Now().UTC(),
+			Reaped:    allReaped,
+		})
+	}
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
@@ -1392,7 +1440,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			paths := dirtyWorktreePaths(wtPath)
 			res.NoEvidencePaths = paths
 			if len(paths) > 0 {
-				res.Error = fmt.Sprintf("%s; dirty paths: %s", res.Reason, strings.Join(paths, ", "))
+				rescueRef := preserveDirtyNoEvidenceAttempt(wtPath, artifacts.DirAbs, artifacts.DirRel)
+				if rescueRef != "" {
+					res.PreserveRef = rescueRef
+					res.Error = fmt.Sprintf("%s; dirty paths: %s; rescue: %s", res.Reason, strings.Join(paths, ", "), rescueRef)
+				} else {
+					res.Error = fmt.Sprintf("%s; dirty paths: %s", res.Reason, strings.Join(paths, ", "))
+				}
 			} else {
 				res.Error = res.Reason
 			}
@@ -1560,6 +1614,36 @@ func cleanupAttemptWorktree(gitOps GitOps, workDir, wtPath, outcome string, pres
 	return true
 }
 
+// preserveDirtyNoEvidenceAttempt stages all dirty files in the attempt
+// worktree, generates a binary patch of staged content, and writes it to the
+// artifact bundle directory so operators can recover the agent's uncommitted
+// work. Returns the bundle-relative path of the patch on success, or "" if
+// nothing was staged or the write failed. The patch survives worktree cleanup
+// because publishEvidenceBundleToProjectRoot copies the artifact dir to the
+// project root before cleanup runs.
+func preserveDirtyNoEvidenceAttempt(wtPath, artifactsDirAbs, artifactsDirRel string) string {
+	// Use the same exclusion pathspecs as SynthesizeCommit so that DDx-managed
+	// execution-bundle files (prompt.md, manifest.json, embedded/, etc.) are not
+	// included in the rescue patch. If only those noise files are dirty, the
+	// staging produces an empty index and we return "" (clean no-evidence).
+	addArgs := append([]string{"add", "-A", "--", "."}, synthesizeCommitExcludePathspecs(wtPath)...)
+	if err := internalgit.Command(context.Background(), wtPath, addArgs...).Run(); err != nil {
+		return ""
+	}
+	patchData, err := internalgit.Command(context.Background(), wtPath, "diff", "--cached", "--binary").Output()
+	if err != nil || len(bytes.TrimSpace(patchData)) == 0 {
+		return ""
+	}
+	if err := os.MkdirAll(artifactsDirAbs, 0o755); err != nil {
+		return ""
+	}
+	patchPath := filepath.Join(artifactsDirAbs, "dirty_rescue.patch")
+	if err := os.WriteFile(patchPath, patchData, 0o644); err != nil {
+		return ""
+	}
+	return filepath.ToSlash(filepath.Join(artifactsDirRel, "dirty_rescue.patch"))
+}
+
 // commitTrackerLocked commits beads.jsonl if it has uncommitted changes.
 // Callers must hold withTrackerLock(projectRoot) before calling. Used by Run()
 // to fold tracker commit, checkpoint synthesis, and worktree creation into a
@@ -1638,7 +1722,7 @@ func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
 }
 
 func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rcfg config.ResolvedConfig, runtime ExecuteBeadRuntime) (*executeBeadArtifacts, *bead.Bead, error) {
-	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID)
+	b, refs, err := loadBeadContext(projectRoot, wtPath, beadID, runtime.BeadStoreRoot)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1698,20 +1782,38 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 	return artifacts, b, nil
 }
 
-func loadBeadContext(projectRoot, wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
-	roots := []string{wtPath}
+func loadBeadContext(projectRoot, wtPath, beadID, canonicalStoreRoot string) (*bead.Bead, []executeBeadGoverningRef, error) {
+	type candidate struct {
+		storeRoot string
+		refRoot   string
+	}
+	var candidates []candidate
+	if strings.TrimSpace(canonicalStoreRoot) != "" {
+		candidates = append(candidates, candidate{storeRoot: canonicalStoreRoot, refRoot: wtPath})
+	}
+	candidates = append(candidates, candidate{storeRoot: beadStoreRoot(wtPath), refRoot: wtPath})
 	if projectRoot != "" && projectRoot != wtPath {
-		roots = append(roots, projectRoot)
+		candidates = append(candidates, candidate{storeRoot: beadStoreRoot(projectRoot), refRoot: projectRoot})
 	}
 	var lastErr error
-	for _, root := range roots {
-		if strings.TrimSpace(root) == "" {
+	seen := map[string]struct{}{}
+	for _, c := range candidates {
+		if strings.TrimSpace(c.storeRoot) == "" {
 			continue
 		}
-		store := bead.NewStore(beadStoreRoot(root))
+		cleanStore := filepath.Clean(c.storeRoot)
+		if _, ok := seen[cleanStore]; ok {
+			continue
+		}
+		seen[cleanStore] = struct{}{}
+		store := bead.NewStore(c.storeRoot)
 		b, err := store.Get(context.Background(), beadID)
 		if err == nil {
-			return b, ResolveGoverningRefs(root, b), nil
+			refRoot := c.refRoot
+			if strings.TrimSpace(refRoot) == "" {
+				refRoot = projectRoot
+			}
+			return b, ResolveGoverningRefs(refRoot, b), nil
 		}
 		lastErr = err
 	}

@@ -147,10 +147,11 @@ func workSelfRefreshEnabled(cmd *cobra.Command) bool {
 	return true
 }
 
-func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker) agent.ExecuteBeadRuntime {
+func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker, beadStoreRoot string) agent.ExecuteBeadRuntime {
 	return agent.ExecuteBeadRuntime{
 		FromRev:          spec.FromRev,
 		Output:           output,
+		BeadStoreRoot:    beadStoreRoot,
 		BeadEvents:       events,
 		AgentRunner:      runner,
 		ResourceChecker:  checker,
@@ -185,12 +186,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if err != nil {
 		return err
 	}
-	projectRoot := resolveProjectRoot(spec.ProjectRoot, f.WorkingDir)
+	projectFlag := spec.ProjectRoot
+	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	spec.ProjectRoot = projectRoot
+	beadStoreRoot := f.commandBeadStoreRoot(projectFlag, projectRoot)
 	if tryTargetBeadID != "" {
 		spec.Mode = executeloop.ModeOnce
 		spec.IdleInterval = executeloop.Duration{}
 	}
+	spec.Profile = agent.NormalizeRoutingProfile(spec.Profile)
 
 	noRoutingFlags := spec.Harness == "" && spec.Model == "" && spec.Provider == "" &&
 		spec.Profile == "" && spec.MinPower == 0 &&
@@ -201,13 +205,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	hasProjectRoutingConfig := projectHasRoutingConfig(projectRoot)
 	autoInferPowerClass := noRoutingFlags && !hasProjectRoutingConfig
 
-	if !spec.OpaquePassthrough {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider); err != nil {
-			return fmt.Errorf("work: %w", err)
-		}
-	}
-
-	store := bead.NewStore(resolveBeadStoreRoot(projectRoot))
+	store := bead.NewStore(beadStoreRoot)
 	workerStore := agent.ExecuteBeadLoopStore(store)
 	if spec.IgnoreCooldown {
 		workerStore = newIgnoreCooldownStore(store)
@@ -267,14 +265,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if !spec.NoReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
-			BeadStore:   bead.NewStore(resolveBeadStoreRoot(projectRoot)),
-			BeadEvents:  bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			BeadStore:   bead.NewStore(beadStoreRoot),
+			BeadEvents:  bead.NewStore(beadStoreRoot),
 			Harness:     spec.ReviewHarness,
 			Model:       spec.ReviewModel,
 		}
 	}
-
-	spec.Profile = agent.NormalizeRoutingProfile(spec.Profile)
 
 	overrides := config.CLIOverrides{
 		Assignee:          resolveClaimAssignee(),
@@ -346,7 +342,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if proseHook == nil {
 		proseHook = agent.NewDefaultProseEvidenceHook(agent.ProseEvidenceConfig{
 			ProjectRoot: projectRoot,
-			Events:      bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			Events:      bead.NewStore(beadStoreRoot),
 			Actor:       resolveClaimAssignee(),
 			Source:      "ddx work",
 		})
@@ -358,7 +354,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	})
 
 	harnessBilledLookup := func(harnessName string) bool {
-		svc, svcErr := agent.NewServiceFromWorkDir(f.WorkingDir)
+		svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(f.WorkingDir)
 		if svcErr != nil {
 			return true
 		}
@@ -375,7 +371,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, harnessBilledLookup)
-	profileSelector := newImplementationProfileSelector(projectRoot)
+	profileSelector := newImplementationProfileSelector(projectRoot, spec.Harness)
 	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 		costCap.Add(report.Harness, report.CostUSD)
 	}
@@ -434,9 +430,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, executeLoopAttemptRuntime(
 			spec,
 			cmd.OutOrStdout(),
-			bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+			bead.NewStore(beadStoreRoot),
 			f.AgentRunnerOverride,
 			resourceChecker,
+			beadStoreRoot,
 		), gitOps)
 		if res != nil {
 			safetyNetAttemptID = res.AttemptID
@@ -456,7 +453,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
-				bead.NewStore(resolveBeadStoreRoot(projectRoot)),
+				bead.NewStore(beadStoreRoot),
 				resolveClaimAssignee(), "ddx work",
 				nil,
 			)
@@ -487,7 +484,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
 			ladder = powerladder.NewLadder(nil)
-			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
+			svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
 			}
@@ -520,7 +517,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, "", "")
 				return unavailableReport, nil
 			}
-			if spec.Provider == "" && spec.Model == "" {
+			if spec.Harness == "" && spec.Provider == "" && spec.Model == "" {
 				if learnedMinPower, learnedUnavailableReport, learned := recentProviderConnectivityMinPower(store, time.Now().UTC(), initialMinPower, spec.MaxPower, loadLadder()); learned {
 					if learnedUnavailableReport.Status != "" {
 						learnedUnavailableReport.BeadID = beadID
@@ -535,7 +532,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				// the requested floor is still inside the exclusion window,
 				// skip this dispatch and let the retry policy raise MinPower
 				// in memory for the next attempt.
-				if svcForExcl, svcExclErr := agent.ResolveServiceFromWorkDir(projectRoot); svcExclErr == nil {
+				if svcForExcl, svcExclErr := agent.ResolvePreflightServiceFromWorkDir(projectRoot); svcExclErr == nil {
 					if exclusionReport, skip := agent.CheckAndApplyRouteExclusions(
 						ctx, svcForExcl, store, beadID, resolveClaimAssignee(),
 						targetBead.Extra, time.Now().UTC(), initialMinPower,
@@ -552,6 +549,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 			initialProfile := spec.Profile
 			initialRoutingNote := ""
+			if spec.Harness != "" && spec.Model == "" && initialMinPower == 0 && spec.Profile != "" {
+				if selection, selectErr := profileSelector.Select(ctx, escalation.PowerClass(spec.Profile), initialMinPower); selectErr == nil && selection.Name != "" {
+					initialProfile = selection.Name
+					initialRoutingNote = selection.Note
+					if selection.MinPower > initialMinPower {
+						initialMinPower = selection.MinPower
+					}
+					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
+						unavailableReport := routeUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
+						applyExecutionRoutingIntentReport(&unavailableReport, routingIntent, initialProfile, initialRoutingNote)
+						return unavailableReport, nil
+					}
+				}
+			}
 			if autoInferPowerClass {
 				if selection, selectErr := profileSelector.Select(ctx, inferredPolicy, initialMinPower); selectErr == nil && selection.Name != "" {
 					initialProfile = selection.Name
@@ -603,6 +614,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				nil,
 				perBeadTracker,
 				strings.TrimSpace(spec.Harness) == "" && strings.TrimSpace(spec.Provider) == "" && strings.TrimSpace(spec.Model) == "",
+				agent.ProviderPin{Harness: spec.Harness, Provider: spec.Provider, Model: spec.Model},
 			)
 			if err == nil {
 				accumulateBilledCost(report)
@@ -626,24 +638,39 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		progressLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                         spec.Mode,
-		IdleInterval:                 spec.IdleInterval.Duration,
-		IgnoreCooldown:               spec.IgnoreCooldown,
-		CooldownOverrideReason:       spec.CooldownOverrideReason,
-		Log:                          progressLog,
-		CleanupLog:                   cleanupLog,
-		EventSink:                    loopSink,
-		WorkerID:                     resolveClaimAssignee(),
-		ProjectRoot:                  projectRoot,
-		CleanupRunner:                cleanupRunner,
-		ResourceChecker:              resourceChecker,
-		ServerHealthProbe:            serverHealthProbe,
-		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
-		ProjectRootDirtyCheck:        agent.CanonicalRootDirtyPaths,
-		SessionID:                    loopSessionID,
-		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:           intakeHook,
-		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
+		Mode:                   spec.Mode,
+		IdleInterval:           spec.IdleInterval.Duration,
+		IgnoreCooldown:         spec.IgnoreCooldown,
+		CooldownOverrideReason: spec.CooldownOverrideReason,
+		Log:                    progressLog,
+		CleanupLog:             cleanupLog,
+		EventSink:              loopSink,
+		WorkerID:               resolveClaimAssignee(),
+		ProjectRoot:            projectRoot,
+		CleanupRunner:          cleanupRunner,
+		ResourceChecker:        resourceChecker,
+		ServerHealthProbe:      serverHealthProbe,
+		BinaryRefreshCheck:     f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID, workSelfRefreshEnabled(cmd)),
+		ProjectRootDirtyCheck:  agent.CanonicalRootDirtyPaths,
+		SessionID:              loopSessionID,
+		PreClaimHook:           buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:     intakeHook,
+		PreClaimTimeout:        spec.PreClaimTimeout.Duration,
+		RoutePreflight: func(ctx context.Context, harness, model string) error {
+			if spec.Harness == "" {
+				return nil
+			}
+			routeTimeout := spec.RouteResolutionTimeout.Duration
+			if routeTimeout <= 0 {
+				routeTimeout = agent.DefaultRouteResolutionTimeout
+			}
+			preflightCtx, cancel := context.WithTimeout(ctx, routeTimeout)
+			defer cancel()
+			if spec.Model != "" {
+				return agent.ValidateForExecuteLoopViaService(preflightCtx, projectRoot, spec.Harness, spec.Model, spec.Provider)
+			}
+			return agent.ValidateHarnessOnlyRouteViaService(preflightCtx, projectRoot, spec.Harness, spec.Provider, spec.Profile, spec.MinPower, spec.MaxPower)
+		},
 		RouteResolutionTimeout:       spec.RouteResolutionTimeout.Duration,
 		ClaimSuccessRateWindow:       optionalIntFlag(cmd, "claim-rate-window", agent.DefaultClaimSuccessRateWindow),
 		ClaimSuccessRateThreshold:    optionalFloat64Flag(cmd, "claim-rate-threshold", agent.DefaultClaimSuccessRateThreshold),
@@ -661,6 +688,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
+		if errors.Is(err, context.Canceled) {
+			return NewExitError(130, "")
+		}
 	}
 	if err != nil {
 		return err

@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260613T204433-6b293a74",
+  "bead_id": "ddx-81e3adcd",
+  "base_rev": "f63f62d48d3840f0d63f465da41822dc8e28d4db",
+  "created_at": "2026-06-13T20:44:42.349997476Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-81e3adcd",
+    "title": "beads: repair merge conflict stage reader",
+    "description": "PROBLEM\nDuring the 2026-06-13 dogfood merge recovery, `.ddx/beads.jsonl` had real Git conflict stages visible via `git ls-files -u` and `git show :1:.ddx/beads.jsonl`, but `ddx bead merge` failed with `read Git stage 1 for .ddx/beads.jsonl: exit status 128`. That forced abandoning the worktree instead of using DDx's supported tracker merge surface.\n\nROOT CAUSE WITH FILE:LINE\ncli/cmd/bead.go registers `newBeadMergeCommand`, and the merge implementation reads Git conflict stages for `.ddx/beads.jsonl`. The observed error means the helper's stage-read command is not equivalent to the working `git show :1:.ddx/beads.jsonl` path in a linked worktree or conflict state. This violates AGENTS.md's rule to prefer supported `ddx bead` operations over direct tracker edits.\n\nPROPOSED FIX\n- Reproduce the conflict with a test repository that has stages 1/2/3 for `.ddx/beads.jsonl` in a linked worktree.\n- Fix the Git stage reader to use a working-tree-root-relative path and the correct repository/worktree directory.\n- Add verbose diagnostics that print the exact stage/path being read when stage access fails.\n- Keep the merge command tracker-only; do not introduce ad hoc JSONL editing as recovery.\n\nNON-SCOPE\nDo not change bead merge semantics for non-conflicted files. Do not bypass Git conflict stages by reading arbitrary temporary files. Do not rewrite existing execute-bead history.",
+    "acceptance": "1. TestBeadMergeReadsConflictStagesInLinkedWorktree creates a real `.ddx/beads.jsonl` merge conflict in a linked worktree and proves `ddx bead merge` reads stages 1/2/3 successfully.\n2. TestBeadMergeVerboseReportsStageReadCommand proves verbose failure output includes stage number, repo root, and repo-relative path when a stage cannot be read.\n3. The fixed helper uses the same path semantics as `git show :1:.ddx/beads.jsonl` from the repository root.\n4. cd cli \u0026\u0026 go test ./cmd/... -run 'TestBeadMergeReadsConflictStagesInLinkedWorktree|TestBeadMergeVerboseReportsStageReadCommand' passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:beads",
+      "area:git",
+      "kind:bug",
+      "kind:reliability",
+      "severity:high",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Bead has a concrete error string ('exit status 128'), a named file and function for the root cause, a working counterexample ('git show :1:.ddx/beads.jsonl'), two named test functions with an exact go test -run filter, and a lefthook gate. The single gap against the 8-criterion rubric is the missing :LINE for the stage-read helper inside cli/cmd/bead.go — an agent can locate it via grep for newBeadMergeCommand or the 'git show :1:' call site, so it is not a dispatch blocker. All AC items are verifiable and the reproduction path (linked worktree with real conflict stages) is unambiguous.\",\"fingerprint\":\"d67ff9e31adf29b8810b68a800e54a1c24640e8fffe63dc5c2c71ea06baa35b1\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"d67ff9e31adf29b8810b68a800e54a1c24640e8fffe63dc5c2c71ea06baa35b1\"}",
+          "created_at": "2026-06-13T20:42:30.360658025Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 17,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260613T204433-6b293a74",
+    "prompt": ".ddx/executions/20260613T204433-6b293a74/prompt.md",
+    "manifest": ".ddx/executions/20260613T204433-6b293a74/manifest.json",
+    "result": ".ddx/executions/20260613T204433-6b293a74/result.json",
+    "checks": ".ddx/executions/20260613T204433-6b293a74/checks.json",
+    "usage": ".ddx/executions/20260613T204433-6b293a74/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-81e3adcd-20260613T204433-6b293a74"
+  },
+  "prompt_sha": "4947f0a950cc3b657feda1075135ee1e110a9fab395e7e02231a933b08067c64"
+}

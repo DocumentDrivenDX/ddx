@@ -315,11 +315,19 @@ func (f *CommandFactory) beadWorkspaceRoot() string {
 }
 
 func (f *CommandFactory) beadStore() *bead.Store {
-	workspaceRoot := f.beadWorkspaceRoot()
-	if workspaceRoot == "" {
+	storeRoot := f.beadStoreRoot()
+	if storeRoot == "" {
 		return bead.NewStore("")
 	}
-	return bead.NewStore(resolveBeadStoreRoot(workspaceRoot))
+	return bead.NewStore(storeRoot)
+}
+
+func (f *CommandFactory) beadStoreRoot() string {
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		return ""
+	}
+	return resolveBeadStoreRoot(workspaceRoot)
 }
 
 func (f *CommandFactory) beadStatusStore(projectRoot string) *bead.Store {
@@ -415,15 +423,13 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 					if !ok {
 						return fmt.Errorf("--set requires key=value format, got: %s", kv)
 					}
-					switch v {
-					case "true":
-						b.Extra[k] = true
-					case "false":
-						b.Extra[k] = false
-					default:
-						b.Extra[k] = v
+					if err := bead.SetExtraValue(b.Extra, k, v); err != nil {
+						return err
 					}
 				}
+			}
+			if err := f.validateExecuteBeadCreate(cmd, s, b); err != nil {
+				return err
 			}
 
 			if err := f.withBeadTrackerWriteLock(func() error {
@@ -457,6 +463,100 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 	cmd.Flags().StringArray("set", nil, "Set custom field (key=value, repeatable)")
 
 	return cmd
+}
+
+func (f *CommandFactory) validateExecuteBeadCreate(cmd *cobra.Command, s *bead.Store, b *bead.Bead) error {
+	if os.Getenv(agentpkg.DDXModeEnvKey) != agentpkg.DDXModeBeadExecution {
+		return nil
+	}
+	currentID := strings.TrimSpace(os.Getenv(agentpkg.DDXBeadIDEnvKey))
+	if currentID == "" {
+		return nil
+	}
+	reason := ""
+	switch {
+	case strings.HasPrefix(strings.ToLower(strings.TrimSpace(b.Title)), "sample:"):
+		reason = "sample_fixture_title"
+	case strings.TrimSpace(b.Parent) == "":
+		reason = "missing_current_parent"
+	case strings.TrimSpace(b.Parent) != currentID:
+		reason = "parent_must_equal_current_bead"
+	default:
+		parent, err := s.Get(context.Background(), currentID)
+		if err != nil {
+			return fmt.Errorf("execute-bead child create guard: load parent %s: %w", currentID, err)
+		}
+		if parent == nil {
+			reason = "current_parent_not_found"
+		} else if missing := missingExecuteChildLabels(parent.Labels, b.Labels); len(missing) > 0 {
+			reason = "missing_parent_labels:" + strings.Join(missing, ",")
+		} else if parentSpec := stringExtra(parent.Extra, "spec-id"); parentSpec != "" && stringExtra(b.Extra, "spec-id") != parentSpec {
+			reason = "missing_parent_spec_id"
+		}
+	}
+	if reason == "" {
+		return nil
+	}
+	f.appendExecuteBeadCreateRejection(s, currentID, b, reason)
+	return fmt.Errorf("execute-bead child create rejected: %s (title=%q parent=%q current=%q)", reason, b.Title, b.Parent, currentID)
+}
+
+func (f *CommandFactory) appendExecuteBeadCreateRejection(s *bead.Store, currentID string, b *bead.Bead, reason string) {
+	if s == nil || currentID == "" {
+		return
+	}
+	body, _ := json.Marshal(map[string]any{
+		"attempt_id":      strings.TrimSpace(os.Getenv(agentpkg.DDXAttemptIDEnvKey)),
+		"attempted_title": b.Title,
+		"parent":          b.Parent,
+		"current_bead_id": currentID,
+		"reason":          reason,
+	})
+	_ = s.AppendEvent(currentID, bead.BeadEvent{
+		Kind:      "operator_attention",
+		Summary:   "execute_bead_child_create_rejected",
+		Body:      string(body),
+		Actor:     "ddx bead create",
+		Source:    "ddx bead create",
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func missingExecuteChildLabels(parentLabels, childLabels []string) []string {
+	child := make(map[string]struct{}, len(childLabels))
+	for _, label := range childLabels {
+		label = strings.TrimSpace(label)
+		if label != "" {
+			child[label] = struct{}{}
+		}
+	}
+	var missing []string
+	for _, label := range parentLabels {
+		label = strings.TrimSpace(label)
+		if label == "" {
+			continue
+		}
+		if _, ok := child[label]; !ok {
+			missing = append(missing, label)
+		}
+	}
+	return missing
+}
+
+func stringExtra(extra map[string]any, key string) string {
+	if extra == nil {
+		return ""
+	}
+	v, ok := extra[key]
+	if !ok || v == nil {
+		return ""
+	}
+	switch v := v.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	default:
+		return strings.TrimSpace(fmt.Sprint(v))
+	}
 }
 
 func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
@@ -706,6 +806,17 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 					setFlags = append(setFlags, k+"="+v)
 				}
 			}
+			for _, kv := range setFlags {
+				k, v, ok := strings.Cut(kv, "=")
+				if !ok {
+					continue
+				}
+				if bead.CanonicalizeQueueRankKey(k) == "queue-rank" {
+					if _, ok := bead.ParseQueueRankValue(v); !ok {
+						return &bead.QueueRankParseError{Value: v}
+					}
+				}
+			}
 
 			statusValue, _ := cmd.Flags().GetString("status")
 			statusChanged := cmd.Flags().Changed("status")
@@ -762,14 +873,8 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						case "issue_type":
 							b.IssueType = v
 						default:
-							// Parse booleans and numbers for proper typing
-							switch v {
-							case "true":
-								b.Extra[k] = true
-							case "false":
-								b.Extra[k] = false
-							default:
-								b.Extra[k] = v
+							if err := bead.SetExtraValue(b.Extra, k, v); err != nil {
+								return err
 							}
 						}
 					}
@@ -777,7 +882,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if unsetFlags, _ := cmd.Flags().GetStringArray("unset"); len(unsetFlags) > 0 {
 					for _, key := range unsetFlags {
 						if b.Extra != nil {
-							delete(b.Extra, key)
+							bead.UnsetExtraKey(b.Extra, key)
 						}
 					}
 				}
@@ -1918,9 +2023,13 @@ This command is not a general hand-edit workflow for bead tracker data.`,
 			if len(args) > 0 {
 				path = args[0]
 			}
-			workspaceRoot := f.beadWorkspaceRoot()
+			// Use the working directory to locate the repo containing the conflict.
+			// beadWorkspaceRoot() redirects to the primary workspace in a linked
+			// worktree, but conflict stages live in the index of the worktree where
+			// the merge actually failed — not the primary bead workspace.
+			workspaceRoot := f.WorkingDir
 			if workspaceRoot == "" {
-				workspaceRoot = f.WorkingDir
+				workspaceRoot = "."
 			}
 			repoRoot := gitpkg.FindProjectRoot(workspaceRoot)
 			relPath, err := filepath.Rel(repoRoot, filepath.Join(workspaceRoot, path))
@@ -1970,7 +2079,7 @@ func gitStageBlob(ctx context.Context, repoRoot string, stage int, path string) 
 	spec := fmt.Sprintf(":%d:%s", stage, path)
 	out, err := gitpkg.Command(ctx, repoRoot, "show", spec).Output()
 	if err != nil {
-		return nil, fmt.Errorf("bead merge: read Git stage %d for %s: %w", stage, path, err)
+		return nil, fmt.Errorf("bead merge: read Git stage %d for %s (repo root: %s): %w", stage, path, repoRoot, err)
 	}
 	return out, nil
 }

@@ -2,10 +2,12 @@ package lockmetrics
 
 import (
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,4 +123,84 @@ func TestLockMetrics_NilSinkIsNoOp(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.True(t, called, "critical section must still run with no sink")
+}
+
+// TestLockMetricsRotatesBeforeLargeFileThreshold seeds locks.jsonl at
+// MaxActiveSizeBytes, emits additional lock events via a FileSink, and proves
+// the active file remains below the 5 MiB pre-commit large-file guard.
+func TestLockMetricsRotatesBeforeLargeFileThreshold(t *testing.T) {
+	root := t.TempDir()
+	metricsPath := Path(root)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+
+	// Seed the active file at the rotation cap to guarantee rotation fires.
+	seed := make([]byte, MaxActiveSizeBytes)
+	require.NoError(t, os.WriteFile(metricsPath, seed, 0o644))
+
+	SetSink(FileSink(root))
+	t.Cleanup(func() { SetSink(nil) })
+
+	require.NoError(t, Instrument("tracker.lock", "tracker.commit", func() error { return nil }))
+
+	// Active file must be below the 5 MiB pre-commit large-file guard.
+	const largeFileGuard = 5 * 1024 * 1024
+	fi, err := os.Stat(metricsPath)
+	require.NoError(t, err)
+	assert.Less(t, fi.Size(), int64(largeFileGuard),
+		"active locks.jsonl must stay below the %d-byte large-file guard after rotation", largeFileGuard)
+}
+
+// TestLockViolationEvidenceSurvivesMetricsRotation proves that a
+// lock-violation.json record written to the execution evidence directory is not
+// affected by metrics rotation: the file persists after locks.jsonl is rotated.
+func TestLockViolationEvidenceSurvivesMetricsRotation(t *testing.T) {
+	root := t.TempDir()
+	evidenceDir := ddxroot.JoinProject(root, "executions", "20260613T210703-88070be3")
+	require.NoError(t, os.MkdirAll(evidenceDir, 0o755))
+
+	// Write a violation record to the evidence directory.
+	violationPath := filepath.Join(evidenceDir, "lock-violation.json")
+	require.NoError(t, os.WriteFile(violationPath, []byte(`{"lock_name":"index.lock"}`), 0o644))
+
+	// Seed the metrics file at the rotation cap to trigger rotation on next write.
+	metricsPath := Path(root)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+	seed := make([]byte, MaxActiveSizeBytes)
+	require.NoError(t, os.WriteFile(metricsPath, seed, 0o644))
+
+	SetSink(FileSink(root))
+	t.Cleanup(func() { SetSink(nil) })
+	require.NoError(t, Instrument("index.lock", "index.commit", func() error { return nil }))
+
+	// Violation evidence must survive metrics rotation.
+	_, err := os.Stat(violationPath)
+	assert.NoError(t, err, "lock-violation.json must survive metrics rotation")
+}
+
+// TestWorkerCleanupDoesNotLeaveOversizedLockMetricsDirty simulates the lock
+// events generated during a worker cleanup pass (many acquire/release cycles)
+// and proves the resulting locks.jsonl stays below the 5 MiB pre-commit
+// large-file guard even after the file is pre-seeded at the rotation cap.
+func TestWorkerCleanupDoesNotLeaveOversizedLockMetricsDirty(t *testing.T) {
+	root := t.TempDir()
+	metricsPath := Path(root)
+	require.NoError(t, os.MkdirAll(filepath.Dir(metricsPath), 0o755))
+
+	// Pre-fill to simulate accumulated events from prior worker cycles.
+	seed := make([]byte, MaxActiveSizeBytes)
+	require.NoError(t, os.WriteFile(metricsPath, seed, 0o644))
+
+	SetSink(FileSink(root))
+	t.Cleanup(func() { SetSink(nil) })
+
+	// Emit acquire/release pairs as a worker cleanup would.
+	for i := 0; i < 20; i++ {
+		_ = Instrument("tracker.lock", "worker.cleanup", func() error { return nil })
+	}
+
+	const largeFileGuard = 5 * 1024 * 1024
+	fi, err := os.Stat(metricsPath)
+	require.NoError(t, err)
+	assert.Less(t, fi.Size(), int64(largeFileGuard),
+		"locks.jsonl must not trip the large-file guard after worker cleanup operations")
 }

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -32,4 +33,33 @@ func TestLefthookPreCommitIncludesDDxRootAudit(t *testing.T) {
 	assert.Contains(t, section, `(projectRoot|[A-Za-z0-9_\.]*WorkingDir)\s*\+\s*"/\.ddx(?:/|")`)
 	assert.Contains(t, section, `grep -Ev '(^cli/internal/ddxroot/)|(_test\.go$)'`)
 	assert.Contains(t, section, "Hardcoded DDx state-root callsites found outside cli/internal/ddxroot/ and approved test fixtures")
+}
+
+func TestPreCommitGoTestFailsWhenAnyPackageFails(t *testing.T) {
+	tmp := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "cmd"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(tmp, "internal", "agent"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "cmd", "x_test.go"), []byte("package cmd\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "internal", "agent", "x_test.go"), []byte("package agent\n"), 0o644))
+
+	bin := filepath.Join(tmp, "bin")
+	require.NoError(t, os.MkdirAll(bin, 0o755))
+	fakeGo := `#!/bin/sh
+case "$*" in
+  *"./cmd"*) echo "cmd failed"; exit 7 ;;
+  *"./internal/agent"*) echo "agent passed"; exit 0 ;;
+  *) echo "unexpected args: $*" >&2; exit 2 ;;
+esac
+`
+	require.NoError(t, os.WriteFile(filepath.Join(bin, "go"), []byte(fakeGo), 0o755))
+
+	script, err := filepath.Abs(filepath.Join("..", "..", "scripts", "lefthook-go-test.sh"))
+	require.NoError(t, err)
+	cmd := exec.Command("sh", script, "./cmd/bead.go", "./internal/agent/types.go")
+	cmd.Dir = tmp
+	cmd.Env = append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "a failing first package must make the hook script fail even if a later package passes")
+	assert.Contains(t, string(out), "cmd failed")
+	assert.Contains(t, string(out), "agent passed")
 }

@@ -21,8 +21,10 @@ import (
 // Retry-power policy between attempts is owned here, not in the agent service.
 func (f *CommandFactory) newWorkCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "work",
-		Short: "Drain the bead execution queue",
+		Use:           "work",
+		Short:         "Drain the bead execution queue",
+		SilenceUsage:  true,
+		SilenceErrors: true,
 		Long: `work drains the execution-ready bead queue. It is the FEAT-010 layer-3
 queue drain: it iterates ddx try (layer 2) across ready beads until a stop
 condition is met and owns retry-power policy between attempts.

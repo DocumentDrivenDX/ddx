@@ -92,6 +92,9 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 			if !rec.IsFresh(now) {
 				continue
 			}
+			if rec.PID > 0 && !processAlive(rec.PID) {
+				continue
+			}
 			add(Record{
 				WorkerID:       rec.WorkerID,
 				BeadID:         rec.CurrentBead,
@@ -108,6 +111,9 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 		}
 		for _, state := range states {
 			if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
+				continue
+			}
+			if state.PID > 0 && !processAlive(state.PID) {
 				continue
 			}
 			add(Record{

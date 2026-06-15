@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260613T234600-ed1ce6e4",
+  "bead_id": "ddx-3141b561",
+  "base_rev": "031e75cbf7e60af2e3d4fcf0edaf6a7c5637a6bb",
+  "created_at": "2026-06-13T23:46:08.018948662Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3141b561",
+    "title": "agent: preserve dirty no-evidence attempts for rescue",
+    "description": "PROBLEM\n\nDuring dogfood on 2026-06-13, `ddx work --once` for ddx-c02ce93c ran a provider attempt that edited implementation files and exited 0, but produced no commit and no `no_changes_rationale.txt`. DDx reported `no_evidence_produced` with dirty paths, then removed the isolated attempt worktree. The operator could not rescue the provider patch from the worktree and had to manually reimplement from partial observed output. A worker surface that destroys dirty provider output after a successful process exit is not acceptable: DDx must preserve or export recoverable evidence for underspecified provider/commit failures.\n\nROOT CAUSE WITH FILE:LINE\n\n- `cli/internal/agent/execute_bead.go:1416-1427` classifies clean-exit/no-commit/no-rationale as `task_no_evidence` and records dirty paths, but it does not convert dirty no-evidence into a preserved recoverable attempt.\n- `cli/internal/agent/execute_bead.go:943-954` defers attempt cleanup for all non-preserved worktree attempts; because `task_no_evidence` is not preserved, cleanup proceeds.\n- `cli/internal/agent/execute_bead.go:1577-1588` removes every non-success attempt worktree unless a preserve flag is set, including dirty `task_no_evidence` attempts.\n- `cli/internal/agent/gitops_real.go:35-37` ignores `git worktree remove --force` errors, so cleanup failures would also be underreported.\n\nPROPOSED FIX\n\nTreat dirty `task_no_evidence` as recoverable provider output: before cleanup, preserve the worktree with a `refs/ddx/iterations/\u003cbead\u003e/\u003cattempt\u003e` ref or export a patch/artifact that contains every dirty path and enough metadata to reconstruct the attempt. Worker output and bead events must name the preserve ref or patch path. Only clean no-evidence attempts may be removed normally.\n\nIN-SCOPE FILES\n\n- cli/internal/agent/execute_bead.go\n- cli/internal/agent/gitops_real.go\n- cli/internal/agent/execute_bead_integration_test.go\n- cli/internal/agent/execute_bead_e2e_test.go\n\nNON-SCOPE\n\nDo not change legitimate `no_changes_rationale.txt` handling. Do not preserve clean no-evidence attempts without dirty paths. Do not kill or change provider subprocess supervision; ddx-c02ce93c handled that separately. Do not hand-edit `.ddx/beads.jsonl`.\n\nDOGFOOD EVIDENCE\n\nAttempt `20260613T225213-a01c938c` for ddx-c02ce93c exited 0 after editing `cli/cmd/work_status_test.go`, `cli/internal/agent/agent_runner_service.go`, `cli/internal/agent/execute_bead.go`, `cli/internal/agent/execute_bead_loop.go`, provider child files, liveness/status files, and then DDx deleted `/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c02ce93c-20260613T225213-a01c938c`.\n",
+    "acceptance": "1. `TestExecuteBead_DirtyNoEvidencePreservesAttempt` proves a fake runner that leaves dirty code files, exits 0, and writes no commit/rationale returns `no_evidence_produced` with a non-empty preserve ref or patch artifact instead of deleting the attempt.\n2. `TestExecuteBead_CleanNoEvidenceStillCleansWorktree` proves a clean no-evidence attempt still cleans up normally and does not create a preserve artifact.\n3. `TestWorkLoopNoEvidenceReportsPreserveLocation` proves `ddx work` output/bead event includes the preserve ref or patch path for dirty no-evidence attempts.\n4. `TestRealGitOpsWorktreeRemoveReportsFailure` proves `RealGitOps.WorktreeRemove` returns an error when `git worktree remove --force` fails instead of swallowing it.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestExecuteBead_DirtyNoEvidencePreservesAttempt|TestExecuteBead_CleanNoEvidenceStillCleansWorktree|TestWorkLoopNoEvidenceReportsPreserveLocation|TestRealGitOpsWorktreeRemoveReportsFailure' -count=1` passes.\n6. `lefthook run pre-commit` passes.\n",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "no-evidence",
+      "rescue"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: runner error: signal: terminated\",\"fingerprint\":\"74debd57843837e5df55f8ccd3aaf718a2b0e7750c7a48fd40c5bed2e0d57b0a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"74debd57843837e5df55f8ccd3aaf718a2b0e7750c7a48fd40c5bed2e0d57b0a\"}",
+          "created_at": "2026-06-13T23:43:39.507738824Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": -600
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260613T234600-ed1ce6e4",
+    "prompt": ".ddx/executions/20260613T234600-ed1ce6e4/prompt.md",
+    "manifest": ".ddx/executions/20260613T234600-ed1ce6e4/manifest.json",
+    "result": ".ddx/executions/20260613T234600-ed1ce6e4/result.json",
+    "checks": ".ddx/executions/20260613T234600-ed1ce6e4/checks.json",
+    "usage": ".ddx/executions/20260613T234600-ed1ce6e4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3141b561-20260613T234600-ed1ce6e4"
+  },
+  "prompt_sha": "cb8065ce5b7c68ad205c0d9b8f91b62f336e5543fb08dae255b68beb91cef9c1"
+}

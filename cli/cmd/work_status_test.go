@@ -528,13 +528,13 @@ func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {
 		CurrentBead:    sidecarBead.ID,
 		AttemptID:      "att-status-sidecar",
 		Phase:          "running",
-		PID:            5151,
+		PID:            os.Getpid(),
 		LastActivityAt: now,
 	}))
 	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
 		BeadID:      runStateBead.ID,
 		AttemptID:   "att-status-runstate",
-		PID:         5152,
+		PID:         os.Getpid(),
 		StartedAt:   now.Add(-time.Minute),
 		RefreshedAt: now,
 		ExpiresAt:   now.Add(time.Minute),
@@ -563,4 +563,235 @@ func TestWorkStatusActiveWorkerSummaryMatchesBeadStatus(t *testing.T) {
 	assert.Contains(t, beadStatus.ActiveWork.BeadIDs, runStateBead.ID)
 	assert.Equal(t, workStatus.ActiveWork.Count, beadStatus.ActiveWork.Count)
 	assert.ElementsMatch(t, workStatus.ActiveWork.BeadIDs, beadStatus.ActiveWork.BeadIDs)
+}
+
+func TestWorkerStatusReportsProviderChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 7676
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-pc", workerstatus.LivenessRecord{
+		WorkerID:    "worker-pc",
+		ProjectRoot: projectRoot,
+		CurrentBead: "ddx-pc000001",
+		AttemptID:   "20260613T202003-18b8bd7e",
+		Phase:       "running",
+		Route:       "claude/sonnet",
+		Harness:     "claude",
+		PID:         pid,
+		StartedAt:   procStartedAt,
+		ProviderChildren: []workerstatus.ProviderChild{
+			{PID: 1882389, Provider: "claude", Harness: "claude", RouteOwner: "claude/sonnet", Phase: "running", AgeSeconds: 42},
+		},
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	children := report.Workers[0].ProviderChildren
+	require.Len(t, children, 1, "provider_children must be surfaced; got %s", out)
+	child := children[0]
+	assert.Equal(t, 1882389, child.PID)
+	assert.Equal(t, "claude", child.Provider)
+	assert.Equal(t, "claude", child.Harness)
+	assert.Equal(t, "claude/sonnet", child.RouteOwner)
+	assert.Equal(t, "running", child.Phase)
+	assert.Equal(t, float64(42), child.AgeSeconds)
+	assert.Contains(t, out, "provider_children")
+}
+
+func TestWorkStatusMarksNonRouteProviderChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 8787
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	const nonRouteDiagnostic = "non-route provider codex terminated by running-phase guard (active route claude/sonnet)"
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-nr", workerstatus.LivenessRecord{
+		WorkerID:    "worker-nr",
+		ProjectRoot: projectRoot,
+		CurrentBead: "ddx-nr000001",
+		AttemptID:   "20260614T004103-afc1d8f7",
+		Phase:       "running",
+		Route:       "claude/sonnet",
+		Harness:     "claude",
+		PID:         pid,
+		StartedAt:   procStartedAt,
+		ProviderChildren: []workerstatus.ProviderChild{
+			{PID: 111, Provider: "claude", Harness: "claude", RouteOwner: "claude/sonnet", Phase: "running", AgeSeconds: 30},
+			{PID: 222, Provider: "codex", Harness: "codex", Phase: "running", AgeSeconds: 12, NonRoute: true, Diagnostic: nonRouteDiagnostic},
+		},
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	children := report.Workers[0].ProviderChildren
+	require.Len(t, children, 2, "both provider children must be surfaced; got %s", out)
+
+	byProvider := map[string]workerstatus.ProviderChild{}
+	for _, c := range children {
+		byProvider[c.Provider] = c
+	}
+
+	route, ok := byProvider["claude"]
+	require.True(t, ok, "active-route claude child must be present: %s", out)
+	assert.Equal(t, "claude/sonnet", route.RouteOwner, "active-route child must carry its route owner")
+	assert.False(t, route.NonRoute, "active-route child must not be flagged non-route")
+	assert.Empty(t, route.Diagnostic, "active-route child must not carry a quarantine diagnostic")
+
+	nonRoute, ok := byProvider["codex"]
+	require.True(t, ok, "non-route codex child must be present: %s", out)
+	assert.True(t, nonRoute.NonRoute, "non-route child must be flagged for operator attention")
+	assert.Empty(t, nonRoute.RouteOwner, "non-route child must not claim a route owner")
+	assert.Equal(t, nonRouteDiagnostic, nonRoute.Diagnostic, "non-route child must carry an operator-attention diagnostic")
+
+	assert.Contains(t, out, "non_route")
+	assert.Contains(t, out, "diagnostic")
+}
+
+// TestWorkStatusMarksNodeWrappedGeminiNonRoute proves that ddx work status
+// --json surfaces a Node-wrapped Gemini provider child (as classified by the
+// running guard) as provider="gemini", non_route=true, with an
+// operator-facing diagnostic when the active route is Claude.
+func TestWorkStatusMarksNodeWrappedGeminiNonRoute(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 9898
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	const nodeRouteOwner = "claude/sonnet"
+	nodeWrappedDiagnostic := "non-route provider gemini terminated by running-phase guard (active route " + nodeRouteOwner + ")"
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-nwg", workerstatus.LivenessRecord{
+		WorkerID:    "worker-nwg",
+		ProjectRoot: projectRoot,
+		CurrentBead: "ddx-nwg00001",
+		AttemptID:   "20260614T014227-nwg00001",
+		Phase:       "running",
+		Route:       nodeRouteOwner,
+		Harness:     "claude",
+		PID:         pid,
+		StartedAt:   procStartedAt,
+		ProviderChildren: []workerstatus.ProviderChild{
+			{PID: 301, Provider: "claude", Harness: "claude", RouteOwner: nodeRouteOwner, Phase: "running", AgeSeconds: 25},
+			{PID: 302, Provider: "gemini", Harness: "gemini", Phase: "running", AgeSeconds: 8, NonRoute: true, Diagnostic: nodeWrappedDiagnostic},
+		},
+		LastActivityAt: time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	children := report.Workers[0].ProviderChildren
+	require.Len(t, children, 2, "both provider children must be surfaced; got %s", out)
+
+	byProvider := map[string]workerstatus.ProviderChild{}
+	for _, c := range children {
+		byProvider[c.Provider] = c
+	}
+
+	route, ok := byProvider["claude"]
+	require.True(t, ok, "active-route claude child must be present: %s", out)
+	assert.Equal(t, nodeRouteOwner, route.RouteOwner)
+	assert.False(t, route.NonRoute)
+
+	nwGemini, ok := byProvider["gemini"]
+	require.True(t, ok, "node-wrapped gemini child must be present: %s", out)
+	assert.True(t, nwGemini.NonRoute, "node-wrapped gemini must be flagged non-route")
+	assert.Empty(t, nwGemini.RouteOwner, "node-wrapped gemini must not carry a route owner")
+	assert.Equal(t, nodeWrappedDiagnostic, nwGemini.Diagnostic, "node-wrapped gemini must carry operator-attention diagnostic")
+
+	assert.Contains(t, out, "non_route")
+	assert.Contains(t, out, "diagnostic")
+}
+
+// TestWorkStatusSurfacesStaleAttemptChildren proves that `ddx work status --json`
+// includes stale_monitor_shells counts from the liveness sidecar, so an operator
+// can detect that the monitor shell guard has cleaned self-matching pgrep loops
+// during the active attempt.
+func TestWorkStatusSurfacesStaleAttemptChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 4488
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-stale-monitors", workerstatus.LivenessRecord{
+		WorkerID:           "worker-stale-monitors",
+		ProjectRoot:        projectRoot,
+		CurrentBead:        "ddx-sm000001",
+		AttemptID:          "20260614T023220-stale01",
+		Phase:              "running",
+		PID:                pid,
+		StartedAt:          procStartedAt,
+		StaleMonitorShells: 2,
+		LastActivityAt:     time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	w := report.Workers[0]
+	assert.Equal(t, 2, w.StaleMonitorShells,
+		"stale_monitor_shells must be surfaced in work status JSON; got %s", out)
+	assert.Contains(t, out, "stale_monitor_shells",
+		"JSON must include stale_monitor_shells key")
 }

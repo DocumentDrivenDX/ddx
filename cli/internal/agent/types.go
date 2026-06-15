@@ -113,6 +113,8 @@ type AgentRunRuntime struct {
 const (
 	DDXModeEnvKey        = "DDX_MODE"
 	DDXModeBeadExecution = "bead_execution"
+	DDXBeadIDEnvKey      = "DDX_BEAD_ID"
+	DDXAttemptIDEnvKey   = "DDX_ATTEMPT_ID"
 )
 
 // Result holds the output of an agent invocation.

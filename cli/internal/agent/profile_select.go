@@ -56,6 +56,13 @@ type ImplementationProfileSelection struct {
 // LoadProfileSnapshot fetches fizeau profiles and models with short-lived,
 // stale-on-error memoization keyed to the service identity.
 func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (ProfileSnapshot, error) {
+	return LoadProfileSnapshotWithFilter(ctx, svc, agentlib.ModelFilter{})
+}
+
+// LoadProfileSnapshotWithFilter fetches fizeau profiles and models, constraining
+// model inventory to filter. Policies remain global metadata; the model filter
+// prevents pinned workers from probing unrelated harness/provider inventories.
+func LoadProfileSnapshotWithFilter(ctx context.Context, svc agentlib.FizeauService, filter agentlib.ModelFilter) (ProfileSnapshot, error) {
 	if svc == nil {
 		return ProfileSnapshot{}, nil
 	}
@@ -63,11 +70,13 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 		ctx = context.Background()
 	}
 	key := profileSnapshotServiceCacheKey(svc)
-	return loadProfileSnapshot(ctx, key, svc)
+	if key != "" && (filter.Harness != "" || filter.Provider != "") {
+		key += "\x00models:harness=" + filter.Harness + "\x00provider=" + filter.Provider
+	}
+	return loadProfileSnapshot(ctx, key, svc, filter)
 }
 
-
-func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauService) (ProfileSnapshot, error) {
+func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauService, filter agentlib.ModelFilter) (ProfileSnapshot, error) {
 	now := profileSnapshotNow()
 
 	var last profileSnapshotCacheEntry
@@ -95,7 +104,7 @@ func loadProfileSnapshot(ctx context.Context, key string, svc agentlib.FizeauSer
 		markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
 		return ProfileSnapshot{}, err
 	}
-	models, err := svc.ListModels(loadCtx, agentlib.ModelFilter{})
+	models, err := svc.ListModels(loadCtx, filter)
 	if err != nil {
 		if hadLast {
 			markProfileSnapshotRefreshDone(key, false, ProfileSnapshot{})
@@ -228,7 +237,6 @@ func cloneProfileSnapshot(snap ProfileSnapshot) ProfileSnapshot {
 		Models:   append([]agentlib.ModelInfo(nil), snap.Models...),
 	}
 }
-
 
 // SelectStrongestProfile returns the highest-power profile band that has at
 // least one available, auto-routable model.
@@ -564,7 +572,7 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 		return selector(snap)
 	}
 	if blocking {
-		snap, err := loadProfileSnapshot(ctx, key, selectedSvc)
+		snap, err := loadProfileSnapshot(ctx, key, selectedSvc, agentlib.ModelFilter{})
 		if err != nil {
 			return ""
 		}

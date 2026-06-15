@@ -30,6 +30,7 @@ type SidecarLivenessReporter struct {
 	rec         workerstatus.LivenessRecord
 	sink        io.Writer
 	sessionID   string
+	childProbe  func(route, harness, phase string) []workerstatus.ProviderChild
 }
 
 // NewSidecarLivenessReporter constructs a SidecarLivenessReporter for the
@@ -68,6 +69,16 @@ func (r *SidecarLivenessReporter) SetAttempt(beadID, attemptID, phase, route, ha
 	r.mu.Unlock()
 }
 
+// SetChildProbe installs a best-effort probe invoked on each heartbeat tick.
+func (r *SidecarLivenessReporter) SetChildProbe(probe func(route, harness, phase string) []workerstatus.ProviderChild) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.childProbe = probe
+	r.mu.Unlock()
+}
+
 // SetWorkerState records a non-attempt worker state in the sidecar.
 func (r *SidecarLivenessReporter) SetWorkerState(phase, message string) {
 	if r == nil {
@@ -83,6 +94,7 @@ func (r *SidecarLivenessReporter) SetWorkerState(phase, message string) {
 	r.rec.Model = ""
 	r.rec.Profile = ""
 	r.rec.ChildPID = 0
+	r.rec.ProviderChildren = nil
 	r.mu.Unlock()
 }
 
@@ -126,6 +138,7 @@ func (r *SidecarLivenessReporter) ClearAttempt() {
 	r.rec.Model = ""
 	r.rec.Profile = ""
 	r.rec.ChildPID = 0
+	r.rec.ProviderChildren = nil
 	r.mu.Unlock()
 }
 
@@ -136,7 +149,21 @@ func (r *SidecarLivenessReporter) OnTick(now time.Time) {
 		return
 	}
 	r.mu.Lock()
+	probe := r.childProbe
+	route := r.rec.Route
+	harness := r.rec.Harness
+	phase := r.rec.Phase
+	hasAttempt := r.rec.CurrentBead != ""
+	r.mu.Unlock()
+
+	var children []workerstatus.ProviderChild
+	if probe != nil && hasAttempt {
+		children = probe(route, harness, phase)
+	}
+
+	r.mu.Lock()
 	r.rec.LastActivityAt = now.UTC()
+	r.rec.ProviderChildren = children
 	snapshot := r.rec
 	r.mu.Unlock()
 	_ = workerstatus.WriteLiveness(r.projectRoot, snapshot.WorkerID, snapshot)

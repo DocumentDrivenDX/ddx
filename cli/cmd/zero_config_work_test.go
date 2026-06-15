@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +26,16 @@ import (
 // fail because the temp config points at an unreachable endpoint, but that
 // failure is downstream of the routing decision and unrelated to AC1.
 func TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"stubbed provider failure"}`)}
+		close(ch)
+		return ch, nil
+	}
+
 	projectDir := t.TempDir()
 	ddxDir := filepath.Join(projectDir, ddxroot.DirName)
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -54,6 +65,7 @@ default_provider: testprov
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
 
 	factory := NewCommandFactory(projectDir)
+	factory.AgentRunnerOverride = passThroughRunner{}
 	root := factory.NewRootCommand()
 	out, err := executeCommand(root, "work", "--once", "--project", projectDir)
 

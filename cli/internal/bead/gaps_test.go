@@ -172,6 +172,24 @@ func TestQueueRankNumericStringCompatibility(t *testing.T) {
 	assert.Equal(t, "ddx-unranked", ready[2].ID)
 }
 
+func TestQueueRankUnderscoreAliasCompatibility(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		{ID: "ddx-unranked", Title: "Unranked", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+		{ID: "ddx-rank-alias", Title: "Rank alias", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now.Add(time.Second), UpdatedAt: now.Add(time.Second), Extra: map[string]any{"queue_rank": "0"}},
+	}))
+
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 2)
+	assert.Equal(t, "ddx-rank-alias", ready[0].ID)
+	rank, ok := QueueRank(ready[0].Extra)
+	require.True(t, ok)
+	assert.Equal(t, 0, rank)
+}
+
 func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {
 	s := newTestStore(t)
 

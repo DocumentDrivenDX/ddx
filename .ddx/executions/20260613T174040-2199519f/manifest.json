@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260613T174040-2199519f",
+  "bead_id": "ddx-3b721804",
+  "base_rev": "f09c4a9e667845cf480ebde78168eb44c4a92950",
+  "created_at": "2026-06-13T17:40:50.891185097Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3b721804",
+    "title": "agent: type provider failures and enforce fallback semantics",
+    "description": "PROBLEM\nDDx/FIZ worker failures can still surface as underspecified execution failures when provider availability, model availability, credentials, endpoint reachability, or harness configuration differs across machines. DDx is the abstraction that should let unattended workers continue through provider variance; a generic provider failure that gives no typed cause, no fallback action, and no durable route-health evidence is a product bug.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/service_run.go:287-290 returns pre-dispatch Fizeau Execute errors as a generic `agent: execute: %w`, leaving the execute loop without a typed provider/model/configuration failure contract.\ncli/internal/agent/service_run.go:332-376 copies final service error text into Result.Error/ExitCode, but downstream classification still depends on free-text heuristics rather than a required typed route-health outcome for provider unavailable, model unavailable, auth missing, quota/rate limit, endpoint timeout, or harness misconfiguration.\ncli/cmd/execute_loop_shared.go:516-544 and :588-612 contain the unpinned route-exclusion/escalation path, but that path only works when the failure is already recognized as provider_connectivity/no_viable_provider; untyped provider/configuration failures can stop or preserve the bead without proving fallback was attempted or intentionally impossible.\n\nPROPOSED FIX\n- Define a typed provider failure taxonomy at the DDx/Fizeau boundary: provider_connectivity, provider_auth, provider_rate_limit, provider_quota, provider_model_unavailable, provider_harness_unavailable, provider_config_invalid, no_viable_provider, and unknown_provider_failure.\n- Normalize both pre-dispatch Execute errors and final failed events into that taxonomy before ExecuteBeadReport construction.\n- For unpinned workers, convert retryable provider/model/harness availability failures into route-health evidence and continue fallback/escalation without parking the bead.\n- For explicit operator pins, fail loudly with a typed hard-pin exhausted/operator-action report that names the pin and available remediation, without silently widening pins.\n- Persist durable evidence on the bead/run showing requested constraints, resolved route if any, typed failure, retryability, whether fallback was attempted, and why fallback stopped.\n\nNON-SCOPE\nDo not move concrete route selection into DDx; Fizeau still owns routing, aliases, model discovery, and provider catalog behavior. Do not remove explicit operator pins. Do not call real providers in tests.",
+    "acceptance": "1. TestServiceExecuteErrorClassifiesProviderConfigFailures uses a fake Fizeau service returning representative pre-dispatch errors for auth missing, model unavailable, provider unavailable, and endpoint timeout; each produces a typed ExecuteBeadReport outcome_reason/disruption_reason instead of generic execution_failed.\n2. TestServiceFinalFailureClassifiesProviderRouteHealth uses fake final events for provider timeout, quota/rate-limit, model unavailable, and harness unavailable; each is normalized into the provider failure taxonomy with retryable vs hard-pin semantics preserved.\n3. TestUnpinnedWorkerFallsBackAfterTypedProviderFailure proves a zero-config/unpinned worker records failed-route evidence and asks Fizeau for a different eligible route or higher floor rather than parking the bead on the first provider failure.\n4. TestPinnedWorkerReportsHardPinExhaustedWithoutWidening proves --harness/--provider/--model pins do not get silently removed, and the report names the typed provider failure plus operator remediation.\n5. TestProviderFailureEvidenceNamesFallbackDecision proves the bead/run evidence includes requested constraints, resolved route if any, typed failure, retryability, fallback_attempted, and fallback_stop_reason.\n6. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run 'TestServiceExecuteErrorClassifiesProviderConfigFailures|TestServiceFinalFailureClassifiesProviderRouteHealth|TestUnpinnedWorkerFallsBackAfterTypedProviderFailure|TestPinnedWorkerReportsHardPinExhaustedWithoutWidening|TestProviderFailureEvidenceNamesFallbackDecision' passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "area:routing",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "queue-rank": "-120",
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260613T174040-2199519f",
+    "prompt": ".ddx/executions/20260613T174040-2199519f/prompt.md",
+    "manifest": ".ddx/executions/20260613T174040-2199519f/manifest.json",
+    "result": ".ddx/executions/20260613T174040-2199519f/result.json",
+    "checks": ".ddx/executions/20260613T174040-2199519f/checks.json",
+    "usage": ".ddx/executions/20260613T174040-2199519f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3b721804-20260613T174040-2199519f"
+  },
+  "prompt_sha": "68255634495dc9eadc2981f10597b0810bd2af8a18dce36c44c4d0895280738d"
+}

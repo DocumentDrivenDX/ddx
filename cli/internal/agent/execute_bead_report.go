@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,14 @@ func MarkResultExecutionError(res *ExecuteBeadResult, err error) {
 	res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 	if res.FailureMode == "" {
 		res.FailureMode = FailureModeUnknown
+	}
+	// A pre-dispatch provider-boundary failure carries its typed classification
+	// on the error (ddx-3b721804). Prefer it so the report's outcome_reason is
+	// the precise provider taxonomy (provider_auth, provider_model_unavailable,
+	// ...) rather than the coarse worker-level bucket.
+	var pfErr *ProviderFailureError
+	if errors.As(err, &pfErr) && pfErr.Failure.Reason != "" {
+		res.FailureMode = pfErr.Failure.Reason
 	}
 }
 

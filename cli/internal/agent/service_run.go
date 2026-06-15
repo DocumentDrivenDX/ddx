@@ -68,6 +68,17 @@ func ResolveServiceFromWorkDirCtx(ctx context.Context, workDir string) (agentlib
 	return NewServiceFromWorkDirCtx(ctx, workDir)
 }
 
+// ResolvePreflightServiceFromWorkDir returns a short-lived service instance for
+// pre-dispatch model/route checks. Production uses a constructor with disabled
+// background provider probes; tests still honor SetServiceRunFactory so they can
+// observe requests without a real service.
+func ResolvePreflightServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
+	if serviceRunFactory != nil {
+		return serviceRunFactory(workDir)
+	}
+	return NewPreflightServiceFromWorkDir(workDir)
+}
+
 // resolveService returns a FizeauService for workDir, using the test-injected
 // factory when set and the production NewServiceFromWorkDir otherwise. All
 // internal callers (RunWithConfigViaService, ValidateForExecuteLoopViaService,
@@ -150,7 +161,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		})
 	}
 
-	svc, err := resolveService(workDir)
+	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -287,7 +298,15 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	start := time.Now().UTC()
 	events, err := svc.Execute(cancelCtx, req)
 	if err != nil {
-		return nil, fmt.Errorf("agent: execute: %w", err)
+		// A pre-dispatch Execute error means routing never produced a viable
+		// dispatch — a provider-boundary failure. Wrap it with its typed
+		// classification (ddx-3b721804) so callers recover the taxonomy via
+		// errors.As instead of re-parsing free text, and so the failure
+		// surfaces as a typed outcome_reason rather than generic execution_failed.
+		return nil, &ProviderFailureError{
+			Failure: ClassifyServiceExecuteError(err),
+			Err:     fmt.Errorf("agent: execute: %w", err),
+		}
 	}
 
 	workPhase := strings.TrimSpace(runtime.WorkLogPhase)
@@ -303,7 +322,43 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
 	}
-	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, runtime.OnRouteResolved)
+	onRouteResolved := func(harness, provider, model string) {
+		harness = firstNonEmpty(harness, fizeauHarness(strings.TrimSpace(runtime.HarnessOverride)), fizeauHarness(strings.TrimSpace(pt.Harness)))
+		provider = firstNonEmpty(provider, strings.TrimSpace(runtime.ProviderOverride), strings.TrimSpace(pt.Provider))
+		model = firstNonEmpty(model, strings.TrimSpace(runtime.ModelOverride), strings.TrimSpace(pt.Model))
+		route := providerRouteLabel(provider, model)
+		now := time.Now().UTC()
+		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), route, harness, now)
+		if len(reaped) > 0 {
+			writeProviderChildCleanupArtifact(workDir, runtime.Correlation["attempt_id"], &providerChildCleanupReport{
+				AttemptID:   runtime.Correlation["attempt_id"],
+				BeadID:      runtime.Correlation["bead_id"],
+				Trigger:     reasonSupersededProviderChild,
+				ActiveRoute: firstNonEmpty(route, harness),
+				ScannedAt:   now,
+				Survivors:   survivors,
+				Reaped:      reaped,
+			})
+		}
+		if runtime.OnRouteResolved != nil {
+			runtime.OnRouteResolved(harness, provider, model)
+		}
+	}
+	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog, onRouteResolved)
+	if final == nil {
+		// Provider process exited before emitting a final event — a harness-level
+		// failure (crash, OOM, binary restart) the model never saw. Classify as
+		// harness unavailable (retryable) so an unpinned worker can fall back to
+		// another eligible route without operator intervention.
+		return nil, &ProviderFailureError{
+			Failure: ProviderFailure{
+				Reason:     FailureModeProviderHarnessUnavailable,
+				Retryable:  true,
+				Disruption: FailureModeProviderHarnessUnavailable,
+			},
+			Err: fmt.Errorf("agent: provider process exited without emitting a final event"),
+		}
+	}
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 
@@ -639,7 +694,7 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	svc, err := resolveService(workDir)
+	svc, err := ResolvePreflightServiceFromWorkDir(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -733,6 +788,52 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 		}); err != nil {
 			return fmt.Errorf("agent: model %q is not routable: %w", model, err)
 		}
+	}
+	return nil
+}
+
+// ValidateHarnessOnlyRouteViaService preflights a harness-only request shape
+// using the same route resolver the execute path will hit. It is used for
+// harness-pinned work/try requests that intentionally leave model empty while
+// relying on profile or MinPower to make the route viable.
+func ValidateHarnessOnlyRouteViaService(ctx context.Context, workDir, harnessName, provider, profile string, minPower, maxPower int) error {
+	if harnessName == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	svc, err := resolveService(workDir)
+	if err != nil {
+		return fmt.Errorf("agent: build service: %w", err)
+	}
+	infos, err := svc.ListHarnesses(ctx)
+	if err != nil {
+		return fmt.Errorf("agent: list harnesses: %w", err)
+	}
+	found := false
+	for _, info := range infos {
+		if info.Name == harnessName {
+			found = true
+			if !info.Available {
+				return fmt.Errorf("agent: harness %s not available", harnessName)
+			}
+			break
+		}
+	}
+	if !found {
+		return fmt.Errorf("agent: unknown harness: %s", harnessName)
+	}
+
+	_, err = svc.ResolveRoute(ctx, agentlib.RouteRequest{
+		Harness:  fizeauHarness(harnessName),
+		Provider: provider,
+		Policy:   profile,
+		MinPower: minPower,
+		MaxPower: maxPower,
+	})
+	if err != nil {
+		return fmt.Errorf("agent: route preflight failed: %w", err)
 	}
 	return nil
 }

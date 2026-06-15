@@ -785,6 +785,11 @@ type ExecuteBeadReport struct {
 	// the attempt outcome. It complements Disrupted/DisruptionReason without
 	// changing their mechanical interruption semantics.
 	OutcomeReason string `json:"outcome_reason,omitempty"`
+	// ProviderFailureEvidence is the durable route-health record attached when
+	// the attempt failed for a typed provider reason (ddx-3b721804): requested
+	// constraints, resolved route if any, typed failure, retryability, and the
+	// fallback decision.
+	ProviderFailureEvidence *ProviderFailureEvidence `json:"provider_failure_evidence,omitempty"`
 	// ResourceExhausted carries the execution-root preflight result when the
 	// attempt stopped before the agent could safely continue.
 	ResourceExhausted any `json:"resource_exhausted,omitempty"`
@@ -1527,6 +1532,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	var liveness *work.SidecarLivenessReporter
 	if runtime.ProjectRoot != "" && runtime.SessionID != "" {
 		liveness = work.NewSidecarLivenessReporter(runtime.ProjectRoot, runtime.SessionID, runtime.SessionID, runtime.EventSink)
+		workerPID := os.Getpid()
+		liveness.SetChildProbe(func(route, harness, phase string) []workerstatus.ProviderChild {
+			return scanProviderChildrenForStatus(context.Background(), workerPID, route, harness, phase, time.Now().UTC())
+		})
 	}
 	serverOutage := newServerOutageTracker(
 		runtime.effectiveServerFailureWindow(),
@@ -2433,7 +2442,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		emit("picker.claim_race", map[string]any{
 			"bead_id":    candidate.ID,
 			"priority":   candidate.Priority,
-			"queue_rank": queueRankValue(candidate.Extra["queue-rank"]),
+			"queue_rank": queueRankValue(candidate.Extra),
 			"reason":     claimErr.Error(),
 		})
 		recordClaimAttempt(false, candidate.ID)
@@ -4661,7 +4670,13 @@ func trackerContentionSkipDetail(reason string) string {
 }
 
 func queueRankValue(raw any) any {
-	rank, ok := parseQueueRank(raw)
+	var rank int
+	var ok bool
+	if extra, isExtra := raw.(map[string]any); isExtra {
+		rank, ok = bead.QueueRank(extra)
+	} else {
+		rank, ok = parseQueueRank(raw)
+	}
 	if !ok {
 		return nil
 	}
@@ -5020,21 +5035,21 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 		}
 		if w.transientCandidateSkips != nil {
 			if _, skipped := w.transientCandidateSkips[candidate.ID]; skipped {
-				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: staleCandidateSkipReason})
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: staleCandidateSkipReason})
 				continue
 			}
 		}
 		if targetBeadID != "" && candidate.ID != targetBeadID {
-			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "target_bead"})
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: "target_bead"})
 			continue
 		}
 		if hasResultForBead(results, candidate.ID) {
-			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "in_attempted"})
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: "in_attempted"})
 			continue
 		}
 		if entry.FilterDecision == FilterDecisionSkipped {
 			// PreviewQueue already applied label_filter; record as skip.
-			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: "label_filter"})
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: "label_filter"})
 			continue
 		}
 		allowed := true
@@ -5050,7 +5065,7 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 			allowed = false
 			reason = guardReason
 			if reason != "" {
-				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra["queue-rank"]), Reason: reason})
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, BeadRank: queueRankPtr(candidate.Extra), Reason: reason})
 			}
 			break
 		}
@@ -6307,6 +6322,10 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeLandRetry,
 		FailureModeLandOperatorAttention,
 		FailureModeWorktreeLost,
+		// Non-retryable typed provider failures (ddx-3b721804): a config bug
+		// or unclassified provider fault is not an implementation attempt.
+		FailureModeProviderConfigInvalid,
+		FailureModeUnknownProviderFailure,
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
 		"operator_required":
@@ -6372,7 +6391,15 @@ func isTransientOutcomeReason(reason string) bool {
 		FailureModeLandRetry,
 		FailureModeNoViableProvider,
 		FailureModeServerUnavailable,
-		FailureModeWorktreeLost:
+		FailureModeWorktreeLost,
+		// Typed provider-availability failures (ddx-3b721804): transient
+		// route-health conditions, not implementation attempts.
+		FailureModeProviderConnectivity,
+		FailureModeProviderAuth,
+		FailureModeProviderRateLimit,
+		FailureModeProviderQuota,
+		FailureModeProviderModelUnavailable,
+		FailureModeProviderHarnessUnavailable:
 		return true
 	default:
 		return false

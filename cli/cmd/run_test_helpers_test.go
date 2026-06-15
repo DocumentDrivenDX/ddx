@@ -43,7 +43,7 @@ func (s *stubAgentService) TailSessionLog(_ context.Context, _ string) (<-chan a
 }
 
 func (s *stubAgentService) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
-	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}}, nil
+	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}, {Name: "codex", Available: true}}, nil
 }
 
 func (s *stubAgentService) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
@@ -87,13 +87,16 @@ func (s *stubAgentService) UsageReport(_ context.Context, _ agentlib.UsageReport
 }
 
 type executeCapturingStub struct {
-	mu            sync.Mutex
-	executeCalled bool
-	lastReq       agentlib.ServiceExecuteRequest
-	requests      []agentlib.ServiceExecuteRequest
-	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
-	listModels    []agentlib.ModelInfo
-	listPolicies  []agentlib.PolicyInfo
+	mu             sync.Mutex
+	executeCalled  bool
+	lastReq        agentlib.ServiceExecuteRequest
+	requests       []agentlib.ServiceExecuteRequest
+	executeFn      func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+	resolveRouteFn func(agentlib.RouteRequest) (*agentlib.RouteDecision, error)
+	listModels     []agentlib.ModelInfo
+	listPolicies   []agentlib.PolicyInfo
+	routeRequests  []agentlib.RouteRequest
+	modelFilters   []agentlib.ModelFilter
 }
 
 func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -111,7 +114,13 @@ func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceEx
 	return ch, nil
 }
 
-func (s *executeCapturingStub) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+func (s *executeCapturingStub) ResolveRoute(_ context.Context, req agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+	s.mu.Lock()
+	s.routeRequests = append(s.routeRequests, req)
+	s.mu.Unlock()
+	if s.resolveRouteFn != nil {
+		return s.resolveRouteFn(req)
+	}
 	return nil, fmt.Errorf("routinglint: ResolveRoute called in execution path — violates CONTRACT-003 / ddx-da19756a")
 }
 
@@ -122,14 +131,17 @@ func (s *executeCapturingStub) TailSessionLog(_ context.Context, _ string) (<-ch
 }
 
 func (s *executeCapturingStub) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
-	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}}, nil
+	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}, {Name: "codex", Available: true}}, nil
 }
 
 func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
 	return nil, nil
 }
 
-func (s *executeCapturingStub) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+func (s *executeCapturingStub) ListModels(_ context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	s.mu.Lock()
+	s.modelFilters = append(s.modelFilters, filter)
+	s.mu.Unlock()
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
@@ -198,6 +210,18 @@ func capturedImplementationRequests(stub *executeCapturingStub) []agentlib.Servi
 		}
 	}
 	return out
+}
+
+func capturedRouteRequests(stub *executeCapturingStub) []agentlib.RouteRequest {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return append([]agentlib.RouteRequest(nil), stub.routeRequests...)
+}
+
+func capturedModelFilters(stub *executeCapturingStub) []agentlib.ModelFilter {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	return append([]agentlib.ModelFilter(nil), stub.modelFilters...)
 }
 
 func minimalProjectDir(t *testing.T) string {

@@ -1,0 +1,46 @@
+{
+  "attempt_id": "20260613T210703-88070be3",
+  "bead_id": "ddx-87447254",
+  "base_rev": "fe202c970464f2940ede3abf62f656d7d3941cf4",
+  "created_at": "2026-06-13T21:07:11.573424078Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-87447254",
+    "title": "metrics: bound lock telemetry file growth",
+    "description": "PROBLEM\nDogfood generated `.ddx/metrics/locks.jsonl` large enough to trigger the pre-commit large-file guard at about 5 MB. DDx-managed lock metrics are useful audit data, but unbounded growth turns routine worker execution into a commit blocker and leaves dirty runtime state after attempts.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/lockmetrics/lockcap.go defines lock caps, and DDx writes lock metrics under `.ddx/metrics/locks.jsonl`, but there is no bounded retention/rotation policy comparable to the execution cleanup guarantees in docs/helix/06-iterate/reliability-principles.md P8. The durable audit path work in ddx-cd99987d covers force-staging managed paths, but it does not cap or rotate oversized lock metric files.\n\nPROPOSED FIX\n- Add bounded retention or rotation for `.ddx/metrics/locks.jsonl` with an explicit size/age policy.\n- Keep recent lock violation evidence durable while preventing normal lock telemetry from exceeding repository large-file gates.\n- Ensure worker shutdown/cleanup can leave the worktree clean or with only intentionally staged DDx-managed audit paths.\n- Document the retention policy near the lock metrics implementation.\n\nNON-SCOPE\nDo not delete lock-violation evidence needed for debugging. Do not disable the large-file pre-commit guard. Do not silently ignore lock metrics write failures.",
+    "acceptance": "1. TestLockMetricsRotatesBeforeLargeFileThreshold seeds `.ddx/metrics/locks.jsonl` near the configured cap, writes additional lock events, and proves rotation or retention keeps the active file below the threshold.\n2. TestLockViolationEvidenceSurvivesMetricsRotation proves `.ddx/executions/\u003crun-id\u003e/lock-violation.json` remains available after metrics rotation.\n3. TestWorkerCleanupDoesNotLeaveOversizedLockMetricsDirty runs a worker cleanup path and proves generated lock metrics do not trip the repository large-file pre-commit guard.\n4. cd cli \u0026\u0026 go test ./internal/lockmetrics/... ./internal/agent/... -run 'TestLockMetricsRotatesBeforeLargeFileThreshold|TestLockViolationEvidenceSurvivesMetricsRotation|TestWorkerCleanupDoesNotLeaveOversizedLockMetricsDirty' passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:metrics",
+      "area:locks",
+      "kind:bug",
+      "kind:reliability",
+      "severity:high",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "queue-rank": 18,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260613T210703-88070be3",
+    "prompt": ".ddx/executions/20260613T210703-88070be3/prompt.md",
+    "manifest": ".ddx/executions/20260613T210703-88070be3/manifest.json",
+    "result": ".ddx/executions/20260613T210703-88070be3/result.json",
+    "checks": ".ddx/executions/20260613T210703-88070be3/checks.json",
+    "usage": ".ddx/executions/20260613T210703-88070be3/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-87447254-20260613T210703-88070be3"
+  },
+  "prompt_sha": "5c84e983ffb020d3cdeacddc7538f8415d42451fdc5c8426b016803984a870fd"
+}

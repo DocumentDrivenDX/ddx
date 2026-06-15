@@ -42,12 +42,13 @@ func TestDDxRoot_InitializedInTreeUsesProjectDDx(t *testing.T) {
 	}
 }
 
-func TestDDxRoot_BareInTreeFallsThroughToXDG(t *testing.T) {
+func TestDDxRoot_BareInTreeUsesProjectDDx(t *testing.T) {
 	projectRoot := filepath.Join(t.TempDir(), "demo-project")
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		t.Fatalf("mkdir project root: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755); err != nil {
+	inTree := filepath.Join(projectRoot, ".ddx")
+	if err := os.MkdirAll(inTree, 0o755); err != nil {
 		t.Fatalf("mkdir bare .ddx: %v", err)
 	}
 	initGitRepo(t, projectRoot)
@@ -56,9 +57,8 @@ func TestDDxRoot_BareInTreeFallsThroughToXDG(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", xdg)
 
 	got := Path(context.Background(), projectRoot)
-	want := filepath.Join(xdg, "ddx", "projects", expectedLocalIdentity(projectRoot))
-	if got != want {
-		t.Fatalf("Path() = %q, want %q", got, want)
+	if got != inTree {
+		t.Fatalf("Path() = %q, want %q", got, inTree)
 	}
 }
 
@@ -77,12 +77,13 @@ func TestDDxRoot_ConventionMode_XDGPath(t *testing.T) {
 	}
 }
 
-func TestExistingPath_BareInTreeFallsThroughToXDG(t *testing.T) {
+func TestExistingPath_BareInTreeUsesProjectDDx(t *testing.T) {
 	projectRoot := filepath.Join(t.TempDir(), "demo-project")
 	if err := os.MkdirAll(projectRoot, 0o755); err != nil {
 		t.Fatalf("mkdir project root: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755); err != nil {
+	inTree := filepath.Join(projectRoot, ".ddx")
+	if err := os.MkdirAll(inTree, 0o755); err != nil {
 		t.Fatalf("mkdir bare .ddx: %v", err)
 	}
 	initGitRepo(t, projectRoot)
@@ -90,8 +91,8 @@ func TestExistingPath_BareInTreeFallsThroughToXDG(t *testing.T) {
 	xdg := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdg)
 
-	want := filepath.Join(xdg, "ddx", "projects", expectedLocalIdentity(projectRoot))
-	if err := os.MkdirAll(want, 0o755); err != nil {
+	conventionRoot := filepath.Join(xdg, "ddx", "projects", expectedLocalIdentity(projectRoot))
+	if err := os.MkdirAll(conventionRoot, 0o755); err != nil {
 		t.Fatalf("mkdir xdg root: %v", err)
 	}
 
@@ -99,8 +100,8 @@ func TestExistingPath_BareInTreeFallsThroughToXDG(t *testing.T) {
 	if !ok {
 		t.Fatal("ExistingPath() = false, want true")
 	}
-	if got != want {
-		t.Fatalf("ExistingPath() = %q, want %q", got, want)
+	if got != inTree {
+		t.Fatalf("ExistingPath() = %q, want %q", got, inTree)
 	}
 }
 

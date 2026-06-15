@@ -1,0 +1,16 @@
+{
+  "bead_id": "ddx-ef9df563",
+  "attempt_id": "20260613T214920-dd500381",
+  "base_rev": "04c1255dd809b15d101dad03860fc7130ff1fddc",
+  "result_rev": "04c1255dd809b15d101dad03860fc7130ff1fddc",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "loading bead ddx-ef9df563 from worktree snapshot: bead: not found: ddx-ef9df563",
+  "duration_ms": 0,
+  "exit_code": 1,
+  "error": "loading bead ddx-ef9df563 from worktree snapshot: bead: not found: ddx-ef9df563",
+  "project_root": "/Users/erik/Projects/ddx-provider-failure-20260613",
+  "failure_mode": "unknown",
+  "started_at": "0001-01-01T00:00:00Z",
+  "finished_at": "0001-01-01T00:00:00Z"
+}

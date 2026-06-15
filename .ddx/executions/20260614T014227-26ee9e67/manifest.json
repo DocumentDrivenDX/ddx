@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260614T014227-26ee9e67",
+  "bead_id": "ddx-cebd3b5b",
+  "base_rev": "3d7f463497298f8d153b9ee5a801edcd5a452f06",
+  "created_at": "2026-06-14T01:42:47.214857729Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cebd3b5b",
+    "title": "Detect Node-wrapped Gemini provider children in running guard",
+    "description": "PROBLEM\nDuring the DDx dogfood run for ddx-6f25c87f, the active route was Claude/Sonnet and `ddx work status --json` reported only the Claude provider child, but the worker also spawned non-route Gemini Node wrapper processes such as `node /home/linuxbrew/.linuxbrew/bin/gemini`. The running provider guard did not report or reap those children, so an unavailable or misconfigured non-route provider can keep running outside the selected route. This is a core DDx/FIZ reliability failure: DDx is the surface that must keep work progressing despite provider availability and configuration variance.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/provider_children.go:68-78` classifies provider children only by `filepath.Base(parts[0])`. For Gemini installed through the Node wrapper, argv[0] is `node` and argv[1] is the `gemini` CLI path, so `providerForCommand` returns empty. Existing tests at `cli/internal/agent/provider_children_test.go:198-240` cover direct executable names (`gemini`) but not `node .../gemini`, and the process-group test at `cli/internal/agent/provider_children_test.go:242-292` uses argv[0]=gemini, so it also misses the real wrapper shape.\n\nPROPOSED FIX\nTeach provider child classification to recognize known provider CLI paths passed as wrapper script arguments, starting with Node-wrapped Gemini (`node /path/to/gemini ...`). Make the running provider guard and `ddx work status --json` treat those processes as provider=`gemini`, non-route when the active route is Claude, and reap the full process group just like direct Gemini provider children.\n\nIN-SCOPE FILES\n- cli/internal/agent/provider_children.go\n- cli/internal/agent/provider_children_test.go\n- any existing cmd/work status test file needed to assert JSON/status behavior\n\nNON-SCOPE\n- Do not change FIZ route selection, provider/model catalogs, or provider availability probing.\n- Do not add a separate supervisor or server-managed worker feature in this bead.\n- Do not change the active-route preservation behavior for legitimate route-owned Claude children.\n- Do not hand-edit `.ddx/beads.jsonl`.",
+    "acceptance": "1. `TestProviderForCommandDetectsNodeWrappedGemini` proves `providerForCommand(\"/path/to/node /path/to/gemini\") == \"gemini\"` while ordinary non-provider Node commands still return empty.\n2. `TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup` starts a fake Node wrapper command whose argv includes a `gemini` path and proves the running guard reports and reaps that Gemini process group while preserving active-route Claude.\n3. `TestWorkStatusMarksNodeWrappedGeminiNonRoute` proves `ddx work status --json`/the status rendering path includes the Node-wrapped Gemini child as provider=`gemini`, non_route=true, with a diagnostic when the active route is Claude.\n4. Existing direct-provider guard coverage continues to pass, including `TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup`.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'TestProviderForCommandDetectsNodeWrappedGemini|TestRunningProviderGuardReapsNodeWrappedGeminiProcessGroup|TestWorkStatusMarksNodeWrappedGeminiNonRoute|TestRunningProviderGuardReapsProviderGrandchildrenByProcessGroup' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "provider-supervision",
+      "dogfood"
+    ],
+    "metadata": {
+      "dogfood-source": "provider-failure-20260613",
+      "queue-rank": -680
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260614T014227-26ee9e67",
+    "prompt": ".ddx/executions/20260614T014227-26ee9e67/prompt.md",
+    "manifest": ".ddx/executions/20260614T014227-26ee9e67/manifest.json",
+    "result": ".ddx/executions/20260614T014227-26ee9e67/result.json",
+    "checks": ".ddx/executions/20260614T014227-26ee9e67/checks.json",
+    "usage": ".ddx/executions/20260614T014227-26ee9e67/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-cebd3b5b-20260614T014227-26ee9e67"
+  },
+  "prompt_sha": "9178e85a4fd14d29e6a017be880d225b96c2f73d3c086bec292a281e643fde5c"
+}

@@ -207,13 +207,7 @@ pre-commit:
       <<: *go_checks
       name: "Go Tests"
       glob: "cli/**/*.go"
-      run: |
-        packages=$(echo {staged_files} | xargs -n1 dirname | sort -u | sed 's|^cli/||')
-        for pkg in $packages; do
-          if ls "$pkg"/*_test.go >/dev/null 2>&1; then
-            go test -short -race -timeout 30m "./$pkg"
-          fi
-        done
+      run: sh ../scripts/lefthook-go-test.sh {staged_files}
       skip:
         - merge
         - rebase

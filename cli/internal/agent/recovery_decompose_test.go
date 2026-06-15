@@ -349,6 +349,179 @@ func TestPreClaimDecomposerDispatchesOutsideProjectRoot(t *testing.T) {
 	assert.True(t, strings.HasPrefix(filepath.Base(gotWorkDir), lifecycleScratchDirPrefix))
 }
 
+func TestPreClaimDecomposerHonorsWorkerHarnessModel(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{
+		ID:          "ddx-preclaim-routing",
+		Title:       "preclaim routing pin test",
+		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/recovery_decompose.go:60 clears routing pins.\n",
+		Acceptance:  "1. TestPreClaimDecomposerHonorsWorkerHarnessModel\n2. cd cli && go test ./internal/agent/...\n3. lefthook run pre-commit",
+		Labels:      []string{"phase:iterate", "area:agent"},
+	}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	payload := map[string]any{
+		"children": []map[string]any{
+			{
+				"title":       "preclaim routing child",
+				"description": "PROBLEM\nChild.\n\nROOT CAUSE\ncli/internal/agent/recovery_decompose.go:60.\n\nPROPOSED FIX\nPreserve pins.\n\nNON-SCOPE\nDo not change provider routing policy.",
+				"acceptance":  "1. TestPreClaimRoutingChild\n2. cd cli && go test ./internal/agent/...\n3. lefthook run pre-commit",
+				"labels":      []string{"phase:iterate", "area:agent"},
+			},
+		},
+		"ac_map": []map[string]any{
+			{"parent_ac": "1. TestPreClaimDecomposerHonorsWorkerHarnessModel", "coverage": "covered by preclaim routing child AC 1"},
+			{"parent_ac": "2. cd cli && go test ./internal/agent/...", "coverage": "covered by preclaim routing child AC 2"},
+			{"parent_ac": "3. lefthook run pre-commit", "coverage": "covered by preclaim routing child AC 3"},
+		},
+		"rationale": "preserves explicit worker routing while splitting",
+	}
+	raw, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var gotHarness string
+	var gotModel string
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		gotHarness = opts.Harness
+		gotModel = opts.Model
+		return &Result{
+			ExitCode:    0,
+			Output:      string(raw),
+			Harness:     opts.Harness,
+			Model:       opts.Model,
+			ActualPower: 15,
+		}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "gpt-5.4-mini"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
+	require.NoError(t, err)
+	require.NotNil(t, decomp)
+	assert.Equal(t, "codex", gotHarness)
+	assert.Equal(t, "gpt-5.4-mini", gotModel)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	body := requireDecomposerEventBody(t, events, "preclaim-decompose-routing")
+	assert.Equal(t, "codex", body.RequestedHarness)
+	assert.Equal(t, "gpt-5.4-mini", body.RequestedModel)
+	assert.Equal(t, "codex", body.SelectedHarness)
+	assert.Equal(t, "gpt-5.4-mini", body.SelectedModel)
+	assert.Empty(t, body.FallbackReason)
+}
+
+func TestPostAttemptDecomposerHonorsWorkerHarnessModel(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{
+		ID:          "ddx-post-routing",
+		Title:       "post attempt routing pin test",
+		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/recovery_decompose.go:149 clears routing pins.\n",
+		Acceptance:  "1. TestPostAttemptDecomposerHonorsWorkerHarnessModel\n2. cd cli && go test ./internal/agent/...\n3. lefthook run pre-commit",
+		Labels:      []string{"phase:iterate", "area:agent"},
+	}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	children := []map[string]any{
+		{
+			"title":       "post routing child",
+			"description": "PROBLEM\nChild.\n\nROOT CAUSE\ncli/internal/agent/recovery_decompose.go:149.\n\nPROPOSED FIX\nPreserve pins.\n\nNON-SCOPE\nDo not change provider routing policy.",
+			"acceptance":  "1. TestPostRoutingChild\n2. cd cli && go test ./internal/agent/...\n3. lefthook run pre-commit",
+			"labels":      []string{"phase:iterate", "area:agent"},
+		},
+	}
+	raw, err := json.Marshal(children)
+	require.NoError(t, err)
+
+	var gotHarness string
+	var gotModel string
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		gotHarness = opts.Harness
+		gotModel = opts.Model
+		return &Result{
+			ExitCode:    0,
+			Output:      string(raw),
+			Harness:     opts.Harness,
+			Model:       opts.Model,
+			ActualPower: 15,
+		}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "gpt-5.4-mini"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result := runDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
+	require.False(t, result.Failed)
+	assert.Equal(t, "codex", gotHarness)
+	assert.Equal(t, "gpt-5.4-mini", gotModel)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	body := requireDecomposerEventBody(t, events, "decompose-applied")
+	assert.Equal(t, "codex", body.RequestedHarness)
+	assert.Equal(t, "gpt-5.4-mini", body.RequestedModel)
+	assert.Equal(t, "codex", body.SelectedHarness)
+	assert.Equal(t, "gpt-5.4-mini", body.SelectedModel)
+	assert.Equal(t, 15, body.SelectedPower)
+	assert.Empty(t, body.FallbackReason)
+}
+
+func TestPreClaimDecomposerFallsBackDeterministicallyWhenRequestedRouteUnavailable(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init(context.Background()))
+
+	b := &bead.Bead{
+		ID:          "ddx-preclaim-route-unavailable",
+		Title:       "preclaim fallback route test",
+		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/recovery_decompose.go:60 could widen failed pinned routes.\n",
+		Acceptance: strings.Join([]string{
+			"1. TestPreClaimDecomposerFallsBackDeterministicallyWhenRequestedRouteUnavailable covers requested-route failure",
+			"2. TestPreClaimFallbackChild covers first child",
+			"3. TestPreClaimFallbackSibling covers second child",
+			"4. cd cli && go test ./internal/agent/... passes",
+			"5. lefthook run pre-commit passes",
+		}, "\n"),
+		Labels: []string{"phase:iterate", "area:agent"},
+	}
+	require.NoError(t, store.Create(context.Background(), b))
+
+	var calls int
+	var gotHarness string
+	var gotModel string
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		calls++
+		gotHarness = opts.Harness
+		gotModel = opts.Model
+		return nil, fmt.Errorf("route unavailable for requested %s/%s", opts.Harness, opts.Model)
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "codex", Model: "gpt-5.4-mini"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	decomp, err := runPreClaimDecomposer(context.Background(), store, runner, rcfg, t.TempDir(), b.ID)
+	require.NoError(t, err)
+	require.NotNil(t, decomp)
+	assert.Equal(t, 1, calls, "requested route failure must not trigger widened provider retries")
+	assert.Equal(t, "codex", gotHarness)
+	assert.Equal(t, "gpt-5.4-mini", gotModel)
+	assert.NotEmpty(t, decomp.Children)
+	assert.Contains(t, decomp.Rationale, "deterministic fallback split")
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	body := requireDecomposerEventBody(t, events, "preclaim-decompose-routing")
+	assert.Equal(t, "codex", body.RequestedHarness)
+	assert.Equal(t, "gpt-5.4-mini", body.RequestedModel)
+	assert.Contains(t, body.FallbackReason, "dispatch error")
+	assert.Empty(t, body.SelectedHarness)
+	assert.Empty(t, body.SelectedModel)
+}
+
 func TestPreClaimDecompositionHook_FallsBackWhenAgentOutputEmpty(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
@@ -386,4 +559,18 @@ func TestPreClaimDecompositionHook_FallsBackWhenAgentOutputEmpty(t *testing.T) {
 		assert.Contains(t, child.Description, "PROBLEM")
 		assert.Contains(t, child.Labels, "decomposed")
 	}
+}
+
+func requireDecomposerEventBody(t *testing.T, events []bead.BeadEvent, kind string) decomposerEventBody {
+	t.Helper()
+	for _, ev := range events {
+		if ev.Kind != kind {
+			continue
+		}
+		var body decomposerEventBody
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		return body
+	}
+	t.Fatalf("missing %s event", kind)
+	return decomposerEventBody{}
 }

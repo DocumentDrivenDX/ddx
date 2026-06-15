@@ -34,6 +34,10 @@ type passthroughTestService struct {
 	listModels          []agentlib.ModelInfo
 	listPolicies        []agentlib.PolicyInfo
 	executeEvents       []agentlib.ServiceEvent
+	// executeErr, when non-nil, is returned as the pre-dispatch error from
+	// Execute so tests can exercise typed provider-failure classification
+	// (ddx-3b721804) without a real agent server.
+	executeErr error
 	// harnessInfos, when non-nil, overrides the harness list returned by
 	// ListHarnesses. Lets tests report a harness as available + subscription
 	// so seedRecentRouteAttemptsFromTracker skips exclusion-seeding for it.
@@ -53,6 +57,9 @@ func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.Servi
 	}
 	s.executeCalled = true
 	s.lastReq = req
+	if s.executeErr != nil {
+		return nil, s.executeErr
+	}
 	ch := make(chan agentlib.ServiceEvent, len(s.executeEvents)+1)
 	if len(s.executeEvents) > 0 {
 		for _, evt := range s.executeEvents {
@@ -880,6 +887,26 @@ func TestFizeauAutoRoutingExplicitPinsRemainPassthrough(t *testing.T) {
 	assert.True(t, runRuntime.ClearRoutingPins)
 	assert.True(t, runRuntime.ClearProfile)
 	assert.True(t, runRuntime.ClearMaxPower)
+}
+
+// TestRunServiceRequestCarriesPolicyForProfileDrivenHarnessRouting verifies
+// that an explicit harness plus profile-only route forwards the profile as a
+// Fizeau policy so empty-model requests remain routable without a model pin.
+func TestRunServiceRequestCarriesPolicyForProfileDrivenHarnessRouting(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness: "codex",
+		Profile: "smart",
+	})
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "codex", svc.lastReq.Harness)
+	assert.Equal(t, "smart", svc.lastReq.Policy)
+	assert.Empty(t, svc.lastReq.Model, "profile-driven harness routing must keep the model empty")
 }
 
 func TestExecuteOnService_InvalidPowerBoundsFailBeforeService(t *testing.T) {
