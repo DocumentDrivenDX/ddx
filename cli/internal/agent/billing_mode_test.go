@@ -11,8 +11,11 @@ func TestBillingModeForClassifiesHarnessesAndEndpoints(t *testing.T) {
 		want    string
 	}{
 		{name: "claude code subscription", harness: "claude", want: BillingModeSubscription},
+		{name: "claude tui subscription", harness: "claude-tui", want: BillingModeSubscription},
+		{name: "claude code alias subscription", harness: "claude-code", want: BillingModeSubscription},
 		{name: "codex subscription", harness: "codex", want: BillingModeSubscription},
 		{name: "gemini cli subscription", harness: "gemini-cli", want: BillingModeSubscription},
+		{name: "claude tui surface subscription", surface: "claude-tui", want: BillingModeSubscription},
 		{name: "openrouter paid", harness: "openrouter", want: BillingModePaid},
 		{name: "openai api paid", harness: "openai", want: BillingModePaid},
 		{name: "anthropic api paid", harness: "anthropic", want: BillingModePaid},

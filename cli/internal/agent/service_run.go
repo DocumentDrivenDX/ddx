@@ -398,9 +398,12 @@ func firstPositiveInt(values ...int) int {
 // subscription harness binary is present: a transient connectivity blip must
 // never hard-exclude one of these harnesses during a local-fleet outage.
 var knownSubscriptionHarnesses = map[string]struct{}{
-	"claude": {},
-	"codex":  {},
-	"gemini": {},
+	"claude":      {},
+	"claude-code": {},
+	"claude-tui":  {},
+	"codex":       {},
+	"gemini":      {},
+	"gemini-cli":  {},
 }
 
 // shieldedSubscriptionHarnesses returns the set of harness names whose recorded

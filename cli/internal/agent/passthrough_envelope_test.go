@@ -421,7 +421,7 @@ func TestSeedRecentRouteAttemptsFromTrackerReplaysFailedRouteExtra(t *testing.T)
 
 // TestSeedExclusionsSkipsAvailableSubscriptionHarness reproduces the
 // no_viable_provider regression: during a local-fleet outage, transient
-// connectivity blips on a subscription harness (claude) were recorded in the
+// connectivity blips on a subscription harness (claude-tui) were recorded in the
 // tracker and replayed as HARD route exclusions. With local providers excluded
 // by config and openrouter blocked, excluding the only live subscription
 // harness empties the candidate set. The seed must replay the unreachable
@@ -435,11 +435,11 @@ func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: "seed-sub-001", Title: "seed subscription"}))
 	now := time.Date(2026, 5, 29, 8, 55, 0, 0, time.UTC)
 
-	// Transient connectivity blip on an available subscription harness (claude).
+	// Transient connectivity blip on an available subscription harness (claude-tui).
 	require.NoError(t, store.AppendEvent("seed-sub-001", bead.BeadEvent{
 		Kind:      "route-failure",
-		Summary:   "provider_connectivity claude",
-		Body:      `{"harness":"claude","provider":"claude","model":"claude-sonnet-4","error":"transient connection reset","outcome_reason":"provider_connectivity"}`,
+		Summary:   "provider_connectivity claude-tui",
+		Body:      `{"harness":"claude-tui","provider":"claude-tui","model":"opus-4.7","error":"transient connection reset","outcome_reason":"provider_connectivity"}`,
 		CreatedAt: now.Add(-time.Minute),
 	}))
 	// Unreachable local/HTTP provider: still a meaningful exclusion.
@@ -452,22 +452,22 @@ func TestSeedExclusionsSkipsAvailableSubscriptionHarness(t *testing.T) {
 
 	svc := &passthroughTestService{
 		harnessInfos: []agentlib.HarnessInfo{
-			{Name: "claude", Available: true, Billing: agentlib.BillingModelSubscription},
+			{Name: "claude-tui", Available: true, Billing: agentlib.BillingModelSubscription},
 		},
 	}
 
 	seedRecentRouteAttemptsFromTracker(context.Background(), svc, root, now)
 
-	var sawClaude, sawBragi bool
+	var sawClaudeTUI, sawBragi bool
 	for _, a := range svc.routeAttempts {
-		if a.Provider == "claude" || a.Harness == "claude" {
-			sawClaude = true
+		if a.Provider == "claude-tui" || a.Harness == "claude-tui" {
+			sawClaudeTUI = true
 		}
 		if a.Provider == "bragi" {
 			sawBragi = true
 		}
 	}
-	assert.False(t, sawClaude, "available subscription harness (claude) must not be seeded as a route exclusion; got %+v", svc.routeAttempts)
+	assert.False(t, sawClaudeTUI, "available subscription harness (claude-tui) must not be seeded as a route exclusion; got %+v", svc.routeAttempts)
 	assert.True(t, sawBragi, "unreachable local provider (bragi) must still be seeded as a route exclusion; got %+v", svc.routeAttempts)
 }
 

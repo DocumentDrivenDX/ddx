@@ -29,14 +29,14 @@ func billingModeFor(harness, surface, baseURL string) string {
 	switch h {
 	case "agent", "virtual", "script", "lmstudio", "ollama", "vllm", "omlx":
 		return BillingModeLocal
-	case "claude", "claude-code", "codex", "gemini", "gemini-cli":
+	case "claude", "claude-code", "claude-tui", "codex", "gemini", "gemini-cli":
 		return BillingModeSubscription
 	case "openrouter", "openai", "anthropic":
 		return BillingModePaid
 	}
 
 	switch s {
-	case "claude", "codex", "gemini":
+	case "claude", "claude-code", "claude-tui", "codex", "gemini", "gemini-cli":
 		return BillingModeSubscription
 	case "local", "virtual", "script":
 		return BillingModeLocal

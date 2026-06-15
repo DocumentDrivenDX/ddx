@@ -719,19 +719,21 @@ func TestNormalizeFailedRoutes_PreservesEndpointAndTimeoutClass(t *testing.T) {
 }
 
 // TestIsShieldedSubscriptionHarness_TrueForSubscriptionCLIsDespiteFailures is
-// the predicate-level proof for the no_viable_provider fix: claude/codex must
-// be shielded from hard route exclusion even when their only recent route
-// attempts are connectivity failures (which would otherwise taint a
-// liveness/Available signal). The shield is keyed on binary-on-PATH +
-// billing==subscription (Path field from fizeau's registry.Discover, which is
-// exec.LookPath of the binary), with the fixed {claude,codex,gemini} set as a
-// fail-open fallback — never on the connectivity-tainted Available flag.
+// the predicate-level proof for the no_viable_provider fix: subscription CLI
+// harnesses (including claude-tui) must be shielded from hard route exclusion
+// even when their only recent route attempts are connectivity failures (which
+// would otherwise taint a liveness/Available signal). The shield is keyed on
+// binary-on-PATH + billing==subscription (Path field from fizeau's
+// registry.Discover, which is exec.LookPath of the binary), with the fixed
+// knownSubscriptionHarnesses set as a fail-open fallback — never on the
+// connectivity-tainted Available flag.
 func TestIsShieldedSubscriptionHarness_TrueForSubscriptionCLIsDespiteFailures(t *testing.T) {
 	// Path-present subscription harnesses with Available=false (liveness tainted
 	// by recent connectivity blips). The shield must still fire.
 	svc := &passthroughTestService{
 		harnessInfos: []agentlib.HarnessInfo{
 			{Name: "claude", Available: false, Path: "/usr/local/bin/claude", Billing: agentlib.BillingModelSubscription},
+			{Name: "claude-tui", Available: false, Path: "/usr/local/bin/claude", Billing: agentlib.BillingModelSubscription},
 			{Name: "codex", Available: false, Path: "/usr/local/bin/codex", Billing: agentlib.BillingModelSubscription},
 			{Name: "bragi", Available: false, Path: "", Billing: agentlib.BillingModelPerToken},
 		},
@@ -740,6 +742,8 @@ func TestIsShieldedSubscriptionHarness_TrueForSubscriptionCLIsDespiteFailures(t 
 
 	assert.True(t, isShieldedSubscriptionHarness("claude", shielded),
 		"claude must be shielded via binary-on-PATH despite Available=false")
+	assert.True(t, isShieldedSubscriptionHarness("claude-tui", shielded),
+		"claude-tui must be shielded via binary-on-PATH despite Available=false")
 	assert.True(t, isShieldedSubscriptionHarness("codex", shielded),
 		"codex must be shielded via binary-on-PATH despite Available=false")
 	assert.True(t, isShieldedSubscriptionHarness("CLAUDE", shielded),
@@ -755,12 +759,12 @@ func TestIsShieldedSubscriptionHarness_TrueForSubscriptionCLIsDespiteFailures(t 
 }
 
 // TestShieldedSubscriptionHarnesses_FailOpenWithoutService asserts the fixed
-// {claude,codex,gemini} set is always shielded even when the service is nil or
+// subscription harness set is always shielded even when the service is nil or
 // ListHarnesses errors — a transient service error must never let a
 // connectivity blip hard-exclude a subscription harness.
 func TestShieldedSubscriptionHarnesses_FailOpenWithoutService(t *testing.T) {
 	shielded := shieldedSubscriptionHarnesses(context.Background(), nil)
-	for _, name := range []string{"claude", "codex", "gemini"} {
+	for _, name := range []string{"claude", "claude-code", "claude-tui", "codex", "gemini", "gemini-cli"} {
 		assert.True(t, isShieldedSubscriptionHarness(name, shielded),
 			"%s must be shielded fail-open when no service is available", name)
 	}
@@ -768,7 +772,7 @@ func TestShieldedSubscriptionHarnesses_FailOpenWithoutService(t *testing.T) {
 
 // TestCheckAndApplyRouteExclusions_DoesNotExcludeSubscriptionHarness is the
 // integration-level proof: when the bead's only failed-route entries are
-// subscription CLI harnesses (claude/codex) with recent connectivity failures,
+// subscription CLI harnesses (claude-tui/codex) with recent connectivity failures,
 // CheckAndApplyRouteExclusions must NOT skip dispatch and must NOT pass those
 // harnesses in the RouteRequest.ExcludedRoutes payload. Reproduces the
 // no_viable_provider drain failure where replayed connectivity blips emptied
@@ -779,7 +783,7 @@ func TestCheckAndApplyRouteExclusions_DoesNotExcludeSubscriptionHarness(t *testi
 
 	require.NoError(t, store.Update(context.Background(), first.ID, func(b *bead.Bead) {
 		appendFailedRoute(b, FailedRouteEntry{
-			Provider: "claude", Model: "claude-sonnet-4",
+			Provider: "claude-tui", Model: "opus-4.7",
 			Reason: FailureModeProviderConnectivity,
 			At:     frozen.Add(-2 * time.Minute).Format(time.RFC3339),
 		})
@@ -796,7 +800,7 @@ func TestCheckAndApplyRouteExclusions_DoesNotExcludeSubscriptionHarness(t *testi
 	// (liveness tainted by the same connectivity blips recorded above).
 	svc := &passthroughTestService{
 		harnessInfos: []agentlib.HarnessInfo{
-			{Name: "claude", Available: false, Path: "/usr/local/bin/claude", Billing: agentlib.BillingModelSubscription},
+			{Name: "claude-tui", Available: false, Path: "/usr/local/bin/claude", Billing: agentlib.BillingModelSubscription},
 			{Name: "codex", Available: false, Path: "/usr/local/bin/codex", Billing: agentlib.BillingModelSubscription},
 		},
 	}
