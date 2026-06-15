@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260615T140747-d0d32f0e",
+  "bead_id": "ddx-c5c755f6",
+  "base_rev": "21e5a0e739eafbbf38d4f67d7243fab251d882a4",
+  "created_at": "2026-06-15T14:07:53.895057599Z",
+  "requested": {
+    "harness": "claude-tui",
+    "model": "opus-4.7",
+    "effort": "medium",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c5c755f6",
+    "title": "agent: enforce execution cwd and evidence-path contracts",
+    "description": "PROBLEM\nDuring dogfood of ddx-3b721804 on 2026-06-13, the execute-bead attempt ran a Go verification command from the wrong directory and got `go: go.mod file not found in current directory`, then later attempted to inspect `.ddx/executions/` from the wrong location and got `No such file or directory`. The same attempt temporarily moved new source files through `/tmp` while debugging. DDx instructions already say to work inside the execution worktree and keep evidence under the bundle path, but instructions alone did not prevent wrong-cwd verification or `/tmp` round-trips.\n\nROOT CAUSE WITH FILE:LINE\ncli/internal/agent/execute_bead.go:1925-1934 defines the no_changes rationale path in prose but does not make evidence-path checks mechanical for ordinary verification commands.\ncli/internal/agent/execute_bead.go:1936-1941 says reports must go under the bundle path and never `/tmp`, but DDx does not reject transcript/tool activity that uses `/tmp` as an implementation or evidence staging area.\ncli/internal/agent/execute_bead.go:1961-1967 says work only inside the execution worktree, but DDx does not validate that shell commands affecting verification ran from the repo/module root or execution worktree.\ncli/internal/agent/execute_bead_validation.go:147-161 validates commit/gate integrity after the attempt, but it skips checks it cannot observe and does not classify wrong-cwd verification or `/tmp` file round-trips as attempt-integrity defects.\n\nPROPOSED FIX\nAdd structured transcript/session validation for execute-bead attempts that detects verification commands run from the wrong cwd, evidence-path lookups outside the execution bundle, and source/evidence file moves through `/tmp`. When detected, preserve the attempt or require repair before closure with a typed integrity reason and durable evidence.\n\nNON-SCOPE\nDo not ban temporary compiler caches or harmless OS temp usage by build tools. Do not parse arbitrary shell perfectly; target high-signal patterns DDx can observe from tool command arguments, cwd, and output.",
+    "acceptance": "1. TestAttemptIntegrityRejectsVerificationWrongCWD feeds a transcript/tool record where a required Go verification command returns `go.mod file not found`; DDx classifies it as wrong_cwd_verification and does not accept it as passing evidence.\n2. TestAttemptIntegrityRejectsMissingExecutionBundleLookup feeds a command/output pair that tries `.ddx/executions/` from the wrong cwd and records evidence_path_wrong_cwd.\n3. TestAttemptIntegrityRejectsTmpRoundTripForSourceFiles feeds transcript commands that move tracked source/test files through `/tmp`; DDx records tmp_roundtrip_tracked_file and preserves or rejects the attempt.\n4. TestAttemptIntegrityAllowsBenignBuildToolTempUsage proves build cache/temp paths not moving repo source or evidence are not rejected.\n5. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestAttemptIntegrityRejectsVerificationWrongCWD|TestAttemptIntegrityRejectsMissingExecutionBundleLookup|TestAttemptIntegrityRejectsTmpRoundTripForSourceFiles|TestAttemptIntegrityAllowsBenignBuildToolTempUsage' passes.\\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "phase:build",
+      "area:agent",
+      "area:work",
+      "kind:bug",
+      "kind:reliability",
+      "severity:high",
+      "plan:server-managed-workers"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: empty output\",\"fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e34bdae94e7315839ca053aac38fbaa8650d6abc771248c4bad134e1d2da0366\"}",
+          "created_at": "2026-06-15T14:07:46.81890602Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": "-137",
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260615T140747-d0d32f0e",
+    "prompt": ".ddx/executions/20260615T140747-d0d32f0e/prompt.md",
+    "manifest": ".ddx/executions/20260615T140747-d0d32f0e/manifest.json",
+    "result": ".ddx/executions/20260615T140747-d0d32f0e/result.json",
+    "checks": ".ddx/executions/20260615T140747-d0d32f0e/checks.json",
+    "usage": ".ddx/executions/20260615T140747-d0d32f0e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-c5c755f6-20260615T140747-d0d32f0e"
+  },
+  "prompt_sha": "aba4616b7ceb62772cf1f311b9db58d84d48fa02531e3afd1c34d5d3080a4ec9"
+}
