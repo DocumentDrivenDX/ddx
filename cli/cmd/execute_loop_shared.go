@@ -30,6 +30,24 @@ import (
 
 const defaultWorktreeReapMaxAge = 72 * time.Hour
 
+func probeLocalServerHealth(ctx context.Context, addr string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(addr, "/")+"/api/health", nil)
+	if err != nil {
+		return err
+	}
+	client := newLocalServerClient()
+	client.Timeout = 5 * time.Second
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server health status %s", resp.Status)
+	}
+	return nil
+}
+
 func hostnameOrEmpty() string {
 	h, err := os.Hostname()
 	if err != nil {
@@ -315,18 +333,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		if strings.TrimSpace(addr) == "" {
 			return false, nil
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(addr, "/")+"/api/health", nil)
-		if err != nil {
+		if err := probeLocalServerHealth(ctx, addr); err != nil {
 			return false, err
-		}
-		client := &http.Client{Timeout: 5 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return false, err
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			return false, fmt.Errorf("server health status %s", resp.Status)
 		}
 		smokeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
