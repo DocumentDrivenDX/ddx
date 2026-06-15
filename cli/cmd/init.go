@@ -136,8 +136,8 @@ func (f *CommandFactory) runInit(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "✅ DDx initialized successfully!\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 		_, _ = fmt.Fprint(cmd.OutOrStdout(), "Next steps:\n")
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx install helix   - Install HELIX workflow (optional)\n")
-		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx doctor          - Check installation health\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx plugin install helix   - Pin HELIX and materialize local adapters (optional)\n")
+		_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ddx doctor                 - Check installation health\n")
 		_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	}
 
