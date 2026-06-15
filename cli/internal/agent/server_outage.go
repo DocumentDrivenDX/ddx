@@ -6,10 +6,9 @@ import (
 	"time"
 )
 
-// ServerHealthProbe reports whether the worker's server sidecar is healthy
-// enough to resume queue draining. Production callers should return true only
-// after the server's /api/health endpoint is healthy and the lightweight smoke
-// path succeeds again.
+// ServerHealthProbe reports whether the worker's server sidecar is reachable
+// enough to resume queue draining. Provider/model routing failures are separate
+// bead execution failures and must not keep the worker parked as server-down.
 type ServerHealthProbe interface {
 	Healthy(ctx context.Context) (bool, error)
 }

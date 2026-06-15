@@ -336,16 +336,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		if err := probeLocalServerHealth(ctx, addr); err != nil {
 			return false, err
 		}
-		smokeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
-		defer cancel()
-		smokeResult, smokeErr := agent.RunWithConfigViaService(smokeCtx, projectRoot, rcfg, agent.AgentRunRuntime{
-			Prompt:  "server health smoke test",
-			WorkDir: projectRoot,
-		})
-		if smokeErr != nil {
-			return false, smokeErr
-		}
-		return smokeResult != nil && smokeResult.ExitCode == 0, nil
+		return true, nil
 	}
 
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
