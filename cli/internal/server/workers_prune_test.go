@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -207,6 +208,49 @@ func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOwnedClaim(t *testing
 	require.NoError(t, err)
 	assert.Equal(t, "exited", rec.State)
 	assert.Equal(t, "terminal-worker-claim", rec.ReapReason)
+}
+
+func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOpenLegacyOwner(t *testing.T) {
+	root := t.TempDir()
+	ddx := testutils.MakeInitializedDDxRoot(t, root)
+	store := bead.NewStore(ddx)
+	const beadID = "ddx-terminal-open-owner"
+	const workerID = "worker-terminal-open-owner"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "terminal open owner",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+		Owner:     workerID,
+	}))
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, m.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-time.Hour),
+		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
+		PID:         9999997,
+	}))
+
+	m.ReconcileStaleWorkers()
+
+	b, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+	assert.Empty(t, b.Owner)
+
+	events, err := store.EventsByKind(beadID, "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "terminal-worker-claim", events[0].Summary)
 }
 
 // TestWorkerManagerPruneByMaxAge verifies that Prune reaps a worker older

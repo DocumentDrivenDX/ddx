@@ -2776,6 +2776,7 @@ func (s *Server) handleReconcileWorkers(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	m := s.workerManagerForRequest(r)
+	m.ReconcileStaleWorkers()
 	sup := NewWorkerSupervisor(wd, m)
 	result, err := sup.Reconcile()
 	if err != nil {
@@ -2796,6 +2797,7 @@ func (s *Server) handleCleanupWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := s.workerManagerForRequest(r)
+	m.ReconcileStaleWorkers()
 	sup := NewWorkerSupervisor(wd, m)
 	result, err := sup.Reconcile()
 	if err != nil {

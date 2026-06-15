@@ -1933,6 +1933,56 @@ func TestRESTWorkerReconcileQueryProjectStartsTargetProjectWorker(t *testing.T) 
 	assert.Equal(t, projectB, got.ProjectRoot)
 }
 
+func TestRESTWorkerCleanupReleasesTerminalLegacyOwnerBeforeDesiredReconcile(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-rest-cleanup-terminal-owner")
+
+	projectRoot := setupTestDir(t)
+	ddxDir := testutils.MakeInitializedDDxRoot(t, projectRoot)
+	store := bead.NewStore(ddxDir)
+	const beadID = "ddx-rest-terminal-owner"
+	const workerID = "worker-rest-terminal-owner"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        beadID,
+		Title:     "rest terminal owner",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+		Owner:     workerID,
+	}))
+
+	srv := New(":0", projectRoot)
+	dir := filepath.Join(srv.workers.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, srv.workers.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: projectRoot,
+		StartedAt:   time.Now().UTC().Add(-time.Hour),
+		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
+		PID:         9999997,
+	}))
+
+	req := httptest.NewRequest(http.MethodPost,
+		"/api/agent/workers/cleanup?project="+url.QueryEscape(projectRoot),
+		nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	b, err := store.Get(context.Background(), beadID)
+	require.NoError(t, err)
+	assert.Empty(t, b.Owner)
+
+	events, err := store.EventsByKind(beadID, "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "terminal-worker-claim", events[0].Summary)
+}
+
 func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {
 	projectRoot := setupTestDir(t)
 	srv := New(":0", projectRoot)
