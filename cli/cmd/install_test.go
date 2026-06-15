@@ -15,7 +15,7 @@ import (
 )
 
 // TestInstall_InTreeMode_WritesProjectPluginsAndLinks verifies AC1 (bead ddx-747f1b35):
-// With an in-tree <project>/.ddx/, ddx install <name> (no --global) writes to
+// With an in-tree <project>/.ddx/, ddx plugin install <name> (no --global) writes to
 // <project>/.ddx/plugins/<name>/ and creates project-tier links under
 // <project>/.claude/skills/<name> and <project>/.agents/skills/<name>.
 func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
@@ -29,7 +29,7 @@ func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin must land under <project>/.ddx/plugins/<name>/.
@@ -53,7 +53,7 @@ func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
 }
 
 // TestInstall_InTreeWritesProjectTreeAndLinks verifies AC1:
-// With an in-tree <project>/.ddx/, ddx install <name> (no --global) writes to
+// With an in-tree <project>/.ddx/, ddx plugin install <name> (no --global) writes to
 // <project>/.ddx/plugins/<name>/ and creates project-tier links under
 // <project>/.claude/skills/<name> and <project>/.agents/skills/<name>
 // resolving into that plugins/ dir.
@@ -69,7 +69,7 @@ func TestInstall_InTreeWritesProjectTreeAndLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin must land in the project in-tree location.
@@ -105,7 +105,7 @@ func TestInstall_InTreeWritesProjectTreeAndLinks(t *testing.T) {
 }
 
 // TestInstall_ConventionModeWritesXDGProjectTree verifies AC2:
-// With no <project>/.ddx/, ddx install <name> (no --global) writes to
+// With no <project>/.ddx/, ddx plugin install <name> (no --global) writes to
 // ${XDG_DATA_HOME}/ddx/projects/<host>/<owner>/<repo>/plugins/<name>/ and the
 // project agent-tier links point into that XDG plugins/ path.
 // A git repo with a deterministic remote URL is used so host/owner/repo are stable.
@@ -138,7 +138,7 @@ func TestInstall_ConventionModeWritesXDGProjectTree(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Convention root must be at the XDG projects path derived from the remote URL.
@@ -176,7 +176,7 @@ func TestInstall_ConventionModeWritesXDGProjectTree(t *testing.T) {
 }
 
 // TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks verifies AC2 (bead ddx-747f1b35):
-// With no <project>/.ddx/, ddx install <name> (no --global) writes to
+// With no <project>/.ddx/, ddx plugin install <name> (no --global) writes to
 // ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and the project-tier
 // skill links are under the project dir and resolve into the XDG plugins path.
 func TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks(t *testing.T) {
@@ -204,7 +204,7 @@ func TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin must land under the XDG convention path for this project.
@@ -247,7 +247,7 @@ func TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks(t *testing.T) {
 }
 
 // TestInstall_InTreeMode_WritesProjectTreeAndLinks verifies AC2 (bead ddx-be724d92):
-// ddx install <name> with <project>/.ddx/ present writes <project>/.ddx/plugins/<name>/
+// ddx plugin install <name> with <project>/.ddx/ present writes <project>/.ddx/plugins/<name>/
 // and links <project>/.claude/skills/<name> and <project>/.agents/skills/<name>.
 func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
 	workDir := t.TempDir()
@@ -260,7 +260,7 @@ func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
@@ -280,7 +280,7 @@ func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
 }
 
 // TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks verifies AC3 (bead ddx-be724d92):
-// ddx install <name> with no <project>/.ddx/ writes
+// ddx plugin install <name> with no <project>/.ddx/ writes
 // ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and links
 // the project-tier skill paths into that XDG plugins path.
 func TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks(t *testing.T) {
@@ -294,7 +294,7 @@ func TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	conventionRoot := ddxroot.Path(context.Background(), workDir)

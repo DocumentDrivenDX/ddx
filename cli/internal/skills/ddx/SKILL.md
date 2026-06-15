@@ -23,11 +23,10 @@ the DDx surface correctly.
 The skill body you're reading is an **overview** plus an **intent
 router**. The real domain guidance lives in `reference/*.md` files.
 
-Install locations: this skill is resolved from the project-local plugin layer
-(`.ddx/plugins/ddx/`), the global machine layer
-(`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`), or the binary's baked-in
-default — see **Install topology** below. `ddx doctor` reports which layer is
-active.
+Install locations: this skill is resolved from project plugin lock metadata
+plus the XDG plugin cache, or from the binary's baked-in default package for
+DDx itself — see **Install topology** below. `ddx doctor --plugins` reports
+lock, cache, and generated adapter state.
 
 **Directive: before responding to any DDx-related request, read the
 matching reference file from the router table below. The router is
@@ -36,20 +35,17 @@ guidance, not this overview alone.**
 
 ## Install topology
 
-DDx resolves the default `ddx` package in three layers: project-local
-`.ddx/plugins/ddx/`, then the global fallback at
-`${XDG_DATA_HOME}/ddx/global/plugins/ddx/`, then the baked-in package
-embedded in the binary. `ddx doctor` reports the project and global
-layers separately so operators can tell whether the project copy is
-real, missing, or lazily resolving to the global layer.
+DDx resolves marketplace plugins through project lock metadata under the
+resolved DDx root plus payloads in
+`${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`. Agent-facing skill
+outputs are generated adapters under `<project>/.agents/skills/<name>/` and
+`<project>/.claude/skills/<name>/`; they can be recreated with
+`ddx plugin sync` and should not be treated as checked-in source payload.
 
-For project-local installs, the agent-facing skill outputs live in
-`<project>/.agents/skills/<name>/` and `<project>/.claude/skills/<name>/`.
-For machine-wide installs (`ddx install <name> --global`), the plugin lands
-in `${XDG_DATA_HOME}/ddx/global/plugins/<name>/` and skill links are created
-under `~/.agents/skills/<name>/` and `~/.claude/skills/<name>/`. Manual
-home-directory skill placements outside these managed paths are retired; use
-`ddx install --global` instead.
+The default `ddx` package can fall back to the copy embedded in the binary so
+the CLI remains usable offline. Home-directory/global plugin installs are
+retired as the forward model; share downloaded payloads through the XDG cache
+and record plugin intent per project with `ddx plugin install <name>`.
 
 ## Vocabulary
 
@@ -110,10 +106,10 @@ exact definitions.
 - **Power bounds** — `MinPower` and optional `MaxPower` integers passed to the
   upstream execution service. DDx may raise `MinPower` on eligible retries;
   Fizeau owns concrete route selection within those bounds.
-- **Plugin** — a self-contained extension installed to
-  `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
-  prompts, patterns, templates) is auto-installed by `ddx init`.
-  `ddx install <name>`.
+- **Plugin** — a self-contained extension recorded in the project plugin lock,
+  cached under XDG, and exposed to agents through generated adapters. The
+  default `ddx` plugin (personas, prompts, patterns, templates) can fall back
+  to the copy embedded in the binary. `ddx plugin install <name>`.
 - **Skill** — an agentskills.io-standard directory (SKILL.md +
   optional `reference/`, `evals/`, `scripts/`). This `ddx` skill is
   the one DDx ships. Plugins can ship additional skills.

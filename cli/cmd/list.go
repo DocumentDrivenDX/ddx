@@ -242,7 +242,7 @@ func outputListHuman(cmd *cobra.Command, response *ListResponse, filter, resourc
 
 		cmd.Println("📦 Installed Packages:")
 		if len(state.Installed) == 0 {
-			cmd.Println("  (none — run 'ddx install <name>' to install)")
+			cmd.Println("  (none — run 'ddx plugin install <name>' to install)")
 		} else {
 			for _, entry := range state.Installed {
 				cmd.Printf("  %-12s %-8s %-14s (installed %s)\n",

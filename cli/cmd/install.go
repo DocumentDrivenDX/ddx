@@ -19,34 +19,60 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newInstallCommand creates the "ddx install <name>" command.
+// newInstallCommand creates the retired top-level "ddx install <name>" shim.
 func (f *CommandFactory) newInstallCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install <name>",
-		Short: "Install a package or resource",
-		Long: `Install a package or resource from the DDx registry.
+		Short: "Deprecated: use 'ddx plugin install'",
+		Long: `The top-level ddx install command has been retired.
 
-Without --global, installs into the current project:
+Use 'ddx plugin install <name>' so plugin lifecycle operations stay under
+the plugin noun. Registry installs write project lock metadata, resolve
+payloads into the XDG cache, and generate agent adapter shims for the current
+project.`,
+		Hidden: true,
+		Args:   cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := "<name>"
+			if len(args) > 0 {
+				name = args[0]
+			}
+			return fmt.Errorf("ddx install has been retired; use 'ddx plugin install %s' instead", name)
+		},
+	}
+	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
+	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
+	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
+	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
+	return cmd
+}
+
+// newPluginInstallCommand creates the canonical "ddx plugin install <name>" command.
+func (f *CommandFactory) newPluginInstallCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "install <name>",
+		Short: "Install a plugin",
+		Long: `Install a plugin from the DDx registry.
+
+Registry installs behave like an npx-style dependency:
   - Project metadata: <ddx-root>/plugins.lock.yaml
   - Payload cache: ${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/
-Generated skill shims are created under <project>/.claude/skills/ and <project>/.agents/skills/.
+  - Generated adapters: <project>/.agents/skills/ and <project>/.claude/skills/
 
-With --global, installs into the machine-wide DDx plugin tree:
-  ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
-Skill links are created under ~/.claude/skills/ and ~/.agents/skills/.
+Generated adapters can be recreated with 'ddx plugin sync' and should not be
+treated as source payload copies.
 
 Examples:
-  ddx install helix                        # Install HELIX workflow (project-local)
-  ddx install helix --global               # Install HELIX workflow (machine-wide)
-  ddx install helix --force                # Reinstall even if already up to date
-  ddx plugin install helix --local ../helix --force
-  ddx install persona/strict-code-reviewer # Install a single persona`,
+  ddx plugin install helix
+  ddx plugin install helix --force
+  ddx plugin install helix --local ../helix --force`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runInstall,
 	}
 	cmd.Flags().BoolP("force", "f", false, "Reinstall even if already at the latest version")
 	cmd.Flags().String("local", "", "Install from a local directory instead of the registry")
 	cmd.Flags().Bool("global", false, "Install into the machine-wide global plugin tree (${XDG_DATA_HOME}/ddx/global/)")
+	_ = cmd.Flags().MarkHidden("global")
 	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
 	return cmd
 }
@@ -303,10 +329,7 @@ func (f *CommandFactory) newPluginCommand() *cobra.Command {
 		Aliases: []string{"plugins"},
 		Short:   "Manage DDx plugins",
 	}
-	installCmd := f.newInstallCommand()
-	installCmd.Use = "install <name>"
-	installCmd.Short = "Install a plugin"
-	cmd.AddCommand(installCmd)
+	cmd.AddCommand(f.newPluginInstallCommand())
 	cmd.AddCommand(f.newPluginListCommand())
 	cmd.AddCommand(f.newPluginShowCommand())
 	cmd.AddCommand(f.newPluginSyncCommand())
@@ -321,6 +344,7 @@ func (f *CommandFactory) newPluginListCommand() *cobra.Command {
 		RunE:  f.runPluginList,
 	}
 	cmd.Flags().Bool("global", false, "List from the machine-wide global plugin tree")
+	_ = cmd.Flags().MarkHidden("global")
 	return cmd
 }
 
@@ -377,6 +401,7 @@ func (f *CommandFactory) newPluginShowCommand() *cobra.Command {
 		RunE:  f.runPluginShow,
 	}
 	cmd.Flags().Bool("global", false, "Show from the machine-wide global plugin tree")
+	_ = cmd.Flags().MarkHidden("global")
 	return cmd
 }
 
@@ -1230,11 +1255,14 @@ func shouldSkipLocalInstallIssue(rel string) bool {
 // newInstalledCommand creates the "ddx installed" command.
 func (f *CommandFactory) newInstalledCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "installed",
-		Short: "List installed packages",
-		Long:  `List all packages and resources installed via ddx install.`,
-		Args:  cobra.NoArgs,
-		RunE:  f.runInstalled,
+		Use:    "installed",
+		Short:  "Deprecated: use 'ddx plugin list'",
+		Long:   `The top-level ddx installed command has been retired. Use 'ddx plugin list' instead.`,
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("ddx installed has been retired; use 'ddx plugin list' instead")
+		},
 	}
 }
 
@@ -1272,11 +1300,14 @@ func (f *CommandFactory) runInstalled(cmd *cobra.Command, args []string) error {
 // newUninstallCommand creates the "ddx uninstall <name>" command.
 func (f *CommandFactory) newUninstallCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "uninstall <name>",
-		Short: "Remove an installed package",
-		Long:  `Remove a package or resource installed via ddx install.`,
-		Args:  cobra.ExactArgs(1),
-		RunE:  f.runUninstall,
+		Use:    "uninstall <name>",
+		Short:  "Deprecated: plugin lifecycle moved under 'ddx plugin'",
+		Long:   `The top-level ddx uninstall command has been retired. Use 'ddx plugin list' and 'ddx plugin sync' for project plugin state.`,
+		Hidden: true,
+		Args:   cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("ddx uninstall has been retired; plugin lifecycle is managed under 'ddx plugin'")
+		},
 	}
 }
 
@@ -1310,11 +1341,14 @@ func (f *CommandFactory) runUninstall(cmd *cobra.Command, args []string) error {
 // newVerifyCommand creates the "ddx verify" command.
 func (f *CommandFactory) newVerifyCommand() *cobra.Command {
 	return &cobra.Command{
-		Use:   "verify",
-		Short: "Verify installed package integrity",
-		Long:  `Check that all files recorded for installed packages still exist and symlinks resolve correctly.`,
-		Args:  cobra.NoArgs,
-		RunE:  f.runVerify,
+		Use:    "verify",
+		Short:  "Deprecated: use 'ddx doctor --plugins'",
+		Long:   `The top-level ddx verify command has been retired. Use 'ddx doctor --plugins' and 'ddx plugin sync' instead.`,
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("ddx verify has been retired; use 'ddx doctor --plugins' or 'ddx plugin sync' instead")
+		},
 	}
 }
 
@@ -1374,7 +1408,7 @@ func (f *CommandFactory) runVerify(cmd *cobra.Command, args []string) error {
 	}
 
 	if totalIssues > 0 {
-		return fmt.Errorf("%d integrity issue(s) found — run 'ddx install <name> --force' to repair", totalIssues)
+		return fmt.Errorf("%d integrity issue(s) found — run 'ddx plugin install <name> --force' to repair", totalIssues)
 	}
 	return nil
 }
@@ -1417,11 +1451,14 @@ func (f *CommandFactory) runSearch(cmd *cobra.Command, args []string) error {
 
 func (f *CommandFactory) newOutdatedCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "outdated",
-		Short: "List installed packages with available updates",
-		Long:  `Check installed packages against the registry and list those with newer versions available.`,
-		Args:  cobra.NoArgs,
-		RunE:  f.runOutdated,
+		Use:    "outdated",
+		Short:  "Deprecated: plugin lifecycle moved under 'ddx plugin'",
+		Long:   `The top-level ddx outdated command has been retired. Use 'ddx plugin list' and 'ddx doctor --plugins' instead.`,
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return fmt.Errorf("ddx outdated has been retired; use 'ddx plugin list' and 'ddx doctor --plugins' instead")
+		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd

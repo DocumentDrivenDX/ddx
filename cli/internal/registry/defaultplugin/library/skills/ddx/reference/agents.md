@@ -127,14 +127,18 @@ ddx run --persona architect --prompt review.md
 
 ## Getting more capabilities
 
-`ddx install <name>` adds plugins to the project. Plugins can ship
-personas, prompts, patterns, templates, and workflow skills.
+`ddx plugin install <name>` records a project plugin dependency. Registry
+payloads are cached under XDG and only generated agent adapters are
+materialized into the project, so marketplace plugins can behave like an
+`npx` dependency instead of copied source assets. Plugins can ship personas,
+prompts, patterns, templates, and workflow skills.
 
 ```bash
-ddx install helix              # HELIX workflow plugin
+ddx plugin install helix       # HELIX workflow plugin
 ddx search <term>              # discover available plugins
-ddx installed                  # list installed plugins
-ddx uninstall <name>           # remove
+ddx plugin list                # list project plugin locks
+ddx plugin show helix          # show lock/cache/adapter details
+ddx plugin sync                # recreate generated adapters
 ```
 
 Custom personas go in `.ddx/plugins/<plugin>/personas/<name>.md`
@@ -143,16 +147,16 @@ See the personas README for the authoring quality bar.
 
 ## Install topology
 
-DDx resolves package installs in this order: project-local
-`.ddx/plugins/<name>/`, then the global fallback at
-`${XDG_DATA_HOME}/ddx/global/plugins/<name>/`, then the baked-in
-default package for `ddx` itself. `ddx doctor` exposes the project and
-global `ddx` layers separately so operators can distinguish a real
-project install from a global fallback.
+DDx resolves marketplace plugins from the project plugin lock and the XDG
+cache (`${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`). The baked-in
+default package exists only for `ddx` itself so the CLI remains usable
+offline. `ddx doctor --plugins` exposes lock, cache, and generated adapter
+state.
 
 The agent-facing skill outputs are the project-local `.agents/skills/`
 and `.claude/skills/` directories. Those are the install targets for the
-resolved package; home-directory skill installs are retired.
+resolved package; home-directory/global plugin installs are retired as the
+forward model.
 
 ## Anti-patterns
 
@@ -193,11 +197,12 @@ ddx persona bind <role> <persona>
 ddx persona bindings
 
 # Plugin install
-ddx install <plugin>
+ddx plugin install <plugin>
 ddx search <term>
-ddx installed
-ddx uninstall <name>
+ddx plugin list
+ddx plugin show <name>
+ddx plugin sync
 ```
 
 Full flag list: `ddx run --help`, `ddx persona --help`,
-`ddx install --help`.
+`ddx plugin --help`.

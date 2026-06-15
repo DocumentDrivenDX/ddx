@@ -494,7 +494,7 @@ func (f *CommandFactory) displayPluginStalenessHints(cmd *cobra.Command) {
 		needsUpgrade, err := update.NeedsUpgrade(entry.Version, latestVersion)
 		if err == nil && needsUpgrade {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(),
-				"\n💡 %s %s installed, %s available. Run 'ddx install %s' to update.\n",
+				"\n💡 %s %s installed, %s available. Run 'ddx plugin install %s --force' to update.\n",
 				entry.Name, entry.Version, latestVersion, entry.Name)
 		}
 	}

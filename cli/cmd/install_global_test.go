@@ -49,7 +49,7 @@ func makeLocalPlugin(t *testing.T, dir, name string) string {
 }
 
 // TestInstallGlobal_WritesXDGAndAgentTierLinks verifies AC1:
-// ddx install <name> --global writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// ddx plugin install <name> --global writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
 // and creates agent-tier links under ~/.claude/skills/<name> and ~/.agents/skills/<name>.
 func TestInstallGlobal_WritesXDGAndAgentTierLinks(t *testing.T) {
 	workDir := t.TempDir()
@@ -62,7 +62,7 @@ func TestInstallGlobal_WritesXDGAndAgentTierLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--global", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin root must land in the global tree.
@@ -92,7 +92,7 @@ func TestInstallGlobal_WritesXDGAndAgentTierLinks(t *testing.T) {
 }
 
 // TestInstallProject_InTreeLinks verifies AC2:
-// ddx install <name> (no --global, in-tree mode) installs to <project>/.ddx/plugins/<name>/
+// ddx plugin install <name> (no --global, in-tree mode) installs to <project>/.ddx/plugins/<name>/
 // and creates project-tier links under <project>/.claude/skills/<name> and
 // <project>/.agents/skills/<name>.
 func TestInstallProject_InTreeLinks(t *testing.T) {
@@ -107,7 +107,7 @@ func TestInstallProject_InTreeLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin must land in the project in-tree location.
@@ -137,7 +137,7 @@ func TestInstallProject_InTreeLinks(t *testing.T) {
 }
 
 // TestInstallProject_ConventionLinks verifies AC3:
-// ddx install <name> (no --global, convention mode — no .ddx/ in project) installs
+// ddx plugin install <name> (no --global, convention mode — no .ddx/ in project) installs
 // to ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and creates
 // project-tier links pointing into that XDG plugins path.
 func TestInstallProject_ConventionLinks(t *testing.T) {
@@ -153,7 +153,7 @@ func TestInstallProject_ConventionLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Determine the convention root that ddxroot.Path would produce.
@@ -184,7 +184,7 @@ func TestInstallProject_ConventionLinks(t *testing.T) {
 }
 
 // TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier verifies bead AC1:
-// ddx install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// ddx plugin install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
 // and creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>
 // that resolves into the global plugin tree.
 func TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier(t *testing.T) {
@@ -198,7 +198,7 @@ func TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin root must land in the global tree.
@@ -237,7 +237,7 @@ func TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier(t *testing.T) {
 }
 
 // TestInstallGlobal_WritesGlobalTierAndAgentLinks verifies AC1:
-// ddx install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// ddx plugin install <name> --global --silent writes to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
 // and creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>.
 func TestInstallGlobal_WritesGlobalTierAndAgentLinks(t *testing.T) {
 	workDir := t.TempDir()
@@ -250,7 +250,7 @@ func TestInstallGlobal_WritesGlobalTierAndAgentLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin root must land in the global tree.
@@ -280,7 +280,7 @@ func TestInstallGlobal_WritesGlobalTierAndAgentLinks(t *testing.T) {
 }
 
 // TestInstallProject_InTreeMode verifies AC2:
-// ddx install <name> (no --global, in-tree mode) installs to <project>/.ddx/plugins/<name>/
+// ddx plugin install <name> (no --global, in-tree mode) installs to <project>/.ddx/plugins/<name>/
 // and creates project-tier links under <project>/.claude/skills/<name> and
 // <project>/.agents/skills/<name> pointing into <project>/.ddx/plugins/<name>.
 func TestInstallProject_InTreeMode(t *testing.T) {
@@ -295,7 +295,7 @@ func TestInstallProject_InTreeMode(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin must land in the project in-tree location.
@@ -332,7 +332,7 @@ func TestInstallProject_InTreeMode(t *testing.T) {
 }
 
 // TestInstallProject_ConventionMode verifies AC3:
-// ddx install <name> (no --global, convention mode — no .ddx/ in project) installs
+// ddx plugin install <name> (no --global, convention mode — no .ddx/ in project) installs
 // to ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and creates
 // project-tier links pointing into that XDG plugins path.
 func TestInstallProject_ConventionMode(t *testing.T) {
@@ -347,7 +347,7 @@ func TestInstallProject_ConventionMode(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Determine the convention root that ddxroot.Path would produce.
@@ -435,7 +435,7 @@ func mustBuildValidPluginTarball(t *testing.T, rootName, skillName string) []byt
 }
 
 // TestInstallGlobal_WritesToGlobalTreeAndAgentLinks verifies AC1:
-// ddx install <name> --global --silent installs to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/,
+// ddx plugin install <name> --global --silent installs to ${XDG_DATA_HOME}/ddx/global/plugins/<name>/,
 // creates a symlink-or-copy under ~/.claude/skills/<name> and ~/.agents/skills/<name>,
 // and records the entry in the global state file only (not the project state).
 func TestInstallGlobal_WritesToGlobalTreeAndAgentLinks(t *testing.T) {
@@ -549,7 +549,7 @@ func TestPluginListGlobal_EnumeratesFromGlobalTier(t *testing.T) {
 }
 
 // TestInstallGlobal_WritesGlobalTreeAndAgentLinks verifies AC1 (bead ddx-be724d92):
-// ddx install <name> --global --silent creates ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
+// ddx plugin install <name> --global --silent creates ${XDG_DATA_HOME}/ddx/global/plugins/<name>/
 // and a symlink-or-copy at ~/.claude/skills/<name> and ~/.agents/skills/<name>.
 func TestInstallGlobal_WritesGlobalTreeAndAgentLinks(t *testing.T) {
 	workDir := t.TempDir()
@@ -562,7 +562,7 @@ func TestInstallGlobal_WritesGlobalTreeAndAgentLinks(t *testing.T) {
 	makeLocalPlugin(t, localPlugin, "myplugin")
 
 	factory := NewCommandFactory(workDir)
-	output, err := executeCommand(factory.NewRootCommand(), "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--global", "--silent", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
 	// Plugin root must land in ${XDG_DATA_HOME}/ddx/global/plugins/<name>/.

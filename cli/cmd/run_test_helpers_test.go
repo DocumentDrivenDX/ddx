@@ -179,11 +179,15 @@ func (s *executeCapturingStub) UsageReport(_ context.Context, _ agentlib.UsageRe
 
 func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
 	t.Helper()
+	agent.ResetProfileSnapshotCacheForTesting()
 	stub := &executeCapturingStub{}
 	agent.SetServiceRunFactory(func(_ string) (agentlib.FizeauService, error) {
 		return stub, nil
 	})
-	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })
+	t.Cleanup(func() {
+		agent.SetServiceRunFactory(nil)
+		agent.ResetProfileSnapshotCacheForTesting()
+	})
 	return stub
 }
 

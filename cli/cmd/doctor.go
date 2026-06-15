@@ -899,7 +899,7 @@ func checkInstalledLaunchers(verbose bool) {
 
 		li, err := os.Lstat(dst)
 		if os.IsNotExist(err) {
-			fmt.Printf("❌ MISSING (%s not found, run: ddx install %s)\n", dst, pkg.Name)
+			fmt.Printf("❌ MISSING (%s not found, run: ddx plugin install %s)\n", dst, pkg.Name)
 			continue
 		}
 		if err != nil {

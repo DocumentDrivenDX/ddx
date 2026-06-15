@@ -30,6 +30,14 @@ var (
 	profileSnapshotLoadTimeout = 3 * time.Second
 )
 
+// ResetProfileSnapshotCacheForTesting clears process-wide routing profile
+// snapshots between tests that install different service factories.
+func ResetProfileSnapshotCacheForTesting() {
+	profileSnapshotCacheMu.Lock()
+	defer profileSnapshotCacheMu.Unlock()
+	profileSnapshotCache = map[string]profileSnapshotCacheEntry{}
+}
+
 type profileSnapshotCacheEntry struct {
 	snap             ProfileSnapshot
 	loadedAt         time.Time

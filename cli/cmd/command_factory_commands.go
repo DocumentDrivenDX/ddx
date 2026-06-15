@@ -13,8 +13,9 @@ func (f *CommandFactory) newInitCommand() *cobra.Command {
 
 This command:
 • Creates a .ddx/config.yaml configuration file
-• Installs the default DDx library plugin
-• Commits the config file to git
+• Writes DDx version metadata
+• Creates generated agent adapter files
+• Commits initialized project metadata to git
 
 Examples:
   ddx init                  # Initialize DDx in current project
@@ -32,7 +33,8 @@ Examples:
 	cmd.Flags().Bool("skip-claude-injection", false, "Skip injecting meta-prompts into CLAUDE.md")
 	cmd.Flags().String("repository", "", "Library repository URL (default: https://github.com/DocumentDrivenDX/ddx-library)")
 	cmd.Flags().String("branch", "", "Library repository branch (default: main)")
-	cmd.Flags().Bool("global", false, "Perform one-time global machine setup (installs default plugin and agent-tier skill links into the XDG global layer)")
+	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
+	_ = cmd.Flags().MarkHidden("global")
 
 	return cmd
 }
