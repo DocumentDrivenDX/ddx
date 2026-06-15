@@ -208,6 +208,62 @@ func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
 	}
 }
 
+func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
+	root := t.TempDir()
+	type cleanupCall struct {
+		harness  string
+		provider string
+		model    string
+		scopes   []string
+	}
+	calls := make(chan cleanupCall, 8)
+	oldRouteCleanup := reapCurrentProcessNonRouteProviderProbes
+	oldInterval := preClaimProviderProbeCleanupInterval
+	reapCurrentProcessNonRouteProviderProbes = func(harness, provider, model string, scopeDirs ...string) {
+		calls <- cleanupCall{
+			harness:  harness,
+			provider: provider,
+			model:    model,
+			scopes:   append([]string(nil), scopeDirs...),
+		}
+	}
+	preClaimProviderProbeCleanupInterval = 5 * time.Millisecond
+	t.Cleanup(func() {
+		reapCurrentProcessNonRouteProviderProbes = oldRouteCleanup
+		preClaimProviderProbeCleanupInterval = oldInterval
+	})
+
+	wrapped := wrapPreClaimIntakeProviderCleanup(root, ExecuteLoopWorkerSpec{
+		Harness: "claude-tui",
+		Model:   "opus-4.7",
+	}, func(context.Context, string) (agent.PreClaimIntakeResult, error) {
+		select {
+		case <-calls:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("initial route-aware cleanup was not invoked")
+		}
+		select {
+		case <-calls:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("route-aware cleanup did not run while pre-claim hook was active")
+		}
+		return agent.PreClaimIntakeResult{Outcome: agent.PreClaimIntakeActionableAtomic}, nil
+	})
+
+	got, err := wrapped(context.Background(), "ddx-preclaim")
+	require.NoError(t, err)
+	assert.Equal(t, agent.PreClaimIntakeActionableAtomic, got.Outcome)
+
+	select {
+	case final := <-calls:
+		assert.Equal(t, "claude-tui", final.harness)
+		assert.Equal(t, "opus-4.7", final.model)
+		assert.Contains(t, final.scopes, root)
+	default:
+		t.Fatal("final route-aware cleanup was not invoked")
+	}
+}
+
 func TestWorkerManagerStartPluginActionPublishesTerminalProgress(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

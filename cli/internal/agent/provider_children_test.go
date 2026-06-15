@@ -478,6 +478,104 @@ func TestReapRootProviderChildrenInScopesReapsOnlyScopedRootChildren(t *testing.
 	}
 }
 
+func TestReapRootNonRouteProviderChildrenInScopesPreservesActiveRoute(t *testing.T) {
+	now := time.Now().UTC()
+	scopeDir := filepath.Join(t.TempDir(), "project")
+	outside := filepath.Join(t.TempDir(), "outside")
+	const (
+		rootPID      = 747590
+		claudePID    = 747591
+		codexPID     = 747592
+		geminiPID    = 747593
+		outsidePID   = 747594
+		nestedCodex  = 747595
+		unknownRoute = 747596
+	)
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{
+			{
+				PID:       claudePID,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "/home/erik/.local/bin/claude --model opus",
+				CWD:       scopeDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       codexPID,
+				PPID:      rootPID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+				CWD:       scopeDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       geminiPID,
+				PPID:      rootPID,
+				Provider:  "gemini",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/gemini",
+				CWD:       filepath.Join(scopeDir, "scratch"),
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       outsidePID,
+				PPID:      rootPID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
+				CWD:       outside,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       nestedCodex,
+				PPID:      claudePID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex exec",
+				CWD:       scopeDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       unknownRoute,
+				PPID:      rootPID,
+				Provider:  "opencode",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/opencode",
+				CWD:       scopeDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+		}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	if got := ReapRootNonRouteProviderChildrenInScopes(context.Background(), rootPID, "", "", "", scopeDir); got != 0 {
+		t.Fatalf("unknown route reaped %d children; want 0", got)
+	}
+	if len(killed) != 0 {
+		t.Fatalf("unknown route should not terminate children, got %v", killed)
+	}
+
+	if got := ReapRootNonRouteProviderChildrenInScopes(context.Background(), rootPID, "claude-tui", "", "opus-4.7", scopeDir); got != 3 {
+		t.Fatalf("ReapRootNonRouteProviderChildrenInScopes() = %d, want 3", got)
+	}
+	want := []int{codexPID, geminiPID, unknownRoute}
+	if len(killed) != len(want) {
+		t.Fatalf("killed = %v, want %v", killed, want)
+	}
+	for i := range want {
+		if killed[i] != want[i] {
+			t.Fatalf("killed = %v, want %v", killed, want)
+		}
+	}
+}
+
 func TestRunningProviderGuardReapsNonRouteProviderChildren(t *testing.T) {
 	dir := t.TempDir()
 	claudePID := startFakeProviderChild(t, dir, "claude")

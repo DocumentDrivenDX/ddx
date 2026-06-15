@@ -14,6 +14,7 @@ const (
 	providerChildActionTerminated = "terminated"
 	reasonSupersededProviderChild = "superseded_provider_child"
 	reasonRunningPhaseGuard       = "running_phase_non_route_provider_child"
+	reasonPreClaimNonRouteChild   = "pre_claim_non_route_provider_child"
 	reasonDefunctProviderChild    = "defunct_provider_child"
 	reasonAttemptEnded            = "attempt_ended"
 	providerChildCleanupArtifact  = "provider-children.json"
@@ -532,6 +533,44 @@ func ReapRootProviderChildrenInScopes(ctx context.Context, rootPID int, scopeDir
 		}
 		seen[scopeDir] = struct{}{}
 		total += ReapRootProviderChildrenInScope(ctx, rootPID, scopeDir)
+	}
+	return total
+}
+
+// ReapRootNonRouteProviderChildrenInScopes terminates direct provider CLI
+// children under rootPID whose cwd is inside scopeDirs and whose provider does
+// not match the active route. Route-owned children and nested children are
+// preserved. When the active route is unknown, this observes nothing rather
+// than guessing.
+func ReapRootNonRouteProviderChildrenInScopes(ctx context.Context, rootPID int, harness, provider, model string, scopeDirs ...string) int {
+	if rootPID <= 0 {
+		return 0
+	}
+	routeLabel := providerRouteLabel(provider, model)
+	if strings.TrimSpace(routeLabel) == "" && strings.TrimSpace(harness) == "" {
+		return 0
+	}
+	seen := map[string]struct{}{}
+	total := 0
+	for _, scopeDir := range scopeDirs {
+		scopeDir = strings.TrimSpace(scopeDir)
+		if scopeDir == "" {
+			continue
+		}
+		if _, ok := seen[scopeDir]; ok {
+			continue
+		}
+		seen[scopeDir] = struct{}{}
+		reaped, _, err := reapProviderChildren(ctx, rootPID, scopeDir, time.Now().UTC(), func(proc providerChildProcess) string {
+			if routeOwnsProvider(proc.Provider, routeLabel, harness) {
+				return ""
+			}
+			return reasonPreClaimNonRouteChild
+		})
+		if err != nil {
+			continue
+		}
+		total += len(reaped)
 	}
 	return total
 }

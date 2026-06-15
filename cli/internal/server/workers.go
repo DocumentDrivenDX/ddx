@@ -771,6 +771,55 @@ func appendPowerAttemptEvent(store agent.BeadEventAppender, beadID string, repor
 	})
 }
 
+func wrapPreClaimIntakeProviderCleanup(projectRoot string, spec ExecuteLoopWorkerSpec, next agent.PreClaimIntakeHook) agent.PreClaimIntakeHook {
+	if next == nil {
+		return nil
+	}
+	harness := strings.TrimSpace(spec.Harness)
+	provider := strings.TrimSpace(spec.Provider)
+	model := strings.TrimSpace(spec.Model)
+	if harness == "" && provider == "" {
+		return next
+	}
+	return func(ctx context.Context, beadID string) (agent.PreClaimIntakeResult, error) {
+		cleanup := func() {
+			cleanupCurrentProcessNonRouteProviderProbes(harness, provider, model, projectRoot)
+		}
+		cleanup()
+
+		baseCtx := ctx
+		if baseCtx == nil {
+			baseCtx = context.Background()
+		}
+		guardCtx, cancel := context.WithCancel(baseCtx)
+		done := make(chan struct{})
+		interval := preClaimProviderProbeCleanupInterval
+		if interval > 0 {
+			go func() {
+				defer close(done)
+				ticker := time.NewTicker(interval)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-guardCtx.Done():
+						return
+					case <-ticker.C:
+						cleanup()
+					}
+				}
+			}()
+		} else {
+			close(done)
+		}
+
+		result, err := next(ctx, beadID)
+		cancel()
+		<-done
+		cleanup()
+		return result, err
+	}
+}
+
 func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
@@ -803,6 +852,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		lintHook = agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
 		intakeHook = agent.NewPreClaimIntakeHookWithLog(projectRoot, store, rcfg, nil, qualityRunner, log)
 		intakeHook = agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), intakeHook)
+		intakeHook = wrapPreClaimIntakeProviderCleanup(projectRoot, spec, intakeHook)
 		triageHook = agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 	}
 
