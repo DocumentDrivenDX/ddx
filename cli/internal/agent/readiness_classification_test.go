@@ -163,6 +163,35 @@ func TestReadinessClassification_NormalizesSafelyRefinableLegacyToNeedsRefine(t 
 	assert.Empty(t, blocking.SystemReason)
 }
 
+func TestNormalizeReadinessClassificationRefinableAlias(t *testing.T) {
+	warnOnly := ClassifyReadinessWithMode("refinable", nil, "tighten acceptance", config.BeadQualityModeWarnOnly)
+	assert.Equal(t, ReadinessClassificationNeedsRefine, warnOnly.Classification)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.IntakeOutcome)
+	assert.Empty(t, warnOnly.SystemReason)
+	assert.Empty(t, warnOnly.Diagnostic)
+
+	blocking := ClassifyReadinessWithMode("refinable", nil, "tighten acceptance", config.BeadQualityModeBlock)
+	assert.Equal(t, ReadinessClassificationNeedsRefine, blocking.Classification)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.IntakeOutcome)
+	assert.Empty(t, blocking.SystemReason)
+	assert.Empty(t, blocking.Diagnostic)
+}
+
+func TestReadinessUnknownClassificationDiagnosticNamesSchemaDrift(t *testing.T) {
+	got := ClassifyReadinessWithMode("totally_new", nil, "provider emitted a new readiness value", config.BeadQualityModeWarnOnly)
+
+	assert.Equal(t, ReadinessClassificationSystemUnready, got.Classification)
+	assert.Equal(t, ReadinessReasonSystemUnready, got.Reason)
+	assert.Equal(t, ReadinessSystemReasonSchemaDrift, got.SystemReason)
+	assert.Equal(t, "recoverable", got.TriageClassification)
+	assert.Equal(t, PreClaimIntakeError, got.IntakeOutcome)
+	assert.Contains(t, got.Diagnostic, `readiness classification "totally_new"`)
+	for _, want := range AcceptedReadinessClassifications {
+		assert.Contains(t, got.Diagnostic, want)
+	}
+	assert.NotContains(t, got.Diagnostic, ReadinessSystemReasonUnavailable)
+}
+
 func TestReadinessClassification_NormalizesSplitLegacyToNeedsSplit(t *testing.T) {
 	for _, qualityMode := range []string{config.BeadQualityModeWarnOnly, config.BeadQualityModeBlock} {
 		got := ClassifyReadinessWithMode("split", nil, "multiple independent slices", qualityMode)
@@ -273,6 +302,22 @@ func TestPreClaimReadiness_DecodesSafelyRefinableClassificationAsNeedsRefine(t *
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Empty(t, got.SystemReason)
 	assert.Contains(t, got.Detail, "tighten acceptance")
+}
+
+func TestPreClaimIntakeRefinableAliasFollowsNeedsRefinePolicy(t *testing.T) {
+	payload := `{"classification":"refinable","rationale":"tighten acceptance","readiness_checks":[]}`
+
+	warnOnly, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.Outcome)
+	assert.Empty(t, warnOnly.SystemReason)
+	assert.Contains(t, warnOnly.Detail, "tighten acceptance")
+
+	blocking, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeBlock)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.Outcome)
+	assert.Empty(t, blocking.SystemReason)
+	assert.Contains(t, blocking.Detail, "tighten acceptance")
 }
 
 func TestPreClaimReadiness_DecodesSplitClassificationAsNeedsSplit(t *testing.T) {

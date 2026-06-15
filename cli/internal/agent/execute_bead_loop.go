@@ -2759,11 +2759,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 			classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
+			schemaDrift := classified.SystemReason == ReadinessSystemReasonSchemaDrift
 			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
 			eventType := "pre_claim_intake.warn"
 			policyMode := "warn-only"
 			decision := "warn"
 			suggestedAction := "check the readiness route or harness configuration and retry"
+			if schemaDrift {
+				message = fmt.Sprintf("readiness schema drift: %s (continuing)", warning)
+				suggestedAction = "fix the readiness producer/provider so it emits a classification in the accepted enum"
+			}
 			if rootMutationError {
 				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
 				eventType = "pre_claim_intake.error"
@@ -2795,6 +2800,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"detail":        warning,
 				},
 			)
+			if schemaDrift {
+				eventBody["rule_id"] = "pre_claim_intake.schema_drift"
+				eventBody["diagnostic"] = classified.Diagnostic
+				eventBody["accepted_classifications"] = AcceptedReadinessClassifications
+			}
 			if rootMutationError {
 				eventBody["severity"] = "error"
 			}
@@ -2840,11 +2850,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				systemReason = classified.SystemReason
 			}
 			rootMutationError := sawParentBackEdge && isProjectRootMutationRejectedDetail(warning)
+			schemaDrift := systemReason == ReadinessSystemReasonSchemaDrift
 			message := fmt.Sprintf("check unavailable: %s (continuing)", warning)
 			eventType := "pre_claim_intake.warn"
 			policyMode := "warn-only"
 			decision := "warn"
 			suggestedAction := "check the readiness route or harness configuration and retry"
+			if schemaDrift {
+				message = fmt.Sprintf("readiness schema drift: %s (continuing)", warning)
+				suggestedAction = "fix the readiness producer/provider so it emits a classification in the accepted enum"
+			}
 			if rootMutationError {
 				message = fmt.Sprintf("check unavailable for bead %s: %s (error)", candidate.ID, warning)
 				eventType = "pre_claim_intake.error"
@@ -2876,6 +2891,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"detail":        warning,
 				},
 			)
+			if schemaDrift {
+				eventBody["rule_id"] = "pre_claim_intake.schema_drift"
+				eventBody["diagnostic"] = schemaDriftDiagnostic("", warning)
+				eventBody["accepted_classifications"] = AcceptedReadinessClassifications
+			}
 			if rootMutationError {
 				eventBody["severity"] = "error"
 			}

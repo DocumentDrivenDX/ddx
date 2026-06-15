@@ -2,6 +2,7 @@ package agent
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -31,7 +32,45 @@ const (
 	ReadinessSystemReasonResourceExhausted = "resource_exhausted"
 	ReadinessSystemReasonRepoConcurrency   = "repo_concurrency"
 	ReadinessSystemReasonTimeout           = "timeout"
+	// ReadinessSystemReasonSchemaDrift marks readiness output that DDx could not
+	// classify because the provider emitted a classification outside the canonical
+	// enum. It is a provider/schema-drift signal, not a project-readiness blocker.
+	ReadinessSystemReasonSchemaDrift = "schema_drift"
 )
+
+// AcceptedReadinessClassifications is the canonical readiness classification
+// enum. It is surfaced verbatim in schema-drift diagnostics so an operator can
+// see both what the provider emitted and what DDx accepts.
+var AcceptedReadinessClassifications = []string{
+	ReadinessClassificationReady,
+	ReadinessClassificationNeedsRefine,
+	ReadinessClassificationNeedsSplit,
+	ReadinessClassificationOperatorRequired,
+	ReadinessClassificationSystemUnready,
+}
+
+// schemaDriftDiagnostic builds an actionable provider/schema-drift message that
+// names both the raw (unrecognized) classification and the accepted enum set so
+// the failure is not mistaken for the bead itself being system-unready.
+func schemaDriftDiagnostic(rawClassification, detail string) string {
+	enum := strings.Join(AcceptedReadinessClassifications, ", ")
+	if raw := strings.TrimSpace(rawClassification); raw != "" {
+		return fmt.Sprintf(
+			"provider/schema drift: readiness classification %q is not in the accepted enum (%s)",
+			raw, enum,
+		)
+	}
+	if d := strings.TrimSpace(detail); d != "" {
+		return fmt.Sprintf(
+			"provider/schema drift: %s; accepted classifications are %s",
+			d, enum,
+		)
+	}
+	return fmt.Sprintf(
+		"provider/schema drift: readiness classification is not in the accepted enum (%s)",
+		enum,
+	)
+}
 
 // ReadinessClassificationResult is the deterministic bridge between the
 // bead-lifecycle readiness vocabulary and work scheduling semantics.
@@ -41,6 +80,11 @@ type ReadinessClassificationResult struct {
 	SystemReason         string
 	TriageClassification string
 	IntakeOutcome        PreClaimIntakeOutcome
+	// Diagnostic carries human/operator-facing context that the bare
+	// classification cannot. It is set for provider/schema-drift outcomes so an
+	// unknown classification is recorded with the raw value and accepted enum set
+	// instead of a generic system_unready project failure.
+	Diagnostic string
 }
 
 // ClassifyReadiness maps bead-lifecycle readiness evidence to a stable result.
@@ -54,6 +98,7 @@ func ClassifyReadiness(classification string, reasons []string, detail string) R
 // ClassifyReadinessWithMode maps bead-lifecycle readiness evidence to a stable
 // result using the configured bead-quality mode.
 func ClassifyReadinessWithMode(classification string, reasons []string, detail, qualityMode string) ReadinessClassificationResult {
+	rawClassification := strings.TrimSpace(classification)
 	classification = normalizeReadinessClassification(classification)
 	reason := firstReadinessReason(reasons)
 	systemReason := classifyReadinessSystemReason(detail, reasons)
@@ -63,13 +108,17 @@ func ClassifyReadinessWithMode(classification string, reasons []string, detail, 
 		if systemReason == "" {
 			systemReason = ReadinessSystemReasonUnavailable
 		}
-		return ReadinessClassificationResult{
+		result := ReadinessClassificationResult{
 			Classification:       ReadinessClassificationSystemUnready,
 			Reason:               ReadinessReasonSystemUnready,
 			SystemReason:         systemReason,
 			TriageClassification: triageClassificationForSystemReason(systemReason),
 			IntakeOutcome:        PreClaimIntakeError,
 		}
+		if systemReason == ReadinessSystemReasonSchemaDrift {
+			result.Diagnostic = schemaDriftDiagnostic("", detail)
+		}
+		return result
 	}
 
 	if fromReason := readinessClassificationForReason(reason); fromReason != "" {
@@ -105,10 +154,14 @@ func ClassifyReadinessWithMode(classification string, reasons []string, detail, 
 			out.IntakeOutcome = PreClaimIntakeActionableAtomic
 		}
 	default:
+		// An unrecognized classification is provider/schema drift, not a project
+		// readiness blocker. Record it as such with the raw value and accepted enum
+		// set so the diagnostic is actionable instead of a generic system failure.
 		out.Classification = ReadinessClassificationSystemUnready
 		out.Reason = ReadinessReasonSystemUnready
-		out.SystemReason = ReadinessSystemReasonUnavailable
+		out.SystemReason = ReadinessSystemReasonSchemaDrift
 		out.TriageClassification = triageClassificationForSystemReason(out.SystemReason)
+		out.Diagnostic = schemaDriftDiagnostic(rawClassification, detail)
 		out.IntakeOutcome = PreClaimIntakeError
 	}
 	return out
@@ -127,7 +180,7 @@ func normalizeReadinessClassification(classification string) string {
 	switch strings.ToLower(strings.TrimSpace(classification)) {
 	case "", "ready", "actionable_atomic", "atomic", "ok", "actionable", "pass":
 		return ReadinessClassificationReady
-	case "needs_refine", "actionable_but_rewritten", "rewritten", "safely_refinable":
+	case "needs_refine", "refinable", "actionable_but_rewritten", "rewritten", "safely_refinable":
 		return ReadinessClassificationNeedsRefine
 	case "needs_split", "too_large", "too_large_decomposed", "decomposable", "split":
 		return ReadinessClassificationNeedsSplit
@@ -193,6 +246,12 @@ func classifyReadinessSystemReason(detail string, reasons []string) string {
 		return ""
 	}
 	switch {
+	case containsAny(combined,
+		"unknown classification",
+		"unknown readiness classification",
+		"unexpected classification",
+		"unrecognized classification"):
+		return ReadinessSystemReasonSchemaDrift
 	case IsLockContentionError(combined):
 		return ReadinessSystemReasonRepoConcurrency
 	case containsAny(combined,
@@ -268,6 +327,7 @@ func triageClassificationForSystemReason(systemReason string) string {
 	case ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
 		ReadinessSystemReasonTimeout,
+		ReadinessSystemReasonSchemaDrift,
 		ReadinessSystemReasonUnavailable:
 		return "recoverable"
 	default:
