@@ -1054,7 +1054,7 @@ func wrapPreClaimIntakeProviderCleanup(projectRoot string, spec ExecuteLoopWorke
 		}
 		guardCtx, cancel := context.WithCancel(baseCtx)
 		done := make(chan struct{})
-		interval := preClaimProviderProbeCleanupInterval
+		interval := currentPreClaimProviderProbeCleanupInterval()
 		if interval > 0 {
 			go func() {
 				defer close(done)

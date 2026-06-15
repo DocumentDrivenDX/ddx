@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -292,15 +293,11 @@ func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
 	}))
 
 	calls := make(chan []string, 4)
-	oldCleanup := reapCurrentProcessProviderProbes
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
+	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
 		copied := append([]string(nil), scopeDirs...)
 		calls <- copied
 		return 0
-	}
-	t.Cleanup(func() {
-		reapCurrentProcessProviderProbes = oldCleanup
-	})
+	}))
 
 	m := NewWorkerManager(root)
 	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
@@ -333,17 +330,11 @@ func TestRunWorkerFinalCleanupReapsProviderProbes(t *testing.T) {
 func TestCleanupCurrentProcessProviderProbesRunsFollowupSweeps(t *testing.T) {
 	root := t.TempDir()
 	calls := make(chan []string, 4)
-	oldCleanup := reapCurrentProcessProviderProbes
-	oldDelays := providerProbeCleanupFollowupDelays
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
+	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
 		calls <- append([]string(nil), scopeDirs...)
 		return 0
-	}
-	providerProbeCleanupFollowupDelays = []time.Duration{5 * time.Millisecond, 10 * time.Millisecond}
-	t.Cleanup(func() {
-		reapCurrentProcessProviderProbes = oldCleanup
-		providerProbeCleanupFollowupDelays = oldDelays
-	})
+	}))
+	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest([]time.Duration{5 * time.Millisecond, 10 * time.Millisecond}))
 
 	cleanupCurrentProcessProviderProbes(root)
 
@@ -363,13 +354,8 @@ func TestCleanupCurrentProcessProviderProbesRunsFollowupSweeps(t *testing.T) {
 
 func TestCleanupCurrentProcessProviderProbesSettledWaitsForQuietWindow(t *testing.T) {
 	root := t.TempDir()
-	oldCleanup := reapCurrentProcessProviderProbes
-	oldFollowups := providerProbeCleanupFollowupDelays
-	oldQuiet := providerProbeCleanupSettleQuiet
-	oldDeadline := providerProbeCleanupSettleDeadline
-	oldInterval := providerProbeCleanupSettleInterval
 	calls := 0
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
+	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
 		if !testScopeContains(scopeDirs, root) {
 			return 0
 		}
@@ -378,18 +364,9 @@ func TestCleanupCurrentProcessProviderProbesSettledWaitsForQuietWindow(t *testin
 			return 1
 		}
 		return 0
-	}
-	providerProbeCleanupFollowupDelays = nil
-	providerProbeCleanupSettleQuiet = 15 * time.Millisecond
-	providerProbeCleanupSettleDeadline = 200 * time.Millisecond
-	providerProbeCleanupSettleInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		reapCurrentProcessProviderProbes = oldCleanup
-		providerProbeCleanupFollowupDelays = oldFollowups
-		providerProbeCleanupSettleQuiet = oldQuiet
-		providerProbeCleanupSettleDeadline = oldDeadline
-		providerProbeCleanupSettleInterval = oldInterval
-	})
+	}))
+	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
+	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 200*time.Millisecond, 5*time.Millisecond))
 
 	reaped := cleanupCurrentProcessProviderProbesSettled(root)
 
@@ -409,37 +386,20 @@ func TestRunWorkerFinalCleanupRunsUnscopedSweepWhenLastWorker(t *testing.T) {
 		IssueType: bead.DefaultType,
 	}))
 
-	oldScoped := reapCurrentProcessProviderProbes
-	oldUnscoped := reapCurrentProcessProviderProbesUnscoped
-	oldFollowups := providerProbeCleanupFollowupDelays
-	oldQuiet := providerProbeCleanupSettleQuiet
-	oldDeadline := providerProbeCleanupSettleDeadline
-	oldInterval := providerProbeCleanupSettleInterval
-	scopedCalls := 0
-	unscopedCalls := 0
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
-		scopedCalls++
+	var scopedCalls atomic.Int32
+	var unscopedCalls atomic.Int32
+	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
+		scopedCalls.Add(1)
 		return 0
-	}
-	reapCurrentProcessProviderProbesUnscoped = func() int {
-		unscopedCalls++
-		if unscopedCalls == 2 {
+	}))
+	t.Cleanup(setReapCurrentProcessProviderProbesUnscopedForTest(func() int {
+		if unscopedCalls.Add(1) == 2 {
 			return 1
 		}
 		return 0
-	}
-	providerProbeCleanupFollowupDelays = nil
-	providerProbeCleanupSettleQuiet = 15 * time.Millisecond
-	providerProbeCleanupSettleDeadline = 200 * time.Millisecond
-	providerProbeCleanupSettleInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		reapCurrentProcessProviderProbes = oldScoped
-		reapCurrentProcessProviderProbesUnscoped = oldUnscoped
-		providerProbeCleanupFollowupDelays = oldFollowups
-		providerProbeCleanupSettleQuiet = oldQuiet
-		providerProbeCleanupSettleDeadline = oldDeadline
-		providerProbeCleanupSettleInterval = oldInterval
-	})
+	}))
+	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
+	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 200*time.Millisecond, 5*time.Millisecond))
 
 	m := NewWorkerManager(root)
 	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
@@ -461,9 +421,10 @@ func TestRunWorkerFinalCleanupRunsUnscopedSweepWhenLastWorker(t *testing.T) {
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
 	assert.Equal(t, "success", final.Status)
 	require.Eventually(t, func() bool {
-		return scopedCalls > 0 && unscopedCalls >= 5
+		return scopedCalls.Load() > 0 && unscopedCalls.Load() >= 5
 	}, time.Second, 5*time.Millisecond, "last-worker finalization must finish scoped and unscoped cleanup")
-	time.Sleep(2 * providerProbeCleanupSettleDeadline)
+	_, settleDeadline, _ := providerProbeCleanupSettleConfig()
+	time.Sleep(2 * settleDeadline)
 }
 
 func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testing.T) {
@@ -478,34 +439,18 @@ func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testi
 		IssueType: bead.DefaultType,
 	}))
 
-	oldScoped := reapCurrentProcessProviderProbes
-	oldUnscoped := reapCurrentProcessProviderProbesUnscoped
-	oldFollowups := providerProbeCleanupFollowupDelays
-	oldQuiet := providerProbeCleanupSettleQuiet
-	oldDeadline := providerProbeCleanupSettleDeadline
-	oldInterval := providerProbeCleanupSettleInterval
-	scopedCalls := 0
-	unscopedCalls := 0
-	reapCurrentProcessProviderProbes = func(scopeDirs ...string) int {
-		scopedCalls++
+	var scopedCalls atomic.Int32
+	var unscopedCalls atomic.Int32
+	t.Cleanup(setReapCurrentProcessProviderProbesForTest(func(scopeDirs ...string) int {
+		scopedCalls.Add(1)
 		return 0
-	}
-	reapCurrentProcessProviderProbesUnscoped = func() int {
-		unscopedCalls++
+	}))
+	t.Cleanup(setReapCurrentProcessProviderProbesUnscopedForTest(func() int {
+		unscopedCalls.Add(1)
 		return 0
-	}
-	providerProbeCleanupFollowupDelays = nil
-	providerProbeCleanupSettleQuiet = 15 * time.Millisecond
-	providerProbeCleanupSettleDeadline = 50 * time.Millisecond
-	providerProbeCleanupSettleInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		reapCurrentProcessProviderProbes = oldScoped
-		reapCurrentProcessProviderProbesUnscoped = oldUnscoped
-		providerProbeCleanupFollowupDelays = oldFollowups
-		providerProbeCleanupSettleQuiet = oldQuiet
-		providerProbeCleanupSettleDeadline = oldDeadline
-		providerProbeCleanupSettleInterval = oldInterval
-	})
+	}))
+	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
+	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 50*time.Millisecond, 5*time.Millisecond))
 
 	m := NewWorkerManager(root)
 	now := time.Now().UTC()
@@ -529,10 +474,11 @@ func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testi
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
 	assert.Equal(t, "success", final.Status)
 	require.Eventually(t, func() bool {
-		return scopedCalls > 0
+		return scopedCalls.Load() > 0
 	}, time.Second, 5*time.Millisecond, "finalization must still run scoped cleanup")
-	time.Sleep(2 * providerProbeCleanupSettleDeadline)
-	assert.Zero(t, unscopedCalls, "unscoped cleanup must not run while another worker is live")
+	_, settleDeadline, _ := providerProbeCleanupSettleConfig()
+	time.Sleep(2 * settleDeadline)
+	assert.Zero(t, unscopedCalls.Load(), "unscoped cleanup must not run while another worker is live")
 }
 
 func testScopeContains(scopes []string, root string) bool {
@@ -553,9 +499,7 @@ func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
 		scopes   []string
 	}
 	calls := make(chan cleanupCall, 8)
-	oldRouteCleanup := reapCurrentProcessNonRouteProviderProbes
-	oldInterval := preClaimProviderProbeCleanupInterval
-	reapCurrentProcessNonRouteProviderProbes = func(harness, provider, model string, scopeDirs ...string) int {
+	t.Cleanup(setReapCurrentProcessNonRouteProviderProbesForTest(func(harness, provider, model string, scopeDirs ...string) int {
 		calls <- cleanupCall{
 			harness:  harness,
 			provider: provider,
@@ -563,12 +507,8 @@ func TestPreClaimIntakeProviderCleanupGuardRunsDuringHook(t *testing.T) {
 			scopes:   append([]string(nil), scopeDirs...),
 		}
 		return 0
-	}
-	preClaimProviderProbeCleanupInterval = 5 * time.Millisecond
-	t.Cleanup(func() {
-		reapCurrentProcessNonRouteProviderProbes = oldRouteCleanup
-		preClaimProviderProbeCleanupInterval = oldInterval
-	})
+	}))
+	t.Cleanup(setPreClaimProviderProbeCleanupIntervalForTest(5 * time.Millisecond))
 
 	wrapped := wrapPreClaimIntakeProviderCleanup(root, ExecuteLoopWorkerSpec{
 		Harness: "claude-tui",
