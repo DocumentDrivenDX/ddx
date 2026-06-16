@@ -50,6 +50,7 @@ func acquireSingletonLock() (func(), error) {
 				_ = os.RemoveAll(lockDir)
 				return nil, fmt.Errorf("server: write lock pid: %w", err)
 			}
+			clearStaleServerAddr()
 			release := func() {
 				data, _ := os.ReadFile(pidPath)
 				if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid == os.Getpid() {
@@ -71,6 +72,25 @@ func acquireSingletonLock() (func(), error) {
 		}
 	}
 	return nil, fmt.Errorf("server: could not acquire singleton lock at %s", lockDir)
+}
+
+func clearStaleServerAddr() {
+	type addrFile struct {
+		PID int `json:"pid"`
+	}
+	path := filepath.Join(serverAddrDir(), "server.addr")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var af addrFile
+	if err := json.Unmarshal(data, &af); err != nil {
+		_ = os.Remove(path)
+		return
+	}
+	if af.PID > 0 && !processAlive(af.PID) {
+		_ = os.Remove(path)
+	}
 }
 
 // ReadRawServerAddr returns the URL recorded in server.addr without checking

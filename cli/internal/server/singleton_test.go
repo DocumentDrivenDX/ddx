@@ -103,6 +103,39 @@ func TestServer_SingletonGuardBreaksStaleLock(t *testing.T) {
 	}
 }
 
+func TestServer_SingletonAcquireClearsStaleAddress(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	stalePID := 999999
+	if processAlive(stalePID) {
+		t.Skipf("pid %d is alive on this host; cannot use it as stale test data", stalePID)
+	}
+
+	dir := serverAddrDir()
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	addr := map[string]any{
+		"url": "https://127.0.0.1:18099",
+		"pid": stalePID,
+	}
+	data, _ := json.Marshal(addr)
+	addrPath := filepath.Join(dir, "server.addr")
+	if err := os.WriteFile(addrPath, data, 0600); err != nil {
+		t.Fatalf("write addr: %v", err)
+	}
+
+	release, err := acquireSingletonLock()
+	if err != nil {
+		t.Fatalf("expected singleton acquire to succeed, got error: %v", err)
+	}
+	defer release()
+
+	if _, err := os.Stat(addrPath); !os.IsNotExist(err) {
+		t.Fatalf("expected stale server.addr removed during singleton acquire, stat err=%v", err)
+	}
+}
+
 // TestServer_StaleAddressFallbackWithWarning verifies that ReadServerAddr
 // detects a server.addr whose recorded pid is not alive, emits a warning,
 // and returns "" so callers fall back to the default URL.
