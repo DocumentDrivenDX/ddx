@@ -244,11 +244,11 @@ func TestLoadSaveState(t *testing.T) {
 	}
 }
 
-// FEAT-015 invariants for project-local plugin installs:
-//   - the plugin tree lives under <projectRoot>/.ddx/plugins/<name>/
-//   - skill copies live under <projectRoot>/.agents/skills/ and .claude/skills/
-//   - NO symlinks anywhere in the install output
-//   - NO file resolves outside <projectRoot>
+// Legacy copy-installer invariants:
+//   - when the compatibility InstallPackage* helpers are used directly, their
+//     copied output stays inside projectRoot
+//   - marketplace registry installs do not use this path; they cache payloads
+//     under XDG and generate project-local adapter shims
 //
 // The TestInstallSkills_* tests below replace the legacy TestSymlinkSkills_*
 // tests deleted with symlinkSkills/pruneStaleSkillLinks.
@@ -280,13 +280,14 @@ func walkAndAssertNoSymlinks(t *testing.T, root, projectRoot string) int {
 	return count
 }
 
-func TestInstallSkills_NoSymlinksAnywhere(t *testing.T) {
-	// FEAT-015 cross-platform invariant: a plugin install in a project must
-	// produce zero symlinks anywhere in the three install trees and every
-	// path must resolve inside projectRoot.
+func TestLegacyInstallPackageCopiesStayInsideProjectRoot(t *testing.T) {
+	// The compatibility copy-installer must not write through symlinks or
+	// escape projectRoot. Forward marketplace installs are covered by
+	// cmd/plugin_materialization_test.go and should not create this layout.
 	projectRoot := t.TempDir()
 
-	// Simulate the post-install layout: plugin tree + skill copies as real files.
+	// Simulate the legacy post-install layout: plugin tree + skill copies as
+	// real files.
 	pluginTree := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "sample")
 	require.NoError(t, os.MkdirAll(filepath.Join(pluginTree, ".agents", "skills", "sample-skill"), 0o755))
 	require.NoError(t, os.WriteFile(

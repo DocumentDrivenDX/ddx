@@ -14,11 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestInstall_InTreeMode_WritesProjectPluginsAndLinks verifies AC1 (bead ddx-747f1b35):
-// With an in-tree <project>/.ddx/, ddx plugin install <name> (no --global) writes to
-// <project>/.ddx/plugins/<name>/ and creates project-tier links under
-// <project>/.claude/skills/<name> and <project>/.agents/skills/<name>.
-func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
+// TestInstallLocal_InTreeMode_WritesProjectPluginOverlayAndLinks verifies that
+// `ddx plugin install <name> --local` writes a developer overlay symlink to
+// <project>/.ddx/plugins/<name>/ and creates project-tier skill links.
+func TestInstallLocal_InTreeMode_WritesProjectPluginOverlayAndLinks(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -32,7 +31,7 @@ func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
 	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
-	// Plugin must land under <project>/.ddx/plugins/<name>/.
+	// The local checkout overlay lives under <project>/.ddx/plugins/<name>/.
 	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
 	info, statErr := os.Lstat(pluginDir)
 	require.NoError(t, statErr, "project plugin dir must exist at %s", pluginDir)
@@ -52,12 +51,10 @@ func TestInstall_InTreeMode_WritesProjectPluginsAndLinks(t *testing.T) {
 	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for in-tree install")
 }
 
-// TestInstall_InTreeWritesProjectTreeAndLinks verifies AC1:
-// With an in-tree <project>/.ddx/, ddx plugin install <name> (no --global) writes to
-// <project>/.ddx/plugins/<name>/ and creates project-tier links under
-// <project>/.claude/skills/<name> and <project>/.agents/skills/<name>
-// resolving into that plugins/ dir.
-func TestInstall_InTreeWritesProjectTreeAndLinks(t *testing.T) {
+// TestInstallLocal_InTreeOverlayAndLinks verifies that local-overlay skill
+// links resolve into the local plugin checkout, not into copied marketplace
+// payloads.
+func TestInstallLocal_InTreeOverlayAndLinks(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -72,7 +69,7 @@ func TestInstall_InTreeWritesProjectTreeAndLinks(t *testing.T) {
 	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "myplugin", "--local", localPlugin, "--force")
 	require.NoError(t, err, output)
 
-	// Plugin must land in the project in-tree location.
+	// The project plugin path is a symlink overlay to the local checkout.
 	projectPluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
 	pluginInfo, pluginStatErr := os.Lstat(projectPluginDir)
 	require.NoError(t, pluginStatErr, "project plugin dir must exist at %s", projectPluginDir)
@@ -104,12 +101,12 @@ func TestInstall_InTreeWritesProjectTreeAndLinks(t *testing.T) {
 	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for in-tree install")
 }
 
-// TestInstall_ConventionModeWritesXDGProjectTree verifies AC2:
-// With no <project>/.ddx/, ddx plugin install <name> (no --global) writes to
+// TestInstallLocal_ConventionModeWritesXDGProjectOverlay verifies that with no
+// <project>/.ddx/, `ddx plugin install <name> --local` writes an overlay under
 // ${XDG_DATA_HOME}/ddx/projects/<host>/<owner>/<repo>/plugins/<name>/ and the
-// project agent-tier links point into that XDG plugins/ path.
+// project agent-tier links point into that overlay source.
 // A git repo with a deterministic remote URL is used so host/owner/repo are stable.
-func TestInstall_ConventionModeWritesXDGProjectTree(t *testing.T) {
+func TestInstallLocal_ConventionModeWritesXDGProjectOverlay(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	xdgDataHome := t.TempDir()
@@ -246,10 +243,10 @@ func TestInstall_ConventionMode_WritesXDGProjectPluginsAndLinks(t *testing.T) {
 	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for convention install")
 }
 
-// TestInstall_InTreeMode_WritesProjectTreeAndLinks verifies AC2 (bead ddx-be724d92):
-// ddx plugin install <name> with <project>/.ddx/ present writes <project>/.ddx/plugins/<name>/
-// and links <project>/.claude/skills/<name> and <project>/.agents/skills/<name>.
-func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
+// TestInstallLocal_InTreeMode_WritesOverlayAndLinks verifies that
+// `ddx plugin install <name> --local` with <project>/.ddx/ present writes a
+// project-local overlay symlink and links project-tier skills.
+func TestInstallLocal_InTreeMode_WritesOverlayAndLinks(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -265,7 +262,7 @@ func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
 
 	pluginDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "myplugin")
 	_, statErr := os.Lstat(pluginDir)
-	require.NoError(t, statErr, "in-tree plugin dir must exist at %s", pluginDir)
+	require.NoError(t, statErr, "in-tree plugin overlay must exist at %s", pluginDir)
 
 	for _, surface := range []string{".agents/skills", ".claude/skills"} {
 		skillLink := filepath.Join(workDir, surface, "myplugin-skill")
@@ -279,11 +276,10 @@ func TestInstall_InTreeMode_WritesProjectTreeAndLinks(t *testing.T) {
 	assert.True(t, os.IsNotExist(noClaudeErr), "home .claude/skills must not be created for in-tree install")
 }
 
-// TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks verifies AC3 (bead ddx-be724d92):
-// ddx plugin install <name> with no <project>/.ddx/ writes
-// ${XDG_DATA_HOME}/ddx/projects/<identity>/plugins/<name>/ and links
-// the project-tier skill paths into that XDG plugins path.
-func TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks(t *testing.T) {
+// TestInstallLocal_ConventionMode_WritesXdgOverlayAndLinks verifies that
+// `ddx plugin install <name> --local` with no <project>/.ddx/ writes an XDG
+// project overlay symlink and links project-tier skills.
+func TestInstallLocal_ConventionMode_WritesXdgOverlayAndLinks(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	xdgDataHome := t.TempDir()
@@ -303,7 +299,7 @@ func TestInstall_ConventionMode_WritesXdgProjectTreeAndLinks(t *testing.T) {
 
 	conventionPluginDir := filepath.Join(conventionRoot, "plugins", "myplugin")
 	_, statErr := os.Lstat(conventionPluginDir)
-	require.NoError(t, statErr, "convention plugin dir must exist at %s", conventionPluginDir)
+	require.NoError(t, statErr, "convention plugin overlay must exist at %s", conventionPluginDir)
 
 	for _, surface := range []string{".agents/skills", ".claude/skills"} {
 		skillLink := filepath.Join(workDir, surface, "myplugin-skill")

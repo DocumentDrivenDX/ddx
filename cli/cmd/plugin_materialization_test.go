@@ -45,6 +45,34 @@ func TestPluginInstall_RegistryWritesLockNotProjectPayload(t *testing.T) {
 	}
 }
 
+func TestPluginInstall_HelixRegistryWritesLockNotProjectPayload(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	server := pluginMaterializationArchiveServerFor(t, "helix", registry.PackageTypeWorkflow, "helix")
+	defer server.Close()
+
+	factory := pluginMaterializationFactoryForPackage(workDir, server.URL, "helix", registry.PackageTypeWorkflow, "helix")
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "helix", "--force")
+	require.NoError(t, err, output)
+
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "helix"),
+		"marketplace HELIX install must not copy payload into the project plugin tree")
+	assert.FileExists(t, filepath.Join(workDir, ddxroot.DirName, registry.ProjectPluginLockFile))
+
+	lock, err := registry.LoadProjectPluginLock(t.Context(), workDir)
+	require.NoError(t, err)
+	entry := lock.Find("helix")
+	require.NotNil(t, entry)
+	assert.Equal(t, "1.0.0", entry.Version)
+	assert.FileExists(t, filepath.Join(entry.CachePath, "package.yaml"))
+
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "helix"),
+		filepath.Join(".claude", "skills", "helix"),
+	} {
+		assertLocalSymlink(t, filepath.Join(workDir, rel), filepath.Join(entry.CachePath, "skills", "helix"))
+	}
+}
+
 func TestPluginSync_MaterializesAgentSkillShimsFromCache(t *testing.T) {
 	workDir, _ := setupPluginMaterializationProject(t)
 	server := pluginMaterializationArchiveServer(t)
@@ -214,17 +242,22 @@ func setupPluginMaterializationProject(t *testing.T) (workDir, xdgDir string) {
 }
 
 func pluginMaterializationFactory(workDir, source string) *CommandFactory {
+	return pluginMaterializationFactoryForPackage(workDir, source, "sample-plugin", registry.PackageTypePlugin, "sample-skill")
+}
+
+func pluginMaterializationFactoryForPackage(workDir, source, name string, typ registry.PackageType, skillName string) *CommandFactory {
 	factory := NewCommandFactory(workDir)
 	factory.registryOverride = &registry.Registry{Packages: []registry.Package{{
-		Name:        "sample-plugin",
+		Name:        name,
 		Version:     "1.0.0",
 		Description: "Sample plugin",
-		Type:        registry.PackageTypePlugin,
+		Type:        typ,
 		Source:      source,
 		Install: registry.PackageInstall{
-			Root:   &registry.InstallMapping{Source: ".", Target: ".ddx/plugins/sample-plugin"},
+			Root:   &registry.InstallMapping{Source: ".", Target: ddxroot.JoinRelative("plugins", name)},
 			Skills: []registry.InstallMapping{{Source: "skills/", Target: ".agents/skills/"}, {Source: "skills/", Target: ".claude/skills/"}},
 		},
+		Keywords: []string{skillName},
 	}}}
 	return factory
 }
@@ -232,21 +265,37 @@ func pluginMaterializationFactory(workDir, source string) *CommandFactory {
 func pluginMaterializationArchiveServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	archive := pluginMaterializationTarball(t)
+	return pluginMaterializationArchiveServerWithPayload(archive)
+}
+
+func pluginMaterializationArchiveServerFor(t *testing.T, pluginName string, typ registry.PackageType, skillName string) *httptest.Server {
+	t.Helper()
+	archive := pluginMaterializationTarballFor(t, pluginName, typ, skillName)
+	return pluginMaterializationArchiveServerWithPayload(archive)
+}
+
+func pluginMaterializationArchiveServerWithPayload(archive []byte) *httptest.Server {
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(archive)
 	}))
 }
 
 func pluginMaterializationTarball(t *testing.T) []byte {
+	return pluginMaterializationTarballFor(t, "sample-plugin", registry.PackageTypePlugin, "sample-skill")
+}
+
+func pluginMaterializationTarballFor(t *testing.T, pluginName string, typ registry.PackageType, skillName string) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
-	writePluginMaterializationTarDir(t, tw, "sample-plugin-1.0.0")
-	writePluginMaterializationTarFile(t, tw, filepath.Join("sample-plugin-1.0.0", "package.yaml"), []byte(`name: sample-plugin
+
+	topDir := pluginName + "-1.0.0"
+	writePluginMaterializationTarDir(t, tw, topDir)
+	writePluginMaterializationTarFile(t, tw, filepath.Join(topDir, "package.yaml"), []byte(`name: `+pluginName+`
 version: 1.0.0
 description: Sample plugin
-type: plugin
+type: `+string(typ)+`
 source: https://example.com/sample-plugin
 api_version: 1
 install:
@@ -259,9 +308,9 @@ install:
     - source: skills/
       target: .claude/skills/
 `))
-	writePluginMaterializationTarDir(t, tw, filepath.Join("sample-plugin-1.0.0", "skills"))
-	writePluginMaterializationTarDir(t, tw, filepath.Join("sample-plugin-1.0.0", "skills", "sample-skill"))
-	writePluginMaterializationTarFile(t, tw, filepath.Join("sample-plugin-1.0.0", "skills", "sample-skill", "SKILL.md"), []byte("---\nname: sample-skill\ndescription: sample\n---\n\nSample skill body.\n"))
+	writePluginMaterializationTarDir(t, tw, filepath.Join(topDir, "skills"))
+	writePluginMaterializationTarDir(t, tw, filepath.Join(topDir, "skills", skillName))
+	writePluginMaterializationTarFile(t, tw, filepath.Join(topDir, "skills", skillName, "SKILL.md"), []byte("---\nname: "+skillName+"\ndescription: sample\n---\n\nSample skill body.\n"))
 	require.NoError(t, tw.Close())
 	require.NoError(t, gz.Close())
 	return buf.Bytes()
