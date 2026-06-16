@@ -160,6 +160,23 @@ func (s *WorkerSupervisor) Reconcile() (ReconcileResult, error) {
 		}
 	}
 
+	// Adoption pass: a freshly constructed supervisor may share a controller
+	// with workers started by an earlier supervisor instance. Count those live
+	// same-project managed workers before provisioning, so desired_count=1
+	// remains idempotent across request-local supervisor instances.
+	for _, r := range recs {
+		if _, ok := s.managed[r.ID]; ok {
+			continue
+		}
+		if !r.Managed || r.ProjectRoot != s.projectRoot || isTerminalWorkerState(r.State) {
+			continue
+		}
+		if !s.ctrl.HasLiveWorker(r.ID) {
+			continue
+		}
+		s.managed[r.ID] = managedWorker{startedAt: r.StartedAt}
+	}
+
 	// Classify managed workers into healthy-running and crashed.
 	running := 0
 	for id := range s.managed {

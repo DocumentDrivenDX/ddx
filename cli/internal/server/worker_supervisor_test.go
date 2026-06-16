@@ -91,6 +91,21 @@ func (f *fakeWorkerController) seedRunning(id string) {
 	f.live[id] = false
 }
 
+// seedLiveManaged injects a live server-managed worker that was started before
+// this supervisor instance existed.
+func (f *fakeWorkerController) seedLiveManaged(id, projectRoot string, startedAt time.Time) {
+	f.records[id] = &WorkerRecord{
+		ID:          id,
+		Kind:        "work",
+		State:       workerStateRunning,
+		Status:      workerStateRunning,
+		ProjectRoot: projectRoot,
+		StartedAt:   startedAt,
+		Managed:     true,
+	}
+	f.live[id] = true
+}
+
 // TestWorkerSupervisorReconcileStartsAndStopsToDesiredCount proves reconcile
 // starts missing server-managed workers and stops the newest excess workers to
 // match desired_count (AC2).
@@ -287,4 +302,48 @@ func TestWorkerSupervisorMarksStaleRunningRecordsStopped(t *testing.T) {
 	assert.False(t, adopted, "stale record must not be adopted as a managed worker")
 	require.Len(t, res.Started, 1, "supervisor must start a fresh worker, not adopt the stale one")
 	assert.NotEqual(t, "stale-worker", res.Started[0])
+}
+
+func TestWorkerSupervisorAdoptsLiveManagedWorkersBeforeStarting(t *testing.T) {
+	root := t.TempDir()
+	clock := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	fake := newFakeWorkerController(func() time.Time { return clock })
+	fake.seedLiveManaged("already-running", root, clock.Add(-time.Minute))
+	sup := NewWorkerSupervisor(root, fake)
+	sup.clock = func() time.Time { return clock }
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+
+	res, err := sup.Reconcile()
+	require.NoError(t, err)
+	assert.Empty(t, res.Started, "live same-project managed workers must satisfy desired_count")
+	assert.Empty(t, res.Stopped)
+	_, adopted := sup.managed["already-running"]
+	assert.True(t, adopted, "supervisor must adopt the live managed worker")
+	assert.Equal(t, workerStateRunning, fake.records["already-running"].State)
+}
+
+func TestWorkerSupervisorStopsAdoptedLiveExcessWorkers(t *testing.T) {
+	root := t.TempDir()
+	clock := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	fake := newFakeWorkerController(func() time.Time { return clock })
+	fake.seedLiveManaged("old-worker", root, clock.Add(-2*time.Minute))
+	fake.seedLiveManaged("new-worker", root, clock.Add(-time.Minute))
+	sup := NewWorkerSupervisor(root, fake)
+	sup.clock = func() time.Time { return clock }
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+
+	res, err := sup.Reconcile()
+	require.NoError(t, err)
+	assert.Empty(t, res.Started)
+	require.Equal(t, []string{"new-worker"}, res.Stopped, "newest adopted excess worker must stop first")
+	assert.Equal(t, workerStateRunning, fake.records["old-worker"].State)
+	assert.Equal(t, workerStateStopped, fake.records["new-worker"].State)
 }
