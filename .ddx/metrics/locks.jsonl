@@ -790,3 +790,6 @@
 {"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":3175246,"acquired_at":"2026-06-16T08:30:43.550913807Z","released_at":"2026-06-16T08:30:43.552146886Z","duration_ms":1}
 {"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":3175246,"acquired_at":"2026-06-16T08:30:43.91657672Z"}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":4160390,"acquired_at":"2026-06-16T08:36:30.136722051Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":4160390,"acquired_at":"2026-06-16T08:36:30.136722051Z","released_at":"2026-06-16T08:36:30.649911511Z","duration_ms":513}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":4160390,"acquired_at":"2026-06-16T08:36:33.717267225Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":4160390,"acquired_at":"2026-06-16T08:36:33.717267225Z","released_at":"2026-06-16T08:36:33.717730932Z"}
