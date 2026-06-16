@@ -225,8 +225,18 @@ func durableAuditIndexGitTimeout() time.Duration {
 	timeout := durableAuditGitTimeout
 	if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.Cap > 0 && (timeout <= 0 || cfg.Cap < timeout) {
 		timeout = cfg.Cap
+		// Keep the git subprocess comfortably below the active cap so ordinary
+		// durable-audit commits do not trigger the watchdog boundary.
+		return timeout - minDuration(timeout/10, time.Second)
 	}
 	return timeout
+}
+
+func minDuration(a, b time.Duration) time.Duration {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func durableAuditPathsClean(gitDir string, paths []string) bool {
