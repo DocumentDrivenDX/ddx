@@ -111,6 +111,48 @@ func TestWorkerCLISetStatusRestartReconcile(t *testing.T) {
 	assert.Contains(t, out, "worker-test-003")
 }
 
+func TestWorkerCLISetStartSuppressEmptyReconcileOutput(t *testing.T) {
+	projectRoot := t.TempDir()
+
+	var desiredRequests, reconcileRequests int
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/agent/workers/desired":
+			desiredRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"project_root":    projectRoot,
+				"desired_count":   1,
+				"restart_enabled": true,
+				"status":          "saved",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/reconcile":
+			reconcileRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("{}\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("DDX_SERVER_URL", srv.URL)
+
+	factory := NewCommandFactory(projectRoot)
+
+	out, err := executeCommand(factory.NewRootCommand(), "worker", "set", "--project", projectRoot, "--count", "1", "--restart")
+	require.NoError(t, err)
+	assert.Contains(t, out, "saved")
+	assert.NotContains(t, out, "\n{}\n")
+
+	out, err = executeCommand(factory.NewRootCommand(), "worker", "start", "--project", projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, out, "saved")
+	assert.NotContains(t, out, "\n{}\n")
+
+	assert.Equal(t, 2, desiredRequests)
+	assert.Equal(t, 2, reconcileRequests)
+}
+
 func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
 	projectA := t.TempDir()
 	projectB := t.TempDir()

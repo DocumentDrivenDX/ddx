@@ -119,7 +119,9 @@ func (f *CommandFactory) newWorkerSetCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
+			if !emptyWorkerReconcileOutput(reconcileOut) {
+				fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
+			}
 			return nil
 		},
 	}
@@ -168,7 +170,9 @@ func (f *CommandFactory) newWorkerStartCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
+			if !emptyWorkerReconcileOutput(reconcileOut) {
+				fmt.Fprintln(cmd.OutOrStdout(), string(reconcileOut))
+			}
 			return nil
 		},
 	}
@@ -249,6 +253,18 @@ func requestWorkerReconcile(base, projectRoot string) ([]byte, error) {
 		return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
 	}
 	return out, nil
+}
+
+func emptyWorkerReconcileOutput(out []byte) bool {
+	trimmed := bytes.TrimSpace(out)
+	if len(trimmed) == 0 || bytes.Equal(trimmed, []byte("{}")) {
+		return true
+	}
+	var object map[string]any
+	if err := json.Unmarshal(trimmed, &object); err == nil && len(object) == 0 {
+		return true
+	}
+	return false
 }
 
 func (f *CommandFactory) newWorkerReconcileCommand() *cobra.Command {
