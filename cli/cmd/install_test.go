@@ -10,9 +10,46 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestCommitPluginChangesDoesNotAbsorbPreStagedSource(t *testing.T) {
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	runInstallTestGit(t, projectRoot, "init")
+	runInstallTestGit(t, projectRoot, "config", "user.name", "Test User")
+	runInstallTestGit(t, projectRoot, "config", "user.email", "test@example.invalid")
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("initial\n"), 0o644))
+	runInstallTestGit(t, projectRoot, "add", "README.md")
+	runInstallTestGit(t, projectRoot, "commit", "-m", "initial")
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "src.go"), []byte("package main\n"), 0o644))
+	runInstallTestGit(t, projectRoot, "add", "src.go")
+	lockRel := ddxroot.JoinRelative(registry.ProjectPluginLockFile)
+	lockPath := filepath.Join(projectRoot, lockRel)
+	require.NoError(t, os.WriteFile(lockPath, []byte(`{"plugins":[{"name":"helix","version":"1.2.3"}]}`+"\n"), 0o644))
+
+	commitPluginChanges(projectRoot, "helix", "1.2.3")
+
+	committedNames := runInstallTestGit(t, projectRoot, "show", "--format=", "--name-only", "HEAD")
+	assert.Contains(t, committedNames, filepath.ToSlash(lockRel))
+	assert.NotContains(t, committedNames, "src.go", "plugin auto-commit must not absorb pre-staged source")
+
+	stagedNames := runInstallTestGit(t, projectRoot, "diff", "--cached", "--name-only")
+	assert.Contains(t, stagedNames, "src.go", "pre-staged source must remain staged for the operator's commit")
+}
+
+func runInstallTestGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoErrorf(t, err, "git %s failed:\n%s", strings.Join(args, " "), string(out))
+	return string(out)
+}
 
 // TestInstallLocal_InTreeMode_WritesProjectPluginOverlayAndLinks verifies that
 // `ddx plugin install <name> --local` writes a developer overlay symlink to

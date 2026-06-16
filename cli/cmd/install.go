@@ -185,7 +185,7 @@ func (f *CommandFactory) installProjectRegistryPlugin(ctx context.Context, out i
 		return fmt.Errorf("saving plugin lock: %w", err)
 	}
 	fmt.Fprintf(out, "Installed %s %s (cache: %s, shims: %d)\n", entry.Name, entry.Version, entry.CachePath, len(entry.GeneratedFiles))
-	commitPluginChanges(entry.Name, entry.Version)
+	commitPluginChanges(f.WorkingDir, entry.Name, entry.Version)
 	return nil
 }
 
@@ -564,7 +564,7 @@ func (f *CommandFactory) runPluginUninstall(cmd *cobra.Command, args []string) e
 	if err := registry.SaveProjectPluginLock(cmd.Context(), f.WorkingDir, lock); err != nil {
 		return fmt.Errorf("saving plugin lock: %w", err)
 	}
-	commitPluginChanges(entry.Name, entry.Version)
+	commitPluginChanges(f.WorkingDir, entry.Name, entry.Version)
 	fmt.Fprintf(out, "Uninstalled %s (%d generated adapter(s) removed)\n", name, removed)
 	return nil
 }
@@ -710,25 +710,28 @@ func installPathContainsAny(parent string, files []string) bool {
 
 // commitPluginChanges stages and commits plugin-related changes in the working tree.
 // Non-fatal: if git operations fail (not a repo, nothing to commit), it's silently skipped.
-func commitPluginChanges(name, version string) {
+func commitPluginChanges(projectRoot, name, version string) {
 	// Stage project plugin intent. Skill shims are generated adapter state.
-	paths := []string{ddxroot.JoinRelative(registry.ProjectPluginLockFile)}
+	lockPath := ddxroot.JoinRelative(registry.ProjectPluginLockFile)
 	ctx := context.Background()
-	for _, p := range paths {
-		if _, err := os.Stat(p); err == nil {
-			gitAdd := internalgit.Command(ctx, "", "add", p)
-			_ = gitAdd.Run()
+	if projectRoot == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			projectRoot = cwd
 		}
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, lockPath)); err == nil {
+		gitAdd := internalgit.Command(ctx, projectRoot, "add", lockPath)
+		_ = gitAdd.Run()
 	}
 
 	// Check if there's anything to commit.
-	status := internalgit.Command(ctx, "", "diff", "--cached", "--quiet")
+	status := internalgit.Command(ctx, projectRoot, "diff", "--cached", "--quiet", "--", lockPath)
 	if status.Run() == nil {
 		return // nothing staged
 	}
 
 	msg := fmt.Sprintf("chore: install %s %s", name, version)
-	gitCommit := internalgit.Command(ctx, "", "commit", "-m", msg)
+	gitCommit := internalgit.Command(ctx, projectRoot, "commit", "-m", msg, "--only", "--", lockPath)
 	_ = gitCommit.Run()
 }
 
