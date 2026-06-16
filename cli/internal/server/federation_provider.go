@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -76,9 +77,9 @@ func (p *hubFederationProvider) FanOut(ctx context.Context, req *federation.FanO
 	return res, nil
 }
 
-// ForwardMutation routes a single owner-targeted mutation to the spoke that
-// owns the target project. It preserves the request metadata as headers so the
-// spoke can enforce origin and idempotency constraints.
+// ForwardMutation routes a single owner-targeted mutation to the unique spoke
+// that owns the target project. It preserves the request metadata as headers so
+// the spoke can enforce origin and idempotency constraints.
 func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
 	if p.server.hub == nil {
 		return nil, federation.ErrForwardMutationOffline
@@ -91,13 +92,28 @@ func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federa
 	}
 
 	p.server.hub.mu.Lock()
-	target := p.server.hub.registry.FindSpoke(req.TargetNodeID)
-	if target == nil {
-		p.server.hub.mu.Unlock()
-		return nil, federation.ErrForwardMutationMissingOwner
-	}
-	targetCopy := *target
+	target, routeErr := federation.RouteMutationToProjectOwner(p.server.hub.registry, req.TargetProjectID)
 	p.server.hub.mu.Unlock()
+	if routeErr != nil {
+		if strings.Contains(routeErr.Error(), "multiple registered owners") {
+			return nil, &federation.ForwardMutationRefusalError{
+				Kind:   federation.ForwardMutationRefusalBroadcastLike,
+				Detail: routeErr.Error(),
+			}
+		}
+		return nil, &federation.ForwardMutationRefusalError{
+			Kind:   federation.ForwardMutationRefusalMissingOwner,
+			Detail: routeErr.Error(),
+		}
+	}
+
+	targetCopy := *target
+	if targetCopy.NodeID != req.TargetNodeID {
+		return nil, &federation.ForwardMutationRefusalError{
+			Kind:   federation.ForwardMutationRefusalBroadcastLike,
+			Detail: fmt.Sprintf("target node %q does not own project %q", req.TargetNodeID, req.TargetProjectID),
+		}
+	}
 
 	if targetCopy.Status == federation.StatusOffline {
 		return nil, federation.ErrForwardMutationOffline
@@ -107,17 +123,6 @@ func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federa
 	}
 	if !spokeHasCapability(targetCopy.Capabilities, "write") {
 		return nil, federation.ErrForwardMutationReadOnly
-	}
-
-	ownsProject := false
-	for _, owned := range targetCopy.ProjectIDs {
-		if owned == req.TargetProjectID {
-			ownsProject = true
-			break
-		}
-	}
-	if !ownsProject {
-		return nil, federation.ErrForwardMutationMissingOwner
 	}
 
 	headers := make(map[string]string, len(req.Headers)+5)
