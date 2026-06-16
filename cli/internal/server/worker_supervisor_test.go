@@ -57,6 +57,15 @@ func (f *fakeWorkerController) Stop(id string) error {
 	return nil
 }
 
+func (f *fakeWorkerController) MarkManaged(id string) error {
+	rec, ok := f.records[id]
+	if !ok {
+		return fmt.Errorf("worker not found")
+	}
+	rec.Managed = true
+	return nil
+}
+
 func (f *fakeWorkerController) List() ([]WorkerRecord, error) {
 	out := make([]WorkerRecord, 0, len(f.records))
 	for _, r := range f.records {
@@ -179,6 +188,7 @@ func TestWorkerSupervisorRestartBackoff(t *testing.T) {
 	require.Len(t, res.Started, 1)
 	require.Empty(t, res.Restarted)
 	first := res.Started[0]
+	assert.True(t, fake.records[first].Managed, "supervised starts must persist managed=true")
 
 	// Worker crashes -> restart allowed (no prior restarts, no backoff).
 	fake.crash(first)

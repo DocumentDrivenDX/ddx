@@ -276,15 +276,47 @@ func (m *WorkerManager) WakeProject(projectRoot string) int {
 	return signalled
 }
 
-// HasLiveWorker reports whether the manager currently holds a live in-memory
-// handle (goroutine) for id. False for disk-only records left behind by a
-// previous server run. Used by WorkerSupervisor to distinguish a crashed
-// managed worker from a stale disk record it never started.
+// HasLiveWorker reports whether the manager currently has live execution for
+// id, either as an in-memory handle or as an external worker process recorded
+// on disk. Used by WorkerSupervisor to distinguish a live managed worker from
+// a stale disk record left behind by a previous server run.
 func (m *WorkerManager) HasLiveWorker(id string) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	_, ok := m.workers[id]
-	return ok
+	m.mu.Unlock()
+	if ok {
+		return true
+	}
+
+	rec, err := m.readRecord(filepath.Join(m.rootDir, id))
+	if err != nil {
+		return false
+	}
+	if isTerminalWorkerState(rec.State) {
+		return false
+	}
+	return rec.PID > 0 && isPIDAlive(rec.PID)
+}
+
+// MarkManaged persists that id is controlled by desired-state supervision.
+func (m *WorkerManager) MarkManaged(id string) error {
+	dir := filepath.Join(m.rootDir, id)
+
+	m.mu.Lock()
+	if handle, ok := m.workers[id]; ok && handle != nil {
+		handle.record.Managed = true
+		snapshot := handle.record
+		m.mu.Unlock()
+		return m.writeRecord(dir, snapshot)
+	}
+	m.mu.Unlock()
+
+	rec, err := m.readRecord(dir)
+	if err != nil {
+		return err
+	}
+	rec.Managed = true
+	return m.writeRecord(dir, rec)
 }
 
 func NewWorkerManager(projectRoot string) *WorkerManager {

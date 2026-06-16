@@ -34,11 +34,12 @@ func isTerminalWorkerState(state string) bool {
 // implements it.
 type workerController interface {
 	StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerRecord, error)
+	MarkManaged(id string) error
 	Stop(id string) error
 	List() ([]WorkerRecord, error)
-	// HasLiveWorker reports whether the controller currently holds a live
-	// in-memory handle (goroutine) for id. False for disk-only records left
-	// behind by a previous server run.
+	// HasLiveWorker reports whether the controller currently has live execution
+	// for id, either through an in-memory handle or a live external worker PID.
+	// False for stale disk-only records left behind by a previous server run.
 	HasLiveWorker(id string) bool
 }
 
@@ -260,6 +261,10 @@ func (s *WorkerSupervisor) startWorker(desired *WorkerDesiredState) (WorkerRecor
 	if err != nil {
 		return WorkerRecord{}, err
 	}
+	if err := s.ctrl.MarkManaged(rec.ID); err != nil {
+		return WorkerRecord{}, err
+	}
+	rec.Managed = true
 	s.managed[rec.ID] = managedWorker{spec: spec, startedAt: rec.StartedAt}
 	return rec, nil
 }

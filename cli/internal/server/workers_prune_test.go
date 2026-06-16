@@ -503,6 +503,42 @@ func TestWorkerManagerPIDAliveInList(t *testing.T) {
 	// We just verify the field is present (not nil).
 }
 
+func TestWorkerManagerHasLiveWorkerUsesRecordedPID(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-20260101T000000-live"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	rec := WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC(),
+		PID:         os.Getpid(),
+	}
+	require.NoError(t, m.writeRecord(dir, rec))
+
+	assert.True(t, m.HasLiveWorker(workerID), "live external PID must count as a live worker")
+	require.NoError(t, m.MarkManaged(workerID))
+
+	got, err := m.Show(workerID)
+	require.NoError(t, err)
+	assert.True(t, got.Managed, "MarkManaged must persist managed=true on disk-only records")
+
+	rec.Managed = true
+	rec.State = workerStateStopped
+	rec.Status = workerStateStopped
+	require.NoError(t, m.writeRecord(dir, rec))
+	assert.False(t, m.HasLiveWorker(workerID), "terminal records must not count as live even when PID exists")
+}
+
 // TestWorkerManagerPIDAliveNilForGoroutineWorker verifies that List omits
 // pid_alive for goroutine-only workers (PID == 0).
 func TestWorkerManagerPIDAliveNilForGoroutineWorker(t *testing.T) {
