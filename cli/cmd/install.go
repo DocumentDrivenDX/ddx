@@ -199,6 +199,8 @@ func (f *CommandFactory) newPluginCommand() *cobra.Command {
 	cmd.AddCommand(f.newPluginListCommand())
 	cmd.AddCommand(f.newPluginShowCommand())
 	cmd.AddCommand(f.newPluginSyncCommand())
+	cmd.AddCommand(f.newPluginUpgradeCommand())
+	cmd.AddCommand(f.newPluginUninstallCommand())
 	return cmd
 }
 
@@ -211,7 +213,21 @@ func (f *CommandFactory) newPluginListCommand() *cobra.Command {
 	}
 	cmd.Flags().Bool("global", false, "deprecated compatibility flag")
 	_ = cmd.Flags().MarkHidden("global")
+	cmd.Flags().Bool("json", false, "Output project plugin state as JSON")
 	return cmd
+}
+
+type projectPluginListEntry struct {
+	Name           string    `json:"name"`
+	Version        string    `json:"version"`
+	Type           string    `json:"type"`
+	Status         string    `json:"status"`
+	Source         string    `json:"source,omitempty"`
+	CachePath      string    `json:"cache_path,omitempty"`
+	Path           string    `json:"path,omitempty"`
+	LocalOverlay   bool      `json:"local_overlay"`
+	GeneratedFiles []string  `json:"generated_files,omitempty"`
+	InstalledAt    time.Time `json:"installed_at,omitempty"`
 }
 
 func (f *CommandFactory) runPluginList(cmd *cobra.Command, args []string) error {
@@ -221,22 +237,96 @@ func (f *CommandFactory) runPluginList(cmd *cobra.Command, args []string) error 
 		cmd.SilenceUsage = true
 		return errGlobalPluginInstallRetired()
 	}
+	jsonOut, _ := cmd.Flags().GetBool("json")
 
-	lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
+	entries, err := f.projectPluginListEntries(cmd.Context())
 	if err != nil {
-		return fmt.Errorf("loading plugin lock: %w", err)
+		return err
 	}
-	if len(lock.Plugins) == 0 {
+	if jsonOut {
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		return enc.Encode(entries)
+	}
+	if len(entries) == 0 {
 		fmt.Fprintln(out, "No plugins installed.")
 		return nil
 	}
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS")
-	for _, e := range lock.Plugins {
-		status := projectPluginLockStatus(cmd.Context(), f.WorkingDir, e)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Name, e.Version, string(e.Type), status)
+	fmt.Fprintln(w, "NAME\tVERSION\tTYPE\tSTATUS\tSOURCE")
+	for _, e := range entries {
+		source := e.Source
+		if e.LocalOverlay {
+			source = e.Path
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n", e.Name, e.Version, e.Type, e.Status, source)
 	}
 	return w.Flush()
+}
+
+func (f *CommandFactory) projectPluginListEntries(ctx context.Context) ([]projectPluginListEntry, error) {
+	lock, err := registry.LoadProjectPluginLock(ctx, f.WorkingDir)
+	if err != nil {
+		return nil, fmt.Errorf("loading plugin lock: %w", err)
+	}
+	entries := make([]projectPluginListEntry, 0, len(lock.Plugins))
+	seen := map[string]bool{}
+	for _, e := range lock.Plugins {
+		status := projectPluginLockStatus(ctx, f.WorkingDir, e)
+		cachePath := e.CachePath
+		if cachePath == "" {
+			cachePath = registry.PluginCacheDir(e.Name, e.Version)
+		}
+		localPath, local := projectPluginLocalOverlayPath(ctx, f.WorkingDir, e.Name)
+		entry := projectPluginListEntry{
+			Name:           e.Name,
+			Version:        e.Version,
+			Type:           string(e.Type),
+			Status:         status,
+			Source:         e.Source,
+			CachePath:      cachePath,
+			LocalOverlay:   local,
+			GeneratedFiles: append([]string(nil), e.GeneratedFiles...),
+			InstalledAt:    e.InstalledAt,
+		}
+		if local {
+			entry.Path = localPath
+		}
+		entries = append(entries, entry)
+		seen[e.Name] = true
+	}
+
+	overlayRoot := filepath.Join(ddxroot.Path(ctx, f.WorkingDir), "plugins")
+	children, readErr := os.ReadDir(overlayRoot)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		return nil, fmt.Errorf("reading local plugin overlays: %w", readErr)
+	}
+	for _, child := range children {
+		name := child.Name()
+		if seen[name] {
+			continue
+		}
+		path := filepath.Join(overlayRoot, name)
+		info, statErr := os.Lstat(path)
+		if statErr != nil || info.Mode()&os.ModeSymlink == 0 {
+			continue
+		}
+		target, _ := os.Readlink(path)
+		if target != "" && !filepath.IsAbs(target) {
+			target = filepath.Clean(filepath.Join(filepath.Dir(path), target))
+		}
+		entries = append(entries, projectPluginListEntry{
+			Name:         name,
+			Version:      "local",
+			Type:         string(registry.PackageTypePlugin),
+			Status:       "local-overlay",
+			Source:       target,
+			Path:         target,
+			LocalOverlay: true,
+		})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	return entries, nil
 }
 
 func (f *CommandFactory) newPluginShowCommand() *cobra.Command {
@@ -335,6 +425,150 @@ func (f *CommandFactory) runPluginSync(cmd *cobra.Command, args []string) error 
 	return nil
 }
 
+func (f *CommandFactory) newPluginUpgradeCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "upgrade [name]",
+		Short: "Upgrade registry-installed plugins",
+		Long: `Upgrade one or all registry-installed project plugins.
+
+Local overlays are machine-local developer state and are skipped. Registry
+plugins remain lock/cache based: the project lock is updated, payloads resolve
+into the shared XDG cache, and generated adapters are recreated.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: f.runPluginUpgrade,
+	}
+	cmd.Flags().BoolP("force", "f", false, "Reinstall even when the locked version is current")
+	cmd.Flags().Bool("silent", false, "Suppress all output except errors")
+	return cmd
+}
+
+func (f *CommandFactory) runPluginUpgrade(cmd *cobra.Command, args []string) error {
+	out := cmd.OutOrStdout()
+	if silent, _ := cmd.Flags().GetBool("silent"); silent {
+		out = io.Discard
+	}
+	force, _ := cmd.Flags().GetBool("force")
+
+	lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
+	if err != nil {
+		return fmt.Errorf("loading plugin lock: %w", err)
+	}
+	var targets []registry.PluginLockEntry
+	if len(args) == 1 {
+		name := args[0]
+		if projectPluginLocalOverlay(cmd.Context(), f.WorkingDir, name) {
+			fmt.Fprintf(out, "%s is local-linked; skipped\n", name)
+			return nil
+		}
+		entry := lock.Find(name)
+		if entry == nil {
+			return fmt.Errorf("plugin %q is not installed", name)
+		}
+		targets = append(targets, *entry)
+	} else {
+		targets = append(targets, lock.Plugins...)
+		entries, err := f.projectPluginListEntries(cmd.Context())
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if entry.LocalOverlay && lock.Find(entry.Name) == nil {
+				fmt.Fprintf(out, "%s is local-linked; skipped\n", entry.Name)
+			}
+		}
+	}
+	if len(targets) == 0 {
+		fmt.Fprintln(out, "No registry plugins installed.")
+		return nil
+	}
+
+	reg := f.pluginRegistry()
+	for _, locked := range targets {
+		if projectPluginLocalOverlay(cmd.Context(), f.WorkingDir, locked.Name) {
+			fmt.Fprintf(out, "%s is local-linked; skipped\n", locked.Name)
+			continue
+		}
+		pkg, findErr := reg.Find(locked.Name)
+		if findErr != nil {
+			pkg = &registry.Package{
+				Name:        locked.Name,
+				Version:     locked.Version,
+				Description: locked.Name + " plugin",
+				Type:        locked.Type,
+				Source:      locked.Source,
+			}
+		}
+		if pkg.Source == "" {
+			pkg.Source = locked.Source
+		}
+		if pkg.Version == "" {
+			pkg.Version = locked.Version
+		}
+		if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
+			pkg.Version = strings.TrimPrefix(release.TagName, "v")
+		}
+		if pkg.Version == locked.Version && !force {
+			fmt.Fprintf(out, "%s %s is already up to date\n", locked.Name, locked.Version)
+			continue
+		}
+		if err := f.installProjectRegistryPlugin(cmd.Context(), out, pkg, force); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *CommandFactory) newPluginUninstallCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "uninstall <name>",
+		Short: "Remove a project plugin or local overlay",
+		Long: `Remove a project plugin.
+
+For registry-installed plugins, this removes generated adapter files and the
+project lock entry. For local overlays, this removes only project symlinks and
+leaves both the checkout target and any registry version pin untouched.`,
+		Args: cobra.ExactArgs(1),
+		RunE: f.runPluginUninstall,
+	}
+}
+
+func (f *CommandFactory) runPluginUninstall(cmd *cobra.Command, args []string) error {
+	name := args[0]
+	out := cmd.OutOrStdout()
+
+	if overlayPath, local := projectPluginLocalOverlayPath(cmd.Context(), f.WorkingDir, name); local {
+		removed, err := removeLocalPluginOverlay(cmd.Context(), f.WorkingDir, name, overlayPath)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "Uninstalled local overlay %s (%d symlink(s) removed)\n", name, removed)
+		return nil
+	}
+
+	lock, err := registry.LoadProjectPluginLock(cmd.Context(), f.WorkingDir)
+	if err != nil {
+		return fmt.Errorf("loading plugin lock: %w", err)
+	}
+	entry := lock.Find(name)
+	if entry == nil {
+		return fmt.Errorf("plugin %q is not installed", name)
+	}
+	removed := 0
+	for _, generated := range entry.GeneratedFiles {
+		path := filepath.Join(f.WorkingDir, filepath.FromSlash(generated))
+		if err := os.RemoveAll(path); err == nil {
+			removed++
+		}
+	}
+	lock.Remove(name)
+	if err := registry.SaveProjectPluginLock(cmd.Context(), f.WorkingDir, lock); err != nil {
+		return fmt.Errorf("saving plugin lock: %w", err)
+	}
+	commitPluginChanges(entry.Name, entry.Version)
+	fmt.Fprintf(out, "Uninstalled %s (%d generated adapter(s) removed)\n", name, removed)
+	return nil
+}
+
 func projectPluginLockStatus(ctx context.Context, projectRoot string, entry registry.PluginLockEntry) string {
 	if projectPluginLocalOverlay(ctx, projectRoot, entry.Name) {
 		return "local-overlay"
@@ -356,9 +590,80 @@ func projectPluginLockStatus(ctx context.Context, projectRoot string, entry regi
 }
 
 func projectPluginLocalOverlay(ctx context.Context, projectRoot, name string) bool {
+	_, ok := projectPluginLocalOverlayPath(ctx, projectRoot, name)
+	return ok
+}
+
+func projectPluginLocalOverlayPath(ctx context.Context, projectRoot, name string) (string, bool) {
 	path := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
 	info, err := os.Lstat(path)
-	return err == nil && info.Mode()&os.ModeSymlink != 0
+	if err != nil || info.Mode()&os.ModeSymlink == 0 {
+		return "", false
+	}
+	target, err := os.Readlink(path)
+	if err != nil {
+		return path, true
+	}
+	if target != "" && !filepath.IsAbs(target) {
+		target = filepath.Clean(filepath.Join(filepath.Dir(path), target))
+	}
+	return target, true
+}
+
+func removeLocalPluginOverlay(ctx context.Context, projectRoot, name, targetRoot string) (int, error) {
+	removed := 0
+	overlayPath := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
+	if info, err := os.Lstat(overlayPath); err == nil && info.Mode()&os.ModeSymlink != 0 {
+		if err := os.Remove(overlayPath); err != nil {
+			return removed, fmt.Errorf("removing local plugin overlay %s: %w", overlayPath, err)
+		}
+		removed++
+	}
+
+	if targetRoot == "" {
+		return removed, nil
+	}
+	if abs, err := filepath.Abs(targetRoot); err == nil {
+		targetRoot = abs
+	}
+	for _, surface := range []string{".agents/skills", ".claude/skills"} {
+		dir := filepath.Join(projectRoot, filepath.FromSlash(surface))
+		children, err := os.ReadDir(dir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return removed, fmt.Errorf("reading generated skills %s: %w", dir, err)
+		}
+		for _, child := range children {
+			path := filepath.Join(dir, child.Name())
+			info, err := os.Lstat(path)
+			if err != nil || info.Mode()&os.ModeSymlink == 0 {
+				continue
+			}
+			dest, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				continue
+			}
+			if localPathHasPrefix(dest, targetRoot) {
+				if err := os.Remove(path); err != nil {
+					return removed, fmt.Errorf("removing local skill overlay %s: %w", path, err)
+				}
+				removed++
+			}
+		}
+	}
+	return removed, nil
+}
+
+func localPathHasPrefix(path, prefix string) bool {
+	path = filepath.Clean(path)
+	prefix = filepath.Clean(prefix)
+	if path == prefix {
+		return true
+	}
+	rel, err := filepath.Rel(prefix, path)
+	return err == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".."
 }
 
 func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
