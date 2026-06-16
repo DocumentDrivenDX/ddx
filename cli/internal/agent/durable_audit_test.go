@@ -589,6 +589,66 @@ func TestFinalizeDurableAuditOrStop_TrackerLockTimeoutDoesNotStopWorker(t *testi
 	assert.True(t, sawTransient, "loop.durable_audit_transient event must be emitted")
 }
 
+func TestWork_TransientDurableAuditRetryBlocksNextClaim(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	inner := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	require.NoError(t, inner.Init(context.Background()))
+	first := &bead.Bead{ID: "ddx-audit-retry-1", Title: "audit retry one", Priority: 0}
+	second := &bead.Bead{ID: "ddx-audit-retry-2", Title: "audit retry two", Priority: 1}
+	require.NoError(t, inner.Create(context.Background(), first))
+	require.NoError(t, inner.Create(context.Background(), second))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed tracker")
+	head := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	store := &claimCountingStore{Store: inner}
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{
+				BeadID:      beadID,
+				AttemptID:   "20260616T181500-audit-retry",
+				Status:      ExecuteBeadStatusExecutionFailed,
+				Detail:      "implementation failed",
+				BaseRev:     head,
+				ResultRev:   head,
+				SessionID:   "sess-audit-retry",
+				ProjectRoot: projectRoot,
+			}, nil
+		}),
+	}
+
+	oldRetry := retryPendingDurableAuditCommit
+	var retryCalls int32
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	retryPendingDurableAuditCommit = func(projectRoot, attemptID string) error {
+		atomic.AddInt32(&retryCalls, 1)
+		cancel()
+		return context.DeadlineExceeded
+	}
+	t.Cleanup(func() {
+		retryPendingDurableAuditCommit = oldRetry
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		ProjectRoot: projectRoot,
+		FinalizeDurableAudit: func(report ExecuteBeadReport) error {
+			return fmt.Errorf("commit durable audit outputs: %w", context.DeadlineExceeded)
+		},
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "only the first bead may execute while its audit commit is pending")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "pending durable audit retry must block the next claim")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&retryCalls), "pending durable audit commit should be retried before candidate selection")
+}
+
 // TestIsTransientGitContention_SignalKilledAndDeadline asserts that the
 // SIGKILL / context-deadline class and the tracker-lock-timeout string are
 // each classified as transient (ddx-83361480).

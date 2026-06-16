@@ -1424,6 +1424,13 @@ func isTransientGitContention(err error) bool {
 	return gitlock.IsTransientGitContention("", err)
 }
 
+var retryPendingDurableAuditCommit = CommitDurableAuditOutputs
+
+type pendingDurableAuditCommit struct {
+	BeadID string
+	Report ExecuteBeadReport
+}
+
 type executeBeadLoopState struct {
 	now                        func() time.Time
 	assignee                   string
@@ -1464,6 +1471,7 @@ type executeBeadLoopState struct {
 	cleanupLog                 io.Writer
 	attemptStarted             *bool
 	idleRecoverySpentUSD       float64
+	pendingDurableAudit        *pendingDurableAuditCommit
 }
 
 type executeBeadIterationOutcome struct {
@@ -1953,13 +1961,16 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		if err := runtime.FinalizeDurableAudit(report); err != nil {
 			// Transient .git/index.lock contention from concurrent workers must
 			// not stop the drain (ddx-23ac2796). The pending tracker/audit
-			// changes remain staged and are committed on a later iteration, so
-			// treat lock contention as retryable rather than operator attention --
-			// a transient lock conflict must never halt an unattended worker.
+			// changes are retried before the next claim so autonomous work never
+			// advances while durable audit metadata is still dirty.
 			if isTransientGitContention(err) {
+				state.pendingDurableAudit = &pendingDurableAuditCommit{
+					BeadID: candidateID,
+					Report: report,
+				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log,
-						"transient git/tracker contention committing durable audit outputs for %s; not stopping (will retry next iteration): %v\n",
+						"transient git/tracker contention committing durable audit outputs for %s; not stopping (will retry before the next claim): %v\n",
 						candidateID, err)
 				}
 				emit("loop.durable_audit_transient", map[string]any{
@@ -2008,6 +2019,68 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			applyStop(work.StopInput{ContextErr: err})
 		}
 		return executeBeadIterationOutcome{Stop: true}, err
+	}
+	if pending := state.pendingDurableAudit; pending != nil {
+		projectRoot := strings.TrimSpace(firstNonEmpty(pending.Report.ProjectRoot, runtime.ProjectRoot))
+		if err := retryPendingDurableAuditCommit(projectRoot, pending.Report.AttemptID); err != nil {
+			if isTransientGitContention(err) {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log,
+						"transient git/tracker contention retrying durable audit outputs for %s; holding before next claim: %v\n",
+						pending.BeadID, err)
+				}
+				emit("loop.durable_audit_retry_transient", map[string]any{
+					"reason":     "git_tracker_contention",
+					"bead_id":    pending.BeadID,
+					"attempt_id": pending.Report.AttemptID,
+					"detail":     strings.TrimSpace(err.Error()),
+				})
+				sleepDur := idleInterval
+				if sleepDur <= 0 {
+					sleepDur = time.Second
+				}
+				if err := sleepOrWake(ctx, sleepDur, runtime.WakeCh); err != nil {
+					if exitReason == "" {
+						applyStop(work.StopInput{ContextErr: err})
+					}
+					return executeBeadIterationOutcome{Stop: true}, err
+				}
+				return executeBeadIterationOutcome{Continue: true}, nil
+			}
+			dirtyPaths := append([]string(nil), trackerpaths.ManagedPathspecs()...)
+			result.OperatorAttention = &OperatorAttentionStop{
+				Reason:      "durable_audit_commit_failed",
+				BeadID:      pending.BeadID,
+				ProjectRoot: projectRoot,
+				DirtyPaths:  dirtyPaths,
+				Message:     "DDx could not commit pending durable audit outputs; resolve the git failure before continuing autonomous work.",
+			}
+			setExit("OperatorAttention", "operator_attention")
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log,
+					"operator attention: failed to commit pending durable audit outputs for %s; stopping work. %v\n",
+					pending.BeadID,
+					err,
+				)
+			}
+			emit("loop.operator_attention", map[string]any{
+				"reason":       "durable_audit_commit_failed",
+				"bead_id":      pending.BeadID,
+				"project_root": projectRoot,
+				"dirty_paths":  dirtyPaths,
+				"message":      result.OperatorAttention.Message,
+				"detail":       strings.TrimSpace(err.Error()),
+			})
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		state.pendingDurableAudit = nil
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "committed pending durable audit outputs for %s before next claim\n", pending.BeadID)
+		}
+		emit("loop.durable_audit_retry_committed", map[string]any{
+			"bead_id":    pending.BeadID,
+			"attempt_id": pending.Report.AttemptID,
+		})
 	}
 	if loopMode == executeloop.ModeWatch && serverOutage.Active() {
 		if !serverUnavailableLogged && runtime.Log != nil {
