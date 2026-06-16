@@ -1,0 +1,56 @@
+{
+  "attempt_id": "20260616T090250-36367135",
+  "bead_id": "ddx-67cdc109",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T090250-36367135",
+  "trigger": "",
+  "started_at": "2026-06-16T09:15:50.549289202Z",
+  "finished_at": "2026-06-16T09:15:51.335532436Z",
+  "scanned": 95,
+  "candidates": [
+    {
+      "pid": 446118,
+      "ppid": 356379,
+      "pgid": 356379,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/cli",
+      "command": "sleep 2"
+    },
+    {
+      "pid": 356379,
+      "ppid": 283541,
+      "pgid": 356379,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/cli",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781600598187-85z3u4.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until grep -qE \"lefthook\\[\" /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/f223650f-6980-4113-9ec9-9739fc09bfe2/tasks/bzd18vx1s.output 2\u003e/dev/null; do sleep 2; done \u0026\u0026 tail -20 /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/f223650f-6980-4113-9ec9-9739fc09bfe2/tasks/bzd18vx1s.output' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-398a-cwd"
+    },
+    {
+      "pid": 283541,
+      "ppid": 211401,
+      "pgid": 283541,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T090250-36367135",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3779924115\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3779924115\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"5dd53decf37e7d54b9a2b821a90b35ca\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-3779924115/stop-hook-payload.json\\\"\"}]}]}} --model sonnet"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 446118,
+      "ppid": 356379,
+      "pgid": 356379,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/cli",
+      "command": "sleep 2"
+    },
+    {
+      "pid": 356379,
+      "ppid": 283541,
+      "pgid": 356379,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/cli",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781600598187-85z3u4.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until grep -qE \"lefthook\\[\" /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/f223650f-6980-4113-9ec9-9739fc09bfe2/tasks/bzd18vx1s.output 2\u003e/dev/null; do sleep 2; done \u0026\u0026 tail -20 /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-67cdc109-20260616T090250-36367135/f223650f-6980-4113-9ec9-9739fc09bfe2/tasks/bzd18vx1s.output' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-398a-cwd"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 283541,
+      "ppid": 211401,
+      "pgid": 283541,
+      "command": "[claude] \u003cdefunct\u003e"
+    }
+  ]
+}
