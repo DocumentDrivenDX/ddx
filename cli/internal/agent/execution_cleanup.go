@@ -487,7 +487,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		if _, ok := liveRunStates[runStateLiveKey(state)]; ok {
 			continue
 		}
-		if runStateWorktreeStillExists(state) {
+		if RunStateStaleReason(state, now()) == "" && runStateWorktreeStillExists(state) {
 			continue
 		}
 		if removed, bytes := m.removeStaleRunState(state, &summary); removed {

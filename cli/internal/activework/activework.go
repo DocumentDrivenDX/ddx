@@ -113,10 +113,7 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 			return Snapshot{}, err
 		}
 		for _, state := range states {
-			if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
-				continue
-			}
-			if state.PID > 0 && !processAlive(state.PID) {
+			if agent.RunStateStaleReason(state, now) != "" {
 				continue
 			}
 			add(Record{

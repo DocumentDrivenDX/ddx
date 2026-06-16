@@ -327,6 +327,32 @@ func runStateNewer(a, b RunState) bool {
 	return a.AttemptID > b.AttemptID
 }
 
+// RunStateStaleReason returns the reason a run-state record should no longer
+// be treated as active execution state. A remaining worktree can still be
+// preserved separately; this only answers whether the live run-state lease is
+// stale.
+func RunStateStaleReason(state RunState, now time.Time) string {
+	if state.PID > 0 {
+		if trackerProcessAlive(state.PID) {
+			return ""
+		}
+		return "pid_not_alive"
+	}
+	if !state.ExpiresAt.IsZero() && now.After(state.ExpiresAt) {
+		return "expired"
+	}
+	return ""
+}
+
+// ClearRunStateRecord removes the run-state record for state and refreshes the
+// compatibility summary from any remaining attempts.
+func ClearRunStateRecord(projectRoot string, state RunState) error {
+	if state.AttemptID != "" {
+		return ClearRunStateAttempt(projectRoot, state.AttemptID)
+	}
+	return ClearRunState(projectRoot)
+}
+
 // ClearRunState removes all run-state records, including the compatibility
 // summary and per-attempt files. A missing file or directory is not an error.
 func ClearRunState(projectRoot string) error {

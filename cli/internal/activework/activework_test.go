@@ -2,10 +2,13 @@ package activework
 
 import (
 	"context"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
@@ -50,6 +53,28 @@ func TestActiveWorkSnapshotIgnoresStaleWorkerSidecars(t *testing.T) {
 	assert.Zero(t, snap.Count)
 }
 
+func TestActiveWorkSnapshotIgnoresFreshRunStateWhenPIDIsDead(t *testing.T) {
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ddxroot.DirName), 0o755))
+	now := time.Now().UTC()
+
+	require.NoError(t, agent.WriteRunState(projectRoot, agent.RunState{
+		BeadID:       "ddx-stale-run-state",
+		AttemptID:    "20260613T034907-3d00f60f",
+		StartedAt:    now.Add(-time.Minute),
+		WorktreePath: filepath.Join(projectRoot, ".ddx-exec-wt", ".execute-bead-wt-ddx-stale-run-state"),
+		PID:          deadActiveWorkPID(t),
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(time.Minute),
+	}))
+
+	snap, err := Collect(projectRoot, nil, now)
+	require.NoError(t, err)
+	assert.Empty(t, snap.Records, "fresh-looking run-state with a dead owner pid must not jam active work")
+	assert.Empty(t, snap.BeadIDs)
+	assert.Zero(t, snap.Count)
+}
+
 func TestActiveWorkMergeKeepsEqualBeadIDsAcrossProjects(t *testing.T) {
 	now := time.Now().UTC()
 	snap := Merge(
@@ -79,4 +104,14 @@ func TestActiveWorkMergeKeepsEqualBeadIDsAcrossProjects(t *testing.T) {
 	require.Contains(t, byProject, "/repo/b")
 	assert.Equal(t, "worker-a", byProject["/repo/a"].WorkerID)
 	assert.Equal(t, "worker-b", byProject["/repo/b"].WorkerID)
+}
+
+func deadActiveWorkPID(t *testing.T) int {
+	t.Helper()
+
+	cmd := exec.Command("sh", "-c", "exit 0")
+	require.NoError(t, cmd.Start())
+	pid := cmd.Process.Pid
+	require.NoError(t, cmd.Wait())
+	return pid
 }

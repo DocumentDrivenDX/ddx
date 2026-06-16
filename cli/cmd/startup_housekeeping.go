@@ -42,15 +42,18 @@ type startupHousekeepingReport struct {
 
 	StaleWorktrees     int64
 	StaleWorkerDirs    int64
+	StaleRunStateFiles int64
 	StaleExecutionDirs int64
 
 	RemovedRegisteredWorktrees  int64
 	RemovedUnregisteredTempDirs int64
 	RemovedWorkerDirs           int64
+	RemovedRunStateFiles        int64
 	ArchivedExecutionDirs       int64
 	DeletedExecutionDirs        int64
 
-	Warnings []agent.ExecutionCleanupWarning
+	Warnings     []agent.ExecutionCleanupWarning
+	Observations []agent.ExecutionCleanupObservation
 }
 
 type startupHousekeepingRunner struct {
@@ -89,8 +92,10 @@ func (r *startupHousekeepingRunner) Cleanup(ctx context.Context) (agent.Executio
 		RemovedRegisteredWorktrees:  report.RemovedRegisteredWorktrees,
 		RemovedUnregisteredTempDirs: report.RemovedUnregisteredTempDirs,
 		RemovedWorkerDirs:           report.RemovedWorkerDirs,
+		RemovedRunStateFiles:        report.RemovedRunStateFiles,
 		RemovedEvidenceDirs:         report.ArchivedExecutionDirs + report.DeletedExecutionDirs,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), report.Warnings...),
+		Observations:                append([]agent.ExecutionCleanupObservation(nil), report.Observations...),
 	}, nil
 }
 
@@ -114,6 +119,7 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 	if err != nil {
 		return report, err
 	}
+	runStates = r.scanRunStates(ctx, now, runStates, apply, &report)
 	if err := r.scanWorktrees(ctx, now, runStates, apply, &report); err != nil {
 		return report, err
 	}
@@ -124,6 +130,46 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 		return report, err
 	}
 	return report, nil
+}
+
+func (r *startupHousekeepingRunner) scanRunStates(ctx context.Context, now time.Time, runStates []agent.RunState, apply bool, report *startupHousekeepingReport) []agent.RunState {
+	if len(runStates) == 0 {
+		return runStates
+	}
+	kept := make([]agent.RunState, 0, len(runStates))
+	for _, state := range runStates {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				kept = append(kept, state)
+				continue
+			}
+		}
+		reason := agent.RunStateStaleReason(state, now)
+		if reason == "" {
+			kept = append(kept, state)
+			continue
+		}
+		report.StaleRunStateFiles++
+		if !apply {
+			continue
+		}
+		if err := agent.ClearRunStateRecord(r.projectRoot, state); err != nil {
+			report.Warnings = append(report.Warnings, agent.ExecutionCleanupWarning{
+				Path:    r.projectRoot,
+				Class:   "run_state_clear",
+				Message: err.Error(),
+			})
+			kept = append(kept, state)
+			continue
+		}
+		report.RemovedRunStateFiles++
+		report.Observations = append(report.Observations, agent.ExecutionCleanupObservation{
+			Path:    r.projectRoot,
+			Class:   "removed_stale_run_state",
+			Message: fmt.Sprintf("%s: bead=%s attempt=%s pid=%d", reason, state.BeadID, state.AttemptID, state.PID),
+		})
+	}
+	return kept
 }
 
 func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.Time, runStates []agent.RunState, apply bool, report *startupHousekeepingReport) error {

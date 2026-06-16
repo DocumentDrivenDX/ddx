@@ -72,6 +72,33 @@ func TestWorkStartup_PreservesLiveWorktrees(t *testing.T) {
 	assert.Contains(t, runCleanupCommandGit(t, projectRoot, "worktree", "list", "--porcelain"), worktreePath)
 }
 
+func TestWorkStartupCleanup_RemovesFreshRunStateWhenOwnerPIDIsDead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-liveness startup cleanup test is unix-oriented")
+	}
+
+	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
+
+	attemptID := "20260613T034907-3d00f60f"
+	worktreePath := createRegisteredStartupWorktree(t, projectRoot, tempRoot, "ddx-stale-active", attemptID)
+	now := time.Now().UTC()
+	writeStartupRunState(t, projectRoot, "ddx-stale-active", attemptID, worktreePath, deadProcessPID(t), now)
+
+	runner := newStartupHousekeepingRunner(projectRoot)
+	runner.now = func() time.Time { return now }
+	report, err := runner.scan(context.Background(), true)
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), report.StaleRunStateFiles)
+	assert.Equal(t, int64(1), report.RemovedRunStateFiles)
+	require.Len(t, report.Observations, 1)
+	assert.Equal(t, "removed_stale_run_state", report.Observations[0].Class)
+	assert.DirExists(t, worktreePath, "fresh worktree cleanup remains governed by normal worktree policy")
+	states, err := agent.ReadRunStates(projectRoot)
+	require.NoError(t, err)
+	assert.Empty(t, states, "dead-owner run-state must be cleared before the next claim/status pass")
+}
+
 func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	projectRoot, _ := setupWorkStartupCleanupProject(t)
 
