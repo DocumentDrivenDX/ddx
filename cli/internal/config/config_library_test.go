@@ -113,3 +113,25 @@ func TestResolveLibraryResource_FallbackWithoutConfig(t *testing.T) {
 	assert.True(t, filepath.IsAbs(got) || got != "", "expected non-empty result, got %q", got)
 	assert.Contains(t, got, filepath.Join("prompts", "x.md"))
 }
+
+func TestResolveLibraryPathFallsBackToBuiltinCacheWhenConfigHasNoPath(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tempDir, "xdg"))
+	t.Setenv("DDX_LIBRARY_BASE_PATH", "")
+
+	ddxDir := filepath.Join(tempDir, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"
+library:
+  repository:
+    url: "https://github.com/DocumentDrivenDX/ddx"
+    branch: "main"
+`), 0o644))
+
+	got, err := ResolveLibraryPath(tempDir)
+	require.NoError(t, err)
+	assert.Contains(t, got, filepath.Join("ddx", "cache", "plugins", "ddx"))
+	info, statErr := os.Stat(filepath.Join(got, "skills", "ddx", "SKILL.md"))
+	require.NoError(t, statErr)
+	assert.False(t, info.IsDir())
+}

@@ -49,19 +49,12 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 		}
 	}
 
-	// Fall back to the configured library path so documents created via the
-	// documentWrite mutation (which target the library) remain readable even
-	// when they have no DDx frontmatter and so do not appear in the graph.
-	cfg, err := config.LoadWithWorkingDir(wd)
+	// Fall back to the resolved library path so cache-backed package documents
+	// and explicit documentWrite targets remain readable even when they have no
+	// DDx frontmatter and so do not appear in the graph.
+	libPath, err := config.ResolveLibraryPath(wd)
 	if err != nil {
-		return nil, fmt.Errorf("loading config: %w", err)
-	}
-	if cfg.Library == nil || cfg.Library.Path == "" {
-		return nil, nil
-	}
-	libPath := cfg.Library.Path
-	if !filepath.IsAbs(libPath) {
-		libPath = filepath.Join(wd, libPath)
+		return nil, fmt.Errorf("resolving library path: %w", err)
 	}
 
 	fullPath, err := ResolveDocumentPath(libPath, cleaned)

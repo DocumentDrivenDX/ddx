@@ -1554,6 +1554,52 @@ func TestReady(t *testing.T) {
 	}
 }
 
+func TestReadyUsesBuiltinLibraryCacheWhenConfigHasNoPath(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg"))
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ddxroot.DirName)
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configYAML := `version: "1.0"
+library:
+  repository:
+    url: "https://github.com/DocumentDrivenDX/ddx"
+    branch: "main"
+`
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(configYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	beadOpen := `{"id":"bx-001","title":"Open bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`
+	if err := os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beadOpen+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/ready", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result struct {
+		Status string            `json:"status"`
+		Checks map[string]string `json:"checks"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Status != "ready" {
+		t.Errorf("expected status=ready, got %s", result.Status)
+	}
+	if result.Checks["library"] != "ok" {
+		t.Errorf("expected library=ok, got %s", result.Checks["library"])
+	}
+}
+
 func TestAgentSessions(t *testing.T) {
 	dir := setupTestDir(t)
 

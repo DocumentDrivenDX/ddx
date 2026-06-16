@@ -1489,7 +1489,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ready := true
 
 	// Check library path
-	if s.libraryPath() != "" {
+	if s.libraryPathForRequest(r) != "" {
 		checks["library"] = "ok"
 	} else {
 		checks["library"] = "not_configured"
@@ -5446,18 +5446,11 @@ func (s *Server) libraryPath() string {
 
 // libraryPathFor resolves the library path rooted at workingDir.
 func (s *Server) libraryPathFor(workingDir string) string {
-	cfg, err := config.LoadWithWorkingDir(workingDir)
+	p, err := config.ResolveLibraryPath(workingDir)
 	if err != nil {
 		return ""
 	}
-	if cfg.Library == nil || cfg.Library.Path == "" {
-		return ""
-	}
-	p := cfg.Library.Path
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(workingDir, p)
-	}
-	if _, err := os.Stat(p); err != nil {
+	if info, err := os.Stat(p); err != nil || !info.IsDir() {
 		return ""
 	}
 	return p
