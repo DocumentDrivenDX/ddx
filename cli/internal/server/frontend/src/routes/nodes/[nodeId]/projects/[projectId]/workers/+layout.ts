@@ -18,6 +18,12 @@ const WORKERS_QUERY = gql`
 					successes
 					failures
 					startedAt
+					managed
+					desiredCount
+					restartCount
+					lastRestartAt
+					backoffUntil
+					cleanupNeeded
 				}
 				cursor
 			}
@@ -66,6 +72,12 @@ interface WorkerNode {
 	successes: number | null
 	failures: number | null
 	startedAt: string | null
+	managed: boolean | null
+	desiredCount: number | null
+	restartCount: number | null
+	lastRestartAt: string | null
+	backoffUntil: string | null
+	cleanupNeeded: boolean | null
 }
 
 interface WorkerEdge {
