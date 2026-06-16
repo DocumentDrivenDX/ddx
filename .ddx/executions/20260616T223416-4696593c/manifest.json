@@ -1,0 +1,33 @@
+{
+  "attempt_id": "20260616T223416-4696593c",
+  "bead_id": "ddx-e81c01de",
+  "base_rev": "bf8335e764cdfbce57da4b31222c0d9423c107d1",
+  "created_at": "2026-06-16T22:34:24.067106862Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e81c01de",
+    "title": "server: add owner-targeted federation mutation contract",
+    "description": "PROBLEM\nHub-mode needs a narrow mutation-forwarding contract for writes that target exactly one owner node/project/worker, but the federation layer currently only models read fan-out.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-026-federation.md:150 specifies the owner-targeted write surface.\n- docs/helix/02-design/adr/ADR-007-federation-topology.md documents the 2026-06-08 amendment requiring owner-targeted basic writes.\n- cli/internal/server/graphql/resolver_federation.go:3 documents the current federation resolvers as read-only fan-out.\n- cli/internal/server/graphql/resolver_federation.go:23 defines FederationProvider with only Spokes and FanOut; there is no owner-targeted ForwardMutation path.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327 requires federated worker control and owner-targeted writes.\n\nPROPOSED FIX\n- Add a narrow federation forwarding interface for mutations that target one node/project/worker owner.\n- Define request/response types that carry origin identity, forwarding path, request id/idempotency key, target node id, target project id, expected version where supplied, and capability metadata needed by forwarding.\n- Add typed errors for offline, stale, read_only, missing-project, missing-owner, and broadcast-like requests.\n- Keep existing federated reads unchanged except for capability metadata needed by forwarding.\n\nNON-SCOPE\nDo not implement write broadcast, distributed consensus, Axon backend, FEAT-029 managed-node outbound channels, or hub failover.\n\nPARENT\nParent bead: ddx-d5dfa702.",
+    "acceptance": "1. Go test `TestFederationForwardMutationContract_CarriesTargetAndOriginMetadata` proves the forwarding request type carries origin identity, forwarding path, request id/idempotency key, target node id, target project id, and expected version.\n2. Go test `TestFederationForwardMutationContract_DefinesTypedRefusals` proves the contract exposes typed errors for offline, stale, read_only, missing-project, missing-owner, and broadcast-like requests.\n3. Go test `TestFederationProvider_ExposesForwardMutationWithoutChangingFanOutReads` proves the provider adds a ForwardMutation path while existing Spokes and FanOut read behavior remains intact.\n4. `cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/federation/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-f2c16a4b",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "kind:feature",
+      "plan:server-operator-workbench"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T223416-4696593c",
+    "prompt": ".ddx/executions/20260616T223416-4696593c/prompt.md",
+    "manifest": ".ddx/executions/20260616T223416-4696593c/manifest.json",
+    "result": ".ddx/executions/20260616T223416-4696593c/result.json",
+    "checks": ".ddx/executions/20260616T223416-4696593c/checks.json",
+    "usage": ".ddx/executions/20260616T223416-4696593c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-e81c01de-20260616T223416-4696593c"
+  },
+  "prompt_sha": "add93dfd852bf874b0b2a0b5382976d7a79ec23af33292070976393bb6084ff8"
+}

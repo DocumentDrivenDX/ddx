@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260616T224249-a90573fd",
+  "bead_id": "ddx-7eebb7a4",
+  "base_rev": "18a9e0c67058e3e060c488da223b9fa935acfdfc",
+  "created_at": "2026-06-16T22:42:59.436091386Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7eebb7a4",
+    "title": "agent: prevent pre-dispatch checkpoint commits from killing managed workers",
+    "description": "PROBLEM\nDuring the 2026-06-16 DDx repo canary after rebuilding/installing 764fe0084, worker worker-20260616T215629-cc7c claimed ddx-7f5092f2, completed readiness, then was killed before an execution attempt started. Its status.json records action=index-lock-violation with detail operation=index.commit outcome=removed reason=\"managed worker exited; no live owner\". Its worker.log shows tracker_lock section=pre_dispatch_commits wait=0s hold=10.017s followed by \"Cancel received, shutting down gracefully\". .ddx/metrics/locks.jsonl records pre_dispatch_commits for holder_pid=680596 from 2026-06-16T22:01:42.882688293Z to 2026-06-16T22:01:52.89652651Z, duration_ms=10013. This violates the worker/server reliability goal: a pre-dispatch checkpoint must not cross the cap boundary, leave a stale index.lock, or require server kill/restart before execution begins.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:842-860 runs commitTrackerLocked and checkpointPreDispatchDirt together under withTrackerLock(projectRoot, \"pre_dispatch_commits\", ...), so tracker commit plus checkpoint/index sync can hold the parent repo mutation path long enough to hit cap-boundary behavior before the isolated attempt exists.\n- cli/internal/agent/execute_bead.go:1702-1713 stages and commits tracker changes through runGitWithIndexLockRecovery without a pre-cap timeout proof for the pre-dispatch path.\n- cli/internal/agent/predispatch_dirty.go:260-299 performs temp-index checkpoint work and then runGitWithIndexLockRecovery(..., \"read-tree\", \"HEAD\") while still inside the pre_dispatch_commits mutation window.\n- cli/internal/server/workers.go:833-867 recovers .git/index.lock after managed-worker exit, but the canary shows this is happening after the worker is killed rather than preventing the cap-boundary failure.\n\nPROPOSED FIX\nBound pre-dispatch tracker/checkpoint git operations so ordinary checkpoint commits do not run to the index.lock cap or cause a managed worker kill before execution. Prefer splitting tracker commit and checkpoint/index sync into separately bounded mutation windows, using a temp-index path that avoids parent index.commit where possible, or timing out before DefaultIndexLockCap with clean stale-lock recovery and an operator-visible retryable event. Preserve the pre-execute-bead checkpoint and tracker audit history.\n\nNON-SCOPE\nDo not raise DefaultIndexLockCap, disable lockmetrics violations, remove checkpoint commits, change durable-audit behavior already covered by ddx-15fdc1e1, or change plugin topology.\n\nPARENT\n- ddx-d5dfa702\n\nDEPENDENCIES\n- None.",
+    "acceptance": "1. New or extended Go test TestPreDispatchCommits_IndexCommitStaysBelowCap simulates dirty tracker/checkpoint state and proves pre_dispatch_commits completes without any index.lock/index.commit violation at DefaultIndexLockCap.\n2. New or extended Go test TestPreDispatchCommits_CapTimeoutDoesNotKillManagedWorker simulates a cap-boundary pre-dispatch git operation and proves the bead is released or retried with an operator-visible event instead of leaving a killed managed worker and stale claim.\n3. New or extended Go test TestPreDispatchCommits_RecoversStaleIndexLockBeforeNextClaim proves a stale .git/index.lock left by a cancelled pre-dispatch git command is recovered before the next claim.\n4. The fix preserves chore: checkpoint pre-execute-bead commits and tracker audit commits when pre-dispatch work succeeds.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... ./internal/lockmetrics/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:lock",
+      "area:workers",
+      "kind:bug",
+      "reliability",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T221914-fc32 runtime=1m35s pid=1060927 reason=stop",
+          "created_at": "2026-06-16T22:20:49.867582233Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260616T222301-4fef state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-16T22:26:59.362503483Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "worker-20260616T223731-80ab",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-7eebb7a4\",\"fingerprint\":\"61832db0213b8407ded37b6b7c455b3eb90f418dfe2bbf3c0b5e71b8a802bf39\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"61832db0213b8407ded37b6b7c455b3eb90f418dfe2bbf3c0b5e71b8a802bf39\"}",
+          "created_at": "2026-06-16T22:40:48.686067704Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T224249-a90573fd",
+    "prompt": ".ddx/executions/20260616T224249-a90573fd/prompt.md",
+    "manifest": ".ddx/executions/20260616T224249-a90573fd/manifest.json",
+    "result": ".ddx/executions/20260616T224249-a90573fd/result.json",
+    "checks": ".ddx/executions/20260616T224249-a90573fd/checks.json",
+    "usage": ".ddx/executions/20260616T224249-a90573fd/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7eebb7a4-20260616T224249-a90573fd"
+  },
+  "prompt_sha": "12a9cd004f4c90cbedb675f5be89b233bfe20eac49857280a354b13fb6e1e075"
+}

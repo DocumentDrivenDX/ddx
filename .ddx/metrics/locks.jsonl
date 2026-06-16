@@ -1503,3 +1503,4 @@
 {"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":1120772,"acquired_at":"2026-06-16T22:45:17.505594477Z","released_at":"2026-06-16T22:45:17.552638284Z","duration_ms":47}
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":1120772,"acquired_at":"2026-06-16T22:45:17.571176707Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":1120772,"acquired_at":"2026-06-16T22:45:17.571176707Z","released_at":"2026-06-16T22:45:17.678518786Z","duration_ms":107}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1370638,"acquired_at":"2026-06-16T22:51:40.685989779Z"}
