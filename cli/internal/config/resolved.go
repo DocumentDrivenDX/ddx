@@ -69,6 +69,9 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.noChangesVerificationTimeout = workers.ResolveNoChangesVerificationTimeout()
 	r.maxNoChangesBeforeClose = workers.ResolveMaxNoChangesBeforeClose()
 	r.heartbeatInterval = workers.ResolveHeartbeatInterval()
+	r.autoSupersedeClose = workers.ResolveAutoSupersedeClose()
+	r.autoEpicDecompose = workers.ResolveAutoEpicDecompose()
+	r.autoClosureReclassify = workers.ResolveAutoClosureReclassify()
 
 	r.harness = overrides.Harness
 	r.explicitHarness = overrides.Harness != ""
@@ -212,6 +215,9 @@ type ResolvedConfig struct {
 	triagePolicy                       triage.TriagePolicy
 	maxDecompositionDepth              int
 	acQualityMinScore                  float64
+	autoSupersedeClose                 bool
+	autoEpicDecompose                  bool
+	autoClosureReclassify              bool
 }
 
 // requireSealed panics if r was not produced by Resolve / LoadAndResolve.
@@ -253,6 +259,27 @@ func (r ResolvedConfig) MaxNoChangesBeforeClose() int {
 func (r ResolvedConfig) HeartbeatInterval() time.Duration {
 	r.requireSealed()
 	return r.heartbeatInterval
+}
+
+// AutoSupersedeClose reports whether idle-path superseded cascade-close is
+// enabled (work.autoRemediations.autoSupersedeClose, default true).
+func (r ResolvedConfig) AutoSupersedeClose() bool {
+	r.requireSealed()
+	return r.autoSupersedeClose
+}
+
+// AutoEpicDecompose reports whether idle-path auto-decomposition is enabled
+// (work.autoRemediations.autoEpicDecompose, default true).
+func (r ResolvedConfig) AutoEpicDecompose() bool {
+	r.requireSealed()
+	return r.autoEpicDecompose
+}
+
+// AutoClosureReclassify reports whether idle-path closure reclassify is
+// enabled (work.autoRemediations.autoClosureReclassify, default true).
+func (r ResolvedConfig) AutoClosureReclassify() bool {
+	r.requireSealed()
+	return r.autoClosureReclassify
 }
 
 func (r ResolvedConfig) Harness() string {

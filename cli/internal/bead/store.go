@@ -1796,6 +1796,53 @@ func (s *Store) cascadeCloseSuperseeded(closedID string) error {
 	return nil
 }
 
+// RunSupersededCascade runs the same scope-checked cascade-close that
+// Store.Close performs, but out of band: given a superseder bead Y that is
+// already closed, it closes every still-open bead X that is superseded by Y
+// and passes every cascade scope guard. It returns the number of beads closed.
+// Used by the idle-path auto-remediation pass when Diagnose reports
+// superseded_pending_close for an X whose superseder Y closed without the
+// cascade having run (FEAT-010 §Idle-Path Diagnosis and Auto-Remediation).
+// Idempotent: re-running closes nothing new.
+func (s *Store) RunSupersededCascade(supersederID string) (int, error) {
+	if strings.TrimSpace(supersederID) == "" {
+		return 0, fmt.Errorf("bead: RunSupersededCascade requires a superseder id")
+	}
+	all, err := s.ReadAll(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	closed := 0
+	visited := map[string]bool{supersederID: true}
+	for _, x := range all {
+		if visited[x.ID] {
+			continue
+		}
+		if !s.canCascadeCloseSuperseeded(&x, supersederID, all) {
+			continue
+		}
+		visited[x.ID] = true
+		if err := s.SetLifecycleStatus(x.ID, StatusClosed, LifecycleTransitionOptions{
+			ManualClose: true,
+			Reason:      fmt.Sprintf("cascade-close superseded by %s", supersederID),
+			Source:      "Store.RunSupersededCascade",
+		}); err != nil {
+			continue
+		}
+		_ = s.externalizeEvents(x.ID)
+		_ = s.AppendEvent(x.ID, BeadEvent{
+			Kind:      "superseded_close",
+			Summary:   fmt.Sprintf("closed as superseded via %s", supersederID),
+			Body:      fmt.Sprintf("closed_by_cascade_of: %s\nreason: closed_as_superseded_via:%s", supersederID, supersederID),
+			Source:    "Store.RunSupersededCascade",
+			CreatedAt: time.Now().UTC(),
+		})
+		_ = s.RemoveClaimHeartbeat(x.ID)
+		closed++
+	}
+	return closed, nil
+}
+
 // canCascadeCloseSuperseeded checks all scope guards before cascade-closing X.
 // All guards must pass for a bead to be eligible. Reads current state fresh.
 func (s *Store) canCascadeCloseSuperseeded(x *Bead, closedID string, allBeads []Bead) bool {

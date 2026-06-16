@@ -116,6 +116,11 @@ work runs inline in the current process; per ADR-022 there is no separate
 	// for operator-constrained power within which the agent selects the route.
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged")
+	// Idle-path auto-remediation overrides (FEAT-010). Each remediation is on
+	// by default via work.autoRemediations config; these flags disable one.
+	cmd.Flags().Bool("no-auto-supersede-close", false, "Disable idle-path cascade-close of beads superseded by a closed bead")
+	cmd.Flags().Bool("no-auto-epic-decompose", false, "Disable idle-path auto-decomposition of genuinely undecomposed epics")
+	cmd.Flags().Bool("no-auto-closure-reclassify", false, "Disable idle-path closure of misclassified closure-candidate and dead-intermediate beads")
 
 	// Register "ddx work plan", "ddx work focus", "ddx work clear-cooldowns",
 	// "ddx work metrics", "ddx work analyze", and "ddx work status" as

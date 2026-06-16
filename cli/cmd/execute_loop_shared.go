@@ -199,6 +199,36 @@ func optionalFloat64Flag(cmd *cobra.Command, name string, defaultValue float64) 
 	return value
 }
 
+func optionalBoolFlag(cmd *cobra.Command, name string, defaultValue bool) bool {
+	if cmd.Flags().Lookup(name) == nil {
+		return defaultValue
+	}
+	value, err := cmd.Flags().GetBool(name)
+	if err != nil {
+		return defaultValue
+	}
+	return value
+}
+
+// buildIdleAutoRemediationConfig resolves the idle-path auto-remediation
+// toggles: each remediation is enabled when its work.autoRemediations config
+// value (default true) is on AND its --no-auto-* override flag is not set.
+// CLI flags override per-project config.
+func buildIdleAutoRemediationConfig(cmd *cobra.Command, store agent.ExecuteBeadLoopStore, runner agent.AgentRunner, rcfg config.ResolvedConfig, projectRoot string, maxRecoveryCostUSD float64) agent.IdleAutoRemediationConfig {
+	noSupersede := optionalBoolFlag(cmd, "no-auto-supersede-close", false)
+	noDecompose := optionalBoolFlag(cmd, "no-auto-epic-decompose", false)
+	noReclassify := optionalBoolFlag(cmd, "no-auto-closure-reclassify", false)
+	return agent.IdleAutoRemediationConfig{
+		AutoSupersedeClose:    rcfg.AutoSupersedeClose() && !noSupersede,
+		AutoEpicDecompose:     rcfg.AutoEpicDecompose() && !noDecompose,
+		AutoClosureReclassify: rcfg.AutoClosureReclassify() && !noReclassify,
+		MaxRecoveryCostUSD:    maxRecoveryCostUSD,
+		Decompose: func(ctx context.Context, beadID string) (agent.DecomposeResult, error) {
+			return agent.AutoDecomposeEpic(ctx, store, runner, rcfg, projectRoot, beadID)
+		},
+	}
+}
+
 func scrubServerManagedWorkerProcessEnv() {
 	for _, key := range []string{
 		"DDX_PROJECT_ROOT",
@@ -374,6 +404,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		MaxRecoveryCostUSD: spec.MaxRecoveryCostUSD,
 		MaxBeadCostUSD:     spec.MaxBeadCostUSD,
 	})
+	idleAutoRemediation := buildIdleAutoRemediationConfig(cmd, store, qualityRunner, rcfg, projectRoot, spec.MaxRecoveryCostUSD)
 
 	harnessBilledLookup := func(harnessName string) bool {
 		svc, svcErr := agent.ResolvePreflightServiceFromWorkDir(f.WorkingDir)
@@ -708,6 +739,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		ReviewCostCap:                costCap,
 		FinalizeDurableAudit:         f.buildAttemptAuditFinalizer(projectRoot, store),
 		PostLadderExhaustionHook:     recoveryHook,
+		IdleAutoRemediation:          idleAutoRemediation,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)

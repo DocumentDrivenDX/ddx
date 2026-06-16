@@ -247,6 +247,53 @@ type WorkersConfig struct {
 	// string uses the built-in default that matches bead.HeartbeatInterval
 	// (30s today).
 	HeartbeatInterval string `yaml:"heartbeat_interval,omitempty" json:"heartbeat_interval,omitempty"`
+	// AutoRemediations toggles the idle-path auto-remediations the work loop
+	// runs before reporting no ready work (FEAT-010 §Idle-Path Diagnosis and
+	// Auto-Remediation). Each toggle defaults to true when unset.
+	AutoRemediations *AutoRemediationsConfig `yaml:"auto_remediations,omitempty" json:"auto_remediations,omitempty"`
+}
+
+// AutoRemediationsConfig holds the idle-path auto-remediation toggles. Each
+// pointer field is nil-defaults-true: an unset toggle resolves to true. CLI
+// --no-auto-* flags override these per-project values.
+type AutoRemediationsConfig struct {
+	// AutoSupersedeClose cascade-closes beads diagnosed as
+	// superseded_pending_close. Defaults to true.
+	AutoSupersedeClose *bool `yaml:"auto_supersede_close,omitempty" json:"auto_supersede_close,omitempty"`
+	// AutoEpicDecompose dispatches auto-decomposition for genuinely
+	// undecomposed epics. Defaults to true.
+	AutoEpicDecompose *bool `yaml:"auto_epic_decompose,omitempty" json:"auto_epic_decompose,omitempty"`
+	// AutoClosureReclassify closes beads diagnosed as
+	// closure_candidate_misclassified or dead_intermediate_all_children_closed.
+	// Defaults to true.
+	AutoClosureReclassify *bool `yaml:"auto_closure_reclassify,omitempty" json:"auto_closure_reclassify,omitempty"`
+}
+
+// ResolveAutoSupersedeClose reports whether idle-path superseded cascade-close
+// is enabled. Defaults to true when unset.
+func (w *WorkersConfig) ResolveAutoSupersedeClose() bool {
+	if w == nil || w.AutoRemediations == nil || w.AutoRemediations.AutoSupersedeClose == nil {
+		return true
+	}
+	return *w.AutoRemediations.AutoSupersedeClose
+}
+
+// ResolveAutoEpicDecompose reports whether idle-path auto-decomposition is
+// enabled. Defaults to true when unset.
+func (w *WorkersConfig) ResolveAutoEpicDecompose() bool {
+	if w == nil || w.AutoRemediations == nil || w.AutoRemediations.AutoEpicDecompose == nil {
+		return true
+	}
+	return *w.AutoRemediations.AutoEpicDecompose
+}
+
+// ResolveAutoClosureReclassify reports whether idle-path closure reclassify is
+// enabled. Defaults to true when unset.
+func (w *WorkersConfig) ResolveAutoClosureReclassify() bool {
+	if w == nil || w.AutoRemediations == nil || w.AutoRemediations.AutoClosureReclassify == nil {
+		return true
+	}
+	return *w.AutoRemediations.AutoClosureReclassify
 }
 
 // Default values for WorkersConfig resolvers. These mirror the hardcoded

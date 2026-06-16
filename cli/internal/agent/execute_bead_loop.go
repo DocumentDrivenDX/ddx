@@ -182,6 +182,11 @@ type ExecuteBeadLoopRuntime struct {
 	// threshold (>= 2). A nil hook or Attempted=false result falls through to
 	// the existing loop path unchanged.
 	PostLadderExhaustionHook PostLadderExhaustionHook
+	// IdleAutoRemediation configures the idle-path diagnose→remediate→rescan
+	// pass run before the loop reports NoReadyWork (FEAT-010 §Idle-Path
+	// Diagnosis and Auto-Remediation). The zero value disables it, preserving
+	// the legacy idle behavior.
+	IdleAutoRemediation IdleAutoRemediationConfig
 }
 
 func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
@@ -1458,6 +1463,7 @@ type executeBeadLoopState struct {
 	exitReason                 string
 	cleanupLog                 io.Writer
 	attemptStarted             *bool
+	idleRecoverySpentUSD       float64
 }
 
 type executeBeadIterationOutcome struct {
@@ -2316,11 +2322,32 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		}
 
 		result.NoReadyWork = true
+		var idleBreakdown bead.ReadyExecutionBreakdown
+		haveBreakdown := false
 		if diag, ok := w.Store.(readyDiagnoser); ok {
 			if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
+				idleBreakdown = breakdown
+				haveBreakdown = true
 				result.NoReadyWorkDetail = noReadyWorkBreakdownFromLifecycle(breakdown)
 				snapshot := queueSnapshotFromLifecycle(breakdown)
 				result.QueueSnapshot = &snapshot
+			}
+		}
+
+		// Idle-path diagnose→remediate→rescan (FEAT-010 §Idle-Path Diagnosis
+		// and Auto-Remediation): before declaring no ready work, diagnose every
+		// non-ready bead and fire matching idle-path remediators. If at least
+		// one remediation succeeded, re-scan immediately without sleeping —
+		// those mutations may unblock downstream work.
+		if haveBreakdown && runtime.IdleAutoRemediation.enabled() {
+			recoverySpent := state.idleRecoverySpentUSD
+			remediated := w.runIdleAutoRemediation(ctx, runtime, idleBreakdown, emit, &recoverySpent)
+			state.idleRecoverySpentUSD = recoverySpent
+			if remediated {
+				result.NoReadyWork = false
+				clearTransientCandidateSkips()
+				resetPreClaimIdleStreak()
+				return executeBeadIterationOutcome{Continue: true}, nil
 			}
 		}
 		if applyStop(work.StopInput{
