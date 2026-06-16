@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260616T084801-2515093e",
+  "bead_id": "ddx-67cdc109",
+  "base_rev": "76e459c5487563f71d536a39758ab075e16eb78f",
+  "created_at": "2026-06-16T08:48:08.415027837Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-67cdc109",
+    "title": "Classify land coordination failures without implementation reruns: part 2",
+    "description": "PROBLEM\nParent bead ddx-bced4e39 is too broad for one execution pass. This child owns part 2 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nNiflheim land/ref/index/evidence-staging failures were recorded as overall `execution_failed` even when the candidate had succeeded or landed. The worker retried implementation work instead of reconciling land/evidence state or sending the bead to operator attention, wasting route attempts and confusing system failure with model-quality failure.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_orchestrator.go:305-309` wraps `LandingAdvancer` errors as generic `land advancer` errors.\n- `cli/internal/agent/failclass/failclass.go:103-142` contains the normative table that only `OutcomeGenuineFailure` can escalate, but execute-bead/work land outcomes are not consistently reduced to this typed table before retry/escalation decisions.\n\nPROPOSED FIX\nAdd self-contained Niflheim-style land coordination fixtures or table-driven cases under `cli/internal/agent/...` for `cannot lock ref refs/heads/main` after a candidate or merge is already landed, and for `landing worktree has staged changes after waiting 2s` caused by generated DDx evidence. Classify these as land/ref/index/evidence coordination outcomes, not implementation/model failures. If the candidate commit or merge is already an ancestor of the target, reconcile and close/continue without rerunning implementation. If the landing worktree is dirty with generated evidence or DDx metadata, retry/preserve the land/evidence step or move to operator attention according to existing reliability policy.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`; reuse or align with it.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`; this is typed classification and reconciliation behavior, not another timeout implementation.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related: `ddx-e1a576a7`, `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineer\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `TestExecuteBeadResult_NiflheimEvidence_LandCoordinationDecisionAudit` proves result JSON/event bodies include `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, land/reconcile status, and any review status available for the land coordination scenarios.\n- Existing behavior from `ddx-2965925e` and `ddx-b2846610` remains covered by reuse/alignment with their helpers or by waiting on those dependencies; this bead does not add a duplicate low-level index-contention or timeout implementation.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `TestExecuteBeadResult_NiflheimEvidence_LandCoordinationDecisionAudit` proves result JSON/event bodies include `failure_class`, `retry_action`, `escalation_count`, requested/actual routing facts, land/reconcile status, and any review status available for the land coordination scenarios.\n2. Existing behavior from `ddx-2965925e` and `ddx-b2846610` remains covered by reuse/alignment with their helpers or by waiting on those dependencies; this bead does not add a duplicate low-level index-contention or timeout implementation.",
+    "parent": "ddx-bced4e39",
+    "labels": [
+      "adr:024",
+      "area:agent",
+      "area:execute-bead",
+      "area:review",
+      "area:workers",
+      "decomposed",
+      "incident:niflheim-2026-06-06",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "prevention",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260616T084349-8105",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode readiness classification result: json: cannot unmarshal array into Go struct field preClaimIntakePromptRewrite.rewrite.acceptance of type string\",\"fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4d3ef910fa5fa4ed32056aae58b6a22d70d8b7522ba884a15b06d485686c716e\"}",
+          "created_at": "2026-06-16T08:46:00.467461338Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 2160
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T084801-2515093e",
+    "prompt": ".ddx/executions/20260616T084801-2515093e/prompt.md",
+    "manifest": ".ddx/executions/20260616T084801-2515093e/manifest.json",
+    "result": ".ddx/executions/20260616T084801-2515093e/result.json",
+    "checks": ".ddx/executions/20260616T084801-2515093e/checks.json",
+    "usage": ".ddx/executions/20260616T084801-2515093e/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-67cdc109-20260616T084801-2515093e"
+  },
+  "prompt_sha": "ca061fec9eedc3e42c98cc203b53788ab8bbde7fce53fd5222181599712fe033"
+}
