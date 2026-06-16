@@ -1,9 +1,13 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 )
 
 // TestMaterializeWorktreeSkills_RemovesBrokenLinks simulates an execute-bead
@@ -12,6 +16,7 @@ import (
 // materializeWorktreeSkills runs, no broken symlinks remain in those
 // directories (so the harness cannot emit "failed to stat" errors).
 func TestMaterializeWorktreeSkills_RemovesBrokenLinks(t *testing.T) {
+	setWorktreeSkillTestCache(t)
 	wt := t.TempDir()
 
 	for _, rel := range []string{".agents/skills", ".claude/skills"} {
@@ -27,7 +32,7 @@ func TestMaterializeWorktreeSkills_RemovesBrokenLinks(t *testing.T) {
 		}
 	}
 
-	if err := materializeWorktreeSkills(wt); err != nil {
+	if err := materializeWorktreeSkills("", wt); err != nil {
 		t.Fatalf("materializeWorktreeSkills: %v", err)
 	}
 
@@ -52,6 +57,7 @@ func TestMaterializeWorktreeSkills_RemovesBrokenLinks(t *testing.T) {
 // whose targets do resolve (e.g. correctly re-materialized by install) are
 // left untouched.
 func TestMaterializeWorktreeSkills_PreservesValidLinks(t *testing.T) {
+	setWorktreeSkillTestCache(t)
 	wt := t.TempDir()
 
 	// Create a real target and link to it.
@@ -68,7 +74,7 @@ func TestMaterializeWorktreeSkills_PreservesValidLinks(t *testing.T) {
 		t.Fatalf("symlink: %v", err)
 	}
 
-	if err := materializeWorktreeSkills(wt); err != nil {
+	if err := materializeWorktreeSkills("", wt); err != nil {
 		t.Fatalf("materializeWorktreeSkills: %v", err)
 	}
 
@@ -90,6 +96,7 @@ func TestMaterializeWorktreeSkills_PreservesValidLinks(t *testing.T) {
 // gracefully: broken symlinks are removed and no error is returned. This
 // confirms that resolveBrokenSkillLink (deleted in FEAT-015) is not needed.
 func TestExecuteBead_WorktreeFromPreMigrationCommit(t *testing.T) {
+	setWorktreeSkillTestCache(t)
 	wt := t.TempDir()
 
 	// Simulate pre-migration state: symlinks in .agents/skills/ and
@@ -112,7 +119,7 @@ func TestExecuteBead_WorktreeFromPreMigrationCommit(t *testing.T) {
 		t.Fatalf("mkdir real skill: %v", err)
 	}
 
-	if err := materializeWorktreeSkills(wt); err != nil {
+	if err := materializeWorktreeSkills("", wt); err != nil {
 		t.Fatalf("materializeWorktreeSkills: %v", err)
 	}
 
@@ -128,4 +135,68 @@ func TestExecuteBead_WorktreeFromPreMigrationCommit(t *testing.T) {
 	if _, err := os.Stat(realSkillDir); err != nil {
 		t.Errorf("real skill directory was removed: %v", err)
 	}
+}
+
+func TestMaterializeWorktreeSkills_RecreatesBuiltinDDxAdapters(t *testing.T) {
+	setWorktreeSkillTestCache(t)
+	wt := t.TempDir()
+
+	if err := materializeWorktreeSkills("", wt); err != nil {
+		t.Fatalf("materializeWorktreeSkills: %v", err)
+	}
+
+	for _, rel := range []string{".agents/skills/ddx", ".claude/skills/ddx"} {
+		skillPath := filepath.Join(wt, rel, "bead-lifecycle", "SKILL.md")
+		if _, err := os.Stat(skillPath); err != nil {
+			t.Fatalf("expected built-in ddx skill adapter %s: %v", skillPath, err)
+		}
+	}
+}
+
+func TestMaterializeWorktreeSkills_RecreatesLockedPluginAdapters(t *testing.T) {
+	setWorktreeSkillTestCache(t)
+	projectRoot := t.TempDir()
+	wt := t.TempDir()
+	cachePath := filepath.Join(t.TempDir(), "cache", "plugins", "example", "1.0.0")
+	skillDir := filepath.Join(cachePath, "skills", "example-skill")
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatalf("mkdir skill cache: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\nname: example-skill\ndescription: Example skill.\n---\n"), 0o644); err != nil {
+		t.Fatalf("write skill: %v", err)
+	}
+	if err := os.MkdirAll(ddxroot.InTree(projectRoot), 0o755); err != nil {
+		t.Fatalf("mkdir project ddx: %v", err)
+	}
+	lock := &registry.PluginLock{Plugins: []registry.PluginLockEntry{{
+		Name:      "example",
+		Version:   "1.0.0",
+		Type:      registry.PackageTypePlugin,
+		Source:    "https://example.invalid/example",
+		CachePath: cachePath,
+	}}}
+	if err := registry.SaveProjectPluginLock(testContext(t), projectRoot, lock); err != nil {
+		t.Fatalf("save plugin lock: %v", err)
+	}
+
+	if err := materializeWorktreeSkills(projectRoot, wt); err != nil {
+		t.Fatalf("materializeWorktreeSkills: %v", err)
+	}
+
+	for _, rel := range []string{".agents/skills/example-skill", ".claude/skills/example-skill"} {
+		skillPath := filepath.Join(wt, rel, "SKILL.md")
+		if _, err := os.Stat(skillPath); err != nil {
+			t.Fatalf("expected locked plugin skill adapter %s: %v", skillPath, err)
+		}
+	}
+}
+
+func setWorktreeSkillTestCache(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg-data"))
+}
+
+func testContext(t *testing.T) context.Context {
+	t.Helper()
+	return context.Background()
 }

@@ -993,7 +993,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	// Repair project-local skill symlinks whose targets do not resolve inside
 	// the freshly created worktree.
-	_ = materializeWorktreeSkills(wtPath)
+	_ = materializeWorktreeSkills(projectRoot, wtPath)
 
 	// Prepare artifacts (context load, prompt generation).
 	artifacts, beadCtx, err := prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev, rcfg, runtime)
