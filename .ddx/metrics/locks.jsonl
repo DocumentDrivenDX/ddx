@@ -1582,3 +1582,12 @@
 {"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2240207,"acquired_at":"2026-06-16T23:43:59.928141375Z","released_at":"2026-06-16T23:43:59.961975531Z","duration_ms":33}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2240207,"acquired_at":"2026-06-16T23:43:59.332248727Z","released_at":"2026-06-16T23:43:59.962229298Z","duration_ms":629}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.027464558Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.460263101Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.460263101Z","released_at":"2026-06-16T23:44:47.491535665Z","duration_ms":31}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.027464558Z","released_at":"2026-06-16T23:44:47.491743539Z","duration_ms":464}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.624820008Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.624820008Z","released_at":"2026-06-16T23:44:47.624901007Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.877595174Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.877595174Z","released_at":"2026-06-16T23:44:47.918674859Z","duration_ms":41}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":2240245,"acquired_at":"2026-06-16T23:44:47.934276954Z"}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2313392,"acquired_at":"2026-06-16T23:50:30.339464676Z"}
