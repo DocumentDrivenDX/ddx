@@ -1,0 +1,284 @@
+{
+  "attempt_id": "20260616T171925-7c727376",
+  "bead_id": "ddx-73857d3f",
+  "base_rev": "0d1c22d897888ce68c1944b850d859187b104324",
+  "created_at": "2026-06-16T17:19:33.149675756Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-73857d3f",
+    "title": "Strip dangling deps during tracker merge",
+    "description": "PROBLEM: ddx can create phantom dependency edges during tracker conflict resolution when dependency rows are merged even though the target bead record is absent from both active beads.jsonl data and the archive. These dangling dependencies keep affected beads from readiness forever because queue classification treats missing dependency targets as unsatisfied.\n\nROOT CAUSE WITH FILE:LINE: cli/internal/bead/merge.go:162 unions dependency lists with mergeObjectLists(dependencyMergeKey, ...) but does not perform referential-integrity validation against the merged active bead set plus archived bead IDs. Parent dependency edges can merge in while child records from a dropped branch do not, leaving dependencies[].depends_on_id values with no target record.\n\nPROPOSED FIX: After dependency union in MergeTrackerConflictJSONL, filter each bead's Dependencies so any dependency whose depends_on_id is absent from the merged active bead ID set and the archive sibling ID set is removed. Mirror the archive-aware ID loading used by the existing doctor dangling_dep repair, or route the merged result through a shared archive-aware referential-integrity pass if one already exists locally.\n\nNON-SCOPE: The doctor dangling_dep finding and Store.updateBead guard are already landed; do not redo them. Do not change readiness semantics here. Do not address import-time dangling deps or worktree-prefix ID contamination in this child bead.\n\nCONTEXT: Cross-machine convergence already relies on doctor --fix bumping updated_at and the supervisor union resolver keeping newest-updated_at records, so pruned records propagate. This child is only about stopping new phantoms at the merge layer.",
+    "acceptance": "1. Add TestMergeTrackerConflictJSONL_StripsDanglingDependenciesArchiveAware covering cli/internal/bead/merge.go: it feeds a merge where a bead has a dependency whose target is absent from the merged active set and archive, then asserts the merged output removes that dependency.\n2. The same test, or TestMergeTrackerConflictJSONL_PreservesArchiveBackedDependencies, asserts a dependency whose target exists only in the archive sibling is preserved.\n3. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-6bd07a26",
+    "labels": [
+      "area:bead",
+      "kind:data-integrity",
+      "prevention",
+      "reliability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-16T14:42:03.936544387Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260616T143413-6aeb0c0f\",\"bead_id\":\"ddx-73857d3f\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-16T14:42:05.877394986Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "worker-20260616T142027-e325",
+          "body": "{\"base_rev\":\"da024f5744354fa7ef032a00c8febda44524182f\",\"classification\":\"transport\",\"detail\":\"signal: terminated\",\"rationale\":\"attempt ended with subprocess termination (detail/error: signal: terminated) and no evidence of bead-owned test failure, merge conflict, quota, blocker, or already-satisfied work\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"85a88a23825a605bdc019b19a4e724a1d22100c3\",\"session_id\":\"eb-6a6c9b4d\",\"status\":\"execution_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-16T14:42:42.435294125Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "transport: release_claim_retry"
+        },
+        {
+          "actor": "worker-20260616T142027-e325",
+          "body": "signal: terminated\npowerClass=standard\ndecision_audit={\"failure_class\":\"transport\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\nresult_rev=85a88a23825a605bdc019b19a4e724a1d22100c3\nbase_rev=da024f5744354fa7ef032a00c8febda44524182f\noutcome_reason=transport",
+          "created_at": "2026-06-16T14:42:42.478654919Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T144425-24ef runtime=2m44s pid=3952208 reason=stop",
+          "created_at": "2026-06-16T14:47:09.501245729Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T144743-afcc",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Well-formed bead: ROOT CAUSE pinned to cli/internal/bead/merge.go:162 with mechanism, PROPOSED FIX is algorithm-level (filter after union, mirror archive-aware ID load), NON-SCOPE prevents scope creep onto doctor/readiness/import layers. AC names two specific TestFoo functions, covers both strip and preserve cases, ends with go test + lefthook gate. Prior attempt is transport/signal-terminated only—no logic failure or implementation blocker. One minor gap: deps not explicitly stated as 'no deps', costing one criterion point.\",\"fingerprint\":\"8ebb3b5036b6088b599a7deb5e2a36e3b48314f151737090ccde2ec14e6e0289\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"8ebb3b5036b6088b599a7deb5e2a36e3b48314f151737090ccde2ec14e6e0289\"}",
+          "created_at": "2026-06-16T14:48:42.903346217Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "worker-20260616T145221-c071",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-73857d3f\",\"fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\"}",
+          "created_at": "2026-06-16T14:53:44.106084566Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "worker-20260616T145221-c071",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-73857d3f\",\"fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\"}",
+          "created_at": "2026-06-16T14:59:27.461263496Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T145221-c071 runtime=7m25s pid=4044158 reason=stop",
+          "created_at": "2026-06-16T14:59:45.964337413Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T151718-de3f",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Root cause is precisely identified at merge.go:162 (confirmed), fix approach is unambiguous (filter deps post-union), archive-aware pattern loadArchiveBeadIDs exists in doctor.go and is reusable, named test functions are given, gate commands are correct. Prior attempt was a transport failure (signal: terminated) not a code rejection. The only latitude left to the implementer is whether to add an archiveIDs parameter to MergeTrackerConflictJSONL or do a post-processing pass at the call site in bead.go — both paths are clear from the existing codebase and the bead's 'mirror or route' language covers both without ambiguity.\",\"fingerprint\":\"7db55f610eafbb7bcc420b6301b48ee9f43fb484d87ca1d43e2ce4209ed6966d\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"7db55f610eafbb7bcc420b6301b48ee9f43fb484d87ca1d43e2ce4209ed6966d\"}",
+          "created_at": "2026-06-16T15:19:07.691855674Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T151718-de3f runtime=12m23s pid=40022 reason=stop",
+          "created_at": "2026-06-16T15:29:42.147504123Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T153017-74b1 runtime=13m55s pid=183530 reason=stop",
+          "created_at": "2026-06-16T15:44:13.100298068Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T154448-3831",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-73857d3f\",\"fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\"}",
+          "created_at": "2026-06-16T15:47:42.191109547Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "worker-20260616T154448-3831",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-73857d3f\",\"fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\"}",
+          "created_at": "2026-06-16T15:50:54.705241674Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T154448-3831 runtime=7m22s pid=371584 reason=stop",
+          "created_at": "2026-06-16T15:52:10.037476888Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T155244-cbda runtime=34s pid=504278 reason=stop",
+          "created_at": "2026-06-16T15:53:18.209914917Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T160524-413d",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-73857d3f\",\"fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"17212770f8546990ff54a244ea08579b61373e626b7fba07254c250072598f46\"}",
+          "created_at": "2026-06-16T16:07:42.647799979Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T160524-413d runtime=4m13s pid=651419 reason=stop",
+          "created_at": "2026-06-16T16:09:37.914251872Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T161333-3620 runtime=5m26s pid=800027 reason=stop",
+          "created_at": "2026-06-16T16:18:59.462642097Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T162205-9d19 runtime=1m55s pid=946363 reason=stop",
+          "created_at": "2026-06-16T16:24:00.948817997Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T163159-8e2c runtime=46s pid=1046036 reason=stop",
+          "created_at": "2026-06-16T16:32:44.742929352Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T163258-1428",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Well-specified atomic bead with confirmed root cause at merge.go:163, clear fix scope, named test functions, and complete AC. Prior attempt was a transport kill (signal: terminated, outcome_reason=transport), not a code logic failure — safe to retry. Archive-aware ID loading pattern already exists in store.go (archivePartner() lines 2879-2881) to guide the implementation. No ambiguity or external blockers.\",\"fingerprint\":\"ce156aba6b7ff37b6a41b8747c590f92b5a02b0b117c6eae833bfe502e1eb395\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"ce156aba6b7ff37b6a41b8747c590f92b5a02b0b117c6eae833bfe502e1eb395\"}",
+          "created_at": "2026-06-16T16:34:20.974053524Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T163258-1428 runtime=2m18s pid=1074146 reason=stop",
+          "created_at": "2026-06-16T16:35:16.781262089Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T163927-73ef",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Root cause is verified at cli/internal/bead/merge.go:162 where mergeObjectLists runs with no referential-integrity filter. The fix pattern is concrete — doctor.go:263 already has loadArchiveBeadIDs to mirror. Named test functions are specific and the gate commands are explicit. Prior attempt was a transport failure (signal: terminated), not a logic blocker. The only quality gap is missing a phase:N label, which does not block execution.\",\"fingerprint\":\"048559d9eaf549237f731b03181a4d9c1a90c40a98fa62201eca6b148940f5f5\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"048559d9eaf549237f731b03181a4d9c1a90c40a98fa62201eca6b148940f5f5\"}",
+          "created_at": "2026-06-16T16:40:51.05292161Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T163927-73ef runtime=2m3s pid=1192601 reason=stop",
+          "created_at": "2026-06-16T16:41:30.43517414Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T164704-af0f runtime=33s pid=1294045 reason=stop",
+          "created_at": "2026-06-16T16:47:37.659329439Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T164748-f3fa runtime=35s pid=1318026 reason=stop",
+          "created_at": "2026-06-16T16:48:23.497103271Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260616T165730-318b",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Root cause is pinned to a real, verified line (merge.go:163 — the bead says 162, the dependency switch is at 162/163, same block). The archive-aware ID loading pattern (loadArchiveBeadIDs, doctor.go:267) and dangling-dep repair logic (applyDanglingDepRepair, doctor.go:576) both exist for reference. Test function names are new — no conflicts in merge_test.go. Prior attempt was a transport failure (signal: terminated, failure_class: transport), not a logic or code rejection; no semantic blocker survives. The implementation decision of how to surface archive IDs into MergeTrackerConflictJSONL (extend signature vs. post-merge filter at the call site) is left to the agent, which is appropriate scope — both approaches are viable and the AC tests will validate whichever is chosen.\",\"fingerprint\":\"0b33917bc53a810ed6332327c1928216fc50fd85d7499daacb7a589839248e7a\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"0b33917bc53a810ed6332327c1928216fc50fd85d7499daacb7a589839248e7a\"}",
+          "created_at": "2026-06-16T16:59:21.78200154Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T165730-318b runtime=12m8s pid=1491315 reason=stop",
+          "created_at": "2026-06-16T17:09:39.204325257Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude-tui\",\"resolved_model\":\"sonnet-4.6\",\"route_reason\":\"policy=default; score=94.0\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-16T17:09:39.803502968Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=claude-tui model=sonnet-4.6 reason=policy=default; score=94.0"
+        },
+        {
+          "actor": "worker-20260616T171546-d856",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Description is accurate: merge.go:162-163 confirms dependency union via mergeObjectLists with no referential-integrity check. loadArchiveBeadIDs already exists in doctor.go:267 and is reusable. MergeTrackerConflictJSONL takes raw bytes so archive IDs must be threaded in (caller at cmd/bead.go:2054 knows outPath and can supply them, or the function gains an optional archiveIDs param). Both accepted approaches are hinted in the bead. Prior attempt failed transport-only (signal: terminated); no code-level blocker. Named test functions are specific and checkable. AC is complete.\",\"fingerprint\":\"3b1bd20500c6c502c13fc5d299352839418842d72e9f730fdbd5f4a934b37a17\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3b1bd20500c6c502c13fc5d299352839418842d72e9f730fdbd5f4a934b37a17\"}",
+          "created_at": "2026-06-16T17:17:25.15220098Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T171925-7c727376",
+    "prompt": ".ddx/executions/20260616T171925-7c727376/prompt.md",
+    "manifest": ".ddx/executions/20260616T171925-7c727376/manifest.json",
+    "result": ".ddx/executions/20260616T171925-7c727376/result.json",
+    "checks": ".ddx/executions/20260616T171925-7c727376/checks.json",
+    "usage": ".ddx/executions/20260616T171925-7c727376/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-73857d3f-20260616T171925-7c727376"
+  },
+  "prompt_sha": "41af6fb94eccc7334abfd40f172f69f227ec57b8601cb00a7988212f7e81f796"
+}
