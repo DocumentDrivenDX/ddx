@@ -16,6 +16,7 @@ import (
 // and fresh run-state records into one project-scoped view so operator-facing
 // status surfaces can agree on what is actively running.
 type Record struct {
+	ProjectRoot    string    `json:"project_root,omitempty"`
 	WorkerID       string    `json:"worker_id,omitempty"`
 	BeadID         string    `json:"bead_id,omitempty"`
 	AttemptID      string    `json:"attempt_id,omitempty"`
@@ -74,6 +75,7 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 				continue
 			}
 			add(Record{
+				ProjectRoot:    projectRoot,
 				BeadID:         b.ID,
 				WorkerID:       lease.Owner,
 				Owner:          lease.Owner,
@@ -96,6 +98,7 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 				continue
 			}
 			add(Record{
+				ProjectRoot:    projectRoot,
 				WorkerID:       rec.WorkerID,
 				BeadID:         rec.CurrentBead,
 				AttemptID:      rec.AttemptID,
@@ -117,6 +120,7 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 				continue
 			}
 			add(Record{
+				ProjectRoot:    projectRoot,
 				BeadID:         state.BeadID,
 				AttemptID:      state.AttemptID,
 				Source:         "run-state",
@@ -125,6 +129,31 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 		}
 	}
 
+	return snapshotFromRecords(byKey), nil
+}
+
+// Merge reconciles one or more project-scoped snapshots into one host-scoped
+// view. ProjectRoot participates in the active-work key so equal bead IDs from
+// different repositories do not collapse into one record.
+func Merge(snapshots ...Snapshot) Snapshot {
+	byKey := make(map[string]Record)
+	for _, snap := range snapshots {
+		for _, rec := range snap.Records {
+			key := activeWorkKey(rec)
+			if key == "" {
+				continue
+			}
+			if existing, ok := byKey[key]; ok {
+				byKey[key] = mergeRecord(existing, rec)
+				continue
+			}
+			byKey[key] = rec
+		}
+	}
+	return snapshotFromRecords(byKey)
+}
+
+func snapshotFromRecords(byKey map[string]Record) Snapshot {
 	records := make([]Record, 0, len(byKey))
 	beadIDs := make(map[string]struct{})
 	for _, rec := range byKey {
@@ -136,16 +165,19 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 
 	sort.SliceStable(records, func(i, j int) bool {
 		if records[i].LastActivityAt.Equal(records[j].LastActivityAt) {
-			if records[i].BeadID == records[j].BeadID {
-				if records[i].AttemptID == records[j].AttemptID {
-					if records[i].WorkerID == records[j].WorkerID {
-						return records[i].Source < records[j].Source
+			if records[i].ProjectRoot == records[j].ProjectRoot {
+				if records[i].BeadID == records[j].BeadID {
+					if records[i].AttemptID == records[j].AttemptID {
+						if records[i].WorkerID == records[j].WorkerID {
+							return records[i].Source < records[j].Source
+						}
+						return records[i].WorkerID < records[j].WorkerID
 					}
-					return records[i].WorkerID < records[j].WorkerID
+					return records[i].AttemptID < records[j].AttemptID
 				}
-				return records[i].AttemptID < records[j].AttemptID
+				return records[i].BeadID < records[j].BeadID
 			}
-			return records[i].BeadID < records[j].BeadID
+			return records[i].ProjectRoot < records[j].ProjectRoot
 		}
 		return records[i].LastActivityAt.After(records[j].LastActivityAt)
 	})
@@ -160,17 +192,18 @@ func Collect(projectRoot string, store *bead.Store, now time.Time) (Snapshot, er
 		Count:   len(records),
 		BeadIDs: beadList,
 		Records: records,
-	}, nil
+	}
 }
 
 func activeWorkKey(rec Record) string {
+	prefix := rec.ProjectRoot + "|"
 	switch {
 	case rec.BeadID != "":
-		return "bead:" + rec.BeadID
+		return prefix + "bead:" + rec.BeadID
 	case rec.AttemptID != "":
-		return "attempt:" + rec.AttemptID
+		return prefix + "attempt:" + rec.AttemptID
 	case rec.WorkerID != "":
-		return "worker:" + rec.WorkerID
+		return prefix + "worker:" + rec.WorkerID
 	default:
 		return ""
 	}
@@ -178,6 +211,9 @@ func activeWorkKey(rec Record) string {
 
 func mergeRecord(dst, src Record) Record {
 	if src.LastActivityAt.After(dst.LastActivityAt) {
+		if src.ProjectRoot != "" {
+			dst.ProjectRoot = src.ProjectRoot
+		}
 		if src.BeadID != "" {
 			dst.BeadID = src.BeadID
 		}
@@ -198,6 +234,9 @@ func mergeRecord(dst, src Record) Record {
 		}
 		dst.LastActivityAt = src.LastActivityAt
 		return dst
+	}
+	if dst.ProjectRoot == "" {
+		dst.ProjectRoot = src.ProjectRoot
 	}
 	if dst.BeadID == "" {
 		dst.BeadID = src.BeadID

@@ -106,11 +106,15 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 		allProjects,
 		now,
 	)
-	active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now)
+	active, err := collectWorkStatusActiveWork(projectRoot, liveWorkers, allProjects, now)
 	if err != nil {
 		return fmt.Errorf("work status: active work query: %w", err)
 	}
-	liveWorkers = enrichWorkersWithActiveWork(liveWorkers, active, projectRoot)
+	activeWorkProjectRoot := projectRoot
+	if allProjects {
+		activeWorkProjectRoot = ""
+	}
+	liveWorkers = enrichWorkersWithActiveWork(liveWorkers, active, activeWorkProjectRoot)
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
@@ -127,6 +131,43 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 	}
 	writeWorkStatusText(out, report)
 	return nil
+}
+
+func collectWorkStatusActiveWork(projectRoot string, workers []workerstatus.LiveWorker, allProjects bool, now time.Time) (activework.Snapshot, error) {
+	if !allProjects {
+		return collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now)
+	}
+	roots := workStatusProjectRoots(projectRoot, workers)
+	snapshots := make([]activework.Snapshot, 0, len(roots))
+	for _, root := range roots {
+		snap, err := collectActiveWorkSnapshot(root, bead.NewStore(resolveBeadStoreRoot(root)), now)
+		if err != nil {
+			return activework.Snapshot{}, err
+		}
+		snapshots = append(snapshots, snap)
+	}
+	return activework.Merge(snapshots...), nil
+}
+
+func workStatusProjectRoots(projectRoot string, workers []workerstatus.LiveWorker) []string {
+	var roots []string
+	add := func(root string) {
+		root = strings.TrimSpace(root)
+		if root == "" {
+			return
+		}
+		for _, existing := range roots {
+			if workerstatus.SamePath(existing, root) {
+				return
+			}
+		}
+		roots = append(roots, root)
+	}
+	add(projectRoot)
+	for _, worker := range workers {
+		add(worker.ProjectRoot)
+	}
+	return roots
 }
 
 func (f *CommandFactory) workerScanner() workerStatusScanner {
@@ -229,10 +270,12 @@ func enrichWorkersWithActiveWork(workers []workerstatus.LiveWorker, active activ
 	byAttemptID := make(map[string]activework.Record, len(active.Records))
 	for _, rec := range active.Records {
 		if rec.WorkerID != "" {
-			byWorkerID[rec.WorkerID] = rec
+			byWorkerID[activeWorkLookupKey(rec.ProjectRoot, rec.WorkerID)] = rec
+			byWorkerID[activeWorkLookupKey("", rec.WorkerID)] = rec
 		}
 		if rec.AttemptID != "" {
-			byAttemptID[rec.AttemptID] = rec
+			byAttemptID[activeWorkLookupKey(rec.ProjectRoot, rec.AttemptID)] = rec
+			byAttemptID[activeWorkLookupKey("", rec.AttemptID)] = rec
 		}
 	}
 	for i := range workers {
@@ -242,10 +285,16 @@ func enrichWorkersWithActiveWork(workers []workerstatus.LiveWorker, active activ
 		}
 		rec, ok := activework.Record{}, false
 		if workerID := workerIDFromCommand(w.Command); workerID != "" {
-			rec, ok = byWorkerID[workerID]
+			rec, ok = byWorkerID[activeWorkLookupKey(w.ProjectRoot, workerID)]
+			if !ok {
+				rec, ok = byWorkerID[activeWorkLookupKey("", workerID)]
+			}
 		}
 		if !ok && w.AttemptID != "" {
-			rec, ok = byAttemptID[w.AttemptID]
+			rec, ok = byAttemptID[activeWorkLookupKey(w.ProjectRoot, w.AttemptID)]
+			if !ok {
+				rec, ok = byAttemptID[activeWorkLookupKey("", w.AttemptID)]
+			}
 		}
 		if !ok {
 			continue
@@ -264,6 +313,10 @@ func enrichWorkersWithActiveWork(workers []workerstatus.LiveWorker, active activ
 		}
 	}
 	return workers
+}
+
+func activeWorkLookupKey(projectRoot, id string) string {
+	return projectRoot + "|" + id
 }
 
 func workerIDFromCommand(command string) string {
