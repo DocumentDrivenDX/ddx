@@ -35,7 +35,9 @@ func executeRootCommand(rootCmd *cobra.Command, ctx context.Context, stop func()
 	cancelAnnounce := newGracefulCancelAnnouncer(rootCmd.ErrOrStderr(), stop)
 
 	done := make(chan struct{})
+	watcherDone := make(chan struct{})
 	go func() {
+		defer close(watcherDone)
 		select {
 		case <-ctx.Done():
 			cancelAnnounce()
@@ -45,6 +47,7 @@ func executeRootCommand(rootCmd *cobra.Command, ctx context.Context, stop func()
 
 	err := rootCmd.ExecuteContext(ctx)
 	close(done)
+	<-watcherDone
 	if ctx.Err() != nil {
 		cancelAnnounce()
 	}

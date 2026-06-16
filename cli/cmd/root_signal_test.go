@@ -92,3 +92,24 @@ func TestExecuteRootCommand_NormalCompletionDoesNotPrintCancelMessage(t *testing
 	require.NoError(t, err)
 	assert.Empty(t, stderr.String())
 }
+
+func TestExecuteRootCommand_CancelAfterNormalCompletionDoesNotPrintCancelMessage(t *testing.T) {
+	root := &cobra.Command{
+		Use:           "ddx",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := executeRootCommand(root, ctx, nil)
+	cancel()
+
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+}
