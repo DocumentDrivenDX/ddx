@@ -14,13 +14,14 @@ type heartbeatStore interface {
 // on a background goroutine at the given interval. When reporter is non-nil,
 // reporter.OnTick is invoked after each TouchClaimHeartbeat so callers can
 // mirror the same liveness signal to a worker-status sidecar and the
-// optional server probe without rewriting the bead tracker. The goroutine
-// is stopped and waited for before WithHeartbeat returns.
+// optional server probe without rewriting the bead tracker.
 func WithHeartbeat[T any](ctx context.Context, beadID string, interval time.Duration, store heartbeatStore, reporter LivenessReporter, fn func() (T, error)) (T, error) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	return withHeartbeatCh(ctx, beadID, ticker.C, store, reporter, fn)
 }
+
+var heartbeatStopWait = 250 * time.Millisecond
 
 // withHeartbeatCh is the injectable variant used by tests to supply a stub tick channel.
 func withHeartbeatCh[T any](ctx context.Context, beadID string, tickCh <-chan time.Time, store heartbeatStore, reporter LivenessReporter, fn func() (T, error)) (T, error) {
@@ -33,7 +34,10 @@ func withHeartbeatCh[T any](ctx context.Context, beadID string, tickCh <-chan ti
 			select {
 			case <-hbCtx.Done():
 				return
-			case tick := <-tickCh:
+			case tick, ok := <-tickCh:
+				if !ok {
+					return
+				}
 				_ = store.TouchClaimHeartbeat(beadID)
 				if reporter != nil {
 					reporter.OnTick(tick)
@@ -43,6 +47,14 @@ func withHeartbeatCh[T any](ctx context.Context, beadID string, tickCh <-chan ti
 	}()
 	result, err := fn()
 	hbCancel()
-	wg.Wait()
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(heartbeatStopWait):
+	}
 	return result, err
 }
