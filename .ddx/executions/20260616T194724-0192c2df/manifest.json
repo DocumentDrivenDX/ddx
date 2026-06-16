@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260616T194724-0192c2df",
+  "bead_id": "ddx-7608f739",
+  "base_rev": "ae29aa614147aa946ba4349050256d06295984fe",
+  "created_at": "2026-06-16T19:47:31.654313901Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7608f739",
+    "title": "server: align startup reconcile tests with production worker path",
+    "description": "PROBLEM\nExisting startup reconcile tests can pass while the production worker manager path remains broken, because they primarily exercise fake-controller replacement behavior rather than the real worker/status/reconcile integration used by `ddx worker status --json` after a service restart.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/server_startup_reconcile_test.go:96-204 covers fake controller startup replacement, but there is no paired production-path assertion proving terminated desired workers are replaced in the same path used by service restart and worker status.\n- cli/internal/server/server.go:360-381 invokes reconcileDesiredWorkersAfterStartup from server startup, but current coverage does not make that startup reconcile observable and bounded in the production path.\n\nPROPOSED FIX\nExtend or pair the existing replacement test with production-path assertions that exercise the startup reconcile entrypoint, confirm bounded/observable reconcile behavior, and verify status output reflects only the intended desired workers.\n\nNON-SCOPE\nDo not implement GraphQL worker count/cap changes from ddx-c713d75e. Do not change bead claim semantics or Fizeau routing. Do not remove valid desired worker state for active projects such as /Users/erik/Projects/ddx and /Users/erik/Projects/sesame. Governing artifact reference: plan:server-operator-workbench.",
+    "acceptance": "1. Existing TestServerStartupReconcileReplacesTerminatedWorker still passes.\n2. TestServerStartupReconcileReplacesTerminatedWorker is extended, or paired with new test TestServerStartupReconcileReplacesTerminatedWorker_ProductionPath, to assert production-path startup reconcile behavior rather than fake-controller behavior alone.\n3. The production-path assertion proves startup reconcile is observable and bounded, including enough status/audit detail to diagnose a failed restore.\n4. `ddx worker status --json --project \u003cpath\u003e` after restart reports exactly the desired running worker for each valid project and no unrelated stale-project workers in the covered scenario.\n5. `cd cli \u0026\u0026 go test ./internal/server/... ./cmd/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-8674fc2d",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:workers",
+      "kind:bug",
+      "reliability",
+      "plan:server-operator-workbench"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T194724-0192c2df",
+    "prompt": ".ddx/executions/20260616T194724-0192c2df/prompt.md",
+    "manifest": ".ddx/executions/20260616T194724-0192c2df/manifest.json",
+    "result": ".ddx/executions/20260616T194724-0192c2df/result.json",
+    "checks": ".ddx/executions/20260616T194724-0192c2df/checks.json",
+    "usage": ".ddx/executions/20260616T194724-0192c2df/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7608f739-20260616T194724-0192c2df"
+  },
+  "prompt_sha": "a343dbfb0f16f17b8dc4322b713693fa71dff3b0ec4a56ef045de09f461884a7"
+}
