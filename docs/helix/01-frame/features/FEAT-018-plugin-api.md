@@ -236,7 +236,7 @@ do not affect DDx graph semantics.
 
 ### Functional
 
-1. **package.yaml support** — `ddx install` reads `package.yaml` from the
+1. **package.yaml support** — `ddx plugin install` reads `package.yaml` from the
    plugin repo as an alternative to the built-in registry. Built-in registry
    entries serve as fallback when no `package.yaml` exists.
 2. **API version field** — `package.yaml` declares `api_version: 1`. DDx

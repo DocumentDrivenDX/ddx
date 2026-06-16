@@ -12,13 +12,13 @@ These are the internal engineering principles that shape how DDx is built. They 
 - **Tradeoff:** Workflow tools must coordinate state across DDx primitives, which adds integration work. In exchange, DDx stays methodology-agnostic and reusable.
 - **DDx feature it shapes:** `ddx bead` — a generic work-item store with a dependency DAG, no opinions about what "ready" means beyond unblocked dependencies.
 
-### 2. Project-Local by Default
+### 2. Project-Declared by Default
 
-- **Rule:** Resources install under the project's `.ddx/`, `.agents/`, and `.claude/` directories. There is no home-directory install path and no `--global` surface.
-- **Decision generated:** `ddx install <name>` writes only under `<projectRoot>/.ddx/plugins/`, `<projectRoot>/.agents/skills/`, and `<projectRoot>/.claude/skills/`. The default plugin from `library/` is materialized to `.ddx/plugins/ddx/` by `ddx init`.
+- **Rule:** Projects declare the resources they use; downloaded marketplace payloads live in the shared XDG cache, while the project tree keeps durable metadata plus generated agent adapters. There is no home-directory install path and no forward `--global` surface.
+- **Decision generated:** `ddx plugin install <name>` records project intent in `.ddx/plugins.lock.yaml`, resolves marketplace payloads into the shared XDG plugin cache, and materializes only generated agent adapters under `<projectRoot>/.agents/skills/` and `<projectRoot>/.claude/skills/`. The default `ddx` package can fall back to the copy embedded in the binary; full registry payloads are not copied into every project.
 - **Alternative rejected:** Support a global `~/.ddx/` install for shared resources across projects, mirroring tools like `npm -g` or `cargo install`. Rejected because global state desyncs from per-project version pins and makes reproducible builds harder.
 - **Tradeoff:** Users pay disk and install time per project rather than once per machine. In exchange, every project carries its own pinned, reproducible toolkit and there is no "works on my machine" caused by a stale global install.
-- **DDx feature it shapes:** `ddx init` and `ddx install` — both write only into the project tree; the retired `--global` flag and `~/.ddx` paths are gone.
+- **DDx feature it shapes:** `ddx init` and `ddx plugin install` — project state stays in durable metadata plus generated adapters; the retired top-level install verbs and checked-in payload copies are not the forward path.
 
 ### 3. Bounded Context per Attempt
 

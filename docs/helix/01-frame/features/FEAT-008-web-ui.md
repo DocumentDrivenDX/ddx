@@ -1116,7 +1116,7 @@ provider logs
 **So that** I don't have to hand-edit `.ddx/config.yaml`
 
 **Acceptance Criteria:**
-- Given personas are installed (via `ddx install` or the DDx default
+- Given personas are installed (via `ddx plugin install` or the DDx default
   plugin), when I open the `Personas` page, then I see a card per persona
   with name, role tags, and a short description pulled from the
   persona file's frontmatter
@@ -1138,7 +1138,7 @@ provider logs
 ### US-098: Operator Browses and Installs Plugins
 **As an** operator setting up DDx for a new project
 **I want** to see available plugins and install one from the UI
-**So that** I don't have to know the exact `ddx install <name>` invocation
+**So that** I don't have to know the exact `ddx plugin install <name>` invocation
 
 **Acceptance Criteria:**
 - Given the `Plugins` page is open, then I see all plugins from the
@@ -1147,9 +1147,10 @@ provider logs
   description, keywords, and install status (installed / available /
   update-available)
 - Given I click an available plugin, when I click `Install`, then a
-  modal shows the install scope (global vs project) and required disk
-  space; on confirm, the UI triggers `ddx install <name>` server-side
-  and streams install progress via a worker-backed dispatch
+  modal shows the project dependency, XDG cache target, generated adapter
+  targets, and required disk space; on confirm, the UI triggers
+  `ddx plugin install <name>` server-side and streams install progress via a
+  worker-backed dispatch
 - Given installation completes, then the plugin card updates to
   "installed" status without a page reload
 - Given a plugin is installed, then I can view its manifest

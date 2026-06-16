@@ -145,10 +145,12 @@ branches switch.
 - DDx bead-mutating commands (`ddx bead create`, `update`, `close`, etc.)
   should auto-commit `beads.jsonl` after successful mutations (governed by the
   same `git.auto_commit` setting as document changes)
-- `ddx install` should auto-commit plugin-related changes (skill symlinks,
-  bead tracker updates)
+- `ddx plugin install` should auto-commit project plugin intent/lock metadata.
+  Generated skill adapters and cached plugin payloads remain machine-local and
+  are not committed.
 - `ddx init` should generate agent guidance (in CLAUDE.md or AGENTS.md) that
-  instructs agents to commit `beads.jsonl` alongside code changes
+  instructs agents to commit durable DDx state such as `beads.jsonl` alongside
+  code changes
 
 **Design constraint:** Bead auto-commits should be lightweight. A single bead
 mutation produces one commit. Batch operations (e.g., `ddx bead import`)
@@ -162,8 +164,9 @@ skill symlinks as untracked noise.
 
 **Minimum guidance:**
 - `.ddx/beads.jsonl` should be committed after bead mutations
-- `.agents/skills/` and `.claude/skills/` should be committed after
-  `ddx install` (already implemented)
+- `.ddx/plugins.lock.yaml` should be committed after `ddx plugin install`
+- `.agents/skills/`, `.claude/skills/`, and `.ddx/plugins/` are generated
+  adapters or local overlays and should not be committed
 - `.ddx/config.yaml` and `.ddx/versions.yaml` should be committed on init
   (already implemented)
 
@@ -198,14 +201,15 @@ metaprompt injection) or generated as a standalone AGENTS.md.
 **Bead tracker auto-commit (S7)**
 14. `ddx bead` mutating commands auto-commit `.ddx/beads.jsonl` after
     successful operations (governed by `git.auto_commit`)
-15. `ddx install` auto-commits plugin artifacts (skill symlinks, tracker
-    changes) with `chore: install <name> <version>` message
+15. `ddx plugin install` auto-commits `.ddx/plugins.lock.yaml` changes with
+    `chore: install <name> <version>` message; generated adapters are excluded
 16. Batch bead operations produce one commit, not one per record
 
 **Agent guidance generation (S8)**
 17. `ddx init` injects agent guidance into CLAUDE.md (or generates AGENTS.md)
     that instructs agents to commit DDx-managed state files:
-    `.ddx/beads.jsonl`, `.ddx/config.yaml`, `.agents/skills/`, `.claude/skills/`
+    `.ddx/beads.jsonl`, `.ddx/config.yaml`, `.ddx/versions.yaml`, and
+    `.ddx/plugins.lock.yaml`; generated adapters are explicitly excluded
 18. The guidance is part of the metaprompt injection and is updated on
     `ddx init --force`
 
@@ -396,8 +400,10 @@ agents and developers
 
 **Acceptance Criteria:**
 - Given I run `ddx init`, then CLAUDE.md contains guidance listing
-  `.ddx/beads.jsonl`, `.ddx/config.yaml`, `.agents/skills/`, and
-  `.claude/skills/` as files that should be committed
+  `.ddx/beads.jsonl`, `.ddx/config.yaml`, `.ddx/versions.yaml`, and
+  `.ddx/plugins.lock.yaml` as files that should be committed, and lists
+  `.agents/skills/`, `.claude/skills/`, and `.ddx/plugins/` as generated
+  adapter/local-overlay state that should not be committed
 - Given I run `ddx init --force`, then the guidance is refreshed
 - Given an agent reads the generated guidance, then it knows to `git add`
   and commit `.ddx/beads.jsonl` after bead operations
@@ -421,7 +427,7 @@ agents and developers
 - `internal/git` package (existing — basic git operations)
 - FEAT-004 (beads — bead mutation operations)
 - FEAT-007 (document graph — artifact ID to file path mapping)
-- FEAT-009 (plugin registry — `ddx init` and `ddx install`)
+- FEAT-009 (plugin registry — `ddx init` and `ddx plugin install`)
 
 Note: FEAT-002 (Server) depends on FEAT-012, not the reverse. FEAT-012 defines
 the git mechanics (write+commit, history, checkpoints); FEAT-002 exposes those

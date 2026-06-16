@@ -68,6 +68,34 @@ func TestDoctorPluginsFlagAuditsLegacyUntypedPluginEntries(t *testing.T) {
 	assert.Contains(t, output, "missing package.yaml")
 }
 
+func TestDoctorPluginsFlagSkipsStaleRetiredInstalledState(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	state := &registry.InstalledState{
+		Installed: []registry.InstalledEntry{
+			{
+				Name:    "helix",
+				Version: "1.0.0",
+				Type:    registry.PackageTypeWorkflow,
+				Source:  "https://github.com/DocumentDrivenDX/helix",
+				Files: []string{
+					"plugins/helix/skills/helix/SKILL.md",
+					"plugins/helix/workflows/workflow.yml",
+				},
+			},
+		},
+	}
+	require.NoError(t, registry.SaveState(state))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--plugins")
+	require.NoError(t, err)
+	assert.NotContains(t, output, "plugins/helix/skills/helix/SKILL.md")
+	assert.NotContains(t, output, "missing recorded file or symlink")
+}
+
 func TestDoctorPluginsFlagSkipsResourceEntries(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()

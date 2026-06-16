@@ -953,6 +953,9 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 		default:
 			continue
 		}
+		if !legacyInstalledEntryHasLivePath(entry) {
+			continue
+		}
 		for _, issue := range registry.AuditInstalledEntry(entry, fallback) {
 			diag := DiagnosticIssue{
 				Type:        "plugin_validation",
@@ -973,6 +976,34 @@ func checkInstalledPlugins(verbose bool) []DiagnosticIssue {
 	}
 
 	return issues
+}
+
+func legacyInstalledEntryHasLivePath(entry registry.InstalledEntry) bool {
+	if root := installedEntryRootCandidate(entry); root != "" {
+		return legacyInstalledPathExists(root)
+	}
+	return false
+}
+
+func legacyInstalledPathExists(candidate string) bool {
+	candidate = strings.TrimSpace(candidate)
+	if candidate == "" || strings.Contains(candidate, "://") {
+		return false
+	}
+	path := registry.ExpandHome(candidate)
+	if _, err := os.Lstat(path); err == nil {
+		return true
+	}
+	if filepath.IsAbs(path) {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	homePath := ddxroot.JoinHome(home, candidate)
+	_, err = os.Lstat(homePath)
+	return err == nil
 }
 
 func checkProjectPluginLockState(ctx context.Context, projectRoot string, verbose bool) []DiagnosticIssue {
@@ -1063,9 +1094,21 @@ func looksLikePluginInstall(entry registry.InstalledEntry) bool {
 
 func installedEntryRootCandidate(entry registry.InstalledEntry) string {
 	if len(entry.Files) > 0 && strings.TrimSpace(entry.Files[0]) != "" {
-		return entry.Files[0]
+		return legacyRootFromRecordedPath(entry.Files[0])
 	}
 	return strings.TrimSpace(entry.Source)
+}
+
+func legacyRootFromRecordedPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	slash := filepath.ToSlash(raw)
+	if !filepath.IsAbs(raw) && strings.HasPrefix(slash, "plugins/") {
+		parts := strings.Split(slash, "/")
+		if len(parts) >= 2 {
+			return filepath.FromSlash(parts[0] + "/" + parts[1])
+		}
+	}
+	return raw
 }
 
 // checkGitRepoHealth detects git-repo corruption from prior ddx incidents:

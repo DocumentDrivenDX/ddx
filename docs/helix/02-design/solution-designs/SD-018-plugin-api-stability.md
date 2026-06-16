@@ -32,7 +32,7 @@ while keeping the surface minimal and backward-compatible.
   compatibility.
 - Keep the discovery surface explicit: DDx only recognizes paths declared by
   the manifest or the documented directory layout.
-- Make `ddx install` and `ddx doctor --plugins` use the same validator so the
+- Make `ddx plugin install` and `ddx doctor --plugins` use the same validator so the
   install path and the audit path cannot drift.
 
 ## Package Manifest
@@ -184,7 +184,7 @@ Plugin installation follows one validator-backed path regardless of source.
 
 ### Install-Time Validation
 
-`ddx install` validates:
+`ddx plugin install` validates:
 
 - required manifest fields are present
 - `api_version` is supported

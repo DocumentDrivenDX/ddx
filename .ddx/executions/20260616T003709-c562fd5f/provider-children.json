@@ -3,7 +3,7 @@
   "bead_id": "ddx-2b15342f",
   "trigger": "running_phase_non_route_provider_child",
   "active_route": "claude-tui",
-  "scanned_at": "2026-06-16T00:38:48.897830573Z",
+  "scanned_at": "2026-06-16T00:46:18.897832281Z",
   "reaped": [
     {
       "pid": 487032,
@@ -15,6 +15,30 @@
     },
     {
       "pid": 532092,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 581593,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 581631,
+      "provider": "claude",
+      "command": "/home/erik/.local/bin/claude",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 581642,
       "provider": "gemini",
       "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
       "age_seconds": 0,
