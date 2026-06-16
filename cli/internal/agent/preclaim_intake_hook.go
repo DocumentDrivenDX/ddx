@@ -50,6 +50,25 @@ type preClaimIntakePromptRewrite struct {
 	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
+func (r *preClaimIntakePromptRewrite) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Description   string          `json:"description,omitempty"`
+		Acceptance    json.RawMessage `json:"acceptance,omitempty"`
+		ChangedFields []string        `json:"changed_fields,omitempty"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	acceptance, err := decodeReadinessAcceptanceList(raw.Acceptance, "rewrite.acceptance")
+	if err != nil {
+		return err
+	}
+	r.Description = raw.Description
+	r.Acceptance = strings.Join(acceptance, "\n")
+	r.ChangedFields = raw.ChangedFields
+	return nil
+}
+
 // preClaimReadinessPromptResult is the canonical readiness JSON schema returned
 // by skills that use the FEAT-010/ADR-023 outcome vocabulary.
 type preClaimReadinessPromptResult struct {
@@ -681,7 +700,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Use easy only for work suitable for cheap dispatch: narrow mechanical edits such as typo fixes, formatting, simple docs/prose tweaks, straightforward fixture updates, or one-file transforms with low blast radius.\n")
 	sb.WriteString("Use hard only for work suitable for smart dispatch: architecture or ambiguous tradeoff judgment, multiple subsystems with high blast radius, security/data-loss/concurrency risk, or prior attempts showing standard power is insufficient.\n")
 	sb.WriteString("Do not choose hard just because a bead is important, long, or could be written more cleanly. Readiness score and difficulty are separate: low readiness means refine/split/block, not hard.\n")
-	sb.WriteString("If the bead is not executable as written but can be made executable by a narrow, semantics-preserving metadata/AC rewrite, emit rewrite with changed_fields, description, and acceptance.\n")
+	sb.WriteString("If the bead is not executable as written but can be made executable by a narrow, semantics-preserving metadata/AC rewrite, emit rewrite with changed_fields, description, and acceptance. rewrite.description must be a string; rewrite.acceptance may be a string or a string array of numbered criteria.\n")
 	sb.WriteString("Put prompt-quality improvements in suggested_fixes only; keep operator_required for actual blockers.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
 	sb.WriteString("Classify as operator_required only when ambiguity, missing prerequisites, hidden external blockers, or unsafe scope choices prevent an implementation attempt.\n")

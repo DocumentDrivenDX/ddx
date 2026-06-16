@@ -66,7 +66,7 @@ func TestBeadLifecycleSkillReadinessDocumentsRewriteContract(t *testing.T) {
 			assert.Contains(t, body, "`rewrite` is the machine-")
 			assert.Contains(t, body, "consumable replacement contract DDx may apply before claim")
 			assert.Contains(t, body, "`rewrite.changed_fields` is required")
-			assert.Contains(t, body, "`rewrite.description` / `rewrite.acceptance` must be strings, not arrays")
+			assert.Contains(t, body, "`rewrite.description` must be a string; `rewrite.acceptance` may be a string or a string array")
 			assert.Contains(t, body, "`readiness_checks` MUST be a JSON array")
 			assert.Contains(t, body, "`waivers_applied` SHOULD be emitted as a JSON array")
 			assert.Contains(t, body, "legacy flat string arrays or a scalar string")
@@ -128,11 +128,18 @@ func TestPreClaimReadiness_RejectsUnsupportedClassification(t *testing.T) {
 	}
 }
 
-func TestPreClaimReadiness_RejectsArrayAcceptanceRewrite(t *testing.T) {
-	_, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":["1. TestFoo"]}}`, config.BeadQualityModeWarnOnly)
+func TestPreClaimReadiness_AllowsArrayAcceptanceRewrite(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":["1. TestFoo","2. lefthook run pre-commit"]}}`, config.BeadQualityModeWarnOnly)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableButRewritten, got.Outcome)
+	assert.Equal(t, "1. TestFoo\n2. lefthook run pre-commit", got.Rewrite.Acceptance)
+}
+
+func TestPreClaimReadiness_RejectsInvalidAcceptanceRewriteShape(t *testing.T) {
+	_, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":{"criterion":"1. TestFoo"}}}`, config.BeadQualityModeWarnOnly)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "rewrite.acceptance")
-	assert.Contains(t, err.Error(), "cannot unmarshal array")
+	assert.Contains(t, err.Error(), "must be a string or string array")
 }
 
 func TestLintHook_RejectsMalformedRationaleShape(t *testing.T) {

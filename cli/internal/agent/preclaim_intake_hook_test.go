@@ -844,6 +844,29 @@ func TestPreClaimReadiness_UnknownReasonActionableError(t *testing.T) {
 	assert.Contains(t, err.Error(), "system_unready")
 }
 
+func TestPreClaimReadiness_AcceptsRewriteAcceptanceArray(t *testing.T) {
+	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":["1. TestPreClaimReadiness_AcceptsRewriteAcceptanceArray","2. cd cli && go test ./internal/agent/... -run TestPreClaimReadiness_AcceptsRewriteAcceptanceArray -count=1","3. lefthook run pre-commit"]}}`
+
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableButRewritten, got.Outcome)
+	assert.Equal(t, []string{"acceptance"}, got.Rewrite.ChangedFields)
+	assert.Equal(t, strings.Join([]string{
+		"1. TestPreClaimReadiness_AcceptsRewriteAcceptanceArray",
+		"2. cd cli && go test ./internal/agent/... -run TestPreClaimReadiness_AcceptsRewriteAcceptanceArray -count=1",
+		"3. lefthook run pre-commit",
+	}, "\n"), got.Rewrite.Acceptance)
+}
+
+func TestPreClaimReadiness_RejectsInvalidRewriteAcceptanceShape(t *testing.T) {
+	payload := `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}],"rewrite":{"changed_fields":["acceptance"],"acceptance":{"criterion":"1. TestFoo"}}}`
+
+	_, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "rewrite.acceptance")
+	assert.Contains(t, err.Error(), "must be a string or string array")
+}
+
 func TestPreClaimReadiness_DecodesFractionalScore(t *testing.T) {
 	got, err := decodePreClaimIntakePayloadResultWithMode(`{"classification":"ready","tractability":"tractable","score":0.86,"rationale":"single slice","readiness_checks":[]}`, config.BeadQualityModeWarnOnly)
 	require.NoError(t, err)
