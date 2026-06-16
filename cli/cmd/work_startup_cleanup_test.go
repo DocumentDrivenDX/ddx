@@ -99,6 +99,41 @@ func TestWorkStartupCleanup_RemovesFreshRunStateWhenOwnerPIDIsDead(t *testing.T)
 	assert.Empty(t, states, "dead-owner run-state must be cleared before the next claim/status pass")
 }
 
+func TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim(t *testing.T) {
+	projectRoot, tempRoot := setupWorkStartupCleanupProject(t)
+
+	attemptID := "20260608T112233-deadbeef"
+	worktreePath := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-process-stale-"+attemptID)
+	require.NoError(t, os.MkdirAll(worktreePath, 0o755))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(worktreePath, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-process-stale",
+		AttemptID:    attemptID,
+		WorktreePath: worktreePath,
+	}))
+	killer := &startupProcessKillerFake{}
+	runner := newStartupHousekeepingRunner(projectRoot)
+	runner.processScanner = startupProcessScannerFake{processes: []agent.ExecutionCleanupProcessInfo{{
+		PID:     7001,
+		PPID:    1,
+		PGID:    7000,
+		Cwd:     worktreePath,
+		Command: "sh -c cargo test",
+	}}}
+	runner.processKiller = killer
+
+	report, err := runner.scan(context.Background(), true)
+	require.NoError(t, err)
+
+	assert.Equal(t, []int{7000}, killer.groups)
+	assert.Equal(t, int64(1), report.StaleAttemptProcesses)
+	assert.Equal(t, int64(1), report.ReapedProcessGroups)
+	require.NotEmpty(t, report.Processes)
+	assert.True(t, report.Processes[0].WouldKill)
+	assert.True(t, report.Processes[0].Killed)
+	assert.Equal(t, "attempt_process_census", report.Observations[0].Class)
+}
+
 func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	projectRoot, _ := setupWorkStartupCleanupProject(t)
 
@@ -139,6 +174,23 @@ func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(workersDir, deadWorkerID))
 	assert.NoDirExists(t, filepath.Join(workersDir, staleWorkerID))
 	assert.DirExists(t, filepath.Join(workersDir, freshWorkerID))
+}
+
+type startupProcessScannerFake struct {
+	processes []agent.ExecutionCleanupProcessInfo
+}
+
+func (s startupProcessScannerFake) ScanExecutionProcesses(context.Context) ([]agent.ExecutionCleanupProcessInfo, error) {
+	return append([]agent.ExecutionCleanupProcessInfo(nil), s.processes...), nil
+}
+
+type startupProcessKillerFake struct {
+	groups []int
+}
+
+func (k *startupProcessKillerFake) KillExecutionProcessGroup(_ context.Context, groupID int) error {
+	k.groups = append(k.groups, groupID)
+	return nil
 }
 
 func TestExecutionsRetention_ArchivesOldEvidence(t *testing.T) {

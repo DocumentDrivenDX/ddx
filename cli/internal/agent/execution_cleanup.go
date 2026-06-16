@@ -90,6 +90,23 @@ type ExecutionCleanupObservation struct {
 	Inodes  int64  `json:"inodes,omitempty"`
 }
 
+// ExecutionCleanupProcessFinding records one stale or preserved process found
+// under a DDx execution worktree.
+type ExecutionCleanupProcessFinding struct {
+	PID          int    `json:"pid"`
+	PPID         int    `json:"ppid,omitempty"`
+	PGID         int    `json:"pgid,omitempty"`
+	Command      string `json:"command,omitempty"`
+	Cwd          string `json:"cwd,omitempty"`
+	WorktreePath string `json:"worktree_path,omitempty"`
+	BeadID       string `json:"bead_id,omitempty"`
+	AttemptID    string `json:"attempt_id,omitempty"`
+	Reason       string `json:"reason,omitempty"`
+	WouldKill    bool   `json:"would_kill"`
+	Killed       bool   `json:"killed,omitempty"`
+	Preserved    bool   `json:"preserved,omitempty"`
+}
+
 // ExecutionCleanupWarning records a non-blocking issue encountered while the
 // manager was scanning or reclaiming execution resources.
 type ExecutionCleanupWarning struct {
@@ -116,12 +133,16 @@ type ExecutionCleanupSummary struct {
 	ScannedEvidenceDirs  int `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs int `json:"complete_evidence_dirs"`
 	ScannedScratchDirs   int `json:"scanned_scratch_dirs"`
+	ScannedProcesses     int `json:"scanned_processes"`
 
 	RemovedUnregisteredTempDirs int64 `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64 `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64 `json:"removed_run_state_files"`
 	RemovedScratchDirs          int64 `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
+	StaleAttemptProcesses       int64 `json:"stale_attempt_processes"`
+	ReapedProcessGroups         int64 `json:"reaped_process_groups"`
+	PreservedAttemptProcesses   int64 `json:"preserved_attempt_processes"`
 	PrunedCandidateRefs         int64 `json:"pruned_candidate_refs"`
 	RemovedEvidenceDirs         int64 `json:"removed_evidence_dirs"`
 	RemovedAgentLogs            int64 `json:"removed_agent_logs"`
@@ -132,9 +153,10 @@ type ExecutionCleanupSummary struct {
 	ScratchBytesReclaimed  int64 `json:"scratch_bytes_reclaimed"`
 	ScratchInodesReclaimed int64 `json:"scratch_inodes_reclaimed"`
 
-	Warnings     []ExecutionCleanupWarning     `json:"warnings,omitempty"`
-	Issues       []ExecutionCleanupIssue       `json:"issues,omitempty"`
-	Observations []ExecutionCleanupObservation `json:"observations,omitempty"`
+	Warnings     []ExecutionCleanupWarning        `json:"warnings,omitempty"`
+	Issues       []ExecutionCleanupIssue          `json:"issues,omitempty"`
+	Observations []ExecutionCleanupObservation    `json:"observations,omitempty"`
+	Processes    []ExecutionCleanupProcessFinding `json:"processes,omitempty"`
 }
 
 // ExecutionCleanupLivenessProbe decides whether a cleanup candidate should be
@@ -196,6 +218,8 @@ type ExecutionCleanupManager struct {
 	DryRun          bool
 	Now             func() time.Time
 	Probe           ExecutionCleanupLivenessProbe
+	ProcessScanner  ExecutionCleanupProcessScanner
+	ProcessKiller   ExecutionCleanupProcessKiller
 	// RetainDays controls how many days of evidence dirs under
 	// .ddx/executions/ to retain. 0 disables the prune; default is 90.
 	RetainDays int
@@ -287,6 +311,14 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			Class:   "run_state_read",
 			Message: runStateErr.Error(),
 		})
+	}
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
+	if err := m.cleanupAttemptDescendantProcesses(ctx, &summary, runStates, registered, probe, now()); err != nil {
+		return summary, err
 	}
 	if ctx != nil {
 		if err := ctx.Err(); err != nil {
@@ -524,6 +556,54 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 	m.cleanupDurableLandedCandidateRefs(&summary)
 
+	return summary, nil
+}
+
+// CleanupAttemptDescendantProcesses runs only the conservative process census
+// and reaper used by full cleanup. Work startup uses this before claiming so a
+// stale DDx-owned process tree cannot keep burning resources while the queue
+// continues.
+func (m *ExecutionCleanupManager) CleanupAttemptDescendantProcesses(ctx context.Context) (ExecutionCleanupSummary, error) {
+	summary := ExecutionCleanupSummary{
+		ProjectRoot: m.ProjectRoot,
+		TempRoot:    m.tempRoot(),
+	}
+	if summary.TempRoot == "" {
+		summary.TempRoot = executionCleanupTempRoot(m.ProjectRoot)
+	}
+	if summary.TempRoot == "" {
+		return summary, errors.New("execution cleanup: temp root is empty")
+	}
+	if m.ProjectRoot == "" {
+		return summary, errors.New("execution cleanup: project root is empty")
+	}
+	now := time.Now
+	if m.Now != nil {
+		now = m.Now
+	}
+	probe := m.Probe
+	if probe == nil {
+		probe = defaultExecutionCleanupLivenessProbe{}
+	}
+	registered := map[string]struct{}{}
+	if m.GitOps != nil {
+		if paths, err := m.GitOps.WorktreeList(m.ProjectRoot); err == nil {
+			for _, p := range paths {
+				registered[filepath.Clean(p)] = struct{}{}
+			}
+		}
+	}
+	runStates, err := ReadRunStates(m.ProjectRoot)
+	if err != nil {
+		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+			Path:    runStateDirPath(m.ProjectRoot),
+			Class:   "run_state_read",
+			Message: err.Error(),
+		})
+	}
+	if err := m.cleanupAttemptDescendantProcesses(ctx, &summary, runStates, registered, probe, now()); err != nil {
+		return summary, err
+	}
 	return summary, nil
 }
 

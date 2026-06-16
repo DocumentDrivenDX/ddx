@@ -40,20 +40,23 @@ type startupHousekeepingReport struct {
 	ProjectRoot string
 	TempRoot    string
 
-	StaleWorktrees     int64
-	StaleWorkerDirs    int64
-	StaleRunStateFiles int64
-	StaleExecutionDirs int64
+	StaleWorktrees        int64
+	StaleWorkerDirs       int64
+	StaleRunStateFiles    int64
+	StaleExecutionDirs    int64
+	StaleAttemptProcesses int64
 
 	RemovedRegisteredWorktrees  int64
 	RemovedUnregisteredTempDirs int64
 	RemovedWorkerDirs           int64
 	RemovedRunStateFiles        int64
+	ReapedProcessGroups         int64
 	ArchivedExecutionDirs       int64
 	DeletedExecutionDirs        int64
 
 	Warnings     []agent.ExecutionCleanupWarning
 	Observations []agent.ExecutionCleanupObservation
+	Processes    []agent.ExecutionCleanupProcessFinding
 }
 
 type startupHousekeepingRunner struct {
@@ -63,6 +66,8 @@ type startupHousekeepingRunner struct {
 	workerDirMaxAge time.Duration
 	now             func() time.Time
 	retentionPolicy executionRetentionPolicy
+	processScanner  agent.ExecutionCleanupProcessScanner
+	processKiller   agent.ExecutionCleanupProcessKiller
 }
 
 func newStartupHousekeepingRunner(projectRoot string) *startupHousekeepingRunner {
@@ -93,9 +98,12 @@ func (r *startupHousekeepingRunner) Cleanup(ctx context.Context) (agent.Executio
 		RemovedUnregisteredTempDirs: report.RemovedUnregisteredTempDirs,
 		RemovedWorkerDirs:           report.RemovedWorkerDirs,
 		RemovedRunStateFiles:        report.RemovedRunStateFiles,
+		StaleAttemptProcesses:       report.StaleAttemptProcesses,
+		ReapedProcessGroups:         report.ReapedProcessGroups,
 		RemovedEvidenceDirs:         report.ArchivedExecutionDirs + report.DeletedExecutionDirs,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), report.Warnings...),
 		Observations:                append([]agent.ExecutionCleanupObservation(nil), report.Observations...),
+		Processes:                   append([]agent.ExecutionCleanupProcessFinding(nil), report.Processes...),
 	}, nil
 }
 
@@ -120,6 +128,9 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 		return report, err
 	}
 	runStates = r.scanRunStates(ctx, now, runStates, apply, &report)
+	if err := r.scanAttemptDescendantProcesses(ctx, apply, &report); err != nil {
+		return report, err
+	}
 	if err := r.scanWorktrees(ctx, now, runStates, apply, &report); err != nil {
 		return report, err
 	}
@@ -170,6 +181,24 @@ func (r *startupHousekeepingRunner) scanRunStates(ctx context.Context, now time.
 		})
 	}
 	return kept
+}
+
+func (r *startupHousekeepingRunner) scanAttemptDescendantProcesses(ctx context.Context, apply bool, report *startupHousekeepingReport) error {
+	mgr := agent.NewExecutionCleanupManager(r.projectRoot, &agent.RealGitOps{})
+	mgr.TempRoot = report.TempRoot
+	mgr.DryRun = !apply
+	mgr.ProcessScanner = r.processScanner
+	mgr.ProcessKiller = r.processKiller
+	summary, err := mgr.CleanupAttemptDescendantProcesses(ctx)
+	if err != nil {
+		return err
+	}
+	report.StaleAttemptProcesses += summary.StaleAttemptProcesses
+	report.ReapedProcessGroups += summary.ReapedProcessGroups
+	report.Warnings = append(report.Warnings, summary.Warnings...)
+	report.Observations = append(report.Observations, summary.Observations...)
+	report.Processes = append(report.Processes, summary.Processes...)
+	return nil
 }
 
 func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.Time, runStates []agent.RunState, apply bool, report *startupHousekeepingReport) error {

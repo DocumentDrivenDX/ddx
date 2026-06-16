@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -23,11 +24,15 @@ type cleanupCommandJSON struct {
 	ScannedEvidenceDirs         int              `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs        int              `json:"complete_evidence_dirs"`
 	ScannedScratchDirs          int              `json:"scanned_scratch_dirs"`
+	ScannedProcesses            int              `json:"scanned_processes"`
 	RemovedUnregisteredTempDirs int64            `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64            `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64            `json:"removed_run_state_files"`
 	RemovedScratchDirs          int64            `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64            `json:"preserved_active_scratch_dirs"`
+	StaleAttemptProcesses       int64            `json:"stale_attempt_processes"`
+	ReapedProcessGroups         int64            `json:"reaped_process_groups"`
+	PreservedAttemptProcesses   int64            `json:"preserved_attempt_processes"`
 	BytesReclaimed              int64            `json:"bytes_reclaimed"`
 	InodesReclaimed             int64            `json:"inodes_reclaimed"`
 	ScratchBytesReclaimed       int64            `json:"scratch_bytes_reclaimed"`
@@ -35,6 +40,7 @@ type cleanupCommandJSON struct {
 	Warnings                    []map[string]any `json:"warnings"`
 	BlockedErrors               []map[string]any `json:"blocked_errors"`
 	Observations                []map[string]any `json:"observations"`
+	Processes                   []map[string]any `json:"processes"`
 }
 
 func setupCleanupCommandProject(t *testing.T) (string, string) {
@@ -181,8 +187,50 @@ func TestCleanupCommand_JSONShape(t *testing.T) {
 	assert.NotEmpty(t, report.Warnings)
 	assert.NotNil(t, report.BlockedErrors)
 	assert.NotNil(t, report.Observations)
+	assert.NotNil(t, report.Processes)
 	assert.Greater(t, report.BytesReclaimed, int64(0))
 	assert.Greater(t, report.InodesReclaimed, int64(0))
+}
+
+func TestCleanupCommand_JSONIncludesProcessFindings(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("real process cwd scan is unix-oriented")
+	}
+
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-process-20260608T112233-deadbeef", projectRoot, "20260608T112233-deadbeef")
+	proc := exec.Command("sh", "-c", "cd \"$1\" && sleep 30", "sh", stalePath)
+	require.NoError(t, proc.Start())
+	t.Cleanup(func() {
+		if proc.Process != nil {
+			_ = proc.Process.Kill()
+			_, _ = proc.Process.Wait()
+		}
+	})
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	textOut, err := executeCommand(root, "cleanup")
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "cleanup: found")
+	assert.Contains(t, textOut, "stale attempt process")
+	assert.Contains(t, textOut, "process: pid=")
+	assert.Contains(t, textOut, "would_kill=true")
+
+	jsonOut, err := executeCommand(root, "cleanup", "--json")
+	require.NoError(t, err)
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
+	assert.True(t, report.DryRun)
+	assert.GreaterOrEqual(t, report.StaleAttemptProcesses, int64(1))
+	assert.Equal(t, int64(0), report.ReapedProcessGroups)
+	require.NotEmpty(t, report.Processes)
+	found := false
+	for _, proc := range report.Processes {
+		if proc["worktree_path"] == stalePath && proc["would_kill"] == true {
+			found = true
+		}
+	}
+	assert.True(t, found, "json process findings should include stale worktree process: %s", jsonOut)
 }
 
 func TestCleanupCommand_DoesNotRemovePreservedEvidence(t *testing.T) {
