@@ -200,3 +200,92 @@ func TestPluginLookup_BakedInDefaultOnly(t *testing.T) {
 		t.Error("expected error for unknown plugin name, got nil")
 	}
 }
+
+func TestBuiltinDDxPackageResolvesFromDefaultPluginFallback(t *testing.T) {
+	projectRoot := makeInTreeRoot(t)
+
+	cachePath, err := BuiltinDDxCachePath()
+	if err != nil {
+		t.Fatalf("BuiltinDDxCachePath: %v", err)
+	}
+	if err := os.RemoveAll(cachePath); err != nil {
+		t.Fatalf("remove stale cache: %v", err)
+	}
+	if err := EnsureBuiltinDDxCache(cachePath, true); err != nil {
+		t.Fatalf("EnsureBuiltinDDxCache: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(cachePath, "skills", "ddx", "SKILL.md")); err != nil {
+		t.Fatalf("embedded default-plugin cache missing DDx skill: %v", err)
+	}
+
+	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, "ddx")
+	if err != nil {
+		t.Fatalf("ResolvePlugin(ddx): unexpected error: %v", err)
+	}
+	if gotLayer != "baked-in" {
+		t.Errorf("layer = %q, want %q", gotLayer, "baked-in")
+	}
+	if gotPath != "" {
+		t.Errorf("path = %q, want empty string for baked-in", gotPath)
+	}
+}
+
+func TestRegistryDistinguishesLocalOverlayFromMarketplacePackage(t *testing.T) {
+	projectRoot := makeInTreeRoot(t)
+	pluginName := "sample-plugin"
+	xdg := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdg)
+
+	cachePlugin := filepath.Join(xdg, "ddx", "cache", "plugins", pluginName, "1.2.3")
+	if err := os.MkdirAll(cachePlugin, 0o755); err != nil {
+		t.Fatalf("mkdir cache plugin: %v", err)
+	}
+	lock := &PluginLock{Plugins: []PluginLockEntry{{
+		Name:      pluginName,
+		Version:   "1.2.3",
+		Type:      PackageTypePlugin,
+		Source:    "https://example.com/myplugin",
+		CachePath: cachePlugin,
+	}}}
+	if err := SaveProjectPluginLock(context.Background(), projectRoot, lock); err != nil {
+		t.Fatalf("save plugin lock: %v", err)
+	}
+
+	overlayTarget := filepath.Join(t.TempDir(), "sample-plugin")
+	if err := os.MkdirAll(overlayTarget, 0o755); err != nil {
+		t.Fatalf("mkdir overlay target: %v", err)
+	}
+	overlayPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", pluginName)
+	if err := os.MkdirAll(filepath.Dir(overlayPath), 0o755); err != nil {
+		t.Fatalf("mkdir overlay parent: %v", err)
+	}
+	if err := os.Symlink(overlayTarget, overlayPath); err != nil {
+		t.Fatalf("symlink project overlay: %v", err)
+	}
+
+	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
+	if err != nil {
+		t.Fatalf("ResolvePlugin project overlay: unexpected error: %v", err)
+	}
+	if gotLayer != "project" {
+		t.Fatalf("layer = %q, want %q", gotLayer, "project")
+	}
+	if gotPath != overlayPath {
+		t.Fatalf("path = %q, want %q", gotPath, overlayPath)
+	}
+
+	if err := os.Remove(overlayPath); err != nil {
+		t.Fatalf("remove overlay symlink: %v", err)
+	}
+
+	gotPath, gotLayer, err = ResolvePlugin(context.Background(), projectRoot, pluginName)
+	if err != nil {
+		t.Fatalf("ResolvePlugin cache-backed package: unexpected error: %v", err)
+	}
+	if gotLayer != "cache" {
+		t.Fatalf("layer = %q, want %q", gotLayer, "cache")
+	}
+	if gotPath != cachePlugin {
+		t.Fatalf("path = %q, want %q", gotPath, cachePlugin)
+	}
+}

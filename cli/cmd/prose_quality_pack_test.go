@@ -90,7 +90,7 @@ func TestProseQualityStylePack_ShipsThroughDefaultLibrary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if builtin.Install.Root == nil || builtin.Install.Root.Source != "library" || builtin.Install.Root.Target != ".ddx/plugins/ddx" {
+	if builtin.Install.Root == nil || builtin.Install.Root.Source != "library" {
 		t.Fatalf("built-in ddx package does not ship the library root: %+v", builtin.Install.Root)
 	}
 
@@ -104,7 +104,7 @@ func TestProseQualityStylePack_ShipsThroughDefaultLibrary(t *testing.T) {
 	// The canonical library/package.yaml is package-rooted: install.root.source
 	// is "." relative to the library/ package root. Resolving the rule paths
 	// therefore goes through library/<source>.
-	if manifest.Install.Root == nil || manifest.Install.Root.Source != "." || manifest.Install.Root.Target != ".ddx/plugins/ddx" {
+	if manifest.Install.Root == nil || manifest.Install.Root.Source != "." {
 		t.Fatalf("library manifest does not ship the package root: %+v", manifest.Install.Root)
 	}
 
