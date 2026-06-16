@@ -85,6 +85,8 @@ var startupDesiredWorkerReconcileDelays = []time.Duration{
 	10 * time.Second,
 }
 
+var startupDesiredWorkerReconcileLog io.Writer = os.Stderr
+
 var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
 	manager := startupManager
 	if projectRoot != startupRoot {
@@ -387,11 +389,39 @@ func (s *Server) reconcileDesiredWorkersOnce() []error {
 	}
 	roots, errs := s.desiredWorkerProjectRoots()
 	for _, projectRoot := range roots {
-		if _, err := startupDesiredWorkerReconcileProject(projectRoot, s.WorkingDir, s.workers); err != nil {
+		result, err := startupDesiredWorkerReconcileProject(projectRoot, s.WorkingDir, s.workers)
+		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: reconcile desired workers: %w", projectRoot, err))
+			continue
 		}
+		logStartupDesiredWorkerReconcileResult(projectRoot, result)
 	}
 	return errs
+}
+
+func logStartupDesiredWorkerReconcileResult(projectRoot string, result ReconcileResult) {
+	if startupDesiredWorkerReconcileLog == nil {
+		return
+	}
+	if len(result.Started) == 0 &&
+		len(result.Restarted) == 0 &&
+		len(result.Stopped) == 0 &&
+		len(result.StaleMarked) == 0 &&
+		len(result.RestartSkipped) == 0 &&
+		len(result.Errors) == 0 {
+		return
+	}
+	_, _ = fmt.Fprintf(
+		startupDesiredWorkerReconcileLog,
+		"ddx-server: startup worker reconcile project=%s started=%d restarted=%d stopped=%d stale_marked=%d restart_skipped=%d errors=%d\n",
+		projectRoot,
+		len(result.Started),
+		len(result.Restarted),
+		len(result.Stopped),
+		len(result.StaleMarked),
+		len(result.RestartSkipped),
+		len(result.Errors),
+	)
 }
 
 func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {

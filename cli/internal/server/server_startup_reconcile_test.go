@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -212,4 +213,62 @@ func TestServerStartupReconcileReplacesTerminatedWorker(t *testing.T) {
 	assert.NotEqual(t, "worker-from-previous-run", newID,
 		"fresh worker must have a new ID, not reuse the stale record")
 	assert.Equal(t, workerStateRunning, fake.records[newID].State)
+}
+
+func TestServerStartupReconcileLogsNonNoopResults(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{DesiredCount: 1}))
+
+	var log bytes.Buffer
+	prevLog := startupDesiredWorkerReconcileLog
+	startupDesiredWorkerReconcileLog = &log
+	t.Cleanup(func() { startupDesiredWorkerReconcileLog = prevLog })
+
+	prev := startupDesiredWorkerReconcileProject
+	startupDesiredWorkerReconcileProject = func(projectRoot, _ string, _ *WorkerManager) (ReconcileResult, error) {
+		return ReconcileResult{
+			Started:        []string{"worker-new"},
+			StaleMarked:    []string{"worker-stale"},
+			RestartSkipped: []string{"dirty project root"},
+		}, nil
+	}
+	t.Cleanup(func() { startupDesiredWorkerReconcileProject = prev })
+
+	srv := &Server{
+		WorkingDir: root,
+		workers:    NewWorkerManager(root),
+	}
+
+	errs := srv.reconcileDesiredWorkersOnce()
+	require.Empty(t, errs)
+	out := log.String()
+	assert.Contains(t, out, "ddx-server: startup worker reconcile project="+root)
+	assert.Contains(t, out, "started=1")
+	assert.Contains(t, out, "stale_marked=1")
+	assert.Contains(t, out, "restart_skipped=1")
+}
+
+func TestServerStartupReconcileDoesNotLogNoopResults(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{DesiredCount: 0}))
+
+	var log bytes.Buffer
+	prevLog := startupDesiredWorkerReconcileLog
+	startupDesiredWorkerReconcileLog = &log
+	t.Cleanup(func() { startupDesiredWorkerReconcileLog = prevLog })
+
+	prev := startupDesiredWorkerReconcileProject
+	startupDesiredWorkerReconcileProject = func(projectRoot, _ string, _ *WorkerManager) (ReconcileResult, error) {
+		return ReconcileResult{}, nil
+	}
+	t.Cleanup(func() { startupDesiredWorkerReconcileProject = prev })
+
+	srv := &Server{
+		WorkingDir: root,
+		workers:    NewWorkerManager(root),
+	}
+
+	errs := srv.reconcileDesiredWorkersOnce()
+	require.Empty(t, errs)
+	assert.Empty(t, log.String(), "no-op startup reconcile should not spam the service log")
 }
