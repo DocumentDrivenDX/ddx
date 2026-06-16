@@ -448,16 +448,23 @@ func ReadServerAddr() string {
 	return af.URL
 }
 
-// installSingletonReleaseOnSignal arranges for the singleton lock to be
-// released on SIGTERM/SIGINT so that the next ddx-server can start without
-// having to wait for stale-lock detection. The handler exits the process
-// with a conventional non-zero status; defers in ListenAndServe(TLS) do not
-// run, but the lock release fires explicitly here.
+// installSingletonReleaseOnSignal arranges for graceful teardown on
+// SIGTERM/SIGINT: server-managed worker process trees are stopped and the
+// singleton lock is released so the next ddx-server can start without having to
+// wait for stale-lock detection. The handler exits the process with a
+// conventional non-zero status; defers in ListenAndServe(TLS) do not run, so
+// the worker cleanup and lock release fire explicitly here.
+//
+// Shutdown() runs before release() so that managed workers (external
+// `ddx work` subprocesses and their agent child process groups) are reaped
+// while the server still owns them; skipping it leaks the whole worker tree on
+// every signal-driven restart.
 func (s *Server) installSingletonReleaseOnSignal(release func()) {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-ch
+		_ = s.Shutdown()
 		release()
 		os.Exit(130)
 	}()

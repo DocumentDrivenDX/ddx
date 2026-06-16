@@ -2081,7 +2081,12 @@ func (m *WorkerManager) watchdogSweep(now time.Time) {
 		if h == nil || h.reaped {
 			continue
 		}
-		rec := h.record
+		// External (server-managed) workers do not stream progress back into
+		// the in-memory handle, so h.record.CurrentAttempt stays nil even while
+		// an attempt is in flight. Refresh it from the durable run-state on disk
+		// — the same source List()/Show() use — so the watchdog can reap a
+		// stalled external worker instead of leaving its process tree running.
+		rec := refreshWorkerCurrentAttemptFromRunState(h.record)
 		if !rec.FinishedAt.IsZero() {
 			continue
 		}

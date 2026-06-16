@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -242,6 +243,71 @@ func TestManagedWorkerWatchdogReapKillsProcessTree(t *testing.T) {
 	b, err := store.Get(context.Background(), "ddx-watchdog-tree")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status)
+}
+
+// TestManagedWorkerWatchdogReapsExternalWorkerFromRunState proves the watchdog
+// can reap a stalled server-managed (external) worker whose in-memory record has
+// no CurrentAttempt — the normal state for an external worker, which never
+// streams progress back into the server handle. The only durable in-flight
+// signal is the run-state a harness attempt writes; the sweep must refresh from
+// it (matched by worker PID) and then reap the whole process tree. Without the
+// refresh the sweep skips the worker forever and leaks its child agents.
+func TestManagedWorkerWatchdogReapsExternalWorkerFromRunState(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBead(t, root, "ddx-runstate-reap")
+
+	binDir := t.TempDir()
+	pidFile := filepath.Join(root, "provider-pids.txt")
+	workerPath := writeProviderTreeScripts(t, binDir, pidFile)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogDeadline = time.Millisecond
+	m.StallDeadline = time.Millisecond
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(time.Second),
+	})
+	require.NoError(t, err)
+	require.NotZero(t, rec.PID)
+	_ = waitForPIDFileRows(t, pidFile, 2)
+
+	now := time.Now().UTC()
+	// Age the worker past the deadlines but deliberately leave CurrentAttempt
+	// and CurrentBead empty — an external worker never reports them into the
+	// in-memory handle. Only the durable run-state, matched by PID, can supply
+	// the in-flight attempt the watchdog needs.
+	m.mu.Lock()
+	h := m.workers[rec.ID]
+	require.NotNil(t, h)
+	h.record.StartedAt = now.Add(-time.Second)
+	h.record.CurrentAttempt = nil
+	h.record.CurrentBead = ""
+	h.lastPhaseTS = time.Time{}
+	m.mu.Unlock()
+
+	require.NoError(t, agent.WriteRunState(root, agent.RunState{
+		BeadID:    "ddx-runstate-reap",
+		AttemptID: "att-runstate",
+		Harness:   "script",
+		PID:       rec.PID,
+		StartedAt: now.Add(-time.Second),
+		ExpiresAt: now.Add(time.Hour),
+	}))
+
+	m.watchdogSweep(now)
+	waitForProcessGroupEmpty(t, rec.PGID)
+
+	final := waitForWorkerExit(t, m, rec.ID, 5*time.Second)
+	assert.Equal(t, "reaped", final.State)
+
+	b, err := store.Get(context.Background(), "ddx-runstate-reap")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status,
+		"bead claim must be released after the run-state-driven reap")
 }
 
 func TestWorkerManagerShutdownStopsManagedProcessTrees(t *testing.T) {
