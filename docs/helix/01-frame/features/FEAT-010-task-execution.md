@@ -320,7 +320,10 @@ across ready beads until a stop condition is met. It owns:
   claim release, and shutdown/interruption cleanup for claimed beads, using the
   TD-027 §12 claim-state contract
 - Durable bead action after each layer-2 attempt, using TD-031 §2 outcome,
-  no_changes, cooldown, and stale-metadata rules
+  no_changes, cooldown, and stale-metadata rules; transient durable-audit commit
+  contention stays on the retry path and does not become operator attention,
+  while genuine git failures such as permissions, ENOSPC, or corruption still
+  surface as operator attention.
 - No-progress / stop-condition evaluation
 - A loop-level record that references its child layer-2 records by
   attempt id and reports terminal disposition (drained, blocked,
