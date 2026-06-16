@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260616T233002-722b64ee",
+  "bead_id": "ddx-1644ead2",
+  "base_rev": "96ecb6d355bb1f1614e8dfa1814c28fcc7280ad7",
+  "created_at": "2026-06-16T23:30:11.609947364Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1644ead2",
+    "title": "server: route forwarded federation mutations to one owner",
+    "description": "PROBLEM\nHub-mode owner-targeted operator writes must be sent to exactly one owning spoke, but current federation behavior has no owner resolution or single-spoke forwarding path and must not create phantom local fallback state.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-026-federation.md:150 specifies the owner-targeted write surface.\n- docs/helix/02-design/adr/ADR-007-federation-topology.md documents the 2026-06-08 amendment requiring owner-targeted basic writes.\n- cli/internal/server/graphql/resolver_federation.go:3 documents the current federation resolvers as read-only fan-out.\n- cli/internal/server/graphql/resolver_federation.go:23 defines FederationProvider with only Spokes and FanOut; there is no owner-targeted ForwardMutation path.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:327 requires federated worker control and owner-targeted writes.\n\nPROPOSED FIX\n- Implement owner-targeted forwarding for mutations that identify one node/project/worker owner.\n- Resolve target node id, target project id, worker owner, and supplied expected version before dispatch.\n- Send each accepted mutation to exactly one owning spoke.\n- Refuse offline, stale, read_only, missing-project, missing-owner, and broadcast-like requests with typed errors.\n- Do not create local fallback workers, events, or writes when forwarding is refused.\n- Keep existing federated reads unchanged except for capability metadata needed by forwarding.\n\nNON-SCOPE\nDo not implement write broadcast, distributed consensus, Axon backend, FEAT-029 managed-node outbound channels, or hub failover.\n\nPARENT\nParent bead: ddx-d5dfa702.",
+    "acceptance": "1. Go test `TestFederationForwardMutation_RoutesToOwner` proves a target node/project mutation is sent to exactly one owning spoke.\n2. Go test `TestFederationForwardMutation_RejectsOfflineOrReadOnly` proves offline, stale, and read_only spokes are refused without local fallback state.\n3. Go test `TestFederationForwardMutation_RejectsBroadcastTarget` proves a missing owner, missing project, or multi-owner target is rejected with a typed broadcast-like refusal.\n4. Go test `TestFederationForwardMutation_PreservesForwardingMetadata` proves origin identity, forwarding path, request id/idempotency key, target node id, target project id, and expected version are passed through to the owner call.\n5. `cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/federation/...` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-f2c16a4b",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "kind:feature",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260616T232006-ea8e",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-1644ead2\",\"fingerprint\":\"3ac1ec002c47f8775792cf18ddf11673253c29826b0210655b4975f432d43afb\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"3ac1ec002c47f8775792cf18ddf11673253c29826b0210655b4975f432d43afb\"}",
+          "created_at": "2026-06-16T23:29:45.961969524Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T233002-722b64ee",
+    "prompt": ".ddx/executions/20260616T233002-722b64ee/prompt.md",
+    "manifest": ".ddx/executions/20260616T233002-722b64ee/manifest.json",
+    "result": ".ddx/executions/20260616T233002-722b64ee/result.json",
+    "checks": ".ddx/executions/20260616T233002-722b64ee/checks.json",
+    "usage": ".ddx/executions/20260616T233002-722b64ee/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-1644ead2-20260616T233002-722b64ee"
+  },
+  "prompt_sha": "1b4c30b775794a05f2d32d44855f9093d59173c444af0ff2a12d9789d1305b9d"
+}
