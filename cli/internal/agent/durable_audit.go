@@ -24,6 +24,9 @@ var (
 	durableAuditCommandContext = func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.Background(), durableAuditGitTimeout)
 	}
+	// durableAuditIndexLockOwnerLookup resolves the live owner of an index.lock
+	// path for the durable-audit cancel-recovery path. Var for testing without lsof.
+	durableAuditIndexLockOwnerLookup = gitlock.IndexLockOwner
 )
 
 type durableAuditBeadReader interface {
@@ -182,11 +185,25 @@ func runDurableAuditGitWithIndexLockRecovery(gitDir string, args ...string) ([]b
 		return fmt.Errorf("%s; index-lock recovery exhausted after %d attempts: %s", strings.TrimSpace(string(out)), gitlock.RecoveryAttempts, lastDiag)
 	})
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-		if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.LockPath != "" {
-			_ = os.RemoveAll(cfg.LockPath)
-		}
+		recoverStaleIndexLockAfterDurableAuditCancel(gitDir)
 	}
 	return out, err
+}
+
+// recoverStaleIndexLockAfterDurableAuditCancel removes the durable-audit git
+// dir's index.lock after a capped/cancelled commit, but only when the lock has
+// no live owner. A killed git subprocess leaves a fresh (age < gitlock.StaleAge)
+// unowned lock that RecoverGitIndexLock would refuse to remove; this targeted
+// cleanup clears it. A lock held by a live concurrent git process is left untouched.
+func recoverStaleIndexLockAfterDurableAuditCancel(gitDir string) {
+	lockPath := worktreeIndexLockPath(gitDir)
+	if _, statErr := os.Lstat(lockPath); statErr != nil {
+		return
+	}
+	if pid, _ := durableAuditIndexLockOwnerLookup(lockPath); pid > 0 && processAlive(pid) {
+		return
+	}
+	_ = os.Remove(lockPath)
 }
 
 func runDurableAuditGitWithTimeout(gitDir string, timeout time.Duration, args ...string) ([]byte, error) {
