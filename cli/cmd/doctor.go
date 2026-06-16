@@ -431,16 +431,15 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// reportSkillInstallTopology prints the global and project install layers for
-// the default ddx package so operators can see whether the project copy exists
-// or is falling through to the global layer.
+// reportSkillInstallTopology prints the retired global layer and current
+// project/cache resolution for the default ddx package.
 func reportSkillInstallTopology(projectRoot string) {
 	ctx := context.Background()
 
 	globalPath := filepath.Join(ddxroot.GlobalDir(), "plugins", "ddx")
 	globalStatus := "missing"
 	if info, err := os.Stat(globalPath); err == nil && info.IsDir() {
-		globalStatus = "ok"
+		globalStatus = "retired-stale"
 	}
 
 	projectPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx")
@@ -453,19 +452,13 @@ func reportSkillInstallTopology(projectRoot string) {
 				projectStatus = "ok"
 			case "cache":
 				projectStatus = "lazy-resolves-to-cache"
-			case "global":
-				projectStatus = "lazy-resolves-to-global"
 			case "baked-in":
-				projectStatus = "missing"
+				projectStatus = "baked-in"
 			}
-		} else if globalStatus == "ok" {
-			projectStatus = "lazy-resolves-to-global"
 		}
-	} else if globalStatus == "ok" {
-		projectStatus = "lazy-resolves-to-global"
 	}
 
-	fmt.Printf("   Global Install (%s) — %s\n", globalPath, globalStatus)
+	fmt.Printf("   Retired Global Install (%s) — %s\n", globalPath, globalStatus)
 	fmt.Printf("   Project Install (%s) — %s\n", projectPath, projectStatus)
 }
 

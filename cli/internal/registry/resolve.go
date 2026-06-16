@@ -9,30 +9,14 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
-// GlobalPluginsDir returns the global plugins root: ${XDG_DATA_HOME}/ddx/global/plugins.
-// The directory may not exist; callers that need it present must create it.
-func GlobalPluginsDir() string {
-	return filepath.Join(ddxroot.GlobalDir(), "plugins")
-}
-
-// GlobalPluginDir returns the filesystem path for a named plugin in the global
-// tier: ${XDG_DATA_HOME}/ddx/global/plugins/<name>.
-// The directory may not exist; callers that need it present must create it.
-func GlobalPluginDir(name string) string {
-	return filepath.Join(GlobalPluginsDir(), name)
-}
-
 // ResolvePlugin returns the on-disk path and the resolution layer for a plugin.
-// Precedence: local project overlay → project lock/cache → global legacy →
-// baked-in default.
+// Precedence: local project overlay -> project lock/cache -> baked-in default.
 //
 // Layer values:
 //   - "project": found under <projectRoot>/.ddx/plugins/<name>, normally a
 //     local developer overlay
 //   - "cache": found through <ddx-root>/plugins.lock.yaml and the XDG payload
 //     cache
-//   - "global": found under ${XDG_DATA_HOME}/ddx/global/plugins/<name>
-//     (legacy/developer escape hatch)
 //   - "baked-in": embedded default; only valid for the "ddx" plugin name
 //
 // For baked-in, path is empty — callers should use defaultplugin.FS().
@@ -55,14 +39,9 @@ func ResolvePlugin(ctx context.Context, projectRoot, name string) (path string, 
 		}
 	}
 
-	globalPluginPath := filepath.Join(ddxroot.GlobalDir(), "plugins", name)
-	if info, statErr := os.Stat(globalPluginPath); statErr == nil && info.IsDir() {
-		return globalPluginPath, "global", nil
-	}
-
 	if name == "ddx" {
 		return "", "baked-in", nil
 	}
 
-	return "", "", fmt.Errorf("plugin %q not found in project, global, or baked-in layers", name)
+	return "", "", fmt.Errorf("plugin %q not found in project lock/cache or baked-in layers", name)
 }

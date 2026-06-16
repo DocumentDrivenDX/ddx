@@ -205,10 +205,7 @@ func TestUpdate_DiscardLocalOverwritesDirty(t *testing.T) {
 		"backup should contain the dirty (pre-overwrite) content")
 }
 
-// TestUpdateGlobal_UpdatesGlobalNotProject verifies AC1:
-// ddx update --global modifies only ${XDG_DATA_HOME}/ddx/global/plugins/ and
-// leaves the project plugins/ dir byte-identical.
-func TestUpdateGlobal_UpdatesGlobalNotProject(t *testing.T) {
+func TestUpdateGlobal_IsRetiredAndDoesNotTouchProjectOrGlobalTrees(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	xdgDataHome := t.TempDir()
@@ -227,18 +224,18 @@ func TestUpdateGlobal_UpdatesGlobalNotProject(t *testing.T) {
 	globalSentinel := filepath.Join(globalPluginDir, "sentinel.txt")
 	require.NoError(t, os.WriteFile(globalSentinel, []byte("global-side"), 0o644))
 
-	// Run ddx update --global with empty global installed state (no packages to update).
 	factory := NewCommandFactory(workDir)
 	output, err := executeCommand(factory.NewRootCommand(), "update", "--global")
-	require.NoError(t, err, output)
+	require.Error(t, err, output)
+	assert.Contains(t, err.Error(), "global plugin installs are retired")
 
-	// Project plugin tree must be byte-identical after global update.
 	projectData, readErr := os.ReadFile(projectSentinel)
-	require.NoError(t, readErr, "project sentinel must exist after global update")
+	require.NoError(t, readErr, "project sentinel must remain after retired global update")
 	assert.Equal(t, "project-side", string(projectData), "project sentinel must be byte-identical")
 
-	// Global update must not trigger project-level skill refresh.
-	assert.NotContains(t, output, "Shipped skills refreshed")
+	globalData, readErr := os.ReadFile(globalSentinel)
+	require.NoError(t, readErr, "global sentinel must remain after retired global update")
+	assert.Equal(t, "global-side", string(globalData), "global sentinel must be byte-identical")
 }
 
 // TestUpdate_RespectsConventionVsInTreeMode verifies AC2:

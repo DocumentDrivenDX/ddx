@@ -19,7 +19,7 @@ func makeInTreeRoot(t *testing.T) string {
 	return projectRoot
 }
 
-func TestPluginLookup_PrefersProjectOverGlobal(t *testing.T) {
+func TestPluginLookup_PrefersProjectOverLegacyGlobal(t *testing.T) {
 	projectRoot := makeInTreeRoot(t)
 	pluginName := "myplugin"
 
@@ -48,7 +48,7 @@ func TestPluginLookup_PrefersProjectOverGlobal(t *testing.T) {
 	}
 }
 
-func TestPluginLookup_FallsBackToGlobal(t *testing.T) {
+func TestPluginLookup_IgnoresLegacyGlobal(t *testing.T) {
 	projectRoot := makeInTreeRoot(t)
 	pluginName := "myplugin"
 
@@ -60,30 +60,20 @@ func TestPluginLookup_FallsBackToGlobal(t *testing.T) {
 		t.Fatalf("mkdir global plugin: %v", err)
 	}
 
-	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
-	if err != nil {
-		t.Fatalf("ResolvePlugin: unexpected error: %v", err)
-	}
-	if gotLayer != "global" {
-		t.Errorf("layer = %q, want %q", gotLayer, "global")
-	}
-	if gotPath != globalPlugin {
-		t.Errorf("path = %q, want %q", gotPath, globalPlugin)
+	_, _, err := ResolvePlugin(context.Background(), projectRoot, pluginName)
+	if err == nil {
+		t.Fatalf("ResolvePlugin unexpectedly resolved legacy global plugin %q", globalPlugin)
 	}
 
-	// With neither project nor global copy present, "ddx" falls back to baked-in.
-	projectRoot2 := makeInTreeRoot(t)
-	xdg2 := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg2)
-	gotPath2, gotLayer2, err2 := ResolvePlugin(context.Background(), projectRoot2, "ddx")
-	if err2 != nil {
-		t.Fatalf("ResolvePlugin(ddx baked-in): unexpected error: %v", err2)
+	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, "ddx")
+	if err != nil {
+		t.Fatalf("ResolvePlugin(ddx baked-in): unexpected error: %v", err)
 	}
-	if gotLayer2 != "baked-in" {
-		t.Errorf("layer = %q, want %q", gotLayer2, "baked-in")
+	if gotLayer != "baked-in" {
+		t.Errorf("layer = %q, want %q", gotLayer, "baked-in")
 	}
-	if gotPath2 != "" {
-		t.Errorf("path = %q, want empty string for baked-in", gotPath2)
+	if gotPath != "" {
+		t.Errorf("path = %q, want empty string for baked-in", gotPath)
 	}
 }
 
@@ -157,57 +147,8 @@ func TestPluginLookup_PrefersLocalOverlayOverProjectLockCache(t *testing.T) {
 	}
 }
 
-func TestGlobalPluginsDir_HonorsXDGDataHome(t *testing.T) {
-	xdg := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg)
-
-	got := GlobalPluginsDir()
-	want := filepath.Join(xdg, "ddx", "global", "plugins")
-	if got != want {
-		t.Errorf("GlobalPluginsDir() = %q, want %q", got, want)
-	}
-
-	// Fallback: without XDG_DATA_HOME, uses ~/.local/share.
-	t.Setenv("XDG_DATA_HOME", "")
-	home, err := os.UserHomeDir()
-	if err == nil {
-		got2 := GlobalPluginsDir()
-		want2 := filepath.Join(home, ".local", "share", "ddx", "global", "plugins")
-		if got2 != want2 {
-			t.Errorf("GlobalPluginsDir() without XDG = %q, want %q", got2, want2)
-		}
-	}
-}
-
-func TestGlobalPluginDir_HonorsXDGDataHome(t *testing.T) {
-	xdg := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg)
-
-	pluginName := "testplugin"
-	got := GlobalPluginDir(pluginName)
-	want := filepath.Join(xdg, "ddx", "global", "plugins", pluginName)
-	if got != want {
-		t.Errorf("GlobalPluginDir(%q) = %q, want %q", pluginName, got, want)
-	}
-
-	// Changing XDG_DATA_HOME changes the result.
-	xdg2 := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdg2)
-	got2 := GlobalPluginDir(pluginName)
-	want2 := filepath.Join(xdg2, "ddx", "global", "plugins", pluginName)
-	if got2 != want2 {
-		t.Errorf("GlobalPluginDir(%q) with changed XDG = %q, want %q", pluginName, got2, want2)
-	}
-	if got2 == got {
-		t.Errorf("GlobalPluginDir result did not change when XDG_DATA_HOME changed")
-	}
-}
-
 func TestPluginLookup_BakedInDefaultOnly(t *testing.T) {
 	projectRoot := makeInTreeRoot(t)
-
-	// Empty XDG so no global copies exist.
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	// "ddx" resolves to baked-in.
 	gotPath, gotLayer, err := ResolvePlugin(context.Background(), projectRoot, "ddx")

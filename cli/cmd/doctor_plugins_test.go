@@ -297,10 +297,9 @@ api_version: 1
 	assert.Contains(t, output, "dangling-link")
 }
 
-// TestDoctor_ReportsInstallTopology verifies that `ddx doctor` output contains
-// a "Global Install (...) — ok|missing" line and a "Project Install (...) —
-// ok|missing|lazy-resolves-to-global" line, and that the project line reads
-// "lazy-resolves-to-global" when only the global install is present.
+// TestDoctor_ReportsInstallTopology verifies that `ddx doctor` reports legacy
+// global payloads as retired-stale instead of treating them as a resolution
+// layer.
 func TestDoctor_ReportsInstallTopology(t *testing.T) {
 	xdgDir := t.TempDir()
 	homeDir := t.TempDir()
@@ -316,16 +315,10 @@ func TestDoctor_ReportsInstallTopology(t *testing.T) {
 	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor")
 	require.NoError(t, err)
 
-	// Both topology lines must appear in the output.
-	assert.Contains(t, output, "Global Install (", "Global Install line must appear in doctor output")
+	assert.Contains(t, output, "Retired Global Install (", "retired global install line must appear in doctor output")
 	assert.Contains(t, output, "Project Install (", "Project Install line must appear in doctor output")
-
-	// When only the global install exists, the project line must report lazy resolution.
-	assert.Contains(t, output, "lazy-resolves-to-global",
-		"Project Install line must read lazy-resolves-to-global when global install exists but project install does not")
-
-	// The global install we created must report "ok".
-	assert.Contains(t, output, ") — ok", "Global Install must report ok when global plugin dir exists")
+	assert.Contains(t, output, "retired-stale", "legacy global plugin dir must be reported as stale")
+	assert.NotContains(t, output, "lazy-resolves-to-global", "legacy global plugin dir must not be used as a resolution layer")
 }
 
 func executeWithStdoutCapture(t *testing.T, root *cobra.Command, args ...string) (string, error) {

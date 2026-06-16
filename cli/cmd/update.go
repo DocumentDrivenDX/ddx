@@ -32,7 +32,7 @@ type UpdateOptions struct {
 	DryRun       bool
 	Resource     string // selective update resource
 	DiscardLocal bool   // discard local changes when overwriting
-	Global       bool   // update global plugin tree instead of project tree
+	Global       bool   // deprecated compatibility flag; rejected when set
 }
 
 // ConflictInfo represents information about a detected conflict
@@ -62,13 +62,9 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// --global updates only the machine-wide plugin tree.
 	if opts.Global {
-		result, err := performGlobalUpdate(opts)
-		if err != nil {
-			return err
-		}
-		return displayUpdateResult(cmd, result, opts)
+		cmd.SilenceUsage = true
+		return errGlobalPluginInstallRetired()
 	}
 
 	// Call pure business logic
@@ -290,69 +286,6 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		Message:      "Updated: " + strings.Join(updated, ", "),
 		UpdatedFiles: updated,
 		BackupPath:   backupPath,
-	}, nil
-}
-
-// performGlobalUpdate checks for newer versions of globally installed plugins
-// and reinstalls any that are outdated (or all if --force). It operates
-// exclusively on the global plugin tree (${XDG_DATA_HOME}/ddx/global/) and
-// never touches the project tree.
-func performGlobalUpdate(opts *UpdateOptions) (*UpdateResult, error) {
-	state, err := registry.LoadGlobalState()
-	if err != nil || len(state.Installed) == 0 {
-		return &UpdateResult{Success: true, Message: "No globally installed packages."}, nil
-	}
-
-	reg := registry.BuiltinRegistry()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("getting home dir: %w", err)
-	}
-
-	var updated []string
-	for _, entry := range state.Installed {
-		if opts.Resource != "" && entry.Name != opts.Resource {
-			continue
-		}
-		pkg, err := reg.Find(entry.Name)
-		if err != nil {
-			continue
-		}
-
-		latestVersion := pkg.Version
-		if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
-			latestVersion = strings.TrimPrefix(release.TagName, "v")
-		}
-
-		if !opts.Force && entry.Version == latestVersion {
-			continue
-		}
-
-		installPkg := *pkg
-		installPkg.Version = latestVersion
-		adjustedPkg := adjustInstallTargets(&installPkg, entry.Name,
-			filepath.Join(home, ".agents", "skills"),
-			filepath.Join(home, ".claude", "skills"))
-
-		newEntry, err := registry.InstallPackage(adjustedPkg, ddxroot.GlobalDir())
-		if err != nil {
-			return nil, fmt.Errorf("updating global %s: %w", entry.Name, err)
-		}
-		state.AddOrUpdate(newEntry)
-		updated = append(updated, entry.Name+" "+entry.Version+" → "+latestVersion)
-	}
-
-	if err := registry.SaveGlobalState(state); err != nil {
-		return nil, fmt.Errorf("saving global state: %w", err)
-	}
-
-	if len(updated) == 0 {
-		return &UpdateResult{Success: true, Message: "Global packages are up to date."}, nil
-	}
-	return &UpdateResult{
-		Success:      true,
-		Message:      "Updated globally: " + strings.Join(updated, ", "),
-		UpdatedFiles: updated,
 	}, nil
 }
 

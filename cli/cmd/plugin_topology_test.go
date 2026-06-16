@@ -43,3 +43,13 @@ func TestInitHelp_DoesNotClaimDefaultPluginCopy(t *testing.T) {
 	assert.NotContains(t, output, "Installs the default DDx library plugin")
 	assert.NotContains(t, output, "--global")
 }
+
+func TestInitGlobalRetired(t *testing.T) {
+	factory := NewCommandFactory(t.TempDir())
+
+	output, err := executeCommand(factory.NewRootCommand(), "init", "--global")
+	require.Error(t, err, output)
+	assert.Contains(t, err.Error(), "ddx init --global is retired")
+	assert.Contains(t, err.Error(), "ddx init [path]")
+	assert.Contains(t, err.Error(), "ddx plugin install <name>")
+}

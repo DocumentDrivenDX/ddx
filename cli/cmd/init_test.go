@@ -800,64 +800,21 @@ func TestInitGitignoreRunStateMigration(t *testing.T) {
 	assert.Contains(t, content, ".ddx/run-state/")
 }
 
-// TestInitGlobal_CreatesAgentTierLinks verifies that `ddx init --global`:
-//   - installs the default ddx plugin to ${XDG_DATA_HOME}/ddx/global/plugins/ddx
-//   - creates ~/.claude/skills/ddx and ~/.agents/skills/ddx symlinks pointing into it
-//   - writes ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults
-func TestInitGlobal_CreatesAgentTierLinks(t *testing.T) {
+func TestInitGlobal_IsRetiredAndDoesNotCreateMachineState(t *testing.T) {
 	xdgDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("HOME", homeDir)
 
 	te := NewTestEnvironment(t, WithGitInit(false))
-	_, err := te.RunCommand("init", "--global")
-	require.NoError(t, err)
-
-	globalPluginDir := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
-	expectedTarget := filepath.Join(globalPluginDir, "skills", "ddx")
-
-	// Plugin must be installed into the global plugin dir.
-	assert.DirExists(t, globalPluginDir, "global plugin dir must be created by ddx init --global")
-
-	// Agent-tier skill links must exist and point into the global plugin dir.
-	for _, surface := range []string{".claude/skills", ".agents/skills"} {
-		link := filepath.Join(homeDir, surface, "ddx")
-		info, statErr := os.Lstat(link)
-		require.NoError(t, statErr, "skill link %s must exist", link)
-		assert.True(t, info.Mode()&os.ModeSymlink != 0, "%s must be a symlink", link)
-		target, readErr := os.Readlink(link)
-		require.NoError(t, readErr)
-		assert.Equal(t, expectedTarget, target, "%s must point into global plugin dir", link)
-	}
-
-	// Global config.yaml must be written with convention defaults.
-	configPath := filepath.Join(xdgDir, "ddx", "global", "config.yaml")
-	assert.FileExists(t, configPath, "global config.yaml must be written by ddx init --global")
-	data, readErr := os.ReadFile(configPath)
-	require.NoError(t, readErr)
-	assert.Contains(t, string(data), "version:", "global config.yaml must contain version field")
-}
-
-// TestInitGlobal_WritesGlobalConfig verifies that `ddx init --global` writes
-// ${XDG_DATA_HOME}/ddx/global/config.yaml with convention defaults.
-func TestInitGlobal_WritesGlobalConfig(t *testing.T) {
-	xdgDir := t.TempDir()
-	homeDir := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", xdgDir)
-	t.Setenv("HOME", homeDir)
-
-	te := NewTestEnvironment(t, WithGitInit(false))
-	_, err := te.RunCommand("init", "--global")
-	require.NoError(t, err)
-
-	configPath := filepath.Join(xdgDir, "ddx", "global", "config.yaml")
-	assert.FileExists(t, configPath, "global config.yaml must be written by ddx init --global")
-
-	data, readErr := os.ReadFile(configPath)
-	require.NoError(t, readErr)
-	content := string(data)
-	assert.Contains(t, content, "version:", "global config.yaml must contain version field")
+	output, err := te.RunCommand("init", "--global")
+	require.Error(t, err, output)
+	assert.Contains(t, err.Error(), "ddx init --global is retired")
+	assert.Contains(t, err.Error(), "ddx init [path]")
+	assert.NoDirExists(t, filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx"))
+	assert.NoFileExists(t, filepath.Join(xdgDir, "ddx", "global", "config.yaml"))
+	assert.NoDirExists(t, filepath.Join(homeDir, ".agents", "skills", "ddx"))
+	assert.NoDirExists(t, filepath.Join(homeDir, ".claude", "skills", "ddx"))
 }
 
 // TestInitCommand_US014_SynchronizationSetup tests US-014 synchronization initialization

@@ -222,17 +222,17 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 			wantGlobalStatus:  "missing",
 		},
 		{
-			name:              "project falls through to global",
+			name:              "legacy global install ignored",
 			projectInstalled:  false,
 			globalInstalled:   true,
-			wantProjectStatus: "lazy-resolves-to-global",
-			wantGlobalStatus:  "ok",
+			wantProjectStatus: "baked-in",
+			wantGlobalStatus:  "retired-stale",
 		},
 		{
 			name:              "project install missing",
 			projectInstalled:  false,
 			globalInstalled:   false,
-			wantProjectStatus: "missing",
+			wantProjectStatus: "baked-in",
 			wantGlobalStatus:  "missing",
 		},
 		{
@@ -240,7 +240,7 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 			projectInstalled:  true,
 			globalInstalled:   true,
 			wantProjectStatus: "ok",
-			wantGlobalStatus:  "ok",
+			wantGlobalStatus:  "retired-stale",
 		},
 	}
 
@@ -277,7 +277,7 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 			projectPath := filepath.Join(ddxroot.JoinProject(workDir), "plugins", "ddx")
 			globalPath := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
 
-			if !strings.Contains(output, "Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
+			if !strings.Contains(output, "Retired Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
 				t.Fatalf("output missing global install status %q:\n%s", tc.wantGlobalStatus, output)
 			}
 			if !strings.Contains(output, "Project Install ("+projectPath+") — "+tc.wantProjectStatus) {
