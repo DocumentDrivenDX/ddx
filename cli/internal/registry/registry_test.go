@@ -1,6 +1,7 @@
 package registry
 
 import (
+	iofs "io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -63,9 +65,6 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Install.Root.Source != "library" {
 		t.Errorf("expected root source=library, got %q", pkg.Install.Root.Source)
 	}
-	if pkg.Install.Root.Target != ".ddx/plugins/ddx" {
-		t.Errorf("expected root target=.ddx/plugins/ddx, got %q", pkg.Install.Root.Target)
-	}
 	// ddx plugin ships skills to project-local skill dirs only (FEAT-015).
 	if len(pkg.Install.Skills) != 2 {
 		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Install.Skills))
@@ -81,6 +80,15 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Install.Scripts != nil {
 		t.Error("expected no scripts")
 	}
+}
+
+func TestDefaultPluginPackageDoesNotAdvertiseProjectPayloadInstallTarget(t *testing.T) {
+	data, err := iofs.ReadFile(defaultplugin.FS(), "package.yaml")
+	require.NoError(t, err)
+
+	text := string(data)
+	assert.Contains(t, text, "Legacy/local-overlay compatibility metadata only.")
+	assert.Contains(t, text, "target: .ddx/plugins/ddx")
 }
 
 func TestFind(t *testing.T) {

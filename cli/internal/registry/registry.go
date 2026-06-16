@@ -75,9 +75,9 @@ func BuiltinRegistry() *Registry {
 				Install: PackageInstall{
 					Root: &InstallMapping{
 						Source: "library",
-						// Compatibility manifest target. Registry installs
-						// cache the payload under XDG and generate shims; they
-						// do not copy this tree into the project.
+						// Legacy/local-overlay compatibility metadata only.
+						// Built-in DDx resolves through the embedded cache and
+						// generated adapters, not a copied project payload tree.
 						Target: ".ddx/plugins/ddx",
 					},
 					Skills: []InstallMapping{
