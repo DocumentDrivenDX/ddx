@@ -188,63 +188,67 @@ flowchart LR
     class Bind cfg;
 ```
 
-## Project-Local Install Model
+## Project Plugin Model
 
-DDx installs are **project-local**. The only global artifact is the `ddx`
-binary itself (and optionally `ddx-server`). Everything else lives under the
-project root.
+DDx project setup is **project-scoped**, but plugin payloads are not vendored
+into every repository. The global machine artifact is the `ddx` binary. The
+shared plugin payload cache lives under XDG data directories. The project
+records durable intent and regenerates adapter files as needed.
 
 After `ddx init`:
 
 ```
 <projectRoot>/
 ├── .ddx/
-│   ├── config.yaml          # project DDx config
-│   ├── plugins/             # installed plugins (local only)
-│   │   └── ddx/             # the default DDx plugin (library)
+│   ├── config.yaml          # project DDx config, committed
+│   ├── versions.yaml        # DDx version metadata, committed
+│   ├── plugins.lock.yaml    # registry plugin pins, committed
+│   ├── plugins/             # local overlay symlinks only, ignored
 │   ├── executions/          # ddx try / ddx work evidence
 │   └── beads/               # bead store (JSONL)
 ├── .agents/
-│   └── skills/              # agent-facing skills
+│   └── skills/              # generated agent adapters, ignored
 └── .claude/
-    └── skills/              # Claude-specific skill installs
+    └── skills/              # generated Claude adapters, ignored
 ```
 
-`ddx install <plugin>` only writes under those three trees. There is no
-`~/.ddx`. There is no `ddx install --global`. Cloning the repo gives a
-collaborator the entire DDx surface for the project; deleting `.ddx/`
-removes it.
+`ddx plugin install <plugin>` writes `.ddx/plugins.lock.yaml`, resolves the
+plugin into `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`, and
+generates `.agents/skills/` plus `.claude/skills/` adapters. `ddx plugin sync`
+recreates missing adapters from the lock/cache. `.ddx/plugins/<name>` is used
+only for explicit local overlays.
 
-This is a deliberate inversion of the usual CLI pattern. It makes:
+This keeps:
 
-- **Reproducibility** — the repo is the source of truth.
-- **Onboarding** — `git clone && ddx doctor` is enough.
-- **Cleanup** — reversible by file deletion.
+- **Reproducibility** — the committed lockfile is the source of truth.
+- **Onboarding** — `git clone && ddx plugin sync && ddx doctor` repairs local adapters.
+- **Small repos** — reusable workflow assets are cached, not checked in.
 
 See **FEAT-015** for the installation architecture spec.
 
 ```mermaid
 flowchart TB
-    subgraph Global["Global (developer machine)"]
+    subgraph Global["Machine"]
         Bin["ddx binary<br/>(~/.local/bin/ddx)"]
-        Server["ddx-server<br/>(optional, only global artifact)"]
+        Cache["plugin cache<br/>(${XDG_DATA_HOME}/ddx/cache/plugins)"]
     end
-    subgraph Project["&lt;projectRoot&gt;/ — everything else lives here"]
+    subgraph Project["&lt;projectRoot&gt;/"]
         direction LR
-        DDxDir[".ddx/<br/>config.yaml · plugins/ ·<br/>executions/ · beads/"]
-        AgentsDir[".agents/skills/"]
-        ClaudeDir[".claude/skills/"]
+        Lock[".ddx/plugins.lock.yaml"]
+        AgentsDir[".agents/skills/<br/>generated"]
+        ClaudeDir[".claude/skills/<br/>generated"]
     end
 
     Bin -->|"ddx init"| Project
-    Bin -->|"ddx install &lt;plugin&gt;"| DDxDir
-    Bin -->|"ddx install &lt;plugin&gt;"| AgentsDir
-    Bin -->|"ddx install &lt;plugin&gt;"| ClaudeDir
+    Bin -->|"ddx plugin install &lt;plugin&gt;"| Lock
+    Bin -->|"resolve payload"| Cache
+    Cache -->|"ddx plugin sync"| AgentsDir
+    Cache -->|"ddx plugin sync"| ClaudeDir
 
     classDef global fill:#e5e7eb,stroke:#4b5563,color:#1f2937;
     classDef local fill:#dbeafe,stroke:#1d4ed8,color:#1e293b;
-    class Bin,Server global;
-    class DDxDir,AgentsDir,ClaudeDir local;
+    class Bin,Cache global;
+    class Lock,AgentsDir,ClaudeDir local;
 ```
 
 ## Multi-Machine Sync

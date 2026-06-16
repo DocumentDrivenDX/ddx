@@ -64,7 +64,7 @@ HERO_GRAPHIC_PLACEHOLDER -->
   >}}
   {{< hextra/feature-card
     title="Plugin Registry"
-    subtitle="One command to install a workflow. ddx install helix gives you structured development with AI agents out of the box."
+    subtitle="Pin a workflow without vendoring it. ddx plugin install helix records the dependency, caches the payload, and generates local agent adapters."
     class="hx-aspect-auto md:hx-aspect-[1.1/1] max-md:hx-min-h-[340px]"
     style="background: radial-gradient(ellipse at 50% 80%,rgba(53,163,95,0.15),hsla(0,0%,100%,0));"
   >}}

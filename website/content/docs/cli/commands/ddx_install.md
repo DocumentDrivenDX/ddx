@@ -5,17 +5,17 @@ generated: true
 
 ## ddx install
 
-Install a package or resource
+Retired: use ddx plugin install
 
 ### Synopsis
 
-Install a package or resource from the DDx registry into the
-current project under .ddx/plugins/<name>/.
+`ddx install` is retired. Use `ddx plugin install <name>` for project plugin
+lifecycle operations.
 
 Examples:
-  ddx install helix                        # Install HELIX workflow
-  ddx install helix --force                # Reinstall even if already up to date
-  ddx install persona/strict-code-reviewer # Install a single persona
+  ddx plugin install helix
+  ddx plugin install helix --force
+  ddx plugin install helix --local ../helix --force
 
 ```
 ddx install <name> [flags]

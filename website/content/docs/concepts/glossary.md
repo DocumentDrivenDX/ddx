@@ -63,15 +63,16 @@ composed into prompts when their bound role is dispatched.
 
 ## Plugin
 
-A package of DDx resources installed under a project. Plugins ship
-templates, patterns, prompts, personas, and other artifacts. The default
-DDx plugin lives at `<projectRoot>/.ddx/plugins/ddx/` after `ddx init`.
+A package of DDx resources such as skills, templates, prompts, checks, or MCP
+server definitions. Registry plugins are pinned in `.ddx/plugins.lock.yaml`,
+cached under `${XDG_DATA_HOME}/ddx/cache/plugins/`, and exposed through
+generated `.agents/skills/` and `.claude/skills/` adapters.
 
 ## Project-Local
 
-A DDx design property: install operations only write under `<projectRoot>`,
-never under `~/`. Cloning the repo gives a collaborator the full DDx
-surface for the project. The single global artifact is `ddx-server`.
+A DDx design property: durable project intent lives under `<projectRoot>`.
+Generated adapters and cached plugin payloads are recreated locally and are
+not source assets to commit. The single user-facing binary is `ddx`.
 
 ## Prompt Envelope
 

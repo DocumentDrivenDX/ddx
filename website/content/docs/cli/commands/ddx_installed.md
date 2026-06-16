@@ -5,11 +5,11 @@ generated: true
 
 ## ddx installed
 
-List installed packages
+Retired: use ddx plugin list
 
 ### Synopsis
 
-List all packages and resources installed via ddx install.
+`ddx installed` is retired. Use `ddx plugin list` to inspect project plugins.
 
 ```
 ddx installed [flags]

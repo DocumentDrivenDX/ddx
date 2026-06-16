@@ -35,7 +35,7 @@ complete, and which review gates apply.
 |-------------------|-----------------------------|
 | Document library and templates | Which documents are required, and when |
 | Bead tracker (work items, dependencies, claims) | Phase gates and definition-of-done |
-| Plugin registry (`ddx install`) | Methodology-specific skills and prompts |
+| Plugin registry (`ddx plugin install`) | Methodology-specific skills and prompts |
 | Agent dispatch and harness routing | Supervisory loops and planning |
 | MCP server for documents and beads | Story shape, review checklists, ceremonies |
 | Git sync and execution evidence | Release process and deployment cadence |
@@ -63,13 +63,13 @@ ships any mix of skills, templates, prompts, patterns, MCP servers, or tool
 configs. Installing one is a single command:
 
 ```bash
-ddx install <plugin>
+ddx plugin install <plugin>
 ```
 
-`ddx install` writes only inside the project — under `.ddx/plugins/<name>/`,
-`.agents/skills/`, and `.claude/skills/`. The tree is committed to git, so
-teammates and CI get the same plugin set on clone. Nothing is installed under
-`~/`.
+`ddx plugin install` records project plugin intent in `.ddx/plugins.lock.yaml`,
+stores payload bytes in the shared XDG plugin cache, and generates local
+adapter paths under `.agents/skills/` and `.claude/skills/`. Teammates get the
+same plugin set from the lockfile, without committing plugin payload trees.
 
 A plugin can be as small as a single skill or as large as a full methodology.
 HELIX is the reference example, but the same mechanism distributes:
@@ -114,7 +114,7 @@ tracking, and agent dispatch — and adds the opinions about *how* those
 primitives are sequenced.
 
 ```bash
-ddx install helix
+ddx plugin install helix
 ```
 
 {{< asciinema src="03-plugin-install" >}}
@@ -139,7 +139,7 @@ If you are building a workflow methodology on DDx, you get for free:
 - **Document library management** — structured docs your users already have
 - **Bead tracker** — shared work-item storage with dependencies and claims
 - **Agent dispatch** — invoke any supported AI agent through one interface
-- **Plugin registry** — distribute your methodology with `ddx install`
+- **Plugin registry** — distribute your methodology with `ddx plugin install`
 - **MCP access** — agents discover and read documents programmatically
 - **Execution evidence** — every agent run is recorded for audit and replay
 

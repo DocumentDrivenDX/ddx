@@ -77,7 +77,7 @@ ls .ddx/executions/
 Skills are reusable, agent-invocable capabilities packaged alongside the project. They install under `.agents/skills/` and `.claude/skills/` and become available to any harness that supports skill discovery. Plugins ship skills the way they ship templates and prompts — versioned, project-local, no global state.
 
 ```
-ddx install <plugin-name>     # plugins can carry skills
+ddx plugin install <plugin-name>     # plugins can carry skills
 ls .claude/skills/
 ```
 

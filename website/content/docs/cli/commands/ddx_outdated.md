@@ -5,11 +5,12 @@ generated: true
 
 ## ddx outdated
 
-List installed packages with available updates
+Retired plugin update check
 
 ### Synopsis
 
-Check installed packages against the registry and list those with newer versions available.
+`ddx outdated` is retired. Use `ddx plugin list`, `ddx plugin install <name> --force`,
+and `ddx doctor --plugins` for the forward plugin lifecycle.
 
 ```
 ddx outdated [flags]

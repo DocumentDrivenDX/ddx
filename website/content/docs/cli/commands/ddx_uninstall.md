@@ -5,11 +5,11 @@ generated: true
 
 ## ddx uninstall
 
-Remove an installed package
+Retired: use ddx plugin uninstall
 
 ### Synopsis
 
-Remove a package or resource installed via ddx install.
+`ddx uninstall` is retired. Use `ddx plugin uninstall <name>` for project plugins.
 
 ```
 ddx uninstall <name> [flags]

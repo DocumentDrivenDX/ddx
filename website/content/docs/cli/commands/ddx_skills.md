@@ -22,8 +22,8 @@ Examples:
   ddx skills check
   ddx skills check skills
   ddx skills check .agents/skills
-  ddx skills check .ddx/plugins/ddx
-  ddx skills check .ddx/plugins/helix/skills
+  ddx skills check library/skills/ddx
+  ddx skills check .claude/skills/ddx
 
 ```
 ddx skills [flags]

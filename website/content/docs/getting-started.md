@@ -18,9 +18,10 @@ Run the install script to set up DDx globally:
 curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 ```
 
-This installs the `ddx` CLI binary to `~/.local/bin/ddx`. DDx skills
-are installed per-project by `ddx init` and `ddx install <plugin>` —
-nothing is written under `~/` outside the binary itself.
+This installs the `ddx` CLI binary to `~/.local/bin/ddx`. Project skills
+and workflow plugins are resolved per project by `ddx init` and
+`ddx plugin install <plugin>`; payloads live in the XDG plugin cache and
+generated agent adapters stay out of git.
 
 Verify the installation:
 
@@ -34,22 +35,24 @@ ddx doctor
 In your project directory, run:
 
 ```bash
-ddx init
+ddx init .
 ```
 
 This creates:
-- `.ddx/` - DDx configuration and project-local plugin tree
-- `.agents/skills/` and `.claude/skills/` - copied skill files for
-  Claude Code (real files, no symlinks)
+- `.ddx/config.yaml` and `.ddx/versions.yaml` - project DDx metadata
+- `.agents/skills/ddx` and `.claude/skills/ddx` - generated adapters to the
+  built-in DDx skill package
+- `.gitignore` rules that keep generated adapters and plugin payloads out of git
 
 ## Install HELIX Workflow
 
 ```bash
-ddx install helix
+ddx plugin install helix
 ```
 
-This installs HELIX to `.ddx/plugins/helix/` and copies its skills
-into the project's `.agents/skills/` and `.claude/skills/` trees.
+This records HELIX in `.ddx/plugins.lock.yaml`, resolves the HELIX payload into
+`${XDG_DATA_HOME}/ddx/cache/plugins/helix/<version>/`, and generates local
+agent adapters under `.agents/skills/` and `.claude/skills/`.
 
 ## Plan
 
@@ -139,9 +142,10 @@ multi-model review, use `adversarial-review`.
 Check for updates:
 
 ```bash
-ddx update --check     # Check all
-ddx update ddx         # Update DDx CLI
-ddx update helix      # Update HELIX plugin
+ddx upgrade --check          # Check the DDx binary
+ddx upgrade                  # Upgrade the DDx binary
+ddx plugin sync              # Recreate generated plugin adapters
+ddx plugin install helix --force
 ```
 
 ## Next Steps
