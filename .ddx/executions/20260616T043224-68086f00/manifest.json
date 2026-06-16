@@ -1,0 +1,64 @@
+{
+  "attempt_id": "20260616T043224-68086f00",
+  "bead_id": "ddx-f6609c33",
+  "base_rev": "fc2de8f4fee3ec2121aa2493312331a66401d9ea",
+  "created_at": "2026-06-16T04:32:32.700780248Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f6609c33",
+    "title": "ops: migrate active project queues to server-managed workers",
+    "description": "PROBLEM\nThe server-managed worker feature is not done until active dogfood queues stop depending on tmux/shell workers and are monitored through the server-managed surface. The operator specifically needs helix, ddx, tablespec, pqueue, and heimq to each have one worker steadily burning down its bead queue, with all in-flight queues expected to burn down in less than 24 hours unless blocked by explicit beads.\n\nROOT CAUSE WITH FILE:LINE\nThe plan's Migration Plan requires replacing external workers with server-managed desired state. Existing server start/stop at cli/internal/server/graphql/schema.graphql:3271-3285 and worker UI controls at cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte:12-42 were one-shot controls, so earlier dogfood used tmux windows and external ddx work processes. After the dependency beads land, the server should be authoritative for routine worker lifecycle.\n\nPROPOSED FIX\nInventory active workers and queues, stop retired tmux/shell workers gracefully, verify no leftover attempt-owned ddx work/claude/codex descendants, set desired_count=1 for helix, ddx, tablespec, pqueue, and heimq via ddx worker/server API, and monitor through server APIs until queues drain or blockers are filed. Update the plan document with migration evidence and any exception beads.\n\nNON-SCOPE\nDo not force-kill unrelated interactive Claude/Codex/Codex sessions. Do not drain queues by manual implementation outside beads unless explicitly required to unstick a worker. Do not use tmux as the steady-state management mechanism.",
+    "acceptance": "1. ddx worker status --all-projects --json or the implemented equivalent shows helix, ddx, tablespec, pqueue, and heimq each with desired_count \u003e= 1 and actual managed worker count \u003e= 1, or each exception has a linked blocker bead.\n2. Existing tmux/shell ddx work workers for those projects are stopped or explicitly classified as temporary external fallback with a blocker bead.\n3. pgrep -af 'ddx work|claude|codex' is reviewed after migration and no retired attempt-owned ddx work, claude, codex, shell, or sleep descendant remains.\n4. Each project has fresh worker progress evidence from the server-managed surface after migration.\n5. Queue status for helix, ddx, tablespec, pqueue, and heimq is recorded, including projected blockers if burn-down within 24 hours is not realistic.\n6. docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md is updated with final migration evidence.\n7. make install is run after any ddx code change lands during migration.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-9d1af129",
+    "labels": [
+      "area:ops",
+      "area:workers",
+      "kind:dogfood",
+      "kind:reliability",
+      "phase:build",
+      "plan:server-managed-workers",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"ddx worker status --all-projects --json or the implemented equivalent shows helix, ddx, tablespec, pqueue, and heimq each with desired_count \\u003e= 1 and actual managed worker count \\u003e= 1, or each exception has a linked blocker bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"Existing tmux/shell ddx work workers for those projects are stopped or explicitly classified as temporary external fallback with a blocker bead.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"pgrep -af 'ddx work|claude|codex' is reviewed after migration and no retired attempt-owned ddx work, claude, codex, shell, or sleep descendant remains.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"Each project has fresh worker progress evidence from the server-managed surface after migration.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Queue status for helix, ddx, tablespec, pqueue, and heimq is recorded, including projected blockers if burn-down within 24 hours is not realistic.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md is updated with final migration evidence.\",\"kind\":\"mechanical\",\"verifiable\":true},{\"ac\":7,\"text\":\"make install is run after any ddx code change lands during migration.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":8,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-06-16T04:27:29.537258052Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.25 threshold=0.50 verifiable=2/8"
+        },
+        {
+          "actor": "worker-20260616T042728-f086",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"acceptance criteria dropped or altered\",\"fingerprint\":\"a5009c61c899c35222e0cf80f68291112e4b76a566f9e181735e2281652ab1f2\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"a5009c61c899c35222e0cf80f68291112e4b76a566f9e181735e2281652ab1f2\"}",
+          "created_at": "2026-06-16T04:30:24.044433908Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        }
+      ],
+      "queue-rank": 140,
+      "spec-id": "IP-2026-06-13-server-managed-workers"
+    }
+  },
+  "governing": [
+    {
+      "id": "IP-2026-06-13-server-managed-workers",
+      "path": "docs/helix/06-iterate/server-managed-workers-plan-2026-06-13.md",
+      "title": "Implementation Plan: Server-Managed Worker Supervision"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260616T043224-68086f00",
+    "prompt": ".ddx/executions/20260616T043224-68086f00/prompt.md",
+    "manifest": ".ddx/executions/20260616T043224-68086f00/manifest.json",
+    "result": ".ddx/executions/20260616T043224-68086f00/result.json",
+    "checks": ".ddx/executions/20260616T043224-68086f00/checks.json",
+    "usage": ".ddx/executions/20260616T043224-68086f00/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-f6609c33-20260616T043224-68086f00"
+  },
+  "prompt_sha": "c683e57924055e27bfefc8c8b6b42b2e5fb0ef7efc5533fa9f77fb3be1f5517d"
+}
