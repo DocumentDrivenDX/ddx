@@ -72,9 +72,10 @@ func TestPromptSizeReport(t *testing.T) {
 		Bytes         int    `json:"bytes"`
 		PromptSHA     string `json:"prompt_sha"`
 	}
+	// Updated for ddx-e665942c (background verification completion guardrail, +~160 bytes).
 	const (
-		fullByteBudget    = 6400
-		minimalByteBudget = 6200
+		fullByteBudget    = 6600
+		minimalByteBudget = 6400
 	)
 
 	// Selector at execute_bead.go routes (agent|fiz|embedded) to the Agent

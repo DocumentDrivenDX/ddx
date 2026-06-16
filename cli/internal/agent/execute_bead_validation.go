@@ -74,11 +74,13 @@ type AttemptIntegrityInput struct {
 // when the attempt satisfies the integrity contract. When OK is false, Reason
 // is a short machine code and Detail is an operator-facing explanation that
 // makes clear the rejection came from DDx validation, not from an
-// implementation/agent failure.
+// implementation/agent failure. Warnings carries non-fatal observations (e.g.
+// duplicate verification commands where the first succeeded) that assist triage.
 type AttemptIntegrityVerdict struct {
-	OK     bool
-	Reason string
-	Detail string
+	OK       bool
+	Reason   string
+	Detail   string
+	Warnings []string
 }
 
 // Integrity reason codes (the Reason field of AttemptIntegrityVerdict).
@@ -271,6 +273,56 @@ func transcriptCommandsFromToolCalls(calls []ToolCallEntry) []TranscriptCommand 
 	return out
 }
 
+// detectDuplicateGateRunWarnings scans gate runs for a pattern where the same
+// verification command (by normalized form) appears more than once and the first
+// run was meaningful (successful) while a later run was not. This matches the
+// auto-background canary pattern: the harness backgrounds a timed-out
+// verification command and the agent re-issues the same command before consuming
+// the background result.
+func detectDuplicateGateRunWarnings(runs []PreCommitGateRun) []string {
+	if len(runs) < 2 {
+		return nil
+	}
+	// Normalize: any command containing "lefthook run pre-commit" maps to the
+	// same canonical key regardless of pipe/redirect suffix.
+	canonical := func(cmd string) string {
+		if strings.Contains(cmd, "lefthook run pre-commit") {
+			return "lefthook run pre-commit"
+		}
+		return strings.TrimSpace(cmd)
+	}
+	type group struct {
+		firstClass string
+		hasDupe    bool
+		dupeClass  string
+	}
+	groups := map[string]*group{}
+	order := []string{}
+	for _, r := range runs {
+		key := canonical(r.Command)
+		if g, ok := groups[key]; ok {
+			if !g.hasDupe {
+				g.hasDupe = true
+				g.dupeClass = classifyLefthookOutput(r.Output)
+			}
+		} else {
+			groups[key] = &group{firstClass: classifyLefthookOutput(r.Output)}
+			order = append(order, key)
+		}
+	}
+	var warnings []string
+	for _, key := range order {
+		g := groups[key]
+		if g.hasDupe && g.firstClass == "meaningful" && g.dupeClass != "meaningful" {
+			warnings = append(warnings, fmt.Sprintf(
+				"DDx warning: duplicate pre-commit gate run detected for %q; the first successful run is preserved as acceptance evidence. Avoid rerunning the same verification command while a prior auto-backgrounded result is still pending.",
+				key,
+			))
+		}
+	}
+	return warnings
+}
+
 // ValidateAttemptIntegrity performs the structured post-agent integrity check.
 // It is pure so it can be exercised directly by regression tests that simulate
 // an execute-bead transcript. It rejects an attempt when:
@@ -324,7 +376,7 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict 
 		}
 	}
 
-	return AttemptIntegrityVerdict{OK: true}
+	return AttemptIntegrityVerdict{OK: true, Warnings: detectDuplicateGateRunWarnings(in.GateRuns)}
 }
 
 // detectPostCommitMutation reports whether the agent rewrote its implementation

@@ -1961,7 +1961,7 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // TestPromptGuardrails_AllPresent enforce this list; add a guardrail here
 // AND to both tests when you introduce one.
 //
-// 24 guardrails (FEAT-022 cross-reference):
+// 25 guardrails (FEAT-022 cross-reference):
 //  1. AC checkbox: every AC satisfied by a specific code/test/file (anti-handwave)
 //  2. Read named files / referenced specs first, before editing
 //  3. Missing-governing fallback note (non-minimal renders only — see
@@ -1992,6 +1992,8 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 //     plan before running expensive commands; document output path and completion criterion
 // 24. Prohibit rerunning identical long-running commands without documenting why
 //     prior output is invalid and what changed before the retry
+// 25. Background verification completion: wait for auto-backgrounded verification
+//     commands (lefthook, go test) to complete before rerunning in the same worktree
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
 // Both variants emit it verbatim; per-variant preamble runs before it.
@@ -2075,7 +2077,8 @@ For expensive commands (benchmarks, load tests, validation > 60s per variant):
 
 - Write a matrix plan before launching expensive commands: list required configs, output paths, completion criteria.
 - Do not re-run the same long-running command unless: (1) the command fingerprint changed (args/env/config), AND (2) you document why prior output is invalid and what changed.
-- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.`
+- If a long-running command times out or is incomplete, exit with ` + "`status: open`" + ` + retryable ` + "`reason`" + ` in ` + "`no_changes_rationale.txt`" + `. Do not silently retry; let the orchestrator decide.
+- If a verification command is auto-backgrounded by the harness, wait for its completion before rerunning the same command in the same worktree.`
 
 // executeBeadInstructionsClaudeText is the <instructions> body used when the
 // harness carries its own rich system prompt (claude, codex, opencode,

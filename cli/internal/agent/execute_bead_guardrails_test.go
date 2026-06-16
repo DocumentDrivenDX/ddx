@@ -91,6 +91,10 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "agent_use_tools_not_bash", variants: []string{"agent"}, any: []string{"`bash: cat`", "`bash: rg`"}},
 		{name: "long_running_matrix_plan", any: []string{"Long-running matrix/benchmark beads", "matrix plan", "output paths", "completion criteria"}},
 		{name: "long_running_rerun_justification", any: []string{"Do not re-run the same long-running command", "document why prior output is invalid"}},
+		{name: "background_verification_completion", any: []string{
+			"auto-backgrounded by the harness, wait for its completion",
+			"auto-backgrounded by the harness",
+		}},
 	}
 
 	cases := []struct{ variant, harness string }{
@@ -360,10 +364,11 @@ func TestExecuteBeadInstructionsMissingGoverningGate(t *testing.T) {
 // at HEAD before the shared-block extraction dep landed.
 func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 	// Pre-tightening baselines from TestPromptSizeReport before ddx-fcdbc731.
-	// Updated for FEAT-010 (long-running matrix guardrails).
+	// Updated for FEAT-010 (long-running matrix guardrails) and ddx-e665942c
+	// (background verification completion guardrail, +19 words per variant).
 	const (
-		baselineClaude = 1105
-		baselineAgent  = 1065
+		baselineClaude = 1150
+		baselineAgent  = 1110
 		floor          = 0.70 // ≥30% reduction; words ≤ 0.70 * baseline
 	)
 	cases := []struct {

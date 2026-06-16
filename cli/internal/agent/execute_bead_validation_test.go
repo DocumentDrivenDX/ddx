@@ -292,6 +292,49 @@ func TestAttemptIntegrityAllowsBenignBuildToolTempUsage(t *testing.T) {
 	}
 }
 
+// TestAttemptIntegrity_ClaudeBackgroundPreCommitDuplicateUsesSuccessfulPriorRun
+// is the regression test for the ddx-e665942c canary: Claude auto-backgrounded
+// `lefthook run pre-commit 2>&1 | tail -30` after the 120s tool timeout, then
+// launched a second `lefthook run pre-commit 2>&1` before consuming the first
+// background result. The first succeeded (exit 0); the duplicate failed (exit 1).
+// ValidateAttemptIntegrity must keep the first successful gate run as acceptance
+// evidence (verdict.OK) and record the duplicate as a warning, not convert the
+// attempt to a false-red solely because the later run failed.
+func TestAttemptIntegrity_ClaudeBackgroundPreCommitDuplicateUsesSuccessfulPriorRun(t *testing.T) {
+	successOutput := "go-test\n✔ go-test (executed in 4.21s)\nsummary: (done in 4.3s)"
+	failOutput := "error: exit status 1"
+	verdict := ValidateAttemptIntegrity(AttemptIntegrityInput{
+		BaseRev:           "aaa0000",
+		ImplementationRev: "bbb0000",
+		CommitEvents: []CommitEvent{
+			{SHA: "bbb0000", Action: "commit", Subject: "implement feature [ddx-e2fd88f3]"},
+		},
+		CodeChanging: true,
+		GateRuns: []PreCommitGateRun{
+			// First run: auto-backgrounded by the harness, completed exit 0.
+			{Command: "lefthook run pre-commit 2>&1 | tail -30", Output: successOutput},
+			// Duplicate run: launched before first background result was consumed, failed exit 1.
+			{Command: "lefthook run pre-commit 2>&1", Output: failOutput},
+		},
+	})
+	if !verdict.OK {
+		t.Fatalf("expected first successful gate run to be preserved as acceptance evidence; got reason=%q detail=%q", verdict.Reason, verdict.Detail)
+	}
+	if len(verdict.Warnings) == 0 {
+		t.Fatal("expected a warning about the duplicate background verification command, got none")
+	}
+	found := false
+	for _, w := range verdict.Warnings {
+		if strings.Contains(strings.ToLower(w), "duplicate") || strings.Contains(strings.ToLower(w), "auto-backgrounded") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected warning to mention duplicate or auto-backgrounded, got %v", verdict.Warnings)
+	}
+}
+
 // TestLandBeadResult_AttemptIntegrityPreserved (AC1 + AC4 at the orchestrator
 // boundary) verifies a worker result flagged with FailureModeAttemptIntegrity
 // and commits is preserved for review — not merged — and that the final result
