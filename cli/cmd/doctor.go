@@ -446,10 +446,32 @@ func reportSkillInstallTopology(projectRoot string) {
 	projectStatus := "missing"
 	if existingRoot, ok := ddxroot.ExistingPath(ctx, projectRoot); ok {
 		projectPath = filepath.Join(existingRoot, "plugins", "ddx")
-		if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
+		if info, err := os.Lstat(projectPath); err == nil && info.Mode()&os.ModeSymlink == 0 {
+			projectStatus = "retired-stale"
+		} else if err == nil {
+			if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
+				switch layer {
+				case "project":
+					projectStatus = "ok"
+				case "cache":
+					projectStatus = "lazy-resolves-to-cache"
+				case "baked-in":
+					projectStatus = "baked-in"
+				}
+			} else {
+				projectStatus = "broken-overlay"
+			}
+		} else if os.IsNotExist(err) {
+			if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
+				switch layer {
+				case "cache":
+					projectStatus = "lazy-resolves-to-cache"
+				case "baked-in":
+					projectStatus = "baked-in"
+				}
+			}
+		} else if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
 			switch layer {
-			case "project":
-				projectStatus = "ok"
 			case "cache":
 				projectStatus = "lazy-resolves-to-cache"
 			case "baked-in":

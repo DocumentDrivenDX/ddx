@@ -216,10 +216,10 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 		wantGlobalStatus  string
 	}{
 		{
-			name:              "project install present",
+			name:              "legacy project install present",
 			projectInstalled:  true,
 			globalInstalled:   false,
-			wantProjectStatus: "ok",
+			wantProjectStatus: "retired-stale",
 			wantGlobalStatus:  "missing",
 		},
 		{
@@ -237,10 +237,10 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 			wantGlobalStatus:  "missing",
 		},
 		{
-			name:              "both project and global present",
+			name:              "both legacy project and global present",
 			projectInstalled:  true,
 			globalInstalled:   true,
-			wantProjectStatus: "ok",
+			wantProjectStatus: "retired-stale",
 			wantGlobalStatus:  "retired-stale",
 		},
 	}

@@ -19,6 +19,8 @@ type Options struct {
 
 // Install copies skills from src into <projectRoot>/.agents/skills/<name>/ and
 // <projectRoot>/.claude/skills/<name>/ as real files. Never creates symlinks.
+// This is a legacy compatibility installer. Forward registry and built-in
+// plugin flows use the registry cache plus generated adapter shims instead.
 //
 // Source layouts:
 //   - Top-level skill dirs (embed.FS bootstrap): src has "<skillName>/..."
