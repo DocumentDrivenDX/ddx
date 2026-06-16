@@ -3,13 +3,22 @@ package cmd
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	urlpkg "net/url"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
+)
+
+var (
+	workerServerReadinessRetryBudget = 30 * time.Second
+	workerServerReadinessRetryDelay  = 200 * time.Millisecond
 )
 
 func (f *CommandFactory) newWorkerCommand() *cobra.Command {
@@ -36,7 +45,11 @@ func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
 		Short: "Show worker status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			base := resolveServerURL(f.WorkingDir)
-			resp, err := newLocalServerClient().Get(base + "/api/agent/workers")
+			req, err := http.NewRequest(http.MethodGet, base+"/api/agent/workers", nil)
+			if err != nil {
+				return err
+			}
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -105,7 +118,7 @@ func (f *CommandFactory) newWorkerSetCommand() *cobra.Command {
 				return err
 			}
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := newLocalServerClient().Do(req)
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -156,7 +169,7 @@ func (f *CommandFactory) newWorkerStartCommand() *cobra.Command {
 				return err
 			}
 			req.Header.Set("Content-Type", "application/json")
-			resp, err := newLocalServerClient().Do(req)
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -191,7 +204,7 @@ func (f *CommandFactory) newWorkerStopCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := newLocalServerClient().Do(req)
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -218,7 +231,7 @@ func (f *CommandFactory) newWorkerRestartCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := newLocalServerClient().Do(req)
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -243,7 +256,7 @@ func requestWorkerReconcile(base, projectRoot string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := newLocalServerClient().Do(req)
+	resp, err := doWorkerServerRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("server request: %w", err)
 	}
@@ -282,7 +295,7 @@ func (f *CommandFactory) newWorkerReconcileCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := newLocalServerClient().Do(req)
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -314,7 +327,7 @@ func (f *CommandFactory) newWorkerCleanupCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			resp, err := newLocalServerClient().Do(req)
+			resp, err := doWorkerServerRequest(req)
 			if err != nil {
 				return fmt.Errorf("server request: %w", err)
 			}
@@ -329,4 +342,87 @@ func (f *CommandFactory) newWorkerCleanupCommand() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&project, "project", "", "Project path")
 	return cmd
+}
+
+func doWorkerServerRequest(req *http.Request) (*http.Response, error) {
+	client := newLocalServerClient()
+	resp, err := client.Do(req)
+	if err == nil || !shouldRetryWorkerServerReadiness(req, err) {
+		return resp, err
+	}
+	if workerServerReadinessRetryBudget <= 0 {
+		return nil, err
+	}
+
+	deadline := time.Now().Add(workerServerReadinessRetryBudget)
+	lastErr := err
+	for time.Now().Before(deadline) {
+		time.Sleep(workerServerReadinessRetryDelay)
+		retryReq, cloneErr := cloneRequestForRetry(req)
+		if cloneErr != nil {
+			return nil, cloneErr
+		}
+		resp, err = client.Do(retryReq)
+		if err == nil {
+			return resp, nil
+		}
+		if !shouldRetryWorkerServerReadiness(retryReq, err) {
+			return nil, err
+		}
+		lastErr = err
+	}
+	return nil, fmt.Errorf("local server readiness timeout after %s: %w", workerServerReadinessRetryBudget, lastErr)
+}
+
+func cloneRequestForRetry(req *http.Request) (*http.Request, error) {
+	retryReq := req.Clone(req.Context())
+	if req.Body != nil {
+		if req.GetBody == nil {
+			return nil, fmt.Errorf("cannot retry %s %s: request body is not replayable", req.Method, req.URL.Redacted())
+		}
+		body, err := req.GetBody()
+		if err != nil {
+			return nil, fmt.Errorf("replay request body: %w", err)
+		}
+		retryReq.Body = body
+	}
+	return retryReq, nil
+}
+
+func shouldRetryWorkerServerReadiness(req *http.Request, err error) bool {
+	return req != nil && req.URL != nil && isLocalWorkerServerURL(req.URL) && isConnectionRefused(err)
+}
+
+func isLocalWorkerServerURL(u *urlpkg.URL) bool {
+	host := u.Hostname()
+	if host == "" {
+		host = u.Host
+		if splitHost, _, err := net.SplitHostPort(host); err == nil {
+			host = splitHost
+		}
+	}
+	host = strings.Trim(host, "[]")
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
+func isConnectionRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return true
+	}
+	if strings.Contains(strings.ToLower(err.Error()), "connection refused") {
+		return true
+	}
+	var urlErr *urlpkg.Error
+	if errors.As(err, &urlErr) {
+		return isConnectionRefused(urlErr.Err)
+	}
+	return false
 }

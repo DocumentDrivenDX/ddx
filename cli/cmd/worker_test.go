@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -153,6 +155,80 @@ func TestWorkerCLISetStartSuppressEmptyReconcileOutput(t *testing.T) {
 	assert.Equal(t, 2, reconcileRequests)
 }
 
+func TestWorkerSet_RetriesDuringRestartListenerReadiness(t *testing.T) {
+	projectRoot := t.TempDir()
+	addr := reserveLocalTCPAddr(t)
+	t.Setenv("DDX_SERVER_URL", "https://"+addr)
+	withWorkerReadinessRetryTiming(t, 2*time.Second, 10*time.Millisecond)
+
+	var desiredRequests, reconcileRequests int
+	serverStarted := make(chan *httptest.Server, 1)
+	serverErr := make(chan error, 1)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodPut && r.URL.Path == "/api/agent/workers/desired":
+			desiredRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"project_root":    projectRoot,
+				"desired_count":   1,
+				"restart_enabled": true,
+				"status":          "saved",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/agent/workers/reconcile":
+			reconcileRequests++
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte("{}\n"))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			serverErr <- err
+			return
+		}
+		srv := httptest.NewUnstartedServer(handler)
+		srv.Listener = ln
+		srv.StartTLS()
+		serverStarted <- srv
+	}()
+	t.Cleanup(func() {
+		select {
+		case srv := <-serverStarted:
+			srv.Close()
+		case <-time.After(time.Second):
+		}
+	})
+
+	factory := NewCommandFactory(projectRoot)
+	out, err := executeCommand(factory.NewRootCommand(), "worker", "set", "--project", projectRoot, "--count", "1", "--restart")
+	require.NoError(t, err)
+	assert.Contains(t, out, "saved")
+	assert.Equal(t, 1, desiredRequests)
+	assert.Equal(t, 1, reconcileRequests)
+	select {
+	case err := <-serverErr:
+		require.NoError(t, err)
+	default:
+	}
+}
+
+func TestWorkerSet_ReadinessRetryBudgetExpires(t *testing.T) {
+	projectRoot := t.TempDir()
+	addr := reserveLocalTCPAddr(t)
+	t.Setenv("DDX_SERVER_URL", "https://"+addr)
+	withWorkerReadinessRetryTiming(t, 40*time.Millisecond, 5*time.Millisecond)
+
+	factory := NewCommandFactory(projectRoot)
+	out, err := executeCommand(factory.NewRootCommand(), "worker", "set", "--project", projectRoot, "--count", "1", "--restart")
+	require.Error(t, err, out)
+	assert.Contains(t, err.Error(), "local server readiness timeout after")
+	assert.Contains(t, err.Error(), "connection refused")
+}
+
 func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
 	projectA := t.TempDir()
 	projectB := t.TempDir()
@@ -185,4 +261,25 @@ func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
 	assert.Contains(t, textOut, "worker-project-a")
 	assert.NotContains(t, textOut, "worker-project-b")
 	assert.NotContains(t, textOut, projectB)
+}
+
+func reserveLocalTCPAddr(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+	return addr
+}
+
+func withWorkerReadinessRetryTiming(t *testing.T, budget, delay time.Duration) {
+	t.Helper()
+	oldBudget := workerServerReadinessRetryBudget
+	oldDelay := workerServerReadinessRetryDelay
+	workerServerReadinessRetryBudget = budget
+	workerServerReadinessRetryDelay = delay
+	t.Cleanup(func() {
+		workerServerReadinessRetryBudget = oldBudget
+		workerServerReadinessRetryDelay = oldDelay
+	})
 }
