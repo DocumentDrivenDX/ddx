@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260616T180612-891539c4",
+  "bead_id": "ddx-8166bf68",
+  "base_rev": "fc727dd3b95c49ff836ae98198db666665f5cb0a",
+  "created_at": "2026-06-16T18:06:20.122444808Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8166bf68",
+    "title": "Strip dangling deps during bead import",
+    "description": "PROBLEM: ddx bead import can persist dangling dependency edges even after detecting them, allowing imported beads to block readiness permanently when dependencies[].depends_on_id references a bead absent from both the destination tracker and archive.\n\nROOT CAUSE WITH FILE:LINE: cli/internal/bead/import.go:281 detects dangling dependencies and emits a warning containing 'dangling dep (skipped)', but the import path appends the bead with the dangling dependency still present. The warning text is false because the dependency is not actually skipped.\n\nPROPOSED FIX: Change the import path so detected dangling dependencies are filtered out of bead.Dependencies before the bead is appended or written. Keep a warning, but make it accurately report that the dependency was stripped and include an accurate stripped count in the import result/reporting surface used by tests.\n\nNON-SCOPE: The doctor dangling_dep finding and Store.updateBead guard are already landed; do not redo them. Do not change readiness semantics here. Do not address merge-time dangling deps or worktree-prefix ID contamination in this child bead.\n\nCONTEXT: Cross-machine convergence already relies on doctor --fix bumping updated_at and the supervisor union resolver keeping newest-updated_at records, so pruned records propagate. This child is only about stopping new phantoms at the import layer.",
+    "acceptance": "1. Add TestImport_StripsDanglingDependenciesAndReportsCount covering cli/internal/bead/import.go: it imports a bead with a dependency whose target is absent from active and archive data, then asserts the stored/imported bead has no dangling dependency.\n2. TestImport_StripsDanglingDependenciesAndReportsCount asserts the import warning/report count is accurate and no longer claims a dependency was skipped while preserving it.\n3. Add or extend an import test to assert valid dependencies whose targets exist in active or archive data are preserved.\n4. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-6bd07a26",
+    "labels": [
+      "area:bead",
+      "kind:data-integrity",
+      "prevention",
+      "reliability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T173308-465d runtime=23m4s pid=1867066 reason=stop",
+          "created_at": "2026-06-16T17:56:11.932273528Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260616T175727-11fe runtime=1m21s pid=2095731 reason=stop",
+          "created_at": "2026-06-16T17:58:48.573069235Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T180612-891539c4",
+    "prompt": ".ddx/executions/20260616T180612-891539c4/prompt.md",
+    "manifest": ".ddx/executions/20260616T180612-891539c4/manifest.json",
+    "result": ".ddx/executions/20260616T180612-891539c4/result.json",
+    "checks": ".ddx/executions/20260616T180612-891539c4/checks.json",
+    "usage": ".ddx/executions/20260616T180612-891539c4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8166bf68-20260616T180612-891539c4"
+  },
+  "prompt_sha": "d9d1cfdaf043b0c2d7c0c934b384a0a7df115074e3d48acfe92267f4d8fb8d37"
+}

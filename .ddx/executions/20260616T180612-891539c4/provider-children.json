@@ -1,0 +1,16 @@
+{
+  "attempt_id": "20260616T180612-891539c4",
+  "bead_id": "ddx-8166bf68",
+  "trigger": "context canceled",
+  "scanned_at": "2026-06-16T18:06:52.141694392Z",
+  "reaped": [
+    {
+      "pid": 2263087,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 115,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
