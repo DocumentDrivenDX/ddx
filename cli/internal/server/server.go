@@ -11,6 +11,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -77,6 +78,20 @@ func serverBuildSHA() string {
 // Stage E1. Package-level variable so tests can lower the cap; production
 // callers must not mutate it.
 var serverInlineCapBytes = evidence.DefaultMaxInlinedFileBytes
+
+var startupDesiredWorkerReconcileDelays = []time.Duration{
+	250 * time.Millisecond,
+	2 * time.Second,
+	10 * time.Second,
+}
+
+var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
+	manager := startupManager
+	if projectRoot != startupRoot {
+		manager = NewWorkerManager(projectRoot)
+	}
+	return manager.ReconcileDesiredWorkers()
+}
 
 // mcpText constructs a text-typed mcpContent whose Text body is bounded by
 // serverInlineCapBytes via evidence.ClampOutput. The Truncated and
@@ -355,28 +370,64 @@ func (s *Server) reconcileDesiredWorkersAfterStartup() {
 	}
 	go func() {
 		// Let the listener enter Serve before child workers report lifecycle
-		// events back through the server.
-		time.Sleep(250 * time.Millisecond)
-		projects := s.state.GetProjects(false)
-		if len(projects) == 0 {
-			_, _ = s.workers.ReconcileDesiredWorkers()
-			return
-		}
-		for _, project := range projects {
-			projectRoot := strings.TrimSpace(project.Path)
-			if projectRoot == "" {
-				continue
+		// events back through the server. A few follow-up passes cover startup
+		// races while server state and desired-worker files settle.
+		for _, delay := range startupDesiredWorkerReconcileDelays {
+			time.Sleep(delay)
+			for _, err := range s.reconcileDesiredWorkersOnce() {
+				_, _ = fmt.Fprintf(os.Stderr, "ddx-server: startup worker reconcile: %v\n", err)
 			}
-			if _, err := LoadWorkerDesiredState(projectRoot); err != nil {
-				continue
-			}
-			manager := s.workers
-			if projectRoot != s.WorkingDir {
-				manager = NewWorkerManager(projectRoot)
-			}
-			_, _ = manager.ReconcileDesiredWorkers()
 		}
 	}()
+}
+
+func (s *Server) reconcileDesiredWorkersOnce() []error {
+	if s == nil || s.workers == nil {
+		return nil
+	}
+	roots, errs := s.desiredWorkerProjectRoots()
+	for _, projectRoot := range roots {
+		if _, err := startupDesiredWorkerReconcileProject(projectRoot, s.WorkingDir, s.workers); err != nil {
+			errs = append(errs, fmt.Errorf("%s: reconcile desired workers: %w", projectRoot, err))
+		}
+	}
+	return errs
+}
+
+func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
+	if s == nil {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	var candidates []string
+	add := func(path string) {
+		path = strings.TrimSpace(path)
+		if path == "" || seen[path] {
+			return
+		}
+		seen[path] = true
+		candidates = append(candidates, path)
+	}
+	add(s.WorkingDir)
+	if s.state != nil {
+		for _, project := range s.state.GetProjects(false) {
+			add(project.Path)
+		}
+	}
+
+	roots := make([]string, 0, len(candidates))
+	var errs []error
+	for _, projectRoot := range candidates {
+		if _, err := LoadWorkerDesiredState(projectRoot); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			errs = append(errs, fmt.Errorf("%s: load desired worker state: %w", projectRoot, err))
+			continue
+		}
+		roots = append(roots, projectRoot)
+	}
+	return roots, errs
 }
 
 // writeAddrFile writes the server's address to a user-level file so CLI
@@ -886,7 +937,10 @@ func (s *Server) workerManagerForProjectRoot(dir string) *WorkerManager {
 	if dir == "" || dir == s.WorkingDir {
 		return s.workers
 	}
-	return NewWorkerManager(dir)
+	m := NewWorkerManager(dir)
+	m.BeadWorkerFactory = s.workers.BeadWorkerFactory
+	m.workerBinaryPath = s.workers.workerBinaryPath
+	return m
 }
 
 func (s *Server) workerManagerForWorkerID(id string, r *http.Request) (*WorkerManager, bool) {

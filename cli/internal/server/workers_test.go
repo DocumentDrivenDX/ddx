@@ -47,9 +47,12 @@ func TestPrepareExecuteLoopWorkerSpecDefaultsOpaquePassthrough(t *testing.T) {
 }
 
 func TestWorkerManagerForProjectRootUsesTargetProject(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("DDX_NODE_NAME", "test-node-worker-manager-project-root")
 	root := t.TempDir()
 	other := t.TempDir()
 	srv := New("127.0.0.1:0", root)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 	defer srv.workers.StopWatchdog()
 
 	assert.Same(t, srv.workers, srv.workerManagerForProjectRoot(root))
@@ -466,6 +469,12 @@ func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testi
 	}))
 	t.Cleanup(setProviderProbeCleanupFollowupDelaysForTest(nil))
 	t.Cleanup(setProviderProbeCleanupSettleTimingsForTest(15*time.Millisecond, 50*time.Millisecond, 5*time.Millisecond))
+	require.Eventually(t, func() bool {
+		before := unscopedCalls.Load()
+		time.Sleep(100 * time.Millisecond)
+		return unscopedCalls.Load() == before
+	}, 2*time.Second, 10*time.Millisecond, "prior provider-probe cleanup callbacks must settle before this assertion")
+	unscopedCalls.Store(0)
 
 	m := NewWorkerManager(root)
 	now := time.Now().UTC()
@@ -492,8 +501,9 @@ func TestRunWorkerFinalCleanupSkipsUnscopedSweepWhenAnotherWorkerIsLive(t *testi
 		return scopedCalls.Load() > 0
 	}, time.Second, 5*time.Millisecond, "finalization must still run scoped cleanup")
 	_, settleDeadline, _ := providerProbeCleanupSettleConfig()
+	unscopedBeforeSettle := unscopedCalls.Load()
 	time.Sleep(2 * settleDeadline)
-	assert.Zero(t, unscopedCalls.Load(), "unscoped cleanup must not run while another worker is live")
+	assert.Equal(t, unscopedBeforeSettle, unscopedCalls.Load(), "unscoped cleanup must not run while another worker is live")
 }
 
 func testScopeContains(scopes []string, root string) bool {
@@ -1770,6 +1780,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 	setupBeadStore(t, projectB)
 
 	srv := New(":0", projectA)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 	// Register project B so the server accepts it.
 	srv.state.RegisterProject(projectB)
 
@@ -1795,7 +1806,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 		assert.NotEmpty(t, rec.ID)
 
 		// Wait for the worker to finish before the test teardown.
-		_ = waitForWorkerExit(t, srv.workers, rec.ID, 10*time.Second)
+		_ = waitForWorkerExit(t, srv.workerManagerForProjectRoot(projectB), rec.ID, 10*time.Second)
 	})
 
 	t.Run("unregistered project is rejected with 422", func(t *testing.T) {
@@ -1829,6 +1840,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	setupBeadStore(t, projectB)
 
 	srv := New(":0", projectA)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 	srv.state.RegisterProject(projectB)
 	installFastSuccessWorker(srv.workers)
 
@@ -1867,8 +1879,9 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	var record WorkerRecord
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &record))
 	t.Cleanup(func() {
-		_ = srv.workers.Stop(record.ID)
-		_ = waitForWorkerExit(t, srv.workers, record.ID, 5*time.Second)
+		targetWorkers := srv.workerManagerForProjectRoot(projectB)
+		_ = targetWorkers.Stop(record.ID)
+		_ = waitForWorkerExit(t, targetWorkers, record.ID, 5*time.Second)
 	})
 	assert.Equal(t, projectB, record.ProjectRoot)
 	assert.Equal(t, "fiz", record.Harness)
@@ -1877,7 +1890,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.False(t, record.Once)
 	assert.Equal(t, "17s", record.PollInterval)
 
-	data, err := os.ReadFile(filepath.Join(projectA, record.SpecPath))
+	data, err := os.ReadFile(filepath.Join(projectB, record.SpecPath))
 	require.NoError(t, err)
 	var persisted ExecuteLoopWorkerSpec
 	require.NoError(t, json.Unmarshal(data, &persisted))
@@ -1914,6 +1927,7 @@ func TestRESTWorkerReconcileQueryProjectStartsTargetProjectWorker(t *testing.T) 
 	setupBeadStore(t, projectB)
 
 	srv := New(":0", projectA)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 	srv.state.RegisterProject(projectB)
 	installFastSuccessWorker(srv.workers)
 
@@ -1934,7 +1948,7 @@ func TestRESTWorkerReconcileQueryProjectStartsTargetProjectWorker(t *testing.T) 
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &result))
 	require.Len(t, result.Started, 1)
 
-	records, err := srv.workers.List()
+	records, err := srv.workerManagerForProjectRoot(projectB).List()
 	require.NoError(t, err)
 	var got WorkerRecord
 	for _, rec := range records {
@@ -1966,6 +1980,7 @@ func TestRESTWorkerCleanupReleasesTerminalLegacyOwnerBeforeDesiredReconcile(t *t
 	}))
 
 	srv := New(":0", projectRoot)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 	dir := filepath.Join(srv.workers.rootDir, workerID)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, srv.workers.writeRecord(dir, WorkerRecord{
@@ -2000,6 +2015,7 @@ func TestRESTWorkerCleanupReleasesTerminalLegacyOwnerBeforeDesiredReconcile(t *t
 func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {
 	projectRoot := setupTestDir(t)
 	srv := New(":0", projectRoot)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 
 	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/work", strings.NewReader(`{"poll_interval":"30s"}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -2018,6 +2034,7 @@ func TestRESTWorkerStart_UnknownSpecVersion(t *testing.T) {
 
 	projectRoot := setupTestDir(t)
 	srv := New(":0", projectRoot)
+	t.Cleanup(func() { _ = srv.Shutdown() })
 
 	body, _ := json.Marshal(map[string]any{
 		"mode":               "once",
