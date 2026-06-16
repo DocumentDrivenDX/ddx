@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260616T093338-d96607e8",
+  "bead_id": "ddx-d3abb526",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-06-16T09:39:57.674595944Z",
+  "reaped": [
+    {
+      "pid": 728110,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 728362,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 693229,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 357,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
+    }
+  ]
+}
