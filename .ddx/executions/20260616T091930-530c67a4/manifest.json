@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260616T091930-530c67a4",
+  "bead_id": "ddx-d3abb526",
+  "base_rev": "fadaf70c0e3761a865bb6571ef96a1749cbdb655",
+  "created_at": "2026-06-16T09:19:39.414147234Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d3abb526",
+    "title": "Classify land coordination failures without implementation reruns: part 3",
+    "description": "PROBLEM\nParent bead ddx-bced4e39 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nNiflheim land/ref/index/evidence-staging failures were recorded as overall `execution_failed` even when the candidate had succeeded or landed. The worker retried implementation work instead of reconciling land/evidence state or sending the bead to operator attention, wasting route attempts and confusing system failure with model-quality failure.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_orchestrator.go:305-309` wraps `LandingAdvancer` errors as generic `land advancer` errors.\n- `cli/internal/agent/failclass/failclass.go:103-142` contains the normative table that only `OutcomeGenuineFailure` can escalate, but execute-bead/work land outcomes are not consistently reduced to this typed table before retry/escalation decisions.\n\nPROPOSED FIX\nAdd self-contained Niflheim-style land coordination fixtures or table-driven cases under `cli/internal/agent/...` for `cannot lock ref refs/heads/main` after a candidate or merge is already landed, and for `landing worktree has staged changes after waiting 2s` caused by generated DDx evidence. Classify these as land/ref/index/evidence coordination outcomes, not implementation/model failures. If the candidate commit or merge is already an ancestor of the target, reconcile and close/continue without rerunning implementation. If the landing worktree is dirty with generated evidence or DDx metadata, retry/preserve the land/evidence step or move to operator attention according to existing reliability policy.\n\nNON-SCOPE\n- Do not change Fizeau route selection or hard-code concrete provider/model names.\n- Do not edit Niflheim beads or Niflheim implementation code.\n- Do not duplicate the low-level index-contention fix tracked by `ddx-2965925e`; reuse or align with it.\n- Do not duplicate the post-commit review/land timeout work tracked by `ddx-b2846610`; this is typed classification and reconciliation behavior, not another timeout implementation.\n- Do not duplicate the repeated pre-claim warn operator-attention bead `ddx-d67f124e`.\n- Do not implement a full operator-lane product workflow beyond state transitions/events needed to keep the worker from blind retry or false close.\n\nINTERSECTIONS\nParent: `ddx-3106674f`. Dependencies to preserve: `ddx-2965925e`, `ddx-b2846610`, `ddx-d67f124e`. Related: `ddx-e1a576a7`, `ddx-a9d130d0`, `ddx-ac10e7af`. Governing references: FEAT-010, TP-021, ADR-024, docs/dev/engineer\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|LandCoordination|RetryEscalation|LandCoordinationDecisionAudit' -count=1` passes.\n- `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n- `lefthook run pre-commit` passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run 'NiflheimEvidence|LandCoordination|RetryEscalation|LandCoordinationDecisionAudit' -count=1` passes.\n2. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -count=1` passes.\n3. `lefthook run pre-commit` passes.",
+    "parent": "ddx-bced4e39",
+    "labels": [
+      "adr:024",
+      "area:agent",
+      "area:execute-bead",
+      "area:review",
+      "area:workers",
+      "decomposed",
+      "incident:niflheim-2026-06-06",
+      "kind:bug",
+      "kind:reliability",
+      "phase:iterate",
+      "prevention",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260616T085759-202e",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-d3abb526\",\"fingerprint\":\"982cf7d7e617b249505f52162c9e020ee4c9567a71e4583af77b9e555a1b9f2f\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"982cf7d7e617b249505f52162c9e020ee4c9567a71e4583af77b9e555a1b9f2f\"}",
+          "created_at": "2026-06-16T09:19:18.350375033Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": 2170
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T091930-530c67a4",
+    "prompt": ".ddx/executions/20260616T091930-530c67a4/prompt.md",
+    "manifest": ".ddx/executions/20260616T091930-530c67a4/manifest.json",
+    "result": ".ddx/executions/20260616T091930-530c67a4/result.json",
+    "checks": ".ddx/executions/20260616T091930-530c67a4/checks.json",
+    "usage": ".ddx/executions/20260616T091930-530c67a4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d3abb526-20260616T091930-530c67a4"
+  },
+  "prompt_sha": "722d7b93e98c17c7189634096caf3dd33bc5103e53875ff5889e19c76e3d4a53"
+}
