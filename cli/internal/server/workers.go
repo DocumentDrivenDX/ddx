@@ -24,6 +24,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -809,6 +810,15 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 			record.CurrentBead = released[0]
 		}
 	}
+	m.mu.Unlock()
+
+	if record.Managed && record.PID > 0 && isTerminalWorkerState(record.State) {
+		if cleanupEvent, ok := recoverManagedWorkerIndexLockAfterExit(record.ProjectRoot, record.ID, record.PID); ok {
+			record.Lifecycle = append(record.Lifecycle, cleanupEvent)
+		}
+	}
+
+	m.mu.Lock()
 	_ = m.writeRecord(dir, record)
 	handle.record = record
 	shouldRefillDesired := record.Managed && preservedState == "" && isTerminalWorkerState(record.State)
@@ -816,6 +826,48 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 	if shouldRefillDesired {
 		go m.refillDesiredWorkersAfterManagedExit(record.ID)
 	}
+}
+
+var managedWorkerIndexLockOwnerLookup = gitlock.IndexLockOwner
+
+// recoverManagedWorkerIndexLockAfterExit removes a fresh or stale .git/index.lock
+// left behind by a managed worker that has already exited, but only when no live
+// process still owns the lock. The cleanup is intentionally fresh-lock tolerant:
+// once the worker has exited, an unowned lock is safe to remove even if it is
+// younger than gitlock.StaleAge.
+func recoverManagedWorkerIndexLockAfterExit(projectRoot, workerID string, workerPID int) (WorkerLifecycleEvent, bool) {
+	if strings.TrimSpace(projectRoot) == "" {
+		return WorkerLifecycleEvent{}, false
+	}
+	lockPath := gitlock.IndexLockPath(projectRoot)
+	if _, err := os.Lstat(lockPath); err != nil {
+		return WorkerLifecycleEvent{}, false
+	}
+
+	ownerPID, _ := managedWorkerIndexLockOwnerLookup(lockPath)
+	outcome := "removed"
+	reason := "managed worker exited; no live owner"
+
+	if workerPID > 0 && processAlive(workerPID) {
+		outcome = "kept-live-worker"
+		reason = fmt.Sprintf("worker pid %d still alive", workerPID)
+	} else if ownerPID > 0 && processAlive(ownerPID) {
+		outcome = "kept-live-owner"
+		reason = fmt.Sprintf("live lock owner pid %d", ownerPID)
+	} else if err := os.Remove(lockPath); err != nil && !os.IsNotExist(err) {
+		outcome = "remove-error"
+		reason = err.Error()
+	}
+
+	return WorkerLifecycleEvent{
+		Action:    "index-lock-violation",
+		Actor:     "ddx-server",
+		Timestamp: time.Now().UTC(),
+		Detail: fmt.Sprintf(
+			"worker=%s worker_pid=%d holder_pid=%d lock_path=%s operation=index.commit outcome=%s reason=%s",
+			workerID, workerPID, ownerPID, lockPath, outcome, reason,
+		),
+	}, true
 }
 
 func (m *WorkerManager) refillDesiredWorkersAfterManagedExit(id string) {
