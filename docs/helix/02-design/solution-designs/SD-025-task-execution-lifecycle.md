@@ -254,7 +254,9 @@ complete evidence bundles as durable data rather than scratch.
 DDx-owned cleanup scope also includes DDx-created helper scratch beside the
 configured execution root, legacy `$TMPDIR/ddx-exec-wt` resources,
 DDx-created test and e2e scratch roots, generated test binaries, and run-state
-or liveness files. The execution root resolves in priority order:
+or liveness files. It also includes stale descendant process groups whose cwd
+or command context is inside a DDx-owned execution worktree for the current
+project. The execution root resolves in priority order:
 `DDX_EXEC_WT_DIR`, `executions.temp_worktree_root`, then the per-user cache
 root (`$XDG_CACHE_HOME/ddx/exec-wt` on Linux, or the platform cache
 equivalent). Recognized DDx-owned scratch prefixes are: `ddx-test-`,
@@ -269,7 +271,9 @@ path is eligible for deletion when: (a) it has `cleanup.json` metadata and the
 liveness is expired or the owning attempt is terminal; or (b) it matches a
 recognized DDx prefix without metadata, the directory mtime is at least **6
 hours** old, and no live PID or active session is present. The manager
-preserves published evidence and active workspaces.
+preserves published evidence, active workspaces, process groups tied to live
+run-state or liveness metadata, registered active worktrees, and other-project
+processes.
 
 ### Entry points
 
@@ -289,7 +293,9 @@ configuration.
 Loop cleanup runs inside `ddx work` at startup, between attempts after
 setup/finalization failure, periodically while polling, and during graceful
 shutdown. It may clean stale resources from prior attempts before the next
-claim.
+claim. Before claiming, it also runs the stale attempt-descendant process pass
+so orphan shells, test processes, or tiny servers inside stale execution
+worktrees cannot keep consuming CPU or ports after the owning attempt is gone.
 
 Background cleanup runs occasionally while long-lived DDx processes are alive.
 It uses jitter plus a project cleanup lock so concurrent workers do not all
@@ -298,7 +304,9 @@ resource.
 
 An explicit operator command, such as `ddx cleanup` or `ddx doctor cleanup`,
 runs the same manager and reports what it removed without requiring a queue
-drain.
+drain. In dry-run mode it reports stale process findings without terminating
+them; in apply mode it terminates only process groups that are provably
+DDx-owned and stale.
 
 ### Conservative deletion rules
 
@@ -314,6 +322,9 @@ The manager may delete:
 - stale heartbeat/liveness files for dead PIDs or expired sessions
 - partial setup directories that never reached atomic evidence publication
 - old non-preserved scratch data past configured retention
+- stale DDx-owned attempt-descendant process groups whose cwd or command
+  context points at a current-project execution worktree and whose run-state,
+  liveness metadata, and registered-worktree ownership are not live
 
 The manager must not delete:
 
@@ -322,6 +333,8 @@ The manager must not delete:
 - attempt backend refs under `refs/ddx/attempt-backend/...`
 - complete `.ddx/runs/<id>` or `.ddx/executions/<attempt-id>` evidence
 - active workspaces with a live PID/session heartbeat
+- process groups tied to live run-state/liveness metadata, registered active
+  worktrees, another project, or only a broad command-name match
 - paths outside configured DDx roots
 - paths that only loosely resemble DDx names without matching ownership
   metadata or registered worktree evidence

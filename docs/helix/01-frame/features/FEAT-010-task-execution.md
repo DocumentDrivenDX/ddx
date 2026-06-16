@@ -833,8 +833,11 @@ path or ref.
 DDx-owned cleanup scope includes execution workspaces, helper scratch roots
 created beside the configured execution root, legacy `$TMPDIR/ddx-exec-wt`
 resources, DDx-created test and e2e scratch roots, generated test binaries, and
-run-state or liveness files. The cleanup manager may delete only DDx-owned
-paths. Recognized DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
+run-state or liveness files. It also includes stale descendant process groups
+whose cwd or command context is inside a DDx-owned execution worktree for the
+current project and whose owning attempt is no longer live. The cleanup manager
+may delete or terminate only DDx-owned paths and process groups. Recognized
+DDx-owned scratch prefixes are: `ddx-test-`, `ddx-e2e-`,
 `ddx-test-bin-`, `ddx-test-binary-`, `ddx-lifecycle-`,
 `ddx-agent-support-keepalive`, `ddx-config-anchor-`, `ddx-exec-keepalive`,
 `ddx-metric-keepalive`, `ddx-metaprompt-keepalive`,
@@ -852,7 +855,9 @@ Deletion is permitted only when all of the following hold:
   **6 hours** old and no live PID or active session is attached.
 
 The manager must preserve published evidence, active workspaces, and anything
-outside DDx-owned roots.
+outside DDx-owned roots. It must also preserve process groups tied to live
+run-state, live liveness metadata, registered active worktrees, or another
+project.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
@@ -868,7 +873,11 @@ remove stale unregistered directories under DDx temp roots, registered DDx
 worktrees or metadata-backed workspaces whose attempt is terminal or whose
 liveness marker is stale, stale
 heartbeat/liveness files for dead PIDs, and partial setup directories that were
-never published as complete evidence. It must not remove preserved workspaces,
+never published as complete evidence. Startup and operator cleanup also run a
+stale attempt-descendant process census; dry-run reports matching PIDs, process
+groups, commands, cwd, worktree, bead/attempt when inferable, and whether
+`--apply` would terminate them. Apply may terminate only stale DDx-owned attempt
+process groups after the same ownership/liveness checks pass. It must not remove preserved workspaces,
 `refs/ddx/iterations/...`, complete `.ddx/runs/<id>` or
 `.ddx/executions/<attempt-id>` evidence, active workspaces with live
 PID/session liveness, or non-DDx directories.
@@ -880,8 +889,8 @@ Resource exhaustion after cleanup is a hard visible stop message and a layer-3
 `resource_exhausted` disposition.
 
 Cleanup reporting includes scratch roots removed, bytes and inodes reclaimed,
-preserved paths, and blocked warnings so operators can see why cleanup stopped
-short.
+stale process findings, reaped process groups, preserved paths, and blocked
+warnings so operators can see why cleanup stopped short.
 
 ### `ddx work` Run Modes
 

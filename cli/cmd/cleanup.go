@@ -9,25 +9,30 @@ import (
 )
 
 type cleanupCommandReport struct {
-	DryRun                      bool                                `json:"dry_run"`
-	ProjectRoot                 string                              `json:"project_root"`
-	TempRoot                    string                              `json:"temp_root"`
-	ScannedTempDirs             int                                 `json:"scanned_temp_dirs"`
-	ScannedEvidenceDirs         int                                 `json:"scanned_evidence_dirs"`
-	CompleteEvidenceDirs        int                                 `json:"complete_evidence_dirs"`
-	ScannedScratchDirs          int                                 `json:"scanned_scratch_dirs"`
-	RemovedUnregisteredTempDirs int64                               `json:"removed_unregistered_temp_dirs"`
-	RemovedRegisteredWorktrees  int64                               `json:"removed_registered_worktrees"`
-	RemovedRunStateFiles        int64                               `json:"removed_run_state_files"`
-	RemovedScratchDirs          int64                               `json:"removed_scratch_dirs"`
-	PreservedActiveScratchDirs  int64                               `json:"preserved_active_scratch_dirs"`
-	BytesReclaimed              int64                               `json:"bytes_reclaimed"`
-	InodesReclaimed             int64                               `json:"inodes_reclaimed"`
-	ScratchBytesReclaimed       int64                               `json:"scratch_bytes_reclaimed"`
-	ScratchInodesReclaimed      int64                               `json:"scratch_inodes_reclaimed"`
-	Warnings                    []agent.ExecutionCleanupWarning     `json:"warnings"`
-	BlockedErrors               []agent.ExecutionCleanupIssue       `json:"blocked_errors"`
-	Observations                []agent.ExecutionCleanupObservation `json:"observations"`
+	DryRun                      bool                                   `json:"dry_run"`
+	ProjectRoot                 string                                 `json:"project_root"`
+	TempRoot                    string                                 `json:"temp_root"`
+	ScannedTempDirs             int                                    `json:"scanned_temp_dirs"`
+	ScannedEvidenceDirs         int                                    `json:"scanned_evidence_dirs"`
+	CompleteEvidenceDirs        int                                    `json:"complete_evidence_dirs"`
+	ScannedScratchDirs          int                                    `json:"scanned_scratch_dirs"`
+	ScannedProcesses            int                                    `json:"scanned_processes"`
+	RemovedUnregisteredTempDirs int64                                  `json:"removed_unregistered_temp_dirs"`
+	RemovedRegisteredWorktrees  int64                                  `json:"removed_registered_worktrees"`
+	RemovedRunStateFiles        int64                                  `json:"removed_run_state_files"`
+	RemovedScratchDirs          int64                                  `json:"removed_scratch_dirs"`
+	PreservedActiveScratchDirs  int64                                  `json:"preserved_active_scratch_dirs"`
+	StaleAttemptProcesses       int64                                  `json:"stale_attempt_processes"`
+	ReapedProcessGroups         int64                                  `json:"reaped_process_groups"`
+	PreservedAttemptProcesses   int64                                  `json:"preserved_attempt_processes"`
+	BytesReclaimed              int64                                  `json:"bytes_reclaimed"`
+	InodesReclaimed             int64                                  `json:"inodes_reclaimed"`
+	ScratchBytesReclaimed       int64                                  `json:"scratch_bytes_reclaimed"`
+	ScratchInodesReclaimed      int64                                  `json:"scratch_inodes_reclaimed"`
+	Warnings                    []agent.ExecutionCleanupWarning        `json:"warnings"`
+	BlockedErrors               []agent.ExecutionCleanupIssue          `json:"blocked_errors"`
+	Observations                []agent.ExecutionCleanupObservation    `json:"observations"`
+	Processes                   []agent.ExecutionCleanupProcessFinding `json:"processes"`
 }
 
 func (f *CommandFactory) newCleanupCommand() *cobra.Command {
@@ -82,17 +87,22 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 		ScannedEvidenceDirs:         summary.ScannedEvidenceDirs,
 		CompleteEvidenceDirs:        summary.CompleteEvidenceDirs,
 		ScannedScratchDirs:          summary.ScannedScratchDirs,
+		ScannedProcesses:            summary.ScannedProcesses,
 		RemovedUnregisteredTempDirs: summary.RemovedUnregisteredTempDirs,
 		RemovedRegisteredWorktrees:  summary.RemovedRegisteredWorktrees,
 		RemovedRunStateFiles:        summary.RemovedRunStateFiles,
 		RemovedScratchDirs:          summary.RemovedScratchDirs,
 		PreservedActiveScratchDirs:  summary.PreservedActiveScratchDirs,
+		StaleAttemptProcesses:       summary.StaleAttemptProcesses,
+		ReapedProcessGroups:         summary.ReapedProcessGroups,
+		PreservedAttemptProcesses:   summary.PreservedAttemptProcesses,
 		BytesReclaimed:              summary.BytesReclaimed,
 		InodesReclaimed:             summary.InodesReclaimed,
 		ScratchBytesReclaimed:       summary.ScratchBytesReclaimed,
 		ScratchInodesReclaimed:      summary.ScratchInodesReclaimed,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), summary.Warnings...),
 		Observations:                append([]agent.ExecutionCleanupObservation(nil), summary.Observations...),
+		Processes:                   append([]agent.ExecutionCleanupProcessFinding(nil), summary.Processes...),
 	}
 	for _, issue := range summary.Issues {
 		if issue.Blocking {
@@ -107,6 +117,9 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 	}
 	if report.Observations == nil {
 		report.Observations = []agent.ExecutionCleanupObservation{}
+	}
+	if report.Processes == nil {
+		report.Processes = []agent.ExecutionCleanupProcessFinding{}
 	}
 
 	if asJSON {
@@ -140,6 +153,27 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 	}
 	if report.CompleteEvidenceDirs > 0 {
 		fmt.Fprintf(out, "cleanup: preserved %d complete evidence bundle(s)\n", report.CompleteEvidenceDirs)
+	}
+	if report.StaleAttemptProcesses > 0 || report.PreservedAttemptProcesses > 0 {
+		fmt.Fprintf(out, "cleanup: found %d stale attempt process group(s), reaped %d, preserved %d process(es)\n",
+			report.StaleAttemptProcesses,
+			report.ReapedProcessGroups,
+			report.PreservedAttemptProcesses,
+		)
+		for _, proc := range report.Processes {
+			if proc.WouldKill || proc.Preserved {
+				fmt.Fprintf(out, "process: pid=%d pgid=%d worktree=%s command=%q reason=%s would_kill=%t killed=%t preserved=%t\n",
+					proc.PID,
+					proc.PGID,
+					proc.WorktreePath,
+					proc.Command,
+					proc.Reason,
+					proc.WouldKill,
+					proc.Killed,
+					proc.Preserved,
+				)
+			}
+		}
 	}
 	for _, warning := range report.Warnings {
 		fmt.Fprintf(out, "warning: %s (%s): %s\n", warning.Path, warning.Class, warning.Message)
