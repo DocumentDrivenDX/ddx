@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -20,18 +19,11 @@ func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error
 		workingDir = "."
 	}
 
-	// Get library path using working directory
-	cfg, err := config.LoadWithWorkingDir(workingDir)
+	libPath, err := resolveCommandLibraryPath(workingDir)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+		return err
 	}
-
-	var libPath string
-	if cfg.Library != nil {
-		libPath = cfg.Library.Path
-	}
-
-	promptsDir := filepath.Join(workingDir, libPath, "prompts")
+	promptsDir := filepath.Join(libPath, "prompts")
 
 	// Check if prompts directory exists
 	if _, err := os.Stat(promptsDir); os.IsNotExist(err) {
@@ -106,15 +98,9 @@ func runPromptsShow(cmd *cobra.Command, args []string) error {
 		workingDir = factory.WorkingDir
 	}
 
-	// Get library path using working directory
-	cfg, err := config.LoadWithWorkingDir(workingDir)
+	libPath, err := resolveCommandLibraryPath(workingDir)
 	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	var libPath string
-	if cfg.Library != nil {
-		libPath = cfg.Library.Path
+		return err
 	}
 
 	// Try different paths for the prompt

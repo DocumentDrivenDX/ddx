@@ -1,0 +1,13 @@
+extends: existence
+message: "DDx prose claim needs a concrete subject, mechanism, or evidence."
+level: suggestion
+ignorecase: true
+scope: summary
+tokens:
+  - robust
+  - comprehensive
+  - seamless
+  - world-class
+  - industry-leading
+  - best-in-class
+  - cutting-edge

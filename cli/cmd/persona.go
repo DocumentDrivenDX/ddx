@@ -811,26 +811,10 @@ func validatePersonaContent(content, personaName string) error {
 
 // getPersonaLibraryPath gets library path with working directory context for persona operations
 func getPersonaLibraryPath(workingDir string) (string, error) {
-	// Use the config system with working directory parameter
 	if workingDir == "" {
 		return "", fmt.Errorf("working directory must be provided")
 	}
-
-	// Use the library path resolution from config
-	cfg, err := config.LoadWithWorkingDir(workingDir)
-	if err != nil {
-		return "", err
-	}
-
-	if cfg.Library != nil {
-		libPath := cfg.Library.Path
-		// If path is relative, resolve it relative to working directory
-		if !filepath.IsAbs(libPath) {
-			libPath = filepath.Join(workingDir, libPath)
-		}
-		return libPath, nil
-	}
-	return "", fmt.Errorf("library path not configured")
+	return resolveCommandLibraryPath(workingDir)
 }
 
 // loadPersonaConfig loads config with working directory context for persona operations

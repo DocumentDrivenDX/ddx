@@ -1,0 +1,11 @@
+extends: existence
+message: "Remove token-expensive filler that does not add execution value."
+level: suggestion
+ignorecase: true
+scope: summary
+tokens:
+  - very important
+  - in order to
+  - effectively
+  - begin to
+  - make the experience better

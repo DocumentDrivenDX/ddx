@@ -1,0 +1,28 @@
+mode: planning
+rules:
+  - id: prose.planning.claims
+    severity: warning
+    contains_any:
+      - robust
+      - comprehensive
+      - seamless
+      - high
+    rationale: The sentence uses broad planning language such as "robust", "seamless", and "high" without concrete deliverables.
+    suggested_edit: Replace the roadmap claim with explicit milestones, owners, or dates.
+  - id: prose.generic.repeated_opening
+    severity: warning
+    kind: repeated_opening
+    rationale: The opening sentence repeats verbatim, which adds filler instead of direction.
+    suggested_edit: Keep one copy of the sentence and replace the duplicate with a specific next step.
+  - id: prose.definition_by_negation
+    severity: warning
+    kind: negation_predicate
+    rationale: This sentence defines its subject by what it is not. Readers infer what you mean; stronger prose names the positive shape directly.
+    suggested_edit: Replace the negation with a sentence whose main predicate describes what the subject is. Keep the negation only if a positive predicate follows in the same paragraph.
+  - id: prose.planning.vagueness
+    severity: warning
+    contains_any:
+      - most important work
+      - other strategic items
+    rationale: The phrase "most important work" is too vague to support a plan.
+    suggested_edit: Name the actual work item or decision rather than using priority language alone.

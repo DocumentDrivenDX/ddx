@@ -1,0 +1,81 @@
+# Sequential Thinking MCP Server Definition
+name: sequential-thinking
+description: "Dynamic problem-solving through structured thought sequences"
+category: utility
+author: modelcontextprotocol
+version: 2025.7.1
+tags: [reasoning, problem-solving, thinking, analysis, reflection]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+
+environment:
+  - name: DISABLE_THOUGHT_LOGGING
+    description: "Set to 'true' to disable logging of thought information"
+    required: false
+    sensitive: false
+    default: "false"
+    validation: "^(true|false)$"
+
+documentation:
+  setup: |
+    1. No additional setup required - works out of the box
+    2. Optionally set DISABLE_THOUGHT_LOGGING=true to disable thought logging
+    3. The server provides tools for structured problem-solving
+  features:
+    - Break down complex problems into manageable steps
+    - Visual tracking of thought history
+    - Dynamic revision and branching of thought processes
+    - Adjustment as understanding deepens
+  examples:
+    - "Start a new thought sequence for problem analysis"
+    - "Review and revise previous thoughts"
+    - "Branch into alternative solutions"
+    - "Track the evolution of understanding over time"
+  use_cases:
+    - Complex problem decomposition
+    - Step-by-step reasoning
+    - Decision tree exploration
+    - Hypothesis testing and refinement
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: none
+  file_access: none
+  data_handling: "Thought sequences stored in memory during session"
+  warnings:
+    - "Thought sequences are not persisted between sessions"
+
+verification:
+  test_command: "Start a new thought sequence"
+  expected_response: "Thought sequence initialized"
+
+configuration_example: |
+  {
+    "mcpServers": {
+      "sequential-thinking": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "@modelcontextprotocol/server-sequential-thinking"
+        ],
+        "env": {
+          "DISABLE_THOUGHT_LOGGING": "false"
+        }
+      }
+    }
+  }
+
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking
+  readme: https://github.com/modelcontextprotocol/servers/blob/main/src/sequentialthinking/README.md
+  npm: https://www.npmjs.com/package/@modelcontextprotocol/server-sequential-thinking
+  issues: https://github.com/modelcontextprotocol/servers/issues

@@ -10,6 +10,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"gopkg.in/yaml.v3"
 )
 
@@ -60,14 +61,30 @@ func resolveLibraryPersonasDir(workingDir string) string {
 		_, _ = fmt.Fprintf(os.Stderr, "DDx config not found; run \"ddx init\" to bootstrap project\n")
 		return ""
 	}
-	if cfg.Library == nil || cfg.Library.Path == "" {
+	if cfg.Library != nil {
+		libPath := strings.TrimSpace(cfg.Library.Path)
+		if libPath != "" {
+			if !filepath.IsAbs(libPath) && workingDir != "" {
+				libPath = filepath.Join(workingDir, libPath)
+			}
+			return filepath.Join(libPath, "personas")
+		}
+	}
+	if workingDir != "" {
+		legacyPath := ddxroot.InTree(workingDir, "plugins", "ddx")
+		if info, err := os.Stat(legacyPath); err == nil && info.IsDir() {
+			return filepath.Join(legacyPath, "personas")
+		}
+	}
+	cachePath, err := registry.BuiltinDDxCachePath()
+	if err != nil {
 		return ""
 	}
-	libPath := cfg.Library.Path
-	if !filepath.IsAbs(libPath) && workingDir != "" {
-		libPath = filepath.Join(workingDir, libPath)
+	if err := registry.EnsureBuiltinDDxCache(cachePath, false); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "DDx default library cache unavailable: %v\n", err)
+		return ""
 	}
-	return filepath.Join(libPath, "personas")
+	return filepath.Join(cachePath, "personas")
 }
 
 // resolveProjectPersonasDir returns the project-local persona directory.

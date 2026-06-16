@@ -73,19 +73,20 @@ go-discovery-verify:
 		exit 1; \
 	fi
 
-# Sync the canonical default-plugin skill tree (../library/skills/) and its
-# manifest into internal/registry/defaultplugin/library/ so //go:embed (which
-# cannot traverse upward out of the package) picks them up. Runs as a prereq
-# of build/test/dev so contributors never see a stale embedded default
-# package. rsync --delete keeps the skill destination in exact sync.
+# Sync the canonical default-plugin package (../library/) into
+# internal/registry/defaultplugin/library/ so //go:embed (which cannot traverse
+# upward out of the package) picks it up. Runs as a prereq of build/test/dev so
+# contributors never see a stale embedded default package. rsync --delete keeps
+# the destination in exact sync.
 DEFAULT_PKG_SRC := ../library
 DEFAULT_PKG_DST := internal/registry/defaultplugin/library
 copy-skills:
-	@if [ ! -d "$(DEFAULT_PKG_SRC)/skills" ]; then \
-		echo "error: $(DEFAULT_PKG_SRC)/skills not found (run from cli/)"; exit 1; \
+	@if [ ! -f "$(DEFAULT_PKG_SRC)/package.yaml" ]; then \
+		echo "error: $(DEFAULT_PKG_SRC)/package.yaml not found (run from cli/)"; exit 1; \
 	fi
-	@rsync -a --delete $(DEFAULT_PKG_SRC)/skills/ $(DEFAULT_PKG_DST)/skills/
-	@cp $(DEFAULT_PKG_SRC)/package.yaml $(DEFAULT_PKG_DST)/package.yaml
+	@rsync -a --delete --delete-excluded \
+		--exclude checks/go-production-reachability/ \
+		$(DEFAULT_PKG_SRC)/ $(DEFAULT_PKG_DST)/
 
 # Build for current platform
 build: copy-skills frontend-build frontend-verify

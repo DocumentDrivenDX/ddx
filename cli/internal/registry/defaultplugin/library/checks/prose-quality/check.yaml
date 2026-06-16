@@ -1,0 +1,41 @@
+mode: technical
+severity: advisory
+policy: advisory
+runner: vale
+vale:
+  version: "3.13.0"
+  styles_path: styles
+  style: DDx
+rule_pack:
+  name: DDx
+  version: "0.1.0"
+  path: styles/DDx
+  rules:
+    - file: DDx/UnsupportedClaim.yml
+      rule_id: prose.claim.unsupported
+    - file: DDx/AISlop.yml
+      rule_id: prose.ai_slop.polish
+    - file: DDx/FillerTransition.yml
+      rule_id: prose.filler.transition
+    - file: DDx/MissingActorAction.yml
+      rule_id: prose.specificity.actor_action
+    - file: DDx/TokenCost.yml
+      rule_id: prose.cost.filler
+    - file: DDx/RepeatedOpening.yml
+      rule_id: prose.structure.repeated_opening
+    - file: DDx/Vocabulary.yml
+      rule_id: prose.vocabulary.generic_substitute
+includes:
+  - docs/**
+excludes:
+  - "**/*.generated.md"
+vocabulary:
+  default_path: vocabulary/default.yaml
+  vale_style: DDx/Vocabulary.yml
+  accept:
+    - DDx
+    - bead
+    - execution
+    - Helix
+    - Fizeau
+  reject:

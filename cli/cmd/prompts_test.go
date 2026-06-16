@@ -68,7 +68,9 @@ persona_bindings:
 			},
 			validate: func(t *testing.T, output string, err error) {
 				assert.NoError(t, err)
-				assert.Contains(t, output, "No prompts directory found")
+				assert.Contains(t, output, "Available prompts:")
+				assert.Contains(t, output, "claude/system-prompts/code-review")
+				assert.Contains(t, output, "common/docs")
 			},
 			expectError: false,
 		},
@@ -112,7 +114,9 @@ persona_bindings: {}`
 			},
 			validate: func(t *testing.T, output string, err error) {
 				assert.NoError(t, err)
-				assert.Contains(t, output, "No prompts directory found")
+				assert.Contains(t, output, "Available prompts:")
+				assert.Contains(t, output, "claude/system-prompts/code-review.md")
+				assert.Contains(t, output, "common/docs.md")
 			},
 			expectError: false,
 		},
@@ -232,7 +236,8 @@ persona_bindings: {}`
 			},
 			validate: func(t *testing.T, output string, err error) {
 				assert.NoError(t, err)
-				assert.Contains(t, output, "No prompts directory found")
+				assert.Contains(t, output, "claude/system-prompts/code-review")
+				assert.NotContains(t, output, "common/docs")
 			},
 			expectError: false,
 		},
@@ -268,7 +273,8 @@ persona_bindings: {}`
 			},
 			validate: func(t *testing.T, output string, err error) {
 				assert.NoError(t, err)
-				assert.Contains(t, output, "No prompts directory found")
+				assert.Contains(t, output, "Available prompts:")
+				assert.Contains(t, output, "ddx/create-workflow")
 			},
 			expectError: false,
 		},

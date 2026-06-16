@@ -1,0 +1,62 @@
+# Notion MCP Server Definition
+name: notion
+description: "Notion workspace integration for pages and databases"
+category: productivity
+author: modelcontextprotocol
+version: 1.0.0
+tags: [notion, workspace, database, pages, productivity, collaboration]
+
+command:
+  executable: npx
+  args: ["-y", "@modelcontextprotocol/server-notion"]
+
+environment:
+  - name: NOTION_API_KEY
+    description: "Notion integration API key"
+    required: true
+    sensitive: true
+    validation: "^secret_[a-zA-Z0-9]{43}$"
+
+documentation:
+  setup: |
+    1. Go to https://www.notion.so/my-integrations
+    2. Click "+ New integration"
+    3. Give your integration a name (e.g., "Claude MCP")
+    4. Submit and copy the "Internal Integration Token"
+    5. Go to your Notion pages and invite your integration:
+       - Open the page you want to access
+       - Click "Share" → "Invite"
+       - Search for your integration name and select it
+  permissions:
+    - Read content
+    - Update content
+    - Insert content
+  examples:
+    - "Show me my Notion pages"
+    - "Create a new page in my workspace"
+    - "Search for pages about project planning"
+    - "Update the status in my project database"
+
+compatibility:
+  platforms: [darwin, linux, windows]
+  claude_versions: [desktop, code]
+  min_ddx_version: "0.2.0"
+  node_version: ">=16.0.0"
+
+security:
+  sandbox: recommended
+  network_access: required
+  file_access: none
+  data_handling: "API key stored encrypted in config file"
+  warnings:
+    - "Grant minimal page access to your integration"
+    - "Regularly review integration permissions"
+
+verification:
+  test_command: "List my Notion pages"
+  expected_response: "List of accessible Notion pages"
+
+links:
+  homepage: https://github.com/modelcontextprotocol/servers
+  documentation: https://github.com/modelcontextprotocol/servers/tree/main/src/notion
+  issues: https://github.com/modelcontextprotocol/servers/issues
