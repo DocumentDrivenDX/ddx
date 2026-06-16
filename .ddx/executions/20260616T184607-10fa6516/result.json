@@ -1,0 +1,22 @@
+{
+  "bead_id": "ddx-8166bf68",
+  "attempt_id": "20260616T184607-10fa6516",
+  "base_rev": "997f5e545f882b382e0b86f5ca648463f725b9cd",
+  "result_rev": "997f5e545f882b382e0b86f5ca648463f725b9cd",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "agent: provider process exited without emitting a final event",
+  "session_id": "eb-8f316057",
+  "duration_ms": 86882,
+  "exit_code": 1,
+  "error": "agent: provider process exited without emitting a final event",
+  "project_root": "/Users/erik/Projects/ddx",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260616T184607-10fa6516",
+  "prompt_file": ".ddx/executions/20260616T184607-10fa6516/prompt.md",
+  "manifest_file": ".ddx/executions/20260616T184607-10fa6516/manifest.json",
+  "result_file": ".ddx/executions/20260616T184607-10fa6516/result.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-16T18:46:33.461832131Z",
+  "finished_at": "2026-06-16T18:48:00.344595165Z"
+}
