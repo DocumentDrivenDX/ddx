@@ -2578,6 +2578,41 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		})
 	}
 
+	if freshForHold, err := w.Store.Get(ctx, candidate.ID); err == nil && freshForHold != nil {
+		candidate = *freshForHold
+	}
+	if detail, held := activeDesignHoldDetail(candidate, now().UTC()); held {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "design hold parked bead %s: %s\n", candidate.ID, detail)
+		}
+		emit("pre_claim_intake.blocked", readinessDecisionBody(
+			"pre_claim_intake.operator_required",
+			"operator_required",
+			"pre_claim_intake",
+			"block",
+			"park",
+			"review intake result and accept, rewrite, split, block, or cancel",
+			map[string]any{
+				"bead_id": candidate.ID,
+				"outcome": string(PreClaimIntakeOperatorRequired),
+				"detail":  detail,
+			},
+		))
+		parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", detail, now().UTC())
+		if berr != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+		}
+		_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
+		if berr != nil || !parked {
+			transientCandidateSkips[candidate.ID] = "operator_required"
+		}
+		if stopAfterNonAttemptSkip() {
+			applyStop(work.StopInput{Once: true})
+			return executeBeadIterationOutcome{Stop: true}, nil
+		}
+		return executeBeadIterationOutcome{Continue: true}, nil
+	}
+
 	skipPreClaimIntake := false
 	readinessEstimatedDifficulty := ""
 
@@ -4891,6 +4926,29 @@ func candidateSkipDetail(reason string, fresh *bead.Bead) string {
 	default:
 		return "bead dropped out of the fresh execution-ready view"
 	}
+}
+
+var designHoldUntilRe = regexp.MustCompile(`(?i)(?:design\s+hold|cooldown)[^.:\n;]*\buntil\s+([0-9]{4}-[0-9]{2}-[0-9]{2})`)
+
+func activeDesignHoldDetail(candidate bead.Bead, at time.Time) (string, bool) {
+	notes := strings.TrimSpace(candidate.Notes)
+	if notes == "" {
+		return "", false
+	}
+	match := designHoldUntilRe.FindStringSubmatch(notes)
+	if len(match) < 2 {
+		return "", false
+	}
+	until, err := time.Parse("2006-01-02", match[1])
+	if err != nil {
+		return "", false
+	}
+	// Treat the date as inclusive through the end of that UTC day. A hold
+	// "until 2027-01-01" should not execute during 2027-01-01 itself.
+	if at.UTC().Before(until.AddDate(0, 0, 1)) {
+		return fmt.Sprintf("active design hold until %s", until.Format("2006-01-02")), true
+	}
+	return "", false
 }
 
 type preClaimWarnRepeatState struct {
