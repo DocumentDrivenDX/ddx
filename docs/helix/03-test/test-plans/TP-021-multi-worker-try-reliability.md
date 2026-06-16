@@ -46,6 +46,15 @@ not best-effort diagnostics. The default caps remain 10 s for `index.lock` and
 30 s for `.ddx/.git-tracker.lock`; fast tests should assert much smaller local
 budgets where the fixture is deterministic.
 
+Durable-audit commit collision-safety contract: a lock-acquire timeout and a
+git subprocess SIGKILL or context-deadline during any status, add, or commit
+step are transient contention, not operator-attention. The durable-audit commit
+must be idempotent and resumable so a rerun completes without manual `git
+reset`, and concurrent workers must back off with a bounded wait while
+serializing the critical section, returning a transient error rather than
+killing the git child. Genuine non-transient failures such as permissions,
+ENOSPC, or repository corruption still surface operator attention.
+
 ## Existing Coverage
 
 - `cli/internal/integration/lock_contention_test.go` proves 5
@@ -76,6 +85,10 @@ budgets where the fixture is deterministic.
   `ddx bead create/update/close` commands run. Assert no tracker-lock timeout,
   no missing `prompt.md`/`manifest.json`/`result.json`, and no `index.lock`
   failures in worker output.
+- `TestIsTransientGitContention_SignalKilledAndDeadline`: prove the durable-
+  audit commit classifier treats `signal: killed`, context-deadline, and
+  tracker-lock-timeout strings as transient contention rather than operator
+  attention.
 - `TestChaos_StartupCleanupSkipsWhenAnotherWorkerOwnsCleanupLock`: start N
   `ddx work --once` processes against a fixture with stale worktree metadata.
   Assert exactly one cleanup pass mutates the stale worktree and the others emit
