@@ -102,6 +102,69 @@ func TestServerStartupReconcileReportsStaleDesiredProjectAudit(t *testing.T) {
 	assert.NotContains(t, out, "project="+activeRoot)
 }
 
+func TestServerStartupReconcile_SkipsMissingOrInvalidDesiredProjects(t *testing.T) {
+	activeRoot := t.TempDir()
+	staleRoot := t.TempDir()
+	clock := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	nowFn := func() time.Time { return clock }
+
+	require.NoError(t, SaveWorkerDesiredState(activeRoot, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+	require.NoError(t, SaveWorkerDesiredState(staleRoot, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+	require.NoError(t, os.RemoveAll(staleRoot))
+
+	activeFake := newFakeWorkerController(nowFn)
+	results := map[string][]ReconcileResult{}
+	calls := map[string]int{}
+
+	prev := startupDesiredWorkerReconcileProject
+	startupDesiredWorkerReconcileProject = func(projectRoot, _ string, _ *WorkerManager) (ReconcileResult, error) {
+		calls[projectRoot]++
+		switch projectRoot {
+		case activeRoot:
+			sup := NewWorkerSupervisor(projectRoot, activeFake)
+			sup.clock = nowFn
+			res, err := sup.Reconcile()
+			results[projectRoot] = append(results[projectRoot], res)
+			return res, err
+		case staleRoot:
+			return ReconcileResult{}, fmt.Errorf("stale project root should have been skipped")
+		default:
+			return ReconcileResult{}, fmt.Errorf("unexpected project root in reconcile: %s", projectRoot)
+		}
+	}
+	t.Cleanup(func() { startupDesiredWorkerReconcileProject = prev })
+
+	state := &ServerState{}
+	state.RegisterProject(activeRoot)
+	state.RegisterProject(staleRoot)
+	srv := &Server{
+		WorkingDir: activeRoot,
+		workers:    NewWorkerManager(activeRoot),
+		state:      state,
+	}
+
+	errs := srv.reconcileDesiredWorkersOnce()
+	require.Empty(t, errs, "startup reconcile must skip the stale project without error")
+	require.Equal(t, 1, calls[activeRoot], "active project must be reconciled")
+	assert.Zero(t, calls[staleRoot], "missing project root must never reach the worker reconcile hook")
+	require.Len(t, results[activeRoot], 1)
+	require.Len(t, results[activeRoot][0].Started, 1, "active project must still start its desired worker")
+	assert.Equal(t, workerStateRunning, activeFake.records[results[activeRoot][0].Started[0]].State)
+
+	errs = srv.reconcileDesiredWorkersOnce()
+	require.Empty(t, errs, "second startup reconcile must remain clean")
+	require.Equal(t, 2, calls[activeRoot], "active project should continue reconciling normally")
+	assert.Zero(t, calls[staleRoot], "stale project must stay skipped on later reconcile passes")
+	require.Len(t, results[activeRoot], 2)
+	assert.Empty(t, results[activeRoot][1].Started, "second startup pass must not duplicate the active worker")
+}
+
 func TestServerStartupReconcileDeduplicatesStartupProject(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{DesiredCount: 1}))
