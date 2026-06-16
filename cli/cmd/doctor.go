@@ -400,15 +400,15 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check 14: Legacy DDx skill symlinks under project skill directories
-	// (FEAT-015). In the project-local model the DDx-managed ddx skill is a
-	// real directory. A symlink indicates a pre-migration DDx install;
+	// (FEAT-015). The DDx-managed ddx skill may be a generated shim to a
+	// cache-backed package. Other ddx symlinks indicate a pre-migration install;
 	// project-owned non-DDx skill symlinks are allowed.
 	if legacyDirs := legacySkillSymlinkDirs(f.WorkingDir); len(legacyDirs) > 0 {
 		errOut := cmd.ErrOrStderr()
 		for _, dir := range legacyDirs {
 			fmt.Fprintf(errOut, "DDx skill symlink detected under %s; pre-migration DDx skill install detected\n", dir)
 		}
-		fmt.Fprintln(errOut, "run: ddx update --force")
+		fmt.Fprintln(errOut, "run: ddx plugin sync --force")
 		return fmt.Errorf("legacy DDx skill symlinks detected")
 	}
 
@@ -464,8 +464,8 @@ func reportSkillInstallTopology(projectRoot string) {
 
 // legacySkillSymlinkDirs returns the relative names of project-local skill
 // directories (e.g. ".agents/skills", ".claude/skills") whose DDx-managed
-// ddx entry is still a symlink. That symlink indicates a pre-FEAT-015 DDx
-// install; unrelated project-owned skill symlinks are ignored.
+// ddx entry is a symlink that does not resolve to an approved generated cache
+// shim. Unrelated project-owned skill symlinks are ignored.
 func legacySkillSymlinkDirs(workingDir string) []string {
 	if workingDir == "" {
 		return nil
@@ -478,10 +478,57 @@ func legacySkillSymlinkDirs(workingDir string) []string {
 			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
+			if isGeneratedDDxSkillShim(workingDir, ddxSkillDir) {
+				continue
+			}
 			found = append(found, rel)
 		}
 	}
 	return found
+}
+
+func isGeneratedDDxSkillShim(projectRoot, skillDir string) bool {
+	target, err := os.Readlink(skillDir)
+	if err != nil {
+		return false
+	}
+	resolved := target
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(filepath.Dir(skillDir), resolved)
+	}
+	if _, err := os.Stat(filepath.Join(resolved, "SKILL.md")); err != nil {
+		return false
+	}
+
+	if builtin, err := registry.BuiltinRegistry().Find("ddx"); err == nil {
+		if sameExistingPath(resolved, filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")) {
+			return true
+		}
+	}
+	lock, err := registry.LoadProjectPluginLock(context.Background(), projectRoot)
+	if err == nil {
+		if entry := lock.Find("ddx"); entry != nil {
+			cachePath := entry.CachePath
+			if cachePath == "" {
+				cachePath = registry.PluginCacheDir(entry.Name, entry.Version)
+			}
+			if sameExistingPath(resolved, filepath.Join(cachePath, "skills", "ddx")) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func sameExistingPath(a, b string) bool {
+	aInfo, aErr := os.Stat(a)
+	bInfo, bErr := os.Stat(b)
+	if aErr == nil && bErr == nil {
+		return os.SameFile(aInfo, bInfo)
+	}
+	aAbs, aAbsErr := filepath.Abs(a)
+	bAbs, bAbsErr := filepath.Abs(b)
+	return aAbsErr == nil && bAbsErr == nil && filepath.Clean(aAbs) == filepath.Clean(bAbs)
 }
 
 // runDoctorScoped runs only the checks relevant to the staged file paths,

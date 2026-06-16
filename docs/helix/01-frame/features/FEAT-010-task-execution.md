@@ -1154,7 +1154,7 @@ root, the exact checked paths, and remediation:
 
 ```text
 Run:
-  ddx update --force
+  ddx plugin sync --force
   ddx doctor
 ```
 

@@ -151,10 +151,11 @@ Desired behavior:
 
 3. **Project Structure Creation**
    - Creates `.ddx/` directory with config.yaml, plugin lock metadata, and versions.yaml
-   - Leaves the default `ddx` plugin available through the baked-in fallback
-     and generated harness skill adapters
+   - Leaves the default `ddx` plugin available through a baked-in fallback that
+     can materialize `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/`
+     without network access
    - Produces `.agents/skills/ddx/` and `.claude/skills/ddx/` as generated
-     adapter state that can be recreated
+     adapter state linked to the built-in cache, not as copied project payloads
    - Commits only durable project metadata and guidance files
 
 3a. **Bootstrap Skill Cleanup (Stale ddx-* Removal)**
@@ -282,7 +283,10 @@ Desired behavior:
   `npx`.
 - **Generated Skills:** `ddx init` and `ddx plugin sync` may create
   `.agents/skills/*` and `.claude/skills/*`, but those directories are
-  generated shims/links and are ignored by default.
+  generated shims/links and are ignored by default. The built-in `ddx` package
+  uses the same shape: the binary can populate the XDG plugin cache from the
+  embedded default package, then expose cache-backed `ddx` skill adapters
+  without writing `.ddx/plugins/ddx` or a project plugin-lock entry.
 - **Git-Trackable Versions:** `.ddx/versions.yaml` committed to git — teammates get version gate on clone
 - **Git-Trackable Execution Evidence:** `.ddx/executions/<attempt-id>/` is
   the tracked execute-bead attempt bundle defined in FEAT-006 §"Execute-Bead
@@ -318,10 +322,10 @@ project/
 │   └── plugins/
 │       └── helix/        (local install overlay only: symlink to checkout)
 ├── .agents/skills/
-│   ├── ddx/              (generated adapter)
+│   ├── ddx/              (generated adapter to built-in XDG cache)
 │   └── helix/            (generated adapter or local checkout symlink)
 ├── .claude/skills/
-│   ├── ddx/              (generated adapter)
+│   ├── ddx/              (generated adapter to built-in XDG cache)
 │   └── helix/            (generated adapter or local checkout symlink)
 └── ...
 ```
@@ -332,7 +336,7 @@ project/
 |---------|-------|--------------|
 | `curl install.sh \| bash` | Machine | Binary to `~/.local/bin/ddx` + PATH/completions |
 | `ddx upgrade` | Machine | Upgrade only the DDx binary |
-| `ddx init [path] [--force]` | Project | `.ddx/` metadata + built-in `ddx` adapter + AGENTS/CLAUDE guidance |
+| `ddx init [path] [--force]` | Project | `.ddx/` metadata + built-in cache-backed `ddx` adapter + AGENTS/CLAUDE guidance |
 | `ddx plugin install <name>` | Project | Record plugin lock metadata, cache payload, and materialize generated shims |
 | `ddx plugin install <name> --local <path>` | Project/dev | Symlink project plugin and skill paths to a local checkout |
 | `ddx plugin list` | Project | List project plugins and local overlays |

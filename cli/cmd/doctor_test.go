@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/registry"
 )
 
 func TestDoctorProseChecker_MissingVale(t *testing.T) {
@@ -170,8 +171,8 @@ func TestDoctor_FlagsLegacyDDxSkillSymlinks(t *testing.T) {
 	if !strings.Contains(stderr, "DDx skill symlink detected under .agents/skills") {
 		t.Errorf("stderr missing DDx skill symlink diagnostic; got:\n%s", stderr)
 	}
-	if !strings.Contains(stderr, "run: ddx update --force") {
-		t.Errorf("stderr missing 'run: ddx update --force'; got:\n%s", stderr)
+	if !strings.Contains(stderr, "run: ddx plugin sync --force") {
+		t.Errorf("stderr missing 'run: ddx plugin sync --force'; got:\n%s", stderr)
 	}
 }
 
@@ -462,6 +463,40 @@ func TestDoctorLegacySkillSymlinkDirsFlagsDDxSymlink(t *testing.T) {
 				t.Fatalf("legacySkillSymlinkDirs() = %v, want [%s]", got, tc.rel)
 			}
 		})
+	}
+}
+
+// TestDoctorLegacySkillSymlinkDirsAllowsBuiltinCacheShim verifies that the
+// cache-backed built-in ddx adapter is not classified as a legacy symlink.
+func TestDoctorLegacySkillSymlinkDirsAllowsBuiltinCacheShim(t *testing.T) {
+	workDir := t.TempDir()
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+
+	builtin, err := registry.BuiltinRegistry().Find("ddx")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
+	if err := os.MkdirAll(cacheSkillDir, 0o755); err != nil {
+		t.Fatalf("mkdir cache skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(cacheSkillDir, "SKILL.md"), []byte("# DDx\n"), 0o644); err != nil {
+		t.Fatalf("write cache skill: %v", err)
+	}
+	for _, rel := range []string{filepath.Join(".agents", "skills"), filepath.Join(".claude", "skills")} {
+		root := filepath.Join(workDir, rel)
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.Symlink(cacheSkillDir, filepath.Join(root, "ddx")); err != nil {
+			t.Fatalf("symlink %s/ddx: %v", rel, err)
+		}
+	}
+
+	got := legacySkillSymlinkDirs(workDir)
+	if len(got) != 0 {
+		t.Fatalf("legacySkillSymlinkDirs() = %v, want no legacy dirs for built-in cache shim", got)
 	}
 }
 

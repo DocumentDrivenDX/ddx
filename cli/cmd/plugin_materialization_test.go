@@ -68,7 +68,7 @@ func TestPluginSync_MaterializesAgentSkillShimsFromCache(t *testing.T) {
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "sample-skill"), filepath.Join(entry.CachePath, "skills", "sample-skill"))
 }
 
-func TestPluginSync_MaterializesBuiltinDDxAdaptersWithoutLock(t *testing.T) {
+func TestPluginSync_MaterializesBuiltinDDxAdaptersFromXDGCache(t *testing.T) {
 	workDir, _ := setupPluginMaterializationProject(t)
 	factory := NewCommandFactory(workDir)
 
@@ -78,17 +78,36 @@ func TestPluginSync_MaterializesBuiltinDDxAdaptersWithoutLock(t *testing.T) {
 
 	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
 		"plugin sync must not copy the baked-in ddx payload into the project plugin tree")
+	builtin, err := registry.BuiltinRegistry().Find("ddx")
+	require.NoError(t, err)
+	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
+	assert.FileExists(t, filepath.Join(cacheSkillDir, "SKILL.md"))
 	for _, rel := range []string{
 		filepath.Join(".agents", "skills", "ddx"),
 		filepath.Join(".claude", "skills", "ddx"),
 	} {
 		path := filepath.Join(workDir, rel)
 		assert.FileExists(t, filepath.Join(path, "SKILL.md"))
-		info, statErr := os.Lstat(path)
-		require.NoError(t, statErr)
-		assert.Equal(t, os.FileMode(0), info.Mode()&os.ModeSymlink,
-			"built-in ddx adapters are materialized from embedded files, not symlinked to a payload cache")
+		assertLocalSymlink(t, path, cacheSkillDir)
 	}
+}
+
+func TestPluginSync_RecreatesBuiltinDDxCacheFromEmbeddedFS(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	factory := NewCommandFactory(workDir)
+	builtin, err := registry.BuiltinRegistry().Find("ddx")
+	require.NoError(t, err)
+	cachePath := registry.PluginCacheDir("ddx", builtin.Version)
+	require.NoError(t, os.RemoveAll(cachePath))
+
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "sync")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "ddx builtin: ok")
+	assert.FileExists(t, filepath.Join(cachePath, "skills", "ddx", "SKILL.md"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "ddx"), filepath.Join(cachePath, "skills", "ddx"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "ddx"), filepath.Join(cachePath, "skills", "ddx"))
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
+		"offline built-in cache recreation must not create a project payload tree")
 }
 
 func TestPluginConsumer_LazilySyncsMissingShims(t *testing.T) {

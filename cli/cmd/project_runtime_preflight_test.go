@@ -40,7 +40,7 @@ func TestProjectRuntimePreflight_MissingBeadLifecycleReportsCheckedPathsAndRemed
 	assert.Contains(t, out, projectRoot, "output must include resolved project root")
 	assert.Contains(t, out, filepath.Join(".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"), "output must include first checked path")
 	assert.Contains(t, out, filepath.Join(".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"), "output must include second checked path")
-	assert.Contains(t, out, "ddx update --force", "output must include primary remediation command")
+	assert.Contains(t, out, "ddx plugin sync --force", "output must include primary remediation command")
 	assert.Contains(t, out, "ddx doctor", "output must include secondary remediation command")
 }
 
@@ -64,7 +64,7 @@ func TestWorkPreflight_WarnsOnceForMissingLifecycleSkill(t *testing.T) {
 	_ = root1.Execute()
 	out1 := buf1.String()
 	assert.Contains(t, out1, "preflight warning:", "first invocation must emit the preflight warning")
-	assert.Contains(t, out1, "ddx update --force")
+	assert.Contains(t, out1, "ddx plugin sync --force")
 
 	// Second invocation on the same factory must not repeat the warning.
 	var buf2 bytes.Buffer
@@ -110,7 +110,7 @@ func TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill(t *testing.T) {
 
 	out := buf.String()
 	assert.Contains(t, out, "preflight warning:", "preflight warning must appear in output")
-	assert.Contains(t, out, "ddx update --force", "remediation must include ddx update --force")
+	assert.Contains(t, out, "ddx plugin sync --force", "remediation must include ddx plugin sync --force")
 	assert.Contains(t, out, "ddx doctor", "remediation must include ddx doctor")
 
 	// Warning must precede any bead dispatch output.
@@ -147,7 +147,7 @@ func TestServerPreflight_MissingLifecycleSkillStartsDegraded(t *testing.T) {
 	out := buf.String()
 	// Degraded startup diagnostics must be surfaced.
 	assert.Contains(t, out, "bead-lifecycle", "degraded diagnostics must mention bead-lifecycle")
-	assert.Contains(t, out, "ddx update --force", "degraded diagnostics must include primary remediation")
+	assert.Contains(t, out, "ddx plugin sync --force", "degraded diagnostics must include primary remediation")
 }
 
 // TestProjectRuntimePreflight_IgnoresNonDDxProjectSkillSymlink verifies that
@@ -176,10 +176,10 @@ func TestProjectRuntimePreflight_IgnoresNonDDxProjectSkillSymlink(t *testing.T) 
 	assert.Empty(t, buf.String(), "healthy DDx layout must not emit a preflight warning")
 }
 
-// TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsUpdateForce verifies
+// TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsPluginSyncForce verifies
 // that legacy DDx skill symlinks reuse the FEAT-015 remediation path:
-// ddx update --force first, then ddx doctor.
-func TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsUpdateForce(t *testing.T) {
+// ddx plugin sync --force first, then ddx doctor.
+func TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsPluginSyncForce(t *testing.T) {
 	projectRoot := t.TempDir()
 	legacyDDxTarget := filepath.Join(projectRoot, "legacy-skills", "ddx", "bead-lifecycle")
 	require.NoError(t, os.MkdirAll(legacyDDxTarget, 0o755))
@@ -197,10 +197,10 @@ func TestProjectRuntimePreflight_LegacyDDxSkillSymlinkSuggestsUpdateForce(t *tes
 	emitPreflightWarning(&buf, result)
 	out := buf.String()
 
-	// ddx update --force must appear before ddx doctor (primary remediation first).
-	updateIdx := strings.Index(out, "ddx update --force")
+	// ddx plugin sync --force must appear before ddx doctor (primary remediation first).
+	updateIdx := strings.Index(out, "ddx plugin sync --force")
 	doctorIdx := strings.Index(out, "ddx doctor")
-	assert.GreaterOrEqual(t, updateIdx, 0, "output must contain ddx update --force")
+	assert.GreaterOrEqual(t, updateIdx, 0, "output must contain ddx plugin sync --force")
 	assert.GreaterOrEqual(t, doctorIdx, 0, "output must contain ddx doctor")
-	assert.Less(t, updateIdx, doctorIdx, "ddx update --force must appear before ddx doctor")
+	assert.Less(t, updateIdx, doctorIdx, "ddx plugin sync --force must appear before ddx doctor")
 }

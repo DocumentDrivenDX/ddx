@@ -42,12 +42,23 @@ surfaces live.
 DDx resolves the default `ddx` package in this order:
 
 1. project plugin lock entry plus cache payload
-2. baked-in package embedded in the binary
+2. built-in cache payload materialized from the binary under
+   `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/`
+3. baked-in package embedded in the binary
 
 For registry/marketplace plugins, "project-local" means the project has a
 durable dependency and lock entry, not necessarily a copied payload tree.
 Payloads resolve from the XDG plugin cache; the baked-in layer exists only for
 the default `ddx` package so the binary remains usable offline.
+
+The built-in `ddx` package follows the same adapter shape as marketplace
+plugins without becoming a normal project dependency: `ddx init` and
+`ddx plugin sync` may materialize the embedded default package into the XDG
+plugin cache, then create `.agents/skills/ddx` and `.claude/skills/ddx` as
+generated shims/links to `skills/ddx` in that cache. They do not create
+`.ddx/plugins/ddx`, do not write a project plugin-lock entry for `ddx`, and do
+not require network access. If the cache is missing, the embedded package is the
+fallback source used to recreate it.
 
 DDx supports one forward registry install mode with generated agent-tier
 outputs:
@@ -87,6 +98,9 @@ explicitly chosen machine-local development state.
   instead of describing competing home-directory and project-directory
   locations.
 - The default package remains available offline through the embedded layer.
+- The default package no longer needs a full copied skill tree in every project;
+  projects get generated adapters that can be recreated from the XDG cache or
+  the binary.
 - Registry plugin payloads no longer need to be checked into every project.
   Clone portability comes from project metadata plus lazy materialization.
 - Agent skill directories become generated adapter state. They may be removed
