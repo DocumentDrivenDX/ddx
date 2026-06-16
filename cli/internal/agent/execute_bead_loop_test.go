@@ -2992,7 +2992,15 @@ func claimHeartbeatPathForTest(store *bead.Store, beadID string) string {
 		root = real
 	}
 	sum := sha1.Sum([]byte(root))
-	return filepath.Join(os.TempDir(), "ddx-claim-heartbeats", hex.EncodeToString(sum[:]), beadID+".json")
+	baseDir := os.Getenv("DDX_CLAIM_HEARTBEAT_DIR")
+	if baseDir == "" {
+		if cacheDir, err := os.UserCacheDir(); err == nil && cacheDir != "" {
+			baseDir = filepath.Join(cacheDir, "ddx", "ddx-claim-heartbeats")
+		} else {
+			baseDir = filepath.Join(os.TempDir(), "ddx", "ddx-claim-heartbeats")
+		}
+	}
+	return filepath.Join(filepath.Clean(baseDir), hex.EncodeToString(sum[:]), beadID+".json")
 }
 
 // errorInjectingStore wraps a real ExecuteBeadLoopStore and allows individual
@@ -3052,6 +3060,7 @@ func (s *errorInjectingStore) AppendEvent(id string, event bead.BeadEvent) error
 
 func TestWorkerFailurePathsReleaseClaimAtomically(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("DDX_CLAIM_HEARTBEAT_DIR", filepath.Join(dir, "claim-heartbeats"))
 	store := bead.NewStore(filepath.Join(dir, ddxroot.DirName))
 	require.NoError(t, store.Init(context.Background()))
 
