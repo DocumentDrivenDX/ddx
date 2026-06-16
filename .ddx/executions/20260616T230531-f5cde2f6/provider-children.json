@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260616T230531-f5cde2f6",
+  "bead_id": "ddx-7eebb7a4",
+  "trigger": "context canceled",
+  "scanned_at": "2026-06-16T23:19:38.645570605Z",
+  "reaped": [
+    {
+      "pid": 1600600,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1600635,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1810204,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1810262,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
