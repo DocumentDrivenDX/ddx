@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"io"
+	"strings"
 	"sync"
 
 	"github.com/DocumentDrivenDX/ddx/internal/federation"
@@ -72,6 +74,111 @@ func (p *hubFederationProvider) FanOut(ctx context.Context, req *federation.FanO
 		p.server.hub.mu.Unlock()
 	}
 	return res, nil
+}
+
+// ForwardMutation routes a single owner-targeted mutation to the spoke that
+// owns the target project. It preserves the request metadata as headers so the
+// spoke can enforce origin and idempotency constraints.
+func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
+	if p.server.hub == nil {
+		return nil, federation.ErrForwardMutationOffline
+	}
+	if req == nil {
+		return nil, federation.ErrForwardMutationBroadcastLike
+	}
+	if err := req.Validate(); err != nil {
+		return nil, err
+	}
+
+	p.server.hub.mu.Lock()
+	target := p.server.hub.registry.FindSpoke(req.TargetNodeID)
+	if target == nil {
+		p.server.hub.mu.Unlock()
+		return nil, federation.ErrForwardMutationMissingOwner
+	}
+	targetCopy := *target
+	p.server.hub.mu.Unlock()
+
+	if targetCopy.Status == federation.StatusOffline {
+		return nil, federation.ErrForwardMutationOffline
+	}
+	if targetCopy.Status == federation.StatusStale {
+		return nil, federation.ErrForwardMutationStale
+	}
+	if !spokeHasCapability(targetCopy.Capabilities, "write") {
+		return nil, federation.ErrForwardMutationReadOnly
+	}
+
+	ownsProject := false
+	for _, owned := range targetCopy.ProjectIDs {
+		if owned == req.TargetProjectID {
+			ownsProject = true
+			break
+		}
+	}
+	if !ownsProject {
+		return nil, federation.ErrForwardMutationMissingOwner
+	}
+
+	headers := make(map[string]string, len(req.Headers)+5)
+	for k, v := range req.Headers {
+		headers[k] = v
+	}
+	if req.OriginIdentity != "" {
+		headers[federationOriginIdentityHeader] = req.OriginIdentity
+	}
+	if coordinatorIdentity := strings.TrimSpace(p.server.federationSelfIdentity()); coordinatorIdentity != "" {
+		headers[federationCoordinatorIdentityHeader] = coordinatorIdentity
+	}
+	if len(req.ForwardingPath) > 0 {
+		headers["X-DDx-Forwarding-Path"] = strings.Join(req.ForwardingPath, " -> ")
+	}
+	if req.RequestID != "" {
+		headers["X-DDx-Request-ID"] = req.RequestID
+	}
+	if req.IdempotencyKey != "" {
+		headers["X-DDx-Idempotency-Key"] = req.IdempotencyKey
+	}
+	if req.TargetProjectID != "" {
+		headers["X-DDx-Target-Project-ID"] = req.TargetProjectID
+	}
+	if req.ExpectedVersion != nil && *req.ExpectedVersion != "" {
+		headers["X-DDx-Expected-Version"] = *req.ExpectedVersion
+	}
+
+	resp, err := federation.NewFanOutClient().ForwardMutation(ctx, &targetCopy, req.Body, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return &federation.ForwardMutationResponse{
+		OriginIdentity:       req.OriginIdentity,
+		ForwardingPath:       append([]string(nil), req.ForwardingPath...),
+		RequestID:            req.RequestID,
+		IdempotencyKey:       req.IdempotencyKey,
+		TargetNodeID:         req.TargetNodeID,
+		TargetProjectID:      req.TargetProjectID,
+		ExpectedVersion:      req.ExpectedVersion,
+		RequiredCapabilities: append([]string(nil), req.RequiredCapabilities...),
+		StatusCode:           resp.StatusCode,
+		Headers:              resp.Header.Clone(),
+		Body:                 body,
+	}, nil
+}
+
+func spokeHasCapability(caps []string, want string) bool {
+	for _, c := range caps {
+		if c == want {
+			return true
+		}
+	}
+	return false
 }
 
 // Compile-time assertion that hubFederationProvider satisfies the resolver
