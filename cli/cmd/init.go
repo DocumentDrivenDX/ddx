@@ -297,6 +297,9 @@ func initProject(workingDir string, opts InitOptions) (*InitResult, error) {
 	if err := ensureProjectGitignoreRules(workingDir, initGitignoreRules); err != nil {
 		return nil, NewExitError(1, fmt.Sprintf("Failed to update .gitignore: %v", err))
 	}
+	if _, err := syncBuiltinDDxSkillAdapters(workingDir, opts.Force); err != nil {
+		return nil, NewExitError(1, fmt.Sprintf("Failed to create generated DDx skill adapters: %v", err))
+	}
 	if !opts.NoGit {
 		if err := untrackLegacyRunStateFiles(context.Background(), workingDir); err != nil {
 			return nil, NewExitError(1, fmt.Sprintf("Failed to migrate legacy run-state tracking: %v", err))

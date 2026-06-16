@@ -68,6 +68,29 @@ func TestPluginSync_MaterializesAgentSkillShimsFromCache(t *testing.T) {
 	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "sample-skill"), filepath.Join(entry.CachePath, "skills", "sample-skill"))
 }
 
+func TestPluginSync_MaterializesBuiltinDDxAdaptersWithoutLock(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	factory := NewCommandFactory(workDir)
+
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "sync", "--force")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "ddx builtin: ok")
+
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
+		"plugin sync must not copy the baked-in ddx payload into the project plugin tree")
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "ddx"),
+		filepath.Join(".claude", "skills", "ddx"),
+	} {
+		path := filepath.Join(workDir, rel)
+		assert.FileExists(t, filepath.Join(path, "SKILL.md"))
+		info, statErr := os.Lstat(path)
+		require.NoError(t, statErr)
+		assert.Equal(t, os.FileMode(0), info.Mode()&os.ModeSymlink,
+			"built-in ddx adapters are materialized from embedded files, not symlinked to a payload cache")
+	}
+}
+
 func TestPluginConsumer_LazilySyncsMissingShims(t *testing.T) {
 	workDir, _ := setupPluginMaterializationProject(t)
 	server := pluginMaterializationArchiveServer(t)

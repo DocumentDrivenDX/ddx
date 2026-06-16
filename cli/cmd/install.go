@@ -314,14 +314,15 @@ func (f *CommandFactory) newPluginSyncCommand() *cobra.Command {
 func (f *CommandFactory) runPluginSync(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
 	force, _ := cmd.Flags().GetBool("force")
+	builtinFiles, err := syncBuiltinDDxSkillAdapters(f.WorkingDir, force)
+	if err != nil {
+		return err
+	}
 	results, err := registry.SyncProjectPlugins(cmd.Context(), f.WorkingDir, force)
 	if err != nil {
 		return err
 	}
-	if len(results) == 0 {
-		fmt.Fprintln(out, "No plugins installed.")
-		return nil
-	}
+	fmt.Fprintf(out, "ddx builtin: ok (%d adapter(s))\n", len(builtinFiles))
 	for _, result := range results {
 		status := "ok"
 		if result.LocalOverlay {
