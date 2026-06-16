@@ -276,7 +276,7 @@ func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
 // TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim is AC #4:
 // Covers the post-claim outcomes when intake or lint rejects the bead:
 //   - infra error: fail-open, proceed to execution
-//   - operator_required during queue drain: warn and proceed to execution
+//   - operator_required during queue drain: move bead to status=proposed and unclaim
 //   - operator_required during targeted execution: move bead to status=proposed and unclaim
 //   - lint-blocked: unclaim bead, no execution
 //   - actionable_atomic: proceed to implementation normally
@@ -314,7 +314,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, bead.StatusClosed, got.Status, "bead must be closed after successful execution")
 	})
 
-	t.Run("operator_required_warns_and_executes_during_queue_drain", func(t *testing.T) {
+	t.Run("operator_required_proposes_and_unclaims_during_queue_drain", func(t *testing.T) {
 		store, candidate, _ := newExecuteLoopTestStore(t)
 		var eventSink bytes.Buffer
 		var execCalled atomic.Int32
@@ -322,7 +322,8 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 			Store: store,
 			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 				execCalled.Add(1)
-				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+				t.Fatal("executor must not run for operator_required intake")
+				return ExecuteBeadReport{}, nil
 			}),
 		}
 		opts := config.TestLoopConfigOpts{
@@ -344,34 +345,34 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		assert.Equal(t, int32(1), execCalled.Load(), "broad queue drain should attempt work despite intake uncertainty")
-		assert.Equal(t, 1, result.Attempts)
-		assert.Equal(t, 1, result.Successes)
+		assert.Equal(t, int32(0), execCalled.Load(), "operator_required intake must not execute during queue drain")
+		assert.Equal(t, 0, result.Attempts)
+		assert.Equal(t, 0, result.Successes)
 
 		got, err := store.Get(context.Background(), candidate.ID)
 		require.NoError(t, err)
-		assert.Equal(t, bead.StatusClosed, got.Status, "successful best-effort attempt should close normally")
+		assert.Equal(t, bead.StatusProposed, got.Status, "operator_required intake must park during queue drain")
+		assert.Empty(t, got.Owner, "bead must be unclaimed after terminal intake")
 		assert.NotContains(t, got.Labels, bead.LabelNeedsHuman,
-			"best-effort intake warning must not rely on needs_human label parking")
-		assert.Empty(t, bead.GetNeedsHumanMeta(*got).Reason)
+			"terminal intake outcome must not rely on needs_human label parking")
+		assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 
-		// An intake.warn event is still recorded as evidence for review/follow-up,
-		// but it does not park the bead in broad queue-drain mode.
 		events, err := store.Events(candidate.ID)
 		require.NoError(t, err)
-		var foundWarn bool
+		var foundBlocked bool
 		for _, ev := range events {
-			if ev.Kind != "intake.warn" {
+			if ev.Kind != "intake.blocked" {
 				continue
 			}
-			foundWarn = true
+			foundBlocked = true
 			var body map[string]any
 			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-			assert.Equal(t, "readiness_best_effort", body["reason"])
+			assert.Equal(t, string(PreClaimIntakeOperatorRequired), body["intake_outcome"])
+			assert.Equal(t, "block", body["policy_mode"])
+			assert.Equal(t, "park", body["decision"])
 		}
-		assert.True(t, foundWarn, "an intake.warn event must be recorded as review evidence")
+		assert.True(t, foundBlocked, "an intake.blocked event must be recorded")
 
-		// The event stream must contain pre_claim_intake.blocked.
 		assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
 	})
 

@@ -3049,10 +3049,11 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			}
 			return executeBeadIterationOutcome{Continue: true}, nil
 		default:
-			// Terminal non-actionable intake outcomes are warnings during
-			// broad queue drain: the worker should prefer making an attempt
-			// and letting review/follow-up work handle gaps. Explicit
-			// targeted execution keeps the stricter parking behavior.
+			// Refinement-class intake outcomes are warnings during broad
+			// queue drain: the worker can attempt and let review/follow-up
+			// work handle gaps. Operator-required findings are different:
+			// they represent explicit human/design/external blockers and must
+			// be parked even outside targeted execution.
 			warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
 			if warning == "" {
 				warning = string(intakeOutcome)
@@ -3060,14 +3061,22 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (%s)\n", warning, candidate.ID)
 			}
-			operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", "best-effort", "attempt", "continue with implementation; review should create follow-up work for remaining gaps")
+			policyMode := "best-effort"
+			decision := "attempt"
+			suggestedAction := "continue with implementation; review should create follow-up work for remaining gaps"
+			if intakeOutcome == PreClaimIntakeOperatorRequired {
+				policyMode = "block"
+				decision = "park"
+				suggestedAction = "review intake result and accept, rewrite, split, block, or cancel"
+			}
+			operatorOverrideTerminal, _ := detectIntakeBlockedOperatorOverride(w.Store, &candidate, "pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)), intakeResult.Reason, "pre_claim_intake", policyMode, decision, suggestedAction)
 			emit("pre_claim_intake.blocked", readinessDecisionBody(
 				"pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)),
 				intakeResult.Reason,
 				"pre_claim_intake",
-				"best-effort",
-				"attempt",
-				"continue with implementation; review should create follow-up work for remaining gaps",
+				policyMode,
+				decision,
+				suggestedAction,
 				map[string]any{
 					"bead_id":           candidate.ID,
 					"operator_override": operatorOverrideTerminal,
@@ -3075,7 +3084,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 					"detail":            warning,
 				},
 			))
-			if strictIntakeBlocking() {
+			if strictIntakeBlocking() || intakeOutcome == PreClaimIntakeOperatorRequired {
 				if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 				} else if parked {
