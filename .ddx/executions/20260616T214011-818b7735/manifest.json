@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260616T214011-818b7735",
+  "bead_id": "ddx-ff032e16",
+  "base_rev": "44f4d09ef3588f1dae20fb96f46359811bc2ee7a",
+  "created_at": "2026-06-16T21:40:38.421261636Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ff032e16",
+    "title": "init: prove built-in DDx adapters materialize without project payload",
+    "description": "PROBLEM\nThe end-to-end init/plugin sync behavior needs an executable proof that normal projects get generated DDx skill adapters without receiving a full built-in payload under .ddx/plugins/ddx. Without that proof, future changes can regress to materializing project-local default package resources.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md:18-27 says projects should use generated adapters and cache-backed/defaultplugin resolution rather than checking in generated payloads.\n- cli/internal/config/types.go:623-672 still defaults library.path to .ddx/plugins/ddx in DefaultNewConfig and ApplyDefaults.\n- cli/internal/registry/registry.go:75-82 and cli/internal/registry/defaultplugin/library/package.yaml:14-22 still expose install.root.target=.ddx/plugins/ddx for the built-in ddx package.\n- cli/internal/registry/registry_test.go:60-68 asserts the legacy .ddx/plugins/ddx target.\n\nPROPOSED FIX\nExtend the existing init/plugin sync coverage so a plain ddx init followed by plugin sync leaves .ddx/plugins/ddx absent while generated adapters under .agents/skills/ddx and .claude/skills/ddx exist and point to working built-in DDx resources. Keep the test focused on normal installs, not local development overlays.\n\nNON-SCOPE\nDo not remove support for explicit local development overlays. Do not remove the embedded default plugin fallback needed for offline ddx init. Do not change HELIX marketplace packaging.\n\nPARENT\nddx-602ae31a\n\nGOVERNING ARTIFACT\n- docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md:18-27",
+    "acceptance": "1. TestInitProject_MaterializesBuiltinAdaptersWithoutPluginPayload still passes and explicitly asserts .ddx/plugins/ddx is absent after normal ddx init/plugin sync.\n2. TestDefaultDDxPackageDoesNotRequireProjectPayload proves .agents/skills/ddx and .claude/skills/ddx are generated and usable without a project-local .ddx/plugins/ddx payload.\n3. TestPluginSyncDoesNotMaterializeBuiltinProjectPayload proves rerunning plugin sync does not create .ddx/plugins/ddx for the built-in DDx package in the normal install path.\n4. `cd cli \u0026\u0026 go test ./internal/registry/... ./internal/config/... ./cmd/... ./internal/server/frontend/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6c284fb3",
+    "labels": [
+      "phase:iterate",
+      "area:plugin",
+      "area:cli",
+      "kind:bug",
+      "initiative:zero-footprint",
+      "marketplace",
+      "plan:2026-05-13",
+      "parent:ddx-602ae31a"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T214011-818b7735",
+    "prompt": ".ddx/executions/20260616T214011-818b7735/prompt.md",
+    "manifest": ".ddx/executions/20260616T214011-818b7735/manifest.json",
+    "result": ".ddx/executions/20260616T214011-818b7735/result.json",
+    "checks": ".ddx/executions/20260616T214011-818b7735/checks.json",
+    "usage": ".ddx/executions/20260616T214011-818b7735/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ff032e16-20260616T214011-818b7735"
+  },
+  "prompt_sha": "9a353be356c3ee45a444574b48a048c8817fad2752890665538b6559afda07db"
+}
