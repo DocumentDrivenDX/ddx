@@ -55,8 +55,10 @@ repository root.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `install.root` | mapping | Copy or materialize the package root into the install target |
-| `install.skills` | []mapping | Skill source/target mappings |
+| `distribution` | mapping | Registry/cache metadata such as resolved artifact, checksum, and cache key |
+| `materialize` | mapping | Generated project adapter targets such as agent skill shims |
+| `install.root` | mapping | Compatibility root target for local overlays and legacy packages |
+| `install.skills` | []mapping | Compatibility skill mappings for local overlays and legacy packages |
 | `install.scripts` | mapping | CLI entrypoint source/target mapping |
 | `install.executable` | []string | Relative paths that must retain execute permission |
 | `requires` | []string | DDx version constraints |
@@ -69,8 +71,14 @@ repository root.
 - The manifest parser preserves unknown fields so future additions do not
   break older tooling.
 - `name` must be stable enough to use as the install directory name.
-- `source` is provenance metadata, not a resolution hint; install behavior
-  comes from the declared install mappings.
+- `source` is provenance metadata, not a resolution hint; marketplace
+  resolution comes from registry metadata and lock entries.
+- Marketplace installs must not require committing the plugin payload tree into
+  the project. The project records plugin intent and cache resolution in
+  `.ddx/plugins.lock.yaml`.
+- `install.root` remains a compatibility surface for local development overlays
+  and legacy packages. New marketplace packages should expose generated project
+  adapters through `materialize` instead of requiring an in-tree payload copy.
 
 ## Plugin Layout
 
@@ -91,8 +99,9 @@ The canonical plugin source tree is file-based and explicit:
 ### Layout Rules
 
 - `skills/` is the canonical skill source owned by the plugin.
-- `.agents/skills/` and `.claude/skills/` are discovery mirrors created from
-  the canonical skill source.
+- `.agents/skills/` and `.claude/skills/` inside the package payload are
+  optional compatibility mirrors. In a project worktree, those paths are
+  generated adapters recreated by `ddx plugin sync`.
 - `workflows/` holds shared workflow resources when a plugin ships a workflow
   bundle.
 - `scripts/` holds CLI entrypoints that DDx may symlink into the user's PATH.
@@ -100,12 +109,18 @@ The canonical plugin source tree is file-based and explicit:
 - `docs/` is optional and does not affect validation unless referenced by the
   manifest.
 
-The installed plugin root lives under the project-local DDx workspace, not in
-the active work queue. The install target is:
+The package payload for a marketplace install lives in the resolved DDx plugin
+cache, not in the project repository. The normal cache target is:
 
 ```text
-.ddx/plugins/<name>/
+${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/
 ```
+
+The project-local `.ddx/plugins/<name>` path is reserved for local development
+overlays and legacy compatibility. A local overlay is intentionally a symlink
+to a developer checkout, while marketplace installs rely on
+`.ddx/plugins.lock.yaml` plus generated adapter links/directories under
+`.agents/skills/` and `.claude/skills/`.
 
 ## Skill Contract
 
@@ -167,16 +182,21 @@ Plugin installation follows one validator-backed path regardless of source.
    - builtin registry fallback for legacy packages
 2. Read `package.yaml` from the source root.
 3. Validate `api_version` and required manifest fields.
-4. Materialize the package into `.ddx/plugins/<name>/`.
-5. Create relative symlinks for the declared discovery surfaces.
-6. Ensure any declared executable paths preserve the execute bit.
-7. Record the installed package for later doctor and update checks.
+4. Resolve the package payload into the shared DDx plugin cache.
+5. Record the resolved package in `.ddx/plugins.lock.yaml`, including version,
+   source, cache path, and generated adapter paths.
+6. Generate project-local discovery adapters for declared skills, typically
+   `.agents/skills/<skill>` and `.claude/skills/<skill>`.
+7. Ensure any declared executable paths preserve the execute bit.
+8. Record enough metadata for later doctor, sync, and update checks.
 
 ### Compatibility and Legacy Fallback
 
 - If a source repository provides `package.yaml`, that manifest is authoritative.
 - If a plugin has no manifest yet, DDx may fall back to the built-in registry
   entry for compatibility.
+- The built-in `ddx` plugin is available through an embedded package fallback
+  that can recreate the cache-backed adapter shims without network access.
 - The fallback path is migration-only and should not become a second source of
   truth.
 
@@ -193,7 +213,9 @@ Plugin installation follows one validator-backed path regardless of source.
 - skill frontmatter includes top-level `name` and `description`
 - `SKILL.md` names match their directory names via `name`
 - executable targets exist and are executable when required
-- symlink targets stay within the installed plugin root
+- generated adapter targets are project-relative and owned by the plugin lock
+- marketplace payloads resolve to the recorded cache path
+- symlink targets stay within the cached plugin root or a declared local overlay
 
 Install validation is fail-fast. If the package is malformed, DDx stops before
 writing a partial install record.
@@ -211,6 +233,8 @@ writing a partial install record.
 - declared executable paths that lost the execute bit
 
 Doctor reports structural issues only. It does not mutate the install.
+`ddx plugin sync` owns repair of missing generated adapters from the lock/cache
+state.
 
 ## Compatibility Rules
 
@@ -241,9 +265,11 @@ Doctor reports structural issues only. It does not mutate the install.
 
 The current builtin registry remains a bridge, not the long-term contract.
 
-- Existing built-in packages continue to work through registry fallback.
+- Existing built-in packages continue to work through embedded or registry
+  fallback.
 - New plugin packages should ship `package.yaml` and the documented directory
-  layout from day one.
+  layout from day one, but projects should commit only lock metadata and any
+  intentional governance files.
 - Over time, the builtin registry should shrink to compatibility shims and
   bootstrap packages only.
 
@@ -255,7 +281,8 @@ into the plugin repository itself.
 - Compiled plugin interfaces
 - Runtime plugin loading
 - Plugin dependency resolution
-- Marketplace discovery or hosting
+- Marketplace hosting implementation details beyond the lock/cache/materialize
+  contract
 - Validation of arbitrary user scripts outside the documented hook contract
 
 ## Validation Matrix
