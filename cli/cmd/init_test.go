@@ -727,6 +727,7 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, ".ddx/server/", ".ddx/server/ must be ignored")
 	assert.Contains(t, content, ".ddx/run-state.json", ".ddx/run-state.json must be ignored")
 	assert.Contains(t, content, ".ddx/run-state/", ".ddx/run-state/ must be ignored")
+	assert.Contains(t, content, ".ddx/dirty-root-guard.json", ".ddx/dirty-root-guard.json must be ignored")
 	assert.Contains(t, content, ".ddx/executions/*/embedded/", "embedded runtime state must be ignored")
 
 	// Execution evidence must be explicitly un-ignored
@@ -734,6 +735,7 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, "!.ddx/executions/*/prompt.md", "prompt.md must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/manifest.json", "manifest.json must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/result.json", "result.json must be un-ignored")
+	assert.Contains(t, content, "!.ddx/executions/*/checks.json", "checks.json must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/usage.json", "usage.json must be un-ignored")
 
 	// Verify with git check-ignore that a concrete evidence file is NOT ignored
@@ -749,18 +751,23 @@ func TestInitGitignoreRules(t *testing.T) {
 	gitConfig2.Dir = te.Dir
 	require.NoError(t, gitConfig2.Run())
 
-	// git check-ignore exits 0 if ignored, 1 if not ignored
-	checkIgnore := exec.Command("git", "check-ignore", "-q", ".ddx/executions/abc123/prompt.md")
-	checkIgnore.Dir = te.Dir
-	err = checkIgnore.Run()
-	// exit code 1 means NOT ignored — that's what we want
-	assert.Error(t, err, ".ddx/executions/abc123/prompt.md must NOT be ignored by git")
+	checkIgnoreGuard := exec.Command("git", "check-ignore", "-q", ".ddx/dirty-root-guard.json")
+	checkIgnoreGuard.Dir = te.Dir
+	assert.NoError(t, checkIgnoreGuard.Run(), ".ddx/dirty-root-guard.json must be ignored by git")
 
-	checkIgnoreUsage := exec.Command("git", "check-ignore", "-q", ".ddx/executions/abc123/usage.json")
-	checkIgnoreUsage.Dir = te.Dir
-	err = checkIgnoreUsage.Run()
-	// exit code 1 means NOT ignored — that's what we want
-	assert.Error(t, err, ".ddx/executions/abc123/usage.json must NOT be ignored by git")
+	// git check-ignore exits 0 if ignored, 1 if not ignored.
+	for _, evidencePath := range []string{
+		".ddx/executions/abc123/prompt.md",
+		".ddx/executions/abc123/manifest.json",
+		".ddx/executions/abc123/result.json",
+		".ddx/executions/abc123/checks.json",
+		".ddx/executions/abc123/usage.json",
+	} {
+		checkIgnore := exec.Command("git", "check-ignore", "-q", evidencePath)
+		checkIgnore.Dir = te.Dir
+		err = checkIgnore.Run()
+		assert.Error(t, err, "%s must NOT be ignored by git", evidencePath)
+	}
 }
 
 func TestInitGitignoreRunStateMigration(t *testing.T) {
