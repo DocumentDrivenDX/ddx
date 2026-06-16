@@ -1,0 +1,10 @@
+plugins:
+    - name: helix
+      version: 0.7.1
+      type: workflow
+      source: https://github.com/DocumentDrivenDX/helix
+      cache_path: /home/erik/.local/share/ddx/cache/plugins/helix/0.7.1
+      installed_at: 2026-06-16T19:10:45.334178201-04:00
+      generated_files:
+        - .agents/skills/helix
+        - .claude/skills/helix
