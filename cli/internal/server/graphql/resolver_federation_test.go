@@ -9,6 +9,7 @@ package graphql_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,6 +37,45 @@ func (s *stubFederation) Spokes() []federation.SpokeRecord {
 
 func (s *stubFederation) FanOut(ctx context.Context, req *federation.FanOutRequest) (*federation.FanOutResult, error) {
 	return s.client.Execute(ctx, s.spokes, req)
+}
+
+func (s *stubFederation) ForwardMutation(ctx context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
+	target := s.spoke(req.TargetNodeID)
+	if target == nil {
+		return nil, federation.ErrForwardMutationMissingOwner
+	}
+	resp, err := s.client.ForwardMutation(ctx, target, req.Body, req.Headers)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	return &federation.ForwardMutationResponse{
+		OriginIdentity:       req.OriginIdentity,
+		ForwardingPath:       append([]string(nil), req.ForwardingPath...),
+		RequestID:            req.RequestID,
+		IdempotencyKey:       req.IdempotencyKey,
+		TargetNodeID:         req.TargetNodeID,
+		TargetProjectID:      req.TargetProjectID,
+		ExpectedVersion:      req.ExpectedVersion,
+		RequiredCapabilities: append([]string(nil), req.RequiredCapabilities...),
+		StatusCode:           resp.StatusCode,
+		Headers:              resp.Header.Clone(),
+		Body:                 body,
+	}, nil
+}
+
+func (s *stubFederation) spoke(nodeID string) *federation.SpokeRecord {
+	for i := range s.spokes {
+		if s.spokes[i].NodeID == nodeID {
+			return &s.spokes[i]
+		}
+	}
+	return nil
 }
 
 // newSpokeServer spins up an httptest server whose /graphql endpoint returns
@@ -485,5 +525,100 @@ func TestFederation_VersionSkew_RendersAndSkips(t *testing.T) {
 	}
 	if beadsData.FederatedBeads[0].NodeID != "node-compat" {
 		t.Errorf("federatedBeads row: want node-compat, got %q", beadsData.FederatedBeads[0].NodeID)
+	}
+}
+
+// TestFederationProvider_ExposesForwardMutationWithoutChangingFanOutReads
+// proves the provider surface carries a mutation-forwarding path while the
+// existing read fan-out methods remain unchanged.
+func TestFederationProvider_ExposesForwardMutationWithoutChangingFanOutReads(t *testing.T) {
+	skipIntegrationInShort(t)
+	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+
+	spoke := newSpokeServer(t, func(req map[string]any) any {
+		return map[string]any{
+			"data": map[string]any{
+				"beads": map[string]any{"edges": []map[string]any{
+					{"node": map[string]any{
+						"id": "ddx-F1", "title": "forwarded bead", "status": "open",
+						"priority": 0, "issueType": "task",
+						"createdAt": "2026-05-01T00:00:00Z", "updatedAt": "2026-05-01T00:00:00Z",
+						"projectID": "project-forward",
+					}},
+				}},
+			},
+		}
+	})
+
+	fed := &stubFederation{
+		client: federation.NewFanOutClient(),
+		spokes: []federation.SpokeRecord{
+			{
+				NodeID: "node-forward", Name: "forward", URL: spoke.URL,
+				DDxVersion: "0.1.0", SchemaVersion: federation.CurrentSchemaVersion,
+				Capabilities: []string{"read", "write"},
+				ProjectIDs:   []string{"project-forward"},
+				RegisteredAt: now, LastHeartbeat: now, Status: federation.StatusActive,
+			},
+		},
+	}
+	fed.client.HubDDxVersion = "0.1.0"
+	fed.client.HubSchemaVersion = federation.CurrentSchemaVersion
+	fed.client.PerNodeTimeout = 500 * time.Millisecond
+
+	before, err := fed.FanOut(context.Background(), &federation.FanOutRequest{Query: "{ __typename }"})
+	if err != nil {
+		t.Fatalf("read fan-out before forward mutation: %v", err)
+	}
+	if len(before.Responses) != 1 {
+		t.Fatalf("read fan-out before forward mutation: want 1 response, got %d", len(before.Responses))
+	}
+
+	expectedVersion := "17"
+	resp, err := fed.ForwardMutation(context.Background(), &federation.ForwardMutationRequest{
+		OriginIdentity:       "localhost:127.0.0.1:9000",
+		ForwardingPath:       []string{"hub-node", "node-forward"},
+		RequestID:            "req-123",
+		IdempotencyKey:       "idem-123",
+		TargetNodeID:         "node-forward",
+		TargetProjectID:      "project-forward",
+		ExpectedVersion:      &expectedVersion,
+		RequiredCapabilities: []string{"write"},
+		Body:                 []byte(`{"query":"mutation { __typename }"}`),
+		Headers: map[string]string{
+			"X-DDx-Origin-Identity": "localhost:127.0.0.1:9000",
+		},
+	})
+	if err != nil {
+		t.Fatalf("forward mutation: %v", err)
+	}
+	if resp.TargetNodeID != "node-forward" || resp.TargetProjectID != "project-forward" {
+		t.Fatalf("forward response target metadata mismatch: %+v", resp)
+	}
+	if resp.RequestID != "req-123" || resp.IdempotencyKey != "idem-123" {
+		t.Fatalf("forward response request metadata mismatch: %+v", resp)
+	}
+	if resp.ExpectedVersion == nil || *resp.ExpectedVersion != expectedVersion {
+		t.Fatalf("forward response expected version mismatch: %+v", resp.ExpectedVersion)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("forward response status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if len(resp.Body) == 0 {
+		t.Fatalf("forward response body must not be empty")
+	}
+	if got := string(resp.ForwardingPath[0]); got != "hub-node" {
+		t.Fatalf("forward response forwarding path = %+v", resp.ForwardingPath)
+	}
+
+	after, err := fed.FanOut(context.Background(), &federation.FanOutRequest{Query: "{ __typename }"})
+	if err != nil {
+		t.Fatalf("read fan-out after forward mutation: %v", err)
+	}
+	if len(after.Responses) != 1 {
+		t.Fatalf("read fan-out after forward mutation: want 1 response, got %d", len(after.Responses))
+	}
+	if _, ok := after.Responses["node-forward"]; !ok {
+		t.Fatalf("read fan-out after forward mutation missing node-forward response: %+v", after.Responses)
 	}
 }

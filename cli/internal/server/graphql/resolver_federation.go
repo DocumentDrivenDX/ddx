@@ -4,9 +4,9 @@ package graphql
 // queries to every active spoke via the B14.6a fan-out client, decorates
 // each row with routing metadata (node_id, project_id, project_url,
 // write_capability, status), and merges the per-spoke responses into a
-// single result. Local query types (beads, runs, projects) are unchanged —
-// these federated queries ship in parallel so existing local views keep
-// working.
+// single result. The same provider surface also exposes owner-targeted write
+// forwarding so mutation callers can route a single write to its owning
+// project without changing the read fan-out behavior.
 
 import (
 	"context"
@@ -29,6 +29,10 @@ type FederationProvider interface {
 	// Spokes (the implementation may apply its own active/stale policy) and
 	// returns the merged FanOutResult.
 	FanOut(ctx context.Context, req *federation.FanOutRequest) (*federation.FanOutResult, error)
+	// ForwardMutation routes one owner-targeted mutation to the owning spoke.
+	// The request carries the origin, forwarding trail, and target identity
+	// metadata needed to preserve the write contract.
+	ForwardMutation(ctx context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error)
 }
 
 // federationCapWrite is the capability string a spoke advertises when it
