@@ -61,11 +61,11 @@ func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *
 	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
 }
 
-// TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths proves that
-// DDx-managed durable audit paths are committed even when the project
-// gitignores them (ddx-cd99987d). Before the fix git add refused the ignored
-// paths and the worker exited needing manual `git add -f` cleanup.
-func TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths(t *testing.T) {
+// TestCommitDurableAuditOutputs_DoesNotDropManagedEvidence proves that the
+// durable-audit commit keeps the DDx-managed evidence set intact: tracker
+// beads, attempt metrics, and attachment payloads all land even when the
+// project gitignores some of them (ddx-cd99987d).
+func TestCommitDurableAuditOutputs_DoesNotDropManagedEvidence(t *testing.T) {
 	projectRoot := newDurableAuditProject(t)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
 
@@ -79,9 +79,11 @@ func TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths(t *testing.T) {
 	runGitInteg(t, projectRoot, "commit", "-m", "chore: ignore managed audit dirs")
 
 	metricsDir := filepath.Join(ddxDir, "metrics")
+	beadsPath := filepath.Join(ddxDir, "beads.jsonl")
 	attachmentsDir := filepath.Join(ddxDir, "attachments", "ddx-cd99987d")
 	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
 	require.NoError(t, os.MkdirAll(attachmentsDir, 0o755))
+	require.NoError(t, os.WriteFile(beadsPath, []byte("bead\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("row\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(attachmentsDir, "events.jsonl"), []byte("event\n"), 0o644))
 
@@ -91,12 +93,13 @@ func TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths(t *testing.T) {
 	assert.Equal(t, "chore: update tracker (execute-bead 20260615T145159-ignored)", subject)
 
 	show := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+	assert.Contains(t, show, ".ddx/beads.jsonl")
 	assert.Contains(t, show, ".ddx/metrics/attempts.jsonl")
 	assert.Contains(t, show, ".ddx/attachments/ddx-cd99987d/events.jsonl")
 
 	// The committed files are no longer dirty.
 	status := runGitInteg(t, projectRoot, "status", "--short", "--ignored=matching", "--",
-		".ddx/metrics/attempts.jsonl", ".ddx/attachments")
+		".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl", ".ddx/attachments")
 	assert.Empty(t, status)
 }
 
