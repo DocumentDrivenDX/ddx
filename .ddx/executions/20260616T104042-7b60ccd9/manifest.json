@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260616T104042-7b60ccd9",
+  "bead_id": "ddx-b29a549d",
+  "base_rev": "568a4abc79984914a762bb0adc89f4b969ec9b09",
+  "created_at": "2026-06-16T10:40:48.770876157Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b29a549d",
+    "title": "server: restart must restore desired managed workers",
+    "description": "PROBLEM\nAfter rebuilding/installing `ddx` from commit `2193aa658` and restarting `ddx-server.service` on 2026-06-16, the server came up healthy but with no child workers. Desired workers for `/Users/erik/Projects/ddx` and `/Users/erik/Projects/sesame` did not all restart until manual `ddx worker start` / `ddx worker reconcile` calls. `ddx worker start --project /Users/erik/Projects/ddx` saved desired state but printed only `{\"desired_count\":1,...}`; a separate `ddx worker reconcile --project /Users/erik/Projects/ddx` was needed before `worker-20260616T084349-8105` appeared. Server-managed workers are not reliable if boot requires an operator nudge.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/server/server.go:349-350` writes the address file and calls `reconcileDesiredWorkersAfterStartup()` before `http.ListenAndServeTLS` enters Serve.\n- `cli/internal/server/server.go:364-381` performs delayed reconcile attempts in a goroutine, but the live service still had a window/state where no desired workers were running after restart.\n- `cli/internal/server/server.go:397-429` discovers project roots only from `s.WorkingDir` and `s.state.GetProjects(false)` plus existing desired-state files; a missing/stale project registration or delayed state load can skip desired projects at startup.\n- `cli/internal/server/worker_supervisor.go:125-137` treats absent desired-state as manage-nothing, so any skipped root produces no worker and no visible startup failure.\n- `cli/cmd/worker.go:135-176` proves the manual `ddx worker start` path saves desired state then explicitly calls the reconcile endpoint, which succeeded where startup reconciliation did not.\n\nPROPOSED FIX\nMake startup reconciliation deterministic and observable. On server startup, every project with `.ddx/workers/desired.json` or a registered desired state must be reconciled after the listener is accepting requests, and failures must be surfaced in server logs/status rather than silently leaving desired workers absent. Add an integration-style regression that starts a real server instance with desired state for at least two projects, waits through startup reconciliation, and asserts workers are launched without calling the reconcile endpoint manually.\n\nNON-SCOPE\n- Do not change worker claim authority or make the server own bead claims.\n- Do not disable manual `ddx worker start` / `ddx worker reconcile`; they remain operator controls.\n- Do not change federation worker forwarding.\n\nPARENT + DEPS\nParent: `ddx-d5dfa702`.\nDeps: none. Related to `ddx-c713d75e`, but this is specifically restart/desired-state reconciliation, not count caps or audit fields.",
+    "acceptance": "1. `TestServerStartupReconcileDesiredWorkersAcrossRegisteredProjects` is strengthened or paired with a new integration-style `TestServerStartupReconcileLaunchesDesiredWorkersAfterListen` that uses the real reconcile path and proves desired workers for two registered projects are started after server startup without a manual reconcile request.\n2. The regression covers the `/Users/erik/Projects/ddx` symptom shape: desired_count=1 saved, previous worker terminal/failed, server restarted, and exactly one fresh managed worker appears for that project.\n3. Startup reconcile failures are observable through logs/status or a server state endpoint; the test asserts a skipped desired project cannot be silent.\n4. `cd cli \u0026\u0026 go test -short ./internal/server/... -run 'StartupReconcile|DesiredWorkers|WorkerSupervisor' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "plan:server-operator-workbench",
+      "canary:server-restart"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T104042-7b60ccd9",
+    "prompt": ".ddx/executions/20260616T104042-7b60ccd9/prompt.md",
+    "manifest": ".ddx/executions/20260616T104042-7b60ccd9/manifest.json",
+    "result": ".ddx/executions/20260616T104042-7b60ccd9/result.json",
+    "checks": ".ddx/executions/20260616T104042-7b60ccd9/checks.json",
+    "usage": ".ddx/executions/20260616T104042-7b60ccd9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-b29a549d-20260616T104042-7b60ccd9"
+  },
+  "prompt_sha": "ae3e839c6dd59f9dda98fec619cdf8a522b7a4d3d06dc1a46ee8d3073ca18ed4"
+}
