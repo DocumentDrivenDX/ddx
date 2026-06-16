@@ -74,3 +74,21 @@ func TestRootSignal_MessagePrintedOnce(t *testing.T) {
 
 	assert.Equal(t, gracefulCancelMessage+"\n", stderr.String())
 }
+
+func TestExecuteRootCommand_NormalCompletionDoesNotPrintCancelMessage(t *testing.T) {
+	root := &cobra.Command{
+		Use:           "ddx",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+	}
+
+	var stderr bytes.Buffer
+	root.SetErr(&stderr)
+
+	err := executeRootCommand(root, context.Background(), nil)
+	require.NoError(t, err)
+	assert.Empty(t, stderr.String())
+}

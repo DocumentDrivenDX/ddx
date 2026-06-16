@@ -42,9 +42,9 @@ func executeRootCommand(rootCmd *cobra.Command, ctx context.Context, stop func()
 		case <-done:
 		}
 	}()
-	defer close(done)
 
 	err := rootCmd.ExecuteContext(ctx)
+	close(done)
 	if ctx.Err() != nil {
 		cancelAnnounce()
 	}
