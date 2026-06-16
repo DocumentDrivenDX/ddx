@@ -67,12 +67,15 @@ library/ -> cli/internal/registry/defaultplugin/library/
 The project-local discovered skill paths are install outputs:
 
 ```text
-.agents/skills/ddx  -> installed by package installer
-.claude/skills/ddx  -> installed by package installer
+.agents/skills/ddx  -> generated adapter to package cache or local overlay
+.claude/skills/ddx  -> generated adapter to package cache or local overlay
 ```
 
-For registry installs, these outputs are real files. For local development
-overlays, they may be symlinks to the source checkout.
+For registry installs, these outputs are generated adapters that resolve into
+`${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`. For the built-in
+`ddx` package, `ddx init` may populate that cache from the binary's embedded
+default package before writing adapters. For local development overlays, the
+adapters may link directly to the source checkout.
 
 ## Manifest Contract
 
@@ -89,6 +92,12 @@ install:
     - source: skills/
       target: .claude/skills/
 ```
+
+For marketplace installs, `install.root` is legacy/local-overlay metadata. The
+forward install writes project intent to the plugin lock, stores payloads in
+the shared XDG cache, and materializes only generated adapters into the
+project worktree. The full payload tree is not copied to `.ddx/plugins/<name>/`
+for normal registry installs.
 
 The installer must honor `install.skills[*].source` relative to the package
 root. Skill discovery must not hard-code `.agents/skills` as the primary source
@@ -112,21 +121,27 @@ InstallPackageFromFS(pkg, sourceFS, projectRoot)
 All three paths must share the same core install implementation:
 
 1. load and validate `package.yaml` when present;
-2. apply `install.root.source -> install.root.target`;
+2. for local overlays only, apply `install.root.source -> install.root.target`;
 3. apply every `install.skills[*].source -> install.skills[*].target`;
 4. apply scripts/executables with the existing project-scope rules;
 5. return one `InstalledEntry` shape.
 
-Remote and embedded installs write real files. Local installs create developer
-overlays: `.ddx/plugins/<name>` and plugin-owned skill outputs are symlinks to
-the local checkout. Local overlays do not mutate recorded plugin pins and do not
+Remote installs write the package payload to the shared XDG cache and generated
+adapters to the project. Embedded installs do the same using the baked-in
+default package as the source and do not create `.ddx/plugins/ddx` or a normal
+project plugin-lock entry for `ddx`. Local installs create developer overlays:
+`.ddx/plugins/<name>` and plugin-owned skill outputs are links to the local
+checkout. Local overlays do not mutate recorded plugin pins and do not
 auto-commit.
 
 ## Init And Update Contract
 
-`ddx init` installs the default DDx package through the embedded package
-installer. It no longer calls a separate embedded skill installer and no longer
-maintains `.ddx/skills/ddx` as a bootstrap-only mirror.
+`ddx init` exposes the default DDx package through the same cache-backed
+adapter topology as registry plugins. It materializes the embedded package into
+the XDG cache when needed, creates `.agents/skills/ddx` and
+`.claude/skills/ddx` adapters, and does not create `.ddx/plugins/ddx` for the
+built-in package. It no longer calls a separate embedded skill installer and no
+longer maintains `.ddx/skills/ddx` as a bootstrap-only mirror.
 
 `ddx update` / the forward replacement for shipped-content refresh uses the
 same package installer path as `ddx init`.
@@ -173,8 +188,9 @@ declared package root or fail with a clear error; it must not self-link
 
 ## Required Tests
 
-- `TestInitInstallsDDxPluginPackage`: `ddx init` creates `.ddx/plugins/ddx`,
-  `.agents/skills/ddx`, and `.claude/skills/ddx` through the package installer.
+- `TestInitInstallsDDxPluginPackage`: `ddx init` creates cache-backed
+  `.agents/skills/ddx` and `.claude/skills/ddx` adapters through the package
+  installer and does not create `.ddx/plugins/ddx`.
 - `TestPluginInstallLocalDDxLibrarySymlinksSkills`: `ddx plugin install ddx
   --local library --force` creates project-local symlinks to
   `library/skills/ddx`.

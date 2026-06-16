@@ -207,29 +207,33 @@ wording, which remains only as an implementation detail for older hooks.
 
 ### Installation
 
-> See FEAT-015 (2026-05-12 amendment) and plan-2026-05-13-ddx-skill-package-layout
-> for the authoritative install model: package-owned source, embedded package copy,
-> and project-local installer outputs.
+> See FEAT-015, FEAT-018, and ADR-027 for the authoritative install model:
+> package-owned source, shared XDG cache payloads, and generated agent
+> adapters. The DDx default package follows the same npx-style topology as
+> marketplace plugins, with an embedded offline fallback.
 
 - Canonical DDx skill source lives in `library/skills/ddx/` and is owned by the
   default `ddx` plugin package. This is the single source of truth.
 - The binary embeds the entire default package library via `//go:embed` at
   `cli/internal/registry/defaultplugin/library/`, so the skill ships offline
   without separate download.
-- `ddx init` installs the default `ddx` plugin through the embedded package
-  installer, producing real project files at `.agents/skills/ddx/` and
-  `.claude/skills/ddx/` (no symlinks, git-trackable).
+- `ddx init` materializes the built-in default package into the shared XDG
+  plugin cache when needed, then creates generated adapters at
+  `.agents/skills/ddx/` and `.claude/skills/ddx/`. These adapters are local
+  generated state, not git-tracked source assets.
 - On init and on `ddx init --force`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
   `ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
   `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
   untouched.
 - Nested workflow skills live under `library/skills/ddx/` so the entire tree
-  is owned by the default package. On install, all nested subdirectories become
-  project-local content at `.agents/skills/ddx/` and `.claude/skills/ddx/`.
+  is owned by the default package. The adapters expose those nested skills from
+  the cache or embedded fallback without copying the payload tree into each
+  project.
 - For development overlays, `ddx plugin install ddx --local library --force`
-  creates project-local symlinks to the source for live editing without
-  auto-committing.
+  creates project-local links to the source for live editing without
+  auto-committing. Local overlays are the exception, not the marketplace
+  install model.
 
 ### AGENTS.md: merge, not clobber
 
@@ -279,10 +283,11 @@ load-bearing, not optional. The repo ships:
 4. `reference/*.md` files are linked one level deep from the root `SKILL.md`;
    nested workflow skills carry their own `SKILL.md` and optional local
    `reference/`, `scripts/`, or `evals/` as needed.
-5. `ddx init` materializes generated skill adapters, removes stale `ddx-*`
-   dirs, and merges the AGENTS.md block without clobbering user content.
-6. `ddx init --force` refreshes `.claude/skills/ddx/` and removes stale
-   dirs.
+5. `ddx init` materializes generated skill adapters from the XDG cache or the
+   embedded default package, removes stale `ddx-*` dirs, and merges the
+   AGENTS.md block without clobbering user content.
+6. `ddx init --force` refreshes `.agents/skills/ddx/` and
+   `.claude/skills/ddx/` adapters and removes stale dirs.
 7. `library/skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
    passing the richer route schema and then passing against `claude` and
    `codex` harnesses via `make eval-skill`.
@@ -291,8 +296,9 @@ load-bearing, not optional. The repo ships:
 9. `reference/interactive.md` is present in `library/skills/ddx/reference/` and
    defines the interactive-steward loop, phase output contracts, mutation policy,
    consent-gated adversarial review, and `ddx work focus` fallback behavior.
-   After `ddx init`, this file is present at `.agents/skills/ddx/reference/interactive.md`
-   and `.claude/skills/ddx/reference/interactive.md`.
+   After `ddx init`, this file resolves through the generated adapters at
+   `.agents/skills/ddx/reference/interactive.md` and
+   `.claude/skills/ddx/reference/interactive.md`.
 10. Generated AGENTS guidance uses the same precedence as the skill: broad
     interactive prompts route to `interactive-steward`, explicit worker prompts
     route to `bead_execution`, and `DDX_MODE=bead_execution` never overrides
