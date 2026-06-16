@@ -932,6 +932,42 @@ func TestWorkStatusServerManagedWorkerRecordHonorsProjectScopeAndTerminalState(t
 	assert.Empty(t, report.Workers, "default project scope must not show other-project or terminal server records: %s", out)
 }
 
+func TestWorkStatusEnrichesServerManagedProcessFromClaimSnapshot(t *testing.T) {
+	projectRoot := t.TempDir()
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Init(context.Background()))
+	const workerID = "worker-20260616T011130-76e1"
+	const beadID = "ddx-82a0664c"
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{ID: beadID, Title: "Claimed by managed worker"}))
+	require.NoError(t, store.Claim(beadID, workerID))
+
+	now := time.Now().UTC()
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         760527,
+		Command:     "/home/erik/.local/bin/ddx work --project " + projectRoot + " --server-managed-worker-id " + workerID + " --no-self-refresh --watch",
+		ProjectRoot: projectRoot,
+		StartedAt:   now.Add(-2 * time.Minute),
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	assert.Equal(t, beadID, report.Workers[0].BeadID)
+	assert.False(t, report.Workers[0].LastActivityAt.IsZero(), "claim snapshot must fill worker activity")
+	require.NotEmpty(t, report.ActiveWork.Records)
+	assert.Equal(t, workerID, report.ActiveWork.Records[0].WorkerID)
+	assert.Equal(t, beadID, report.ActiveWork.Records[0].BeadID)
+}
+
 func writeServerWorkerRecordForStatusTest(t *testing.T, projectRoot string, rec serverpkg.WorkerRecord) {
 	t.Helper()
 	require.NotEmpty(t, rec.ID)

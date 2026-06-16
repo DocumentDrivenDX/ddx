@@ -106,15 +106,16 @@ func (f *CommandFactory) runWorkStatus(cmd *cobra.Command, _ []string) error {
 		allProjects,
 		now,
 	)
+	active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now)
+	if err != nil {
+		return fmt.Errorf("work status: active work query: %w", err)
+	}
+	liveWorkers = enrichWorkersWithActiveWork(liveWorkers, active, projectRoot)
 	report := WorkStatusReport{
 		ProjectRoot: projectRoot,
 		Scope:       "project",
 		Workers:     liveWorkers,
-	}
-	if active, err := collectActiveWorkSnapshot(projectRoot, bead.NewStore(resolveBeadStoreRoot(projectRoot)), now); err == nil {
-		report.ActiveWork = active
-	} else {
-		return fmt.Errorf("work status: active work query: %w", err)
+		ActiveWork:  active,
 	}
 	if allProjects {
 		report.Scope = "all-projects"
@@ -213,6 +214,72 @@ func freshestRunStateForPID(states []agent.RunState, pid int, now time.Time) (ag
 		}
 	}
 	return best, found
+}
+
+// enrichWorkersWithActiveWork uses the project-scoped active-work snapshot as
+// a fallback for long-lived server-managed workers whose process row is present
+// but whose liveness/run-state sidecars are not yet fresh enough to fill bead
+// fields. It only fills blanks, preserving run-state as the canonical attempt
+// source when both surfaces exist.
+func enrichWorkersWithActiveWork(workers []workerstatus.LiveWorker, active activework.Snapshot, projectRoot string) []workerstatus.LiveWorker {
+	if len(workers) == 0 || len(active.Records) == 0 {
+		return workers
+	}
+	byWorkerID := make(map[string]activework.Record, len(active.Records))
+	byAttemptID := make(map[string]activework.Record, len(active.Records))
+	for _, rec := range active.Records {
+		if rec.WorkerID != "" {
+			byWorkerID[rec.WorkerID] = rec
+		}
+		if rec.AttemptID != "" {
+			byAttemptID[rec.AttemptID] = rec
+		}
+	}
+	for i := range workers {
+		w := &workers[i]
+		if projectRoot != "" && w.ProjectRoot != "" && !workerstatus.SamePath(w.ProjectRoot, projectRoot) {
+			continue
+		}
+		rec, ok := activework.Record{}, false
+		if workerID := workerIDFromCommand(w.Command); workerID != "" {
+			rec, ok = byWorkerID[workerID]
+		}
+		if !ok && w.AttemptID != "" {
+			rec, ok = byAttemptID[w.AttemptID]
+		}
+		if !ok {
+			continue
+		}
+		if w.BeadID == "" {
+			w.BeadID = rec.BeadID
+		}
+		if w.AttemptID == "" {
+			w.AttemptID = rec.AttemptID
+		}
+		if w.Phase == "" {
+			w.Phase = rec.Phase
+		}
+		if !rec.LastActivityAt.IsZero() && (w.LastActivityAt.IsZero() || rec.LastActivityAt.After(w.LastActivityAt)) {
+			w.LastActivityAt = rec.LastActivityAt.UTC()
+		}
+	}
+	return workers
+}
+
+func workerIDFromCommand(command string) string {
+	fields := strings.Fields(command)
+	for i, field := range fields {
+		if field == "--server-managed-worker-id" && i+1 < len(fields) {
+			return fields[i+1]
+		}
+		if strings.HasPrefix(field, "--server-managed-worker-id=") {
+			return strings.TrimPrefix(field, "--server-managed-worker-id=")
+		}
+	}
+	if len(fields) >= 4 && fields[0] == "server-managed" && fields[1] == "ddx" && fields[2] == "work" {
+		return fields[3]
+	}
+	return ""
 }
 
 func filterAndSortWorkers(all []workerstatus.LiveWorker, projectRoot string, allProjects bool) []workerstatus.LiveWorker {
