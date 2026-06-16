@@ -173,6 +173,85 @@ func TestManagedWorkerRecordsProcessGroup(t *testing.T) {
 	waitForProcessGroupEmpty(t, rec.PGID)
 }
 
+func TestDesiredWorkerFastProvisionStartsBeforeHistoricalSweep(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	for i := 0; i < 150; i++ {
+		id := "worker-history-" + strconv.Itoa(i)
+		dir := filepath.Join(m.rootDir, id)
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+		require.NoError(t, m.writeRecord(dir, WorkerRecord{
+			ID:          id,
+			Kind:        "work",
+			State:       "failed",
+			Status:      "failed",
+			ProjectRoot: root,
+			Managed:     true,
+			StartedAt:   time.Now().UTC().Add(-time.Duration(i+1) * time.Hour),
+			FinishedAt:  time.Now().UTC().Add(-time.Duration(i) * time.Hour),
+		}))
+	}
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+
+	res, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	require.NoError(t, err)
+	require.Len(t, res.Started, 1, "historical terminal records must not delay or satisfy desired_count")
+
+	rec, err := m.Show(res.Started[0])
+	require.NoError(t, err)
+	assert.True(t, rec.Managed)
+	assert.Equal(t, root, rec.ProjectRoot)
+	assert.Equal(t, workerStateRunning, rec.State)
+
+	require.NoError(t, m.Stop(rec.ID))
+	waitForProcessGroupEmpty(t, rec.PGID)
+}
+
+func TestDesiredWorkerFastProvisionDoesNotDuplicateLiveManagedWorker(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(time.Second),
+	})
+	require.NoError(t, err)
+	require.NoError(t, m.MarkManaged(rec.ID))
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+
+	res, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	require.NoError(t, err)
+	assert.Empty(t, res.Started, "a live managed worker already satisfies desired_count")
+
+	require.NoError(t, m.Stop(rec.ID))
+	waitForProcessGroupEmpty(t, rec.PGID)
+}
+
 func TestManagedWorkerStopKillsClaudeCodexDescendants(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

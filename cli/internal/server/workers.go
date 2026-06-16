@@ -2812,9 +2812,96 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 // ReconcileDesiredWorkers brings server-managed workers in line with the
 // persisted desired state for this manager's project.
 func (m *WorkerManager) ReconcileDesiredWorkers() (ReconcileResult, error) {
+	result, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	if err != nil {
+		return result, err
+	}
 	m.ReconcileStaleWorkers()
 	sup := NewWorkerSupervisor(m.projectRoot, m)
-	return sup.Reconcile()
+	full, err := sup.Reconcile()
+	return mergeReconcileResults(result, full), err
+}
+
+func (m *WorkerManager) provisionDesiredWorkersBeforeStaleSweep() (ReconcileResult, error) {
+	var result ReconcileResult
+	desired, err := LoadWorkerDesiredState(m.projectRoot)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return result, nil
+		}
+		return result, err
+	}
+	running := m.fastLiveManagedWorkerCount(m.projectRoot)
+	sup := NewWorkerSupervisor(m.projectRoot, m)
+	for running < desired.DesiredCount {
+		rec, startErr := sup.startWorker(desired)
+		if startErr != nil {
+			result.Errors = append(result.Errors, startErr.Error())
+			break
+		}
+		running++
+		result.Started = append(result.Started, rec.ID)
+	}
+	return result, nil
+}
+
+func (m *WorkerManager) fastLiveManagedWorkerCount(projectRoot string) int {
+	seen := map[string]bool{}
+	count := 0
+
+	m.mu.Lock()
+	for id, handle := range m.workers {
+		if handle == nil {
+			continue
+		}
+		rec := handle.record
+		root := rec.ProjectRoot
+		if root == "" {
+			root = m.projectRoot
+		}
+		if rec.Managed && root == projectRoot && !isTerminalWorkerState(rec.State) {
+			count++
+			seen[id] = true
+		}
+	}
+	m.mu.Unlock()
+
+	entries, err := os.ReadDir(m.rootDir)
+	if err != nil {
+		return count
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || seen[entry.Name()] {
+			continue
+		}
+		rec, err := m.readRecord(filepath.Join(m.rootDir, entry.Name()))
+		if err != nil || !rec.Managed || isTerminalWorkerState(rec.State) {
+			continue
+		}
+		root := rec.ProjectRoot
+		if root == "" {
+			root = m.projectRoot
+		}
+		if root != projectRoot {
+			continue
+		}
+		if rec.PID > 0 && isPIDAlive(rec.PID) {
+			count++
+			seen[rec.ID] = true
+		}
+	}
+	return count
+}
+
+func mergeReconcileResults(left, right ReconcileResult) ReconcileResult {
+	return ReconcileResult{
+		Started:        append(left.Started, right.Started...),
+		Restarted:      append(left.Restarted, right.Restarted...),
+		Stopped:        append(left.Stopped, right.Stopped...),
+		StaleMarked:    append(left.StaleMarked, right.StaleMarked...),
+		RestartSkipped: append(left.RestartSkipped, right.RestartSkipped...),
+		Errors:         append(left.Errors, right.Errors...),
+	}
 }
 
 func randomSuffix(n int) string {
