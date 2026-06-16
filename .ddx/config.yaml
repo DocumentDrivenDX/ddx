@@ -1,6 +1,5 @@
 version: "1.0"
 library:
-    path: .ddx/plugins/ddx
     repository:
         url: https://github.com/easel/ddx-library
         branch: main

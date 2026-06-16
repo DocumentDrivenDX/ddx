@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -436,6 +437,77 @@ func TestDoctorLegacySkillSymlinkDirsIgnoresNonDDxProjectSkillSymlink(t *testing
 	got := legacySkillSymlinkDirs(workDir)
 	if len(got) != 0 {
 		t.Errorf("expected non-DDx skill symlinks to be ignored, got %v", got)
+	}
+}
+
+func TestCheckLibraryPathUsesBuiltinCacheWhenConfigHasNoPath(t *testing.T) {
+	workDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg"))
+	if err := os.MkdirAll(filepath.Join(workDir, ddxroot.DirName), 0o755); err != nil {
+		t.Fatalf("mkdir .ddx: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, ddxroot.DirName, "config.yaml"), []byte(`version: "1.0"
+library:
+  repository:
+    url: https://github.com/DocumentDrivenDX/ddx
+    branch: main
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if !checkLibraryPathFromWorkingDir(workDir) {
+		t.Fatal("expected empty library.path to resolve through built-in DDx cache")
+	}
+	info := getLibraryPathInfo(workDir)
+	if !strings.Contains(info, filepath.Join("ddx", "cache", "plugins", "ddx")) {
+		t.Fatalf("expected built-in cache path, got %q", info)
+	}
+}
+
+func TestCheckUnpinnedMarketplacePluginAssetsFlagsHelixWithoutLock(t *testing.T) {
+	workDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(workDir, ddxroot.DirName, "plugins", "helix"), 0o755); err != nil {
+		t.Fatalf("mkdir plugin payload: %v", err)
+	}
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "helix"),
+		filepath.Join(".claude", "skills", "helix"),
+	} {
+		dir := filepath.Join(workDir, rel)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "SKILL.md"), []byte("# HELIX\n"), 0o644); err != nil {
+			t.Fatalf("write skill: %v", err)
+		}
+	}
+
+	issues := checkUnpinnedMarketplacePluginAssets(context.Background(), workDir, registry.BuiltinRegistry())
+	if len(issues) != 1 {
+		t.Fatalf("expected one unpinned plugin issue, got %d: %+v", len(issues), issues)
+	}
+	if issues[0].Type != "unpinned_plugin_assets" {
+		t.Fatalf("issue.Type = %q, want unpinned_plugin_assets", issues[0].Type)
+	}
+	if !strings.Contains(issues[0].Description, "helix") {
+		t.Fatalf("expected HELIX issue, got %q", issues[0].Description)
+	}
+}
+
+func TestCheckUnpinnedMarketplacePluginAssetsAllowsLocalOverlaySymlink(t *testing.T) {
+	workDir := t.TempDir()
+	localCheckout := t.TempDir()
+	overlayRoot := filepath.Join(workDir, ddxroot.DirName, "plugins")
+	if err := os.MkdirAll(overlayRoot, 0o755); err != nil {
+		t.Fatalf("mkdir overlays: %v", err)
+	}
+	if err := os.Symlink(localCheckout, filepath.Join(overlayRoot, "helix")); err != nil {
+		t.Fatalf("symlink helix overlay: %v", err)
+	}
+
+	issues := checkUnpinnedMarketplacePluginAssets(context.Background(), workDir, registry.BuiltinRegistry())
+	if len(issues) != 0 {
+		t.Fatalf("expected no issue for explicit local overlay symlink, got %+v", issues)
 	}
 }
 

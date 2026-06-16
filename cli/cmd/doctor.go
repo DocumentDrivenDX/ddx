@@ -306,6 +306,11 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 			allGood = false
 			issues = append(issues, projectPluginIssues...)
 		}
+		unpinnedPluginIssues := checkUnpinnedMarketplacePluginAssets(cmd.Context(), projectRoot, registry.BuiltinRegistry())
+		if len(unpinnedPluginIssues) > 0 {
+			allGood = false
+			issues = append(issues, unpinnedPluginIssues...)
+		}
 		pluginIssues := checkInstalledPlugins(verbose)
 		if len(pluginIssues) > 0 {
 			allGood = false
@@ -816,23 +821,12 @@ func checkPermissions() bool {
 
 // checkLibraryPath verifies library path is accessible
 func checkLibraryPathFromWorkingDir(workingDir string) bool {
-	cfg, err := config.LoadWithWorkingDir(workingDir)
+	libPath, err := resolveCommandLibraryPath(workingDir)
 	if err != nil {
 		return false
 	}
-
-	if cfg.Library == nil || cfg.Library.Path == "" {
-		return false
-	}
-
-	// Resolve library path relative to working directory
-	libPath := cfg.Library.Path
-	if !filepath.IsAbs(libPath) {
-		libPath = filepath.Join(workingDir, libPath)
-	}
-
-	_, err = os.Stat(libPath)
-	return err == nil
+	info, err := os.Stat(libPath)
+	return err == nil && info.IsDir()
 }
 
 // suggestPathFix provides suggestions for PATH configuration
@@ -916,11 +910,7 @@ func getDirectoryPermissions(workingDir string) string {
 
 // getLibraryPathInfo returns information about the DDX library path
 func getLibraryPathInfo(workingDir string) string {
-	if cfg, err := config.LoadWithWorkingDir(workingDir); err == nil && cfg.Library != nil && cfg.Library.Path != "" {
-		libPath := cfg.Library.Path
-		if !filepath.IsAbs(libPath) {
-			libPath = filepath.Join(workingDir, libPath)
-		}
+	if libPath, err := resolveCommandLibraryPath(workingDir); err == nil {
 		return libPath
 	}
 	return "not configured"
@@ -1121,6 +1111,81 @@ func checkProjectPluginLockState(ctx context.Context, projectRoot string, verbos
 	return issues
 }
 
+func checkUnpinnedMarketplacePluginAssets(ctx context.Context, projectRoot string, reg *registry.Registry) []DiagnosticIssue {
+	if reg == nil {
+		return nil
+	}
+	lock, err := registry.LoadProjectPluginLock(ctx, projectRoot)
+	if err != nil {
+		return []DiagnosticIssue{{
+			Type:        "plugin_lock_state",
+			Description: fmt.Sprintf("unable to read project plugin lock: %v", err),
+			Remediation: []string{
+				"Fix .ddx/plugins.lock.yaml, then run 'ddx plugin sync --force'",
+			},
+		}}
+	}
+
+	var issues []DiagnosticIssue
+	for _, pkg := range reg.Packages {
+		if pkg.Name == "ddx" || lock.Find(pkg.Name) != nil {
+			continue
+		}
+		if pkg.Type != registry.PackageTypePlugin && pkg.Type != registry.PackageTypeWorkflow {
+			continue
+		}
+		paths := unpinnedPluginAssetPaths(ctx, projectRoot, pkg.Name)
+		if len(paths) == 0 {
+			continue
+		}
+		issues = append(issues, DiagnosticIssue{
+			Type:        "unpinned_plugin_assets",
+			Description: fmt.Sprintf("%s assets are present without a project plugin lock entry", pkg.Name),
+			Remediation: []string{
+				fmt.Sprintf("Run 'ddx plugin install %s --force' to pin the marketplace plugin and regenerate adapters", pkg.Name),
+				fmt.Sprintf("Remove stale generated assets for %s if this project no longer uses it", pkg.Name),
+			},
+			SystemInfo: map[string]string{
+				"plugin": pkg.Name,
+				"paths":  strings.Join(paths, ", "),
+			},
+		})
+	}
+	if len(issues) == 0 {
+		fmt.Println("✓ Checking Unpinned Plugin Assets... ✅ No unpinned marketplace plugin assets")
+	} else {
+		fmt.Printf("✓ Checking Unpinned Plugin Assets... ⚠️  %d unpinned plugin asset set(s)\n", len(issues))
+		for _, issue := range issues {
+			fmt.Printf("   ⚠️  %s\n", issue.Description)
+			for _, r := range issue.Remediation {
+				fmt.Printf("   💡 %s\n", r)
+			}
+		}
+	}
+	return issues
+}
+
+func unpinnedPluginAssetPaths(ctx context.Context, projectRoot, name string) []string {
+	var paths []string
+	pluginPath := filepath.Join(ddxroot.Path(ctx, projectRoot), "plugins", name)
+	if info, err := os.Lstat(pluginPath); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		paths = append(paths, ddxroot.JoinRelative("plugins", name))
+	}
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", name),
+		filepath.Join(".claude", "skills", name),
+	} {
+		path := filepath.Join(projectRoot, rel)
+		if _, err := os.Lstat(path); err == nil {
+			paths = append(paths, rel)
+		}
+	}
+	return paths
+}
+
 func boolWord(ok bool) string {
 	if ok {
 		return "present"
@@ -1280,10 +1345,15 @@ func checkMetaPromptSync(workingDir string) error {
 		// Meta-prompt disabled - not an issue
 		return nil
 	}
+	libraryPath, err := resolveCommandLibraryPath(workingDir)
+	if err != nil {
+		// Could not resolve the library; the library-path check reports this.
+		return nil
+	}
 
 	injector := metaprompt.NewMetaPromptInjectorWithPaths(
 		"CLAUDE.md",
-		cfg.Library.Path,
+		libraryPath,
 		workingDir,
 	)
 
