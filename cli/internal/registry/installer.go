@@ -15,19 +15,22 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
-// InstallPackage downloads the source release tarball and copies declared install mappings
-// into projectRoot. It records installed files (project-relative when possible) in the
-// returned InstalledEntry.
+// InstallPackage downloads the source release tarball and copies declared
+// install mappings into projectRoot. It records installed files
+// (project-relative when possible) in the returned InstalledEntry.
 //
 // Compatibility shim: this is the historical entrypoint that downloads from a
 // remote tarball. New callers should pick the explicit From* variant that
-// matches their source (Remote/Dir/FS).
+// matches their source (Remote/Dir/FS). Forward marketplace installs must use
+// CachePackageFromRemote plus SyncProjectPlugin so payloads live in the shared
+// XDG cache and project worktrees contain only lock metadata and generated
+// adapter shims.
 func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	return InstallPackageFromRemote(pkg, projectRoot)
 }
 
 // InstallPackageFromRemote downloads the source release tarball and installs
-// the package via the shared core install implementation.
+// the package via the legacy copy-based core install implementation.
 func InstallPackageFromRemote(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        pkg.Name,
@@ -61,8 +64,8 @@ func InstallPackageFromRemote(pkg *Package, projectRoot string) (InstalledEntry,
 
 // InstallPackageFromFS installs the package from an in-memory or embedded
 // filesystem (e.g. //go:embed) rooted at the package directory. The FS is
-// materialized into a temporary directory and passed through the shared core
-// install implementation. Network is not used.
+// materialized into a temporary directory and passed through the legacy
+// copy-based core install implementation. Network is not used.
 func InstallPackageFromFS(pkg *Package, src iofs.FS, projectRoot string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        pkg.Name,
@@ -93,9 +96,10 @@ func InstallPackageFromFS(pkg *Package, src iofs.FS, projectRoot string) (Instal
 	return installFromExtractedDir(pkg, tmpDir, projectRoot, entry)
 }
 
-// installFromExtractedDir is the shared core install routine used by the
-// Remote, Dir, and FS entrypoints. It assumes the package contents are
-// already present on disk at sourceDir.
+// installFromExtractedDir is the legacy copy-based install routine used by the
+// Remote and FS compatibility entrypoints. It assumes the package contents are
+// already present on disk at sourceDir. Do not use this for marketplace
+// registry installs; use cachePackageFromDir + SyncProjectPlugin.
 func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry InstalledEntry) (InstalledEntry, error) {
 	// Switch into projectRoot so relative install targets resolve against the
 	// project, not the caller's cwd. This keeps copyMapping, ExpandHome, and
@@ -140,8 +144,7 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 		return entry, fmt.Errorf("validating package structure: %s", JoinValidationIssues(issues))
 	}
 
-	// Process Root mapping — copy the plugin tree into the project-local
-	// install location (e.g. .ddx/plugins/<name>/).
+	// Process Root mapping for the legacy copy install path.
 	var installedRoot string
 	files, err := copyMapping(sourceDir, pkg.Install.Root)
 	if err != nil {
@@ -158,9 +161,8 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 		}
 	}
 
-	// Process Skills via the manifest mappings. Each mapping copies real files
-	// into its declared target. No symlinks are ever created -- this is the
-	// cross-platform invariant that FEAT-015 relies on.
+	// Process Skills via the manifest mappings for the legacy copy install
+	// path. Forward marketplace installs generate shims from the cache instead.
 	if len(pkg.Install.Skills) > 0 {
 		written, err := installMappings(sourceDir, pkg.Install.Skills)
 		if err != nil {

@@ -16,16 +16,19 @@ const (
 	PackageTypeResource     PackageType = "resource"
 )
 
-// InstallMapping describes a source→target copy during installation.
+// InstallMapping describes a source→target mapping from a plugin package.
+// Marketplace installs use these mappings to select cache contents and
+// generated adapter sources; only legacy compatibility installs copy them
+// directly into a project worktree.
 type InstallMapping struct {
 	Source string `yaml:"source"`
 	Target string `yaml:"target"`
 }
 
-// PackageInstall describes what to copy during installation.
+// PackageInstall describes the plugin package materialization contract.
 type PackageInstall struct {
-	Root       *InstallMapping  `yaml:"root,omitempty"`       // plugin root (e.g., .ddx/plugins/helix)
-	Skills     []InstallMapping `yaml:"skills,omitempty"`     // skills directories (copied to each target)
+	Root       *InstallMapping  `yaml:"root,omitempty"`       // package root; registry installs cache this payload, local overlays may link it
+	Skills     []InstallMapping `yaml:"skills,omitempty"`     // skill source directories used to generate agent adapter shims
 	Scripts    *InstallMapping  `yaml:"scripts,omitempty"`    // scripts/binaries
 	Symlinks   []SymlinkMapping `yaml:"symlinks,omitempty"`   // post-install symlinks
 	Executable []string         `yaml:"executable,omitempty"` // paths (relative to root) that must be executable
@@ -72,6 +75,9 @@ func BuiltinRegistry() *Registry {
 				Install: PackageInstall{
 					Root: &InstallMapping{
 						Source: "library",
+						// Compatibility manifest target. Registry installs
+						// cache the payload under XDG and generate shims; they
+						// do not copy this tree into the project.
 						Target: ".ddx/plugins/ddx",
 					},
 					Skills: []InstallMapping{
@@ -88,15 +94,15 @@ func BuiltinRegistry() *Registry {
 				Type:        PackageTypeWorkflow,
 				Source:      "https://github.com/DocumentDrivenDX/helix",
 				Install: PackageInstall{
-					// Plugin installs are project-local (FEAT-015): the tree
-					// lives under .ddx/plugins/<name>/, never in $HOME.
 					Root: &InstallMapping{
 						Source: ".",
+						// Compatibility manifest target. Marketplace installs
+						// cache HELIX under XDG; .ddx/plugins/helix is reserved
+						// for an explicit local checkout overlay.
 						Target: ".ddx/plugins/helix",
 					},
-					// Skills installed to project-local skill directories.
-					// skills.Install copies real files into both .agents/skills/
-					// and .claude/skills/ regardless of mapping target.
+					// Registry installs generate project-local adapter shims
+					// from cached skill sources.
 					Skills: []InstallMapping{
 						{Source: ".agents/skills/", Target: ".agents/skills/"},
 						{Source: ".agents/skills/", Target: ".claude/skills/"},

@@ -20,7 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestInstallPackageHonorsSkillSource(t *testing.T) {
+func TestLegacyInstallPackageHonorsSkillSource(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := newPackageArchiveServer(t, samplePackageTarball(t))
 	defer server.Close()
@@ -47,7 +47,7 @@ func TestInstallPackageHonorsSkillSource(t *testing.T) {
 	}
 }
 
-func TestInstallPackagePreservesUnrelatedProjectSkills(t *testing.T) {
+func TestLegacyInstallPackagePreservesUnrelatedProjectSkills(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := newPackageArchiveServer(t, samplePackageTarball(t))
 	defer server.Close()
@@ -75,7 +75,7 @@ func TestInstallPackagePreservesUnrelatedProjectSkills(t *testing.T) {
 	}
 }
 
-func TestInstallPackageRecordsManifestSkillTargets(t *testing.T) {
+func TestLegacyInstallPackageRecordsManifestSkillTargets(t *testing.T) {
 	projectRoot := t.TempDir()
 	server := newPackageArchiveServer(t, samplePackageTarball(t))
 	defer server.Close()
@@ -204,17 +204,18 @@ install:
 	}
 }
 
-// TestInstallPackageFromFSHonorsManifestMappings proves that an embedded
-// fs.FS rooted at a package directory reads package.yaml and applies both
-// the root mapping and the declared skill mappings.
-func TestInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
+// TestLegacyInstallPackageFromFSHonorsManifestMappings proves that the
+// compatibility copy installer reads package.yaml and applies both the root
+// mapping and the declared skill mappings when fed an embedded fs.FS.
+func TestLegacyInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
 	projectRoot := t.TempDir()
 	pkg := sampleInstallPackage("https://example.com/sample-plugin")
 
 	entry, err := InstallPackageFromFS(pkg, samplePackageFS(), projectRoot)
 	require.NoError(t, err)
 
-	// Root mapping: package.yaml from the embedded FS lands under .ddx/plugins/<name>/.
+	// Legacy root mapping: package.yaml from the embedded FS lands under the
+	// manifest target. Marketplace installs use the cache/sync path instead.
 	rootManifest := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "sample-plugin", "package.yaml")
 	_, statErr := os.Stat(rootManifest)
 	require.NoError(t, statErr, "package.yaml should be installed via root mapping")
@@ -232,10 +233,10 @@ func TestInstallPackageFromFSHonorsManifestMappings(t *testing.T) {
 	}
 }
 
-// TestInstallPackageFromFSInstallsDefaultDDxPackageOffline proves the embedded
-// default ddx package can install .ddx/plugins/ddx, .agents/skills/ddx, and
-// .claude/skills/ddx without invoking any network download code.
-func TestInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
+// TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline proves the
+// embedded default ddx package remains usable through the compatibility copy
+// installer without invoking network download code.
+func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
 	projectRoot := t.TempDir()
 
 	// Block network: any HTTP attempt should fail this test loudly.
@@ -273,10 +274,10 @@ func TestInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T) {
 	}
 }
 
-// TestInstallPackageFromRemoteUsesSharedCore proves the remote entrypoint
-// and embedded-FS entrypoint share the same skill mapping behavior for a
-// fixture package — same recorded files, same on-disk layout.
-func TestInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
+// TestLegacyInstallPackageFromRemoteUsesSharedCore proves the remote and
+// embedded-FS compatibility entrypoints share the same copy behavior for a
+// fixture package: same recorded files, same on-disk layout.
+func TestLegacyInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
 	remoteRoot := t.TempDir()
 	fsRoot := t.TempDir()
 

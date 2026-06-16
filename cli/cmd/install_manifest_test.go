@@ -179,9 +179,9 @@ Sample skill body.
 	require.NoError(t, err)
 	assert.Equal(t, localPlugin, linkTarget)
 
-	// Plugin file is visible through the symlinked project path.
+	// Plugin file is visible through the local-overlay symlinked project path.
 	_, statErr = os.Stat(filepath.Join(projectPluginDir, "skills", "sample-skill", "SKILL.md"))
-	assert.NoError(t, statErr, "plugin tree must be copied under project")
+	assert.NoError(t, statErr, "plugin tree must be visible through the local overlay")
 
 	_, statErr = os.Lstat(homePluginDir)
 	assert.True(t, os.IsNotExist(statErr), "FEAT-015: no $HOME write even on --force")
