@@ -138,6 +138,40 @@ func TestPluginSync_RecreatesBuiltinDDxCacheFromEmbeddedFS(t *testing.T) {
 		"offline built-in cache recreation must not create a project payload tree")
 }
 
+func TestPluginInstallDDxUsesBuiltinCacheWithoutProjectLock(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	factory := NewCommandFactory(workDir)
+	builtin, err := registry.BuiltinRegistry().Find("ddx")
+	require.NoError(t, err)
+
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "ddx", "--force")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "Installed ddx "+builtin.Version+" from built-in cache")
+
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
+		"installing the built-in ddx package must not copy payloads into the project")
+	assert.NoFileExists(t, filepath.Join(workDir, ddxroot.DirName, registry.ProjectPluginLockFile),
+		"installing the built-in ddx package must not write a project plugin lock")
+
+	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
+	assert.FileExists(t, filepath.Join(cacheSkillDir, "SKILL.md"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "ddx"), cacheSkillDir)
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "ddx"), cacheSkillDir)
+}
+
+func TestPluginShowDDxSurfacesBuiltinPackage(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	factory := NewCommandFactory(workDir)
+
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "show", "ddx")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "Name:         ddx")
+	assert.Contains(t, output, "Status:       built-in")
+	assert.Contains(t, output, "Installed at: built-in")
+	assert.NoFileExists(t, filepath.Join(workDir, ddxroot.DirName, registry.ProjectPluginLockFile),
+		"showing the built-in ddx package must not write a project plugin lock")
+}
+
 func TestPluginConsumer_LazilySyncsMissingShims(t *testing.T) {
 	workDir, _ := setupPluginMaterializationProject(t)
 	server := pluginMaterializationArchiveServer(t)

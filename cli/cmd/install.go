@@ -63,6 +63,7 @@ Generated adapters can be recreated with 'ddx plugin sync' and should not be
 treated as source payload copies.
 
 Examples:
+  ddx plugin install ddx --force
   ddx plugin install helix
   ddx plugin install helix --force
   ddx plugin install helix --local ../helix --force`,
@@ -125,6 +126,19 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 		}
 
 		fmt.Fprintf(out, "Installed %s\n", name)
+		return nil
+	}
+
+	if name == "ddx" {
+		pkg, err := registry.BuiltinRegistry().Find("ddx")
+		if err != nil {
+			return err
+		}
+		files, err := syncBuiltinDDxSkillAdapters(f.WorkingDir, force)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "Installed %s %s from built-in cache (%d adapter(s))\n", pkg.Name, pkg.Version, len(files))
 		return nil
 	}
 
@@ -269,9 +283,18 @@ func (f *CommandFactory) projectPluginListEntries(ctx context.Context) ([]projec
 	if err != nil {
 		return nil, fmt.Errorf("loading plugin lock: %w", err)
 	}
-	entries := make([]projectPluginListEntry, 0, len(lock.Plugins))
+	entries := make([]projectPluginListEntry, 0, len(lock.Plugins)+1)
 	seen := map[string]bool{}
+	if entry, err := builtinDDxListEntry(ctx, f.WorkingDir); err != nil {
+		return nil, err
+	} else {
+		entries = append(entries, entry)
+		seen[entry.Name] = true
+	}
 	for _, e := range lock.Plugins {
+		if seen[e.Name] {
+			continue
+		}
 		status := projectPluginLockStatus(ctx, f.WorkingDir, e)
 		cachePath := e.CachePath
 		if cachePath == "" {
@@ -356,6 +379,9 @@ func (f *CommandFactory) runPluginShow(cmd *cobra.Command, args []string) error 
 	}
 	entry := lock.Find(name)
 	if entry == nil {
+		if name == "ddx" {
+			return f.runBuiltinDDxPluginShow(cmd.Context(), out)
+		}
 		return fmt.Errorf("plugin %q is not installed", name)
 	}
 	result, err := registry.SyncProjectPlugin(cmd.Context(), f.WorkingDir, *entry, false)
@@ -375,6 +401,74 @@ func (f *CommandFactory) runPluginShow(cmd *cobra.Command, args []string) error 
 	fmt.Fprintf(out, "Cache:        %s\n", entry.CachePath)
 	fmt.Fprintf(out, "Installed at: %s\n", entry.InstalledAt.Format("2006-01-02"))
 	fmt.Fprintf(out, "Shims:        %d\n", len(entry.GeneratedFiles))
+	return nil
+}
+
+func builtinDDxListEntry(ctx context.Context, projectRoot string) (projectPluginListEntry, error) {
+	pkg, err := registry.BuiltinRegistry().Find("ddx")
+	if err != nil {
+		return projectPluginListEntry{}, err
+	}
+	cachePath := registry.PluginCacheDir(pkg.Name, pkg.Version)
+	generatedFiles := []string{
+		filepath.Join(".agents", "skills", "ddx"),
+		filepath.Join(".claude", "skills", "ddx"),
+	}
+	entry := projectPluginListEntry{
+		Name:           pkg.Name,
+		Version:        pkg.Version,
+		Type:           string(pkg.Type),
+		Status:         projectBuiltinDDxStatus(projectRoot, cachePath, generatedFiles),
+		Source:         pkg.Source,
+		CachePath:      cachePath,
+		GeneratedFiles: generatedFiles,
+	}
+	if localPath, local := projectPluginLocalOverlayPath(ctx, projectRoot, pkg.Name); local {
+		entry.Version = "local"
+		entry.Status = "local-overlay"
+		entry.Source = localPath
+		entry.Path = localPath
+		entry.LocalOverlay = true
+	}
+	return entry, nil
+}
+
+func projectBuiltinDDxStatus(projectRoot, cachePath string, generatedFiles []string) string {
+	if info, err := os.Stat(cachePath); err != nil || !info.IsDir() {
+		return "cache-missing"
+	}
+	for _, generated := range generatedFiles {
+		path := filepath.Join(projectRoot, filepath.FromSlash(generated))
+		if _, err := os.Stat(path); err != nil {
+			return "shims-missing"
+		}
+	}
+	return "ok"
+}
+
+func (f *CommandFactory) runBuiltinDDxPluginShow(ctx context.Context, out io.Writer) error {
+	pkg, err := registry.BuiltinRegistry().Find("ddx")
+	if err != nil {
+		return err
+	}
+	files, err := syncBuiltinDDxSkillAdapters(f.WorkingDir, false)
+	if err != nil {
+		return err
+	}
+	cachePath := registry.PluginCacheDir(pkg.Name, pkg.Version)
+	fmt.Fprintf(out, "Name:         %s\n", pkg.Name)
+	fmt.Fprintf(out, "Version:      %s\n", pkg.Version)
+	fmt.Fprintf(out, "Type:         %s\n", string(pkg.Type))
+	if localPath, local := projectPluginLocalOverlayPath(ctx, f.WorkingDir, pkg.Name); local {
+		fmt.Fprintf(out, "Source:       %s\n", localPath)
+		fmt.Fprintf(out, "Status:       local-overlay\n")
+	} else {
+		fmt.Fprintf(out, "Source:       %s\n", pkg.Source)
+		fmt.Fprintf(out, "Status:       built-in\n")
+	}
+	fmt.Fprintf(out, "Cache:        %s\n", cachePath)
+	fmt.Fprintf(out, "Installed at: built-in\n")
+	fmt.Fprintf(out, "Shims:        %d\n", len(files))
 	return nil
 }
 

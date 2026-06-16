@@ -46,14 +46,17 @@ func TestPluginListJSONIncludesLockAndLocalOverlay(t *testing.T) {
 
 	var entries []projectPluginListEntry
 	require.NoError(t, json.Unmarshal([]byte(output), &entries))
-	require.Len(t, entries, 2)
-	assert.Equal(t, "helix", entries[0].Name)
-	assert.Equal(t, "ok", entries[0].Status)
+	require.Len(t, entries, 3)
+	assert.Equal(t, "ddx", entries[0].Name)
+	assert.Equal(t, "plugin", entries[0].Type)
 	assert.False(t, entries[0].LocalOverlay)
-	assert.Equal(t, "local-ui", entries[1].Name)
-	assert.Equal(t, "local-overlay", entries[1].Status)
-	assert.True(t, entries[1].LocalOverlay)
-	assert.Equal(t, localRoot, entries[1].Path)
+	assert.Equal(t, "helix", entries[1].Name)
+	assert.Equal(t, "ok", entries[1].Status)
+	assert.False(t, entries[1].LocalOverlay)
+	assert.Equal(t, "local-ui", entries[2].Name)
+	assert.Equal(t, "local-overlay", entries[2].Status)
+	assert.True(t, entries[2].LocalOverlay)
+	assert.Equal(t, localRoot, entries[2].Path)
 }
 
 func TestPluginUninstallLocalOverlayKeepsRegistryPin(t *testing.T) {
