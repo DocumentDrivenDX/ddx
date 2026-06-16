@@ -1,0 +1,17 @@
+{
+  "attempt_id": "20260616T203051-17a05472",
+  "bead_id": "ddx-20faafde",
+  "trigger": "running_phase_non_route_provider_child",
+  "active_route": "codex",
+  "scanned_at": "2026-06-16T20:33:55.646846951Z",
+  "reaped": [
+    {
+      "pid": 3757441,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
