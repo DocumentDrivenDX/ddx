@@ -32,6 +32,19 @@ wait
 `)
 }
 
+func writeExitThenSleepWorkerScript(t *testing.T, path string) {
+	t.Helper()
+	writeTestScript(t, path, `
+if [ ! -f "$FIRST_RUN_MARKER" ]; then
+	touch "$FIRST_RUN_MARKER"
+	sleep 0.2
+	exit 130
+fi
+sleep 60 &
+wait
+`)
+}
+
 func waitForProcessGroupEmpty(t *testing.T, pgid int) {
 	t.Helper()
 	require.NotZero(t, pgid)
@@ -250,6 +263,63 @@ func TestDesiredWorkerFastProvisionDoesNotDuplicateLiveManagedWorker(t *testing.
 
 	require.NoError(t, m.Stop(rec.ID))
 	waitForProcessGroupEmpty(t, rec.PGID)
+}
+
+func TestManagedExternalWorkerExitRefillsDesiredCount(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	markerPath := filepath.Join(root, "first-run.done")
+	writeExitThenSleepWorkerScript(t, workerPath)
+	t.Setenv("FIRST_RUN_MARKER", markerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: true},
+	}))
+
+	res, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	require.NoError(t, err)
+	require.Len(t, res.Started, 1)
+	firstID := res.Started[0]
+
+	var replacement WorkerRecord
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		records, listErr := m.List()
+		require.NoError(t, listErr)
+		for _, rec := range records {
+			if rec.ID == firstID {
+				continue
+			}
+			if rec.Managed && rec.ProjectRoot == root && rec.State == workerStateRunning && rec.PID > 0 && isPIDAlive(rec.PID) {
+				replacement = rec
+				break
+			}
+		}
+		if replacement.ID != "" {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	require.NotEmpty(t, replacement.ID, "desired_count=1 must be refilled after a managed external worker exits")
+
+	first, err := m.Show(firstID)
+	require.NoError(t, err)
+	assert.Equal(t, "failed", first.State)
+	assert.True(t, replacement.Managed)
+	assert.NotEqual(t, firstID, replacement.ID)
+
+	require.NoError(t, m.Stop(replacement.ID))
+	waitForProcessGroupEmpty(t, replacement.PGID)
 }
 
 func TestManagedWorkerStopKillsClaudeCodexDescendants(t *testing.T) {

@@ -785,7 +785,22 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 	}
 	_ = m.writeRecord(dir, record)
 	handle.record = record
+	shouldRefillDesired := record.Managed && preservedState == "" && isTerminalWorkerState(record.State)
 	m.mu.Unlock()
+	if shouldRefillDesired {
+		go m.refillDesiredWorkersAfterManagedExit(record.ID)
+	}
+}
+
+func (m *WorkerManager) refillDesiredWorkersAfterManagedExit(id string) {
+	result, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "ddx-server: worker %s desired refill failed: %v\n", id, err)
+		return
+	}
+	if len(result.Errors) > 0 {
+		_, _ = fmt.Fprintf(os.Stderr, "ddx-server: worker %s desired refill errors: %s\n", id, strings.Join(result.Errors, "; "))
+	}
 }
 
 func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run PluginActionExecutor) (WorkerRecord, error) {
