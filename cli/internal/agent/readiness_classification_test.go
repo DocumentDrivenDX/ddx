@@ -78,6 +78,12 @@ func TestReadinessClassification_DoesNotMisclassifyInfrastructureAsBeadDefect(t 
 			wantTriage: "recoverable",
 		},
 		{
+			name:       "git_ref_cas_race",
+			detail:     "pre-execute-bead checkpoint: advancing checkpoint ref: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 1111111 but expected 2222222",
+			wantSystem: ReadinessSystemReasonRepoConcurrency,
+			wantTriage: "recoverable",
+		},
+		{
 			name:           "readiness_runner_system_unready",
 			classification: ReadinessClassificationSystemUnready,
 			detail:         "readiness runner exited with empty output",

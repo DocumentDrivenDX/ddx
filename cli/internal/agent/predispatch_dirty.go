@@ -34,6 +34,8 @@ var preDispatchDirtyPathLister = func(projectRoot string) ([]string, error) {
 	return preDispatchCheckpointDirtyPaths(projectRoot)
 }
 
+var preDispatchCheckpointBeforeUpdateRef = func(projectRoot, ref, commit, head string) {}
+
 func normalizePreDispatchDirtyPaths(paths []string) []string {
 	seen := make(map[string]bool, len(paths))
 	normalized := make([]string, 0, len(paths))
@@ -240,55 +242,76 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return cmd.CombinedOutput()
 	}
 
-	if out, err := gitWithIndex("read-tree", "HEAD"); err != nil {
-		return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-
-	addArgs := []string{"add", "-A", "--force", "--"}
-	addArgs = append(addArgs, allowedPaths...)
-	if out, err := gitWithIndex(addArgs...); err != nil {
-		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-
-	changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
-	if err != nil {
-		return false, fmt.Errorf("checking checkpoint diff: %w", err)
-	}
-	if len(bytes.TrimSpace(changedOut)) == 0 {
-		return false, nil
-	}
-
-	treeOut, err := gitWithIndex("write-tree")
-	if err != nil {
-		return false, fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
-	}
-	tree := strings.TrimSpace(string(treeOut))
-	msg := "chore: checkpoint pre-execute-bead " + attemptID
-	commitOut, err := internalgit.Command(context.Background(), projectRoot,
-		"-c", "user.name=ddx-checkpoint",
-		"-c", "user.email=checkpoint@ddx.local",
-		"commit-tree", tree, "-p", head, "-m", msg,
-	).CombinedOutput()
-	if err != nil {
-		return false, fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	commit := strings.TrimSpace(string(commitOut))
-
 	refOut, _ := internalgit.Command(context.Background(), projectRoot, "symbolic-ref", "-q", "HEAD").Output()
 	ref := strings.TrimSpace(string(refOut))
 	if ref == "" {
 		ref = "HEAD"
 	}
-	if out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput(); err != nil {
-		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", strings.TrimSpace(string(out)), err)
+
+	const maxCheckpointRefAttempts = 3
+	for attempt := 1; attempt <= maxCheckpointRefAttempts; attempt++ {
+		headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").CombinedOutput()
+		if err != nil {
+			return false, fmt.Errorf("resolving checkpoint HEAD: %s: %w", strings.TrimSpace(string(headOut)), err)
+		}
+		head = strings.TrimSpace(string(headOut))
+		if head == "" {
+			return false, nil
+		}
+
+		if out, err := gitWithIndex("read-tree", "HEAD"); err != nil {
+			return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+
+		addArgs := []string{"add", "-A", "--force", "--"}
+		addArgs = append(addArgs, allowedPaths...)
+		if out, err := gitWithIndex(addArgs...); err != nil {
+			return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
+		}
+
+		changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
+		if err != nil {
+			return false, fmt.Errorf("checking checkpoint diff: %w", err)
+		}
+		if len(bytes.TrimSpace(changedOut)) == 0 {
+			return false, nil
+		}
+
+		treeOut, err := gitWithIndex("write-tree")
+		if err != nil {
+			return false, fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
+		}
+		tree := strings.TrimSpace(string(treeOut))
+		msg := "chore: checkpoint pre-execute-bead " + attemptID
+		commitOut, err := internalgit.Command(context.Background(), projectRoot,
+			"-c", "user.name=ddx-checkpoint",
+			"-c", "user.email=checkpoint@ddx.local",
+			"commit-tree", tree, "-p", head, "-m", msg,
+		).CombinedOutput()
+		if err != nil {
+			return false, fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
+		}
+		commit := strings.TrimSpace(string(commitOut))
+
+		preDispatchCheckpointBeforeUpdateRef(projectRoot, ref, commit, head)
+		out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput()
+		if err == nil {
+			if out, err := runGitWithIndexLockRecovery(context.Background(), projectRoot, "read-tree", "HEAD"); err != nil {
+				return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+			}
+			if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+
+		refErrMsg := strings.TrimSpace(string(out))
+		if attempt < maxCheckpointRefAttempts && IsLockContentionError(refErrMsg) {
+			continue
+		}
+		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", refErrMsg, err)
 	}
-	if out, err := runGitWithIndexLockRecovery(context.Background(), projectRoot, "read-tree", "HEAD"); err != nil {
-		return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
-	}
-	if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
-		return false, err
-	}
-	return true, nil
+	return false, fmt.Errorf("advancing checkpoint ref exceeded retry budget")
 }
 
 func checkpointSkipWorktreePaths(projectRoot string) ([]string, error) {

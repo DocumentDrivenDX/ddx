@@ -209,6 +209,37 @@ func TestCheckpointPreDispatchDirtRecoversStaleIndexLockBeforeSync(t *testing.T)
 	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(metricsRel)), attemptID)
 }
 
+func TestCheckpointPreDispatchDirtRetriesWhenHeadAdvances(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260616T000002-ref-race"
+	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
+	writeCheckpointTestFile(t, projectRoot, metricsRel, `{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n")
+
+	advanced := false
+	previousHook := preDispatchCheckpointBeforeUpdateRef
+	preDispatchCheckpointBeforeUpdateRef = func(projectRoot, ref, commit, head string) {
+		if advanced {
+			return
+		}
+		advanced = true
+		writeCheckpointTestFile(t, projectRoot, "concurrent.txt", "concurrent branch advance\n")
+		runGitInteg(t, projectRoot, "add", "concurrent.txt")
+		runGitInteg(t, projectRoot, "commit", "-m", "test: concurrent branch advance")
+	}
+	t.Cleanup(func() { preDispatchCheckpointBeforeUpdateRef = previousHook })
+
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.True(t, committed, "durable metrics dirt should checkpoint after a ref CAS retry")
+	require.True(t, advanced, "test hook must advance HEAD before the first update-ref")
+
+	log := runGitInteg(t, projectRoot, "log", "--format=%s", "-2")
+	assert.Contains(t, log, "chore: checkpoint pre-execute-bead "+attemptID)
+	assert.Contains(t, log, "test: concurrent branch advance")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(metricsRel)), attemptID)
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:concurrent.txt"), "concurrent branch advance")
+}
+
 func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const attemptID = "20260515T000002-embedded"
