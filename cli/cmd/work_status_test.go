@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -572,11 +573,19 @@ func TestWorkStatusAllProjectsEnrichesActiveBeads(t *testing.T) {
 	projectA := t.TempDir()
 	projectB := t.TempDir()
 	now := time.Now().UTC()
+	storeA := bead.NewStore(filepath.Join(projectA, ddxroot.DirName))
+	storeB := bead.NewStore(filepath.Join(projectB, ddxroot.DirName))
+	require.NoError(t, storeA.Init(context.Background()))
+	require.NoError(t, storeB.Init(context.Background()))
+	require.NoError(t, storeA.Create(context.Background(), &bead.Bead{ID: "ddx-aaaabbbb", Title: "Project A active bead"}))
+	require.NoError(t, storeB.Create(context.Background(), &bead.Bead{ID: "ddx-ccccdddd", Title: "Project B active bead"}))
+	require.NoError(t, storeA.Claim("ddx-aaaabbbb", "worker-a"))
+	require.NoError(t, storeB.Claim("ddx-ccccdddd", "worker-b"))
 
 	scannerWorkers := []workerstatus.LiveWorker{
 		{
 			PID:         1001,
-			Command:     "ddx work --watch --project " + projectA,
+			Command:     "ddx work --watch --project " + projectA + " --server-managed-worker-id worker-a",
 			ProjectRoot: projectA,
 			StartedAt:   now.Add(-5 * time.Minute),
 			Age:         "5m",
@@ -584,7 +593,7 @@ func TestWorkStatusAllProjectsEnrichesActiveBeads(t *testing.T) {
 		},
 		{
 			PID:         2002,
-			Command:     "ddx work --watch --project " + projectB,
+			Command:     "ddx work --watch --project " + projectB + " --server-managed-worker-id worker-b",
 			ProjectRoot: projectB,
 			StartedAt:   now.Add(-3 * time.Minute),
 			Age:         "3m",
@@ -635,6 +644,19 @@ func TestWorkStatusAllProjectsEnrichesActiveBeads(t *testing.T) {
 	assert.Equal(t, "20260515T120840-a1", byProject[projectA].AttemptID)
 	assert.Equal(t, "ddx-ccccdddd", byProject[projectB].BeadID)
 	assert.Equal(t, "20260515T121500-b2", byProject[projectB].AttemptID)
+	require.Equal(t, 2, report.ActiveWork.Count)
+	assert.ElementsMatch(t, []string{"ddx-aaaabbbb", "ddx-ccccdddd"}, report.ActiveWork.BeadIDs)
+
+	recordsByProject := make(map[string]activework.Record, len(report.ActiveWork.Records))
+	for _, rec := range report.ActiveWork.Records {
+		recordsByProject[rec.ProjectRoot] = rec
+	}
+	require.Contains(t, recordsByProject, projectA)
+	require.Contains(t, recordsByProject, projectB)
+	assert.Equal(t, "worker-a", recordsByProject[projectA].WorkerID)
+	assert.Equal(t, "ddx-aaaabbbb", recordsByProject[projectA].BeadID)
+	assert.Equal(t, "worker-b", recordsByProject[projectB].WorkerID)
+	assert.Equal(t, "ddx-ccccdddd", recordsByProject[projectB].BeadID)
 }
 
 func TestWorkStatusIgnoresStaleLivenessSidecar(t *testing.T) {

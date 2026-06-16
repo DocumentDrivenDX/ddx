@@ -49,3 +49,34 @@ func TestActiveWorkSnapshotIgnoresStaleWorkerSidecars(t *testing.T) {
 	assert.Empty(t, snap.BeadIDs)
 	assert.Zero(t, snap.Count)
 }
+
+func TestActiveWorkMergeKeepsEqualBeadIDsAcrossProjects(t *testing.T) {
+	now := time.Now().UTC()
+	snap := Merge(
+		Snapshot{Records: []Record{{
+			ProjectRoot:    "/repo/a",
+			WorkerID:       "worker-a",
+			BeadID:         "same-bead",
+			Source:         "claim",
+			LastActivityAt: now,
+		}}},
+		Snapshot{Records: []Record{{
+			ProjectRoot:    "/repo/b",
+			WorkerID:       "worker-b",
+			BeadID:         "same-bead",
+			Source:         "claim",
+			LastActivityAt: now.Add(time.Second),
+		}}},
+	)
+
+	require.Equal(t, 2, snap.Count)
+	assert.Equal(t, []string{"same-bead"}, snap.BeadIDs)
+	byProject := make(map[string]Record, len(snap.Records))
+	for _, rec := range snap.Records {
+		byProject[rec.ProjectRoot] = rec
+	}
+	require.Contains(t, byProject, "/repo/a")
+	require.Contains(t, byProject, "/repo/b")
+	assert.Equal(t, "worker-a", byProject["/repo/a"].WorkerID)
+	assert.Equal(t, "worker-b", byProject["/repo/b"].WorkerID)
+}
