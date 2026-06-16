@@ -120,6 +120,49 @@ func TestPluginSync_MaterializesBuiltinDDxAdaptersFromXDGCache(t *testing.T) {
 	}
 }
 
+func TestDefaultDDXPackageDoesNotRequireProjectPayload(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	factory := NewCommandFactory(workDir)
+
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "sync")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "ddx builtin: ok")
+
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
+		"default ddx package sync must not create a project payload tree")
+
+	builtin, err := registry.BuiltinRegistry().Find("ddx")
+	require.NoError(t, err)
+	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
+	assert.FileExists(t, filepath.Join(cacheSkillDir, "SKILL.md"))
+
+	for _, rel := range []string{
+		filepath.Join(".agents", "skills", "ddx"),
+		filepath.Join(".claude", "skills", "ddx"),
+	} {
+		path := filepath.Join(workDir, rel)
+		assert.FileExists(t, filepath.Join(path, "SKILL.md"))
+		assertLocalSymlink(t, path, cacheSkillDir)
+	}
+}
+
+func TestPluginSyncDoesNotMaterializeBuiltinProjectPayload(t *testing.T) {
+	workDir, _ := setupPluginMaterializationProject(t)
+	factory := NewCommandFactory(workDir)
+
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "sync")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "ddx builtin: ok")
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
+		"plugin sync must not copy the baked-in ddx payload into the project plugin tree")
+
+	output, err = executeCommand(factory.NewRootCommand(), "plugin", "sync")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "ddx builtin: ok")
+	assert.NoDirExists(t, filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx"),
+		"rerunning plugin sync must not materialize a built-in project payload tree")
+}
+
 func TestPluginSync_RecreatesBuiltinDDxCacheFromEmbeddedFS(t *testing.T) {
 	workDir, _ := setupPluginMaterializationProject(t)
 	factory := NewCommandFactory(workDir)

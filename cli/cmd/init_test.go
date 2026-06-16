@@ -75,6 +75,14 @@ func TestInitProject_MaterializesBuiltinAdaptersWithoutPluginPayload(t *testing.
 		assertLocalSymlink(t, skillDir, cacheSkillDir)
 	}
 
+	// A follow-up plugin sync must keep using the cache-backed adapter path
+	// and must not materialize a project-local built-in payload tree.
+	output, err := te.RunCommand("plugin", "sync")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "ddx builtin: ok")
+	assert.NoDirExists(t, filepath.Join(te.Dir, ddxroot.DirName, "plugins", "ddx"),
+		"plain ddx init/plugin sync must not create .ddx/plugins/ddx")
+
 	// No agent-tier skill links must be installed in HOME.
 	for _, surface := range []string{".agents/skills/ddx", ".claude/skills/ddx"} {
 		skillDir := filepath.Join(homeDir, surface)
