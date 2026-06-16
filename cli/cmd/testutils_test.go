@@ -36,7 +36,9 @@ func TestMain(m *testing.M) {
 	// cleanup flaky under the full suite.
 	_ = os.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	cleanupTemp := isolateCmdTestTempRoot()
+	cleanupProviderGuard := installCmdTestProviderDiscoveryGuardForMain()
 	code := m.Run()
+	cleanupProviderGuard()
 	cleanupTemp()
 	os.Exit(code)
 }
@@ -78,6 +80,104 @@ func isolateCmdTestTempRoot() func() {
 			_ = os.Unsetenv("HOME")
 		}
 		_ = os.RemoveAll(tempRoot)
+	}
+}
+
+func installCmdTestProviderDiscoveryGuardForMain() func() {
+	root, err := os.MkdirTemp("", "ddx-cmd-provider-guard-*")
+	if err != nil {
+		return func() {}
+	}
+	old := snapshotEnv([]string{
+		"PATH",
+		"XDG_CACHE_HOME",
+		"FIZEAU_CACHE_DIR",
+		"FIZEAU_CLAUDE_QUOTA_CACHE",
+		"FIZEAU_CODEX_QUOTA_CACHE",
+		"FIZEAU_GEMINI_QUOTA_CACHE",
+	})
+	if err := applyCmdTestProviderDiscoveryGuard(root, os.Setenv); err != nil {
+		_ = os.RemoveAll(root)
+		return func() {}
+	}
+	return func() {
+		restoreEnv(old)
+		_ = os.RemoveAll(root)
+	}
+}
+
+func installCmdTestProviderDiscoveryGuard(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	require.NoError(t, applyCmdTestProviderDiscoveryGuard(root, func(k, v string) error {
+		t.Setenv(k, v)
+		return nil
+	}))
+	return root
+}
+
+func applyCmdTestProviderDiscoveryGuard(root string, setenv func(string, string) error) error {
+	fakeBin := filepath.Join(root, "bin")
+	cacheRoot := filepath.Join(root, "fizeau-cache")
+	quotaRoot := filepath.Join(root, "fizeau-quota")
+	xdgCache := filepath.Join(root, "xdg-cache")
+	if err := os.MkdirAll(fakeBin, 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(quotaRoot, 0o755); err != nil {
+		return err
+	}
+	for _, name := range []string{"codex", "claude", "gemini"} {
+		if err := os.WriteFile(filepath.Join(fakeBin, name), []byte("#!/bin/sh\necho 'ddx cmd test fake provider: "+name+"' >&2\nexit 127\n"), 0o755); err != nil {
+			return err
+		}
+	}
+	path := fakeBin
+	if existing := os.Getenv("PATH"); strings.TrimSpace(existing) != "" {
+		path += string(os.PathListSeparator) + existing
+	}
+	for key, value := range map[string]string{
+		"PATH":                      path,
+		"XDG_CACHE_HOME":            xdgCache,
+		"FIZEAU_CACHE_DIR":          cacheRoot,
+		"FIZEAU_CLAUDE_QUOTA_CACHE": filepath.Join(quotaRoot, "claude-quota.json"),
+		"FIZEAU_CODEX_QUOTA_CACHE":  filepath.Join(quotaRoot, "codex-quota.json"),
+		"FIZEAU_GEMINI_QUOTA_CACHE": filepath.Join(quotaRoot, "gemini-quota.json"),
+	} {
+		if err := setenv(key, value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type envSnapshot map[string]struct {
+	value string
+	ok    bool
+}
+
+func snapshotEnv(keys []string) envSnapshot {
+	out := make(envSnapshot, len(keys))
+	for _, key := range keys {
+		value, ok := os.LookupEnv(key)
+		out[key] = struct {
+			value string
+			ok    bool
+		}{value: value, ok: ok}
+	}
+	return out
+}
+
+func restoreEnv(snapshot envSnapshot) {
+	for key, item := range snapshot {
+		if item.ok {
+			_ = os.Setenv(key, item.value)
+		} else {
+			_ = os.Unsetenv(key)
+		}
 	}
 }
 
@@ -228,6 +328,7 @@ func NewTestEnvironment(t *testing.T, opts ...TestEnvOption) *TestEnvironment {
 	// Command fixtures should be hermetic. The update checker runs in a
 	// background goroutine and can outlive a test's temp HOME/config dirs.
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	installCmdTestProviderDiscoveryGuard(t)
 
 	tempDir := t.TempDir()
 	ddxDir := filepath.Join(tempDir, ddxroot.DirName)

@@ -230,6 +230,7 @@ func capturedModelFilters(stub *executeCapturingStub) []agentlib.ModelFilter {
 
 func minimalProjectDir(t *testing.T) string {
 	t.Helper()
+	installCmdTestProviderDiscoveryGuard(t)
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	ddxDir := ddxroot.JoinProject(dir)
