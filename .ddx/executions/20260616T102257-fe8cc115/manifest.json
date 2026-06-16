@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260616T102257-fe8cc115",
+  "bead_id": "ddx-9b012b6c",
+  "base_rev": "8cdfe16d0282b438109ac63c09a39e475117174b",
+  "created_at": "2026-06-16T10:23:05.158197115Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9b012b6c",
+    "title": "agent/land: recover stale index locks after capped evidence commits",
+    "description": "PROBLEM\nDuring the same live canary window, `.ddx/metrics/locks.jsonl` recorded an `index.lock` hold-time violation for `operation=index.commit`: duration 10027ms against the 10000ms cap. After the server restart/worker claim cycle, `.git/index.lock` remained with no live owner and blocked a tracker-only commit until manually verified with `lsof` and removed. This violates the lock lifetime contract and is a direct blocker to reliable server-managed workers.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead_land.go:990-1003` documents `landEvidence` as a short ref-advancing commit boundary, then calls `CommitStaged` to create the trailing evidence commit.\n- `cli/internal/agent/execute_bead_land.go:1458-1460` runs `landEvidence` inside `withMainGitLock(projectRoot, \"land_post_land_finalize\", ...)`.\n- `cli/internal/agent/execute_bead_land.go:772-780` implements `CommitStaged` with a real `git commit -m ...` subprocess.\n- `cli/internal/lockmetrics/lockcap.go:18-24` treats `index.lock` holds over 10s as hung and force-releases the lock. When the cap fires during the `git commit` subprocess, DDx can record the violation but still leave a stale `.git/index.lock` / interrupted commit state behind.\n\nPROPOSED FIX\nMake evidence finalization resilient to capped index commits. Either split the expensive evidence `git commit` out of the over-strict critical section or add explicit recovery/retry around cap-triggered commit interruption. The worker must remove only verified-stale `.git/index.lock` files, record durable violation evidence/operator diagnostics, and leave the landing worktree resumable so the next tracker-only or evidence commit succeeds without manual cleanup.\n\nNON-SCOPE\n- Do not raise the default 10s cap as the only fix.\n- Do not remove lock metrics or suppress cap violations.\n- Do not change unrelated land-coordination failure classification beyond the stale-lock recovery path.\n\nPARENT + DEPS\nParent: `ddx-3106674f`.\nDeps: none. Related to the closed lock-contention work, but this is a newly observed stale-lock recovery failure from the Claude TUI canary.",
+    "acceptance": "1. `TestLandEvidenceCommit_IndexLockCapDoesNotLeaveStaleLock` or the nearest existing land/evidence test name simulates a capped/slow evidence `git commit` and asserts no stale `.git/index.lock` remains after recovery.\n2. `TestExecuteBeadLoop_IndexCommitLockViolationReleasesAndContinues` or the nearest existing loop/lockmetrics test name proves the worker records the lock violation, releases/retries or parks cleanly, and a subsequent tracker-only commit can proceed without manual lock removal.\n3. The fix distinguishes verified-stale lock cleanup from live-owner locks; tests cover the live-owner case is not removed.\n4. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/lockmetrics/... -run 'IndexLockCap|LockViolation|LandEvidence|StaleLock' -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-3106674f",
+    "labels": [
+      "phase:iterate",
+      "area:agent",
+      "area:execute-bead",
+      "area:workers",
+      "kind:bug",
+      "kind:reliability",
+      "severity:critical",
+      "spec:FEAT-010",
+      "spec:TP-021",
+      "canary:claude-tui"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T102257-fe8cc115",
+    "prompt": ".ddx/executions/20260616T102257-fe8cc115/prompt.md",
+    "manifest": ".ddx/executions/20260616T102257-fe8cc115/manifest.json",
+    "result": ".ddx/executions/20260616T102257-fe8cc115/result.json",
+    "checks": ".ddx/executions/20260616T102257-fe8cc115/checks.json",
+    "usage": ".ddx/executions/20260616T102257-fe8cc115/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-9b012b6c-20260616T102257-fe8cc115"
+  },
+  "prompt_sha": "16ec1d574dadc266c988db91c10b76de828dde3f9a5aea50ba048c23bbf8094f"
+}
