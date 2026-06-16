@@ -248,6 +248,15 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 		for _, b := range existing {
 			existingIDs[b.ID] = true
 		}
+		if archive := s.archivePartner(); archive != nil {
+			archiveBeads, err := archive.ReadAll(context.Background())
+			if err != nil {
+				return err
+			}
+			for _, b := range archiveBeads {
+				existingIDs[b.ID] = true
+			}
+		}
 
 		// Collect IDs from incoming for cross-reference validation
 		incomingIDs := make(map[string]bool)
@@ -275,11 +284,24 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 			if b.Priority > MaxPriority {
 				b.Priority = MaxPriority
 			}
-			// Validate deps exist in either existing or incoming set
-			for _, depID := range b.DepIDs() {
-				if !existingIDs[depID] && !incomingIDs[depID] {
-					fmt.Fprintf(os.Stderr, "bead: import: %s has dangling dep %s (skipped)\n", b.ID, depID)
+			// Strip dependency edges that still point at nowhere after
+			// considering both active and archived beads plus the current
+			// import batch.
+			if len(b.Dependencies) > 0 {
+				filtered := make([]Dependency, 0, len(b.Dependencies))
+				stripped := 0
+				for _, dep := range b.Dependencies {
+					depID := dep.DependsOnID
+					if !existingIDs[depID] && !incomingIDs[depID] {
+						stripped++
+						continue
+					}
+					filtered = append(filtered, dep)
 				}
+				if stripped > 0 {
+					fmt.Fprintf(os.Stderr, "bead: import: %s stripped %d dangling dep(s)\n", b.ID, stripped)
+				}
+				b.Dependencies = filtered
 			}
 			existing = append(existing, b)
 			existingIDs[b.ID] = true
