@@ -1293,3 +1293,12 @@
 {"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":3723686,"acquired_at":"2026-06-16T20:39:46.473721665Z","released_at":"2026-06-16T20:39:46.521438258Z","duration_ms":47}
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":3723686,"acquired_at":"2026-06-16T20:39:46.538602365Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":3723686,"acquired_at":"2026-06-16T20:39:46.538602365Z","released_at":"2026-06-16T20:39:55.122160927Z","duration_ms":8583}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":3807614,"acquired_at":"2026-06-16T20:43:00.350537524Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":3807614,"acquired_at":"2026-06-16T20:43:00.350537524Z","released_at":"2026-06-16T20:43:01.127980508Z","duration_ms":777}
+{"event":"acquire","lock_name":"tracker.lock","operation":"preserve_dirt","holder_pid":3807614,"acquired_at":"2026-06-16T20:43:01.22652425Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"preserve_dirt","holder_pid":3807614,"acquired_at":"2026-06-16T20:43:01.22652425Z","released_at":"2026-06-16T20:43:01.692296391Z","duration_ms":465}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":3723686,"acquired_at":"2026-06-16T20:44:00.399529998Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":3723686,"acquired_at":"2026-06-16T20:44:00.431746263Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":3723686,"acquired_at":"2026-06-16T20:44:00.431746263Z","released_at":"2026-06-16T20:44:00.472872616Z","duration_ms":41}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":3723686,"acquired_at":"2026-06-16T20:44:00.48905104Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":3723686,"acquired_at":"2026-06-16T20:44:00.48905104Z","released_at":"2026-06-16T20:44:00.576027623Z","duration_ms":86}
