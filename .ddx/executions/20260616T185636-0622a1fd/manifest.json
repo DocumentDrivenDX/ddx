@@ -1,0 +1,68 @@
+{
+  "attempt_id": "20260616T185636-0622a1fd",
+  "bead_id": "ddx-7729a9d3",
+  "base_rev": "1fff5ecf743c989ee89eaa7d199222887d3ed6a6",
+  "created_at": "2026-06-16T18:56:43.535628919Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7729a9d3",
+    "title": "Reject invalid worktree-derived bead prefixes",
+    "description": "PROBLEM: ddx can derive malformed bead ID prefixes from execute-bead worktree directory names when git root discovery fails. That can produce IDs with invalid leading characters such as '.', contaminating the tracker with IDs that normal Create/GenID validation should reject.\n\nROOT CAUSE WITH FILE:LINE: cli/internal/bead/store.go:3070 falls back in detectPrefix to filepath.Base(workingDir) or filepath.Base(cwd) when git rev-parse --show-toplevel is unavailable. In an execute-bead worktree, that basename can be '.execute-bead-wt-...', and detectPrefix returns it without validating the prefix against the ValidateID character rules. Raw WriteAll/import/merge paths can then persist malformed IDs.\n\nPROPOSED FIX: Harden detectPrefix so any derived prefix that would fail ValidateID when used in a bead ID, or that contains '.' or '/', is rejected and DefaultPrefix is returned instead. Optionally add a final GenID validation guard before returning generated IDs so invalid prefixes cannot escape even if another derivation path is added later.\n\nNON-SCOPE: The doctor dangling_dep finding and Store.updateBead guard are already landed; do not redo them. Do not change readiness semantics here. Do not address merge-time or import-time dangling dependency filtering in this child bead.\n\nCONTEXT: Cross-machine convergence already relies on doctor --fix bumping updated_at and the supervisor union resolver keeping newest-updated_at records, so pruned records propagate. This child is only about stopping new malformed IDs at the prefix-generation layer.",
+    "acceptance": "1. Add TestDetectPrefixRejectsInvalidWorktreePrefix covering cli/internal/bead/store.go: it feeds a worktree-style workingDir such as '.execute-bead-wt-123' with git top-level discovery unavailable and asserts detectPrefix returns DefaultPrefix.\n2. Add TestDetectPrefixReturnsOnlyValidateIDCompatiblePrefix or equivalent coverage asserting detectPrefix never returns a prefix that would make GenID produce an ID rejected by ValidateID, including no leading '.' and no '/'.\n3. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-6bd07a26",
+    "labels": [
+      "area:bead",
+      "kind:data-integrity",
+      "prevention",
+      "reliability"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260616T182722-ed47",
+          "body": "{\"detail\":\"pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-06-16T18:32:24.259299192Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-7729a9d3\",\"estimated_difficulty\":\"\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"default\"}",
+          "created_at": "2026-06-16T18:32:24.309391965Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=default powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "worker-20260616T182722-ed47",
+          "body": "pre-execute-bead checkpoint: syncing checkpoint index: fatal: Unable to create '/Users/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\ndecision_audit={\"failure_class\":\"lock_contention\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{},\"actual_route\":{},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=lock_contention",
+          "created_at": "2026-06-16T18:32:24.407381557Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260616T184122-05b0 state=failed reason=terminal-worker-claim",
+          "created_at": "2026-06-16T18:47:42.133540228Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "terminal-worker-claim"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T185636-0622a1fd",
+    "prompt": ".ddx/executions/20260616T185636-0622a1fd/prompt.md",
+    "manifest": ".ddx/executions/20260616T185636-0622a1fd/manifest.json",
+    "result": ".ddx/executions/20260616T185636-0622a1fd/result.json",
+    "checks": ".ddx/executions/20260616T185636-0622a1fd/checks.json",
+    "usage": ".ddx/executions/20260616T185636-0622a1fd/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7729a9d3-20260616T185636-0622a1fd"
+  },
+  "prompt_sha": "48270d0e6e236cb051fe1abb98a6268d1d12b91aefedfbcb6f4e7e7a6bb7476c"
+}
