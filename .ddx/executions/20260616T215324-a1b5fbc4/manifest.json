@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260616T215324-a1b5fbc4",
+  "bead_id": "ddx-7f5092f2",
+  "base_rev": "e56642776607f1ee03add653b71b3d4f026d247f",
+  "created_at": "2026-06-16T21:53:32.015366069Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7f5092f2",
+    "title": "docs: remove normal-install guidance pointing at .ddx/plugins/ddx",
+    "description": "PROBLEM\nCLI help and frontend/e2e fixture documentation still tell users or contributors to look for DDx package resources under .ddx/plugins/ddx. That conflicts with the intended marketplace/cache-backed topology and can cause users to commit or depend on generated payload copies.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md:18-27 says generated adapters and payload copies are not forward repository state.\n- cli/cmd/skills.go:27-32 advertises checking .ddx/plugins/ddx.\n- cli/internal/server/frontend/README.md:85-105 describes the e2e fixture as containing .ddx/plugins/ddx resources, which conflicts with generated-adapter/cache topology.\n\nPROPOSED FIX\nRevise CLI help text and frontend/e2e fixture documentation so normal marketplace installs describe generated adapters plus cache/defaultplugin resolution, not .ddx/plugins/ddx. Mention .ddx/plugins/ddx only where explicitly describing local development overlays or legacy compatibility.\n\nNON-SCOPE\nDo not remove support for explicit local development overlays. Do not remove the embedded default plugin fallback needed for offline ddx init. Do not change HELIX marketplace packaging.\n\nPARENT\nddx-602ae31a\n\nGOVERNING ARTIFACT\n- docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md:18-27",
+    "acceptance": "1. TestSkillsHelpDoesNotRecommendBuiltinProjectPayloadPath proves skills-related CLI help no longer tells users to check .ddx/plugins/ddx for normal installs.\n2. TestFrontendReadmeDescribesCacheBackedFixtureTopology proves cli/internal/server/frontend/README.md describes generated adapters and cache/defaultplugin resolution instead of normal .ddx/plugins/ddx resources.\n3. TestDocsMentionProjectPayloadOnlyForLocalOverlayOrLegacyCompatibility proves remaining .ddx/plugins/ddx mentions in the touched docs are limited to explicit local-overlay or legacy compatibility context.\n4. `cd cli \u0026\u0026 go test ./internal/registry/... ./internal/config/... ./cmd/... ./internal/server/frontend/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6c284fb3",
+    "labels": [
+      "phase:iterate",
+      "area:plugin",
+      "area:cli",
+      "kind:bug",
+      "initiative:zero-footprint",
+      "marketplace",
+      "plan:2026-05-13",
+      "parent:ddx-602ae31a"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260616T213456-24ff",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-7f5092f2 (changed existing dirty paths: .ddx/executions/20260616T214001-69dfdef8/provider-children.json)\",\"fingerprint\":\"224bddb6244b9c2596d1aac07b2622320897f5d12215de18826c2536a8b039a1\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"224bddb6244b9c2596d1aac07b2622320897f5d12215de18826c2536a8b039a1\"}",
+          "created_at": "2026-06-16T21:53:09.866832971Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T215324-a1b5fbc4",
+    "prompt": ".ddx/executions/20260616T215324-a1b5fbc4/prompt.md",
+    "manifest": ".ddx/executions/20260616T215324-a1b5fbc4/manifest.json",
+    "result": ".ddx/executions/20260616T215324-a1b5fbc4/result.json",
+    "checks": ".ddx/executions/20260616T215324-a1b5fbc4/checks.json",
+    "usage": ".ddx/executions/20260616T215324-a1b5fbc4/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-7f5092f2-20260616T215324-a1b5fbc4"
+  },
+  "prompt_sha": "76bf122d77f1d6b96ce44011d01cd8c69953b3faf89c706525ed787d84861b9f"
+}
