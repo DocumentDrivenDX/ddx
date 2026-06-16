@@ -68,6 +68,40 @@ func TestServerStartupReconcileReportsInvalidDesiredState(t *testing.T) {
 	assert.False(t, called, "invalid desired state must not start a worker")
 }
 
+func TestServerStartupReconcileReportsStaleDesiredProjectAudit(t *testing.T) {
+	activeRoot := t.TempDir()
+	staleRoot := t.TempDir()
+	require.NoError(t, SaveWorkerDesiredState(activeRoot, &WorkerDesiredState{DesiredCount: 1}))
+
+	var log bytes.Buffer
+	prevLog := startupDesiredWorkerReconcileLog
+	startupDesiredWorkerReconcileLog = &log
+	t.Cleanup(func() { startupDesiredWorkerReconcileLog = prevLog })
+
+	prev := startupDesiredWorkerReconcileProject
+	startupDesiredWorkerReconcileProject = func(projectRoot, _ string, _ *WorkerManager) (ReconcileResult, error) {
+		return ReconcileResult{}, nil
+	}
+	t.Cleanup(func() { startupDesiredWorkerReconcileProject = prev })
+
+	state := &ServerState{}
+	state.RegisterProject(staleRoot)
+	srv := &Server{
+		WorkingDir: activeRoot,
+		workers:    NewWorkerManager(activeRoot),
+		state:      state,
+	}
+
+	errs := srv.reconcileDesiredWorkersOnce()
+	require.Empty(t, errs)
+
+	out := log.String()
+	assert.Contains(t, out, "ddx-server: startup worker reconcile project="+staleRoot)
+	assert.Contains(t, out, "status=stale")
+	assert.Contains(t, out, "reason=desired worker state missing")
+	assert.NotContains(t, out, "project="+activeRoot)
+}
+
 func TestServerStartupReconcileDeduplicatesStartupProject(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{DesiredCount: 1}))
