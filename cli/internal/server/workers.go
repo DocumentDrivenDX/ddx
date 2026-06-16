@@ -763,8 +763,11 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 	m.mu.Lock()
 	record := handle.record
 	preservedState := ""
-	if record.State == "stopped" || record.State == "reaped" {
+	switch record.State {
+	case workerStateStopped, "reaped":
 		preservedState = record.State
+	case workerStateStopping:
+		preservedState = workerStateStopped
 	}
 	finishedAt := time.Now().UTC()
 	record.FinishedAt = finishedAt
@@ -2062,8 +2065,30 @@ func (m *WorkerManager) RestartWorker(id string, restartCount int) (WorkerRecord
 	if err != nil {
 		return WorkerRecord{}, fmt.Errorf("restart worker: start: %w", err)
 	}
+	if restartCount <= old.RestartCount {
+		restartCount = old.RestartCount + 1
+	}
 	rec.Managed = true
 	rec.RestartCount = restartCount
+	now := time.Now().UTC()
+	rec.Lifecycle = append(rec.Lifecycle, WorkerLifecycleEvent{
+		Action:    "restart",
+		Actor:     "ddx-server",
+		Timestamp: now,
+		Detail:    fmt.Sprintf("old_id=%s restart_count=%d", id, restartCount),
+	})
+	dir = filepath.Join(m.rootDir, rec.ID)
+	m.mu.Lock()
+	if handle := m.workers[rec.ID]; handle != nil {
+		handle.record.Managed = true
+		handle.record.RestartCount = restartCount
+		handle.record.Lifecycle = rec.Lifecycle
+		rec = handle.record
+	}
+	m.mu.Unlock()
+	if err := m.writeRecord(dir, rec); err != nil {
+		return WorkerRecord{}, fmt.Errorf("restart worker: persist replacement: %w", err)
+	}
 	return rec, nil
 }
 

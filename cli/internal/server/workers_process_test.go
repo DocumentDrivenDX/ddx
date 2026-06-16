@@ -4,6 +4,9 @@ package server
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -328,6 +331,147 @@ func TestManagedExternalWorkerExitRefillsDesiredCount(t *testing.T) {
 
 	require.NoError(t, m.Stop(replacement.ID))
 	waitForProcessGroupEmpty(t, replacement.PGID)
+}
+
+func TestWorkerRestartPreservesDesiredCount(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 300 * time.Millisecond
+	defer m.StopAll()
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 2,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: true},
+	}))
+
+	res, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	require.NoError(t, err)
+	require.Len(t, res.Started, 2)
+
+	first, err := m.Show(res.Started[0])
+	require.NoError(t, err)
+	secondID := res.Started[1]
+
+	replacement, err := m.RestartWorker(first.ID, 0)
+	require.NoError(t, err)
+	assert.True(t, replacement.Managed)
+	assert.Equal(t, root, replacement.ProjectRoot)
+	assert.Equal(t, 1, replacement.RestartCount)
+	require.NotEmpty(t, replacement.Lifecycle)
+	assert.Contains(t, replacement.Lifecycle[len(replacement.Lifecycle)-1].Detail, "old_id="+first.ID)
+
+	waitForProcessGroupEmpty(t, first.PGID)
+
+	liveWorkers := func() []WorkerRecord {
+		records, listErr := m.List()
+		require.NoError(t, listErr)
+		live := make([]WorkerRecord, 0, len(records))
+		for _, rec := range records {
+			if rec.ProjectRoot != root || rec.State != workerStateRunning || rec.PID <= 0 || !isPIDAlive(rec.PID) {
+				continue
+			}
+			live = append(live, rec)
+		}
+		return live
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		live := liveWorkers()
+		require.LessOrEqual(t, len(live), 2, "explicit restart must not race desired-count refill into an extra worker")
+		if len(live) == 2 {
+			ids := []string{live[0].ID, live[1].ID}
+			assert.Contains(t, ids, secondID)
+			assert.Contains(t, ids, replacement.ID)
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	live := liveWorkers()
+	require.Len(t, live, 2, "desired_count=2 must remain exactly two after restart/refill hooks drain")
+	ids := []string{live[0].ID, live[1].ID}
+	assert.Contains(t, ids, secondID)
+	assert.Contains(t, ids, replacement.ID)
+
+	old, err := m.Show(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, workerStateStopped, old.State)
+	assert.False(t, old.FinishedAt.IsZero())
+}
+
+func TestRESTWorkerRestartDoesNotOverSpawnDesiredCount(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	srv := New(":0", root)
+	t.Cleanup(func() { _ = srv.Shutdown() })
+	srv.workers.workerBinaryPath = workerPath
+	srv.workers.WatchdogKillGrace = 300 * time.Millisecond
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 2,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: true},
+	}))
+
+	res, err := srv.workers.provisionDesiredWorkersBeforeStaleSweep()
+	require.NoError(t, err)
+	require.Len(t, res.Started, 2)
+
+	first, err := srv.workers.Show(res.Started[0])
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/"+first.ID+"/restart", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code, "body: %s", w.Body.String())
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+	replacementID := payload["id"]
+	require.NotEmpty(t, replacementID)
+	require.NotEqual(t, first.ID, replacementID)
+
+	waitForProcessGroupEmpty(t, first.PGID)
+
+	liveWorkers := func() []WorkerRecord {
+		records, listErr := srv.workers.List()
+		require.NoError(t, listErr)
+		live := make([]WorkerRecord, 0, len(records))
+		for _, rec := range records {
+			if rec.ProjectRoot != root || rec.State != workerStateRunning || rec.PID <= 0 || !isPIDAlive(rec.PID) {
+				continue
+			}
+			live = append(live, rec)
+		}
+		return live
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		require.LessOrEqual(t, len(liveWorkers()), 2, "REST restart must not expose an extra running worker")
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	live := liveWorkers()
+	require.Len(t, live, 2)
+	ids := []string{live[0].ID, live[1].ID}
+	assert.Contains(t, ids, res.Started[1])
+	assert.Contains(t, ids, replacementID)
 }
 
 func TestManagedExternalWorkerExitReleasesOwnedClaimWithoutCurrentBead(t *testing.T) {
