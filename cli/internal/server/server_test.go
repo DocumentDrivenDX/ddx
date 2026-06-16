@@ -4416,6 +4416,64 @@ func TestAgentWorkersAggregatesAcrossProjects(t *testing.T) {
 	}
 }
 
+func TestAgentWorkersStatusDoesNotReconcileTerminalClaims(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-workers-status-readonly")
+
+	root := setupTestDir(t)
+	srv := New(":0", root)
+	store := seedClaimedBeadByOwner(t, root, "ddx-status-readonly", "worker-status-readonly")
+	writeTestWorkerRecord(t, root, "worker-status-readonly", WorkerRecord{
+		ID:          "worker-status-readonly",
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-time.Hour),
+		FinishedAt:  time.Now().UTC().Add(-30 * time.Minute),
+		PID:         9999997,
+	})
+
+	req := httptest.NewRequest("GET", "/api/agent/workers", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var workers []WorkerRecord
+	if err := json.Unmarshal(w.Body.Bytes(), &workers); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	found := false
+	for _, wr := range workers {
+		if wr.ID == "worker-status-readonly" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected status endpoint to include existing worker record")
+	}
+
+	b, err := store.Get(context.Background(), "ddx-status-readonly")
+	if err != nil {
+		t.Fatalf("get bead: %v", err)
+	}
+	if b.Owner != "worker-status-readonly" {
+		t.Fatalf("status GET mutated bead owner: got %q", b.Owner)
+	}
+	events, err := store.EventsByKind("ddx-status-readonly", "bead.reaped")
+	if err != nil {
+		t.Fatalf("events: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("status GET emitted reap events: got %d", len(events))
+	}
+}
+
 // writeTestWorkerRecord writes a WorkerRecord as status.json under the project's
 // .ddx/workers/<id>/ directory — the same layout used by WorkerManager.
 func writeTestWorkerRecord(t *testing.T, projectRoot, id string, rec WorkerRecord) {
