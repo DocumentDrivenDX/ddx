@@ -46,6 +46,20 @@ func TestPrepareExecuteLoopWorkerSpecDefaultsOpaquePassthrough(t *testing.T) {
 	assert.Equal(t, agent.AttemptBackendInTree, spec.AttemptBackend)
 }
 
+func TestWorkerManagerForProjectRootUsesTargetProject(t *testing.T) {
+	root := t.TempDir()
+	other := t.TempDir()
+	srv := New("127.0.0.1:0", root)
+	defer srv.workers.StopWatchdog()
+
+	assert.Same(t, srv.workers, srv.workerManagerForProjectRoot(root))
+
+	m := srv.workerManagerForProjectRoot(other)
+	require.NotSame(t, srv.workers, m)
+	defer m.StopWatchdog()
+	assert.Equal(t, ddxroot.JoinProject(other, "workers"), m.rootDir)
+}
+
 func TestWorkerRuntimeWiresPreClaimDeadlines(t *testing.T) {
 	src, err := os.ReadFile("workers.go")
 	require.NoError(t, err)

@@ -872,10 +872,36 @@ func (s *Server) execStoreForRequest(r *http.Request) *ddxexec.Store {
 // to s.workers.
 func (s *Server) workerManagerForRequest(r *http.Request) *WorkerManager {
 	dir := s.workingDirForRequest(r)
-	if dir == s.WorkingDir {
+	return s.workerManagerForProjectRoot(dir)
+}
+
+func (s *Server) workerManagerForProjectRoot(dir string) *WorkerManager {
+	if dir == "" || dir == s.WorkingDir {
 		return s.workers
 	}
 	return NewWorkerManager(dir)
+}
+
+func (s *Server) workerManagerForWorkerID(id string, r *http.Request) (*WorkerManager, bool) {
+	roots := []string{s.workingDirForRequest(r), s.WorkingDir}
+	if s.state != nil {
+		for _, project := range s.state.GetProjects(false) {
+			roots = append(roots, project.Path)
+		}
+	}
+	seen := map[string]bool{}
+	for _, root := range roots {
+		root = strings.TrimSpace(root)
+		if root == "" || seen[root] {
+			continue
+		}
+		seen[root] = true
+		m := s.workerManagerForProjectRoot(root)
+		if _, err := m.Show(id); err == nil {
+			return m, true
+		}
+	}
+	return nil, false
 }
 
 // runsRedirectSunset is the deprecation date advertised in the Sunset header
@@ -2665,7 +2691,8 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	record, err := s.workers.StartExecuteLoop(workerSpec)
+	m := s.workerManagerForProjectRoot(projectRoot)
+	record, err := m.StartExecuteLoop(workerSpec)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -2738,7 +2765,12 @@ func (s *Server) handleStopAgentWorker(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	if err := s.workers.Stop(id); err != nil {
+	m, ok := s.workerManagerForWorkerID(id, r)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "worker not found"})
+		return
+	}
+	if err := m.Stop(id); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
@@ -2795,7 +2827,11 @@ func (s *Server) handleRestartAgentWorker(w http.ResponseWriter, r *http.Request
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
 		return
 	}
-	m := s.workerManagerForRequest(r)
+	m, ok := s.workerManagerForWorkerID(id, r)
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "worker not found"})
+		return
+	}
 	rec, err := m.RestartWorker(id, 0)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -2814,7 +2850,7 @@ func (s *Server) handleReconcileWorkers(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
 		return
 	}
-	m := s.workerManagerForRequest(r)
+	m := s.workerManagerForProjectRoot(wd)
 	m.ReconcileStaleWorkers()
 	sup := NewWorkerSupervisor(wd, m)
 	result, err := sup.Reconcile()
@@ -2835,7 +2871,7 @@ func (s *Server) handleCleanupWorkers(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
 		return
 	}
-	m := s.workerManagerForRequest(r)
+	m := s.workerManagerForProjectRoot(wd)
 	m.ReconcileStaleWorkers()
 	sup := NewWorkerSupervisor(wd, m)
 	result, err := sup.Reconcile()
