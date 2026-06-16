@@ -9,7 +9,7 @@ ddx:
 # DDx Skill Package Layout
 
 Date: 2026-05-13
-Status: Draft
+Status: Accepted; partially implemented
 
 ## Summary
 
@@ -17,6 +17,15 @@ The DDx skill tree should be content owned by the default `ddx` plugin package,
 not a parallel bootstrap tree with checked-in mirrors. `ddx init`, `ddx update`,
 and `ddx plugin install ddx` should all install the same package layout through
 the same package installer.
+
+As of 2026-06-16, the forward behavior is cache-backed and npx-like:
+`ddx init` and `ddx plugin sync` materialize the built-in `ddx` package into
+the shared XDG plugin cache and expose generated adapters in
+`.agents/skills/ddx` and `.claude/skills/ddx`. Marketplace plugins such as
+HELIX use the same generated-adapter shape from `.ddx/plugins.lock.yaml` plus
+`${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`. Checked-in plugin
+payloads and generated agent adapters are not part of the forward repository
+state.
 
 Development installs may use symlink overlays for live editing, but those
 overlays are project-local. DDx must not restore home-directory skill installs;

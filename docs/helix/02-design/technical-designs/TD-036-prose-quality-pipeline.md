@@ -101,12 +101,16 @@ Proposed source layout:
 - `library/checks/prose-quality/vocabulary/`
 - `library/checks/prose-quality/fixtures/`
 
-Installed layout:
+Resolved default-plugin layout:
 
-- `.ddx/plugins/ddx/checks/prose-quality/check.yaml`
-- `.ddx/plugins/ddx/checks/prose-quality/rules/`
-- `.ddx/plugins/ddx/checks/prose-quality/vocabulary/`
-- `.ddx/plugins/ddx/checks/prose-quality/fixtures/`
+- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/check.yaml`
+- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/rules/`
+- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/vocabulary/`
+- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/fixtures/`
+
+`.ddx/plugins/ddx` is reserved for explicit local development overlays and
+legacy compatibility. Normal `ddx init` / `ddx plugin sync` bootstrap must not
+copy the default plugin payload into the project repository.
 
 Layout rules:
 

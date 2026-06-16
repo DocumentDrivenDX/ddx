@@ -83,9 +83,10 @@ The default `ddx` plugin ships five role-focused personas:
   (monolith-first, data-model-first)
 - `specification-enforcer` — refuses drift from governing artifacts
 
-See `.ddx/plugins/ddx/personas/README.md` for the quality bar and
-authoring guidance. Projects can install additional personas via
-plugins.
+See the resolved default plugin payload
+(`${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/personas/README.md`, or the
+baked-in package when offline) for the quality bar and authoring guidance.
+Projects can install additional personas via plugins.
 
 ### Using a persona
 

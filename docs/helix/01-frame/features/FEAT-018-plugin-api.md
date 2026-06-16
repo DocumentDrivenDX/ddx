@@ -9,7 +9,7 @@ ddx:
 # Feature: Plugin API Stability
 
 **ID:** FEAT-018
-**Status:** Not Started
+**Status:** In Progress
 **Priority:** P1
 **Owner:** DDx Team
 
@@ -21,6 +21,17 @@ descriptors, directory layout, skill format, hook scripts, and bead
 conventions. This feature documents the existing surfaces, adds schema
 versioning, defines marketplace materialization behavior, and commits to
 backward compatibility.
+
+> **Update 2026-06-16 (marketplace plugin topology):** HELIX now ships as a
+> marketplace plugin, so this feature's materialization rules are no longer
+> aspirational. The forward contract is the npx-style model: project intent and
+> version pins live in `.ddx/plugins.lock.yaml`, registry payloads live in
+> `${XDG_DATA_HOME}/ddx/cache/plugins/<name>/<version>/`, and project worktrees
+> get only generated agent adapters under `.agents/skills/` and
+> `.claude/skills/`. The default `ddx` package follows the same adapter shape
+> through the embedded/built-in fallback, but it is not recorded as a normal
+> marketplace dependency and does not create `.ddx/plugins/ddx` during
+> `ddx init` or `ddx plugin sync`.
 
 ## Problem Statement
 

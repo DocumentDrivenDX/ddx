@@ -181,7 +181,8 @@ reference file; do not violate them.
 - Governing feature specs: see `FEAT-*` documents under your
   project's `docs/` tree — especially the CLI, beads, agent-service,
   executions, and skills features.
-- Personas README: shipped by the default `ddx` plugin at
-  `.ddx/plugins/ddx/personas/README.md`.
+- Personas README: shipped by the resolved default `ddx` plugin package at
+  `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/personas/README.md`, with
+  the baked-in package as the offline fallback.
 - Open standard this skill conforms to:
   [agentskills.io](https://agentskills.io).
