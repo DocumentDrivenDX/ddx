@@ -260,6 +260,12 @@ type reviewArtifactResult struct {
 	EvidenceAssembly *EvidenceAssemblyTelemetry `json:"evidence_assembly,omitempty"`
 }
 
+// DefaultReviewDispatchTimeout is the absolute wall-clock cap for reviewer
+// dispatches when neither project config nor operator flags set one. Reviews
+// are lifecycle gates; a stalled reviewer must become durable review-error
+// evidence instead of blocking the worker indefinitely.
+const DefaultReviewDispatchTimeout = 3 * time.Minute
+
 // HasBeadLabel reports whether label is present in labels.
 func HasBeadLabel(labels []string, label string) bool {
 	for _, l := range labels {
@@ -806,6 +812,10 @@ type DefaultBeadReviewer struct {
 	// triggers (review-error and review-pairing-degraded events) for the
 	// same result_rev so the reviewer MinPower is bumped on retry.
 	EventReader BeadEventReader
+	// ReviewDispatchTimeout overrides the default absolute wall-clock cap for
+	// reviewer dispatches. Production callers normally leave this zero; tests
+	// use it to exercise timeout behavior without waiting minutes.
+	ReviewDispatchTimeout time.Duration
 }
 
 // BuildReviewExecuteRequest constructs the AgentRunRuntime used for the
@@ -863,6 +873,19 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 		ClearProfile:        true,
 		ClearMaxPower:       true,
 	}
+}
+
+func stampReviewAttemptCorrelation(runtime *AgentRunRuntime, reviewAttemptID string) {
+	if runtime == nil || strings.TrimSpace(reviewAttemptID) == "" {
+		return
+	}
+	if runtime.Correlation == nil {
+		runtime.Correlation = map[string]string{}
+	}
+	if implAttemptID := strings.TrimSpace(runtime.Correlation["attempt_id"]); implAttemptID != "" {
+		runtime.Correlation["impl_attempt_id"] = implAttemptID
+	}
+	runtime.Correlation["review_attempt_id"] = reviewAttemptID
 }
 
 // reviewerDispatchProfile returns the fizeau profile name and MinPower to use
@@ -1217,6 +1240,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 
 	start := time.Now()
 	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewProfile.Name)
+	stampReviewAttemptCorrelation(&runRuntime, attemptID)
 	// Apply escalated MinPower: use the higher of the base R4 floor and the
 	// escalated profile floor so retries reach a stronger reviewer powerClass.
 	if reviewProfile.MinPower > runRuntime.MinPowerOverride {
@@ -1225,10 +1249,16 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	reviewRouteLabel := r.applyExplicitReviewerPins(&runRuntime)
 	runRuntime.Prompt = prompt
 	runRuntime.WorkDir = reviewWorkDir
+	runRuntime.WorkLogPhase = "reviewer"
 	result, runErr := r.dispatchReviewRun(ctx, runRuntime)
 
 	durationMS := int(time.Since(start).Milliseconds())
 	if runErr != nil {
+		timeoutDetail := reviewRequestTimeoutDetail(r.ProjectRoot, attemptID)
+		rationale := runErr.Error()
+		if timeoutDetail != "" {
+			rationale += "\n" + timeoutDetail
+		}
 		// Transport-class failure (FEAT-022 §12): network or provider-side
 		// error. Surface as a typed review-error so the loop classifies and
 		// counts it correctly, rather than masquerading as a BLOCK verdict.
@@ -1242,7 +1272,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 		}
 		reviewRes := &ReviewResult{
 			Verdict:         VerdictBlock,
-			Rationale:       runErr.Error(),
+			Rationale:       rationale,
 			Error:           evidence.OutcomeReviewTransport,
 			ReviewerHarness: reviewHarness,
 			ReviewerModel:   reviewRouteLabel,
@@ -1269,6 +1299,9 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			Error:            reviewRes.Error,
 			EvidenceAssembly: transportTelemetry,
 		})
+		if timeoutDetail != "" {
+			return reviewRes, fmt.Errorf("reviewer: %s: %w\n%s", evidence.OutcomeReviewTransport, runErr, timeoutDetail)
+		}
 		return reviewRes, fmt.Errorf("reviewer: %s: %w", evidence.OutcomeReviewTransport, runErr)
 	}
 
@@ -1410,7 +1443,39 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 // execute-bead worker (runner > pre-built service > fresh service).
 func (r *DefaultBeadReviewer) dispatchReviewRun(ctx context.Context, runtime AgentRunRuntime) (*Result, error) {
 	rcfg, _ := ddxconfig.LoadAndResolve(r.ProjectRoot, ddxconfig.CLIOverrides{})
+	if runtime.RequestTimeoutOverride <= 0 {
+		switch {
+		case r.ReviewDispatchTimeout > 0:
+			runtime.RequestTimeoutOverride = r.ReviewDispatchTimeout
+		case rcfg.ProviderRequestTimeout() <= 0 && ResolveRequestTimeoutCap(r.ProjectRoot, rcfg.Provider(), 0) <= 0:
+			runtime.RequestTimeoutOverride = DefaultReviewDispatchTimeout
+		}
+	}
 	return dispatchViaResolvedConfig(ctx, r.ProjectRoot, r.Service, r.Runner, rcfg, runtime)
+}
+
+func reviewRequestTimeoutDetail(projectRoot, attemptID string) string {
+	if strings.TrimSpace(projectRoot) == "" || strings.TrimSpace(attemptID) == "" {
+		return ""
+	}
+	// evidence:allow-unbounded reason="request-timeout.json is a small structured timeout evidence file written by writeRequestTimeoutEvidence"
+	raw, err := os.ReadFile(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID, requestTimeoutArtifact))
+	if err != nil {
+		return ""
+	}
+	var ev requestTimeoutEvidence
+	if err := json.Unmarshal(raw, &ev); err != nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "review_attempt_id=%s\n", attemptID)
+	fmt.Fprintf(&b, "request_timeout=%s\n", ev.ConfiguredTimeout)
+	fmt.Fprintf(&b, "elapsed=%s\n", ev.Elapsed)
+	fmt.Fprintf(&b, "cleanup_result=%s", ev.CleanupResult)
+	if ev.ProviderPID > 0 {
+		fmt.Fprintf(&b, "\nprovider_pid=%d", ev.ProviderPID)
+	}
+	return b.String()
 }
 
 // gitShow runs `git show <rev>` with pathspec exclusions for execution-

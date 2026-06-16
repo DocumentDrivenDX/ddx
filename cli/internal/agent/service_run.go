@@ -270,13 +270,18 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		permissions = rcfg.Permissions()
 	}
 
-	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, rcfg.ProviderRequestTimeout())
+	requestTimeoutOverride := rcfg.ProviderRequestTimeout()
+	if runtime.RequestTimeoutOverride > 0 {
+		requestTimeoutOverride = runtime.RequestTimeoutOverride
+	}
+	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, requestTimeoutOverride)
 	// requestTimeoutCap is the DDx-side absolute provider-session wall-clock cap
 	// (the operator's --request-timeout). It is distinct from providerTimeout
 	// (the per-Chat-call timeout forwarded to fizeau) and from the idle/tool
 	// timers: when set it cancels and reaps a session that keeps emitting tool
 	// events past the window (ddx-9febbad2). Unset → 0 → no absolute cap.
-	requestTimeoutCap := ResolveRequestTimeoutCap(workDir, provider, rcfg.ProviderRequestTimeout())
+	requestTimeoutCap := ResolveRequestTimeoutCap(workDir, provider, requestTimeoutOverride)
+	evidenceAttemptID := runtimeEvidenceAttemptID(runtime.Correlation)
 
 	minPower := rcfg.MinPower()
 	if runtime.MinPowerOverride > 0 {
@@ -358,7 +363,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		watchdog.onRequestTimeout = func(elapsed time.Duration) {
 			reapRequestTimeoutAttempt(
 				workDir,
-				runtime.Correlation["attempt_id"],
+				evidenceAttemptID,
 				runtime.Correlation["bead_id"],
 				workPhase,
 				wd,
@@ -377,8 +382,8 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		now := time.Now().UTC()
 		reaped, survivors := reapSupersededProviderChildren(context.Background(), os.Getpid(), wd, route, harness, now)
 		if len(reaped) > 0 {
-			writeProviderChildCleanupArtifact(workDir, runtime.Correlation["attempt_id"], &providerChildCleanupReport{
-				AttemptID:   runtime.Correlation["attempt_id"],
+			writeProviderChildCleanupArtifact(workDir, evidenceAttemptID, &providerChildCleanupReport{
+				AttemptID:   evidenceAttemptID,
 				BeadID:      runtime.Correlation["bead_id"],
 				Trigger:     reasonSupersededProviderChild,
 				ActiveRoute: firstNonEmpty(route, harness),
@@ -487,6 +492,16 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func runtimeEvidenceAttemptID(correlation map[string]string) string {
+	if len(correlation) == 0 {
+		return ""
+	}
+	if reviewAttemptID := strings.TrimSpace(correlation["review_attempt_id"]); reviewAttemptID != "" {
+		return reviewAttemptID
+	}
+	return strings.TrimSpace(correlation["attempt_id"])
 }
 
 func estimatePromptTokens(prompt string) int {

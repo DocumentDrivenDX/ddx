@@ -123,6 +123,9 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.Effort = rcfg.Effort()
 	opts.Timeout = rcfg.Timeout()
 	opts.WallClock = rcfg.WallClock()
+	if runtime.RequestTimeoutOverride > 0 {
+		opts.WallClock = runtime.RequestTimeoutOverride
+	}
 	opts.WorkDir = runtime.WorkDir
 	opts.Permissions = permissions
 	opts.SessionLogDir = sessionLogDir
