@@ -109,17 +109,20 @@ The doctor helps identify and resolve:
 func (f *CommandFactory) newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [target]",
-		Short: "Update shipped skills and installed plugins",
-		Long: `Update shipped skills and installed plugins to their latest versions.
+		Short: "Refresh generated DDx project adapters",
+		Long: `Refresh generated DDx project adapters and AGENTS.md guidance.
 
 Targets:
-  helix      - Update helix plugin to latest version
-  all        - Update shipped skills and installed plugins (default)
+  ddx        - Refresh the built-in DDx adapters (default)
+  all        - Refresh generated DDx adapters (default)
+
+Marketplace plugin versions are managed by 'ddx plugin upgrade'.
 
 Examples:
-  ddx update           # Refresh shipped skills and update installed packages
-  ddx update helix    # Update helix plugin only
-  ddx update --check   # Check for updates without applying`,
+  ddx update                    # Refresh generated DDx adapters
+  ddx update ddx                # Refresh generated DDx adapters
+  ddx plugin upgrade helix      # Upgrade a marketplace plugin
+  ddx update --check            # Check without applying`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: f.runUpdate,
 	}

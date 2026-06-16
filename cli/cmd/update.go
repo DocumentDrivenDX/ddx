@@ -12,9 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
-	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
-	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 )
@@ -147,19 +145,6 @@ func collectDirtyUpdateTargets(workingDir string) ([]string, error) {
 	var candidates []string
 	candidates = append(candidates, enumerateSkillUpdateTargets(workingDir)...)
 
-	state, err := registry.LoadState()
-	if err == nil {
-		for _, entry := range state.Installed {
-			for _, f := range entry.Files {
-				expanded := registry.ExpandHome(f)
-				if !filepath.IsAbs(expanded) {
-					expanded = filepath.Join(workingDir, expanded)
-				}
-				candidates = append(candidates, expanded)
-			}
-		}
-	}
-
 	var dirty []string
 	for _, c := range candidates {
 		if isUpdateTargetDirty(workingDir, c) {
@@ -190,14 +175,16 @@ func backupUpdateFile(workingDir, filePath, backupBase string) error {
 	return os.WriteFile(dst, data, 0o644)
 }
 
-// performUpdate checks GitHub for the latest version of each installed plugin
-// and updates any that are outdated (or all if --force). Always refreshes the
-// generated built-in `ddx` adapters and the AGENTS.md block so projects that
-// ran `ddx init` under an older DDx version pick up current guidance without
-// copying plugin payloads into the project. Binary updates are intentionally
-// explicit via `ddx upgrade`; `ddx update` must not replace a locally-built
-// dogfood binary with the latest public release.
+// performUpdate refreshes generated built-in `ddx` adapters and the AGENTS.md
+// block so projects that ran `ddx init` under an older DDx version pick up
+// current guidance without copying plugin payloads into the project. Binary
+// updates are intentionally explicit via `ddx upgrade`; plugin version changes
+// are explicit via `ddx plugin upgrade`.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
+	if opts.Resource != "" && opts.Resource != "all" && opts.Resource != "ddx" {
+		return nil, fmt.Errorf("ddx update no longer updates plugins directly; use 'ddx plugin upgrade %s'", opts.Resource)
+	}
+
 	// Pre-check: detect dirty update targets before writing anything (atomic
 	// refuse — no file is mutated if any target is dirty without --discard-local).
 	dirtyFiles, _ := collectDirtyUpdateTargets(workingDir)
@@ -234,61 +221,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		return nil, err
 	}
 
-	state, err := registry.LoadState()
-	if err != nil || len(state.Installed) == 0 {
-		return &UpdateResult{Success: true, Message: "Generated adapters refreshed. No packages installed.", BackupPath: backupPath}, nil
-	}
-
-	reg := registry.BuiltinRegistry()
-
-	var updated []string
-
-	for _, entry := range state.Installed {
-		// Filter to specific target if requested.
-		if opts.Resource != "" && entry.Name != opts.Resource {
-			continue
-		}
-
-		pkg, err := reg.Find(entry.Name)
-		if err != nil {
-			continue // not in registry, skip
-		}
-
-		// Fetch actual latest version from GitHub.
-		latestVersion := pkg.Version
-		if release, err := update.FetchLatestReleaseForRepo(pkg.Source); err == nil {
-			latestVersion = strings.TrimPrefix(release.TagName, "v")
-		}
-
-		if !opts.Force && entry.Version == latestVersion {
-			continue
-		}
-
-		// Install the latest version.
-		installPkg := *pkg
-		installPkg.Version = latestVersion
-		newEntry, err := registry.InstallPackage(&installPkg, workingDir)
-		if err != nil {
-			return nil, fmt.Errorf("updating %s: %w", entry.Name, err)
-		}
-		state.AddOrUpdate(newEntry)
-		updated = append(updated, entry.Name+" "+entry.Version+" → "+latestVersion)
-	}
-
-	if err := registry.SaveState(state); err != nil {
-		return nil, fmt.Errorf("saving state: %w", err)
-	}
-
-	if len(updated) == 0 {
-		return &UpdateResult{Success: true, Message: "Generated adapters refreshed. All packages are up to date.", BackupPath: backupPath}, nil
-	}
-
-	return &UpdateResult{
-		Success:      true,
-		Message:      "Updated: " + strings.Join(updated, ", "),
-		UpdatedFiles: updated,
-		BackupPath:   backupPath,
-	}, nil
+	return &UpdateResult{Success: true, Message: "Generated adapters refreshed. Use 'ddx plugin upgrade' for marketplace plugins.", BackupPath: backupPath}, nil
 }
 
 // refreshGeneratedAdapters recreates cache-backed built-in `ddx` adapters and

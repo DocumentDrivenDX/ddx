@@ -29,14 +29,6 @@ func commitTestFiles(t *testing.T, dir string, relPaths ...string) {
 	require.NoError(t, commit.Run(), "git commit")
 }
 
-// writeRegistryInstalled writes a fake installed.yaml under ~HOME/.ddx/ so that
-// performUpdate sees the listed files as registry-installed update targets.
-func writeRegistryInstalled(t *testing.T, entries []registry.InstalledEntry) {
-	t.Helper()
-	state := &registry.InstalledState{Installed: entries}
-	require.NoError(t, registry.SaveState(state))
-}
-
 // TestUpdate_ForceReplacesStaleSymlinksWithCacheBackedAdapter verifies that
 // ddx update --force replaces legacy links under .agents/skills/ with the
 // cache-backed built-in DDx adapter.
@@ -91,23 +83,16 @@ func TestUpdate_DoesNotAttemptBinaryUpgrade(t *testing.T) {
 	assert.Contains(t, output, "Generated adapters refreshed")
 }
 
-// TestUpdate_RefusesDirtyLibraryFile asserts ddx update --force exits non-zero
-// when a registry-installed file (library/skills/ddx/SKILL.md) has uncommitted
-// changes and the new content would differ. The error output must mention
-// --force --discard-local [AC1].
-func TestUpdate_RefusesDirtyLibraryFile(t *testing.T) {
+// TestUpdate_RefusesDirtyGeneratedAdapterFile asserts ddx update --force exits
+// non-zero when a legacy real-file generated adapter has uncommitted changes.
+// The error output must mention --force --discard-local [AC1].
+func TestUpdate_RefusesDirtyGeneratedAdapterFile(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
 	te := NewTestEnvironment(t) // git-initialised by default
 
-	installedFile := filepath.Join("library", "skills", "ddx", "SKILL.md")
-	writeRegistryInstalled(t, []registry.InstalledEntry{{
-		Name:    "ddx",
-		Version: "0.4.7",
-		Type:    registry.PackageTypePlugin,
-		Files:   []string{installedFile},
-	}})
+	installedFile := filepath.Join(".agents", "skills", "ddx", "SKILL.md")
 
 	te.CreateFile(installedFile, "original content\n")
 	commitTestFiles(t, te.Dir, installedFile)
@@ -122,22 +107,18 @@ func TestUpdate_RefusesDirtyLibraryFile(t *testing.T) {
 		"error output should mention --force --discard-local; got: %q", output)
 }
 
-// TestUpdate_AllowsCleanLibraryFile asserts ddx update --force proceeds without
-// a dirty-file error when the registry-installed file has no uncommitted changes
-// [AC2].
-func TestUpdate_AllowsCleanLibraryFile(t *testing.T) {
+// TestUpdate_AllowsCleanGeneratedAdapterFile asserts ddx update --force proceeds
+// without a dirty-file error when a legacy real-file generated adapter has no
+// uncommitted changes [AC2].
+func TestUpdate_AllowsCleanGeneratedAdapterFile(t *testing.T) {
 	homeDir := t.TempDir()
+	xdgDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDir)
 
 	te := NewTestEnvironment(t) // git-initialised by default
 
-	installedFile := filepath.Join("library", "skills", "ddx", "SKILL.md")
-	writeRegistryInstalled(t, []registry.InstalledEntry{{
-		Name:    "ddx",
-		Version: "0.4.7",
-		Type:    registry.PackageTypePlugin,
-		Files:   []string{installedFile},
-	}})
+	installedFile := filepath.Join(".agents", "skills", "ddx", "SKILL.md")
 
 	te.CreateFile(installedFile, "original content\n")
 	commitTestFiles(t, te.Dir, installedFile)
@@ -146,29 +127,23 @@ func TestUpdate_AllowsCleanLibraryFile(t *testing.T) {
 
 	output, err := te.RunCommand("update", "--force")
 
-	// A network error from InstallPackage is tolerated; the test only asserts
-	// that the dirty-file guard did NOT fire.
-	_ = err
+	require.NoError(t, err, output)
 	assert.NotContains(t, output, "--force --discard-local",
 		"clean file should not trigger the dirty-file error; got: %q", output)
 }
 
 // TestUpdate_DiscardLocalOverwritesDirty asserts that ddx update --force
-// --discard-local succeeds when an installed file is dirty, and that the
+// --discard-local succeeds when a generated adapter file is dirty, and that the
 // original content is saved to .ddx/update-backup/<timestamp>/<path> [AC3].
 func TestUpdate_DiscardLocalOverwritesDirty(t *testing.T) {
 	homeDir := t.TempDir()
+	xdgDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDir)
 
 	te := NewTestEnvironment(t) // git-initialised by default
 
-	installedFile := filepath.Join("library", "skills", "ddx", "SKILL.md")
-	writeRegistryInstalled(t, []registry.InstalledEntry{{
-		Name:    "ddx",
-		Version: "0.4.7",
-		Type:    registry.PackageTypePlugin,
-		Files:   []string{installedFile},
-	}})
+	installedFile := filepath.Join(".agents", "skills", "ddx", "SKILL.md")
 
 	te.CreateFile(installedFile, "original committed content\n")
 	commitTestFiles(t, te.Dir, installedFile)
@@ -177,9 +152,8 @@ func TestUpdate_DiscardLocalOverwritesDirty(t *testing.T) {
 	dirtyContent := "modified content — not yet committed\n"
 	te.CreateFile(installedFile, dirtyContent)
 
-	// Run with --discard-local; tolerate network errors from InstallPackage.
 	output, err := te.RunCommand("update", "--force", "--discard-local")
-	_ = err
+	require.NoError(t, err, output)
 
 	// Must NOT produce the dirty-file error.
 	assert.NotContains(t, output, "--force --discard-local", /*as error msg*/
@@ -253,8 +227,6 @@ func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
 		globalSentinel := filepath.Join(globalPluginDir, "sentinel.txt")
 		require.NoError(t, os.WriteFile(globalSentinel, []byte("global-side"), 0o644))
 
-		writeRegistryInstalled(t, []registry.InstalledEntry{})
-
 		factory := NewCommandFactory(workDir)
 		output, err := executeCommand(factory.NewRootCommand(), "update")
 		require.NoError(t, err, output)
@@ -283,8 +255,6 @@ func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
 		globalSentinel := filepath.Join(globalPluginDir, "sentinel.txt")
 		require.NoError(t, os.WriteFile(globalSentinel, []byte("global-side"), 0o644))
 
-		writeRegistryInstalled(t, []registry.InstalledEntry{})
-
 		factory := NewCommandFactory(workDir)
 		output, err := executeCommand(factory.NewRootCommand(), "update")
 		require.NoError(t, err, output)
@@ -299,24 +269,17 @@ func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
 	})
 }
 
-// TestUpdate_PartialDirtyBatchHaltsCleanly asserts that when multiple
-// registry-installed files are slated for overwrite and even ONE is dirty, the
-// entire update halts before any file is mutated — clean files remain untouched
-// [AC4].
+// TestUpdate_PartialDirtyBatchHaltsCleanly asserts that when multiple generated
+// adapter files are slated for overwrite and even ONE is dirty, the entire
+// update halts before any file is mutated — clean files remain untouched [AC4].
 func TestUpdate_PartialDirtyBatchHaltsCleanly(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 
 	te := NewTestEnvironment(t) // git-initialised by default
 
-	dirtyFile := filepath.Join("library", "skills", "ddx", "SKILL.md")
-	cleanFile := filepath.Join("library", "skills", "ddx", "reference", "work.md")
-	writeRegistryInstalled(t, []registry.InstalledEntry{{
-		Name:    "ddx",
-		Version: "0.4.7",
-		Type:    registry.PackageTypePlugin,
-		Files:   []string{dirtyFile, cleanFile},
-	}})
+	dirtyFile := filepath.Join(".agents", "skills", "ddx", "SKILL.md")
+	cleanFile := filepath.Join(".claude", "skills", "ddx", "SKILL.md")
 
 	te.CreateFile(dirtyFile, "dirty file content\n")
 	te.CreateFile(cleanFile, "clean file content\n")
@@ -334,9 +297,17 @@ func TestUpdate_PartialDirtyBatchHaltsCleanly(t *testing.T) {
 	assert.Equal(t, "clean file content\n", string(data),
 		"clean file must be unchanged after atomic refuse")
 
-	// refreshGeneratedAdapters must NOT have run — .agents/skills/ddx/ should
-	// not have been created.
-	_, statErr := os.Stat(filepath.Join(te.Dir, ".agents", "skills", "ddx"))
-	assert.True(t, os.IsNotExist(statErr),
-		".agents/skills/ddx should not exist after atomic refuse")
+	dirtyData, readErr := os.ReadFile(filepath.Join(te.Dir, dirtyFile))
+	require.NoError(t, readErr)
+	assert.Equal(t, "modified and uncommitted\n", string(dirtyData),
+		"dirty file must be unchanged after atomic refuse")
+}
+
+func TestUpdatePluginTargetPointsToPluginUpgrade(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+
+	output, err := te.RunCommand("update", "helix")
+
+	require.Error(t, err, output)
+	assert.Contains(t, output, "ddx plugin upgrade helix")
 }
