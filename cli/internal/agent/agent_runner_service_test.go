@@ -124,6 +124,53 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	assert.Contains(t, FormatServiceProgressEntries(progress), "18.4 tok/s")
 }
 
+func TestDrainServiceEvents_ReturnsOnFinalWithoutChannelClose(t *testing.T) {
+	events := make(chan agentlib.ServiceEvent, 1)
+	events <- agentlib.ServiceEvent{
+		Type: "final",
+		Time: time.Date(2026, 6, 16, 22, 49, 0, 0, time.UTC),
+		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
+	}
+
+	done := make(chan *agentlib.ServiceFinalData, 1)
+	go func() {
+		final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "readiness"}), nil, nil)
+		done <- final
+	}()
+
+	select {
+	case final := <-done:
+		require.NotNil(t, final)
+		assert.Equal(t, "done", final.FinalText)
+	case <-time.After(1 * time.Second):
+		t.Fatal("drainServiceEventsWithRenderer blocked waiting for channel close after final event")
+	}
+}
+
+func TestDrainServiceEventsWatchdog_ReturnsOnFinalWithoutChannelClose(t *testing.T) {
+	events := make(chan agentlib.ServiceEvent, 1)
+	events <- agentlib.ServiceEvent{
+		Type: agentlib.ServiceEventTypeFinal,
+		Time: time.Date(2026, 6, 16, 22, 49, 0, 0, time.UTC),
+		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
+	}
+	wd := &drainWatchdog{idleTimeout: time.Hour}
+
+	done := make(chan *agentlib.ServiceFinalData, 1)
+	go func() {
+		final, _, _ := drainServiceEventsWithRenderer(events, nil, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "readiness"}), wd, nil)
+		done <- final
+	}()
+
+	select {
+	case final := <-done:
+		require.NotNil(t, final)
+		assert.Equal(t, "done", final.FinalText)
+	case <-time.After(1 * time.Second):
+		t.Fatal("watchdog drain blocked waiting for channel close after final event")
+	}
+}
+
 func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	events := make(chan agentlib.ServiceEvent, 2)
 	events <- agentlib.ServiceEvent{

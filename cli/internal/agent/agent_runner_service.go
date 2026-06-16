@@ -289,6 +289,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 				}
 			case decoded.Final != nil:
 				final = decoded.Final
+				return final, routing, progress
 			}
 		}
 		return final, routing, progress
@@ -417,6 +418,7 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			case decoded.Final != nil:
 				stopToolCallTimer()
 				final = decoded.Final
+				return final, routing, progress
 
 			case decoded.RoutingDecision != nil:
 				routing = decoded.RoutingDecision
