@@ -123,6 +123,54 @@ func TestImportPreservesUnknownFields(t *testing.T) {
 	assert.Equal(t, true, got.Extra["execution-eligible"])
 }
 
+func TestImport_StripsDanglingDependenciesAndReportsCount(t *testing.T) {
+	s := newTestStore(t)
+
+	archive := s.archivePartner()
+	require.NoError(t, archive.Init(testCtx()))
+
+	activeID := "bx-active-target"
+	archiveID := "bx-archive-target"
+	missingID := "bx-missing-target"
+
+	require.NoError(t, s.WriteAll([]Bead{{
+		ID:        activeID,
+		Title:     "Active target",
+		Status:    StatusOpen,
+		Priority:  2,
+		IssueType: DefaultType,
+	}}))
+	require.NoError(t, archive.WriteAll([]Bead{{
+		ID:        archiveID,
+		Title:     "Archive target",
+		Status:    StatusClosed,
+		Priority:  2,
+		IssueType: DefaultType,
+	}}))
+
+	importFile := filepath.Join(t.TempDir(), "import.jsonl")
+	jsonl := fmt.Sprintf(`{"id":"bx-imported","title":"Imported","issue_type":"task","status":"open","priority":2,"dependencies":[{"issue_id":"bx-imported","depends_on_id":"%s","type":"blocks"},{"issue_id":"bx-imported","depends_on_id":"%s","type":"blocks"},{"issue_id":"bx-imported","depends_on_id":"%s","type":"blocks"}],"created_at":"2026-01-02T00:00:00Z","updated_at":"2026-01-02T00:00:00Z"}`, activeID, archiveID, missingID)
+	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
+
+	var (
+		n   int
+		err error
+	)
+	stderr := captureStderr(t, func() {
+		n, err = s.Import(context.Background(), "jsonl", importFile)
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 1, n)
+	assert.Contains(t, stderr, "stripped 1 dangling dep")
+	assert.NotContains(t, stderr, "skipped")
+
+	got, err := s.Get(testCtx(), "bx-imported")
+	require.NoError(t, err)
+	require.Len(t, got.Dependencies, 2)
+	assert.Equal(t, []string{activeID, archiveID}, got.DepIDs())
+	assert.NotContains(t, got.DepIDs(), missingID)
+}
+
 func TestExportRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 
