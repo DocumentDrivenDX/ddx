@@ -17,7 +17,7 @@
 DDx + HELIX takes a project from zero to working software:
 
 1. `ddx init` — create a document library
-2. `ddx plugin install helix` — pin HELIX and generate local adapters
+2. `ddx plugin install helix` — pin HELIX, cache it like an `npx` dependency, and generate local adapters
 3. Agent frames the project — creates PRD, feature specs, and tracker beads
 4. Agent builds it — TDD, one commit per bead, all tests passing
 5. Agent evolves it — adds a feature, updates specs, extends code
@@ -41,6 +41,12 @@ ddx doctor
 ddx persona list
 ddx bead list
 ```
+
+Marketplace plugins are project dependencies, not copied source assets. DDx
+records plugin intent in `.ddx/plugins.lock.yaml`, stores payloads in the shared
+XDG cache, and writes only generated adapter links under `.agents/skills/` and
+`.claude/skills/`. Those adapters are local rebuild output; `ddx plugin sync`
+recreates them from the lock and cache.
 
 ## Pre-claim Intake and Silent-Idle Diagnosis
 
@@ -159,7 +165,7 @@ bound to the metric artifact.
 | Command | What it does |
 |---------|-------------|
 | `ddx init` | Initialize document library |
-| `ddx plugin install <name>` | Pin a workflow plugin and generate local adapters |
+| `ddx plugin install <name>` | Pin a workflow plugin, cache its payload, and generate adapters |
 | `ddx doctor` | Validate installation health |
 | [Prose quality support](docs/prose-quality.md) | Guidance for `ddx doc prose --changed` and prose config |
 | `ddx bead create/list/ready` | Track work items |

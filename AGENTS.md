@@ -128,7 +128,8 @@ is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
 - Use `argument-hint` only when the skill accepts a trailing positional or shorthand invocation hint.
 - Do not use nested `skill:` frontmatter for DDx repo skills.
 - Run `ddx skills check [path ...]` for reusable validation across repo skills and plugin skills.
-- Run `make skill-schema` after editing any file under `skills/*/SKILL.md` or `cli/internal/skills/*/SKILL.md`.
+- Run `make skill-schema` after editing any file under `library/skills/*/SKILL.md` or the embedded default-plugin copy under `cli/internal/registry/defaultplugin/library/skills/*/SKILL.md`.
+- Do not treat `.agents/skills/` or `.claude/skills/` as skill source assets; those are generated adapter links recreated by `ddx plugin sync`.
 
 ## Reviewer Mode
 
