@@ -1,0 +1,72 @@
+{
+  "attempt_id": "20260616T211417-cd800b56",
+  "bead_id": "ddx-56f46990",
+  "base_rev": "1474f0d2768d97d63d8517f16021da1e9c5b1f29",
+  "created_at": "2026-06-16T21:14:24.917137278Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-56f46990",
+    "title": "server: release stale index lock after killed managed worker",
+    "description": "PROBLEM\nDuring the 2026-06-16 DDx repo canary, server-managed worker worker-20260616T203031-1ef9 was cancelled and then exited with `signal: killed` while preparing pre-dispatch commits for bead ddx-d4d764ea. The worker log ended with `tracker_lock section=pre_dispatch_commits wait=0s hold=580ms retries=0`, `Cancel received, shutting down gracefully`, and `tracker_lock section=durable_audit wait=0s hold=3ms retries=0`. The lock metrics then recorded an `index.lock` acquire for `operation=index.commit` by holder_pid=3750227 at 2026-06-16T20:35:38.271560856Z with no release row. After the process was gone, `.git/index.lock` still existed and blocked git status until the operator verified no lsof holder and removed it manually. Desired-count refill correctly spawned worker-20260616T203538-0fad, but the stale lock violated the lock lifetime contract and made the landing worktree unsafe.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/lockmetrics/lockcap.go defines lock cap enforcement, but this canary showed no automatic stale `.git/index.lock` removal or lock-violation artifact when a managed worker died during `index.commit`.\n- cli/internal/server/workers.go runExternalWorker finalization records failed/reaped worker exits and refills desired count, but it does not prove or trigger cleanup for git locks owned by the dead worker PID before replacement continues.\n- cli/internal/agent/execute_bead.go / pre-dispatch commit path emits `pre_dispatch_commits` lock metrics, but the killed worker left an acquire-without-release row and a physical `.git/index.lock` file.\n\nPROPOSED FIX\nAdd a regression path that simulates or drives a server-managed worker death during an index commit / pre-dispatch commit window, then ensure server/lock-cap cleanup removes stale `.git/index.lock` owned by the dead worker before refill or before the next git operation. Record an operator-visible lock-violation or worker event naming worker id, PID, lock path, operation, and cleanup outcome. Preserve normal lock behavior for live holders; never remove a lock still held by a running process.\n\nNON-SCOPE\nDo not change desired-count refill semantics except to make cleanup happen before replacement can proceed. Do not change bead execution routing or startup reconcile stale-project filtering. Do not broaden this bead to all durable-audit SIGKILL classification work tracked by older lock-contention beads; this bead is specifically about stale physical lock cleanup after managed-worker death.\n\nDEPS\nNo deps.",
+    "acceptance": "1. New test TestManagedWorkerDeathDuringIndexCommitRemovesStaleIndexLock creates a managed worker or worker-manager fixture that leaves `.git/index.lock` after its holder PID exits, then proves the server/lock cleanup path removes the stale lock without manual operator action.\n2. TestManagedWorkerDeathDuringIndexCommitDoesNotRemoveLiveHolderLock proves the same cleanup path refuses to remove `.git/index.lock` while the recorded holder PID is still alive.\n3. TestManagedWorkerDeathDuringIndexCommitRecordsLockViolation proves cleanup writes operator-visible evidence containing worker id, holder PID, lock path, operation=index.commit or pre_dispatch_commits, and cleanup outcome.\n4. Existing count-preserving restart/refill tests still prove desired_count is restored after managed worker death without over-spawning.\n5. `cd cli \u0026\u0026 go test ./internal/server/... ./internal/lockmetrics/... ./internal/agent/... -run 'TestManagedWorkerDeathDuringIndexCommit|TestWorkerRestartPreservesDesiredCount|TestManagedExternalWorkerExitRefillsDesiredCount' -count=1` passes.\\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:workers",
+      "area:lock",
+      "kind:bug",
+      "reliability",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260616T202623-834b",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-56f46990 (changed existing dirty paths: .ddx/executions/20260616T203051-17a05472/provider-children.json)\",\"fingerprint\":\"dc42454b07bae20c4ebcecb6a555b9bab744e007db36668a8d1d5630dea06143\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"dc42454b07bae20c4ebcecb6a555b9bab744e007db36668a8d1d5630dea06143\"}",
+          "created_at": "2026-06-16T20:43:46.361949661Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260616T202623-834b state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-16T20:44:06.772669901Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260616T210513-86a0 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-16T21:10:08.244726241Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "worker-20260616T211008-b48e",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"system_unready: Single coherent bug fix: the bead ties the stale .git/index.lock behavior to specific server/worker/lockmetrics paths, defines non-scope, and includes named regression tests plus go test and pre-commit gates.\",\"fingerprint\":\"634fab92618a87ff00a26ce3f3eecba41d38906dd5b8fabfe393cc6b7ab49426\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"634fab92618a87ff00a26ce3f3eecba41d38906dd5b8fabfe393cc6b7ab49426\"}",
+          "created_at": "2026-06-16T21:12:17.216124281Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "queue-rank": -100
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T211417-cd800b56",
+    "prompt": ".ddx/executions/20260616T211417-cd800b56/prompt.md",
+    "manifest": ".ddx/executions/20260616T211417-cd800b56/manifest.json",
+    "result": ".ddx/executions/20260616T211417-cd800b56/result.json",
+    "checks": ".ddx/executions/20260616T211417-cd800b56/checks.json",
+    "usage": ".ddx/executions/20260616T211417-cd800b56/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-56f46990-20260616T211417-cd800b56"
+  },
+  "prompt_sha": "460aac53920787c431f1e02559155930283d295a32b376be1c96a92f204f9ec3"
+}
