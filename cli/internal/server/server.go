@@ -473,6 +473,19 @@ func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
 	roots := make([]string, 0, len(candidates))
 	var errs []error
 	for _, projectRoot := range candidates {
+		info, err := os.Stat(projectRoot)
+		if err != nil {
+			if os.IsNotExist(err) {
+				logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "project root missing")
+				continue
+			}
+			logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "project root unavailable")
+			continue
+		}
+		if !info.IsDir() {
+			logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "project root not a directory")
+			continue
+		}
 		if _, err := LoadWorkerDesiredState(projectRoot); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "desired worker state missing")

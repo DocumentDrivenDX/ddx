@@ -90,8 +90,9 @@ func setupIntegrationDir(t *testing.T) (workDir string, store *bead.Store) {
 		t.Fatal(err)
 	}
 
-	// Minimal config so bead.NewStore can resolve an ID prefix.
-	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\n"
+	// Minimal config so bead.NewStore can resolve an ID prefix and the
+	// artifact-type resolvers can discover the local plugin library fixtures.
+	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nlibrary:\n  path: .ddx/plugins/ddx\n"
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
