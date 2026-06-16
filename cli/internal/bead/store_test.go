@@ -1625,6 +1625,30 @@ func TestStoreReleaseClearsClaimAtomically(t *testing.T) {
 	assert.Equal(t, 1, counts.Open, "released bead must be counted open")
 }
 
+func TestStoreReleaseDoesNotClearLeaseOwnedByDifferentWorker(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-release-different-owner", Title: "Release preserves newer lease", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.ClaimWithOptions(b.ID, "worker-new", "attempt-new", "/tmp/new-worktree"))
+
+	require.NoError(t, s.Release(b.ID, "worker-old", ""))
+
+	got, err := s.Get(testCtx(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, got.Status, "sidecar-only worker claims must not rewrite tracker status")
+	assert.Empty(t, got.Owner, "sidecar-only worker claims must not set tracker owner")
+
+	lease, found, err := s.ClaimLease(b.ID)
+	require.NoError(t, err)
+	require.True(t, found, "stale worker release must not remove a newer worker lease")
+	assert.Equal(t, "worker-new", lease.Owner)
+	assert.Equal(t, "attempt-new", lease.Session)
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	assert.Empty(t, ready, "bead leased by the newer worker must remain absent from ready execution")
+}
+
 // TestClaimReleaseStatusReflectsLease runs the claim/release lifecycle across a
 // worker goroutine while the test goroutine inspects status: while claimed the
 // bead reports in_progress with an owner; after release it reports open with no

@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,6 +224,40 @@ func TestWorkerManagerManagedStopDoesNotReleaseUnrelatedClaimWithoutCurrentBead(
 	require.NoError(t, err)
 	require.True(t, found, "unrelated claim lease must remain")
 	assert.Equal(t, "external-worker", lease.Owner)
+}
+
+func TestReleaseWorkerClaimsDoesNotClearDifferentOwnerPrimaryBead(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+	store := bead.NewStore(ddxroot.JoinProject(root))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:        "ddx-stop-newer-lease",
+		Title:     "newer sidecar lease",
+		Status:    bead.StatusOpen,
+		IssueType: bead.DefaultType,
+	}))
+	require.NoError(t, store.ClaimWithOptions("ddx-stop-newer-lease", "worker-new", "attempt-new", ""))
+
+	released := releaseWorkerClaims(root, "worker-old", "ddx-stop-newer-lease", time.Now().UTC(), bead.BeadEvent{
+		Kind:    "bead.stopped",
+		Summary: "stop",
+		Actor:   "ddx-server",
+		Source:  "server-workers",
+	})
+	assert.Empty(t, released, "stale primary bead state must not authorize release of a newer worker lease")
+
+	lease, found, err := store.ClaimLease("ddx-stop-newer-lease")
+	require.NoError(t, err)
+	require.True(t, found, "newer worker lease must remain")
+	assert.Equal(t, "worker-new", lease.Owner)
+
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	assert.Empty(t, ready, "leased bead must not become ready after stale worker stop")
+
+	events, err := store.EventsByKind("ddx-stop-newer-lease", "bead.stopped")
+	require.NoError(t, err)
+	assert.Empty(t, events, "stale worker stop must not emit release evidence for another worker's bead")
 }
 
 // TestWorkerManagerStopPersistsStoppedToDisk: the graceful path writes the

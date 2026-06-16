@@ -1098,6 +1098,7 @@ func (s *Store) Release(id, assignee, targetStatus string) error {
 	if strings.TrimSpace(targetStatus) == "" {
 		targetStatus = StatusOpen
 	}
+	assignee = strings.TrimSpace(assignee)
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
@@ -1106,6 +1107,26 @@ func (s *Store) Release(id, assignee, targetStatus string) error {
 		for i := range beads {
 			if beads[i].ID != id {
 				continue
+			}
+			if assignee != "" {
+				trackerOwner := strings.TrimSpace(beads[i].Owner)
+				lease, leaseFound, leaseErr := s.readClaimHeartbeat(id)
+				if leaseErr != nil {
+					return leaseErr
+				}
+				leaseOwner := ""
+				if leaseFound {
+					leaseOwner = strings.TrimSpace(lease.Owner)
+				}
+				if trackerOwner != "" && trackerOwner != assignee {
+					return nil
+				}
+				if leaseOwner != "" && leaseOwner != assignee {
+					return nil
+				}
+				if trackerOwner == "" && !leaseFound && beads[i].Status != StatusInProgress {
+					return nil
+				}
 			}
 			if beads[i].Status == StatusInProgress {
 				if err := transitionLifecycleInPlace(&beads[i], targetStatus, LifecycleTransitionOptions{

@@ -1816,16 +1816,8 @@ func releaseWorkerClaims(projectRoot, workerID, primaryBeadID string, now time.T
 		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
 			continue
 		}
-		matched := primaryBeadID != "" && b.ID == primaryBeadID
-		if !matched && strings.TrimSpace(b.Owner) == workerID {
-			matched = true
-		}
-		if !matched {
-			if lease, found, err := store.ClaimLease(b.ID); err == nil && found && strings.TrimSpace(lease.Owner) == workerID {
-				matched = true
-			}
-		}
-		if !matched {
+		releaseAssignee, ok := workerReleaseAssignee(store, &b, workerID, primaryBeadID)
+		if !ok {
 			continue
 		}
 		if _, ok := seen[b.ID]; ok {
@@ -1838,10 +1830,45 @@ func releaseWorkerClaims(projectRoot, workerID, primaryBeadID string, now time.T
 			ev.CreatedAt = now
 		}
 		_ = store.AppendEvent(b.ID, ev)
-		_ = store.Unclaim(b.ID)
+		_ = store.Release(b.ID, releaseAssignee, bead.StatusOpen)
 		released = append(released, b.ID)
 	}
 	return released
+}
+
+func workerReleaseAssignee(store *bead.Store, b *bead.Bead, workerID, primaryBeadID string) (string, bool) {
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" || b == nil {
+		return "", false
+	}
+	trackerOwner := strings.TrimSpace(b.Owner)
+	leaseOwner := ""
+	leaseFound := false
+	if lease, found, err := store.ClaimLease(b.ID); err == nil && found {
+		leaseFound = true
+		leaseOwner = strings.TrimSpace(lease.Owner)
+	}
+	if trackerOwner == workerID || leaseOwner == workerID {
+		return workerID, true
+	}
+	if primaryBeadID != "" && b.ID == primaryBeadID && b.Status == bead.StatusInProgress {
+		if leaseFound && trackerOwner == "" && leaseOwner != "" {
+			return "", false
+		}
+		if trackerOwner != "" {
+			return trackerOwner, true
+		}
+		return workerID, true
+	}
+	return "", false
+}
+
+func workerReleaseAssigneeByID(store *bead.Store, beadID, workerID string) (string, bool) {
+	b, err := store.Get(context.Background(), beadID)
+	if err != nil {
+		return "", false
+	}
+	return workerReleaseAssignee(store, b, workerID, beadID)
 }
 
 func (m *WorkerManager) Stop(id string) error {
@@ -2130,19 +2157,21 @@ func (m *WorkerManager) reapWorker(id string, handle *workerHandle, pid int, bea
 	//    the claim is not leaked even if the kill blocks for the full grace.
 	if beadID != "" {
 		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-		body := fmt.Sprintf(
-			"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
-			id, runtime.Round(time.Second), stalled.Round(time.Second), pid, reason,
-		)
-		_ = store.AppendEvent(beadID, bead.BeadEvent{
-			Kind:      "bead.reaped",
-			Summary:   reason,
-			Body:      body,
-			Actor:     "ddx-watchdog",
-			Source:    "server-workers",
-			CreatedAt: now,
-		})
-		_ = store.Unclaim(beadID)
+		if releaseAssignee, ok := workerReleaseAssigneeByID(store, beadID, id); ok {
+			body := fmt.Sprintf(
+				"worker=%s runtime=%s stalled=%s pid=%d reason=%s",
+				id, runtime.Round(time.Second), stalled.Round(time.Second), pid, reason,
+			)
+			_ = store.AppendEvent(beadID, bead.BeadEvent{
+				Kind:      "bead.reaped",
+				Summary:   reason,
+				Body:      body,
+				Actor:     "ddx-watchdog",
+				Source:    "server-workers",
+				CreatedAt: now,
+			})
+			_ = store.Release(beadID, releaseAssignee, bead.StatusOpen)
+		}
 	}
 
 	// 2. Escalate to the worker process group if we know the PID.
