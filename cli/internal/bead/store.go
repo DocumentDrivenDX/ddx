@@ -3179,18 +3179,36 @@ func detectPrefix(workingDir string) string {
 	cmd := gitpkg.Command(context.Background(), workingDir, "rev-parse", "--show-toplevel")
 	if out, err := cmd.Output(); err == nil {
 		root := strings.TrimSpace(string(out))
-		if root != "" {
-			return filepath.Base(root)
+		if prefix := validateIDPrefix(filepath.Base(root)); prefix != "" {
+			return prefix
 		}
 	}
 	// Fall back to the provided working dir, then cwd.
 	if workingDir != "" {
-		return filepath.Base(workingDir)
+		if prefix := validateIDPrefix(filepath.Base(workingDir)); prefix != "" {
+			return prefix
+		}
+		return DefaultPrefix
 	}
 	if wd, err := os.Getwd(); err == nil {
-		return filepath.Base(wd)
+		if prefix := validateIDPrefix(filepath.Base(wd)); prefix != "" {
+			return prefix
+		}
 	}
 	return DefaultPrefix
+}
+
+// validateIDPrefix returns a prefix that can be safely combined with the
+// generator's default hex suffix and still pass ValidateID. Invalid candidates
+// fall back to the empty string so callers can keep searching.
+func validateIDPrefix(prefix string) string {
+	if prefix == "" || strings.ContainsAny(prefix, "./") {
+		return ""
+	}
+	if err := ValidateID(prefix + strings.Repeat("0", 8)); err != nil {
+		return ""
+	}
+	return prefix
 }
 
 // workingDir returns the project root for git operations. When Dir is the

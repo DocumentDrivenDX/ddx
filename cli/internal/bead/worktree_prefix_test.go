@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
@@ -72,4 +73,35 @@ func TestDetectPrefix_WorktreeDir(t *testing.T) {
 	prefix := detectPrefix(projectDir)
 	assert.Equal(t, "ddx", prefix,
 		"detectPrefix should return the project dir name, not the worktree cwd")
+}
+
+func TestDetectPrefixRejectsInvalidWorktreePrefix(t *testing.T) {
+	worktreeDir := filepath.Join(t.TempDir(), ".execute-bead-wt-123")
+	require.NoError(t, os.MkdirAll(worktreeDir, 0o755))
+
+	prefix := detectPrefix(worktreeDir)
+	require.Equal(t, DefaultPrefix, prefix)
+}
+
+func TestDetectPrefixReturnsOnlyValidateIDCompatiblePrefix(t *testing.T) {
+	t.Run("accepts validate-id-compatible basename", func(t *testing.T) {
+		projectDir := filepath.Join(t.TempDir(), "ddx")
+		require.NoError(t, os.MkdirAll(projectDir, 0o755))
+
+		prefix := detectPrefix(projectDir)
+		require.Equal(t, "ddx", prefix)
+	})
+
+	t.Run("rejects leading dot", func(t *testing.T) {
+		worktreeDir := filepath.Join(t.TempDir(), ".execute-bead-wt-123")
+		require.NoError(t, os.MkdirAll(worktreeDir, 0o755))
+
+		prefix := detectPrefix(worktreeDir)
+		require.Equal(t, DefaultPrefix, prefix)
+	})
+
+	t.Run("rejects slash and overlong prefixes", func(t *testing.T) {
+		require.Empty(t, validateIDPrefix("foo/bar"))
+		require.Empty(t, validateIDPrefix(strings.Repeat("a", 57)))
+	})
 }
