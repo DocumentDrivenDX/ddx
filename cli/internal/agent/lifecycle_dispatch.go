@@ -108,7 +108,7 @@ func captureLifecycleProjectStatus(projectRoot string) (lifecycleProjectStatusSn
 		detail := strings.TrimSpace(firstNonEmpty(repair.StatusStderr, repair.StatusOutput))
 		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %s", detail)
 	}
-	out, err := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
+	out, err := internalgit.CommandNoOptionalLocks(context.Background(), projectRoot, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
 	if err != nil {
 		return lifecycleProjectStatusSnapshot{}, fmt.Errorf("lifecycle dispatch: snapshot project root dirtiness: %s: %w", strings.TrimSpace(string(out)), err)
 	}

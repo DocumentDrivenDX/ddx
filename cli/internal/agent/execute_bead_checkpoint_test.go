@@ -14,9 +14,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
+	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,6 +185,28 @@ func TestCheckpointPreDispatchDirtIgnoresRunStateFiles(t *testing.T) {
 	requireHeadMissingPath(t, projectRoot, runStateRootRel)
 	requireHeadMissingPath(t, projectRoot, runStateAttemptRel)
 	requireUntrackedOrIgnoredStatusEntries(t, projectRoot, runStateRootRel, runStateAttemptRel)
+}
+
+func TestCheckpointPreDispatchDirtRecoversStaleIndexLockBeforeSync(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260616T000001-index-lock"
+	metricsRel := filepath.Join(ddxroot.DirName, "metrics", "attempts.jsonl")
+	writeCheckpointTestFile(t, projectRoot, metricsRel, `{"attempt_id":"`+attemptID+`","outcome":"success"}`+"\n")
+
+	prevStaleAge := gitlock.StaleAge
+	gitlock.StaleAge = time.Millisecond
+	t.Cleanup(func() { gitlock.StaleAge = prevStaleAge })
+
+	lockPath := filepath.Join(projectRoot, ".git", "index.lock")
+	require.NoError(t, os.WriteFile(lockPath, nil, 0o644))
+	old := time.Now().Add(-time.Second)
+	require.NoError(t, os.Chtimes(lockPath, old, old))
+
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.True(t, committed, "durable metrics dirt should still checkpoint")
+	require.NoFileExists(t, lockPath, "stale real-index lock must be recovered before checkpoint sync")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+filepath.ToSlash(metricsRel)), attemptID)
 }
 
 func TestCheckpointPreDispatchDirtIgnoresEmbeddedExecutionPrivateFiles(t *testing.T) {

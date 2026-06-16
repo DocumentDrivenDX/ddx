@@ -282,7 +282,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput(); err != nil {
 		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", strings.TrimSpace(string(out)), err)
 	}
-	if out, err := internalgit.Command(context.Background(), projectRoot, "read-tree", "HEAD").CombinedOutput(); err != nil {
+	if out, err := runGitWithIndexLockRecovery(context.Background(), projectRoot, "read-tree", "HEAD"); err != nil {
 		return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
@@ -379,7 +379,7 @@ func isMaterializedSkillSymlink(projectRoot, path string) bool {
 }
 
 func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
-	out, err := internalgit.Command(context.Background(), projectRoot,
+	out, err := internalgit.CommandNoOptionalLocks(context.Background(), projectRoot,
 		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("listing checkpoint dirt: %s: %w", strings.TrimSpace(string(out)), err)

@@ -78,12 +78,12 @@ func (r *RealGitOps) DeleteRef(dir, ref string) error {
 
 // IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).
 func (r *RealGitOps) IsDirty(dir string) (bool, error) {
-	out, _ := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--", ".", ":(exclude)"+ExecutionCleanupMetadataFileName).Output()
+	out, _ := internalgit.CommandNoOptionalLocks(context.Background(), dir, "status", "--porcelain", "--", ".", ":(exclude)"+ExecutionCleanupMetadataFileName).Output()
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
 func dirtyWorktreePaths(dir string) []string {
-	out, err := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--untracked-files=all").Output()
+	out, err := internalgit.CommandNoOptionalLocks(context.Background(), dir, "status", "--porcelain", "--untracked-files=all").Output()
 	if err != nil {
 		return nil
 	}

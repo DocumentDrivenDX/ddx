@@ -175,7 +175,7 @@ func RepairKnownConfigCorruption(ctx context.Context, workingDir string) RepairR
 		}
 	}
 
-	statusOut, statusErr := gitpkg.Command(ctx, workingDir, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
+	statusOut, statusErr := gitpkg.CommandNoOptionalLocks(ctx, workingDir, "status", "--porcelain", "--untracked-files=all").CombinedOutput()
 	result.StatusOutput, result.StatusStderr = splitGitCombinedOutput(statusOut)
 	result.StatusSucceeded = statusErr == nil
 	if statusErr != nil {

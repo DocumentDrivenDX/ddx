@@ -484,7 +484,7 @@ func CanonicalRootDirtyPaths(projectRoot string) []string {
 	if projectRoot == "" {
 		return nil
 	}
-	out, err := internalgit.Command(context.Background(), projectRoot, "status", "--porcelain").Output()
+	out, err := internalgit.CommandNoOptionalLocks(context.Background(), projectRoot, "status", "--porcelain").Output()
 	if err != nil {
 		return nil
 	}
@@ -525,7 +525,7 @@ func integrityDirtyPaths(wtPath string) []string {
 	if wtPath == "" {
 		return nil
 	}
-	out, err := internalgit.Command(context.Background(), wtPath, "status", "--porcelain").Output()
+	out, err := internalgit.CommandNoOptionalLocks(context.Background(), wtPath, "status", "--porcelain").Output()
 	if err != nil {
 		return nil
 	}
