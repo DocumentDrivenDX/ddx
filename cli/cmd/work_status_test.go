@@ -8,10 +8,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -814,6 +816,121 @@ func TestWorkStatusIncludesServerManagedWorkerRecord(t *testing.T) {
 	assert.Contains(t, textOut, "attempt=20260615T061500-server1")
 }
 
+// TestServerStartupReconcileReplacesTerminatedWorker_ProductionPath proves the
+// real worker-manager reconcile path starts fresh server-managed workers for
+// desired projects after restart and that `ddx work status --json --project`
+// only reports the intended live workers, not dead leftovers from a previous
+// run.
+func TestServerStartupReconcileReplacesTerminatedWorker_ProductionPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("process-backed worker startup is unix-oriented")
+	}
+
+	execRoot := filepath.Join(t.TempDir(), "exec-wt")
+	t.Setenv("DDX_EXEC_WT_DIR", execRoot)
+
+	projectA := t.TempDir()
+	projectB := t.TempDir()
+	staleRoot := t.TempDir()
+	for _, root := range []string{projectA, projectB, staleRoot} {
+		store := bead.NewStore(filepath.Join(root, ddxroot.DirName))
+		require.NoError(t, store.Init(context.Background()))
+	}
+
+	require.NoError(t, serverpkg.SaveWorkerDesiredState(projectA, &serverpkg.WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  serverpkg.WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      serverpkg.WorkerRestartPolicy{Enabled: true},
+	}))
+	require.NoError(t, serverpkg.SaveWorkerDesiredState(projectB, &serverpkg.WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  serverpkg.WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      serverpkg.WorkerRestartPolicy{Enabled: true},
+	}))
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	require.NoError(t, os.WriteFile(workerPath, []byte("#!/bin/sh\nset -eu\nsleep 60 &\nwait\n"), 0o755))
+
+	deadPID := deadProcessPID(t)
+	deadAlive := false
+	now := time.Now().UTC()
+	writeServerWorkerRecordForStatusTest(t, projectA, serverpkg.WorkerRecord{
+		ID:          "worker-project-a-stale",
+		Kind:        "execute-loop",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: projectA,
+		PID:         deadPID,
+		PIDAlive:    &deadAlive,
+		StartedAt:   now.Add(-10 * time.Minute),
+	})
+	writeServerWorkerRecordForStatusTest(t, staleRoot, serverpkg.WorkerRecord{
+		ID:          "worker-stale-project",
+		Kind:        "execute-loop",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: staleRoot,
+		PID:         deadPID,
+		PIDAlive:    &deadAlive,
+		StartedAt:   now.Add(-10 * time.Minute),
+	})
+
+	var managers []*serverpkg.WorkerManager
+	newManager := func(projectRoot string) *serverpkg.WorkerManager {
+		m := serverpkg.NewWorkerManager(projectRoot)
+		setWorkerBinaryPathForTest(t, m, workerPath)
+		m.WatchdogKillGrace = 100 * time.Millisecond
+		managers = append(managers, m)
+		return m
+	}
+	t.Cleanup(func() {
+		for _, m := range managers {
+			m.StopAll()
+		}
+	})
+
+	resA, err := newManager(projectA).ReconcileDesiredWorkers()
+	require.NoError(t, err)
+	require.Len(t, resA.Started, 1, "project A must regain exactly one managed worker after restart")
+	require.Empty(t, resA.Errors)
+	assert.NotEqual(t, "worker-project-a-stale", resA.Started[0], "restart must replace the stale record with a fresh worker")
+
+	resB, err := newManager(projectB).ReconcileDesiredWorkers()
+	require.NoError(t, err)
+	require.Len(t, resB.Started, 1, "project B must start exactly one managed worker")
+	require.Empty(t, resB.Errors)
+
+	statusFor := func(projectRoot string) WorkStatusReport {
+		factory := NewCommandFactory(projectRoot)
+		factory.workerScannerOverride = fixedScanner{workers: nil}
+		out, err := executeCommand(factory.NewRootCommand(), "work", "status", "--project", projectRoot, "--json")
+		require.NoError(t, err)
+
+		var report WorkStatusReport
+		require.NoError(t, json.Unmarshal([]byte(out), &report))
+		return report
+	}
+
+	reportA := statusFor(projectA)
+	require.Len(t, reportA.Workers, 1, "project A status must show exactly one live worker")
+	assert.Equal(t, "project", reportA.Scope)
+	assert.Equal(t, projectA, reportA.ProjectRoot)
+	assert.Equal(t, projectA, reportA.Workers[0].ProjectRoot)
+	assert.Contains(t, reportA.Workers[0].Command, "server-managed ddx work")
+	assert.Equal(t, "running", reportA.Workers[0].Phase)
+	assert.NotZero(t, reportA.Workers[0].AgeSeconds)
+	assert.False(t, reportA.Workers[0].LastActivityAt.IsZero())
+
+	reportB := statusFor(projectB)
+	require.Len(t, reportB.Workers, 1, "project B status must show exactly one live worker")
+	assert.Equal(t, projectB, reportB.ProjectRoot)
+	assert.Equal(t, projectB, reportB.Workers[0].ProjectRoot)
+
+	reportStale := statusFor(staleRoot)
+	assert.Empty(t, reportStale.Workers, "unrelated stale project must not surface as live after restart")
+}
+
 func TestWorkStatusFillsServerManagedAttemptFromRunState(t *testing.T) {
 	projectRoot := t.TempDir()
 	now := time.Now().UTC()
@@ -1021,6 +1138,15 @@ func TestWorkStatusEnrichesServerManagedProcessFromClaimSnapshot(t *testing.T) {
 	require.NotEmpty(t, report.ActiveWork.Records)
 	assert.Equal(t, workerID, report.ActiveWork.Records[0].WorkerID)
 	assert.Equal(t, beadID, report.ActiveWork.Records[0].BeadID)
+}
+
+func setWorkerBinaryPathForTest(t *testing.T, m *serverpkg.WorkerManager, path string) {
+	t.Helper()
+
+	field := reflect.ValueOf(m).Elem().FieldByName("workerBinaryPath")
+	require.True(t, field.IsValid(), "workerBinaryPath field must exist")
+	require.True(t, field.CanAddr(), "workerBinaryPath field must be addressable")
+	reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().SetString(path)
 }
 
 func writeServerWorkerRecordForStatusTest(t *testing.T, projectRoot string, rec serverpkg.WorkerRecord) {
