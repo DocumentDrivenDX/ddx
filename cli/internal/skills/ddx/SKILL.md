@@ -117,8 +117,12 @@ exact definitions.
   isolated context (Claude Code's `.claude/agents/` + `context:
   fork`; Codex's `agents/`; others differ). DDx does not specify subagent
   orchestration; that remains harness business.
-- **Update** — refresh plugin/toolkit content to a newer version.
-  `ddx update [<plugin>]`.
+- **Plugin sync** — recreate project-local generated adapters from the project
+  plugin lock plus XDG cache. `ddx plugin sync`.
+- **Plugin upgrade** — move one or more marketplace plugin locks to newer
+  versions and refresh adapters. `ddx plugin upgrade [<plugin>]`.
+- **Update** — compatibility refresh for generated DDx adapters only. It does
+  not upgrade marketplace plugins; use `ddx plugin upgrade` for that.
 - **Upgrade** — replace the DDx binary with a newer release.
   `ddx upgrade`.
 - **Review** — two distinct concepts. **Bead review**
