@@ -19,10 +19,95 @@ func TestDefaultConfig_Basic(t *testing.T) {
 	config := DefaultNewConfig()
 
 	assert.Equal(t, "1.0", config.Version)
-	assert.Equal(t, ".ddx/plugins/ddx", config.Library.Path)
+	assert.Empty(t, config.Library.Path)
 	assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", config.Library.Repository.URL)
 	assert.Equal(t, "main", config.Library.Repository.Branch)
 	assert.Empty(t, config.PersonaBindings)
+}
+
+func TestDefaultNewConfigDoesNotSetBuiltinProjectPayloadPath(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultNewConfig()
+
+	require.NotNil(t, cfg.Library)
+	require.NotNil(t, cfg.Library.Repository)
+	assert.Empty(t, cfg.Library.Path)
+	assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", cfg.Library.Repository.URL)
+	assert.Equal(t, "main", cfg.Library.Repository.Branch)
+}
+
+func TestApplyDefaultsPreservesExplicitLibraryPath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		path string
+	}{
+		{
+			name: "custom overlay",
+			path: "./local-library",
+		},
+		{
+			name: "legacy project payload overlay",
+			path: ".ddx/plugins/ddx",
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &NewConfig{
+				Library: &LibraryConfig{
+					Path: tt.path,
+				},
+			}
+
+			cfg.ApplyDefaults()
+
+			require.NotNil(t, cfg.Library)
+			assert.Equal(t, tt.path, cfg.Library.Path)
+			require.NotNil(t, cfg.Library.Repository)
+			assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", cfg.Library.Repository.URL)
+			assert.Equal(t, "main", cfg.Library.Repository.Branch)
+		})
+	}
+}
+
+func TestApplyDefaultsDoesNotInventBuiltinProjectPayloadPath(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing library", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &NewConfig{}
+
+		cfg.ApplyDefaults()
+
+		require.NotNil(t, cfg.Library)
+		assert.Empty(t, cfg.Library.Path)
+		require.NotNil(t, cfg.Library.Repository)
+		assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", cfg.Library.Repository.URL)
+		assert.Equal(t, "main", cfg.Library.Repository.Branch)
+	})
+
+	t.Run("empty library path", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := &NewConfig{
+			Library: &LibraryConfig{},
+		}
+
+		cfg.ApplyDefaults()
+
+		require.NotNil(t, cfg.Library)
+		assert.Empty(t, cfg.Library.Path)
+		require.NotNil(t, cfg.Library.Repository)
+		assert.Equal(t, "https://github.com/DocumentDrivenDX/ddx-library", cfg.Library.Repository.URL)
+		assert.Equal(t, "main", cfg.Library.Repository.Branch)
+	})
 }
 
 // TestLoadConfig_DefaultOnly tests loading when no config files exist

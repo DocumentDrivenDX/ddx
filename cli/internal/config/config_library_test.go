@@ -105,10 +105,9 @@ func TestResolveLibraryResource_FallbackWithoutConfig(t *testing.T) {
 	t.Setenv("HOME", tempDir)
 	t.Setenv("DDX_LIBRARY_BASE_PATH", "")
 
-	// No config.yaml written. LoadWithWorkingDir returns DefaultConfig whose
-	// Library.Path is ".ddx/plugins/ddx" (does not exist), so the resolver
-	// returns that joined path. We assert the documented behavior: result
-	// ends with the resource path.
+	// No config.yaml written. LoadWithWorkingDir returns DefaultConfig with an
+	// empty Library.Path, so the resolver falls back to the working directory.
+	// We assert the documented behavior: result ends with the resource path.
 	got, err := ResolveLibraryResource("prompts/x.md", "", tempDir)
 	require.NoError(t, err)
 	assert.True(t, filepath.IsAbs(got) || got != "", "expected non-empty result, got %q", got)
