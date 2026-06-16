@@ -1,9 +1,8 @@
 {
   "attempt_id": "20260616T012509-0eada5cb",
   "bead_id": "ddx-82a0664c",
-  "trigger": "running_phase_non_route_provider_child",
-  "active_route": "claude-tui",
-  "scanned_at": "2026-06-16T01:36:14.505013748Z",
+  "trigger": "context canceled",
+  "scanned_at": "2026-06-16T01:45:31.190380789Z",
   "reaped": [
     {
       "pid": 961495,
@@ -52,6 +51,30 @@
       "age_seconds": 0,
       "action": "terminated",
       "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1116467,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1116585,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 931695,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 1202,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
     }
   ]
 }
