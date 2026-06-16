@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260616T125546-d24bf028",
+  "bead_id": "ddx-71d3a2de",
+  "base_rev": "cb76c2311f41f14d45da9ce91370db0365358e39",
+  "created_at": "2026-06-16T12:55:53.168125094Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71d3a2de",
+    "title": "A: Archive + Interchange — add ctx, satisfy BeadArchive/InterchangeR/W; signature-only (TD-027 §6)",
+    "description": "# PROBLEM\n`*Store` exposes 6 archive/interchange methods (`Archive`, `ArchiveWithEvents`, `Migrate`, `Import`, `ExportTo`, `ExportToFile`). Per TD-027 §6 archive belongs on `BeadArchive` interface; interchange on `BeadInterchangeReader`/`BeadInterchangeWriter`. All take ctx per AC #1. These are signature-only changes — no helper migration needed; the methods stay as direct storage primitives.\n\n# ROOT CAUSE\n`cli/internal/bead/store.go`, `cli/internal/bead/archive.go`, `cli/internal/bead/import.go` define these 6 methods without ctx. Callers: `cli/cmd/bead_archive.go`, `cli/cmd/bead.go` (export/import subcommands).\n\n# PROPOSED FIX\n1. Update `*Store.Archive`, `ArchiveWithEvents`, `Migrate`, `Import`, `ExportTo`, `ExportToFile` to take `ctx context.Context` first.\n2. Compile-time assertions: `var _ BeadArchive = (*Store)(nil)`, `var _ BeadInterchangeReader = (*Store)(nil)`, `var _ BeadInterchangeWriter = (*Store)(nil)`.\n3. Thread ctx through callers (`cli/cmd/bead_archive.go`, `cli/cmd/bead.go`).\n\n# NON-SCOPE\n- Archive policy (TD-027 §16) — not modified.\n- Attachment storage layout (TD-027 §17) — not modified.\n- bd/br interchange shape (TD-027 §20) — wire format unchanged.\n- Migration tooling (`MigrateLifecycle`/`MigrateFromHelix`/etc.) — separate concern, handled in MIG bead.\n- Other concerns — separate beads.\n- Module boundary lockdown — `ddx-74452926`.\n\n# Acceptance criteria\n\n1. The 6 methods take ctx as first parameter. Compile-time assertions for `BeadArchive`, `BeadInterchangeReader`, `BeadInterchangeWriter` compile.\n2. Callers thread ctx. Existing archive/import/export tests pass.\n3. `ddx bead archive`, `ddx bead export`, `ddx bead import` CLI commands continue to work end-to-end. Test: `TestBeadArchiveCommand_RoundTrip`, `TestBeadExportImport_RoundTripsAllFields`.\n4. Schema round-trip preserved (per TD-027 §20 — bd/br interchange compatibility). Test: `TestBead_ExportImportRoundTrip_PreservesExtras`.\n5. `cd cli \u0026\u0026 go test ./...` is green.\n6. `lefthook run pre-commit` passes.\n\n# Labels\nphase:iterate, area:bead, area:archive, area:interchange, kind:refactor, spec:TD-027\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: ddx-c6317784.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "area:archive",
+      "area:bead",
+      "area:interchange",
+      "kind:refactor",
+      "phase:iterate",
+      "spec:TD-027"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-14T04:10:22.980177713Z",
+          "kind": "cooldown-cleared",
+          "source": "ddx work clear-cooldowns",
+          "summary": "operator-bulk-clear"
+        },
+        {
+          "actor": "ddx bead doctor",
+          "body": "dependencies→removed dangling ddx-c6317784 (1 edge(s))",
+          "created_at": "2026-06-08T04:25:18.448253792Z",
+          "kind": "repair",
+          "source": "ddx bead doctor --fix",
+          "summary": "doctor repair applied: 1 change(s)"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260616T121732-a4c1 state=failed reason=terminal-worker-claim",
+          "created_at": "2026-06-16T12:48:13.525532302Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "terminal-worker-claim"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260616T125546-d24bf028",
+    "prompt": ".ddx/executions/20260616T125546-d24bf028/prompt.md",
+    "manifest": ".ddx/executions/20260616T125546-d24bf028/manifest.json",
+    "result": ".ddx/executions/20260616T125546-d24bf028/result.json",
+    "checks": ".ddx/executions/20260616T125546-d24bf028/checks.json",
+    "usage": ".ddx/executions/20260616T125546-d24bf028/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-71d3a2de-20260616T125546-d24bf028"
+  },
+  "prompt_sha": "9d3d8118eb71fd44c429c78c3efe0922623bda9de1feb374ebd9be5debb5e9b5"
+}

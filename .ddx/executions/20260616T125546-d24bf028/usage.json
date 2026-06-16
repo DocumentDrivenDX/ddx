@@ -1,0 +1,10 @@
+{
+  "attempt_id": "20260616T125546-d24bf028",
+  "harness": "claude-tui",
+  "model": "sonnet-4.6",
+  "tokens": 0,
+  "input_tokens": 1,
+  "cached_tokens": 131337,
+  "cache_hit_rate": 0.9999923860573482,
+  "output_tokens": 79
+}
