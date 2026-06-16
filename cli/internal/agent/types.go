@@ -90,6 +90,11 @@ type AgentRunRuntime struct {
 	// implementer's actual selected power, biasing routing toward a stronger
 	// reviewer model (R4 pairing: reviewer >= impl + 1 power).
 	MinPowerOverride int
+	// RequestTimeoutOverride, when > 0, overrides the DDx-side absolute
+	// provider-session wall-clock cap for this single invocation. Review
+	// dispatches use this to stay bounded even when the project has no
+	// request_timeout configured.
+	RequestTimeoutOverride time.Duration
 	// ClearMinPower drops rcfg.MinPower() for this single invocation. Auxiliary
 	// lifecycle classifier calls should not inherit implementation power bounds;
 	// Fizeau owns routing for those hidden dispatches.
