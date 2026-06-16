@@ -1110,19 +1110,23 @@ func (s *Store) Release(id, assignee, targetStatus string) error {
 			}
 			if assignee != "" {
 				trackerOwner := strings.TrimSpace(beads[i].Owner)
-				lease, leaseFound, leaseErr := s.readClaimHeartbeat(id)
-				if leaseErr != nil {
-					return leaseErr
-				}
-				leaseOwner := ""
-				if leaseFound {
-					leaseOwner = strings.TrimSpace(lease.Owner)
-				}
 				if trackerOwner != "" && trackerOwner != assignee {
 					return nil
 				}
-				if leaseOwner != "" && leaseOwner != assignee {
-					return nil
+				leaseFound := false
+				if trackerOwner == "" {
+					lease, found, leaseErr := s.readClaimHeartbeat(id)
+					if leaseErr != nil {
+						return leaseErr
+					}
+					leaseFound = found
+					leaseOwner := ""
+					if leaseFound {
+						leaseOwner = strings.TrimSpace(lease.Owner)
+					}
+					if leaseOwner != "" && leaseOwner != assignee {
+						return nil
+					}
 				}
 				if trackerOwner == "" && !leaseFound && beads[i].Status != StatusInProgress {
 					return nil
