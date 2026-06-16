@@ -45,6 +45,14 @@ wait
 `)
 }
 
+func writeDelayedFailWorkerScript(t *testing.T, path string) {
+	t.Helper()
+	writeTestScript(t, path, `
+sleep 0.2
+exit 137
+`)
+}
+
 func waitForProcessGroupEmpty(t *testing.T, pgid int) {
 	t.Helper()
 	require.NotZero(t, pgid)
@@ -320,6 +328,50 @@ func TestManagedExternalWorkerExitRefillsDesiredCount(t *testing.T) {
 
 	require.NoError(t, m.Stop(replacement.ID))
 	waitForProcessGroupEmpty(t, replacement.PGID)
+}
+
+func TestManagedExternalWorkerExitReleasesOwnedClaimWithoutCurrentBead(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	workerPath := filepath.Join(t.TempDir(), "ddx-worker")
+	writeDelayedFailWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	defer m.StopAll()
+
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(time.Second),
+	})
+	require.NoError(t, err)
+	require.NoError(t, m.MarkManaged(rec.ID))
+
+	store := seedClaimedBeadByOwner(t, root, "ddx-external-exit-claim", rec.ID)
+	m.mu.Lock()
+	h := m.workers[rec.ID]
+	require.NotNil(t, h)
+	h.record.CurrentBead = ""
+	h.record.CurrentAttempt = nil
+	m.mu.Unlock()
+
+	final := waitForWorkerExit(t, m, rec.ID, 5*time.Second)
+	assert.Equal(t, "failed", final.State)
+
+	b, err := store.Get(context.Background(), "ddx-external-exit-claim")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, b.Status)
+	assert.Empty(t, b.Owner, "terminal external worker must release owned claim even without CurrentBead")
+
+	_, found, err := store.ClaimLease("ddx-external-exit-claim")
+	require.NoError(t, err)
+	assert.False(t, found, "terminal external worker must remove the claim lease")
+
+	events, err := store.EventsByKind("ddx-external-exit-claim", "bead.reaped")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "worker-exit", events[0].Summary)
 }
 
 func TestManagedWorkerStopKillsClaudeCodexDescendants(t *testing.T) {

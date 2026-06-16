@@ -766,7 +766,8 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 	if record.State == "stopped" || record.State == "reaped" {
 		preservedState = record.State
 	}
-	record.FinishedAt = time.Now().UTC()
+	finishedAt := time.Now().UTC()
+	record.FinishedAt = finishedAt
 	record.Substate = ""
 	_ = handle.logFile.Close()
 	if waitErr != nil {
@@ -782,6 +783,28 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 		record.State = preservedState
 		record.Status = preservedState
 		record.Error = ""
+	}
+	if preservedState == "" && record.Managed && isTerminalWorkerState(record.State) {
+		projectRoot := record.ProjectRoot
+		if projectRoot == "" {
+			projectRoot = m.projectRoot
+		}
+		beadID := record.CurrentBead
+		if record.CurrentAttempt != nil && record.CurrentAttempt.BeadID != "" {
+			beadID = record.CurrentAttempt.BeadID
+		}
+		body := fmt.Sprintf("worker=%s state=%s reason=worker-exit error=%s", record.ID, record.State, record.LastError)
+		released := releaseWorkerClaims(projectRoot, record.ID, beadID, finishedAt, bead.BeadEvent{
+			Kind:      "bead.reaped",
+			Summary:   "worker-exit",
+			Body:      body,
+			Actor:     "ddx-server",
+			Source:    "server-workers",
+			CreatedAt: finishedAt,
+		})
+		if beadID == "" && len(released) > 0 {
+			record.CurrentBead = released[0]
+		}
 	}
 	_ = m.writeRecord(dir, record)
 	handle.record = record
