@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
-	"gopkg.in/yaml.v3"
 )
 
 func TestListMCPServers_Empty(t *testing.T) {
@@ -122,29 +122,29 @@ func TestListPlugins_WithData(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	ddxDir := filepath.Join(home, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	state := registry.InstalledState{
-		Installed: []registry.InstalledEntry{
+	cacheDir := t.TempDir()
+	if err := registry.SaveProjectPluginLock(context.Background(), dir, &registry.PluginLock{
+		Plugins: []registry.PluginLockEntry{
 			{
 				Name:        "helix",
 				Version:     "0.3.2",
 				Type:        registry.PackageTypeWorkflow,
 				Source:      "https://github.com/DocumentDrivenDX/helix",
+				CachePath:   cacheDir,
 				InstalledAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+				GeneratedFiles: []string{
+					filepath.Join(".agents", "skills", "helix"),
+					filepath.Join(".claude", "skills", "helix"),
+				},
 			},
 		},
-	}
-	data, err := yaml.Marshal(state)
-	if err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(ddxDir, "installed.yaml"), data, 0o644); err != nil {
-		t.Fatal(err)
+	for _, rel := range []string{".agents/skills/helix", ".claude/skills/helix"} {
+		if err := os.MkdirAll(filepath.Join(dir, filepath.FromSlash(rel)), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/api/plugins", nil)
@@ -167,6 +167,9 @@ func TestListPlugins_WithData(t *testing.T) {
 	}
 	if result[0].Type != "workflow" {
 		t.Errorf("expected workflow, got %q", result[0].Type)
+	}
+	if result[0].Status != "installed" {
+		t.Errorf("expected installed status, got %q", result[0].Status)
 	}
 }
 
@@ -224,28 +227,19 @@ func TestMCPListPluginsToolCall(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	ddxDir := filepath.Join(home, ddxroot.DirName)
-	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	state := registry.InstalledState{
-		Installed: []registry.InstalledEntry{
+	cacheDir := t.TempDir()
+	if err := registry.SaveProjectPluginLock(context.Background(), dir, &registry.PluginLock{
+		Plugins: []registry.PluginLockEntry{
 			{
 				Name:        "ddx",
 				Version:     "0.4.7",
 				Type:        registry.PackageTypePlugin,
 				Source:      "https://github.com/DocumentDrivenDX/ddx",
+				CachePath:   cacheDir,
 				InstalledAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
 			},
 		},
-	}
-	data, err := yaml.Marshal(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(ddxDir, "installed.yaml"), data, 0o644); err != nil {
+	}); err != nil {
 		t.Fatal(err)
 	}
 

@@ -98,6 +98,19 @@ func (l *PluginLock) AddOrUpdate(entry PluginLockEntry) {
 	sort.Slice(l.Plugins, func(i, j int) bool { return l.Plugins[i].Name < l.Plugins[j].Name })
 }
 
+func (l *PluginLock) Remove(name string) bool {
+	if l == nil {
+		return false
+	}
+	for i := range l.Plugins {
+		if l.Plugins[i].Name == name {
+			l.Plugins = append(l.Plugins[:i], l.Plugins[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func PluginCacheDir(name, version string) string {
 	return filepath.Join(filepath.Dir(ddxroot.GlobalDir()), "cache", "plugins", cleanCacheSegment(name), cleanCacheSegment(version))
 }

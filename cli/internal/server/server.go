@@ -4174,10 +4174,12 @@ func (s *Server) pluginMcpTools() []mcpTool {
 		},
 		{
 			Name:        "ddx_list_plugins",
-			Description: "List installed DDx plugins",
+			Description: "List installed DDx plugins for a project",
 			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
+				"type": "object",
+				"properties": map[string]any{
+					"project": mcpProjectProp(),
+				},
 			},
 		},
 	}
@@ -4212,8 +4214,6 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_provider_show":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpProviderShow(harness)
-	case "ddx_list_plugins":
-		return s.mcpListPlugins()
 	}
 
 	// From here on: project-local tools. Resolve the project arg to a working
@@ -4224,6 +4224,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	}
 
 	switch call.Name {
+	case "ddx_list_plugins":
+		return s.mcpListPlugins(workingDir)
 	case "ddx_list_documents":
 		return s.mcpListDocuments(workingDir)
 	case "ddx_read_document":
