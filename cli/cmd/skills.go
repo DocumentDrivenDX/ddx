@@ -28,8 +28,11 @@ Examples:
   ddx skills check
   ddx skills check skills
   ddx skills check .agents/skills
-  ddx skills check .ddx/plugins/ddx
-  ddx skills check .ddx/plugins/helix/skills`,
+  ddx skills check .claude/skills
+  ddx skills check .ddx/plugins/helix/skills
+
+Use .ddx/plugins/ddx only when validating a local development overlay or a
+legacy compatibility install.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},

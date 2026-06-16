@@ -60,7 +60,8 @@ bun run test
 The default Playwright config (`playwright.config.ts`) boots a real `ddx server`
 against a self-contained fixture workspace, so backend-dependent specs hit live
 API endpoints without reading `$HOME`, `~/.config/ddx`, or the repository's live
-`.ddx/` state.
+`.ddx/` state. The fixture exercises the same cache/defaultplugin resolution and
+generated-adapter surfaces that normal installs use.
 
 What `bun run test:e2e` does on each run:
 
@@ -84,11 +85,15 @@ Override the port with `DDX_E2E_PORT` if 4174 is taken.
 
 The fixture lives at `cli/internal/server/frontend/e2e/fixtures/` and contains:
 
-- `.ddx/config.yaml` — minimal DDx config pointing at the local plugin library.
+- `.ddx/config.yaml` — minimal DDx config whose `library.path` points at the
+  fixture's local overlay under `.ddx/plugins/ddx/`.
 - `.ddx/beads.jsonl` — open, closed, and blocked beads so bead endpoints return
   non-empty data.
-- `.ddx/plugins/ddx/` — minimal personas, prompts, and templates so document
-  and persona endpoints have something to list.
+- `.ddx/plugins/ddx/` — local overlay source for the fixture's plugin package;
+  the server resolves it through cache/defaultplugin resolution and materializes
+  generated adapters under `.agents/skills/` and `.claude/skills/`. Use this
+  tree only when you are testing local-overlay or legacy-compatibility
+  behavior.
 - `docs/` — small docs library for the document graph endpoint.
 
 The fixture is treated as read-only: the harness copies it before boot, so test
@@ -102,7 +107,8 @@ the repository's own `.ddx/`. Typical extensions:
 
 - More beads → append JSONL records to `.ddx/beads.jsonl`.
 - New personas, prompts, or templates → add files under
-  `.ddx/plugins/ddx/{personas,prompts,templates}/`.
+  `.ddx/plugins/ddx/{personas,prompts,templates}/` for local overlay or legacy
+  compatibility coverage when a spec needs it.
 - New docs for the document graph → add Markdown under `docs/`.
 
 Keep additions minimal and self-contained; the fixture is the only supported
