@@ -469,6 +469,9 @@ func isLiveServerManagedWorker(rec serverpkg.WorkerRecord, now time.Time) bool {
 	if !rec.FinishedAt.IsZero() {
 		return false
 	}
+	if rec.PID > 0 && rec.PIDAlive != nil && !*rec.PIDAlive {
+		return false
+	}
 	if rec.State == "stopping" && now.Sub(serverWorkerLastActivity(rec, rec.StartedAt)) > 2*time.Minute {
 		return false
 	}

@@ -954,6 +954,39 @@ func TestWorkStatusServerManagedWorkerRecordHonorsProjectScopeAndTerminalState(t
 	assert.Empty(t, report.Workers, "default project scope must not show other-project or terminal server records: %s", out)
 }
 
+func TestWorkStatusServerManagedWorkerRecordHonorsDeadPID(t *testing.T) {
+	projectRoot := t.TempDir()
+	now := time.Now().UTC()
+	pidAlive := false
+	writeServerWorkerRecordForStatusTest(t, projectRoot, serverpkg.WorkerRecord{
+		ID:          "worker-status-server-dead-pid",
+		Kind:        "work",
+		State:       "running",
+		Status:      "running",
+		ProjectRoot: projectRoot,
+		PID:         987654,
+		PIDAlive:    &pidAlive,
+		StartedAt:   now.Add(-3 * time.Minute),
+		CurrentAttempt: &serverpkg.CurrentAttemptInfo{
+			AttemptID: "20260616T120500-deadpid",
+			BeadID:    "ddx-deadpid1",
+			Phase:     "running",
+			StartedAt: now.Add(-3 * time.Minute),
+		},
+	})
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: nil}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	assert.Empty(t, report.Workers, "dead PID-backed server records must not be reported as live: %s", out)
+}
+
 func TestWorkStatusEnrichesServerManagedProcessFromClaimSnapshot(t *testing.T) {
 	projectRoot := t.TempDir()
 	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
