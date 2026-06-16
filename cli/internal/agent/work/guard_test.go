@@ -112,6 +112,7 @@ func TestPreClaimStagedManagedTrackerPaths_SkipWithoutCooldown(t *testing.T) {
 		".ddx/beads-archive.jsonl",
 		".ddx/metrics/attempts.jsonl",
 		".ddx/attachments/example",
+		".ddx/executions/20260616T192004-622cdc4f/provider-children.json",
 	}
 
 	for _, path := range cases {

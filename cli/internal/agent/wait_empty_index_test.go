@@ -97,7 +97,12 @@ func TestWaitForEmptyGitIndex_PreservesOperatorWork(t *testing.T) {
 func TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles(t *testing.T) {
 	r := newLandTestRepo(t)
 
-	for _, rel := range []string{".ddx/beads.jsonl", ".ddx/metrics/attempts.jsonl", ".ddx/beads-archive.jsonl"} {
+	for _, rel := range []string{
+		".ddx/beads.jsonl",
+		".ddx/metrics/attempts.jsonl",
+		".ddx/beads-archive.jsonl",
+		".ddx/executions/20260616T192004-622cdc4f/provider-children.json",
+	} {
 		r.writeFile(rel, "{\"id\":\"ddx-1\"}\n")
 		r.runGit("add", rel)
 	}
@@ -120,6 +125,37 @@ func TestWaitForEmptyGitIndex_IgnoresStagedTrackerFiles(t *testing.T) {
 	// files remain staged for the next durable-audit commit.
 	if got := r.runGit("diff", "--cached", "--name-only"); !strings.Contains(got, ".ddx/beads.jsonl") {
 		t.Fatalf("tracker files must remain staged, got %q", got)
+	}
+}
+
+// TestWaitForEmptyGitIndex_IgnoresStagedExecutionEvidenceDeletion covers the
+// post-land state where a durable cleanup artifact under .ddx/executions/ is
+// deleted in the index. Execution evidence is DDx-owned metadata, not operator
+// code/doc/test work, so it must not block the next worker claim.
+func TestWaitForEmptyGitIndex_IgnoresStagedExecutionEvidenceDeletion(t *testing.T) {
+	r := newLandTestRepo(t)
+	rel := ".ddx/executions/20260616T192004-622cdc4f/provider-children.json"
+
+	r.writeFile(rel, "{\"attempt_id\":\"20260616T192004-622cdc4f\"}\n")
+	r.runGit("add", rel)
+	r.runGit("commit", "-m", "seed execution evidence")
+	r.runGit("rm", rel)
+
+	staged := r.runGit("diff", "--cached", "--name-status")
+	if !strings.Contains(staged, "D\t"+rel) {
+		t.Fatalf("setup did not stage execution evidence deletion; staged=%q", staged)
+	}
+
+	start := time.Now()
+	if err := waitForEmptyGitIndex(r.dir, 2*time.Second); err != nil {
+		t.Fatalf("staged execution evidence deletion must not block pre-claim: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 500*time.Millisecond {
+		t.Fatalf("execution-evidence-only staged state should resolve promptly, took %s", elapsed)
+	}
+
+	if got := r.runGit("diff", "--cached", "--name-status"); !strings.Contains(got, "D\t"+rel) {
+		t.Fatalf("execution evidence deletion must remain staged, got %q", got)
 	}
 }
 

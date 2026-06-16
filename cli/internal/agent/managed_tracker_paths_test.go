@@ -41,3 +41,21 @@ func TestManagedTrackerPathListsStayInSync(t *testing.T) {
 		})
 	}
 }
+
+func TestExecutionEvidenceIsPreClaimOnlyManagedMetadata(t *testing.T) {
+	path := ".ddx/executions/20260616T192004-622cdc4f/provider-children.json"
+
+	require.False(t, trackerpaths.IsManagedTrackerPath(path))
+	require.False(t, work.IsManagedTrackerPath(path))
+	require.True(t, trackerpaths.IsNonBlockingPreClaimPath(path))
+
+	assert.Equal(t, []string{path}, dirtyDurableAuditPaths(" D "+path+"\n"))
+
+	repo := newLandTestRepo(t)
+	repo.writeFile(path, "managed\n")
+	repo.runGit("add", path)
+
+	blocking, ok := blockingStagedPaths(repo.dir)
+	require.True(t, ok)
+	assert.Empty(t, blocking)
+}

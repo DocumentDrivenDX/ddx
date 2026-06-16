@@ -266,10 +266,10 @@ func stagedPathsFromError(msg string) []string {
 	return paths
 }
 
-// isTrackerMetadataPath reports whether a repo-relative path is one of the
-// DDx-managed tracker/metadata files.
+// isTrackerMetadataPath reports whether a repo-relative path is DDx-owned
+// metadata that should not block a worker pre-claim.
 func isTrackerMetadataPath(path string) bool {
-	return trackerpaths.IsManagedTrackerPath(path)
+	return trackerpaths.IsNonBlockingPreClaimPath(path)
 }
 
 type preClaimHookCallResult struct {

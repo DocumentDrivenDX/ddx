@@ -531,13 +531,12 @@ func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
 			return nil
 		}
 		// There are staged changes (or a corrupt index). DDx-managed tracker
-		// files (.ddx/beads.jsonl, .ddx/metrics/attempts.jsonl, …) are
-		// append-mostly metadata that concurrent workers rewrite continuously;
-		// a short wait for them to settle reliably fails on a busy multi-worker
-		// host and wedges the queue (ddx-df77e668). They are not code, and the
-		// next claim rewrites them anyway, so they must never block a claim.
-		// When the only staged paths are tracker files, the landing worktree is
-		// clean for claim purposes.
+		// files and execution evidence are metadata that concurrent workers
+		// rewrite continuously; a short wait for them to settle reliably fails
+		// on a busy multi-worker host and wedges the queue (ddx-df77e668).
+		// They are not code/doc/test work, so they must never block a claim.
+		// When the only staged paths are DDx-owned metadata, the landing
+		// worktree is clean for claim purposes.
 		if blocking, ok := blockingStagedPaths(dir); ok && len(blocking) == 0 {
 			return nil
 		}
@@ -588,10 +587,10 @@ func isRecoverableLandingIndexCorruption(output string) bool {
 }
 
 // blockingStagedPaths returns the staged paths that would genuinely block a
-// claim — i.e. every staged path that is NOT a DDx-managed tracker/metadata
-// file. ok is false when the staged list cannot be read (e.g. a corrupt
-// index), so callers can fall through to their corruption-recovery path
-// instead of mistaking the read failure for "no blocking changes".
+// claim — i.e. every staged path that is NOT DDx-owned metadata. ok is false
+// when the staged list cannot be read (e.g. a corrupt index), so callers can
+// fall through to their corruption-recovery path instead of mistaking the read
+// failure for "no blocking changes".
 func blockingStagedPaths(dir string) (blocking []string, ok bool) {
 	out, err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-only").CombinedOutput()
 	if err != nil {
@@ -599,7 +598,7 @@ func blockingStagedPaths(dir string) (blocking []string, ok bool) {
 	}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		p := strings.TrimSpace(line)
-		if p == "" || trackerpaths.IsManagedTrackerPath(p) {
+		if p == "" || trackerpaths.IsNonBlockingPreClaimPath(p) {
 			continue
 		}
 		blocking = append(blocking, p)
