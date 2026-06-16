@@ -2,6 +2,7 @@ package bead
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -86,7 +87,7 @@ func TestImportRejectsCircularDeps(t *testing.T) {
 {"id":"bx-cyc002","title":"B","issue_type":"task","status":"open","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-cyc002","depends_on_id":"bx-cyc001","type":"blocks"}]}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	_, err := s.Import("jsonl", importFile)
+	_, err := s.Import(context.Background(), "jsonl", importFile)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
 }
@@ -99,7 +100,7 @@ func TestImportNoCycleSucceeds(t *testing.T) {
 {"id":"bx-dag002","title":"Child","issue_type":"task","status":"open","priority":2,"created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-dag002","depends_on_id":"bx-dag001","type":"blocks"}]}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	n, err := s.Import("jsonl", importFile)
+	n, err := s.Import(context.Background(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 }
@@ -121,7 +122,7 @@ func TestExportToChecksWriteErrors(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), &Bead{Title: "A"}))
 	require.NoError(t, s.Create(testCtx(), &Bead{Title: "B"}))
 
-	err := s.ExportTo(&failWriter{})
+	err := s.ExportTo(context.Background(), &failWriter{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "export write")
 }
@@ -143,13 +144,13 @@ func TestExportRoundTripPreservesFields(t *testing.T) {
 
 	// Export
 	var buf bytes.Buffer
-	require.NoError(t, s.ExportTo(&buf))
+	require.NoError(t, s.ExportTo(context.Background(), &buf))
 
 	// Import into fresh store
 	s2 := newTestStore(t)
 	importFile := filepath.Join(t.TempDir(), "roundtrip.jsonl")
 	require.NoError(t, os.WriteFile(importFile, buf.Bytes(), 0o644))
-	n, err := s2.Import("jsonl", importFile)
+	n, err := s2.Import(context.Background(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 

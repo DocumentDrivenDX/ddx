@@ -47,7 +47,7 @@ func (s *Store) archivePartner() *Store {
 // derivation can resolve it without loading the archive.
 //
 // Returns the IDs that were moved.
-func (s *Store) Archive(policy ArchivePolicy) ([]string, error) {
+func (s *Store) Archive(ctx context.Context, policy ArchivePolicy) ([]string, error) {
 	if s.Collection != DefaultCollection {
 		return nil, fmt.Errorf("bead: archive only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
 	}
@@ -219,7 +219,7 @@ func (s *Store) maybeOpportunisticMaintenance() {
 	if err != nil || info.Size() <= DefaultArchiveSizeThreshold {
 		return
 	}
-	_, _ = s.ArchiveWithEvents(ArchivePolicy{
+	_, _ = s.ArchiveWithEvents(context.Background(), ArchivePolicy{
 		Statuses: []string{StatusClosed},
 	})
 }

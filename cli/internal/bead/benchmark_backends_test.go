@@ -17,7 +17,7 @@ func prepareBenchStore(b *testing.B, makeStore benchStoreMaker, beads []Bead) *S
 	policy := defaultArchivePolicy()
 	policy.MinActiveCount = 0
 	policy.MinAge = 30 * 24 * time.Hour
-	_, err := s.Archive(policy)
+	_, err := s.Archive(context.Background(), policy)
 	require.NoError(b, err)
 	return s
 }

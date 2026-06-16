@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -479,8 +480,8 @@ func firstNonEmpty(values ...string) string {
 // Migrate uses a permissive archival policy (MinAge=0, MinActiveCount=0)
 // so it drains the historical backlog. Routine archival (after Close)
 // uses the policy assembled by `ddx bead archive` from its flag set.
-func (s *Store) Migrate() (MigrateStats, error) {
-	return s.ArchiveWithEvents(migratePolicy())
+func (s *Store) Migrate(ctx context.Context) (MigrateStats, error) {
+	return s.ArchiveWithEvents(ctx, migratePolicy())
 }
 
 // migrateDryRun reports what Migrate would do without mutating disk. It uses
@@ -555,7 +556,7 @@ func migratePolicy() ArchivePolicy {
 // matches policy.Statuses, then archives eligible beads under the same
 // policy. This is the operator-facing path used by `ddx bead archive` and
 // the internal path used by `ddx bead migrate`.
-func (s *Store) ArchiveWithEvents(policy ArchivePolicy) (MigrateStats, error) {
+func (s *Store) ArchiveWithEvents(ctx context.Context, policy ArchivePolicy) (MigrateStats, error) {
 	var stats MigrateStats
 	if s.Collection != DefaultCollection {
 		return stats, fmt.Errorf("bead: archive only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
@@ -594,7 +595,7 @@ func (s *Store) ArchiveWithEvents(policy ArchivePolicy) (MigrateStats, error) {
 		return stats, fmt.Errorf("bead: archive externalize: %w", err)
 	}
 
-	moved, err := s.Archive(policy)
+	moved, err := s.Archive(ctx, policy)
 	if err != nil {
 		return stats, fmt.Errorf("bead: archive: %w", err)
 	}

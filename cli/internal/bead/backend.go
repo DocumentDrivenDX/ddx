@@ -63,12 +63,12 @@ type Backend interface {
 	Events(id string) ([]BeadEvent, error)
 
 	// Archive split
-	Archive(policy ArchivePolicy) ([]string, error)
-	Migrate() (MigrateStats, error)
+	Archive(ctx context.Context, policy ArchivePolicy) ([]string, error)
+	Migrate(ctx context.Context) (MigrateStats, error)
 
 	// JSONL interchange
-	Import(source, filePath string) (int, error)
-	ExportTo(w io.Writer) error
+	Import(ctx context.Context, source, filePath string) (int, error)
+	ExportTo(ctx context.Context, w io.Writer) error
 }
 
 // TD-027 foundation interfaces. These are additive and intentionally do not

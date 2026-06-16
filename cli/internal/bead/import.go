@@ -13,7 +13,7 @@ import (
 
 // Import reads beads from an external source and merges them into the store.
 // Returns the number of beads imported.
-func (s *Store) Import(source, filePath string) (int, error) {
+func (s *Store) Import(ctx context.Context, source, filePath string) (int, error) {
 	if source == "" || source == "auto" {
 		return s.importAuto(filePath)
 	}
@@ -43,7 +43,7 @@ func (s *Store) Import(source, filePath string) (int, error) {
 // the full corpus. Each archived bead's externalized events are loaded from
 // the active store's attachment dir (where Migrate writes them) before
 // emission.
-func (s *Store) ExportTo(w io.Writer) error {
+func (s *Store) ExportTo(ctx context.Context, w io.Writer) error {
 	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func (s *Store) ExportTo(w io.Writer) error {
 }
 
 // ExportToFile writes all beads as JSONL to the given file path.
-func (s *Store) ExportToFile(filePath string) error {
+func (s *Store) ExportToFile(ctx context.Context, filePath string) error {
 	dir := filepath.Dir(filePath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("bead: export mkdir: %w", err)
@@ -110,7 +110,7 @@ func (s *Store) ExportToFile(filePath string) error {
 		return fmt.Errorf("bead: export create: %w", err)
 	}
 	defer f.Close()
-	return s.ExportTo(f)
+	return s.ExportTo(ctx, f)
 }
 
 // migrateFromHelix checks for .helix/issues.jsonl and imports beads into the

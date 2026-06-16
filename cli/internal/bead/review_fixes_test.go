@@ -2,6 +2,7 @@ package bead
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,7 +115,7 @@ func TestImportAllMalformedReportsError(t *testing.T) {
 	importFile := filepath.Join(t.TempDir(), "bad.jsonl")
 	require.NoError(t, os.WriteFile(importFile, []byte("not json\nalso bad\n"), 0o644))
 
-	_, err := s.Import("jsonl", importFile)
+	_, err := s.Import(context.Background(), "jsonl", importFile)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "malformed")
 }
@@ -126,7 +127,7 @@ func TestExportToWriter(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Export test"}))
 
 	var buf bytes.Buffer
-	require.NoError(t, s.ExportTo(&buf))
+	require.NoError(t, s.ExportTo(context.Background(), &buf))
 
 	assert.Contains(t, buf.String(), "Export test")
 	assert.Contains(t, buf.String(), `"title"`)
@@ -141,7 +142,7 @@ func TestImportRejectsInvalidStatus(t *testing.T) {
 	jsonl := `{"id":"bx-bad00001","title":"Bad status","type":"task","status":"garbage","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	n, err := s.Import("jsonl", importFile)
+	n, err := s.Import(context.Background(), "jsonl", importFile)
 	require.Error(t, err)
 	assert.Equal(t, 0, n)
 	assert.Contains(t, err.Error(), "invalid lifecycle status")
@@ -157,7 +158,7 @@ func TestImportClampsPriority(t *testing.T) {
 	jsonl := `{"id":"bx-pri00001","title":"High pri","type":"task","status":"open","priority":99,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
-	n, err := s.Import("jsonl", importFile)
+	n, err := s.Import(context.Background(), "jsonl", importFile)
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
