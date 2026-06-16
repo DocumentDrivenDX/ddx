@@ -37,13 +37,14 @@ func writeRegistryInstalled(t *testing.T, entries []registry.InstalledEntry) {
 	require.NoError(t, registry.SaveState(state))
 }
 
-// TestUpdate_ForceReplacesStaleSymlinks verifies that ddx update --force
-// replaces legacy symlinks under .agents/skills/ with real files.
-// This covers the FEAT-015 requirement that skills.Install is always invoked
-// with Force:true during update (via refreshShippedSkills).
-func TestUpdate_ForceReplacesStaleSymlinks(t *testing.T) {
+// TestUpdate_ForceReplacesStaleSymlinksWithCacheBackedAdapter verifies that
+// ddx update --force replaces legacy links under .agents/skills/ with the
+// cache-backed built-in DDx adapter.
+func TestUpdate_ForceReplacesStaleSymlinksWithCacheBackedAdapter(t *testing.T) {
 	homeDir := t.TempDir()
+	xdgDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
+	t.Setenv("XDG_DATA_HOME", xdgDir)
 
 	te := NewTestEnvironment(t, WithGitInit(false))
 
@@ -61,25 +62,19 @@ func TestUpdate_ForceReplacesStaleSymlinks(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, info.Mode()&os.ModeSymlink != 0, "expected symlink before update")
 
-	// Run ddx update --force; this should call refreshShippedSkills which
-	// calls skills.Install with Force:true, replacing the symlink.
+	// Run ddx update --force; this should recreate the baked-in package cache
+	// and replace the stale symlink with the generated adapter shim.
 	_, err = te.RunCommand("update", "--force")
 	// The command may fail due to network operations (checking plugin updates),
-	// but refreshShippedSkills runs unconditionally before any network call.
+	// but refreshGeneratedAdapters runs unconditionally before any network call.
 	// We tolerate network errors but require the symlink to be gone.
 	_ = err
 
-	// After update, the symlink must be replaced with a real directory.
-	info, err = os.Lstat(symlinkPath)
-	if os.IsNotExist(err) {
-		// Skill was not installed (embedded FS may not have ddx skill in test);
-		// acceptable — the symlink is gone either way.
-		return
-	}
+	builtin, err := registry.BuiltinRegistry().Find("ddx")
 	require.NoError(t, err)
-	if info.Mode()&os.ModeSymlink != 0 {
-		t.Errorf("symlink was not replaced by ddx update --force: %s is still a symlink", symlinkPath)
-	}
+	cacheSkillDir := filepath.Join(registry.PluginCacheDir("ddx", builtin.Version), "skills", "ddx")
+	assert.FileExists(t, filepath.Join(cacheSkillDir, "SKILL.md"))
+	assertLocalSymlink(t, symlinkPath, cacheSkillDir)
 }
 
 func TestUpdate_DoesNotAttemptBinaryUpgrade(t *testing.T) {
@@ -93,7 +88,7 @@ func TestUpdate_DoesNotAttemptBinaryUpgrade(t *testing.T) {
 
 	assert.NotContains(t, output, "Checking for DDx updates")
 	assert.NotContains(t, output, "Upgrading DDx")
-	assert.Contains(t, output, "Shipped skills refreshed")
+	assert.Contains(t, output, "Generated adapters refreshed")
 }
 
 // TestUpdate_RefusesDirtyLibraryFile asserts ddx update --force exits non-zero
@@ -264,8 +259,8 @@ func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
 		output, err := executeCommand(factory.NewRootCommand(), "update")
 		require.NoError(t, err, output)
 
-		// Shipped skills should be refreshed in the in-tree project.
-		assert.Contains(t, output, "Shipped skills refreshed")
+		// Generated adapters should be refreshed in the in-tree project.
+		assert.Contains(t, output, "Generated adapters refreshed")
 
 		// Global tree must be byte-identical after project update.
 		globalData, readErr := os.ReadFile(globalSentinel)
@@ -294,8 +289,8 @@ func TestUpdate_RespectsConventionVsInTreeMode(t *testing.T) {
 		output, err := executeCommand(factory.NewRootCommand(), "update")
 		require.NoError(t, err, output)
 
-		// Shipped skills should be refreshed in the project dir.
-		assert.Contains(t, output, "Shipped skills refreshed")
+		// Generated adapters should be refreshed in the project dir.
+		assert.Contains(t, output, "Generated adapters refreshed")
 
 		// Global tree must be byte-identical after convention-mode project update.
 		globalData, readErr := os.ReadFile(globalSentinel)
@@ -339,7 +334,7 @@ func TestUpdate_PartialDirtyBatchHaltsCleanly(t *testing.T) {
 	assert.Equal(t, "clean file content\n", string(data),
 		"clean file must be unchanged after atomic refuse")
 
-	// refreshShippedSkills must NOT have run — .agents/skills/ddx/ should
+	// refreshGeneratedAdapters must NOT have run — .agents/skills/ddx/ should
 	// not have been created.
 	_, statErr := os.Stat(filepath.Join(te.Dir, ".agents", "skills", "ddx"))
 	assert.True(t, os.IsNotExist(statErr),

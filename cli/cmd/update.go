@@ -13,7 +13,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
-	"github.com/DocumentDrivenDX/ddx/internal/skills"
+	"github.com/DocumentDrivenDX/ddx/internal/registry/defaultplugin"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -113,15 +113,15 @@ func isUpdateTargetDirty(workingDir, filePath string) bool {
 	return false
 }
 
-// enumerateSkillUpdateTargets returns the destination paths that
-// refreshShippedSkills would write to (files from the embedded ddx skill).
+// enumerateSkillUpdateTargets returns legacy real-file adapter paths that
+// refreshGeneratedAdapters may replace while migrating to cache-backed shims.
 func enumerateSkillUpdateTargets(workingDir string) []string {
 	var result []string
-	_ = fs.WalkDir(skills.SkillFiles, "ddx", func(p string, d fs.DirEntry, _ error) error {
+	_ = fs.WalkDir(defaultplugin.FS(), "skills/ddx", func(p string, d fs.DirEntry, _ error) error {
 		if d == nil || d.IsDir() {
 			return nil
 		}
-		rel, err := filepath.Rel("ddx", filepath.FromSlash(p))
+		rel, err := filepath.Rel(filepath.FromSlash("skills/ddx"), filepath.FromSlash(p))
 		if err != nil {
 			return nil
 		}
@@ -192,11 +192,11 @@ func backupUpdateFile(workingDir, filePath, backupBase string) error {
 
 // performUpdate checks GitHub for the latest version of each installed plugin
 // and updates any that are outdated (or all if --force). Always refreshes the
-// embedded `ddx` skill and the AGENTS.md block so projects that ran `ddx init`
-// under an older DDx version pick up current skill content without re-running
-// init. Binary updates are intentionally explicit via `ddx upgrade`; `ddx
-// update` must not replace a locally-built dogfood binary with the latest
-// public release.
+// generated built-in `ddx` adapters and the AGENTS.md block so projects that
+// ran `ddx init` under an older DDx version pick up current guidance without
+// copying plugin payloads into the project. Binary updates are intentionally
+// explicit via `ddx upgrade`; `ddx update` must not replace a locally-built
+// dogfood binary with the latest public release.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
 	// Pre-check: detect dirty update targets before writing anything (atomic
 	// refuse — no file is mutated if any target is dirty without --discard-local).
@@ -227,14 +227,16 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 		}
 	}
 
-	// Refresh the shipped `ddx` skill copy + AGENTS.md block first, regardless
-	// of whether any plugins are installed. This is what lets older projects
-	// pick up new SKILL.md / reference/*.md content without re-init.
-	refreshShippedSkills(workingDir)
+	// Refresh the built-in `ddx` adapter + AGENTS.md block first, regardless of
+	// whether any plugins are installed. This keeps the default package on the
+	// same cache-backed materialization path as `ddx init` and `ddx plugin sync`.
+	if err := refreshGeneratedAdapters(workingDir); err != nil {
+		return nil, err
+	}
 
 	state, err := registry.LoadState()
 	if err != nil || len(state.Installed) == 0 {
-		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. No packages installed.", BackupPath: backupPath}, nil
+		return &UpdateResult{Success: true, Message: "Generated adapters refreshed. No packages installed.", BackupPath: backupPath}, nil
 	}
 
 	reg := registry.BuiltinRegistry()
@@ -278,7 +280,7 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	}
 
 	if len(updated) == 0 {
-		return &UpdateResult{Success: true, Message: "Shipped skills refreshed. All packages are up to date.", BackupPath: backupPath}, nil
+		return &UpdateResult{Success: true, Message: "Generated adapters refreshed. All packages are up to date.", BackupPath: backupPath}, nil
 	}
 
 	return &UpdateResult{
@@ -289,13 +291,11 @@ func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error
 	}, nil
 }
 
-// refreshShippedSkills re-copies the embedded `ddx` skill into the project's
-// skill directories and refreshes the AGENTS.md DDx block. Safe to call on
-// every `ddx update` because skills.Install with Force=true handles the
-// "existing files should be updated" case, and generateAgentsMD's
-// marker-based merge is idempotent. Stale pre-consolidation skill dirs
-// (ddx-bead, ddx-run, etc.) are swept by cleanupBootstrapSkills.
-func refreshShippedSkills(workingDir string) {
+// refreshGeneratedAdapters recreates cache-backed built-in `ddx` adapters and
+// refreshes the AGENTS.md DDx block. Safe to call on every `ddx update` because
+// syncBuiltinDDxSkillAdapters handles stale real-file directories and
+// generateAgentsMD's marker-based merge is idempotent.
+func refreshGeneratedAdapters(workingDir string) error {
 	bootstrapSkillNames := []string{"ddx"}
 	for _, dir := range []string{
 		filepath.Join(workingDir, ".agents", "skills"),
@@ -304,10 +304,11 @@ func refreshShippedSkills(workingDir string) {
 		_ = os.MkdirAll(dir, 0755)
 		cleanupBootstrapSkills(dir, bootstrapSkillNames)
 	}
-	if err := skills.Install(skills.SkillFiles, workingDir, skills.Options{Force: true}); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "Warning: skill install failed: %v\n", err)
+	if _, err := syncBuiltinDDxSkillAdapters(workingDir, true); err != nil {
+		return fmt.Errorf("refresh generated DDx adapters: %w", err)
 	}
 	generateAgentsMD(workingDir)
+	return nil
 }
 
 // Helper functions for working directory-based operations
