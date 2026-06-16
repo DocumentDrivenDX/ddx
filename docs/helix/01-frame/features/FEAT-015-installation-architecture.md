@@ -42,8 +42,7 @@ ddx:
 > interface.
 >
 > Registry plugin installs write project lock metadata and generated adapter
-> state for clone portability; payload bytes live in the shared cache/global
-> layer.
+> state for clone portability; payload bytes live in the shared XDG cache.
 > Local developer plugin installs use symlinks intentionally: `.ddx/plugins/<name>`
 > links to the local checkout, and `.agents/skills/<skill>` plus
 > `.claude/skills/<skill>` link directly to that checkout's skill directory.
@@ -78,8 +77,8 @@ Redesign the DDx installation architecture with a clean separation of concerns:
   Agent skill directories are generated from the installed plugin graph and are
   intentionally ignored.
 - **ddx plugin install <name>** — registry plugin install: records project
-  intent and a version pin, resolves the plugin payload into the cache/global
-  install layer, and materializes local agent shims/links as needed.
+  intent and a version pin, resolves the plugin payload into the shared XDG
+  cache, and materializes local agent shims/links as needed.
 - **ddx plugin install <name> --local <path>** — developer overlay: symlinks
   project-local plugin and skill paths to the local checkout. It never updates
   the registry version pin and never auto-commits.
@@ -100,8 +99,8 @@ evidence), `AGENTS.md`, and DDx-managed ignore rules. `.agents/skills/` and
 `.claude/skills/` are generated agent adapters and should not be committed.
 
 **Registry plugin installs:** record a durable plugin dependency and lock
-version in the project. Payload files live in the plugin cache/global install
-layer and are rematerialized on demand.
+version in the project. Payload files live in the shared XDG plugin cache and
+are rematerialized on demand.
 
 **Local plugin overlays:** intentionally use symlinks because they are
 machine-local developer state. Local overlays are detected by
@@ -151,7 +150,7 @@ Desired behavior:
 #### Repository Initialization (`ddx init`)
 
 3. **Project Structure Creation**
-   - Creates `.ddx/` directory with config.yaml, library structure, and versions.yaml
+   - Creates `.ddx/` directory with config.yaml, plugin lock metadata, and versions.yaml
    - Leaves the default `ddx` plugin available through the baked-in fallback
      and generated harness skill adapters
    - Produces `.agents/skills/ddx/` and `.claude/skills/ddx/` as generated
@@ -276,10 +275,11 @@ Desired behavior:
 
 ### Non-Functional
 
-- **No Repo Bloat:** registry plugin payloads live in the shared cache/global
-  layer, not in project repositories.
+- **No Repo Bloat:** registry plugin payloads live in the shared XDG cache,
+  not in project repositories.
 - **No Checked-In Plugin Payloads:** registry plugin assets resolve from a
-  cache/global install and are materialized on demand, similar to `npx`.
+  project lock plus cache entry and are materialized on demand, similar to
+  `npx`.
 - **Generated Skills:** `ddx init` and `ddx plugin sync` may create
   `.agents/skills/*` and `.claude/skills/*`, but those directories are
   generated shims/links and are ignored by default.
@@ -332,7 +332,7 @@ project/
 |---------|-------|--------------|
 | `curl install.sh \| bash` | Machine | Binary to `~/.local/bin/ddx` + PATH/completions |
 | `ddx upgrade` | Machine | Upgrade only the DDx binary |
-| `ddx init [--force]` | Project | `.ddx/` structure + built-in `ddx` skill + AGENTS/CLAUDE guidance |
+| `ddx init [path] [--force]` | Project | `.ddx/` metadata + built-in `ddx` adapter + AGENTS/CLAUDE guidance |
 | `ddx plugin install <name>` | Project | Record plugin lock metadata, cache payload, and materialize generated shims |
 | `ddx plugin install <name> --local <path>` | Project/dev | Symlink project plugin and skill paths to a local checkout |
 | `ddx plugin list` | Project | List project plugins and local overlays |
@@ -354,7 +354,7 @@ project/
    state and is never a registry install artifact.
 
 4. **Project-scoped plugin intent**: Plugin dependencies are recorded in the
-   project, while payload bytes resolve from the cache/global layer.
+   project, while payload bytes resolve from the shared XDG cache.
    This lets different projects use different plugin versions and keeps plugin
    state in `.ddx/plugins.lock.yaml`.
 
