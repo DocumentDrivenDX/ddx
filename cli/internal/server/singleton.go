@@ -54,6 +54,7 @@ func acquireSingletonLock() (func(), error) {
 			release := func() {
 				data, _ := os.ReadFile(pidPath)
 				if pid, err := strconv.Atoi(strings.TrimSpace(string(data))); err == nil && pid == os.Getpid() {
+					removeServerAddrForPID(pid)
 					_ = os.RemoveAll(lockDir)
 				}
 			}
@@ -89,6 +90,27 @@ func clearStaleServerAddr() {
 		return
 	}
 	if af.PID > 0 && !processAlive(af.PID) {
+		_ = os.Remove(path)
+	}
+}
+
+func removeServerAddrForPID(pid int) {
+	if pid <= 0 {
+		return
+	}
+	type addrFile struct {
+		PID int `json:"pid"`
+	}
+	path := filepath.Join(serverAddrDir(), "server.addr")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var af addrFile
+	if err := json.Unmarshal(data, &af); err != nil {
+		return
+	}
+	if af.PID == pid {
 		_ = os.Remove(path)
 	}
 }
