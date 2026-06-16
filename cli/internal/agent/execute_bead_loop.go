@@ -1791,7 +1791,19 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 	if state.attemptStarted != nil {
 		attemptStarted = *state.attemptStarted
 	}
+	claimedBeadID := ""
+	claimReleased := false
 	defer func() {
+		if ctx.Err() != nil && claimedBeadID != "" && !claimReleased {
+			if current, err := w.Store.Get(context.Background(), claimedBeadID); err == nil && current != nil {
+				if current.Status == bead.StatusClosed || current.Status == bead.StatusCancelled {
+					return
+				}
+			}
+			if err := releaseWorkerClaim(w.Store, claimedBeadID, assignee); err != nil && runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "cancel cleanup release failed for %s: %v\n", claimedBeadID, err)
+			}
+		}
 		state.resultsResetIdx = resultsResetIdx
 		state.pausedInfraUntil = pausedInfraUntil
 		state.workLog = workLog
@@ -2452,6 +2464,7 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		recordClaimAttempt(false, candidate.ID)
 		return executeBeadIterationOutcome{Continue: true}, nil
 	}
+	claimedBeadID = candidate.ID
 	recordClaimAttempt(true, candidate.ID)
 
 	overrideRetryAfter := ""

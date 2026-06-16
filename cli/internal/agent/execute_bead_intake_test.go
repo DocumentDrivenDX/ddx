@@ -1816,7 +1816,7 @@ func TestIntakeBlockedSetsOperatorOverride(t *testing.T) {
 	// ruleID / decision tuple must match the terminal default emit site in
 	// the readiness flow so the seeded triaged acceptance fingerprint lines up.
 	const ruleID = "pre_claim_intake.operator_required"
-	const suggested = "continue with implementation; review should create follow-up work for remaining gaps"
+	const suggested = "review intake result and accept, rewrite, split, block, or cancel"
 
 	intakeHook := func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		return PreClaimIntakeResult{
@@ -1850,7 +1850,7 @@ func TestIntakeBlockedSetsOperatorOverride(t *testing.T) {
 		// Seed a prior operator acceptance (triaged) whose accepted
 		// fingerprints match the readiness finding so the sibling guard
 		// reports the bead as operator-promoted and the downgrade is skipped.
-		findingFP := preClaimIntakeFindingFingerprint(candidate, ruleID, reason, "pre_claim_intake", "best-effort", "attempt", suggested)
+		findingFP := preClaimIntakeFindingFingerprint(candidate, ruleID, reason, "pre_claim_intake", "block", "park", suggested)
 		promptFP := bead.PromptFingerprint(*candidate)
 		require.NotEmpty(t, findingFP, "finding fingerprint must be computable")
 		triagedBody, err := json.Marshal(map[string]any{
