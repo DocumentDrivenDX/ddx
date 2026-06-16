@@ -399,6 +399,31 @@ func (s *Server) reconcileDesiredWorkersOnce() []error {
 	return errs
 }
 
+func logStartupDesiredWorkerReconcileProjectStatus(projectRoot, status, reason string) {
+	if startupDesiredWorkerReconcileLog == nil {
+		return
+	}
+	projectRoot = strings.TrimSpace(projectRoot)
+	status = strings.TrimSpace(status)
+	reason = strings.TrimSpace(reason)
+	if projectRoot == "" && status == "" && reason == "" {
+		return
+	}
+	if reason != "" {
+		_, _ = fmt.Fprintf(
+			startupDesiredWorkerReconcileLog,
+			"ddx-server: startup worker reconcile project=%s status=%s reason=%s\n",
+			projectRoot, status, reason,
+		)
+		return
+	}
+	_, _ = fmt.Fprintf(
+		startupDesiredWorkerReconcileLog,
+		"ddx-server: startup worker reconcile project=%s status=%s\n",
+		projectRoot, status,
+	)
+}
+
 func logStartupDesiredWorkerReconcileResult(projectRoot string, result ReconcileResult) {
 	if startupDesiredWorkerReconcileLog == nil {
 		return
@@ -450,6 +475,7 @@ func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
 	for _, projectRoot := range candidates {
 		if _, err := LoadWorkerDesiredState(projectRoot); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
+				logStartupDesiredWorkerReconcileProjectStatus(projectRoot, "stale", "desired worker state missing")
 				continue
 			}
 			errs = append(errs, fmt.Errorf("%s: load desired worker state: %w", projectRoot, err))
