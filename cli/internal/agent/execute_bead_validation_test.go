@@ -335,6 +335,24 @@ func TestAttemptIntegrity_ClaudeBackgroundPreCommitDuplicateUsesSuccessfulPriorR
 	}
 }
 
+func TestApplyAttemptIntegrityVerdictRecordsWarnings(t *testing.T) {
+	res := &ExecuteBeadResult{
+		Outcome:  ExecuteBeadOutcomeTaskSucceeded,
+		ExitCode: 0,
+	}
+	applyAttemptIntegrityVerdict(res, AttemptIntegrityVerdict{
+		OK:       true,
+		Warnings: []string{"DDx warning: duplicate pre-commit gate run detected"},
+	})
+
+	if res.Outcome != ExecuteBeadOutcomeTaskSucceeded {
+		t.Fatalf("warning-only verdict changed outcome to %q", res.Outcome)
+	}
+	if len(res.Warnings) != 1 || !strings.Contains(res.Warnings[0], "duplicate pre-commit") {
+		t.Fatalf("expected durable warning on result, got %#v", res.Warnings)
+	}
+}
+
 // TestLandBeadResult_AttemptIntegrityPreserved (AC1 + AC4 at the orchestrator
 // boundary) verifies a worker result flagged with FailureModeAttemptIntegrity
 // and commits is preserved for review — not merged — and that the final result

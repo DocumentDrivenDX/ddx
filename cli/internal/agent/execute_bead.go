@@ -61,6 +61,9 @@ type ExecuteBeadResult struct {
 	Outcome string `json:"outcome"`
 	Status  string `json:"status,omitempty"`
 	Detail  string `json:"detail,omitempty"`
+	// Warnings carries non-fatal attempt observations that should be durable in
+	// result.json without changing success/failure semantics.
+	Warnings []string `json:"warnings,omitempty"`
 	// OrchestratorStatus is populated after the landing/pre-merge orchestration
 	// decision so result.json can distinguish worker success from final
 	// non-landing outcomes.
@@ -1508,12 +1511,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			CodeChanging:       true,
 			TranscriptCommands: transcriptCommands,
 		})
-		if !verdict.OK {
-			res.Outcome = ExecuteBeadOutcomeTaskFailed
-			res.Reason = AttemptIntegrityPreserveReason
-			res.Error = verdict.Detail
-			res.FailureMode = FailureModeAttemptIntegrity
-		}
+		applyAttemptIntegrityVerdict(res, verdict)
 	}
 
 	if err := publishAttemptResult(res); err != nil {

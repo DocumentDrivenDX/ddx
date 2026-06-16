@@ -379,6 +379,21 @@ func ValidateAttemptIntegrity(in AttemptIntegrityInput) AttemptIntegrityVerdict 
 	return AttemptIntegrityVerdict{OK: true, Warnings: detectDuplicateGateRunWarnings(in.GateRuns)}
 }
 
+func applyAttemptIntegrityVerdict(res *ExecuteBeadResult, verdict AttemptIntegrityVerdict) {
+	if res == nil {
+		return
+	}
+	if len(verdict.Warnings) > 0 {
+		res.Warnings = append(res.Warnings, verdict.Warnings...)
+	}
+	if !verdict.OK {
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.Reason = AttemptIntegrityPreserveReason
+		res.Error = verdict.Detail
+		res.FailureMode = FailureModeAttemptIntegrity
+	}
+}
+
 // detectPostCommitMutation reports whether the agent rewrote its implementation
 // commit after the first commit. It returns true when more than one commit
 // event is present and either an amend appears after the first commit or the
