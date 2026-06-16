@@ -742,6 +742,8 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, ".ddx/run-state/", ".ddx/run-state/ must be ignored")
 	assert.Contains(t, content, ".ddx/dirty-root-guard.json", ".ddx/dirty-root-guard.json must be ignored")
 	assert.Contains(t, content, ".ddx/executions/*/embedded/", "embedded runtime state must be ignored")
+	assert.Contains(t, content, ".agents/skills/*", "generated agent skill symlinks must be ignored")
+	assert.Contains(t, content, ".claude/skills/*", "generated Claude skill symlinks must be ignored")
 
 	// Execution evidence must be explicitly un-ignored
 	assert.Contains(t, content, "!.ddx/executions/", "executions/ directory must be un-ignored")
@@ -767,6 +769,12 @@ func TestInitGitignoreRules(t *testing.T) {
 	checkIgnoreGuard := exec.Command("git", "check-ignore", "-q", ".ddx/dirty-root-guard.json")
 	checkIgnoreGuard.Dir = te.Dir
 	assert.NoError(t, checkIgnoreGuard.Run(), ".ddx/dirty-root-guard.json must be ignored by git")
+
+	for _, generatedSkill := range []string{".agents/skills/ddx", ".claude/skills/ddx"} {
+		checkIgnore := exec.Command("git", "check-ignore", "-q", generatedSkill)
+		checkIgnore.Dir = te.Dir
+		assert.NoError(t, checkIgnore.Run(), "%s must be ignored by git even when it is a symlink", generatedSkill)
+	}
 
 	// git check-ignore exits 0 if ignored, 1 if not ignored.
 	for _, evidencePath := range []string{

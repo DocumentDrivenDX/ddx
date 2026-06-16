@@ -41,7 +41,9 @@ var initGitignoreRules = []string{
 	"!.ddx/executions/*/checks.json",
 	"!.ddx/executions/*/usage.json",
 	// Skills target links — rewritten per-machine, not tracked
+	".claude/skills/*",
 	".claude/skills/*/",
+	".agents/skills/*",
 	".agents/skills/*/",
 	// Other agent scratch
 	".codex/",
