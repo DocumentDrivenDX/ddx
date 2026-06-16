@@ -36,7 +36,7 @@ type trackerRecord map[string]any
 // Records are keyed by id. Append-only event and dependency lists are unioned;
 // scalar fields use a three-way merge with deterministic timestamp/ours
 // tie-breaking for true conflicts.
-func MergeTrackerConflictJSONL(baseData, oursData, theirsData []byte) ([]byte, TrackerMergeReport, error) {
+func MergeTrackerConflictJSONL(activePath string, baseData, oursData, theirsData []byte) ([]byte, TrackerMergeReport, error) {
 	base, err := parseTrackerRecords(baseData, "base")
 	if err != nil {
 		return nil, TrackerMergeReport{}, err
@@ -83,6 +83,8 @@ func MergeTrackerConflictJSONL(baseData, oursData, theirsData []byte) ([]byte, T
 		}
 	}
 
+	merged = pruneDanglingTrackerDependencies(merged, activePath)
+
 	out, err := encodeTrackerJSONL(merged)
 	if err != nil {
 		return nil, TrackerMergeReport{}, err
@@ -92,6 +94,52 @@ func MergeTrackerConflictJSONL(baseData, oursData, theirsData []byte) ([]byte, T
 	}
 	report.TotalRecords = len(merged)
 	return out, report, nil
+}
+
+func pruneDanglingTrackerDependencies(records []trackerRecord, activePath string) []trackerRecord {
+	knownIDs := make(map[string]struct{}, len(records))
+	for _, rec := range records {
+		id, _ := rec["id"].(string)
+		if id == "" {
+			continue
+		}
+		knownIDs[id] = struct{}{}
+	}
+	if activePath != "" {
+		for id := range loadArchiveBeadIDs(activePath) {
+			knownIDs[id] = struct{}{}
+		}
+	}
+
+	for _, rec := range records {
+		deps, ok := rec["dependencies"]
+		if !ok {
+			continue
+		}
+		filtered := make([]any, 0, len(valueSlice(deps)))
+		for _, dep := range valueSlice(deps) {
+			m, ok := dep.(map[string]any)
+			if !ok {
+				continue
+			}
+			target, _ := m["depends_on_id"].(string)
+			target = strings.TrimSpace(target)
+			if target == "" {
+				continue
+			}
+			if _, ok := knownIDs[target]; !ok {
+				continue
+			}
+			filtered = append(filtered, dep)
+		}
+		if len(filtered) == 0 {
+			delete(rec, "dependencies")
+			continue
+		}
+		rec["dependencies"] = filtered
+	}
+
+	return records
 }
 
 // ValidateTrackerJSONLUnique checks that content is valid bead JSONL with one

@@ -2,6 +2,8 @@ package bead
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -19,7 +21,7 @@ func TestMergeTrackerConflictPreservesUniqueRecords(t *testing.T) {
 		`{"id":"ddx-theirs","title":"Theirs","status":"open","priority":1,"issue_type":"task","created_at":"2026-04-30T02:00:00Z","updated_at":"2026-04-30T02:00:00Z"}`,
 	)
 
-	merged, report, err := MergeTrackerConflictJSONL(base, ours, theirs)
+	merged, report, err := MergeTrackerConflictJSONL("", base, ours, theirs)
 	require.NoError(t, err)
 	require.Equal(t, 3, report.TotalRecords)
 	require.Equal(t, 1, report.PreservedOurs)
@@ -33,11 +35,26 @@ func TestMergeTrackerConflictPreservesUniqueRecords(t *testing.T) {
 }
 
 func TestMergeTrackerConflictUnionsEventsAndDependencies(t *testing.T) {
-	base := trackerJSONL(`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-base","type":"blocks"}],"events":[{"kind":"note","summary":"base","created_at":"2026-04-30T00:00:00Z"}]}`)
-	ours := trackerJSONL(`{"id":"ddx-task","title":"Task","status":"in_progress","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T01:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-base","type":"blocks"},{"issue_id":"ddx-task","depends_on_id":"ddx-ours","type":"blocks"}],"events":[{"kind":"note","summary":"base","created_at":"2026-04-30T00:00:00Z"},{"kind":"claim","summary":"ours","created_at":"2026-04-30T01:00:00Z"}]}`)
-	theirs := trackerJSONL(`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T02:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-base","type":"blocks"},{"issue_id":"ddx-task","depends_on_id":"ddx-theirs","type":"blocks"}],"events":[{"kind":"note","summary":"base","created_at":"2026-04-30T00:00:00Z"},{"kind":"review","summary":"theirs","created_at":"2026-04-30T02:00:00Z"}]}`)
+	base := trackerJSONL(
+		`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-base","type":"blocks"}],"events":[{"kind":"note","summary":"base","created_at":"2026-04-30T00:00:00Z"}]}`,
+		`{"id":"ddx-base","title":"Base target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+		`{"id":"ddx-ours","title":"Ours target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+		`{"id":"ddx-theirs","title":"Theirs target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	)
+	ours := trackerJSONL(
+		`{"id":"ddx-task","title":"Task","status":"in_progress","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T01:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-base","type":"blocks"},{"issue_id":"ddx-task","depends_on_id":"ddx-ours","type":"blocks"}],"events":[{"kind":"note","summary":"base","created_at":"2026-04-30T00:00:00Z"},{"kind":"claim","summary":"ours","created_at":"2026-04-30T01:00:00Z"}]}`,
+		`{"id":"ddx-base","title":"Base target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+		`{"id":"ddx-ours","title":"Ours target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+		`{"id":"ddx-theirs","title":"Theirs target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	)
+	theirs := trackerJSONL(
+		`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T02:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-base","type":"blocks"},{"issue_id":"ddx-task","depends_on_id":"ddx-theirs","type":"blocks"}],"events":[{"kind":"note","summary":"base","created_at":"2026-04-30T00:00:00Z"},{"kind":"review","summary":"theirs","created_at":"2026-04-30T02:00:00Z"}]}`,
+		`{"id":"ddx-base","title":"Base target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+		`{"id":"ddx-ours","title":"Ours target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+		`{"id":"ddx-theirs","title":"Theirs target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	)
 
-	merged, report, err := MergeTrackerConflictJSONL(base, ours, theirs)
+	merged, report, err := MergeTrackerConflictJSONL("", base, ours, theirs)
 	require.NoError(t, err)
 	require.Equal(t, 1, report.MergedRecords)
 
@@ -57,12 +74,61 @@ func TestMergeTrackerConflictUnionsEventsAndDependencies(t *testing.T) {
 	require.Contains(t, eventSummaries(events), "theirs")
 }
 
+func TestMergeTrackerConflictJSONL_StripsDanglingDependenciesArchiveAware(t *testing.T) {
+	dir := t.TempDir()
+	activePath := filepath.Join(dir, "beads.jsonl")
+
+	base := trackerJSONL(
+		`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-live","type":"blocks"}]}`,
+		`{"id":"ddx-live","title":"Live target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	)
+	ours := trackerJSONL(
+		`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T01:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-live","type":"blocks"},{"issue_id":"ddx-task","depends_on_id":"ddx-missing","type":"blocks"}]}`,
+		`{"id":"ddx-live","title":"Live target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	)
+	theirs := trackerJSONL(
+		`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T02:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-live","type":"blocks"},{"issue_id":"ddx-task","depends_on_id":"ddx-missing","type":"blocks"}]}`,
+		`{"id":"ddx-live","title":"Live target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	)
+
+	merged, _, err := MergeTrackerConflictJSONL(activePath, base, ours, theirs)
+	require.NoError(t, err)
+
+	rec := decodeMergedTrackerRecords(t, merged)["ddx-task"]
+	deps, ok := rec["dependencies"].([]any)
+	require.True(t, ok)
+	require.Len(t, deps, 1)
+	require.Contains(t, dependencyTargets(deps), "ddx-live")
+	require.NotContains(t, dependencyTargets(deps), "ddx-missing")
+}
+
+func TestMergeTrackerConflictJSONL_PreservesArchiveBackedDependencies(t *testing.T) {
+	dir := t.TempDir()
+	activePath := filepath.Join(dir, "beads.jsonl")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "beads-archive.jsonl"), trackerJSONL(
+		`{"id":"ddx-archived","title":"Archived target","status":"closed","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`,
+	), 0o644))
+
+	base := trackerJSONL(`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-archived","type":"blocks"}]}`)
+	ours := trackerJSONL(`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T01:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-archived","type":"blocks"}]}`)
+	theirs := trackerJSONL(`{"id":"ddx-task","title":"Task","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T02:00:00Z","dependencies":[{"issue_id":"ddx-task","depends_on_id":"ddx-archived","type":"blocks"}]}`)
+
+	merged, _, err := MergeTrackerConflictJSONL(activePath, base, ours, theirs)
+	require.NoError(t, err)
+
+	rec := decodeMergedTrackerRecords(t, merged)["ddx-task"]
+	deps, ok := rec["dependencies"].([]any)
+	require.True(t, ok)
+	require.Len(t, deps, 1)
+	require.Contains(t, dependencyTargets(deps), "ddx-archived")
+}
+
 func TestMergeTrackerConflictReportsScalarConflictChoice(t *testing.T) {
 	base := trackerJSONL(`{"id":"ddx-task","title":"Base","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T00:00:00Z"}`)
 	ours := trackerJSONL(`{"id":"ddx-task","title":"Ours","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T01:00:00Z"}`)
 	theirs := trackerJSONL(`{"id":"ddx-task","title":"Theirs","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-30T00:00:00Z","updated_at":"2026-04-30T02:00:00Z"}`)
 
-	merged, report, err := MergeTrackerConflictJSONL(base, ours, theirs)
+	merged, report, err := MergeTrackerConflictJSONL("", base, ours, theirs)
 	require.NoError(t, err)
 	require.NotEmpty(t, report.ScalarConflicts)
 	require.Contains(t, report.ScalarConflicts, TrackerScalarConflict{

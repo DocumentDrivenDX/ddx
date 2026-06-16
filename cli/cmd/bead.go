@@ -2037,6 +2037,7 @@ This command is not a general hand-edit workflow for bead tracker data.`,
 				relPath = filepath.ToSlash(path)
 			}
 			relPath = filepath.ToSlash(filepath.Clean(relPath))
+			outPath := filepath.Join(repoRoot, relPath)
 
 			base, err := gitStageBlob(cmd.Context(), repoRoot, 1, relPath)
 			if err != nil {
@@ -2051,11 +2052,10 @@ This command is not a general hand-edit workflow for bead tracker data.`,
 				return err
 			}
 
-			merged, report, err := bead.MergeTrackerConflictJSONL(base, ours, theirs)
+			merged, report, err := bead.MergeTrackerConflictJSONL(outPath, base, ours, theirs)
 			if err != nil {
 				return err
 			}
-			outPath := filepath.Join(repoRoot, relPath)
 			if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 				return fmt.Errorf("bead merge: mkdir: %w", err)
 			}
