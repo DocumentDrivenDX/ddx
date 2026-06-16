@@ -1,0 +1,16 @@
+{
+  "attempt_id": "20260616T192044-261d4e02",
+  "bead_id": "ddx-1add151d",
+  "trigger": "context canceled",
+  "scanned_at": "2026-06-16T19:31:00.528716127Z",
+  "reaped": [
+    {
+      "pid": 3037106,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
