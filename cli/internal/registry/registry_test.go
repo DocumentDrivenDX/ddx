@@ -71,6 +71,9 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Install.Skills))
 	}
 	for _, sk := range pkg.Install.Skills {
+		if sk.Source != "skills/" {
+			t.Errorf("expected ddx skill source=skills/, got %q", sk.Source)
+		}
 		if strings.HasPrefix(sk.Target, "~") {
 			t.Errorf("skill target must be project-relative, got %q", sk.Target)
 		}

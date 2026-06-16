@@ -81,8 +81,8 @@ func BuiltinRegistry() *Registry {
 						Target: ".ddx/plugins/ddx",
 					},
 					Skills: []InstallMapping{
-						{Source: ".agents/skills/", Target: ".agents/skills/"},
-						{Source: ".agents/skills/", Target: ".claude/skills/"},
+						{Source: "skills/", Target: ".agents/skills/"},
+						{Source: "skills/", Target: ".claude/skills/"},
 					},
 				},
 				Keywords: []string{"library", "prompts", "personas", "mcp", "default", "skills"},
