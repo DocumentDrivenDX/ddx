@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
+
+// documentWriteWriteFile is a test seam so refusal paths can be exercised
+// without depending on host-specific filesystem failures.
+var documentWriteWriteFile = os.WriteFile
 
 // libraryPath resolves the configured library path relative to the per-request
 // working dir (from ctx via WithWorkingDir, falling back to r.WorkingDir).
@@ -52,39 +55,14 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return nil, fmt.Errorf("creating directory: %w", err)
 	}
-	if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
+	if err := documentWriteWriteFile(fullPath, []byte(content), 0o644); err != nil {
 		return nil, fmt.Errorf("writing document: %w", err)
 	}
 
 	// Compute relative path for graph lookup.
 	cleaned, _ := filepath.Rel(libPath, fullPath)
 
-	// Rebuild graph to pick up the newly written file and return the document.
-	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
-	if err != nil {
-		// File was written; return a minimal document rather than failing.
-		return &Document{
-			ID:         cleaned,
-			Path:       cleaned,
-			DependsOn:  []string{},
-			Inputs:     []string{},
-			Dependents: []string{},
-		}, nil
-	}
-
-	// Look up the document by its cleaned path.
-	if id, ok := graph.PathToID[cleaned]; ok {
-		if doc, ok := graph.Documents[id]; ok {
-			return docToGQL(*doc), nil
-		}
-	}
-
-	// File written but not yet in graph (e.g., missing DDx frontmatter).
-	return &Document{
-		ID:         cleaned,
-		Path:       cleaned,
-		DependsOn:  []string{},
-		Inputs:     []string{},
-		Dependents: []string{},
-	}, nil
+	// Re-read through the document query path so the mutation returns the same
+	// fresh document state the UI would see on an immediate follow-up read.
+	return (&queryResolver{r.Resolver}).DocumentByPath(ctx, cleaned)
 }
