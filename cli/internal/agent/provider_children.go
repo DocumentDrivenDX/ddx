@@ -235,6 +235,17 @@ func runningProviderChildGuard(ctx context.Context, rootPID int, scopeDir string
 		}
 		child := providerChildStatus(proc, routeLabel, harness, activeOwner, phase, now)
 		if !inAttemptScope && inProbeScope {
+			if activeOwner == "" {
+				children = append(children, child)
+				continue
+			}
+			if routeOwnsProvider(proc.Provider, routeLabel, harness) {
+				child.RouteOwner = activeOwner
+				child.NonRoute = false
+				child.Diagnostic = "route-owned provider probe outside active attempt scope observed; not terminated"
+				children = append(children, child)
+				continue
+			}
 			child.NonRoute = true
 			child.RouteOwner = ""
 			child.Diagnostic = "provider probe outside active attempt scope terminated by running-phase guard"

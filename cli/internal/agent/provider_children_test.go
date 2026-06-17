@@ -769,10 +769,10 @@ func TestRunningProviderGuardReapsServerScopeProbeChildren(t *testing.T) {
 		now,
 	)
 
-	if len(reaped) != 3 {
-		t.Fatalf("expected three server-scope probe reaps; got %+v", reaped)
+	if len(reaped) != 2 {
+		t.Fatalf("expected two non-route server-scope probe reaps; got %+v", reaped)
 	}
-	wantKilled := []int{probeClaude, probeCodex, probeGemini}
+	wantKilled := []int{probeCodex, probeGemini}
 	if len(killed) != len(wantKilled) {
 		t.Fatalf("killed = %v, want %v", killed, wantKilled)
 	}
@@ -788,6 +788,9 @@ func TestRunningProviderGuardReapsServerScopeProbeChildren(t *testing.T) {
 	if child := byPID[activeClaude]; child.Provider != "claude" || child.NonRoute {
 		t.Fatalf("active attempt claude must survive as route-owned: %+v", child)
 	}
+	if child := byPID[probeClaude]; child.Provider != "claude" || child.NonRoute || child.RouteOwner == "" || !strings.Contains(child.Diagnostic, "not terminated") {
+		t.Fatalf("route-owned claude probe must survive with diagnostic: %+v", child)
+	}
 	if child := byPID[nestedCodex]; !child.NonRoute || !strings.Contains(child.Diagnostic, "not terminated") {
 		t.Fatalf("nested attempt provider must be observed but not killed: %+v", child)
 	}
@@ -795,6 +798,76 @@ func TestRunningProviderGuardReapsServerScopeProbeChildren(t *testing.T) {
 		child := byPID[pid]
 		if !child.NonRoute || !strings.Contains(child.Diagnostic, "outside active attempt scope") {
 			t.Fatalf("probe child %d missing diagnostic: %+v", pid, child)
+		}
+	}
+}
+
+func TestRunningProviderGuardDoesNotReapProbeScopeChildrenWithoutRoute(t *testing.T) {
+	now := time.Now().UTC()
+	serverDir := filepath.Join(t.TempDir(), "server-state")
+	if err := os.MkdirAll(serverDir, 0o755); err != nil {
+		t.Fatalf("mkdir server dir: %v", err)
+	}
+	const (
+		rootPID     = 333331
+		probeClaude = 333332
+		probeCodex  = 333333
+	)
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{
+			{
+				PID:       probeClaude,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "/home/erik/.local/bin/claude --model opus",
+				CWD:       serverDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+			{
+				PID:       probeCodex,
+				PPID:      rootPID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+				CWD:       serverDir,
+				StartedAt: now.Add(-30 * time.Second),
+			},
+		}, nil
+	}
+	var killed []int
+	terminateProviderChild = func(pid int) {
+		killed = append(killed, pid)
+	}
+
+	children, reaped := runningProviderChildGuard(
+		context.Background(),
+		rootPID,
+		filepath.Join(t.TempDir(), "attempt"),
+		[]string{serverDir},
+		"",
+		"",
+		"running",
+		now,
+	)
+
+	if len(reaped) != 0 {
+		t.Fatalf("unknown route must not reap probe-scope children; got %+v", reaped)
+	}
+	if len(killed) != 0 {
+		t.Fatalf("unknown route must not terminate probe-scope children; got %v", killed)
+	}
+	if len(children) != 2 {
+		t.Fatalf("expected observed probe-scope children, got %+v", children)
+	}
+	for _, child := range children {
+		if child.NonRoute || child.RouteOwner != "" {
+			t.Fatalf("unknown-route child must not be labeled non-route or route-owned: %+v", child)
 		}
 	}
 }
