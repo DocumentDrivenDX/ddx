@@ -1,0 +1,26 @@
+{
+  "attempt_id": "20260617T134903-aa996255",
+  "bead_id": "ddx-97375097",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T134903-aa996255",
+  "trigger": "context canceled",
+  "started_at": "2026-06-17T13:50:13.230417889Z",
+  "finished_at": "2026-06-17T13:50:13.997085854Z",
+  "scanned": 97,
+  "candidates": [
+    {
+      "pid": 3788273,
+      "ppid": 3752226,
+      "pgid": 3788273,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T134903-aa996255",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3463484345\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3463484345\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"df9222e82894e2478c77c0a845d54364\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-3463484345/stop-hook-payload.json\\\"\"}]}]}} --model sonnet"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 3788273,
+      "ppid": 3752226,
+      "pgid": 3788273,
+      "command": "[claude] \u003cdefunct\u003e"
+    }
+  ]
+}
