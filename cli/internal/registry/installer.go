@@ -126,7 +126,10 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 		return entry, fmt.Errorf("loading package manifest: %w", manifestErr)
 	}
 
-	if pkg.Install.Root == nil {
+	skipRootInstall := false
+	if pkg.Install.Root == nil && pkg.Name == "ddx" {
+		skipRootInstall = true
+	} else if pkg.Install.Root == nil {
 		pkg.Install.Root = &InstallMapping{
 			Source: ".",
 			Target: defaultPackageRootTarget(pkg.Name),
@@ -136,7 +139,7 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 	// FEAT-015: plugin install targets must be project-relative. Manifests
 	// that try to write into the user's home are rejected so plugins can't
 	// pollute global state.
-	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
+	if pkg.Install.Root != nil && strings.HasPrefix(pkg.Install.Root.Target, "~") {
 		return entry, fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
 	}
 
@@ -145,13 +148,15 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 	}
 
 	// Process Root mapping for the legacy copy install path.
-	var installedRoot string
-	files, err := copyMapping(sourceDir, pkg.Install.Root)
-	if err != nil {
-		return entry, fmt.Errorf("installing plugin root: %w", err)
+	installedRoot := sourceDir
+	if !skipRootInstall {
+		files, err := copyMapping(sourceDir, pkg.Install.Root)
+		if err != nil {
+			return entry, fmt.Errorf("installing plugin root: %w", err)
+		}
+		entry.Files = append(entry.Files, files...)
+		installedRoot = ExpandHome(pkg.Install.Root.Target)
 	}
-	entry.Files = append(entry.Files, files...)
-	installedRoot = ExpandHome(pkg.Install.Root.Target)
 
 	// Ensure declared executables have the execute bit set.
 	for _, rel := range pkg.Install.Executable {

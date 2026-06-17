@@ -73,13 +73,6 @@ func BuiltinRegistry() *Registry {
 				Type:        PackageTypePlugin,
 				Source:      "https://github.com/DocumentDrivenDX/ddx",
 				Install: PackageInstall{
-					Root: &InstallMapping{
-						Source: ".",
-						// Legacy/local-overlay compatibility metadata only.
-						// Built-in DDx resolves through the embedded cache and
-						// generated adapters, not a copied project payload tree.
-						Target: ".ddx/plugins/ddx",
-					},
 					Skills: []InstallMapping{
 						{Source: "skills/", Target: ".agents/skills/"},
 						{Source: "skills/", Target: ".claude/skills/"},

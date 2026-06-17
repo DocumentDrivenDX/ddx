@@ -255,7 +255,6 @@ func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T
 	require.NoError(t, err)
 
 	for _, rel := range []string{
-		filepath.Join(ddxroot.DirName, "plugins", "ddx", "package.yaml"),
 		filepath.Join(".agents", "skills", "ddx", "SKILL.md"),
 		filepath.Join(".claude", "skills", "ddx", "SKILL.md"),
 	} {
@@ -263,6 +262,8 @@ func TestLegacyInstallPackageFromFSInstallsDefaultDDxPackageOffline(t *testing.T
 		_, statErr := os.Stat(path)
 		require.NoError(t, statErr, "expected embedded default package to install %s", rel)
 	}
+	assert.NoDirExists(t, filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx"),
+		"embedded default package install must not create a project payload root")
 
 	// The recorded file list must include the skill targets so the install
 	// state can be uninstalled/reverified later.
