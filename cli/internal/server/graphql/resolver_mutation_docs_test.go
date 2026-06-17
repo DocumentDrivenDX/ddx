@@ -107,6 +107,7 @@ ddx:
   id: helix.feat026
   depends_on:
     - helix.prd
+    - helix.extra
 ---
 # Federation
 
@@ -122,6 +123,9 @@ Updated content.
 	if got := *doc.Content; got != updated {
 		t.Fatalf("DocumentWrite content = %q, want %q", got, updated)
 	}
+	if len(doc.DependsOn) != 2 || doc.DependsOn[0] != "helix.extra" || doc.DependsOn[1] != "helix.prd" {
+		t.Fatalf("DocumentWrite dependsOn = %+v, want [helix.extra helix.prd]", doc.DependsOn)
+	}
 
 	readBack, err := qry.DocumentByPath(ctx, testFeaturePath)
 	if err != nil {
@@ -133,6 +137,9 @@ Updated content.
 	if got := *readBack.Content; got != updated {
 		t.Fatalf("DocumentByPath content = %q, want %q", got, updated)
 	}
+	if len(readBack.DependsOn) != 2 || readBack.DependsOn[0] != "helix.extra" || readBack.DependsOn[1] != "helix.prd" {
+		t.Fatalf("DocumentByPath dependsOn = %+v, want [helix.extra helix.prd]", readBack.DependsOn)
+	}
 
 	stale, err := qry.DocStale(ctx)
 	if err != nil {
@@ -140,6 +147,113 @@ Updated content.
 	}
 	if !staleContains(stale, testFeatureID) {
 		t.Fatalf("expected %s to be stale after save, got %+v", testFeatureID, stale)
+	}
+}
+
+func TestDocumentWrite_RejectsStaleExpectedHash(t *testing.T) {
+	root := setupDocumentProject(t, `---
+ddx:
+  id: helix.feat026
+  depends_on:
+    - helix.prd
+---
+# Federation
+
+Original content.
+`)
+
+	mut := &mutationResolver{&Resolver{WorkingDir: root}}
+	ctx := context.Background()
+
+	docPath := filepath.Join(root, testFeaturePath)
+	expectedHash, err := docgraph.HashDocumentFile(docPath)
+	if err != nil {
+		t.Fatalf("HashDocumentFile: %v", err)
+	}
+
+	current := `---
+ddx:
+  id: helix.feat026
+  depends_on:
+    - helix.prd
+---
+# Federation
+
+Fresh content.
+`
+	if err := os.WriteFile(docPath, []byte(current), 0o644); err != nil {
+		t.Fatalf("write current content: %v", err)
+	}
+
+	refused := `---
+ddx:
+  id: helix.feat026
+  depends_on:
+    - helix.prd
+---
+# Federation
+
+Refused content.
+`
+	if doc, err := mut.DocumentWrite(ctx, testFeaturePath, refused, &expectedHash); err == nil {
+		t.Fatalf("DocumentWrite unexpectedly succeeded: %+v", doc)
+	} else if !strings.Contains(strings.ToLower(err.Error()), "conflict") {
+		t.Fatalf("DocumentWrite error = %v, want conflict", err)
+	}
+
+	body, err := os.ReadFile(docPath)
+	if err != nil {
+		t.Fatalf("read current content: %v", err)
+	}
+	if got := string(body); got != current {
+		t.Fatalf("stale write overwrote current content:\nwant %q\n got %q", current, got)
+	}
+}
+
+func TestDocumentWrite_PathConfinementStillRejectsEscape(t *testing.T) {
+	root := setupDocumentProject(t, `---
+ddx:
+  id: helix.feat026
+  depends_on:
+    - helix.prd
+---
+# Federation
+
+Original content.
+`)
+
+	mut := &mutationResolver{&Resolver{WorkingDir: root}}
+	ctx := context.Background()
+
+	cases := []struct {
+		name        string
+		path        string
+		forbiddenAt string
+	}{
+		{
+			name:        "absolute",
+			path:        filepath.Join(root, "outside.md"),
+			forbiddenAt: filepath.Join(root, "outside.md"),
+		},
+		{
+			name:        "traversal",
+			path:        "../escape.md",
+			forbiddenAt: filepath.Join(filepath.Dir(root), "escape.md"),
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if doc, err := mut.DocumentWrite(ctx, tc.path, "pwned", nil); err == nil {
+				t.Fatalf("DocumentWrite unexpectedly succeeded: %+v", doc)
+			} else if !strings.Contains(strings.ToLower(err.Error()), "invalid path") {
+				t.Fatalf("DocumentWrite error = %v, want invalid path", err)
+			}
+
+			if _, err := os.Stat(tc.forbiddenAt); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("path confinement allowed write at %s: %v", tc.forbiddenAt, err)
+			}
+		})
 	}
 }
 
