@@ -1,0 +1,196 @@
+{
+  "attempt_id": "20260617T120241-14246f2a",
+  "bead_id": "ddx-97375097",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+  "trigger": "",
+  "started_at": "2026-06-17T12:25:55.713778903Z",
+  "finished_at": "2026-06-17T12:25:56.495916337Z",
+  "scanned": 106,
+  "candidates": [
+    {
+      "pid": 3277627,
+      "ppid": 3269424,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build1472041453/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build1472041453/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 3269424,
+      "ppid": 3269408,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli",
+      "command": "/home/linuxbrew/.linuxbrew/bin/go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 3269408,
+      "ppid": 3269406,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/agent/profile_select.go ./internal/agent/ratelimit_retry.go ./internal/agent/service_run.go"
+    },
+    {
+      "pid": 3269406,
+      "ppid": 3262622,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/agent/profile_select.go ./internal/agent/ratelimit_retry.go ./internal/agent/service_run.go"
+    },
+    {
+      "pid": 3262622,
+      "ppid": 3262611,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 3262611,
+      "ppid": 3262556,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/sh /Users/erik/Projects/ddx/.git/hooks/pre-commit"
+    },
+    {
+      "pid": 3381822,
+      "ppid": 3376074,
+      "pgid": 3376074,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "sleep 5"
+    },
+    {
+      "pid": 3381236,
+      "ppid": 3381201,
+      "pgid": 3381201,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "sleep 5"
+    },
+    {
+      "pid": 3262556,
+      "ppid": 3262528,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "git commit -m checks: wire ResetProfileSnapshotCacheForTesting, delete dead ratelimit/service wrappers [ddx-97375097] Delete dead agent-package wrapper functions in ratelimit_retry.go (EvaluateRateLimitWait, IsRateLimitResult, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt) — the try subpackage has its own complete rate-limit retry implementation and these wrappers are not called from any production path. Delete ratelimit_retry_test.go whose tests all covered the deleted functions. Delete ResolveServiceFromWorkDir from service_run.go — replaced by ResolveServiceFromWorkDirCtx; no production callers remained. Wire ResetProfileSnapshotCacheForTesting via init() in profile_select.go — exported for cross-package test cleanup (cmd/run_test_helpers_test.go), same init() pattern used by SetServiceRunFactory to survive deadcode RTA. Decisions log written to .ddx/executions/20260617T120241-14246f2a/decisions.md (gitignored, on-disk only per CLAUDE.md convention). Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e"
+    },
+    {
+      "pid": 3381201,
+      "ppid": 2800385,
+      "pgid": 3381201,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781697789670-2x2mci.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until ! ps -p 3269424 \u003e /dev/null 2\u003e\u00261; do sleep 5; done \u0026\u0026 echo \"go test finished\" \u0026\u0026 git log --oneline -3' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-8b76-cwd"
+    },
+    {
+      "pid": 3376074,
+      "ppid": 2800385,
+      "pgid": 3376074,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781697789670-2x2mci.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until [ \"$(wc -c \u003c /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/b12db4f7-806a-4a85-91f1-0569132f1c09/tasks/b01dn15px.output)\" -gt 3000 ]; do sleep 5; done \u0026\u0026 echo \"output grew\" \u0026\u0026 git log --oneline -3' \u0026\u0026 pwd -P \u003e| /tmp/claude-e6ef-cwd"
+    },
+    {
+      "pid": 3262528,
+      "ppid": 2800385,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781697789670-2x2mci.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'git commit -m \"$(cat \u003c\u003c'\"'\"'EOF'\"'\"' checks: wire ResetProfileSnapshotCacheForTesting, delete dead ratelimit/service wrappers [ddx-97375097] Delete dead agent-package wrapper functions in ratelimit_retry.go (EvaluateRateLimitWait, IsRateLimitResult, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt) — the try subpackage has its own complete rate-limit retry implementation and these wrappers are not called from any production path. Delete ratelimit_retry_test.go whose tests all covered the deleted functions. Delete ResolveServiceFromWorkDir from service_run.go — replaced by ResolveServiceFromWorkDirCtx; no production callers remained. Wire ResetProfileSnapshotCacheForTesting via init() in profile_select.go — exported for cross-package test cleanup (cmd/run_test_helpers_test.go), same init() pattern used by SetServiceRunFactory to survive deadcode RTA. Decisions log written to .ddx/executions/20260617T120241-14246f2a/decisions.md (gitignored, on-disk only per CLAUDE.md convention). Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e EOF )\"' \u0026\u0026 pwd -P \u003e| /tmp/claude-ce2f-cwd"
+    },
+    {
+      "pid": 2800385,
+      "ppid": 2615721,
+      "pgid": 2800385,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-2846845018\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-2846845018\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"fe41d7d11ea0b3a8838ea96ba5d2c799\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-2846845018/stop-hook-payload.json\\\"\"}]}]}} --model sonnet"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 3277627,
+      "ppid": 3269424,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build1472041453/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build1472041453/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 3269424,
+      "ppid": 3269408,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli",
+      "command": "/home/linuxbrew/.linuxbrew/bin/go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 3269408,
+      "ppid": 3269406,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/agent/profile_select.go ./internal/agent/ratelimit_retry.go ./internal/agent/service_run.go"
+    },
+    {
+      "pid": 3269406,
+      "ppid": 3262622,
+      "pgid": 3269406,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/agent/profile_select.go ./internal/agent/ratelimit_retry.go ./internal/agent/service_run.go"
+    },
+    {
+      "pid": 3262622,
+      "ppid": 3262611,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 3262611,
+      "ppid": 3262556,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/sh /Users/erik/Projects/ddx/.git/hooks/pre-commit"
+    },
+    {
+      "pid": 3381822,
+      "ppid": 3376074,
+      "pgid": 3376074,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "sleep 5"
+    },
+    {
+      "pid": 3381236,
+      "ppid": 3381201,
+      "pgid": 3381201,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "sleep 5"
+    },
+    {
+      "pid": 3262556,
+      "ppid": 3262528,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "git commit -m checks: wire ResetProfileSnapshotCacheForTesting, delete dead ratelimit/service wrappers [ddx-97375097] Delete dead agent-package wrapper functions in ratelimit_retry.go (EvaluateRateLimitWait, IsRateLimitResult, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt) — the try subpackage has its own complete rate-limit retry implementation and these wrappers are not called from any production path. Delete ratelimit_retry_test.go whose tests all covered the deleted functions. Delete ResolveServiceFromWorkDir from service_run.go — replaced by ResolveServiceFromWorkDirCtx; no production callers remained. Wire ResetProfileSnapshotCacheForTesting via init() in profile_select.go — exported for cross-package test cleanup (cmd/run_test_helpers_test.go), same init() pattern used by SetServiceRunFactory to survive deadcode RTA. Decisions log written to .ddx/executions/20260617T120241-14246f2a/decisions.md (gitignored, on-disk only per CLAUDE.md convention). Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e"
+    },
+    {
+      "pid": 3381201,
+      "ppid": 2800385,
+      "pgid": 3381201,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781697789670-2x2mci.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until ! ps -p 3269424 \u003e /dev/null 2\u003e\u00261; do sleep 5; done \u0026\u0026 echo \"go test finished\" \u0026\u0026 git log --oneline -3' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-8b76-cwd"
+    },
+    {
+      "pid": 3376074,
+      "ppid": 2800385,
+      "pgid": 3376074,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781697789670-2x2mci.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until [ \"$(wc -c \u003c /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-97375097-20260617T120241-14246f2a/b12db4f7-806a-4a85-91f1-0569132f1c09/tasks/b01dn15px.output)\" -gt 3000 ]; do sleep 5; done \u0026\u0026 echo \"output grew\" \u0026\u0026 git log --oneline -3' \u0026\u0026 pwd -P \u003e| /tmp/claude-e6ef-cwd"
+    },
+    {
+      "pid": 3262528,
+      "ppid": 2800385,
+      "pgid": 3262528,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-97375097-20260617T120241-14246f2a",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781697789670-2x2mci.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'git commit -m \"$(cat \u003c\u003c'\"'\"'EOF'\"'\"' checks: wire ResetProfileSnapshotCacheForTesting, delete dead ratelimit/service wrappers [ddx-97375097] Delete dead agent-package wrapper functions in ratelimit_retry.go (EvaluateRateLimitWait, IsRateLimitResult, ParseRetryAfter, ExtractRetryAfterFromStderr, RateLimitRetryConfig, ctxSleep, RunWithRateLimitRetry, BuildRateLimitRouteAttempt) — the try subpackage has its own complete rate-limit retry implementation and these wrappers are not called from any production path. Delete ratelimit_retry_test.go whose tests all covered the deleted functions. Delete ResolveServiceFromWorkDir from service_run.go — replaced by ResolveServiceFromWorkDirCtx; no production callers remained. Wire ResetProfileSnapshotCacheForTesting via init() in profile_select.go — exported for cross-package test cleanup (cmd/run_test_helpers_test.go), same init() pattern used by SetServiceRunFactory to survive deadcode RTA. Decisions log written to .ddx/executions/20260617T120241-14246f2a/decisions.md (gitignored, on-disk only per CLAUDE.md convention). Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e EOF )\"' \u0026\u0026 pwd -P \u003e| /tmp/claude-ce2f-cwd"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 2800385,
+      "ppid": 2615721,
+      "pgid": 2800385,
+      "command": "[claude] \u003cdefunct\u003e"
+    }
+  ]
+}
