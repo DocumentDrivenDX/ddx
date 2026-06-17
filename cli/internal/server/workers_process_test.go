@@ -381,6 +381,54 @@ func TestManagedExternalWorkerExitRefillsDesiredCount(t *testing.T) {
 	waitForProcessGroupEmpty(t, replacement.PGID)
 }
 
+func TestManagedExternalWorkerExplicitStopSuppressesDesiredRefill(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: false},
+	}))
+
+	res, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	require.NoError(t, err)
+	require.Len(t, res.Started, 1)
+	first, err := m.Show(res.Started[0])
+	require.NoError(t, err)
+
+	require.NoError(t, m.Stop(first.ID))
+	waitForProcessGroupEmpty(t, first.PGID)
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		records, listErr := m.List()
+		require.NoError(t, listErr)
+		for _, rec := range records {
+			if rec.ID == first.ID || rec.ProjectRoot != root {
+				continue
+			}
+			if rec.Managed && rec.State == workerStateRunning && rec.PID > 0 && isPIDAlive(rec.PID) {
+				t.Fatalf("explicit stop spawned desired refill worker %s", rec.ID)
+			}
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+
+	stopped, err := m.Show(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, workerStateStopped, stopped.State)
+}
+
 func TestManagedExternalWorkerConcurrentExitRefillDoesNotOverProvision(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)

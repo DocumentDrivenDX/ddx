@@ -2081,6 +2081,10 @@ func (m *WorkerManager) Stop(id string) error {
 		return nil
 	}
 	handle.stopped = true
+	// An explicit operator stop is a terminal management action, not a crash.
+	// Keep the worker finalizer from immediately refilling desired_count before
+	// the caller can decide whether to restart or lower desired state.
+	handle.suppressDesiredRefill = true
 
 	now := time.Now().UTC()
 	projectRoot := handle.record.ProjectRoot
