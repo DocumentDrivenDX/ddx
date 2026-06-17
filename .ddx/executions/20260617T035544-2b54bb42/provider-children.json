@@ -3,10 +3,18 @@
   "bead_id": "ddx-7eebb7a4",
   "trigger": "running_phase_non_route_provider_child",
   "active_route": "codex",
-  "scanned_at": "2026-06-17T03:58:33.696443729Z",
+  "scanned_at": "2026-06-17T04:21:03.696441979Z",
   "reaped": [
     {
       "pid": 1402515,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1795486,
       "provider": "gemini",
       "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
       "age_seconds": 1,
