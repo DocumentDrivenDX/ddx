@@ -171,6 +171,49 @@ func TestDrainServiceEventsWatchdog_ReturnsOnFinalWithoutChannelClose(t *testing
 	}
 }
 
+func TestDrainServiceEventsWatchdog_ContextDoneSuppressesLateEvents(t *testing.T) {
+	events := make(chan agentlib.ServiceEvent, 4)
+	done := make(chan struct{})
+	close(done)
+
+	var out bytes.Buffer
+	wd := &drainWatchdog{
+		done:        done,
+		idleTimeout: time.Hour,
+	}
+
+	finished := make(chan *agentlib.ServiceFinalData, 1)
+	go func() {
+		final, _, _ := drainServiceEventsWithRenderer(events, &out, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "readiness"}), wd, nil)
+		finished <- final
+	}()
+
+	select {
+	case final := <-finished:
+		require.Nil(t, final)
+	case <-time.After(1 * time.Second):
+		t.Fatal("drain did not return when caller context was done")
+	}
+
+	events <- agentlib.ServiceEvent{
+		Type: "routing_decision",
+		Time: time.Date(2026, 6, 17, 13, 10, 0, 0, time.UTC),
+		Data: json.RawMessage(`{"harness":"codex","provider":"openai","model":"gpt-5.4-mini","reason":"late"}`),
+	}
+	events <- agentlib.ServiceEvent{
+		Type: "progress",
+		Time: time.Date(2026, 6, 17, 13, 10, 1, 0, time.UTC),
+		Data: json.RawMessage(`{"phase":"tool","state":"complete","task_id":"ddx-late","turn_index":1,"action":"late progress","subject":"after timeout"}`),
+	}
+	events <- agentlib.ServiceEvent{
+		Type: "final",
+		Time: time.Date(2026, 6, 17, 13, 10, 2, 0, time.UTC),
+		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"late success"}`),
+	}
+
+	assert.Empty(t, out.String(), "late service events after caller cancellation must not be rendered")
+}
+
 func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	events := make(chan agentlib.ServiceEvent, 2)
 	events <- agentlib.ServiceEvent{

@@ -354,6 +354,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		WorkPhase:     workPhase,
 	})
 	watchdog := &drainWatchdog{
+		done:            cancelCtx.Done(),
 		cancel:          cancel,
 		idleTimeout:     idle,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,

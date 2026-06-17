@@ -15,6 +15,11 @@ import (
 // drainServiceEventsWithRenderer. All fields are optional: nil/zero disables
 // the corresponding check.
 type drainWatchdog struct {
+	// done, when non-nil, stops the drain immediately. This is distinct from the
+	// watchdog timers: caller cancellation (for example pre-claim timeout) must
+	// stop rendering service events even if the upstream service closes its event
+	// channel late.
+	done <-chan struct{}
 	// cancel is called when a wedge condition is detected. Must not be nil
 	// when idleTimeout or toolCallTimeout is non-zero.
 	cancel func()
@@ -153,6 +158,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	}
 
 	watchdog := &drainWatchdog{
+		done:            ctx.Done(),
 		cancel:          cancel,
 		idleTimeout:     timeout,
 		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
@@ -465,6 +471,9 @@ func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Wr
 			if wd.cancel != nil {
 				wd.cancel()
 			}
+			return final, routing, progress
+
+		case <-wd.done:
 			return final, routing, progress
 		}
 	}
