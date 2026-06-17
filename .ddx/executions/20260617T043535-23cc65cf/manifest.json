@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260617T043535-23cc65cf",
+  "bead_id": "ddx-aa88732d",
+  "base_rev": "1025d6cfe690c7d98914b238342f2679e7c7c878",
+  "created_at": "2026-06-17T04:35:43.567365491Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aa88732d",
+    "title": "server: add stale-safe document write and federation forwarding",
+    "description": "PROBLEM\nThe web UI needs safe spec editing for any registered project. Local document writes currently overwrite immediately, and hub-mode has no owner-targeted documentWrite forwarding.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/graphql/resolver_mutation_docs.go:34 defines DocumentWrite with only path and content.\n- cli/internal/server/graphql/resolver_mutation_docs.go:55 writes content directly with os.WriteFile and no expected hash/version check.\n- cli/internal/server/graphql/schema.graphql:3263 exposes documentWrite(path, content) without an expected version/hash input.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:356 requires spec/document edits to be project-scoped, path-confined, and owner-targeted in hub-mode.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:353 defines TC-019 for cross-project spec editing, stale-write refusal, and federated document write.\n\nPROPOSED FIX\n- Extend documentWrite with an expected hash/version input and conflict response semantics.\n- Preserve ResolveDocumentPath confinement for local writes.\n- Reject stale writes before os.WriteFile when expected hash/version does not match current content.\n- Route hub-to-spoke documentWrite through owner-targeted forwarding with origin/forwarding metadata.\n- Refresh or expose document graph/staleness refresh behavior after successful writes.\n\nNON-SCOPE\nDo not build a full collaborative editor or arbitrary filesystem browser. Keep the primary workflow scoped to project documents, especially docs/helix/**.",
+    "acceptance": "1. Go test `TestDocumentWrite_RejectsStaleExpectedHash` proves stale saves fail without overwriting current content.\n2. Go test `TestDocumentWrite_PathConfinementStillRejectsEscape` proves absolute paths and `../` traversal remain rejected.\n3. Go test `TestFederatedDocumentWrite_ForwardsToOwner` proves hub saves for spoke projects persist on the spoke and not locally.\n4. Go test `TestDocumentWrite_RebuildsGraphAfterSave` proves successful spec saves refresh returned document/graph state or expose a deterministic refresh path.\n5. Playwright `spec-editing.spec.ts` includes save FEAT doc, path confinement, stale-write refusal, federated document write, and graph/staleness refresh scenarios.\n6. `cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/docgraph/... ./internal/federation/...` passes.\n7. `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/spec-editing.spec.ts` passes once UI wiring lands.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "area:docs",
+      "kind:feature",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T035100-abe6 runtime=39m14s pid=1383868 reason=stop",
+          "created_at": "2026-06-17T04:30:14.572954204Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260617T043015-21d9",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-aa88732d\",\"fingerprint\":\"592df6bcd4b8f790742c41a650946cf489c371f3ac8f925209d5aa1994557b88\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"592df6bcd4b8f790742c41a650946cf489c371f3ac8f925209d5aa1994557b88\"}",
+          "created_at": "2026-06-17T04:33:14.695480519Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        }
+      ],
+      "spec-id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH",
+      "path": "docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md",
+      "title": "Server Operator Workbench Plan"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260617T043535-23cc65cf",
+    "prompt": ".ddx/executions/20260617T043535-23cc65cf/prompt.md",
+    "manifest": ".ddx/executions/20260617T043535-23cc65cf/manifest.json",
+    "result": ".ddx/executions/20260617T043535-23cc65cf/result.json",
+    "checks": ".ddx/executions/20260617T043535-23cc65cf/checks.json",
+    "usage": ".ddx/executions/20260617T043535-23cc65cf/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-aa88732d-20260617T043535-23cc65cf"
+  },
+  "prompt_sha": "9fe653020999441c4ab28bfeca59edc8a3f3b82ac0e8c77aeec5665177b0af26"
+}

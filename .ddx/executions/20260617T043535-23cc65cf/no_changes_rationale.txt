@@ -1,0 +1,6 @@
+status: open
+reason: exceeds the single-bead size limit; decomposed into server-local write and owner-forwarding child beads
+orchestrator_action: decompose
+child_ids:
+- ddx-3c399bec
+- ddx-c3b15c32
