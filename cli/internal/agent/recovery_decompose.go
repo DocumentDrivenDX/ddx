@@ -143,8 +143,8 @@ func NewDecomposePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner Age
 
 // runDecomposer dispatches a smart+ powerClass agent to split the bead into child
 // beads after the escalation ladder has been exhausted. On success, child beads
-// are created with Parent=beadID, the parent's execution-eligible is set to
-// false, and a "decompose-applied" event is emitted. On failure a
+// are created with Parent=beadID, the parent is closed through the store's
+// lifecycle API, and a "decompose-applied" event is emitted. On failure a
 // DecomposeResult with Failed=true is returned.
 func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRunner, rcfg config.ResolvedConfig, projectRoot string, beadID string) DecomposeResult {
 	tctx, cancel := context.WithTimeout(ctx, decomposerDefaultTimeout)
@@ -212,10 +212,9 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
-		ensureBeadExtra(b)
-		b.Extra[bead.ExtraExecutionElig] = false
-	})
+	if err := closeDecomposedParent(store, beadID); err != nil {
+		return DecomposeResult{Failed: true, Reason: "close_error", CostUSD: result.CostUSD}
+	}
 
 	body, _ := json.Marshal(decomposerEventBodyForResult(childIDs, result, rcfg, ""))
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
@@ -232,6 +231,30 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		ChildIDs: childIDs,
 		CostUSD:  result.CostUSD,
 	}
+}
+
+func closeDecomposedParent(store ExecuteBeadLoopStore, beadID string) error {
+	if err := store.UpdateWithLifecycleStatus(beadID, bead.StatusClosed, bead.LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "post-attempt decomposition complete",
+		Source:      "ddx work",
+	}, func(b *bead.Bead) error {
+		clearReviewTriageClaimMetadata(b)
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	closer, ok := store.(interface {
+		Close(context.Context, string) error
+	})
+	if !ok {
+		return fmt.Errorf("decomposer: close unsupported")
+	}
+	if err := closer.Close(context.Background(), beadID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func decomposerRuntime(ctx context.Context, projectRoot string, runner AgentRunner, rcfg config.ResolvedConfig) AgentRunRuntime {

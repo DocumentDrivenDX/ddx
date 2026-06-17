@@ -545,6 +545,9 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return decision
 	}
 	if len(backEdgeChildIDs) == 0 {
+		if err := closeDecomposedParent(w.Store, candidate.ID); err != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition close failed: %v\n", err)
+		}
 		return decision
 	}
 	if runtime.Log != nil {
