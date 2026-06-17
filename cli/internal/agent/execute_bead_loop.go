@@ -522,7 +522,7 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return decision
 	}
 
-	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
+	childIDs, decompErr := applyDecompositionChildrenAndEvent(ctx, w.Store, candidate, decomp, assignee, at)
 	decision.ChildIDs = append([]string(nil), childIDs...)
 	if decompErr != nil {
 		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
@@ -3191,8 +3191,8 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 				"bead_id":   candidate.ID,
 				"child_ids": childIDs,
 			})
-			// Parent stays open (not proposed) — it is now execution-ineligible
-			// and will close once the decomposed children reach terminal state.
+			// Parent is now closed after decomposition; release any residual claim
+			// so liveness monitors do not flag it as stale.
 			_ = releaseWorkerClaim(w.Store, candidate.ID, assignee)
 			if stopAfterNonAttemptSkip() {
 				applyStop(work.StopInput{Once: true})
@@ -5979,10 +5979,60 @@ func storeBeadDepth(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bea
 	return depth
 }
 
-// applyPreClaimDecomposition creates child beads, parks the parent as
-// execution-ineligible, and appends a triage-decomposed event to the parent.
-// It returns the IDs of the created children so the caller can log or record
-// them.
+// applyDecompositionChildrenAndEvent creates the child beads and appends a
+// triage-decomposed event to the parent. It does NOT change the parent's
+// lifecycle status so the caller can apply the appropriate terminal transition
+// (close or park) after inspecting for back-edges or other conditions.
+func applyDecompositionChildrenAndEvent(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
+	childIDs := make([]string, 0, len(decomp.Children))
+	for _, child := range decomp.Children {
+		nb := &bead.Bead{
+			Title:       child.Title,
+			Description: child.Description,
+			Acceptance:  child.Acceptance,
+			Labels:      append([]string(nil), child.Labels...),
+			Parent:      parent.ID,
+		}
+		if err := store.Create(ctx, nb); err != nil {
+			return childIDs, fmt.Errorf("decompose: create child %q: %w", child.Title, err)
+		}
+		childIDs = append(childIDs, nb.ID)
+	}
+
+	// Park the parent so it does not re-enter execution while children are
+	// outstanding. The caller is responsible for the final lifecycle transition
+	// (close on the pre-claim path; close or park-to-proposed on the
+	// post-attempt path depending on back-edge detection).
+	if err := store.Update(ctx, parent.ID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		b.Extra[bead.ExtraExecutionElig] = false
+	}); err != nil {
+		return childIDs, fmt.Errorf("decompose: park parent %s after decomposition: %w", parent.ID, err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"child_ids": childIDs,
+		"rationale": decomp.Rationale,
+		"ac_map":    decomp.ACMap,
+	})
+	return childIDs, store.AppendEvent(parent.ID, bead.BeadEvent{
+		Kind:      "triage-decomposed",
+		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
+}
+
+// applyPreClaimDecomposition creates child beads, closes the parent through
+// the lifecycle/store API, clears claim metadata, and appends a
+// triage-decomposed event to the parent. It returns the IDs of the created
+// children so the caller can log or record them.
+//
+// The post-attempt path uses applyDecompositionChildrenAndEvent directly so
+// that back-edge detection can still park the parent to proposed before the
+// final close.
 func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
 	childIDs := make([]string, 0, len(decomp.Children))
 	for _, child := range decomp.Children {
@@ -5999,13 +6049,26 @@ func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore,
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	// Park the parent so it does not re-enter execution while the generated
-	// children are outstanding.
-	if err := store.Update(ctx, parent.ID, func(b *bead.Bead) {
+	// Close the parent after children are durably created. Clearing Owner and
+	// claim keys prevents a half-owned closed parent from confusing liveness
+	// checks. execution-eligible=false is set defensively so that any reader
+	// that does not filter by status also treats the parent as ineligible.
+	if err := store.UpdateWithLifecycleStatus(parent.ID, bead.StatusClosed, bead.LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "decomposed into children",
+		Actor:       actor,
+		Source:      "ddx work",
+	}, func(b *bead.Bead) error {
 		ensureBeadExtra(b)
 		b.Extra[bead.ExtraExecutionElig] = false
+		b.Owner = ""
+		for _, k := range bead.ClaimMetadataExtraKeys {
+			delete(b.Extra, k)
+		}
+		delete(b.Extra, bead.ClaimHeartbeatExtraKey)
+		return nil
 	}); err != nil {
-		return childIDs, fmt.Errorf("decompose: park parent %s after decomposition: %w", parent.ID, err)
+		return childIDs, fmt.Errorf("decompose: close parent %s after decomposition: %w", parent.ID, err)
 	}
 
 	body, _ := json.Marshal(map[string]any{
