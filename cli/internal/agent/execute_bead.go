@@ -839,18 +839,55 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		)
 	}
 
-	// Serialize only the parent-repo writes in pre-dispatch (tracker commit
-	// plus the caller-dirt checkpoint) under the main-git lock. Base
-	// resolution and isolated worktree creation are read-only / per-worktree
-	// operations and can proceed after the lock is released.
+	// Serialize the parent-repo writes in pre-dispatch under the main-git
+	// lock, but keep the tracker commit and the checkpoint sync in separate
+	// bounded windows so neither phase can monopolize the lock long enough to
+	// trip the index.lock cap boundary before the attempt workspace exists.
 	var baseRev string
 	var workspace *AttemptWorkspace
 	if err := withTrackerLock(projectRoot, "pre_dispatch_commits", func() error {
 		// Commit beads.jsonl before spawning the attempt workspace so its snapshot
 		// includes any bead metadata updates (e.g. spec-id).
-		if err := commitTrackerLocked(projectRoot); err != nil {
-			return err
+		return commitTrackerLocked(projectRoot)
+	}); err != nil {
+		// A disk/resource-exhaustion failure during the pre-dispatch sequence
+		// (most commonly `git worktree add` running out of space while checking
+		// out the isolated worktree) must surface as a resource_exhausted
+		// outcome, not a raw error. The execute-loop releases the claim for a
+		// resource_exhausted report (parity with the pre-execution resource
+		// check above); a raw error leaves the bead claimed-but-open and
+		// execution-ineligible until a manual --unclaim (ddx-f677a50b).
+		if classifyReadinessSystemReason(err.Error(), nil) == ReadinessSystemReasonResourceExhausted {
+			res := &ExecuteBeadResult{
+				BeadID:      beadID,
+				WorkerID:    runtime.WorkerID,
+				ExitCode:    1,
+				Error:       err.Error(),
+				Reason:      err.Error(),
+				Outcome:     ExecuteBeadOutcomeTaskFailed,
+				Status:      ExecuteBeadStatusResourceExhausted,
+				ProjectRoot: projectRoot,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
 		}
+		if strings.Contains(err.Error(), preDispatchGitTimeoutMarker) {
+			res := &ExecuteBeadResult{
+				BeadID:      beadID,
+				WorkerID:    runtime.WorkerID,
+				ExitCode:    1,
+				Error:       err.Error(),
+				Reason:      err.Error(),
+				Outcome:     ExecuteBeadOutcomeTaskFailed,
+				Status:      ExecuteBeadStatusExecutionFailed,
+				ProjectRoot: projectRoot,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
+		}
+		return nil, err
+	}
+	if err := withTrackerLock(projectRoot, "pre_dispatch_checkpoint", func() error {
 		// Checkpoint any remaining caller dirt as a real commit on the current
 		// branch (FEAT-012 §22, US-126 AC#1). Use a temp-index commit-tree path
 		// here so parent checkout hooks and runtime artifacts cannot fail the
@@ -876,6 +913,20 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Reason:      err.Error(),
 				Outcome:     ExecuteBeadOutcomeTaskFailed,
 				Status:      ExecuteBeadStatusResourceExhausted,
+				ProjectRoot: projectRoot,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
+		}
+		if strings.Contains(err.Error(), preDispatchGitTimeoutMarker) {
+			res := &ExecuteBeadResult{
+				BeadID:      beadID,
+				WorkerID:    runtime.WorkerID,
+				ExitCode:    1,
+				Error:       err.Error(),
+				Reason:      err.Error(),
+				Outcome:     ExecuteBeadOutcomeTaskFailed,
+				Status:      ExecuteBeadStatusExecutionFailed,
 				ProjectRoot: projectRoot,
 			}
 			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
@@ -1699,7 +1750,7 @@ func commitTrackerLocked(projectRoot string) error {
 		}
 	}
 
-	commitOut, err := runGitWithIndexLockRecovery(context.Background(), gitDir, "add", trackerPathspec)
+	commitOut, err := runPreDispatchGitWithIndexLockRecovery(gitDir, "add", trackerPathspec)
 	if err != nil {
 		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
@@ -1710,7 +1761,7 @@ func commitTrackerLocked(projectRoot string) error {
 		return nil
 	}
 	commitArgs := ddxStateCommitArgs(projectRoot, gitDir, "commit", "--no-verify", "--only", "-m", msg, "--", trackerPathspec)
-	commitOut, err = runGitWithIndexLockRecovery(context.Background(), gitDir, commitArgs...)
+	commitOut, err = runPreDispatchGitWithIndexLockRecovery(gitDir, commitArgs...)
 	if err != nil {
 		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
