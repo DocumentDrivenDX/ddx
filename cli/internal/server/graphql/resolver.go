@@ -56,7 +56,7 @@ func (r *Resolver) workingDir(ctx context.Context) string {
 // BeadLifecycleSubscriber can subscribe to live lifecycle events from a bead store.
 // bead.WatcherHub satisfies this interface.
 type BeadLifecycleSubscriber interface {
-	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
+	SubscribeLifecycle(ctx context.Context, projectID string) (<-chan bead.LifecycleEvent, func(), error)
 }
 
 // ExecuteLoopWaker signals running work workers bound to a project

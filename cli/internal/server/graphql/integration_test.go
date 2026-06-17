@@ -340,8 +340,8 @@ type stubBeadBus struct {
 	ch chan bead.LifecycleEvent
 }
 
-func (s *stubBeadBus) SubscribeLifecycle(_ string) (<-chan bead.LifecycleEvent, func()) {
-	return s.ch, func() {}
+func (s *stubBeadBus) SubscribeLifecycle(_ context.Context, _ string) (<-chan bead.LifecycleEvent, func(), error) {
+	return s.ch, func() {}, nil
 }
 
 // ─────────────────────────── WebSocket helpers ──────────────────────────────

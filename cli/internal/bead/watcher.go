@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 )
@@ -26,16 +25,22 @@ type LifecycleEvent struct {
 // the GraphQL subscription resolver.
 type WatcherHub struct {
 	mu       sync.Mutex
+	factory  StoreFactory
 	watchers map[string]*projectWatcher
 	interval time.Duration
 	ctx      context.Context
 	cancel   context.CancelFunc
 }
 
+type StoreFactory func(ctx context.Context, projectID string) (BeadReader, error)
+
+var _ LifecycleSubscriber = (*WatcherHub)(nil)
+
 // NewWatcherHub creates a hub that polls each watched project at interval.
-func NewWatcherHub(interval time.Duration) *WatcherHub {
+func NewWatcherHub(factory StoreFactory, interval time.Duration) *WatcherHub {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &WatcherHub{
+		factory:  factory,
 		watchers: make(map[string]*projectWatcher),
 		interval: interval,
 		ctx:      ctx,
@@ -51,17 +56,27 @@ func (h *WatcherHub) Close() {
 // SubscribeLifecycle registers for lifecycle events from the project at
 // projectID (the project root directory). A new per-project watcher is
 // started on first Subscribe call. The returned func unsubscribes.
-func (h *WatcherHub) SubscribeLifecycle(projectID string) (<-chan LifecycleEvent, func()) {
+func (h *WatcherHub) SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error) {
+	if h.factory == nil {
+		return nil, nil, fmt.Errorf("bead watcher store factory is required")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	h.mu.Lock()
+	defer h.mu.Unlock()
 	pw, ok := h.watchers[projectID]
 	if !ok {
-		store := NewStore(projectID + "/.ddx")
+		store, err := h.factory(ctx, projectID)
+		if err != nil {
+			return nil, nil, err
+		}
 		pw = newProjectWatcher(store, h.interval)
 		h.watchers[projectID] = pw
 		go pw.run(h.ctx)
 	}
-	h.mu.Unlock()
-	return pw.subscribe()
+	ch, unsub := pw.subscribe()
+	return ch, unsub, nil
 }
 
 // beadState captures the fields we compare across polls to detect changes.
@@ -73,16 +88,15 @@ type beadState struct {
 
 // projectWatcher polls a single bead store and broadcasts lifecycle events.
 type projectWatcher struct {
-	store    *Store
+	store    BeadReader
 	interval time.Duration
 
 	mu       sync.Mutex
 	subs     []chan LifecycleEvent
 	snapshot map[string]beadState
-	lastMod  time.Time
 }
 
-func newProjectWatcher(store *Store, interval time.Duration) *projectWatcher {
+func newProjectWatcher(store BeadReader, interval time.Duration) *projectWatcher {
 	return &projectWatcher{
 		store:    store,
 		interval: interval,
@@ -134,15 +148,6 @@ func (pw *projectWatcher) run(ctx context.Context) {
 }
 
 func (pw *projectWatcher) poll(ctx context.Context) {
-	info, err := os.Stat(pw.store.File)
-	if err != nil {
-		return
-	}
-	if !info.ModTime().After(pw.lastMod) {
-		return
-	}
-	pw.lastMod = info.ModTime()
-
 	beads, err := pw.store.ReadAll(ctx)
 	if err != nil {
 		return

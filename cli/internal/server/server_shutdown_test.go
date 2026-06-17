@@ -3,10 +3,12 @@ package server
 // TC-SERVER-SHUTDOWN-001: Server.Shutdown invokes beadHub.Close and coordinatorRegistry.StopAll.
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // spyBeadHub wraps a real WatcherHub and records whether Close was called.
@@ -30,7 +32,9 @@ func TestServerShutdown(t *testing.T) {
 	srv := New(":0", workDir)
 
 	// Inject a spy so we can observe the Close() call.
-	spy := &spyBeadHub{WatcherHub: bead.NewWatcherHub(250 * time.Millisecond)}
+	spy := &spyBeadHub{WatcherHub: bead.NewWatcherHub(func(ctx context.Context, projectID string) (bead.BeadReader, error) {
+		return bead.NewStore(ddxroot.JoinProjectContext(ctx, projectID)), nil
+	}, 250*time.Millisecond)}
 	srv.beadHub = spy
 
 	// Prime one coordinator so StopAll has an entry to clear.

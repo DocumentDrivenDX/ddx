@@ -24,8 +24,8 @@ type stubBeadLifecycleSubscriber struct {
 	sub func()
 }
 
-func (s *stubBeadLifecycleSubscriber) SubscribeLifecycle(_ string) (<-chan bead.LifecycleEvent, func()) {
-	return s.ch, s.sub
+func (s *stubBeadLifecycleSubscriber) SubscribeLifecycle(_ context.Context, _ string) (<-chan bead.LifecycleEvent, func(), error) {
+	return s.ch, s.sub, nil
 }
 
 // TC-GQL-SUB-002: beadLifecycle subscription delivers events via WebSocket.

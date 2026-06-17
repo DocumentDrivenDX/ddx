@@ -14,7 +14,10 @@ func (r *subscriptionResolver) BeadLifecycle(ctx context.Context, projectID stri
 		return nil, fmt.Errorf("subscription not available: bead watcher not configured")
 	}
 
-	src, unsub := r.BeadBus.SubscribeLifecycle(projectID)
+	src, unsub, err := r.BeadBus.SubscribeLifecycle(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
 	out := make(chan *BeadEvent, 16)
 
 	go func() {
