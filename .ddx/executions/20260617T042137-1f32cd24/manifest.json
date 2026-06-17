@@ -1,0 +1,34 @@
+{
+  "attempt_id": "20260617T042137-1f32cd24",
+  "bead_id": "ddx-2fa4ec4c",
+  "base_rev": "17520fa09a6952fb920852ba6be2cb437b314670",
+  "created_at": "2026-06-17T04:21:44.743755535Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2fa4ec4c",
+    "title": "server: forward bead lifecycle mutations to owner with audit metadata",
+    "description": "PROBLEM\nLifecycle bead mutations (approve/block/cancel/reopen) invoked from the hub web UI against a spoke-owned project are not forwarded to the owning node, and forwarded writes do not carry origin/forwarding audit metadata, so lifecycle events on federated projects are lost or untraceable.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/graphql/resolver_mutation_beads.go:12 returns a bead store rooted only at the per-request working directory, so lifecycle resolvers built on it cannot reach a spoke owner.\n- cli/internal/server/graphql/resolver_mutation_beads.go:112 (and the lifecycle resolvers that share this local-store path) mutate locally without emitting forwarding/origin audit metadata.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:353 requires owner-targeted, project-scoped bead queue mutations in hub-mode.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:340 (TC-018) covers cross-project lifecycle mutations and federated writes.\n\nPROPOSED FIX\n- Route beadApprove, beadBlock, beadCancel, beadReopen (and any dependency mutations exposed on this resolver) through local project context or federation owner forwarding, reusing the owner-resolution path established for create/update.\n- Preserve existing lifecycle events on the owning node for forwarded writes and attach origin/forwarding audit metadata.\n- Return typed errors for missing required reasons/notes, non-owned targets, and offline/read_only spokes.\n\nNON-SCOPE\n- Do not add new lifecycle states or dependency-edit UI beyond already exposed mutation surfaces.\n- Create/update forwarding and project isolation are covered by the sibling create/update bead.\n- No Playwright/UI wiring in this bead.\n\nGoverning artifacts: FEAT-021-dashboard-ui.md:353, TP-002-server-web-ui.md:340 (TC-018). Depends on the create/update owner-forwarding bead for the shared owner-resolution path.",
+    "acceptance": "1. Go test `TestFederatedBeadLifecycle_ForwardsAuditMetadata` proves approve/block/cancel/reopen for a spoke project are forwarded to the owner, preserve the lifecycle events on the owning node, and carry origin/forwarding audit metadata returned in a hub federated read.\n2. Go test `TestBeadLifecycle_RequiredReasonTypedErrors` proves typed errors are returned when required reasons/notes are missing, for non-owned targets, and for offline/read_only spokes.\n3. `cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/bead/... ./internal/federation/...` passes.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-0188567e",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "area:beads",
+      "kind:feature",
+      "plan:server-operator-workbench"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260617T042137-1f32cd24",
+    "prompt": ".ddx/executions/20260617T042137-1f32cd24/prompt.md",
+    "manifest": ".ddx/executions/20260617T042137-1f32cd24/manifest.json",
+    "result": ".ddx/executions/20260617T042137-1f32cd24/result.json",
+    "checks": ".ddx/executions/20260617T042137-1f32cd24/checks.json",
+    "usage": ".ddx/executions/20260617T042137-1f32cd24/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2fa4ec4c-20260617T042137-1f32cd24"
+  },
+  "prompt_sha": "606f569da8126fe60857223aec82c90a1dbd75891315670347caccee472a2712"
+}

@@ -2068,3 +2068,4 @@
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":1946454,"acquired_at":"2026-06-17T04:48:57.352667901Z","released_at":"2026-06-17T04:48:58.176974518Z","duration_ms":824}
 {"event":"acquire","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":1383211,"acquired_at":"2026-06-17T04:49:59.144721846Z"}
 {"event":"release","lock_name":"tracker.lock","operation":"land_ref_update","holder_pid":1383211,"acquired_at":"2026-06-17T04:49:59.144721846Z","released_at":"2026-06-17T04:50:08.580989113Z","duration_ms":9436}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1383211,"acquired_at":"2026-06-17T04:54:00.968749387Z"}
