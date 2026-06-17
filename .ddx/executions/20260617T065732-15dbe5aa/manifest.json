@@ -1,0 +1,95 @@
+{
+  "attempt_id": "20260617T065732-15dbe5aa",
+  "bead_id": "ddx-dafa11a4",
+  "base_rev": "de6fb508f35986b4d9b87ae2c561e7f85011e1ba",
+  "created_at": "2026-06-17T06:57:39.21586478Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dafa11a4",
+    "title": "frontend: cover safe spec editing flows",
+    "description": "PROBLEM\nThe web UI needs executable coverage for cross-project spec editing behavior, including save, path confinement, stale-write refusal, federated document write, and graph/staleness refresh scenarios.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/graphql/schema.graphql:3263 exposes documentWrite(path, content) without the expected version/hash input or response semantics the UI needs to exercise stale-safe saves.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:356 requires spec/document edits to be project-scoped, path-confined, and owner-targeted in hub-mode.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:353 defines TC-019 for cross-project spec editing, stale-write refusal, federated document write, and graph/staleness refresh.\n\nPROPOSED FIX\n- Update the frontend spec editing workflow and GraphQL calls to send the expected document hash/version when saving.\n- Surface stale-save conflict behavior without overwriting the editor buffer.\n- Add Playwright coverage in spec-editing.spec.ts for local FEAT doc save, path confinement, stale-write refusal, federated document write, and graph/staleness refresh.\n- Use the server-provided deterministic graph/staleness refresh path after a successful save.\n\nNON-SCOPE\nDo not build a full collaborative editor or arbitrary filesystem browser. Keep the primary workflow scoped to project documents, especially docs/helix/**. Do not implement server resolver, federation, or docgraph internals in this bead except test fixtures needed by Playwright. Parent bead: ddx-d5dfa702.",
+    "acceptance": "1. Playwright TestSpecEditing_SavesFeatDocument in e2e/spec-editing.spec.ts proves a FEAT doc can be edited and saved through the UI.\n2. Playwright TestSpecEditing_RejectsPathEscape in e2e/spec-editing.spec.ts proves path confinement is visible from the UI for absolute paths and ../ traversal.\n3. Playwright TestSpecEditing_RejectsStaleSave in e2e/spec-editing.spec.ts proves stale-write refusal does not overwrite current content and leaves the editor recoverable.\n4. Playwright TestSpecEditing_FederatedWritePersistsOnOwner in e2e/spec-editing.spec.ts proves hub saves for spoke projects persist on the spoke and not locally.\n5. Playwright TestSpecEditing_RefreshesGraphAfterSave in e2e/spec-editing.spec.ts proves graph/staleness state refreshes after a successful save.\n6. cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/spec-editing.spec.ts passes once UI wiring lands.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-aa88732d",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "area:docs",
+      "kind:feature",
+      "plan:server-operator-workbench",
+      "parent:ddx-d5dfa702"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260617T055937-af3f",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-dafa11a4)\",\"fingerprint\":\"4218e67632fa39cb846a4a4bf95d99f14ece9169366aa35e7b43122bfc8f0029\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4218e67632fa39cb846a4a4bf95d99f14ece9169366aa35e7b43122bfc8f0029\"}",
+          "created_at": "2026-06-17T06:04:55.937591477Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T055937-af3f state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-17T06:07:12.803892882Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "worker-20260617T061017-e0ee",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-dafa11a4)\",\"fingerprint\":\"4218e67632fa39cb846a4a4bf95d99f14ece9169366aa35e7b43122bfc8f0029\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4218e67632fa39cb846a4a4bf95d99f14ece9169366aa35e7b43122bfc8f0029\"}",
+          "created_at": "2026-06-17T06:15:18.898470464Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T061017-e0ee runtime=8m30s pid=2811038 reason=stop",
+          "created_at": "2026-06-17T06:18:47.008437474Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-17T06:18:47.397740494Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "worker-20260617T062245-631d",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-dafa11a4)\",\"fingerprint\":\"4218e67632fa39cb846a4a4bf95d99f14ece9169366aa35e7b43122bfc8f0029\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"4218e67632fa39cb846a4a4bf95d99f14ece9169366aa35e7b43122bfc8f0029\"}",
+          "created_at": "2026-06-17T06:27:46.96658498Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T062245-631d runtime=10m8s pid=2951473 reason=stop",
+          "created_at": "2026-06-17T06:32:53.371545642Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260617T065732-15dbe5aa",
+    "prompt": ".ddx/executions/20260617T065732-15dbe5aa/prompt.md",
+    "manifest": ".ddx/executions/20260617T065732-15dbe5aa/manifest.json",
+    "result": ".ddx/executions/20260617T065732-15dbe5aa/result.json",
+    "checks": ".ddx/executions/20260617T065732-15dbe5aa/checks.json",
+    "usage": ".ddx/executions/20260617T065732-15dbe5aa/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-dafa11a4-20260617T065732-15dbe5aa"
+  },
+  "prompt_sha": "d7ab8e190db84fb4a8d95c1c22eb8866fa79b551cfa09158519d7d89e5704629"
+}
