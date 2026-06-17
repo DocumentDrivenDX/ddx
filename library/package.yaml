@@ -1,16 +1,14 @@
 name: ddx
 version: 0.4.7
-description: DDx default library — prompts, personas, MCP server configs, environment templates, and skills
+description: DDx bootstrap skill package for offline init and worker discovery
 type: plugin
 source: https://github.com/DocumentDrivenDX/ddx
 api_version: "1"
 keywords:
-  - library
-  - prompts
-  - personas
-  - mcp
+  - bootstrap
   - default
   - skills
+  - offline
 install:
   skills:
     - source: skills/
