@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260617T085722-bb67971f",
+  "bead_id": "ddx-1d7f8f69",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-06-17T09:11:13.56534629Z",
+  "reaped": [
+    {
+      "pid": 1650191,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1650131,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1657252,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1657158,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1646044,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 810,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
+    }
+  ]
+}
