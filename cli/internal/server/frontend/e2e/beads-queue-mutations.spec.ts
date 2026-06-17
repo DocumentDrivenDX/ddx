@@ -47,7 +47,7 @@ async function mockBase(
 ) {
 	const createdBeads = new Map<string, Record<string, unknown>>();
 
-	await page.route('/graphql', async (route) => {
+	await page.route('**/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		const vars = body.variables ?? {};
 
@@ -223,7 +223,7 @@ test('forwards spoke bead writes from the hub', async ({ page }) => {
 
 	const HUB_URL = `/nodes/node-abc/projects/${SPOKE_PROJECT_ID}/beads`;
 
-	await page.route('/graphql', async (route) => {
+	await page.route('**/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		if (body.query.includes('NodeInfo')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });

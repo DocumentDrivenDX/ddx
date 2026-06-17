@@ -57,6 +57,7 @@
 		if (isSaving || !data.artifact) return;
 		isSaving = true;
 		saveError = null;
+		showGraphRefresh = true;
 		try {
 			const client = createClient(undefined, data.projectId);
 			await client.request(DOCUMENT_WRITE_MUTATION, {
@@ -66,11 +67,11 @@
 			});
 			savedContent = editorContent;
 			isEditing = false;
-			showGraphRefresh = true;
 		} catch (err) {
 			const e = err as { response?: { errors?: Array<{ message: string }> }; message?: string };
 			const gqlMsg = e?.response?.errors?.[0]?.message;
 			saveError = gqlMsg ?? e?.message ?? 'Save failed';
+			showGraphRefresh = false;
 		} finally {
 			isSaving = false;
 		}
@@ -367,6 +368,22 @@
 							class="text-body-sm rounded border border-red-300 bg-red-50 p-2 text-red-700 dark:border-red-700 dark:bg-red-900/20 dark:text-red-400"
 						>
 							{saveError}
+						</div>
+					{/if}
+					{#if showGraphRefresh}
+						<div
+							data-testid="graph-refresh-indicator"
+							class="text-body-sm rounded border border-amber-300 bg-amber-50 p-2 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+						>
+							Graph state may be outdated after edit.
+							<button
+								type="button"
+								aria-label="Refresh graph staleness"
+								onclick={async () => { await invalidateAll(); showGraphRefresh = false; }}
+								class="ml-2 underline hover:no-underline"
+							>
+								Refresh
+							</button>
 						</div>
 					{/if}
 					<div class="flex gap-2">
