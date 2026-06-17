@@ -553,6 +553,7 @@
 		</div>
 		<div class="flex-1 overflow-auto p-6">
 			<BeadForm
+				projectId={data.projectId}
 				onSuccess={async (newBead) => {
 					showCreateForm = false;
 					await invalidateAll();

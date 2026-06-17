@@ -58,7 +58,7 @@
 		isSaving = true;
 		saveError = null;
 		try {
-			const client = createClient();
+			const client = createClient(undefined, data.projectId);
 			await client.request(DOCUMENT_WRITE_MUTATION, {
 				path: data.artifact.path,
 				content: editorContent,
@@ -399,6 +399,7 @@
 						<button
 							type="button"
 							aria-label="Refresh graph staleness"
+							onclick={async () => { await invalidateAll(); showGraphRefresh = false; }}
 							class="underline hover:no-underline"
 						>
 							Refresh

@@ -174,7 +174,7 @@
 			return;
 		}
 
-		const client = createClient();
+		const client = createClient(undefined, projectId);
 		const variables: Record<string, string> = { id: bead.id };
 		if (config.variableName) {
 			variables[config.variableName] = lifecycleReason;
@@ -344,7 +344,7 @@
 		busy = true;
 		actionError = null;
 		try {
-			const client = createClient();
+			const client = createClient(undefined, projectId);
 			const assignee = nodeStore.value?.name ?? 'user';
 			const result = await client.request<{ beadClaim: Bead }>(CLAIM_MUTATION, {
 				id: bead.id,
@@ -364,7 +364,7 @@
 		busy = true;
 		actionError = null;
 		try {
-			const client = createClient();
+			const client = createClient(undefined, projectId);
 			const result = await client.request<{ beadUnclaim: Bead }>(UNCLAIM_MUTATION, {
 				id: bead.id
 			});
@@ -387,7 +387,7 @@
 		busy = true;
 		actionError = null;
 		try {
-			const client = createClient();
+			const client = createClient(undefined, projectId);
 			await client.request<{ beadClose: Bead }>(CLOSE_MUTATION, {
 				id: bead.id,
 				reason: 'deleted via UI'
@@ -554,6 +554,7 @@
 			{#key bead?.id}
 				<BeadForm
 					{bead}
+					{projectId}
 					onSuccess={(updated) => {
 						bead = updated;
 						editing = false;

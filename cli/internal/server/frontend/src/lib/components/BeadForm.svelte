@@ -32,10 +32,12 @@
 
 	let {
 		bead = null,
+		projectId = undefined,
 		onSuccess,
 		onCancel
 	}: {
 		bead?: Bead | null;
+		projectId?: string;
 		onSuccess: (bead: Bead) => void;
 		onCancel: () => void;
 	} = $props();
@@ -87,7 +89,7 @@
 			.filter(Boolean);
 
 		try {
-			const client = createClient();
+			const client = createClient(undefined, projectId);
 			if (isUpdate && bead) {
 				const result = await client.request<{ beadUpdate: Bead }>(UPDATE_MUTATION, {
 					id: bead.id,

@@ -339,9 +339,16 @@ function withStaticPreviewFallback(fetchFn?: typeof globalThis.fetch): typeof gl
  *
  * Pass the SvelteKit-provided `fetch` in load functions so requests
  * respect SvelteKit's SSR/CSR fetch instrumentation.
+ *
+ * Pass `projectId` to scope mutations to a specific project via
+ * `/api/projects/{projectId}/graphql` instead of the default `/graphql`.
+ * This ensures project isolation: mutations hit the owning project's store
+ * and federated mutations are forwarded to the correct spoke node.
  */
-export function createClient(fetchFn?: typeof globalThis.fetch): GraphQLClient {
-	const url =
-		typeof window !== 'undefined' ? new URL('/graphql', window.location.href).href : '/graphql';
+export function createClient(fetchFn?: typeof globalThis.fetch, projectId?: string): GraphQLClient {
+	const path = projectId
+		? `/api/projects/${encodeURIComponent(projectId)}/graphql`
+		: '/graphql';
+	const url = typeof window !== 'undefined' ? new URL(path, window.location.href).href : path;
 	return new GraphQLClient(url, { fetch: withStaticPreviewFallback(fetchFn) });
 }
