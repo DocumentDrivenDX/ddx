@@ -316,7 +316,8 @@ func TestDoctor_ReportsInstallTopology(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Contains(t, output, "Retired Global Install (", "retired global install line must appear in doctor output")
-	assert.Contains(t, output, "Project Install (", "Project Install line must appear in doctor output")
+	assert.Contains(t, output, "Legacy Project Payload (", "legacy project payload line must appear in doctor output")
+	assert.Contains(t, output, "Built-in DDx Package (", "built-in package line must appear in doctor output")
 	assert.Contains(t, output, "retired-stale", "legacy global plugin dir must be reported as stale")
 	assert.NotContains(t, output, "lazy-resolves-to-global", "legacy global plugin dir must not be used as a resolution layer")
 }

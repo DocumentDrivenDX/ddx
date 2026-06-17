@@ -436,8 +436,8 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// reportSkillInstallTopology prints the retired global layer and current
-// project/cache resolution for the default ddx package.
+// reportSkillInstallTopology prints retired legacy payload locations plus the
+// cache-backed built-in package used for the default DDx adapters.
 func reportSkillInstallTopology(projectRoot string) {
 	ctx := context.Background()
 
@@ -447,46 +447,36 @@ func reportSkillInstallTopology(projectRoot string) {
 		globalStatus = "retired-stale"
 	}
 
-	projectPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx")
-	projectStatus := "missing"
+	projectLegacyPath := filepath.Join(projectRoot, ddxroot.DirName, "plugins", "ddx")
+	projectLegacyStatus := "missing"
 	if existingRoot, ok := ddxroot.ExistingPath(ctx, projectRoot); ok {
-		projectPath = filepath.Join(existingRoot, "plugins", "ddx")
-		if info, err := os.Lstat(projectPath); err == nil && info.Mode()&os.ModeSymlink == 0 {
-			projectStatus = "retired-stale"
+		projectLegacyPath = filepath.Join(existingRoot, "plugins", "ddx")
+		if info, err := os.Lstat(projectLegacyPath); err == nil && info.Mode()&os.ModeSymlink == 0 {
+			projectLegacyStatus = "retired-stale"
 		} else if err == nil {
-			if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
-				switch layer {
-				case "project":
-					projectStatus = "ok"
-				case "cache":
-					projectStatus = "lazy-resolves-to-cache"
-				case "baked-in":
-					projectStatus = "baked-in"
-				}
-			} else {
-				projectStatus = "broken-overlay"
-			}
-		} else if os.IsNotExist(err) {
-			if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
-				switch layer {
-				case "cache":
-					projectStatus = "lazy-resolves-to-cache"
-				case "baked-in":
-					projectStatus = "baked-in"
-				}
-			}
-		} else if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil {
-			switch layer {
-			case "cache":
-				projectStatus = "lazy-resolves-to-cache"
-			case "baked-in":
-				projectStatus = "baked-in"
-			}
+			projectLegacyStatus = "local-overlay"
+		} else if !os.IsNotExist(err) {
+			projectLegacyStatus = "unreadable"
 		}
 	}
 
+	builtinCachePath, cacheErr := registry.BuiltinDDxCachePath()
+	builtinStatus := "cache-missing"
+	if cacheErr != nil {
+		builtinStatus = "cache-error"
+	} else if info, err := os.Stat(builtinCachePath); err == nil && info.IsDir() {
+		builtinStatus = "cache-backed"
+	} else if _, layer, err := registry.ResolvePlugin(ctx, projectRoot, "ddx"); err == nil && layer == "baked-in" {
+		builtinStatus = "embedded-fallback"
+	}
+
 	fmt.Printf("   Retired Global Install (%s) — %s\n", globalPath, globalStatus)
-	fmt.Printf("   Project Install (%s) — %s\n", projectPath, projectStatus)
+	fmt.Printf("   Legacy Project Payload (%s) — %s\n", projectLegacyPath, projectLegacyStatus)
+	if cacheErr != nil {
+		fmt.Printf("   Built-in DDx Package — %s (%v)\n", builtinStatus, cacheErr)
+	} else {
+		fmt.Printf("   Built-in DDx Package (%s) — %s\n", builtinCachePath, builtinStatus)
+	}
 }
 
 // legacySkillSymlinkDirs returns the relative names of project-local skill

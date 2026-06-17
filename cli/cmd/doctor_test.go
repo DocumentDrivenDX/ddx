@@ -210,39 +210,39 @@ func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
 
 func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 	cases := []struct {
-		name              string
-		projectInstalled  bool
-		globalInstalled   bool
-		wantProjectStatus string
-		wantGlobalStatus  string
+		name             string
+		projectInstalled bool
+		globalInstalled  bool
+		wantLegacyStatus string
+		wantGlobalStatus string
 	}{
 		{
-			name:              "legacy project install present",
-			projectInstalled:  true,
-			globalInstalled:   false,
-			wantProjectStatus: "retired-stale",
-			wantGlobalStatus:  "missing",
+			name:             "legacy project install present",
+			projectInstalled: true,
+			globalInstalled:  false,
+			wantLegacyStatus: "retired-stale",
+			wantGlobalStatus: "missing",
 		},
 		{
-			name:              "legacy global install ignored",
-			projectInstalled:  false,
-			globalInstalled:   true,
-			wantProjectStatus: "baked-in",
-			wantGlobalStatus:  "retired-stale",
+			name:             "legacy global install ignored",
+			projectInstalled: false,
+			globalInstalled:  true,
+			wantLegacyStatus: "missing",
+			wantGlobalStatus: "retired-stale",
 		},
 		{
-			name:              "project install missing",
-			projectInstalled:  false,
-			globalInstalled:   false,
-			wantProjectStatus: "baked-in",
-			wantGlobalStatus:  "missing",
+			name:             "project install missing",
+			projectInstalled: false,
+			globalInstalled:  false,
+			wantLegacyStatus: "missing",
+			wantGlobalStatus: "missing",
 		},
 		{
-			name:              "both legacy project and global present",
-			projectInstalled:  true,
-			globalInstalled:   true,
-			wantProjectStatus: "retired-stale",
-			wantGlobalStatus:  "retired-stale",
+			name:             "both legacy project and global present",
+			projectInstalled: true,
+			globalInstalled:  true,
+			wantLegacyStatus: "retired-stale",
+			wantGlobalStatus: "retired-stale",
 		},
 	}
 
@@ -278,12 +278,21 @@ func TestDoctor_ReportsBothInstallLayers(t *testing.T) {
 
 			projectPath := filepath.Join(ddxroot.JoinProject(workDir), "plugins", "ddx")
 			globalPath := filepath.Join(xdgDir, "ddx", "global", "plugins", "ddx")
+			builtinCachePath, cacheErr := registry.BuiltinDDxCachePath()
+			if cacheErr != nil {
+				t.Fatalf("BuiltinDDxCachePath: %v", cacheErr)
+			}
 
 			if !strings.Contains(output, "Retired Global Install ("+globalPath+") — "+tc.wantGlobalStatus) {
 				t.Fatalf("output missing global install status %q:\n%s", tc.wantGlobalStatus, output)
 			}
-			if !strings.Contains(output, "Project Install ("+projectPath+") — "+tc.wantProjectStatus) {
-				t.Fatalf("output missing project install status %q:\n%s", tc.wantProjectStatus, output)
+			if !strings.Contains(output, "Legacy Project Payload ("+projectPath+") — "+tc.wantLegacyStatus) {
+				t.Fatalf("output missing legacy project payload status %q:\n%s", tc.wantLegacyStatus, output)
+			}
+			builtinCacheLine := "Built-in DDx Package (" + builtinCachePath + ") — "
+			if !strings.Contains(output, builtinCacheLine+"cache-backed") &&
+				!strings.Contains(output, builtinCacheLine+"embedded-fallback") {
+				t.Fatalf("output missing built-in package cache/fallback status:\n%s", output)
 			}
 		})
 	}
