@@ -1,0 +1,190 @@
+{
+  "attempt_id": "20260617T032353-b52fb28c",
+  "bead_id": "ddx-ae16a7a2",
+  "base_rev": "cb804fd91451151d313bbea3bf8860fba12f5519",
+  "created_at": "2026-06-17T03:24:02.138739048Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ae16a7a2",
+    "title": "server: refresh server.addr before restart status queries",
+    "description": "PROBLEM\nAfter rebuilding/installing DDx at commit b98896c2c and restarting ddx-server.service on 2026-06-16, clients querying worker status could observe stale server.addr state and fall back to a dead pid path instead of the restarted server. This hid whether valid desired worker state for active projects such as /Users/erik/Projects/ddx and /Users/erik/Projects/sesame had been restored automatically.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/server.go:360-381 calls reconcileDesiredWorkersAfterStartup from ListenAndServe/ListenAndServeTLS and schedules delayed passes, but the production restart path did not prove that clients see the restarted server address before status is queried.\n- cli/internal/server/server_startup_reconcile_test.go:96-204 covers fake controller startup replacement only, leaving no process-backed regression for a restarted server launching and reporting real managed ddx work children.\n- cli/cmd/worker.go:118-123 and :169-174 explicitly call POST /api/agent/workers/reconcile after worker set/start, which masked startup reconcile and stale-address failures.\n\nPROPOSED FIX\nEnsure server.addr is refreshed during normal server restart before worker status clients query it, and add restart status coverage proving `ddx worker status --json --project \u003cpath\u003e` reports exactly the desired running worker for each valid project covered by the restart test without requiring an operator reconcile.\n\nNON-SCOPE\nDo not implement GraphQL worker count/cap changes from ddx-c713d75e. Do not change bead claim semantics or Fizeau routing. Do not remove valid desired worker state for active projects such as /Users/erik/Projects/ddx and /Users/erik/Projects/sesame. Do not broaden startup reconcile semantics beyond what is needed for status to observe the restarted server and desired worker count. Governing artifact reference: plan:server-operator-workbench.\n\nPARENT\n- ddx-8674fc2d\n\nDEPENDENCIES\n- None supplied by parent bead.",
+    "acceptance": "1. New or extended test TestServerServiceRestart_RewritesServerAddrBeforeStatus proves the restarted server rewrites server.addr before `ddx worker status --json --project \u003cpath\u003e` can observe a dead pid fallback.\n2. New or extended test TestWorkerStatusAfterServiceRestart_ReportsExactDesiredWorkers proves `ddx worker status --json --project \u003cpath\u003e` after restart reports exactly the desired running worker for each valid project fixture covered by the restart test.\n3. The status-path test does not call `ddx worker reconcile` or POST /api/agent/workers/reconcile after restart.\n4. `cd cli \u0026\u0026 go test ./internal/server/... ./cmd/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-1add151d",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:workers",
+      "kind:bug",
+      "reliability",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T004859-e33e runtime=8m36s pid=3220233 reason=stop",
+          "created_at": "2026-06-17T00:57:35.080020167Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T005813-1c19 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-17T01:03:53.245461754Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "worker-20260617T010353-471e",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-ae16a7a2\",\"fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\"}",
+          "created_at": "2026-06-17T01:09:54.844343635Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "worker-20260617T011509-42f7",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-ae16a7a2\",\"fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\"}",
+          "created_at": "2026-06-17T01:18:57.093894685Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "worker-20260617T011509-42f7",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-ae16a7a2\",\"fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\"}",
+          "created_at": "2026-06-17T01:25:19.859649342Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T011509-42f7 runtime=18m22s pid=3547587 reason=stop",
+          "created_at": "2026-06-17T01:33:32.035357408Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T013408-f205 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-17T01:38:45.33524795Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T013845-1570 runtime=18m15s pid=3909979 reason=stop",
+          "created_at": "2026-06-17T01:57:00.922122233Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-17T01:57:01.652789034Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T015705-f4a5 runtime=2m1s pid=155594 reason=stop",
+          "created_at": "2026-06-17T01:59:06.149157992Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260617T015906-86ad",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-ae16a7a2\",\"fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"264df2e62b7033e460a8d222d2ebc87b56509cb1c70e6002c32937482831747e\"}",
+          "created_at": "2026-06-17T02:02:13.072486339Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T015906-86ad runtime=12m38s pid=165826 reason=stop",
+          "created_at": "2026-06-17T02:11:44.268826128Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T021939-550c state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-17T02:26:43.72108612Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T023345-467c runtime=3m2s pid=472456 reason=stop",
+          "created_at": "2026-06-17T02:36:48.084109968Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260617T023723-a626",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-ae16a7a2)\",\"fingerprint\":\"f0ca2673bb7c594d50b78968de1df380541802b38b8a51a5b0154cf6f302fcc6\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"f0ca2673bb7c594d50b78968de1df380541802b38b8a51a5b0154cf6f302fcc6\"}",
+          "created_at": "2026-06-17T02:42:24.162862076Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T023723-a626 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-17T02:44:31.76283628Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T025517-8f11 runtime=10m26s pid=856671 reason=stop",
+          "created_at": "2026-06-17T03:05:43.292205785Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260617T030618-a8a8",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 5m0s (ddx-ae16a7a2)\",\"fingerprint\":\"f0ca2673bb7c594d50b78968de1df380541802b38b8a51a5b0154cf6f302fcc6\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"f0ca2673bb7c594d50b78968de1df380541802b38b8a51a5b0154cf6f302fcc6\"}",
+          "created_at": "2026-06-17T03:11:19.142935422Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T030618-a8a8 runtime=8m17s pid=948523 reason=stop",
+          "created_at": "2026-06-17T03:14:35.586173266Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260617T032353-b52fb28c",
+    "prompt": ".ddx/executions/20260617T032353-b52fb28c/prompt.md",
+    "manifest": ".ddx/executions/20260617T032353-b52fb28c/manifest.json",
+    "result": ".ddx/executions/20260617T032353-b52fb28c/result.json",
+    "checks": ".ddx/executions/20260617T032353-b52fb28c/checks.json",
+    "usage": ".ddx/executions/20260617T032353-b52fb28c/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ae16a7a2-20260617T032353-b52fb28c"
+  },
+  "prompt_sha": "f4608aff9b95e29dc3f0dbf412b3fd07b5d14ee161032985940a2f04ed260964"
+}
