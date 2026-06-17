@@ -13,10 +13,10 @@ Too big if any holds:
 
 If too big, decompose:
 
-1. `ddx bead create` for each child (copy labels and spec-id).
+1. `ddx bead create` for each child/sibling/replacement bead.
 2. `ddx bead dep add` only for legitimate child-to-child or sibling/replacement edges; never the parent.
-3. Use `Parent=<parent-id>` only as hierarchy metadata; do not add the parent as a dependency.
-4. After a lossless durable split, close the decomposed parent with `ddx bead close <bead-id>`. Otherwise, write `no_changes_rationale.txt` under `bundle` with child IDs, then stop.
+3. Use `Parent=<parent-id>` as hierarchy metadata; do not add the decomposed parent as a dependency.
+4. After a lossless durable split, close the decomposed parent with `ddx bead close <bead-id>` once child/sibling/replacement beads are filed. Otherwise, write `no_changes_rationale.txt` under `bundle` with child IDs, then stop.
 
 Decomposition alone is success. Don't mix it with implementation.
 

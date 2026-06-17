@@ -2043,9 +2043,10 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // 16. Reports go under the bead metadata bundle path, never /tmp, committed
 //     alongside code
 // 17. Write no_changes_rationale.txt before exiting empty
-// 18. Step 0 size-check + decomposition (ddx bead create / dep add / update)
-// 19. Current-bead lifecycle mutations stay orchestrator-owned; only Step 0
-//     parent-note updates may touch current-bead tracker state
+// 18. Step 0 size-check + decomposition (ddx bead create / dep add / close)
+// 19. Current-bead lifecycle mutations stay orchestrator-owned; Step 0
+//     decomposition may create children, wire legitimate child/sibling
+//     dependencies, and close the decomposed parent after a durable split
 // 20. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
 // 21. Stop after the commit (Agent post-commit runaway guard)
 // 22. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
@@ -2073,10 +2074,10 @@ Too big if any holds:
 
 If too big, decompose:
 
-1. ` + "`ddx bead create`" + ` for each child (copy labels and spec-id).
+1. ` + "`ddx bead create`" + ` for each child/sibling/replacement bead.
 2. ` + "`ddx bead dep add`" + ` only for legitimate child-to-child or sibling/replacement edges; never the parent.
-3. Use ` + "`Parent=<parent-id>`" + ` only as hierarchy metadata; do not add the parent as a dependency.
-4. After a lossless durable split, close the decomposed parent with ` + "`ddx bead close <bead-id>`" + `. Otherwise, write ` + "`no_changes_rationale.txt`" + ` under ` + "`bundle`" + ` with child IDs, then stop.
+3. Use ` + "`Parent=<parent-id>`" + ` as hierarchy metadata; do not add the decomposed parent as a dependency.
+4. After a lossless durable split, close the decomposed parent with ` + "`ddx bead close <bead-id>`" + ` once child/sibling/replacement beads are filed. Otherwise, write ` + "`no_changes_rationale.txt`" + ` under ` + "`bundle`" + ` with child IDs, then stop.
 
 Decomposition alone is success. Don't mix it with implementation.`
 

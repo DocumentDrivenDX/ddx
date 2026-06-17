@@ -229,10 +229,39 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 	}
 }
 
-func TestExecuteBeadPromptSnapshotsUseParentToChildDecompositionEdges(t *testing.T) {
+func TestExecuteBeadPrompt_Step0DecompositionMayCloseParent(t *testing.T) {
 	cases := []struct{ variant, harness string }{
 		{"claude", "claude"},
 		{"agent", "agent"},
+	}
+	required := []string{
+		"lossless durable split",
+		"ddx bead create",
+		"ddx bead close <bead-id>",
+		"once child/sibling/replacement beads are filed",
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range required {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing decomposition-close substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
+func TestExecuteBeadPrompt_DecompositionForbidsParentDependency(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	required := []string{
+		"Parent=<parent-id>",
+		"legitimate child-to-child or sibling/replacement edges",
+		"do not add the decomposed parent as a dependency",
 	}
 	for _, c := range cases {
 		c := c
@@ -241,13 +270,12 @@ func TestExecuteBeadPromptSnapshotsUseParentToChildDecompositionEdges(t *testing
 			if strings.Contains(rendered, "ddx bead dep add <child-id> <parent-id>") {
 				t.Fatalf("rendered %s prompt still contains deprecated child-to-parent dep-add instruction", c.variant)
 			}
-			for _, sub := range []string{
-				"Parent=<parent-id>",
-				"lossless durable split",
-				"ddx bead close <bead-id>",
-			} {
+			if strings.Contains(rendered, "ddx bead dep add <parent-id> <child-id>") {
+				t.Fatalf("rendered %s prompt still contains deprecated parent-to-child dep-add instruction", c.variant)
+			}
+			for _, sub := range required {
 				if !strings.Contains(rendered, sub) {
-					t.Errorf("rendered %s prompt missing parent-to-child decomposition substring %q", c.variant, sub)
+					t.Errorf("rendered %s prompt missing parent-dependency guardrail substring %q", c.variant, sub)
 				}
 			}
 		})
