@@ -11,6 +11,64 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestServerServiceRestart_ReconcilesDesiredWorkers(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: true},
+	}))
+
+	firstManager := NewWorkerManager(root)
+	firstManager.workerBinaryPath = workerPath
+	firstManager.WatchdogKillGrace = 100 * time.Millisecond
+	t.Cleanup(firstManager.StopAll)
+
+	firstResult, err := firstManager.ReconcileDesiredWorkers()
+	require.NoError(t, err)
+	require.Len(t, firstResult.Started, 1, "initial server run must launch the desired worker")
+	firstID := firstResult.Started[0]
+	require.Len(t, liveManagedWorkerRecords(t, root), 1)
+
+	firstManager.StopAll()
+	require.Eventually(t, func() bool {
+		return len(liveManagedWorkerRecords(t, root)) == 0
+	}, 5*time.Second, 50*time.Millisecond, "simulated service restart should stop the original worker")
+
+	restartedManager := NewWorkerManager(root)
+	restartedManager.workerBinaryPath = workerPath
+	restartedManager.WatchdogKillGrace = 100 * time.Millisecond
+	t.Cleanup(restartedManager.StopAll)
+
+	prevSkip := skipStartupDesiredWorkerReconcileForTestBinary
+	skipStartupDesiredWorkerReconcileForTestBinary = false
+	t.Cleanup(func() { skipStartupDesiredWorkerReconcileForTestBinary = prevSkip })
+
+	prevDelays := startupDesiredWorkerReconcileDelays
+	startupDesiredWorkerReconcileDelays = []time.Duration{10 * time.Millisecond}
+	t.Cleanup(func() { startupDesiredWorkerReconcileDelays = prevDelays })
+
+	srv := &Server{
+		WorkingDir: root,
+		workers:    restartedManager,
+	}
+	srv.reconcileDesiredWorkersAfterStartup()
+
+	require.Eventually(t, func() bool {
+		live := liveManagedWorkerRecords(t, root)
+		if len(live) != 1 {
+			return false
+		}
+		return live[0].ID != firstID
+	}, 5*time.Second, 50*time.Millisecond, "startup reconcile must restore desired_count=1 without manual reconcile")
+}
+
 func TestServerStartupReconcileDesiredWorkersProcessBackedNoDuplicates(t *testing.T) {
 	rootA := t.TempDir()
 	rootB := t.TempDir()
