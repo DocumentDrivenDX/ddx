@@ -84,6 +84,8 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "decompose_dep_edges_are_child_specific", any: []string{"legitimate child-to-child or sibling/replacement edges", "never the parent"}},
 		{name: "decompose_bead_update", any: []string{"ddx bead update"}},
 		{name: "current_bead_lifecycle_orchestrator_owned", any: []string{"Current-bead lifecycle is orchestrator-owned"}},
+		{name: "decompose_close_parent", any: []string{"ddx bead close <bead-id>", "lossless durable split"}},
+		{name: "decompose_parent_metadata_only", any: []string{"Parent=<parent-id>"}},
 		{name: "review_is_a_gate", any: []string{"review is a gate", "review is a gate, not an escape hatch"}},
 		{name: "blocking_review_findings", any: []string{"BLOCKING `<review-findings>`", "BLOCKING <review-findings>"}},
 		{name: "no_no_changes_with_blocking", any: []string{"do not declare `no_changes` with blocking findings open"}},
@@ -191,18 +193,18 @@ func TestExecuteBeadInstructionsForbidCurrentBeadLifecycleMutation(t *testing.T)
 		"ddx bead update <bead-id> --claim",
 		"ddx bead update <bead-id> --status <status>",
 		"ddx bead update <bead-id> --unclaim",
-		"ddx bead close <bead-id>",
 	}
 	allowed := []string{
 		"ddx bead create",
-		"parent=<parent-id>",
-		"parent -> child",
+		"Parent=<parent-id>",
+		"lossless durable split",
+		"ddx bead close <bead-id>",
 		"ddx bead dep add",
 		"child-to-child or sibling/replacement edges",
-		"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
 	}
 	mustNotContain := []string{
 		"ddx bead dep add <parent-id> <child-id>",
+		"ddx bead dep add <child-id> <parent-id>",
 	}
 	for _, c := range cases {
 		c := c
@@ -240,9 +242,9 @@ func TestExecuteBeadPromptSnapshotsUseParentToChildDecompositionEdges(t *testing
 				t.Fatalf("rendered %s prompt still contains deprecated child-to-parent dep-add instruction", c.variant)
 			}
 			for _, sub := range []string{
-				"parent=<parent-id>",
-				"parent -> child",
-				"ddx bead update <parent-id> --notes 'decomposed into <child-ids>'",
+				"Parent=<parent-id>",
+				"lossless durable split",
+				"ddx bead close <bead-id>",
 			} {
 				if !strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt missing parent-to-child decomposition substring %q", c.variant, sub)
