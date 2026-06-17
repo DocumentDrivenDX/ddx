@@ -44,6 +44,22 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 
 	runtime.WorkDir = scratchDir
 	runtime.PermissionsOverride = PermissionsReadOnlyLifecycle
+	beadID := ""
+	if runtime.Correlation != nil {
+		beadID = strings.TrimSpace(runtime.Correlation["bead_id"])
+	}
+	guard := newRunningProviderGuard(projectRoot, beadID, "", os.Getpid())
+	guard.SetScopeDir(scratchDir)
+	guard.AddProbeScopeDir(projectRoot)
+	baseOnRouteResolved := runtime.OnRouteResolved
+	runtime.OnRouteResolved = func(harness, provider, model string) {
+		guard.UpdateRoute(harness, provider, model)
+		if baseOnRouteResolved != nil {
+			baseOnRouteResolved(harness, provider, model)
+		}
+	}
+	stopProviderGuard := guard.Start(ctx)
+	defer stopProviderGuard()
 
 	before, err := captureLifecycleProjectStatus(projectRoot)
 	if err != nil {
@@ -52,10 +68,6 @@ func dispatchLifecycleRun(ctx context.Context, projectRoot string, svc agentlib.
 
 	result, dispatchErr := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 
-	beadID := ""
-	if runtime.Correlation != nil {
-		beadID = strings.TrimSpace(runtime.Correlation["bead_id"])
-	}
 	if guardErr := guardLifecycleProjectStatus(projectRoot, before, beadID); guardErr != nil {
 		return nil, guardErr
 	}

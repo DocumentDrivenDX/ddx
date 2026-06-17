@@ -9,8 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -558,6 +560,81 @@ func TestPreClaimIntakeHook_PreservesExplicitRoutingPins(t *testing.T) {
 	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
+}
+
+func TestPreClaimIntakeHook_ReapsNonRouteProviderChildrenAfterReadinessRoute(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	const codexPID = 424201
+	const claudePID = 424202
+	rootPID := os.Getpid()
+	killedCh := make(chan int, 2)
+	var killedMu sync.Mutex
+	var killed []int
+	var lifecycleWorkDir atomic.Value
+
+	restoreScanner := providerChildScanner
+	restoreTerminate := terminateProviderChild
+	t.Cleanup(func() {
+		providerChildScanner = restoreScanner
+		terminateProviderChild = restoreTerminate
+	})
+
+	providerChildScanner = func(context.Context, int, time.Time) ([]providerChildProcess, error) {
+		return []providerChildProcess{
+			{
+				PID:       codexPID,
+				PPID:      rootPID,
+				Provider:  "codex",
+				Command:   "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+				CWD:       root,
+				StartedAt: time.Now().Add(-time.Second),
+			},
+			{
+				PID:       claudePID,
+				PPID:      rootPID,
+				Provider:  "claude",
+				Command:   "/home/erik/.local/bin/claude --print --model sonnet",
+				CWD:       lifecycleWorkDir.Load().(string),
+				StartedAt: time.Now().Add(-time.Second),
+			},
+		}, nil
+	}
+	terminateProviderChild = func(pid int) {
+		killedMu.Lock()
+		killed = append(killed, pid)
+		killedMu.Unlock()
+		killedCh <- pid
+	}
+
+	svc := &preClaimIntakeHookServiceStub{
+		executeFunc: func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+			lifecycleWorkDir.Store(req.WorkDir)
+			ch := make(chan agentlib.ServiceEvent, 2)
+			go func() {
+				ch <- makeRoutingDecisionEvent("claude", "anthropic", "sonnet-4.6")
+				select {
+				case <-killedCh:
+				case <-time.After(3 * time.Second):
+				}
+				text := `{"classification":"atomic","confidence":0.95,"reasoning":"provider guard covered readiness"}`
+				ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":` + fmt.Sprintf("%q", text) + `}`)}
+				close(ch)
+			}()
+			return ch, nil
+		},
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	killedMu.Lock()
+	killedCopy := append([]int(nil), killed...)
+	killedMu.Unlock()
+	assert.Contains(t, killedCopy, codexPID)
+	assert.NotContains(t, killedCopy, claudePID)
 }
 
 func TestLifecycleHooks_UnpinnedIntakeUsesProfileSelectionAndLintLeavesPolicyToFizeau(t *testing.T) {
