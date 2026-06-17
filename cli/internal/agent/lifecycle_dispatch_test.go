@@ -35,6 +35,7 @@ func TestParseLifecycleProjectStatusIgnoresDDxRuntimePaths(t *testing.T) {
 		" M .ddx/beads-archive.jsonl\n" +
 		" M .ddx/metrics/attempts.jsonl\n" +
 		" M .ddx/metrics/locks.jsonl\n" +
+		" M .ddx/executions/20260616T235030-999244cc/provider-children.json\n" +
 		"?? .ddx/attachments/ddx-example/events.jsonl\n" +
 		"?? .ddx/dirty-root-guard.json\n" +
 		"?? .ddx/run-state.json\n" +
@@ -53,6 +54,7 @@ func TestLifecycleProjectStatusDiffIgnoresOnlyDDxRuntimePaths(t *testing.T) {
 	before := parseLifecycleProjectStatus(" M cli/internal/agent/foo.go\n")
 	after := parseLifecycleProjectStatus("" +
 		" M .ddx/beads.jsonl\n" +
+		" M .ddx/executions/20260616T235030-999244cc/provider-children.json\n" +
 		" M .ddx/dirty-root-guard.json\n" +
 		" M cli/internal/agent/foo.go\n")
 

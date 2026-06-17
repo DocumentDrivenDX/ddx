@@ -144,7 +144,7 @@ func parseLifecycleProjectStatus(raw string) map[string]string {
 func isLifecycleProjectStatusIgnoredPath(path string) bool {
 	path = strings.TrimSpace(filepath.ToSlash(path))
 	switch {
-	case trackerpaths.IsManagedTrackerPath(path):
+	case trackerpaths.IsNonBlockingPreClaimPath(path):
 		return true
 	case path == ".ddx/dirty-root-guard.json":
 		return true
