@@ -71,22 +71,10 @@ persona's body as a system-prompt addendum to `ddx run` —
 same persona, same behavior across every harness, because the
 harness sees a flat system prompt, not a persona file.
 
-### Default roster
-
-The default `ddx` plugin ships five role-focused personas:
-
-- `code-reviewer` — security-first review with structured verdicts
-- `test-engineer` — stubs-over-mocks, real-e2e, baselined
-  performance, testing pyramid as shape not ratios
-- `implementer` — YAGNI / KISS / DOWITYTD, ships tests with code
-- `architect` — opinionated on when to reach for each pattern
-  (monolith-first, data-model-first)
-- `specification-enforcer` — refuses drift from governing artifacts
-
-See the resolved default plugin payload
-(`${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/personas/README.md`, or the
-baked-in package when offline) for the quality bar and authoring guidance.
-Projects can install additional personas via plugins.
+The built-in `ddx` plugin is a bootstrap skill package and does not ship a
+default persona roster. Install a marketplace plugin such as `helix`, or a
+project-specific plugin, to add personas, prompts, workflow skills, checks, and
+other higher-level assets without copying those payloads into every project.
 
 ### Using a persona
 
@@ -142,9 +130,10 @@ ddx plugin show helix          # show lock/cache/adapter details
 ddx plugin sync                # recreate generated adapters
 ```
 
-Custom personas go in `.ddx/plugins/<plugin>/personas/<name>.md`
-(or directly in `library/personas/<name>.md` for local-only use).
-See the personas README for the authoring quality bar.
+Custom personas belong in a plugin package, typically under
+`library/personas/<name>.md` in that plugin's source tree. Registry installs
+cache that package under XDG and generate adapters into the project; local
+development overlays may expose `.ddx/plugins/<plugin>/personas/<name>.md`.
 
 ## Install topology
 
@@ -171,9 +160,10 @@ forward model.
   they don't make a bad prompt good. Start with a clear prompt;
   reach for a persona when you want consistent style/standards
   across invocations.
-- **Persona files in skill directories**. Personas live in
-  `library/personas/` or `.ddx/plugins/<plugin>/personas/`, not in
-  `.claude/skills/` or `.agents/skills/`. Don't mix the two.
+- **Persona files in skill directories**. Personas live in plugin packages,
+  not in `.claude/skills/` or `.agents/skills/`. Local overlays may use
+  `.ddx/plugins/<plugin>/personas/`; registry installs resolve from the XDG
+  plugin cache. Don't mix personas with generated skill adapters.
 
 ## CLI reference
 

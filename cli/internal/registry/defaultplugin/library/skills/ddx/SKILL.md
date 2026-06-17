@@ -12,9 +12,8 @@ forwards raw passthrough constraints for harness, provider, model,
 and profile while power travels as `MinPower`/`MaxPower` bounds;
 Fizeau owns concrete routing, provider/model discovery, aliases,
 fuzzy matching, catalog lookups, and transcript/session rendering), a
-persona system (bindable AI personalities), a library registry
-(plugins with prompts, templates, personas), and git-aware
-synchronization. This skill makes any skills-compatible coding agent
+persona binding surface backed by installed plugins, a marketplace
+plugin registry, and git-aware synchronization. This skill makes any skills-compatible coding agent
 (Claude Code, OpenAI Codex, Gemini CLI, etc.) understand and operate
 the DDx surface correctly.
 
@@ -108,8 +107,10 @@ exact definitions.
   Fizeau owns concrete route selection within those bounds.
 - **Plugin** — a self-contained extension recorded in the project plugin lock,
   cached under XDG, and exposed to agents through generated adapters. The
-  default `ddx` plugin (personas, prompts, patterns, templates) can fall back
-  to the copy embedded in the binary. `ddx plugin install <name>`.
+  built-in `ddx` plugin is a bootstrap skill package only; workflow payloads
+  such as personas, prompts, patterns, templates, checks, tools, and MCP
+  definitions belong in separately versioned marketplace plugins. `ddx plugin
+  install <name>`.
 - **Skill** — an agentskills.io-standard directory (SKILL.md +
   optional `reference/`, `evals/`, `scripts/`). This `ddx` skill is
   the one DDx ships. Plugins can ship additional skills.
@@ -185,8 +186,8 @@ reference file; do not violate them.
 - Governing feature specs: see `FEAT-*` documents under your
   project's `docs/` tree — especially the CLI, beads, agent-service,
   executions, and skills features.
-- Personas README: shipped by the resolved default `ddx` plugin package at
-  `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/personas/README.md`, with
-  the baked-in package as the offline fallback.
+- Persona guidance: install a marketplace plugin such as `helix` or another
+  project-specific plugin that ships persona files. The built-in `ddx`
+  bootstrap package does not provide a default persona roster.
 - Open standard this skill conforms to:
   [agentskills.io](https://agentskills.io).
