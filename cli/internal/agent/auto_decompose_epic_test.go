@@ -121,6 +121,17 @@ func TestAutoDecomposeEpic_HappyPathClosesParent(t *testing.T) {
 	for _, child := range children {
 		assert.NotContains(t, child.DepIDs(), b.ID, "child %s must not depend on the decomposed parent", child.ID)
 	}
+
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	assert.Len(t, ready, 2, "generated children with no explicit deps must stay ready")
+	readyIDs := make(map[string]bool, len(ready))
+	for _, rb := range ready {
+		readyIDs[rb.ID] = true
+	}
+	for _, child := range children {
+		assert.True(t, readyIDs[child.ID], "child %s must remain ready after parent closure", child.ID)
+	}
 }
 
 // TestAutoDecomposeEpic_PreconditionGates validates that each precondition gate
