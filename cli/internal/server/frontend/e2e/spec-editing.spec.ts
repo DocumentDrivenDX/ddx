@@ -49,7 +49,7 @@ async function mockDocBase(
 		extraQuery?: (query: string, vars: Record<string, unknown>) => Record<string, unknown> | null;
 	} = {}
 ) {
-	await page.route('/graphql', async (route) => {
+	await page.route('**/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		const vars = body.variables ?? {};
 
@@ -224,7 +224,7 @@ test('TestSpecEditing_FederatedWritePersistsOnOwner', async ({ page }) => {
 
 	const SPOKE_DOC_URL = `/nodes/node-abc/projects/${SPOKE_PROJECT_ID}/documents/${HELIX_FEAT_DOC.path}`;
 
-	await page.route('/graphql', async (route) => {
+	await page.route('**/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		if (body.query.includes('NodeInfo')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });

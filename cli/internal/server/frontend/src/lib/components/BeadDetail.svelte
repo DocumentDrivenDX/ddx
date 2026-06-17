@@ -165,13 +165,13 @@
 		actionError = null;
 	}
 
-	async function submitLifecycleAction() {
-		if (!lifecycleAction) return;
+	async function submitLifecycleAction(): Promise<boolean> {
+		if (!lifecycleAction) return false;
 
 		const config = LIFECYCLE_ACTIONS[lifecycleAction];
 		if (config.variableName && !lifecycleReason.trim()) {
 			actionError = `${config.reasonLabel ?? 'Note'} is required`;
-			return;
+			return false;
 		}
 
 		const client = createClient(undefined, projectId);
@@ -190,8 +190,10 @@
 				actionError = null;
 				await invalidateAll();
 			}
+			return true;
 		} catch (error) {
 			actionError = extractGraphQLErrorMessage(error);
+			return false;
 		} finally {
 			busy = false;
 		}
@@ -748,7 +750,7 @@
 			actionLabel={lifecycleConfig.actionLabel}
 			title={lifecycleConfig.title}
 			destructive={lifecycleConfig.destructive}
-			confirmDisabled={busy || (lifecycleConfig.variableName != null && !lifecycleReason.trim())}
+			confirmDisabled={busy}
 			onConfirm={submitLifecycleAction}
 			onOpenChange={(open) => {
 				if (!open) closeLifecycleDialog();
