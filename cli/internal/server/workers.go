@@ -25,6 +25,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	agentlib "github.com/easel/fizeau"
 )
 
@@ -829,6 +830,8 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 	m.mu.Unlock()
 
 	if record.Managed && record.PID > 0 && isTerminalWorkerState(record.State) {
+		_, _ = lockmetrics.CloseAbandonedForPID(record.ProjectRoot, record.PID, finishedAt,
+			"managed worker exited before emitting lock release")
 		if cleanupEvent, ok := recoverManagedWorkerIndexLockAfterExit(record.ProjectRoot, record.ID, record.PID); ok {
 			record.Lifecycle = append(record.Lifecycle, cleanupEvent)
 		}
@@ -2978,6 +2981,8 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 			if projectRoot == "" {
 				projectRoot = m.projectRoot
 			}
+			_, _ = lockmetrics.CloseAbandonedForPID(projectRoot, rec.PID, now,
+				"terminal managed worker record reconciled")
 			body := fmt.Sprintf("worker=%s state=%s reason=terminal-worker-claim", rec.ID, rec.State)
 			released := releaserForProject(projectRoot).release(rec.ID, "", now, bead.BeadEvent{
 				Kind:      "bead.reaped",
@@ -3024,6 +3029,8 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		if projectRoot == "" {
 			projectRoot = m.projectRoot
 		}
+		_, _ = lockmetrics.CloseAbandonedForPID(projectRoot, rec.PID, now,
+			"stale managed worker reconciled after server restart")
 
 		body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
 		releaserForProject(projectRoot).release(rec.ID, beadID, now, bead.BeadEvent{

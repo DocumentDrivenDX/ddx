@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,6 +19,17 @@ func writeLockHoldingWorkerScript(t *testing.T, path string) {
 	writeTestScript(t, path, `
 mkdir -p .git
 printf held > .git/index.lock
+sleep 60 &
+wait
+`)
+}
+
+func writeMetricOnlyWorkerScript(t *testing.T, path string, projectRoot string) {
+	t.Helper()
+	metricsPath := lockmetrics.Path(projectRoot)
+	writeTestScript(t, path, `
+mkdir -p `+strconv.Quote(filepath.Dir(metricsPath))+`
+printf '{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":%s,"acquired_at":"2026-06-17T12:36:22Z"}\n' "$$" >> `+strconv.Quote(metricsPath)+`
 sleep 60 &
 wait
 `)
@@ -71,6 +83,51 @@ func TestManagedWorkerDeathDuringIndexCommitRemovesStaleIndexLock(t *testing.T) 
 	assert.Contains(t, event.Detail, "operation=index.commit")
 	assert.Contains(t, event.Detail, "lock_path="+lockPath)
 	assert.Contains(t, event.Detail, "worker="+rec.ID)
+}
+
+func TestManagedWorkerExitClosesAbandonedLockMetric(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeMetricOnlyWorkerScript(t, workerPath, root)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(time.Second),
+	})
+	require.NoError(t, err)
+	require.NoError(t, m.MarkManaged(rec.ID))
+
+	require.Eventually(t, func() bool {
+		events, err := lockmetrics.Load(root)
+		if err != nil {
+			return false
+		}
+		return len(events) == 1 && events[0].Event == "acquire"
+	}, 5*time.Second, 25*time.Millisecond, "worker must emit an acquire metric before shutdown")
+
+	require.NoError(t, m.Stop(rec.ID))
+	final := waitForWorkerExit(t, m, rec.ID, 5*time.Second)
+	require.Equal(t, "stopped", final.State)
+
+	events, err := lockmetrics.Load(root)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	release := events[1]
+	assert.Equal(t, "release", release.Event)
+	assert.Equal(t, "index.lock", release.LockName)
+	assert.Equal(t, "index.commit", release.Operation)
+	assert.Equal(t, rec.PID, release.HolderPID)
+	assert.True(t, release.Recovered)
+	assert.Equal(t, "error", release.Severity)
+	assert.Contains(t, release.Reason, "managed worker exited")
 }
 
 func TestManagedWorkerDeathDuringIndexCommitDoesNotRemoveLiveHolderLock(t *testing.T) {

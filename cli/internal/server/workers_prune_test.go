@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
@@ -608,6 +609,15 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 		},
 	}
 	require.NoError(t, m.writeRecord(dir, stale))
+	lockmetrics.SetSink(lockmetrics.FileSink(root))
+	t.Cleanup(func() { lockmetrics.SetSink(nil) })
+	lockmetrics.Emit(lockmetrics.Event{
+		Event:      "acquire",
+		LockName:   "index.lock",
+		Operation:  "index.commit",
+		HolderPID:  stale.PID,
+		AcquiredAt: time.Now().UTC().Add(-time.Minute).Format(time.RFC3339Nano),
+	})
 
 	if isPIDAlive(9999996) {
 		t.Skip("PID 9999996 is alive on this host; skipping test")
@@ -629,6 +639,14 @@ func TestReconcileStaleWorkersOnStartup(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, b.Status,
 		"ReconcileStaleWorkers must release bead claims for dead workers")
+
+	events, err := lockmetrics.Load(root)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, "release", events[1].Event)
+	assert.True(t, events[1].Recovered)
+	assert.Equal(t, "error", events[1].Severity)
+	assert.Contains(t, events[1].Reason, "server restart")
 }
 
 func TestReconcileStaleWorkersOnStartupHandlesStopping(t *testing.T) {
