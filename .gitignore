@@ -439,6 +439,7 @@ cli/internal/agent/.ddx/
 # DDx marketplace plugin payloads and generated agent adapters.
 # Project source keeps .ddx/plugins.lock.yaml plus canonical library/embed
 # assets; these paths are restored by ddx plugin sync or local overlays.
+.ddx/plugins/*
 .ddx/plugins/*/
 .agents/skills/*
 .agents/skills/*/

@@ -31,6 +31,7 @@ var initGitignoreRules = []string{
 	".ddx/run-state/",
 	".ddx/dirty-root-guard.json",
 	// Registry plugin payloads and local overlays are materialized per machine.
+	".ddx/plugins/*",
 	".ddx/plugins/*/",
 	// DDx tracked evidence — explicitly un-ignored under executions/
 	"!.ddx/executions/",
