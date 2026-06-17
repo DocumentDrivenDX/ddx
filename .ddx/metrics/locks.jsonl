@@ -2427,3 +2427,6 @@
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":1547074,"acquired_at":"2026-06-17T08:31:21.860391036Z","released_at":"2026-06-17T08:31:22.403694077Z","duration_ms":543}
 {"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":1547074,"acquired_at":"2026-06-17T08:31:25.056598889Z"}
 {"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":1547074,"acquired_at":"2026-06-17T08:31:25.056598889Z","released_at":"2026-06-17T08:31:25.056686681Z"}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1555173,"acquired_at":"2026-06-17T08:40:02.23066376Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1555173,"acquired_at":"2026-06-17T08:40:02.23066376Z","released_at":"2026-06-17T08:40:02.239575799Z","duration_ms":8}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":1555173,"acquired_at":"2026-06-17T08:40:02.245152839Z"}
