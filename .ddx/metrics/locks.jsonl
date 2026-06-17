@@ -1910,3 +1910,4 @@
 {"event":"acquire","lock_name":"index.lock","operation":"index.read-tree","holder_pid":1065332,"acquired_at":"2026-06-17T03:25:09.562453163Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":1065332,"acquired_at":"2026-06-17T03:25:09.562453163Z","released_at":"2026-06-17T03:25:09.590636429Z","duration_ms":28}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1065332,"acquired_at":"2026-06-17T03:24:59.661102892Z","released_at":"2026-06-17T03:25:09.590901972Z","duration_ms":9929}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1144045,"acquired_at":"2026-06-17T03:31:19.322114247Z"}
