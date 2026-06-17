@@ -1,7 +1,9 @@
 package registry
 
 import (
+	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -33,14 +35,52 @@ func EnsureBuiltinDDxCache(cachePath string, force bool) error {
 }
 
 func BuiltinDDxCacheReady(cachePath string) bool {
-	for _, rel := range []string{
-		"package.yaml",
-		filepath.Join("skills", "ddx", "SKILL.md"),
-	} {
-		info, err := os.Stat(filepath.Join(cachePath, rel))
-		if err != nil || info.IsDir() {
-			return false
+	expected := map[string]bool{}
+	if err := fs.WalkDir(defaultplugin.FS(), ".", func(rel string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		if d.IsDir() {
+			return nil
+		}
+		expected[rel] = true
+		embedded, err := fs.ReadFile(defaultplugin.FS(), rel)
+		if err != nil {
+			return err
+		}
+		cached, err := os.ReadFile(filepath.Join(cachePath, filepath.FromSlash(rel)))
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(embedded, cached) {
+			return fmt.Errorf("stale cached file %s", rel)
+		}
+		return nil
+	}); err != nil {
+		return false
+	}
+
+	if len(expected) == 0 {
+		return false
+	}
+
+	if err := filepath.WalkDir(cachePath, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(cachePath, path)
+		if err != nil {
+			return err
+		}
+		if !expected[filepath.ToSlash(rel)] {
+			return fmt.Errorf("stale extra cached file %s", rel)
+		}
+		return nil
+	}); err != nil {
+		return false
 	}
 	return true
 }

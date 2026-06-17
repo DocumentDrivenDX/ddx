@@ -367,16 +367,23 @@ func TestDefaultPackageEmbedCopyIncludesDDxSkill(t *testing.T) {
 		"embedded skills/ddx/SKILL.md must match the canonical library/skills/ddx/SKILL.md (run `make copy-skills` to sync)")
 }
 
-func TestBuiltinDDxCacheReadyRequiresOnlyBootstrapSkill(t *testing.T) {
+func TestBuiltinDDxCacheReadyRequiresFreshEmbeddedBootstrapPackage(t *testing.T) {
 	cachePath := t.TempDir()
-	require.NoError(t, os.MkdirAll(filepath.Join(cachePath, "skills", "ddx"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "package.yaml"), []byte("name: ddx\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "skills", "ddx", "SKILL.md"), []byte("---\nname: ddx\n---\n"), 0o644))
 
-	require.True(t, BuiltinDDxCacheReady(cachePath), "minimal bootstrap package should make built-in ddx cache ready")
+	require.NoError(t, EnsureBuiltinDDxCache(cachePath, true))
+	require.True(t, BuiltinDDxCacheReady(cachePath), "fresh embedded bootstrap package should make built-in ddx cache ready")
 	require.NoDirExists(t, filepath.Join(cachePath, "personas"))
 	require.NoDirExists(t, filepath.Join(cachePath, "prompts"))
 	require.NoDirExists(t, filepath.Join(cachePath, "templates"))
+
+	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "skills", "ddx", "reference", "agents.md"), []byte("stale"), 0o644))
+	require.False(t, BuiltinDDxCacheReady(cachePath), "changed embedded skill content must force cache refresh")
+
+	require.NoError(t, EnsureBuiltinDDxCache(cachePath, true))
+	extra := filepath.Join(cachePath, "personas", "README.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(extra), 0o755))
+	require.NoError(t, os.WriteFile(extra, []byte("old full-package asset"), 0o644))
+	require.False(t, BuiltinDDxCacheReady(cachePath), "extra old default-plugin assets must force cache refresh")
 }
 
 // offlineTransport fails any HTTP attempt so tests can prove an install path
