@@ -2,9 +2,13 @@ package graphql
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
@@ -34,8 +38,35 @@ func (r *mutationResolver) libraryPath(ctx context.Context) (string, error) {
 	return p, nil
 }
 
+// documentWriteConflictError returns the GraphQL conflict envelope used when a
+// caller supplies a stale expected hash for a document write.
+func documentWriteConflictError() error {
+	return &gqlerror.Error{
+		Message: "document write conflict: expected hash does not match current content",
+		Extensions: map[string]any{
+			"code":   "DOCUMENT_WRITE_CONFLICT",
+			"status": 409,
+		},
+	}
+}
+
+// documentWriteContentHash returns the current content hash for a file on disk.
+// Missing files are reported with exists=false so create-vs-update writes can
+// distinguish "new document" from "stale document" without conflating the two.
+func documentWriteContentHash(path string) (hash string, exists bool, err error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), true, nil
+}
+
 // DocumentWrite is the resolver for the documentWrite mutation.
-func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string) (*Document, error) {
+func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string, expectedHash *string) (*Document, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
@@ -52,6 +83,17 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 	if err != nil {
 		return nil, fmt.Errorf("invalid path")
 	}
+
+	if expectedHash != nil && strings.TrimSpace(*expectedHash) != "" {
+		currentHash, exists, err := documentWriteContentHash(fullPath)
+		if err != nil {
+			return nil, fmt.Errorf("reading current document: %w", err)
+		}
+		if !exists || currentHash != strings.TrimSpace(*expectedHash) {
+			return nil, documentWriteConflictError()
+		}
+	}
+
 	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
 		return nil, fmt.Errorf("creating directory: %w", err)
 	}

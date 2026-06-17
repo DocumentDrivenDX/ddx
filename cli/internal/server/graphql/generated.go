@@ -789,7 +789,7 @@ type ComplexityRoot struct {
 		BeadUnclaim           func(childComplexity int, id string) int
 		BeadUpdate            func(childComplexity int, id string, input BeadUpdateInput) int
 		ComparisonDispatch    func(childComplexity int, arms []*ComparisonArmInput) int
-		DocumentWrite         func(childComplexity int, path string, content string) int
+		DocumentWrite         func(childComplexity int, path string, content string, expectedHash *string) int
 		OperatorPromptApprove func(childComplexity int, id string) int
 		OperatorPromptCancel  func(childComplexity int, id string) int
 		OperatorPromptSubmit  func(childComplexity int, input OperatorPromptSubmitInput) int
@@ -1496,7 +1496,7 @@ type MutationResolver interface {
 	BeadApprove(ctx context.Context, id string, note string) (*Bead, error)
 	BeadCancel(ctx context.Context, id string, reason string) (*Bead, error)
 	BeadBlock(ctx context.Context, id string, externalBlockerReason string) (*Bead, error)
-	DocumentWrite(ctx context.Context, path string, content string) (*Document, error)
+	DocumentWrite(ctx context.Context, path string, content string, expectedHash *string) (*Document, error)
 	WorkerDispatch(ctx context.Context, kind string, projectID string, args *string) (*WorkerDispatchResult, error)
 	StartWorker(ctx context.Context, input StartWorkerInput) (*WorkerDispatchResult, error)
 	StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error)
@@ -4839,7 +4839,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Mutation.DocumentWrite(childComplexity, args["path"].(string), args["content"].(string)), true
+		return e.ComplexityRoot.Mutation.DocumentWrite(childComplexity, args["path"].(string), args["content"].(string), args["expectedHash"].(*string)), true
 	case "Mutation.operatorPromptApprove":
 		if e.ComplexityRoot.Mutation.OperatorPromptApprove == nil {
 			break
@@ -8485,6 +8485,11 @@ func (ec *executionContext) field_Mutation_documentWrite_args(ctx context.Contex
 		return nil, err
 	}
 	args["content"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "expectedHash", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["expectedHash"] = arg2
 	return args, nil
 }
 
@@ -26502,7 +26507,7 @@ func (ec *executionContext) _Mutation_documentWrite(ctx context.Context, field g
 		ec.fieldContext_Mutation_documentWrite,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().DocumentWrite(ctx, fc.Args["path"].(string), fc.Args["content"].(string))
+			return ec.Resolvers.Mutation().DocumentWrite(ctx, fc.Args["path"].(string), fc.Args["content"].(string), fc.Args["expectedHash"].(*string))
 		},
 		nil,
 		ec.marshalNDocument2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐDocument,

@@ -3315,7 +3315,9 @@ type Mutation {
     """Document path relative to the library root"""
     path: String!,
     """Document content"""
-    content: String!
+    content: String!,
+    """Optional current content hash; mismatches return a conflict error"""
+    expectedHash: String
   ): Document!
 
   """Dispatch a project worker action."""
