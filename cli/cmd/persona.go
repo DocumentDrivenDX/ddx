@@ -48,7 +48,7 @@ func deprecationNoticeFor(name string) string {
 	if replacement != "" {
 		return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release; use %q instead", name, replacement)
 	}
-	return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release with no direct replacement; see library/personas/README.md for the current 5-persona roster", name)
+	return fmt.Sprintf("warning: persona %q is deprecated and will be removed in a future release with no direct replacement; install a marketplace or project-specific plugin for replacement personas", name)
 }
 
 // PersonaMetadata represents parsed persona frontmatter

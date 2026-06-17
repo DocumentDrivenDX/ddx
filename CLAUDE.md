@@ -215,7 +215,7 @@ DDX includes a persona system that provides consistent AI personalities for diff
 - **Roles**: Abstract functions that personas fulfill (e.g., `code-reviewer`, `test-engineer`)
 - **Bindings**: Project-specific mappings between roles and personas in `.ddx.yml`
 
-Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `library/personas/` for available personas and `library/personas/README.md` for detailed documentation.
+Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. The built-in `ddx` package is bootstrap-only; install a marketplace or project-specific plugin to provide persona files, prompts, workflow skills, checks, and other reusable assets without checking those payloads into every project.
 
 Plugin and persona lookup follows ADR-027: project plugin lock plus XDG cache
 payload first, then the baked-in binary default for the `ddx` package only.
