@@ -2183,3 +2183,6 @@
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2356432,"acquired_at":"2026-06-17T05:33:13.362912297Z"}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2356432,"acquired_at":"2026-06-17T05:33:13.362912297Z","released_at":"2026-06-17T05:33:22.069511197Z","duration_ms":8706}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":2356432,"acquired_at":"2026-06-17T05:33:22.077838779Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2356432,"acquired_at":"2026-06-17T05:33:22.626839558Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2356432,"acquired_at":"2026-06-17T05:33:22.626839558Z","released_at":"2026-06-17T05:33:22.656362276Z","duration_ms":29}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":2356432,"acquired_at":"2026-06-17T05:33:22.077838779Z","released_at":"2026-06-17T05:33:22.656758478Z","duration_ms":578}
