@@ -162,12 +162,18 @@
 		lifecycleDialogOpen = false;
 		lifecycleAction = null;
 		lifecycleReason = '';
+		actionError = null;
 	}
 
 	async function submitLifecycleAction() {
 		if (!lifecycleAction) return;
 
 		const config = LIFECYCLE_ACTIONS[lifecycleAction];
+		if (config.variableName && !lifecycleReason.trim()) {
+			actionError = `${config.reasonLabel ?? 'Note'} is required`;
+			return;
+		}
+
 		const client = createClient();
 		const variables: Record<string, string> = { id: bead.id };
 		if (config.variableName) {
@@ -741,7 +747,7 @@
 			actionLabel={lifecycleConfig.actionLabel}
 			title={lifecycleConfig.title}
 			destructive={lifecycleConfig.destructive}
-			confirmDisabled={busy}
+			confirmDisabled={busy || (lifecycleConfig.variableName != null && !lifecycleReason.trim())}
 			onConfirm={submitLifecycleAction}
 			onOpenChange={(open) => {
 				if (!open) closeLifecycleDialog();
@@ -759,7 +765,7 @@
 						for="bead-lifecycle-reason"
 						class="block text-sm font-medium text-fg-ink dark:text-dark-fg-ink"
 					>
-						{lifecycleConfig.reasonLabel}
+						{lifecycleConfig.reasonLabel} <span class="text-error dark:text-dark-error" aria-hidden="true">*</span>
 					</label>
 					<textarea
 						id="bead-lifecycle-reason"
@@ -768,6 +774,9 @@
 						placeholder={lifecycleConfig.reasonPlaceholder ?? ''}
 						class="w-full rounded-none border border-border-line bg-bg-elevated px-3 py-2 text-body-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:placeholder-dark-fg-muted dark:focus:border-dark-accent-lever"
 					></textarea>
+					{#if !lifecycleReason.trim()}
+						<p data-testid="lifecycle-reason-required-hint" class="text-xs text-fg-muted dark:text-dark-fg-muted">Required</p>
+					{/if}
 				</div>
 			{/if}
 		</ConfirmDialog>
