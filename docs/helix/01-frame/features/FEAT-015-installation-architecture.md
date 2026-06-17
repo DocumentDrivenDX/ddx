@@ -27,6 +27,15 @@ ddx:
 > to work. Clone portability comes from the lockfile plus lazy resolution, not
 > from committing plugin payloads.
 >
+> **Update 2026-06-17 (DDx bootstrap package split):** The built-in `ddx`
+> package embedded in the binary is now the minimum offline bootstrap package,
+> not the full default library. It contains package metadata plus the portable
+> `skills/ddx` tree required by `ddx init`, `ddx plugin sync`, and worker
+> worktree skill discovery. Optional reusable assets such as personas, prompts,
+> templates, MCP examples, environments, prose checks, tools, and artifact
+> templates are registry/cache payloads and should be installed lazily like
+> HELIX marketplace content.
+>
 > **Update 2026-05-12 (single forward install model):** This feature is
 > amended to remove all global/home plugin and skill installation behavior.
 > The only DDx-managed file under a user's home directory is the DDx binary at

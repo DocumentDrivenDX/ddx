@@ -36,9 +36,6 @@ func BuiltinDDxCacheReady(cachePath string) bool {
 	for _, rel := range []string{
 		"package.yaml",
 		filepath.Join("skills", "ddx", "SKILL.md"),
-		filepath.Join("personas", "code-reviewer.md"),
-		filepath.Join("prompts", "claude", "CLAUDE.md.template"),
-		filepath.Join("templates", "README.md"),
 	} {
 		info, err := os.Stat(filepath.Join(cachePath, rel))
 		if err != nil || info.IsDir() {

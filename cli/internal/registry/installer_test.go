@@ -342,6 +342,18 @@ func TestDefaultPackageEmbedCopyIncludesDDxSkill(t *testing.T) {
 		"embedded skills/ddx/SKILL.md must match the canonical library/skills/ddx/SKILL.md (run `make copy-skills` to sync)")
 }
 
+func TestBuiltinDDxCacheReadyRequiresOnlyBootstrapSkill(t *testing.T) {
+	cachePath := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(cachePath, "skills", "ddx"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "package.yaml"), []byte("name: ddx\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(cachePath, "skills", "ddx", "SKILL.md"), []byte("---\nname: ddx\n---\n"), 0o644))
+
+	require.True(t, BuiltinDDxCacheReady(cachePath), "minimal bootstrap package should make built-in ddx cache ready")
+	require.NoDirExists(t, filepath.Join(cachePath, "personas"))
+	require.NoDirExists(t, filepath.Join(cachePath, "prompts"))
+	require.NoDirExists(t, filepath.Join(cachePath, "templates"))
+}
+
 // offlineTransport fails any HTTP attempt so tests can prove an install path
 // did not reach the network.
 type offlineTransport struct{ t *testing.T }

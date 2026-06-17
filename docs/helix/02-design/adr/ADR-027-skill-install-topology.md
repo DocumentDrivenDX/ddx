@@ -10,7 +10,7 @@ ddx:
 
 **Status:** Accepted
 **Date:** 2026-06-01
-**Amended:** 2026-06-15
+**Amended:** 2026-06-17
 
 ## Context
 
@@ -37,6 +37,14 @@ project had a valid plugin lock, a missing cache payload, or missing generated
 adapters, and the agent docs had no single place to describe where the skill
 surfaces live.
 
+The HELIX marketplace plugin also changes the shape of DDx's own built-in
+fallback. The binary no longer needs to carry the whole reusable DDx library
+payload. Offline bootstrap needs only package metadata and the portable
+`skills/ddx` tree; personas, prompts, MCP examples, environments, templates,
+tools, prose-check packs, and artifact templates are optional library assets
+that should resolve through registry/cache packages instead of being embedded
+in every DDx binary.
+
 ## Decision
 
 DDx resolves the default `ddx` package in this order:
@@ -53,12 +61,26 @@ the default `ddx` package so the binary remains usable offline.
 
 The built-in `ddx` package follows the same adapter shape as marketplace
 plugins without becoming a normal project dependency: `ddx init` and
-`ddx plugin sync` may materialize the embedded default package into the XDG
+`ddx plugin sync` may materialize the embedded bootstrap package into the XDG
 plugin cache, then create `.agents/skills/ddx` and `.claude/skills/ddx` as
 generated shims/links to `skills/ddx` in that cache. They do not create
 `.ddx/plugins/ddx`, do not write a project plugin-lock entry for `ddx`, and do
-not require network access. If the cache is missing, the embedded package is the
-fallback source used to recreate it.
+not require network access. If the cache is missing, the embedded bootstrap
+package is the fallback source used to recreate it.
+
+The embedded bootstrap package contains only:
+
+- `package.yaml`
+- `skills/ddx/SKILL.md`
+- `skills/ddx/reference/*`
+- DDx-owned subskills and their small examples/eval fixtures under
+  `skills/ddx/`
+
+It explicitly excludes optional reusable-library payloads such as
+`personas/`, `prompts/`, `templates/`, `environments/`, `mcp-servers/`,
+`checks/`, `tools/`, `patterns/`, and artifact templates. Those assets belong
+to registry/cache packages and can be installed or synced lazily when a project
+declares them.
 
 DDx supports one forward registry install mode with generated agent-tier
 outputs:
@@ -97,7 +119,10 @@ explicitly chosen machine-local development state.
 - The docs can point agents and operators to the same project-local surfaces
   instead of describing competing home-directory and project-directory
   locations.
-- The default package remains available offline through the embedded layer.
+- The default package remains available offline through a minimal embedded
+  bootstrap layer.
+- Optional reusable-library assets are no longer part of the built-in fallback;
+  they are resolved lazily from registry/cache packages when declared.
 - The default package no longer needs a full copied skill tree in every project;
   projects get generated adapters that can be recreated from the XDG cache or
   the binary.

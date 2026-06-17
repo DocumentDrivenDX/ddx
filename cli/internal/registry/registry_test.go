@@ -62,8 +62,8 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Install.Root == nil {
 		t.Fatal("expected install.root to be set")
 	}
-	if pkg.Install.Root.Source != "library" {
-		t.Errorf("expected root source=library, got %q", pkg.Install.Root.Source)
+	if pkg.Install.Root.Source != "." {
+		t.Errorf("expected root source=., got %q", pkg.Install.Root.Source)
 	}
 	// ddx plugin ships skills to project-local skill dirs only (FEAT-015).
 	if len(pkg.Install.Skills) != 2 {
@@ -87,8 +87,27 @@ func TestDefaultPluginPackageDoesNotAdvertiseProjectPayloadInstallTarget(t *test
 	require.NoError(t, err)
 
 	text := string(data)
+	assert.Contains(t, text, "DDx bootstrap skill package")
+	assert.NotContains(t, text, "prompts, personas")
 	assert.Contains(t, text, "Legacy/local-overlay compatibility metadata only.")
 	assert.Contains(t, text, "target: .ddx/plugins/ddx")
+}
+
+func TestBuiltinDDxPackageDoesNotEmbedOptionalLibraryAssets(t *testing.T) {
+	for _, rel := range []string{
+		"artifacts",
+		"checks",
+		"environments",
+		"mcp-servers",
+		"patterns",
+		"personas",
+		"prompts",
+		"templates",
+		"tools",
+	} {
+		_, err := iofs.Stat(defaultplugin.FS(), rel)
+		assert.ErrorIs(t, err, iofs.ErrNotExist, "embedded built-in ddx package must not carry optional %s payload", rel)
+	}
 }
 
 func TestFind(t *testing.T) {

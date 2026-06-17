@@ -69,12 +69,12 @@ func BuiltinRegistry() *Registry {
 			{
 				Name:        "ddx",
 				Version:     "0.4.7",
-				Description: "DDx default library: prompts, personas, MCP configs, environments, skills",
+				Description: "DDx bootstrap skill package for offline init and worker discovery",
 				Type:        PackageTypePlugin,
 				Source:      "https://github.com/DocumentDrivenDX/ddx",
 				Install: PackageInstall{
 					Root: &InstallMapping{
-						Source: "library",
+						Source: ".",
 						// Legacy/local-overlay compatibility metadata only.
 						// Built-in DDx resolves through the embedded cache and
 						// generated adapters, not a copied project payload tree.
@@ -85,7 +85,7 @@ func BuiltinRegistry() *Registry {
 						{Source: "skills/", Target: ".claude/skills/"},
 					},
 				},
-				Keywords: []string{"library", "prompts", "personas", "mcp", "default", "skills"},
+				Keywords: []string{"bootstrap", "default", "skills", "offline"},
 			},
 			{
 				Name:        "helix",
