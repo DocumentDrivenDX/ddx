@@ -1928,6 +1928,8 @@ type WorkerDispatchResult {
   state: String!
   """Worker kind"""
   kind: String!
+  """Every worker started by this dispatch, including id/state/kind."""
+  workers: [WorkerLifecycleResult!]!
 }
 
 """WorkerLifecycleResult describes a lifecycle mutation result."""
@@ -1944,6 +1946,8 @@ type WorkerLifecycleResult {
 input StartWorkerInput {
   """Project identifier"""
   projectId: String!
+  """Number of workers to start. Defaults to 1."""
+  count: Int
   """Optional harness override"""
   harness: String
   """Optional provider override"""

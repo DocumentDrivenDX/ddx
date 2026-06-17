@@ -66,9 +66,10 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 		return r.Actions.DispatchWorker(ctx, kind, r.projectRoot(ctx, projectID), args)
 	case "realign-specs", "run-checks":
 		return &WorkerDispatchResult{
-			ID:    "queued-worker-" + slug(kind),
-			State: queuedPlaceholderState,
-			Kind:  kind,
+			ID:      "queued-worker-" + slug(kind),
+			State:   queuedPlaceholderState,
+			Kind:    kind,
+			Workers: []*WorkerLifecycleResult{},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported worker kind %q", kind)
@@ -145,6 +146,12 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	}
 	if input.RequestTimeout != nil && strings.TrimSpace(*input.RequestTimeout) != "" {
 		args["request_timeout"] = strings.TrimSpace(*input.RequestTimeout)
+	}
+	if input.Count != nil {
+		if *input.Count < 1 {
+			return nil, fmt.Errorf("count must be >= 1")
+		}
+		args["count"] = fmt.Sprintf("%d", *input.Count)
 	}
 	raw, err := json.Marshal(args)
 	if err != nil {

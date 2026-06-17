@@ -120,6 +120,80 @@ func TestWorkerDispatchAdapterMaxCountAllowsWhenUnderLimit(t *testing.T) {
 	}
 }
 
+func TestStartWorker_StartsRequestedCount(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  max_count: 3\n"
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				<-ctx.Done()
+				return agent.ExecuteBeadReport{BeadID: beadID, Status: agent.ExecuteBeadStatusExecutionFailed, Detail: "canceled"}, ctx.Err()
+			}),
+		}
+	}
+
+	raw := `{"count":2,"mode":"watch","idle_interval":"30s"}`
+	adapter := &workerDispatchAdapter{manager: m}
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
+	if err != nil {
+		t.Fatalf("dispatch count=2: %v", err)
+	}
+	t.Cleanup(func() {
+		for _, worker := range result.Workers {
+			_ = m.Stop(worker.ID)
+		}
+	})
+
+	if len(result.Workers) != 2 {
+		t.Fatalf("result.Workers: want 2, got %d", len(result.Workers))
+	}
+	if result.ID != result.Workers[0].ID {
+		t.Fatalf("result.ID should preserve first started worker: got %q want %q", result.ID, result.Workers[0].ID)
+	}
+	if got := adapter.countRunningDrainWorkers(root); got != 2 {
+		t.Fatalf("running workers: want 2, got %d", got)
+	}
+}
+
+func TestStartWorker_EnforcesMaxCount(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	cfg := "version: \"1.0\"\nbead:\n  id_prefix: \"it\"\nworkers:\n  max_count: 2\n"
+	if err := os.WriteFile(filepath.Join(root, ddxroot.DirName, "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		t.Fatal("worker factory must not be called when count exceeds max_count")
+		return nil
+	}
+
+	raw := `{"count":3,"mode":"watch","idle_interval":"30s"}`
+	adapter := &workerDispatchAdapter{manager: m}
+	_, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
+	if err == nil {
+		t.Fatal("expected max_count error, got nil")
+	}
+	if !strings.Contains(err.Error(), "max_count") {
+		t.Fatalf("error should mention max_count, got: %v", err)
+	}
+	if got := adapter.countRunningDrainWorkers(root); got != 0 {
+		t.Fatalf("running workers after rejected count: want 0, got %d", got)
+	}
+}
+
 // TestCountRunningDrainWorkersFiltersByProjectAndKind verifies the helper
 // only counts work workers in state=running for the target
 // projectRoot — not other kinds, other projects, or stopped workers.
