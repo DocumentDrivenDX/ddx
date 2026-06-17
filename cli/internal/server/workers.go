@@ -2981,8 +2981,6 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 			if projectRoot == "" {
 				projectRoot = m.projectRoot
 			}
-			_, _ = lockmetrics.CloseAbandonedForPID(projectRoot, rec.PID, now,
-				"terminal managed worker record reconciled")
 			body := fmt.Sprintf("worker=%s state=%s reason=terminal-worker-claim", rec.ID, rec.State)
 			released := releaserForProject(projectRoot).release(rec.ID, "", now, bead.BeadEvent{
 				Kind:      "bead.reaped",

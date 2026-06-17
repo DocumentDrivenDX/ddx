@@ -211,6 +211,49 @@ func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOwnedClaim(t *testing
 	assert.Equal(t, "terminal-worker-claim", rec.ReapReason)
 }
 
+func TestReconcileStaleWorkersDoesNotRecoverLocksForTerminalHistory(t *testing.T) {
+	root := t.TempDir()
+	store := seedClaimedBeadByOwner(t, root, "ddx-terminal-history", "worker-terminal-history")
+
+	lockmetrics.SetSink(lockmetrics.FileSink(root))
+	t.Cleanup(func() { lockmetrics.SetSink(nil) })
+	lockmetrics.Emit(lockmetrics.Event{
+		Event:      "acquire",
+		LockName:   "index.lock",
+		Operation:  "index.commit",
+		HolderPID:  9999997,
+		AcquiredAt: time.Now().UTC().Add(-time.Hour).Format(time.RFC3339Nano),
+	})
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+
+	workerID := "worker-terminal-history"
+	dir := filepath.Join(m.rootDir, workerID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, m.writeRecord(dir, WorkerRecord{
+		ID:          workerID,
+		Kind:        "work",
+		State:       "exited",
+		Status:      "exited",
+		ProjectRoot: root,
+		StartedAt:   time.Now().UTC().Add(-2 * time.Hour),
+		FinishedAt:  time.Now().UTC().Add(-90 * time.Minute),
+		PID:         9999997,
+	}))
+
+	m.ReconcileStaleWorkers()
+
+	b, err := store.Get(context.Background(), "ddx-terminal-history")
+	require.NoError(t, err)
+	assert.Empty(t, b.Owner, "terminal history still releases stale bead ownership")
+
+	lockEvents, err := lockmetrics.Load(root)
+	require.NoError(t, err)
+	require.Len(t, lockEvents, 1, "terminal historical records must not rescan lock metrics on every reconcile")
+	assert.Equal(t, "acquire", lockEvents[0].Event)
+}
+
 func TestWorkerManagerReconcileStaleWorkersReleasesTerminalOpenLegacyOwner(t *testing.T) {
 	root := t.TempDir()
 	ddx := testutils.MakeInitializedDDxRoot(t, root)
