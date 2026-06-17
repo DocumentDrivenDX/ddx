@@ -407,6 +407,72 @@ func TestWorkerRestartPreservesDesiredCount(t *testing.T) {
 	assert.False(t, old.FinishedAt.IsZero())
 }
 
+func TestManagedExternalWorkerExplicitRestartSuppressesDesiredRefill(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	defer m.StopAll()
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: true},
+	}))
+
+	id := "worker-restart-race"
+	dir := filepath.Join(m.rootDir, id)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	cmd := exec.Command("sh", "-c", "exit 1")
+	require.NoError(t, cmd.Start())
+
+	logFile, err := os.Create(filepath.Join(dir, "worker.log"))
+	require.NoError(t, err)
+
+	progressDone := make(chan struct{})
+	close(progressDone)
+	handle := &workerHandle{
+		record: WorkerRecord{
+			ID:          id,
+			Kind:        "work",
+			State:       workerStateRunning,
+			Status:      workerStateRunning,
+			ProjectRoot: root,
+			PID:         cmd.Process.Pid,
+			StartedAt:   time.Now().UTC(),
+			Managed:     true,
+		},
+		logFile:               logFile,
+		progressDone:          progressDone,
+		suppressDesiredRefill: true,
+	}
+	progressCh := make(chan agent.ProgressEvent)
+
+	m.mu.Lock()
+	m.workers[id] = handle
+	m.mu.Unlock()
+
+	m.runExternalWorker(context.Background(), id, dir, handle, cmd, nil, progressCh)
+	time.Sleep(150 * time.Millisecond)
+
+	records, err := m.List()
+	require.NoError(t, err)
+	for _, rec := range records {
+		if rec.ID == id || rec.ProjectRoot != root {
+			continue
+		}
+		if rec.State == workerStateRunning && rec.PID > 0 && isPIDAlive(rec.PID) {
+			t.Fatalf("explicit restart finalizer spawned desired refill worker %s", rec.ID)
+		}
+	}
+}
+
 func TestRESTWorkerRestartDoesNotOverSpawnDesiredCount(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	root := t.TempDir()

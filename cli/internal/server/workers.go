@@ -194,6 +194,10 @@ type workerHandle struct {
 	// no-op and runWorker can preserve the "stopped" state across its final
 	// record write.
 	stopped bool
+	// suppressDesiredRefill is set by explicit restart before Stop so the old
+	// worker finalizer cannot race the replacement and start another desired
+	// worker for the same project.
+	suppressDesiredRefill bool
 	// wakeCh, when non-nil, signals an work worker's idle-poll
 	// sleep to return early so the loop re-scans the ready queue. The
 	// channel is buffered (cap 1) so a non-blocking send coalesces multiple
@@ -821,7 +825,7 @@ func (m *WorkerManager) runExternalWorker(ctx context.Context, id, dir string, h
 	m.mu.Lock()
 	_ = m.writeRecord(dir, record)
 	handle.record = record
-	shouldRefillDesired := record.Managed && preservedState == "" && isTerminalWorkerState(record.State)
+	shouldRefillDesired := record.Managed && !handle.suppressDesiredRefill && preservedState == "" && isTerminalWorkerState(record.State)
 	m.mu.Unlock()
 	if shouldRefillDesired {
 		go m.refillDesiredWorkersAfterManagedExit(record.ID)
@@ -2095,6 +2099,11 @@ func (m *WorkerManager) RestartWorker(id string, restartCount int) (WorkerRecord
 	if err != nil {
 		return WorkerRecord{}, fmt.Errorf("restart worker: show %s: %w", id, err)
 	}
+	m.mu.Lock()
+	if handle := m.workers[id]; handle != nil {
+		handle.suppressDesiredRefill = true
+	}
+	m.mu.Unlock()
 	// Stop the old worker; ignore "already stopped" errors.
 	_ = m.Stop(id)
 
