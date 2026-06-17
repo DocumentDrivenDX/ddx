@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import { createClient } from '$lib/gql/client';
 	import { subscribeWorkerProgress } from '$lib/gql/subscriptions';
+	import { extractGraphQLErrorMessage } from '$lib/gql/error';
 	import { gql } from 'graphql-request';
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -149,7 +150,7 @@
 	}
 
 	function errorText(err: unknown): string {
-		return err instanceof Error ? err.message : 'Worker action failed.';
+		return extractGraphQLErrorMessage(err, 'Worker action failed.');
 	}
 
 	async function startWorker() {
@@ -573,7 +574,7 @@
 	{/if}
 
 	{#if actionError}
-		<div class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-status-failed dark:border-dark-border-line dark:bg-dark-bg-surface">
+		<div data-testid="worker-action-error" role="alert" class="border border-border-line bg-bg-surface px-3 py-2 text-body-sm text-status-failed dark:border-dark-border-line dark:bg-dark-bg-surface">
 			{actionError}
 		</div>
 	{/if}
