@@ -40,9 +40,6 @@ the only expected home binary is `~/.local/bin/ddx`.
 
 ## Remaining Gaps
 
-- The release build still keeps a generated embedded copy under
-  `cli/internal/skills/ddx` for compatibility. That copy must remain generated
-  from `library/skills/ddx`, not edited as source.
 - `cli/Makefile copy-skills` and `sync-embedded-default-plugin` must remain
   deterministic: they may sync source into embedded release fixtures, but they
   must not recreate project-local payload copies.
@@ -164,8 +161,7 @@ Do not restore these direct bootstrap mechanisms:
 
 - `skills.Install(skills.SkillFiles, ...)` calls from `ddx init` and update;
 - `registerBootstrapDDxSkills`;
-- `cli/internal/skills/ddx` as an editable source distinct from generated
-  release fixtures;
+- `cli/internal/skills/ddx` as an embedded skill mirror;
 - `skills/ddx` as the top-level canonical source;
 - checked-in `.agents/skills/ddx`, `.claude/skills/ddx`, and `.ddx/skills/ddx`
   mirrors.
@@ -199,7 +195,7 @@ declared package root or fail with a clear error; it must not self-link
 6. Keep: sync the minimal `library/package.yaml` plus `library/skills/ddx/`
    into `cli/internal/registry/defaultplugin/library/` as the generated
    embedded release fixture.
-7. Remove only if compatibility allows: legacy generated embedded skill mirrors.
+7. Done: remove the legacy `cli/internal/skills/ddx` embedded skill mirror.
 8. Continue updating FEAT-011, FEAT-015, SD-011, command help, and AGENTS blocks
    when they describe copied bootstrap skill mirrors.
 

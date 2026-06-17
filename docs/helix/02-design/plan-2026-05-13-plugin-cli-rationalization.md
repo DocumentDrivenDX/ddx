@@ -332,7 +332,8 @@ Acceptance:
 
 Files:
 
-- `cli/internal/skills/ddx/reference/agents.md`
+- `library/skills/ddx/reference/agents.md`
+- `cli/internal/registry/defaultplugin/library/skills/ddx/reference/agents.md`
 - `.agents/skills/ddx/reference/agents.md`
 - `.claude/skills/ddx/reference/agents.md`
 - `docs/helix/**`
@@ -361,7 +362,7 @@ Run focused tests as implementation proceeds:
 cd cli && go test ./cmd -run 'Test.*Plugin|Test.*Install|Test.*Upgrade|Test.*Uninstall|Test.*Installed|Test.*Outdated'
 cd cli && go test ./internal/registry/...
 cd cli && go test ./internal/skills/...
-ddx skills check cli/internal/skills/ddx .agents/skills/ddx .claude/skills/ddx
+ddx skills check library/skills/ddx .agents/skills/ddx .claude/skills/ddx
 ```
 
 Final gate:

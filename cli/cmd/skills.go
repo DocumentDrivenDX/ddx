@@ -78,10 +78,9 @@ func (f *CommandFactory) defaultSkillCheckPaths() []string {
 	}
 
 	candidates := []string{
-		filepath.Join(projectRoot, "skills"),
+		filepath.Join(projectRoot, "library", "skills"),
 		filepath.Join(projectRoot, ".agents", "skills"),
 		filepath.Join(projectRoot, ".claude", "skills"),
-		filepath.Join(projectRoot, "cli", "internal", "skills"),
 	}
 
 	var paths []string

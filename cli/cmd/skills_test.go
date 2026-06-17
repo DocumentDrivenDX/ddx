@@ -12,7 +12,7 @@ import (
 
 func TestSkillsCheckDefaultPaths(t *testing.T) {
 	dir := t.TempDir()
-	writeSkillFile(t, filepath.Join(dir, "skills", "plugin-foo", "SKILL.md"), `---
+	writeSkillFile(t, filepath.Join(dir, "library", "skills", "plugin-foo", "SKILL.md"), `---
 name: plugin-foo
 description: Valid test skill.
 ---
@@ -28,7 +28,7 @@ description: Valid test skill.
 
 func TestSkillsCheckDefaultPathsUsesGeneratedAdaptersNotPluginPayload(t *testing.T) {
 	dir := t.TempDir()
-	writeSkillFile(t, filepath.Join(dir, "skills", "plugin-foo", "SKILL.md"), `---
+	writeSkillFile(t, filepath.Join(dir, "library", "skills", "plugin-foo", "SKILL.md"), `---
 name: plugin-foo
 description: Valid test skill.
 ---
