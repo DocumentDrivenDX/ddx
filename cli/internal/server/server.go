@@ -93,7 +93,7 @@ var ensureSelfSignedCertHook = ensureSelfSignedCert
 
 var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
 	manager := startupManager
-	if projectRoot != startupRoot {
+	if !sameCanonicalPath(projectRoot, startupRoot) {
 		manager = NewWorkerManager(projectRoot)
 	}
 	return manager.ReconcileDesiredWorkers()
@@ -315,7 +315,6 @@ func (s *Server) ListenAndServe() error {
 	defer release()
 	s.installSingletonReleaseOnSignal(release)
 	s.writeAddrFile("http")
-	s.reconcileDesiredWorkersAfterStartup()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 
@@ -329,9 +328,15 @@ func (s *Server) ListenAndServe() error {
 			errCh <- s.listenTsnet()
 		}()
 
+		s.reconcileDesiredWorkersAfterStartup()
 		return <-errCh
 	}
-	return http.ListenAndServe(s.Addr, s.mux)
+	ln, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+	s.reconcileDesiredWorkersAfterStartup()
+	return (&http.Server{Addr: s.Addr, Handler: s.mux}).Serve(ln)
 }
 
 // ListenAndServeTLS starts the server with TLS. If certFile and keyFile are
@@ -353,7 +358,6 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 			return fmt.Errorf("generating self-signed cert: %w", err)
 		}
 	}
-	s.reconcileDesiredWorkersAfterStartup()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 		go func() {
@@ -362,9 +366,15 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 		go func() {
 			errCh <- s.listenTsnet()
 		}()
+		s.reconcileDesiredWorkersAfterStartup()
 		return <-errCh
 	}
-	return http.ListenAndServeTLS(s.Addr, certFile, keyFile, s.mux)
+	ln, err := net.Listen("tcp", s.Addr)
+	if err != nil {
+		return err
+	}
+	s.reconcileDesiredWorkersAfterStartup()
+	return (&http.Server{Addr: s.Addr, Handler: s.mux}).ServeTLS(ln, certFile, keyFile)
 }
 
 func (s *Server) reconcileDesiredWorkersAfterStartup() {
