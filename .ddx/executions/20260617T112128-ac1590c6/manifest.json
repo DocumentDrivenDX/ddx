@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260617T112128-ac1590c6",
+  "bead_id": "ddx-2973202c",
+  "base_rev": "3e182f091e4079683b2d0b6d46cb27f637cfcff7",
+  "created_at": "2026-06-17T11:21:36.111060651Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2973202c",
+    "title": "test: wire server operator workbench e2e gate",
+    "description": "PROBLEM\nThe new basic server-operator workflows need a repeatable reliability gate that can be run without scale/Axon noise or generated artifact dirtiness.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:383 defines TC-021 for the hermetic E2E gate.\n- docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md:111 defines Wave 5 as wiring the new E2E specs into the functional gate while keeping scale/perf and Axon separate.\n- Previous frontend functional runs showed unrelated scale fixture failure and generated artifacts can dirty the tree, so this basic workbench gate needs a scoped command.\n\nPROPOSED FIX\n- Add or update frontend test scripts/config so the five workbench specs can be run as a basic functionality gate.\n- Ensure fixtures use temp projects and isolated XDG_DATA_HOME.\n- Ensure the gate does not leave generated videos/screenshots/build artifacts in tracked paths.\n- Keep scale/performance and Axon tests outside this basic gate.\n\nNON-SCOPE\nDo not fix unrelated scale fixture failures in this bead. Do not implement production behavior beyond test/gate wiring.",
+    "acceptance": "1. A documented or scripted gate runs exactly: workers-single-pane.spec.ts, workers-dispatch.spec.ts, federation-worker-control.spec.ts, beads-queue-mutations.spec.ts, and spec-editing.spec.ts.\n2. Playwright test `workbench gate leaves no tracked dirtiness` or equivalent check proves generated artifacts do not dirty tracked paths.\n3. `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/workers-single-pane.spec.ts e2e/workers-dispatch.spec.ts e2e/federation-worker-control.spec.ts e2e/beads-queue-mutations.spec.ts e2e/spec-editing.spec.ts` passes.\n4. `cd cli \u0026\u0026 go test -short ./internal/server/...` passes.\n5. `lefthook run pre-commit` passes.\n6. `git status --short` after the gate has no new generated frontend/video artifacts except pre-existing unrelated DDx metrics.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:test",
+      "area:web",
+      "area:ci",
+      "kind:test",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "worker-20260617T111250-3659",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"decode result: json: cannot unmarshal bool into Go struct field .tractability of type string\",\"fingerprint\":\"5670cbc49a7de4356587ebc33f15f885b534e889e97c5f8b9a41e9fb3d794d82\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"5670cbc49a7de4356587ebc33f15f885b534e889e97c5f8b9a41e9fb3d794d82\"}",
+          "created_at": "2026-06-17T11:14:55.364625835Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T111250-3659 runtime=3m54s pid=2379620 reason=stop",
+          "created_at": "2026-06-17T11:16:44.50768928Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        }
+      ],
+      "spec-id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH",
+      "path": "docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md",
+      "title": "Server Operator Workbench Plan"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260617T112128-ac1590c6",
+    "prompt": ".ddx/executions/20260617T112128-ac1590c6/prompt.md",
+    "manifest": ".ddx/executions/20260617T112128-ac1590c6/manifest.json",
+    "result": ".ddx/executions/20260617T112128-ac1590c6/result.json",
+    "checks": ".ddx/executions/20260617T112128-ac1590c6/checks.json",
+    "usage": ".ddx/executions/20260617T112128-ac1590c6/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-2973202c-20260617T112128-ac1590c6"
+  },
+  "prompt_sha": "66cef848a0af651403b11f97d0032ad218f192a6b7779ae7fc0d75831d189f8e"
+}
