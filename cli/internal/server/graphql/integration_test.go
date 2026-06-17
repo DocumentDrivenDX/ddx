@@ -123,7 +123,10 @@ func newGQLHandler(state ddxgraphql.StateProvider, workDir string, beadBus ddxgr
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 	})
-	return gqlSrv
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(ddxgraphql.WithHTTPRequest(r.Context(), r))
+		gqlSrv.ServeHTTP(w, r)
+	})
 }
 
 type testActionDispatcher struct{}
