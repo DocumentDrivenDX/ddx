@@ -23,7 +23,9 @@ command_groups:
 # Pre-commit hooks - Fast checks on staged files
 # ====================
 pre-commit:
-  parallel: true
+  # Keep pre-commit sequential: sync-embedded-default-plugin rewrites the
+  # embedded default package tree that Go tests compile from.
+  parallel: false
 
   commands:
     # Conflict detection using grep on staged files only.

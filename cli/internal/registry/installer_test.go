@@ -324,6 +324,11 @@ func TestDefaultDDxPackageManifestUsesPackageLocalSkillSource(t *testing.T) {
 	require.NotNil(t, pkg)
 
 	assert.Nil(t, pkg.Install.Root, "library/package.yaml must not advertise a DDx project payload root")
+	assert.Contains(t, pkg.Description, "bootstrap skill package")
+	assert.NotContains(t, pkg.Description, "prompts, personas")
+	assert.NotContains(t, pkg.Keywords, "prompts")
+	assert.NotContains(t, pkg.Keywords, "personas")
+	assert.NotContains(t, pkg.Keywords, "mcp")
 	require.NotEmpty(t, pkg.Install.Skills, "library/package.yaml must declare install.skills mappings")
 	for _, m := range pkg.Install.Skills {
 		assert.Equal(t, "skills/", m.Source,
