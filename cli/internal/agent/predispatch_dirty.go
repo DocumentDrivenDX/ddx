@@ -3,14 +3,18 @@ package agent
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/gitlock"
+	"github.com/DocumentDrivenDX/ddx/internal/lockmetrics"
 )
 
 // checkpointPreDispatchDirt captures DDx bookkeeping changes as a commit on
@@ -35,6 +39,7 @@ var preDispatchDirtyPathLister = func(projectRoot string) ([]string, error) {
 }
 
 var preDispatchCheckpointBeforeUpdateRef = func(projectRoot, ref, commit, head string) {}
+var preDispatchIndexLockOwnerLookup = gitlock.IndexLockOwner
 
 func normalizePreDispatchDirtyPaths(paths []string) []string {
 	seen := make(map[string]bool, len(paths))
@@ -296,7 +301,7 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		preDispatchCheckpointBeforeUpdateRef(projectRoot, ref, commit, head)
 		out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput()
 		if err == nil {
-			if out, err := runGitWithIndexLockRecovery(context.Background(), projectRoot, "read-tree", "HEAD"); err != nil {
+			if out, err := runPreDispatchGitWithIndexLockRecovery(projectRoot, "read-tree", "HEAD"); err != nil {
 				return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
 			}
 			if err := restoreCheckpointSkipWorktreePaths(projectRoot, skipWorktreePaths); err != nil {
@@ -312,6 +317,42 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", refErrMsg, err)
 	}
 	return false, fmt.Errorf("advancing checkpoint ref exceeded retry budget")
+}
+
+func runPreDispatchGitWithIndexLockRecovery(gitDir string, args ...string) ([]byte, error) {
+	timeout := preDispatchIndexGitTimeout()
+	if timeout <= 0 {
+		return runGitWithIndexLockRecovery(context.Background(), gitDir, args...)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	out, err := runGitWithIndexLockRecovery(ctx, gitDir, args...)
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		recoverStaleIndexLockAfterPreDispatchCancel(gitDir)
+		return out, fmt.Errorf("pre-dispatch git timeout: %w", err)
+	}
+	return out, err
+}
+
+func preDispatchIndexGitTimeout() time.Duration {
+	timeout := lockmetrics.DefaultIndexLockCap
+	if cfg := lockmetrics.CapConfigFor("index.lock"); cfg.Cap > 0 && cfg.Cap < timeout {
+		timeout = cfg.Cap
+	}
+	return timeout - minDuration(timeout/10, time.Second)
+}
+
+func recoverStaleIndexLockAfterPreDispatchCancel(gitDir string) {
+	lockPath := worktreeIndexLockPath(gitDir)
+	if _, statErr := os.Lstat(lockPath); statErr != nil {
+		return
+	}
+	if pid, _ := preDispatchIndexLockOwnerLookup(lockPath); pid > 0 && processAlive(pid) {
+		return
+	}
+	_ = os.Remove(lockPath)
 }
 
 func checkpointSkipWorktreePaths(projectRoot string) ([]string, error) {

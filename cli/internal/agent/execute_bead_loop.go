@@ -3645,6 +3645,35 @@ func (w *ExecuteBeadWorker) runIteration(ctx context.Context, rcfg config.Resolv
 		})
 		return executeBeadIterationOutcome{Stop: true}, nil
 	}
+	if timeoutStop, detail, ok := preDispatchGitTimeoutStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
+		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
+			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("Unclaim", assignee, result, unclaimErr)
+			})
+			if ctx.Err() != nil {
+				return executeBeadIterationOutcome{Stop: true}, ctx.Err()
+			}
+			return executeBeadIterationOutcome{Stop: true}, unclaimErr
+		}
+		result.OperatorAttention = timeoutStop
+		setExit("OperatorAttention", "operator_attention")
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log,
+				"operator attention: pre-dispatch git timeout for %s at %s; released bead. %s\n",
+				candidate.ID,
+				runtime.ProjectRoot,
+				detail,
+			)
+		}
+		emit("loop.operator_attention", map[string]any{
+			"reason":       timeoutStop.Reason,
+			"bead_id":      candidate.ID,
+			"project_root": runtime.ProjectRoot,
+			"message":      timeoutStop.Message,
+			"detail":       detail,
+		})
+		return executeBeadIterationOutcome{Stop: true}, nil
+	}
 	if checkpointDirty, ok := preExecuteCheckpointDirtyStop(report, err, runtime.ProjectRoot, candidate.ID); ok {
 		if unclaimErr := releaseWorkerClaim(w.Store, candidate.ID, assignee); unclaimErr != nil {
 			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
