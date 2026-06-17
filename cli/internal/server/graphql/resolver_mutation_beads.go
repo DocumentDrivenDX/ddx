@@ -2,11 +2,14 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/federation"
 )
 
 // beadStore returns a bead.Store rooted at the per-request working directory
@@ -65,6 +68,170 @@ func beadModelFromBead(b *bead.Bead) *Bead {
 	return gql
 }
 
+// beadMutationSelection is the common GraphQL field selection used to round-
+// trip bead mutations through federation.
+const beadMutationSelection = `{
+  id
+  title
+  status
+  priority
+  issueType
+  owner
+  createdAt
+  createdBy
+  updatedAt
+  labels
+  projectID
+  parent
+  description
+  acceptance
+  notes
+  dependencies {
+    issueId
+    dependsOnId
+    type
+    createdAt
+    createdBy
+    metadata
+  }
+}`
+
+type beadMutationForwardEnvelope struct {
+	Query     string         `json:"query"`
+	Variables map[string]any `json:"variables,omitempty"`
+}
+
+type beadMutationForwardResponse struct {
+	Data struct {
+		BeadCreate *Bead `json:"beadCreate,omitempty"`
+		BeadUpdate *Bead `json:"beadUpdate,omitempty"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors,omitempty"`
+}
+
+func (r *mutationResolver) projectIDForWorkingDir(workingDir string) (string, bool) {
+	if r.State == nil || workingDir == "" {
+		return "", false
+	}
+	for _, proj := range r.State.GetProjectSnapshots(false) {
+		if proj.Path == workingDir {
+			return proj.ID, true
+		}
+	}
+	return "", false
+}
+
+// beadMutationOwner resolves the owning spoke for the current request's
+// project. When the project is local or the request is not running with a
+// federation provider, the second return value is nil and the caller should
+// mutate the local store.
+func (r *mutationResolver) beadMutationOwner(workingDir string) (projectID string, owner *federation.SpokeRecord, err error) {
+	projectID, ok := r.projectIDForWorkingDir(workingDir)
+	if !ok || r.Federation == nil {
+		return projectID, nil, nil
+	}
+
+	registry := federation.NewRegistry()
+	registry.Spokes = append(registry.Spokes, r.Federation.Spokes()...)
+	owner, err = federation.RouteMutationToProjectOwner(registry, projectID)
+	if err != nil {
+		switch {
+		case strings.Contains(err.Error(), "multiple registered owners"):
+			return projectID, nil, federation.ErrForwardMutationBroadcastLike
+		case strings.Contains(err.Error(), "no registered spoke owns project"):
+			return projectID, nil, federation.ErrForwardMutationMissingOwner
+		default:
+			return projectID, nil, err
+		}
+	}
+	if owner == nil {
+		return projectID, nil, nil
+	}
+	if strings.TrimSpace(owner.NodeID) == "" || strings.TrimSpace(owner.NodeID) == strings.TrimSpace(r.NodeID) {
+		return projectID, nil, nil
+	}
+	return projectID, owner, nil
+}
+
+func beadMutationForwardQueryCreate() string {
+	return "mutation BeadCreate($input: BeadInput!) { beadCreate(input: $input) " + beadMutationSelection + " }"
+}
+
+func beadMutationForwardQueryUpdate() string {
+	return "mutation BeadUpdate($id: ID!, $input: BeadUpdateInput!) { beadUpdate(id: $id, input: $input) " + beadMutationSelection + " }"
+}
+
+func (r *mutationResolver) forwardBeadMutation(ctx context.Context, owner *federation.SpokeRecord, projectID, mutationName, query string, variables map[string]any) (*Bead, error) {
+	if r.Federation == nil {
+		return nil, federation.ErrForwardMutationMissingOwner
+	}
+	body, err := json.Marshal(beadMutationForwardEnvelope{
+		Query:     query,
+		Variables: variables,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("bead mutation forward: encode request: %w", err)
+	}
+
+	forwardPath := []string{}
+	if nodeID := strings.TrimSpace(r.NodeID); nodeID != "" {
+		forwardPath = append(forwardPath, nodeID)
+	}
+	if owner != nil && strings.TrimSpace(owner.NodeID) != "" {
+		forwardPath = append(forwardPath, strings.TrimSpace(owner.NodeID))
+	}
+
+	resp, err := r.Federation.ForwardMutation(ctx, &federation.ForwardMutationRequest{
+		OriginIdentity:       strings.TrimSpace(r.NodeID),
+		ForwardingPath:       forwardPath,
+		TargetNodeID:         strings.TrimSpace(owner.NodeID),
+		TargetProjectID:      strings.TrimSpace(projectID),
+		RequiredCapabilities: []string{"write"},
+		Body:                 body,
+		Headers: map[string]string{
+			"Content-Type": "application/json",
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("bead mutation forward: empty response")
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("bead mutation forward: spoke returned HTTP %d", resp.StatusCode)
+	}
+
+	var decoded beadMutationForwardResponse
+	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
+		return nil, fmt.Errorf("bead mutation forward: decode response: %w", err)
+	}
+	if len(decoded.Errors) > 0 {
+		msgs := make([]string, 0, len(decoded.Errors))
+		for _, e := range decoded.Errors {
+			msgs = append(msgs, e.Message)
+		}
+		return nil, fmt.Errorf("bead mutation forward: %s", strings.Join(msgs, "; "))
+	}
+
+	switch mutationName {
+	case "beadCreate":
+		if decoded.Data.BeadCreate == nil {
+			return nil, fmt.Errorf("bead mutation forward: missing beadCreate payload")
+		}
+		return decoded.Data.BeadCreate, nil
+	case "beadUpdate":
+		if decoded.Data.BeadUpdate == nil {
+			return nil, fmt.Errorf("bead mutation forward: missing beadUpdate payload")
+		}
+		return decoded.Data.BeadUpdate, nil
+	default:
+		return nil, fmt.Errorf("bead mutation forward: unknown mutation %q", mutationName)
+	}
+}
+
 // BeadCreate is the resolver for the beadCreate mutation.
 func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Bead, error) {
 	if r.workingDir(ctx) == "" {
@@ -102,6 +269,16 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 		b.Notes = *input.Notes
 	}
 
+	projectID, owner, err := r.beadMutationOwner(r.workingDir(ctx))
+	if err != nil {
+		return nil, err
+	}
+	if owner != nil {
+		return r.forwardBeadMutation(ctx, owner, projectID, "beadCreate", beadMutationForwardQueryCreate(), map[string]any{
+			"input": input,
+		})
+	}
+
 	store := r.beadStore(ctx)
 	if err := store.Create(ctx, b); err != nil {
 		return nil, err
@@ -113,6 +290,17 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input BeadUpdateInput) (*Bead, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
+	}
+
+	projectID, owner, routeErr := r.beadMutationOwner(r.workingDir(ctx))
+	if routeErr != nil {
+		return nil, routeErr
+	}
+	if owner != nil {
+		return r.forwardBeadMutation(ctx, owner, projectID, "beadUpdate", beadMutationForwardQueryUpdate(), map[string]any{
+			"id":    id,
+			"input": input,
+		})
 	}
 
 	store := r.beadStore(ctx)
