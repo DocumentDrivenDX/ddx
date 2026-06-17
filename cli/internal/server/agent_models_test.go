@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	agentlib "github.com/easel/fizeau"
 )
 
 func TestHandleAgentModelsNoProviders(t *testing.T) {
@@ -57,6 +59,38 @@ func TestHandleAgentCapabilitiesNoHarness(t *testing.T) {
 	}
 	if errResp["error"] == "" {
 		t.Error("expected non-empty error field")
+	}
+}
+
+func TestChooseCapabilitiesHarnessPrefersClaudeTUI(t *testing.T) {
+	got := chooseCapabilitiesHarness([]agentlib.HarnessInfo{
+		{Name: "codex", Available: true},
+		{Name: "claude", Available: true},
+		{Name: "claude-tui", Available: true},
+	})
+	if got != "claude-tui" {
+		t.Fatalf("chooseCapabilitiesHarness() = %q, want claude-tui", got)
+	}
+}
+
+func TestChooseCapabilitiesHarnessSkipsUnavailablePreferred(t *testing.T) {
+	got := chooseCapabilitiesHarness([]agentlib.HarnessInfo{
+		{Name: "claude-tui", Available: false},
+		{Name: "claude", Available: true},
+		{Name: "codex", Available: true},
+	})
+	if got != "claude" {
+		t.Fatalf("chooseCapabilitiesHarness() = %q, want claude", got)
+	}
+}
+
+func TestChooseCapabilitiesHarnessFallsBackToAnyAvailable(t *testing.T) {
+	got := chooseCapabilitiesHarness([]agentlib.HarnessInfo{
+		{Name: "gemini", Available: true},
+		{Name: "codex", Available: false},
+	})
+	if got != "gemini" {
+		t.Fatalf("chooseCapabilitiesHarness() = %q, want gemini", got)
 	}
 }
 
