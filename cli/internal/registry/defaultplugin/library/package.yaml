@@ -9,7 +9,7 @@ keywords:
   - default
   - skills
   - offline
-install:
+materialize:
   skills:
     - source: skills/
       target: .agents/skills/

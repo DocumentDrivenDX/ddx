@@ -166,8 +166,8 @@ func installFromExtractedDir(pkg *Package, sourceDir, projectRoot string, entry 
 
 	// Process Skills via the manifest mappings for the legacy copy install
 	// path. Forward marketplace installs generate shims from the cache instead.
-	if len(pkg.Install.Skills) > 0 {
-		written, err := installMappings(sourceDir, pkg.Install.Skills)
+	if skillMappings := pkg.SkillMappings(); len(skillMappings) > 0 {
+		written, err := installMappings(sourceDir, skillMappings)
 		if err != nil {
 			return entry, fmt.Errorf("installing skills: %w", err)
 		}

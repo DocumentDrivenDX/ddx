@@ -976,7 +976,7 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 
 	// Install local skills as project-local symlinks into each supported
 	// harness surface.
-	if len(pkg.Install.Skills) > 0 {
+	if skillMappings := pkg.SkillMappings(); len(skillMappings) > 0 {
 		absProject := f.WorkingDir
 		if absProject == "" {
 			absProject, _ = os.Getwd()
@@ -984,7 +984,7 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		if !filepath.IsAbs(absProject) {
 			absProject, _ = filepath.Abs(absProject)
 		}
-		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, pkg.Install.Skills, force)
+		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, skillMappings, force)
 		if err != nil {
 			return fmt.Errorf("installing skills: %w", err)
 		}

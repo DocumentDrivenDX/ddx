@@ -47,7 +47,7 @@ the only expected home binary is `~/.local/bin/ddx`.
   deterministic: they may sync source into embedded release fixtures, but they
   must not recreate project-local payload copies.
 - The root and embedded `package.yaml` manifests must stay minimal:
-  `install.skills` only. No `install.root` payload should be advertised for
+  `materialize.skills` only. No `install.root` payload should be advertised for
   normal installs.
 - `ddx plugin install ddx --local .` must continue to resolve safely to the
   package root or fail before it can self-link `.agents/skills/ddx`.
@@ -113,9 +113,10 @@ to the plugin lock, store payloads in the shared XDG cache, and materialize only
 generated adapters into the project worktree. The full payload tree is not
 copied to `.ddx/plugins/<name>/` for registry installs.
 
-The installer must honor `install.skills[*].source` relative to the package
-root. Skill discovery must not hard-code `.agents/skills` as the primary source
-when the manifest explicitly says `skills/`.
+The installer must honor `materialize.skills[*].source` relative to the package
+root, with `install.skills` retained only as a compatibility fallback. Skill
+discovery must not hard-code `.agents/skills` as the primary source when the
+manifest explicitly says `skills/`.
 
 Directory-to-directory skill mappings install the child skill directories under
 the target. The example above installs `skills/ddx` to `.agents/skills/ddx` and
@@ -136,7 +137,8 @@ All three paths must share the same core install implementation:
 
 1. load and validate `package.yaml` when present;
 2. for local overlays only, apply `install.root.source -> install.root.target`;
-3. apply every `install.skills[*].source -> install.skills[*].target`;
+3. apply every `materialize.skills[*].source -> materialize.skills[*].target`
+   mapping, falling back to `install.skills` for legacy packages;
 4. apply scripts/executables with the existing project-scope rules;
 5. return one `InstalledEntry` shape.
 
@@ -208,14 +210,15 @@ declared package root or fail with a clear error; it must not self-link
   `.agents/skills/ddx` and `.claude/skills/ddx` adapters through the package
   installer and does not create `.ddx/plugins/ddx`.
 - `TestDDxDefaultManifestIsBootstrapOnly`: root and embedded
-  `library/package.yaml` expose only `install.skills` and do not advertise
+  `library/package.yaml` expose only `materialize.skills` and do not advertise
   HELIX-style prompts, personas, templates, checks, tools, MCP servers, or
   `install.root`.
 - `TestPluginInstallLocalDDxLibrarySymlinksSkills`: `ddx plugin install ddx
   --local library --force` creates project-local symlinks to
   `library/skills/ddx`.
-- `TestPluginInstallHonorsSkillSource`: a fixture with `install.skills.source:
-  skills/` installs skills from `skills/` and does not require
+- `TestPluginInstallHonorsSkillSource`: a fixture with
+  `materialize.skills.source: skills/` installs skills from `skills/` and does
+  not require
   `.agents/skills` inside the source package.
 - `TestPluginInstallPreservesUnrelatedProjectSkills`: installing the `ddx`
   package does not replace `.agents/skills` or `.claude/skills` when other

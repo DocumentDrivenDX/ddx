@@ -25,14 +25,15 @@ func (i ValidationIssue) Error() string {
 }
 
 type packageManifestRaw struct {
-	Name        string         `yaml:"name"`
-	Version     string         `yaml:"version"`
-	Description string         `yaml:"description"`
-	Type        string         `yaml:"type"`
-	Source      string         `yaml:"source"`
-	APIVersion  any            `yaml:"api_version"`
-	Install     PackageInstall `yaml:"install"`
-	Keywords    []string       `yaml:"keywords"`
+	Name        string             `yaml:"name"`
+	Version     string             `yaml:"version"`
+	Description string             `yaml:"description"`
+	Type        string             `yaml:"type"`
+	Source      string             `yaml:"source"`
+	APIVersion  any                `yaml:"api_version"`
+	Install     PackageInstall     `yaml:"install"`
+	Materialize PackageMaterialize `yaml:"materialize"`
+	Keywords    []string           `yaml:"keywords"`
 }
 
 // knownManifestKeys is the set of top-level keys consumed by the current
@@ -47,6 +48,7 @@ var knownManifestKeys = map[string]struct{}{
 	"source":      {},
 	"api_version": {},
 	"install":     {},
+	"materialize": {},
 	"keywords":    {},
 }
 
@@ -190,6 +192,7 @@ func validatePackageManifest(path string, raw packageManifestRaw) (*Package, []V
 		Source:      source,
 		APIVersion:  apiVersion,
 		Install:     raw.Install,
+		Materialize: raw.Materialize,
 		Keywords:    append([]string(nil), raw.Keywords...),
 	}
 	return pkg, issues

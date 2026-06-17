@@ -267,7 +267,7 @@ func SyncProjectPlugin(ctx context.Context, projectRoot string, entry PluginLock
 	if pkg == nil {
 		pkg = fallback
 	}
-	files, err := materializeSkillShims(cachePath, projectRoot, pkg.Install.Skills, force)
+	files, err := materializeSkillShims(cachePath, projectRoot, pkg.SkillMappings(), force)
 	if err != nil {
 		return result, err
 	}

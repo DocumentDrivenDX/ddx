@@ -212,7 +212,7 @@ func collectSkillRoots(root string, pkg *Package) []string {
 		roots = append(roots, candidate)
 	}
 
-	for _, mapping := range pkg.Install.Skills {
+	for _, mapping := range pkg.SkillMappings() {
 		sourceRoot := filepath.Join(root, filepath.FromSlash(mapping.Source))
 		add(sourceRoot)
 
@@ -228,7 +228,7 @@ func collectSkillRoots(root string, pkg *Package) []string {
 
 func collectIgnoredBrokenSymlinkPaths(root string, pkg *Package) map[string]bool {
 	ignored := make(map[string]bool)
-	for _, mapping := range pkg.Install.Skills {
+	for _, mapping := range pkg.SkillMappings() {
 		cleanSource := filepath.Clean(filepath.FromSlash(mapping.Source))
 		switch cleanSource {
 		case filepath.Join(".agents", "skills"), filepath.Join(".claude", "skills"):

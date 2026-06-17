@@ -40,8 +40,8 @@ func TestBuiltinRegistry(t *testing.T) {
 	if pkg.Source == "" {
 		t.Error("expected non-empty source")
 	}
-	if pkg.Install.Skills == nil {
-		t.Error("expected install.skills to be set")
+	if pkg.SkillMappings() == nil {
+		t.Error("expected skill mappings to be set")
 	}
 }
 
@@ -62,11 +62,11 @@ func TestBuiltinRegistry_DDxPackage(t *testing.T) {
 	if pkg.Install.Root != nil {
 		t.Fatalf("built-in ddx must not advertise a project payload root: %+v", pkg.Install.Root)
 	}
-	// ddx plugin ships skills to project-local skill dirs only (FEAT-015).
-	if len(pkg.Install.Skills) != 2 {
-		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Install.Skills))
+	// ddx plugin generates project-local skill adapters only (FEAT-018).
+	if len(pkg.Materialize.Skills) != 2 {
+		t.Errorf("expected 2 skill mappings, got %d", len(pkg.Materialize.Skills))
 	}
-	for _, sk := range pkg.Install.Skills {
+	for _, sk := range pkg.Materialize.Skills {
 		if sk.Source != "skills/" {
 			t.Errorf("expected ddx skill source=skills/, got %q", sk.Source)
 		}

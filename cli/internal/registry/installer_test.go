@@ -337,10 +337,11 @@ func TestDDxDefaultManifestIsBootstrapOnly(t *testing.T) {
 			for _, forbidden := range []string{"prompts", "personas", "templates", "checks", "tools", "mcp", "workflows", "helix"} {
 				assert.NotContains(t, pkg.Keywords, forbidden, "%s/package.yaml must not advertise %q", root, forbidden)
 			}
-			require.NotEmpty(t, pkg.Install.Skills, "%s/package.yaml must declare install.skills mappings", root)
-			for _, m := range pkg.Install.Skills {
+			assert.Empty(t, pkg.Install.Skills, "%s/package.yaml must not require legacy install.skills mappings", root)
+			require.NotEmpty(t, pkg.Materialize.Skills, "%s/package.yaml must declare materialize.skills mappings", root)
+			for _, m := range pkg.Materialize.Skills {
 				assert.Equal(t, "skills/", m.Source,
-					"%s/package.yaml install.skills[*].source must be package-local 'skills/', got %q", root, m.Source)
+					"%s/package.yaml materialize.skills[*].source must be package-local 'skills/', got %q", root, m.Source)
 			}
 		})
 	}

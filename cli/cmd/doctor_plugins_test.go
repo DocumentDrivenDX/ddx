@@ -161,15 +161,15 @@ func TestDoctorPluginsFlagReportsBothManifestSchemaAndStructuralIssues(t *testin
 	require.NoError(t, os.Symlink("does-not-exist", filepath.Join(pluginRoot, "broken-link")))
 
 	// Manifest: missing the required `description` field (schema defect)
-	// alongside a valid `install.skills` section (so structural audit has
+	// alongside a valid `materialize.skills` section (so structural audit has
 	// something to walk). Pre-fix: the schema error caused audit to skip
-	// the install section entirely.
+	// the adapter-source section entirely.
 	require.NoError(t, os.WriteFile(filepath.Join(pluginRoot, "package.yaml"), []byte(`name: broken-plugin
 version: 1.0.0
 type: plugin
 source: https://example.com/broken-plugin
 api_version: 1
-install:
+materialize:
   skills:
     - source: skills
       target: .agents/skills
