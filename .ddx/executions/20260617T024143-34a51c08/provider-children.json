@@ -1,0 +1,25 @@
+{
+  "attempt_id": "20260617T024143-34a51c08",
+  "bead_id": "ddx-7eebb7a4",
+  "trigger": "running_phase_non_route_provider_child",
+  "active_route": "codex",
+  "scanned_at": "2026-06-17T02:44:56.536686008Z",
+  "reaped": [
+    {
+      "pid": 638053,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini --version",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 638073,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    }
+  ]
+}
