@@ -248,17 +248,13 @@ func (a *workerDispatchAdapter) StopWorker(ctx context.Context, id string) (*ddx
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if err := a.manager.Stop(id); err != nil {
+	if err := a.manager.RequestStop(id); err != nil {
 		return nil, err
 	}
-	rec, err := a.manager.Show(id)
-	if err != nil {
-		return &ddxgraphql.WorkerLifecycleResult{ID: id, State: "stopping", Kind: "work"}, nil
-	}
 	return &ddxgraphql.WorkerLifecycleResult{
-		ID:    rec.ID,
-		State: rec.State,
-		Kind:  rec.Kind,
+		ID:    id,
+		State: "stopping",
+		Kind:  "work",
 	}, nil
 }
 

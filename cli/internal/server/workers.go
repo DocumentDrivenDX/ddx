@@ -1769,6 +1769,20 @@ func (m *WorkerManager) Show(id string) (WorkerRecord, error) {
 	return refreshWorkerCurrentAttemptFromRunState(rec), nil
 }
 
+// RequestStop validates a worker id and schedules Stop without making API
+// callers wait through process-group termination grace.
+func (m *WorkerManager) RequestStop(id string) error {
+	if _, err := m.Show(id); err != nil {
+		return err
+	}
+	go func() {
+		if err := m.Stop(id); err != nil {
+			fmt.Fprintf(os.Stderr, "ddx: async worker stop %s failed: %v\n", id, err)
+		}
+	}()
+	return nil
+}
+
 // Stop performs a graceful termination of the worker:
 //  1. Mark state=stopping and persist so observers see the transition.
 //  2. Emit bead.stopped event + release the bead claim (if one is held).

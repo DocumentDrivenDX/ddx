@@ -92,13 +92,16 @@ func TestWorkerDispatchAdapterStopWorkerUsesWorkerManagerStop(t *testing.T) {
 	result, err := (&workerDispatchAdapter{manager: m}).StopWorker(t.Context(), "worker-graphql-stop")
 	require.NoError(t, err)
 	assert.Equal(t, "worker-graphql-stop", result.ID)
-	assert.Equal(t, "stopped", result.State)
-	assert.True(t, cancelled.Load(), "GraphQL stop adapter must invoke WorkerManager.Stop cancellation")
+	assert.Equal(t, "stopping", result.State)
 
-	m.mu.Lock()
-	state := handle.record.State
-	m.mu.Unlock()
-	assert.Equal(t, "stopped", state)
+	require.Eventually(t, cancelled.Load, 2*time.Second, 25*time.Millisecond,
+		"GraphQL stop adapter must invoke WorkerManager.Stop cancellation")
+	require.Eventually(t, func() bool {
+		m.mu.Lock()
+		state := handle.record.State
+		m.mu.Unlock()
+		return state == "stopped"
+	}, 2*time.Second, 25*time.Millisecond)
 }
 
 // TestWorkerManagerStopReleasesBeadClaim: when the worker has claimed a bead,

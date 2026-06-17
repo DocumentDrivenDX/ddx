@@ -211,7 +211,7 @@ func (f *CommandFactory) newWorkerStopCommand() *cobra.Command {
 			}
 			defer func() { _ = resp.Body.Close() }()
 			out, _ := io.ReadAll(resp.Body)
-			if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
 				return fmt.Errorf("server error %d: %s", resp.StatusCode, string(out))
 			}
 			fmt.Fprintln(cmd.OutOrStdout(), string(out))

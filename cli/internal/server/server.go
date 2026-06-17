@@ -2933,11 +2933,11 @@ func (s *Server) handleStopAgentWorker(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "worker not found"})
 		return
 	}
-	if err := m.Stop(id); err != nil {
+	if err := m.RequestStop(id); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "stopping"})
+	writeJSON(w, http.StatusAccepted, map[string]string{"id": id, "status": "stopping"})
 }
 
 func (s *Server) handleSetWorkerDesiredState(w http.ResponseWriter, r *http.Request) {

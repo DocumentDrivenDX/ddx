@@ -36,6 +36,15 @@ wait
 `)
 }
 
+func writeTermIgnoringWorkerScript(t *testing.T, path string) {
+	t.Helper()
+	writeTestScript(t, path, `
+trap '' TERM
+sleep 60 &
+wait
+`)
+}
+
 func writeExitThenSleepWorkerScript(t *testing.T, path string) {
 	t.Helper()
 	writeTestScript(t, path, `
@@ -195,6 +204,44 @@ func TestManagedWorkerRecordsProcessGroup(t *testing.T) {
 	assert.Equal(t, rec.PID, rec.PGID)
 
 	require.NoError(t, m.Stop(rec.ID))
+	waitForProcessGroupEmpty(t, rec.PGID)
+}
+
+func TestHandleStopAgentWorkerReturnsBeforeKillGrace(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeTermIgnoringWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 1500 * time.Millisecond
+	defer m.StopAll()
+
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(time.Second),
+	})
+	require.NoError(t, err)
+
+	srv := &Server{WorkingDir: root, workers: m}
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/"+rec.ID+"/stop", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	req.SetPathValue("id", rec.ID)
+	w := httptest.NewRecorder()
+
+	start := time.Now()
+	srv.handleStopAgentWorker(w, req)
+	elapsed := time.Since(start)
+
+	require.Equal(t, http.StatusAccepted, w.Code)
+	assert.Less(t, elapsed, 500*time.Millisecond)
+	assert.JSONEq(t, `{"id":"`+rec.ID+`","status":"stopping"}`, w.Body.String())
+
+	final := waitForWorkerExit(t, m, rec.ID, 4*time.Second)
+	assert.Equal(t, "stopped", final.State)
 	waitForProcessGroupEmpty(t, rec.PGID)
 }
 
