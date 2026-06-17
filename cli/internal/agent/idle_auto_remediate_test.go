@@ -198,7 +198,8 @@ func TestWorkIdle_AutoDecomposeUndecomposedEpic(t *testing.T) {
 
 	parent, err := store.Get(ctx, epic.ID)
 	require.NoError(t, err)
-	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig], "parent epic execution_eligible=false")
+	assert.Equal(t, bead.StatusClosed, parent.Status, "parent epic must be closed after auto-decompose")
+	assert.Empty(t, parent.Owner, "closed decomposed parent must not keep owner metadata")
 
 	require.NotEmpty(t, executed, "loop re-scans and picks at least one child")
 	childIDs := map[string]bool{}

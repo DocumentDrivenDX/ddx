@@ -12,9 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAutoDecomposeEpic_HappyPath validates that a genuinely undecomposed epic
-// with a valid description and labels is dispatched to the preclaim decomposer.
-func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
+// TestAutoDecomposeEpic_HappyPathClosesParent validates that a genuinely
+// undecomposed epic with a valid description and labels is dispatched to the
+// preclaim decomposer and then closed after the split lands.
+func TestAutoDecomposeEpic_HappyPathClosesParent(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init(context.Background()))
 
@@ -25,6 +26,15 @@ func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
 		Description: "PROBLEM\nThis epic has no children and needs decomposition.\n\nROOT CAUSE\nThe epic was created but not broken down.\n\nPROPOSED FIX\nSplit into child tasks.\n\nNON-SCOPE\nNone.",
 		Acceptance:  "1. Children are created with proper structure\n2. cd cli && go test ./internal/agent/... green\n",
 		Labels:      []string{"spec:FEAT-010", "phase:2"},
+		Owner:       "worker-a",
+		Extra: map[string]any{
+			"claimed-at":                "2026-01-01T00:00:00Z",
+			"claimed-pid":               12345,
+			"claimed-machine":           "worker-a",
+			"claimed-session":           "sess-happy",
+			"claimed-worktree":          "/workspace/happy",
+			bead.ClaimHeartbeatExtraKey: "2026-01-01T00:00:00Z",
+		},
 	}
 	require.NoError(t, store.Create(context.Background(), b))
 
@@ -72,10 +82,15 @@ func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
 	// The actual cost tracking would come from the dispatchLifecycleRun result,
 	// but that's handled separately in the dispatch flow.
 
-	// Verify parent execution-eligible is set to false
+	// Verify parent is closed and claim metadata is cleared.
 	parent, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig])
+	assert.Equal(t, bead.StatusClosed, parent.Status)
+	assert.Empty(t, parent.Owner)
+	for _, key := range bead.ClaimMetadataExtraKeys {
+		assert.NotContains(t, parent.Extra, key, "closed decomposed parent must clear claim key %q", key)
+	}
+	assert.NotContains(t, parent.Extra, bead.ClaimHeartbeatExtraKey, "closed decomposed parent must clear the claim heartbeat")
 
 	// Verify auto_decompose_attempted event was emitted
 	events, err := store.Events(b.ID)
@@ -87,7 +102,7 @@ func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
 			var body decomposerEventBody
 			err := json.Unmarshal([]byte(ev.Body), &body)
 			require.NoError(t, err)
-			assert.Equal(t, 2, len(body.ChildIDs))
+			assert.Equal(t, result.ChildIDs, body.ChildIDs)
 			// Cost defaults to 0 since runPreClaimDecomposer doesn't return it
 		}
 	}
@@ -103,6 +118,9 @@ func TestAutoDecomposeEpic_HappyPath(t *testing.T) {
 		}
 	}
 	assert.Len(t, children, 2)
+	for _, child := range children {
+		assert.NotContains(t, child.DepIDs(), b.ID, "child %s must not depend on the decomposed parent", child.ID)
+	}
 }
 
 // TestAutoDecomposeEpic_PreconditionGates validates that each precondition gate
@@ -323,10 +341,10 @@ func TestAutoDecomposeEpic_FallbackDecompositionWorks(t *testing.T) {
 	assert.False(t, result.Failed, "fallback decomposition should succeed")
 	assert.True(t, len(result.ChildIDs) > 0, "fallback should create child beads")
 
-	// Verify parent execution-eligible is set to false
+	// Verify parent is closed after decomposition.
 	parent, err := store.Get(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, false, parent.Extra[bead.ExtraExecutionElig])
+	assert.Equal(t, bead.StatusClosed, parent.Status)
 
 	// Verify auto_decompose_attempted event was emitted
 	events, err := store.Events(b.ID)
