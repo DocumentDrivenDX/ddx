@@ -1,0 +1,11 @@
+internal/agent/execute_bead.go 2046 2049
+internal/agent/execute_bead.go 2077 2077
+internal/agent/execute_bead.go 2079 2080
+internal/agent/execute_bead_guardrails_test.go 232 232
+internal/agent/execute_bead_guardrails_test.go 237 265
+internal/agent/execute_bead_guardrails_test.go 273 276
+internal/agent/execute_bead_guardrails_test.go 278 278
+internal/agent/execute_bead_guardrails_test.go 18 18
+internal/agent/execute_bead_guardrails_test.go 20 21
+internal/agent/execute_bead_guardrails_test.go 16 16
+internal/agent/execute_bead_guardrails_test.go 18 19

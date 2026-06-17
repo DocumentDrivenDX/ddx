@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260617T215715-c2a8dd97",
+  "bead_id": "ddx-903d8953",
+  "base_rev": "59f80017a1a8c1707de413b44a17c33a76a35cb8",
+  "created_at": "2026-06-17T21:57:23.508395266Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-903d8953",
+    "title": "agent: update Step 0 decomposition instructions and prompts",
+    "description": "PROBLEM\nAgent-facing Step 0 guidance still tells workers not to close the current bead and only permits parent-note updates during decomposition. That prevents agents from applying the corrected lifecycle rule after a lossless split and leaves generated child readiness semantics ambiguous.\n\nROOT CAUSE WITH FILE:LINE\n- .agents/skills/ddx/reference/work.md:210-213 and .claude/skills/ddx/reference/work.md:210-213 forbid `ddx bead close \u003cbead-id\u003e` for the current bead and only allow a parent-note update during Step 0 decomposition.\n- cli/internal/agent/execute_bead.go and cli/internal/agent/testdata/execute_bead_prompt_snapshots/{agent,claude}.txt derive or snapshot the same instruction shape, so prompt tests will continue to encode the old behavior unless updated.\n\nPROPOSED FIX\nUpdate .agents/skills/ddx/reference/work.md, .claude/skills/ddx/reference/work.md, cli/internal/agent/execute_bead.go, and the agent/claude prompt snapshots so Step 0 says agents may create child, sibling, or replacement beads for a lossless split; may close the decomposed parent after the split is durable; must wire only legitimate child-to-child or sibling/replacement dependencies; and must not add the decomposed parent as a child dependency. Keep generated adapter conventions intact and update snapshots through the repo's normal prompt-generation path where available.\n\nNON-SCOPE\n- Do not implement the broader `parent_ancestor_in_deps` doctor/back-edge repair slice tracked by ddx-130cf9ab. This bead must not regress it and should reuse its invariant, but it does not replace that repair/backfill work.\n- Do not redesign epic auto-close or historical `dead_intermediate_close`; keep those as legacy/backfill behavior for already-open containers.\n- Do not drain or close existing decomposed queue entries as part of this bead. File or run a separate reconciliation bead if historical tracker cleanup is needed.\n- Do not change Fizeau routing, model escalation, or provider selection.\n\nINTERSECTIONS\nParent: ddx-2a1ece2b.\nRelated, not dependency: ddx-130cf9ab.\nGoverning artifacts: FEAT-010 and TD-031 must remain consistent with the instruction wording updated by the documentation child bead.\n\nPARENT AND DEPS\nParent: ddx-2a1ece2b.\nDeps: No deps. This child can land before or after the docs child but must not contradict the final governed contract.",
+    "acceptance": "1. .agents/skills/ddx/reference/work.md and .claude/skills/ddx/reference/work.md instruct Step 0 decomposition agents that a lossless split may close the decomposed parent after child/sibling/replacement beads are durably filed.\n2. The same Step 0 guidance says generated children may carry `Parent=\u003cdecomposed-id\u003e` but must not include the decomposed parent in dependency IDs; only child-to-child or sibling/replacement deps are allowed when independently justified.\n3. cli/internal/agent/execute_bead.go emits the corrected Step 0 decomposition instructions.\n4. cli/internal/agent/testdata/execute_bead_prompt_snapshots/agent.txt and cli/internal/agent/testdata/execute_bead_prompt_snapshots/claude.txt match the corrected prompt output.\n5. Add or update `TestExecuteBeadPrompt_Step0DecompositionMayCloseParent` and `TestExecuteBeadPrompt_DecompositionForbidsParentDependency` or equivalent prompt coverage.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestExecuteBeadPrompt_Step0DecompositionMayCloseParent|TestExecuteBeadPrompt_DecompositionForbidsParentDependency|DecomposeDoesNotSelfDep' -count=1` passes.\n7. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... ./cmd/... -count=1` passes.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-e9542e0d",
+    "labels": [
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:decomposition",
+      "kind:bug",
+      "kind:correctness",
+      "phase:iterate",
+      "prevention",
+      "related:ddx-130cf9ab",
+      "spec:FEAT-010",
+      "spec:TD-031"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260617T215715-c2a8dd97",
+    "prompt": ".ddx/executions/20260617T215715-c2a8dd97/prompt.md",
+    "manifest": ".ddx/executions/20260617T215715-c2a8dd97/manifest.json",
+    "result": ".ddx/executions/20260617T215715-c2a8dd97/result.json",
+    "checks": ".ddx/executions/20260617T215715-c2a8dd97/checks.json",
+    "usage": ".ddx/executions/20260617T215715-c2a8dd97/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-903d8953-20260617T215715-c2a8dd97"
+  },
+  "prompt_sha": "c7edb563a41ecf016e21f8d79a773cdfa63ee88e6cfaf7d8956476a529ca999a"
+}
