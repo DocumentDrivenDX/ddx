@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260617T212333-5babc77d",
+  "bead_id": "ddx-78a50c99",
+  "base_rev": "a5ecd1cb19b2a57b6fc8725bff158b40e1966f00",
+  "created_at": "2026-06-17T21:23:40.807761218Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-78a50c99",
+    "title": "agent: close parent after auto-epic decomposition",
+    "description": "PROBLEM\nAuto-epic decomposition also parks successfully decomposed parents open with `execution-eligible=false`. A successful lossless auto-decomposition should close the decomposed parent and keep generated child beads executable, while preserving the existing `auto_decompose_attempted` evidence trail.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/auto_decompose_epic.go:182-204 creates child beads for auto-epic decomposition and updates the parent to `execution-eligible=false` instead of closing it.\n- cli/internal/agent/auto_decompose_epic_test.go:15-17 documents the happy path but does not assert that the parent is closed as completed-by-decomposition.\n- The same path must continue to emit `auto_decompose_attempted` evidence for observability and attempt cap behavior.\n\nPROPOSED FIX\n- Update `AutoDecomposeEpic` in cli/internal/agent/auto_decompose_epic.go so a successful lossless child-bead split closes the decomposed parent through the lifecycle/store API after children are created.\n- Preserve existing durable `auto_decompose_attempted` evidence and child ID evidence.\n- Clear parent claim metadata/heartbeat fields on the closed parent.\n- Ensure generated children use `Parent=\u003cdecomposed-id\u003e` but do not receive dependency edges pointing back to the decomposed parent.\n- Update `TestAutoDecomposeEpic_HappyPathClosesParent` or equivalent to prove close semantics while retaining evidence assertions.\n\nNON-SCOPE\n- Do not change pre-claim or post-attempt decomposer code paths in this bead; those are separate children under ddx-e9542e0d.\n- Do not redesign historical `dead_intermediate_close` or epic auto-close behavior for already-open containers.\n- Do not change Fizeau routing, model escalation, provider selection, or decomposer prompt content beyond what is required for the lifecycle assertion.\n\nPARENT AND DEPS\nParent: ddx-e9542e0d.\nDeps: No deps.",
+    "acceptance": "1. `AutoDecomposeEpic` in `cli/internal/agent/auto_decompose_epic.go` closes the decomposed parent through the lifecycle/store API after successful child creation instead of leaving it open with `execution-eligible=false`.\n2. Existing `auto_decompose_attempted` evidence is still emitted and includes enough evidence to identify the generated children or attempted split result.\n3. Parent claim metadata and heartbeat fields are cleared on the closed decomposed parent.\n4. `TestAutoDecomposeEpic_HappyPathClosesParent` or equivalent proves the auto-epic-decompose path closes the parent and still emits `auto_decompose_attempted` evidence.\n5. The test also proves generated children do not include the decomposed parent ID in `DepIDs()`.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run 'AutoDecomposeEpic|DecomposeDoesNotSelfDep|parent_ancestor_in_deps' -count=1` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-e9542e0d",
+    "labels": [
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:decomposition",
+      "kind:bug",
+      "kind:correctness",
+      "phase:iterate",
+      "prevention",
+      "related:ddx-130cf9ab",
+      "spec:FEAT-010",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260617T212333-5babc77d",
+    "prompt": ".ddx/executions/20260617T212333-5babc77d/prompt.md",
+    "manifest": ".ddx/executions/20260617T212333-5babc77d/manifest.json",
+    "result": ".ddx/executions/20260617T212333-5babc77d/result.json",
+    "checks": ".ddx/executions/20260617T212333-5babc77d/checks.json",
+    "usage": ".ddx/executions/20260617T212333-5babc77d/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-78a50c99-20260617T212333-5babc77d"
+  },
+  "prompt_sha": "2fd0802edbc926c1c0ac23ead2afd76f5250a79032b94de42d9c083e39afc27c"
+}
