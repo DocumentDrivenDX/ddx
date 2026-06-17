@@ -87,6 +87,8 @@ var startupDesiredWorkerReconcileDelays = []time.Duration{
 
 var startupDesiredWorkerReconcileLog io.Writer = os.Stderr
 
+var skipStartupDesiredWorkerReconcileForTestBinary = true
+
 var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
 	manager := startupManager
 	if projectRoot != startupRoot {
@@ -367,7 +369,7 @@ func (s *Server) reconcileDesiredWorkersAfterStartup() {
 	if s == nil || s.workers == nil {
 		return
 	}
-	if strings.HasSuffix(os.Args[0], ".test") {
+	if skipStartupDesiredWorkerReconcileForTestBinary && strings.HasSuffix(os.Args[0], ".test") {
 		return
 	}
 	go func() {
