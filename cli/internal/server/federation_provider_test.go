@@ -271,6 +271,179 @@ func TestFederationForwardMutation_PreservesForwardingMetadata(t *testing.T) {
 	}
 }
 
+func TestFederationForwardMutation_IdempotentRequestID(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+
+	var calls int
+	spoke := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("X-Spoke-Call", "first")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"data":{"created":true}}`))
+	}))
+	t.Cleanup(spoke.Close)
+
+	s.hub.mu.Lock()
+	s.hub.registry = federation.NewRegistry()
+	if err := s.hub.registry.UpsertSpoke(federation.SpokeRecord{
+		NodeID:       "node-a",
+		Name:         "alpha",
+		URL:          spoke.URL,
+		ProjectIDs:   []string{"proj-a"},
+		Capabilities: []string{"read", "write"},
+		Status:       federation.StatusActive,
+	}); err != nil {
+		s.hub.mu.Unlock()
+		t.Fatalf("upsert spoke: %v", err)
+	}
+	s.hub.mu.Unlock()
+
+	provider := newHubFederationProvider(s)
+	req := &federation.ForwardMutationRequest{
+		ForwardingPath:  []string{"hub-node", "node-a"},
+		RequestID:       "req-replay",
+		TargetNodeID:    "node-a",
+		TargetProjectID: "proj-a",
+		Body:            []byte(`{"query":"mutation { createThing }"}`),
+	}
+	first, err := provider.ForwardMutation(context.Background(), req)
+	if err != nil {
+		t.Fatalf("first forward mutation: %v", err)
+	}
+	first.Body[0] = '{'
+
+	second, err := provider.ForwardMutation(context.Background(), req)
+	if err != nil {
+		t.Fatalf("second forward mutation: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("same request id must not repeat remote mutation, got %d calls", calls)
+	}
+	if second.StatusCode != http.StatusCreated {
+		t.Fatalf("replayed status = %d", second.StatusCode)
+	}
+	if got := string(second.Body); got != `{"data":{"created":true}}` {
+		t.Fatalf("replayed body = %s", got)
+	}
+	if got := second.Headers.Get("X-Spoke-Call"); got != "first" {
+		t.Fatalf("replayed header = %q", got)
+	}
+}
+
+func TestFederationForwardMutation_IdempotencyKeyIncludesOwnerTarget(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+
+	var callsA, callsB int
+	spokeA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callsA++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"node":"a"}}`))
+	}))
+	t.Cleanup(spokeA.Close)
+	spokeB := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callsB++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"node":"b"}}`))
+	}))
+	t.Cleanup(spokeB.Close)
+
+	s.hub.mu.Lock()
+	s.hub.registry = federation.NewRegistry()
+	for _, spoke := range []federation.SpokeRecord{
+		{
+			NodeID:       "node-a",
+			Name:         "alpha",
+			URL:          spokeA.URL,
+			ProjectIDs:   []string{"proj-a"},
+			Capabilities: []string{"read", "write"},
+			Status:       federation.StatusActive,
+		},
+		{
+			NodeID:       "node-b",
+			Name:         "beta",
+			URL:          spokeB.URL,
+			ProjectIDs:   []string{"proj-b"},
+			Capabilities: []string{"read", "write"},
+			Status:       federation.StatusActive,
+		},
+	} {
+		if err := s.hub.registry.UpsertSpoke(spoke); err != nil {
+			s.hub.mu.Unlock()
+			t.Fatalf("upsert spoke %s: %v", spoke.NodeID, err)
+		}
+	}
+	s.hub.mu.Unlock()
+
+	provider := newHubFederationProvider(s)
+	for _, req := range []*federation.ForwardMutationRequest{
+		{
+			ForwardingPath:  []string{"hub-node", "node-a"},
+			RequestID:       "req-a",
+			IdempotencyKey:  "same-client-key",
+			TargetNodeID:    "node-a",
+			TargetProjectID: "proj-a",
+			Body:            []byte(`{"query":"mutation { a }"}`),
+		},
+		{
+			ForwardingPath:  []string{"hub-node", "node-b"},
+			RequestID:       "req-b",
+			IdempotencyKey:  "same-client-key",
+			TargetNodeID:    "node-b",
+			TargetProjectID: "proj-b",
+			Body:            []byte(`{"query":"mutation { b }"}`),
+		},
+	} {
+		if _, err := provider.ForwardMutation(context.Background(), req); err != nil {
+			t.Fatalf("forward mutation: %v", err)
+		}
+	}
+	if callsA != 1 || callsB != 1 {
+		t.Fatalf("idempotency cache must be scoped by target, callsA=%d callsB=%d", callsA, callsB)
+	}
+}
+
+func TestFederationForwardMutation_IdempotentRefusalDoesNotCreateFallbackState(t *testing.T) {
+	s := newHubServer(t, false)
+	s.hub.mu.Lock()
+	s.hub.registry = federation.NewRegistry()
+	if err := s.hub.registry.UpsertSpoke(federation.SpokeRecord{
+		NodeID:       "node-a",
+		Name:         "alpha",
+		URL:          "https://alpha.example",
+		ProjectIDs:   []string{"proj-a"},
+		Capabilities: []string{"read", "write"},
+		Status:       federation.StatusActive,
+	}); err != nil {
+		s.hub.mu.Unlock()
+		t.Fatalf("upsert spoke: %v", err)
+	}
+	s.hub.mu.Unlock()
+
+	provider := newHubFederationProvider(s)
+	req := &federation.ForwardMutationRequest{
+		ForwardingPath:  []string{"hub-node", "node-a"},
+		RequestID:       "req-missing-owner",
+		TargetNodeID:    "node-a",
+		TargetProjectID: "proj-missing",
+		Body:            []byte(`{"query":"mutation { missing }"}`),
+	}
+	for i := 0; i < 2; i++ {
+		_, err := provider.ForwardMutation(context.Background(), req)
+		var refusal *federation.ForwardMutationRefusalError
+		if !errors.As(err, &refusal) || refusal.Kind != federation.ForwardMutationRefusalMissingOwner {
+			t.Fatalf("attempt %d refusal = %v, want missing-owner", i+1, err)
+		}
+	}
+
+	s.hub.mu.Lock()
+	defer s.hub.mu.Unlock()
+	if got := len(s.hub.registry.Spokes); got != 1 {
+		t.Fatalf("idempotent refusal must not mutate registry, got %d spokes", got)
+	}
+}
+
 func TestFederationForwardMutation_RejectsOfflineOrReadOnly(t *testing.T) {
 	t.Run("offline", func(t *testing.T) {
 		s := newHubServer(t, false)

@@ -123,11 +123,13 @@ func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 	s := newHubServer(t, false)
 	setServerIdentity(t, s, "coord-456")
 
+	var calls int
 	var gotMethod string
 	var gotPath string
 	var gotHeaders http.Header
 	var gotBody []byte
 	spoke := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
 		gotMethod = r.Method
 		gotPath = r.URL.Path
 		gotHeaders = r.Header.Clone()
@@ -140,11 +142,12 @@ func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 	s.hub.mu.Lock()
 	s.hub.registry = federation.NewRegistry()
 	if err := s.hub.registry.UpsertSpoke(federation.SpokeRecord{
-		NodeID:     "node-a",
-		Name:       "alpha",
-		URL:        spoke.URL,
-		ProjectIDs: []string{"proj-a"},
-		Status:     federation.StatusActive,
+		NodeID:       "node-a",
+		Name:         "alpha",
+		URL:          spoke.URL,
+		ProjectIDs:   []string{"proj-a"},
+		Capabilities: []string{"read", "write"},
+		Status:       federation.StatusActive,
 	}); err != nil {
 		s.hub.mu.Unlock()
 		t.Fatalf("upsert spoke: %v", err)
@@ -166,6 +169,9 @@ func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", resp.StatusCode, rec.Body.String())
 	}
+	if calls != 1 {
+		t.Fatalf("spoke calls = %d, want 1", calls)
+	}
 	if gotMethod != http.MethodPost {
 		t.Fatalf("spoke method = %s, want POST", gotMethod)
 	}
@@ -183,6 +189,60 @@ func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 	}
 	if body := rec.Body.String(); body != `{"data":{"forwarded":true}}` {
 		t.Fatalf("response body = %s", body)
+	}
+}
+
+func TestFederationForwardMutationHTTP_IdempotentRequestID(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+
+	var calls int
+	spoke := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.Header().Set("X-Spoke-Call", "first")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"data":{"created":true}}`))
+	}))
+	t.Cleanup(spoke.Close)
+
+	s.hub.mu.Lock()
+	s.hub.registry = federation.NewRegistry()
+	if err := s.hub.registry.UpsertSpoke(federation.SpokeRecord{
+		NodeID:       "node-a",
+		Name:         "alpha",
+		URL:          spoke.URL,
+		ProjectIDs:   []string{"proj-a"},
+		Capabilities: []string{"read", "write"},
+		Status:       federation.StatusActive,
+	}); err != nil {
+		s.hub.mu.Unlock()
+		t.Fatalf("upsert spoke: %v", err)
+	}
+	s.hub.mu.Unlock()
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodPost, "/api/federation/projects/proj-a/graphql", bytes.NewBufferString(`{"query":"mutation { createThing }"}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Tailscale-Node", "origin-123")
+		req.Header.Set("X-DDx-Request-ID", "req-http-replay")
+		req.RemoteAddr = "127.0.0.1:54321"
+
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		resp := rec.Result()
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			t.Fatalf("attempt %d status = %d, body=%s", i+1, resp.StatusCode, rec.Body.String())
+		}
+		if got := resp.Header.Get("X-Spoke-Call"); got != "first" {
+			t.Fatalf("attempt %d replayed header = %q", i+1, got)
+		}
+		if body := rec.Body.String(); body != `{"data":{"created":true}}` {
+			t.Fatalf("attempt %d body = %s", i+1, body)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("same HTTP request id must not repeat remote mutation, got %d calls", calls)
 	}
 }
 

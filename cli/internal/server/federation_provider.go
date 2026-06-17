@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"sync"
 
@@ -90,38 +91,56 @@ func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federa
 	if err := req.Validate(); err != nil {
 		return nil, err
 	}
+	replayKey := forwardMutationReplayKey(req)
+	if replayKey != "" {
+		p.server.hub.mu.Lock()
+		replay, ok := p.server.hub.forwardReplay[replayKey]
+		p.server.hub.mu.Unlock()
+		if ok {
+			return cloneForwardMutationResponse(replay.response), replay.err
+		}
+	}
 
 	p.server.hub.mu.Lock()
 	target, routeErr := federation.RouteMutationToProjectOwner(p.server.hub.registry, req.TargetProjectID)
 	p.server.hub.mu.Unlock()
 	if routeErr != nil {
 		if strings.Contains(routeErr.Error(), "multiple registered owners") {
-			return nil, &federation.ForwardMutationRefusalError{
+			err := &federation.ForwardMutationRefusalError{
 				Kind:   federation.ForwardMutationRefusalBroadcastLike,
 				Detail: routeErr.Error(),
 			}
+			p.storeForwardMutationReplay(replayKey, nil, err)
+			return nil, err
 		}
-		return nil, &federation.ForwardMutationRefusalError{
+		err := &federation.ForwardMutationRefusalError{
 			Kind:   federation.ForwardMutationRefusalMissingOwner,
 			Detail: routeErr.Error(),
 		}
+		p.storeForwardMutationReplay(replayKey, nil, err)
+		return nil, err
 	}
 
 	targetCopy := *target
 	if targetCopy.NodeID != req.TargetNodeID {
-		return nil, &federation.ForwardMutationRefusalError{
+		err := &federation.ForwardMutationRefusalError{
 			Kind:   federation.ForwardMutationRefusalBroadcastLike,
 			Detail: fmt.Sprintf("target node %q does not own project %q", req.TargetNodeID, req.TargetProjectID),
 		}
+		p.storeForwardMutationReplay(replayKey, nil, err)
+		return nil, err
 	}
 
 	if targetCopy.Status == federation.StatusOffline {
+		p.storeForwardMutationReplay(replayKey, nil, federation.ErrForwardMutationOffline)
 		return nil, federation.ErrForwardMutationOffline
 	}
 	if targetCopy.Status == federation.StatusStale {
+		p.storeForwardMutationReplay(replayKey, nil, federation.ErrForwardMutationStale)
 		return nil, federation.ErrForwardMutationStale
 	}
-	if !spokeHasCapability(targetCopy.Capabilities, "write") {
+	if !spokeAllowsForwardMutation(targetCopy.Capabilities) {
+		p.storeForwardMutationReplay(replayKey, nil, federation.ErrForwardMutationReadOnly)
 		return nil, federation.ErrForwardMutationReadOnly
 	}
 
@@ -162,7 +181,7 @@ func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federa
 		return nil, err
 	}
 
-	return &federation.ForwardMutationResponse{
+	out := &federation.ForwardMutationResponse{
 		OriginIdentity:       req.OriginIdentity,
 		ForwardingPath:       append([]string(nil), req.ForwardingPath...),
 		RequestID:            req.RequestID,
@@ -174,7 +193,60 @@ func (p *hubFederationProvider) ForwardMutation(ctx context.Context, req *federa
 		StatusCode:           resp.StatusCode,
 		Headers:              resp.Header.Clone(),
 		Body:                 body,
-	}, nil
+	}
+	p.storeForwardMutationReplay(replayKey, out, nil)
+	return out, nil
+}
+
+func forwardMutationReplayKey(req *federation.ForwardMutationRequest) string {
+	if req == nil {
+		return ""
+	}
+	token := strings.TrimSpace(req.IdempotencyKey)
+	if token == "" {
+		token = strings.TrimSpace(req.RequestID)
+	}
+	if token == "" {
+		return ""
+	}
+	return strings.Join([]string{
+		token,
+		strings.TrimSpace(req.TargetNodeID),
+		strings.TrimSpace(req.TargetProjectID),
+	}, "\x00")
+}
+
+func (p *hubFederationProvider) storeForwardMutationReplay(key string, resp *federation.ForwardMutationResponse, err error) {
+	if key == "" || p.server.hub == nil {
+		return
+	}
+	p.server.hub.mu.Lock()
+	if p.server.hub.forwardReplay == nil {
+		p.server.hub.forwardReplay = make(map[string]forwardMutationReplay)
+	}
+	p.server.hub.forwardReplay[key] = forwardMutationReplay{response: cloneForwardMutationResponse(resp), err: err}
+	p.server.hub.mu.Unlock()
+}
+
+func cloneForwardMutationResponse(resp *federation.ForwardMutationResponse) *federation.ForwardMutationResponse {
+	if resp == nil {
+		return nil
+	}
+	out := *resp
+	out.ForwardingPath = append([]string(nil), resp.ForwardingPath...)
+	out.RequiredCapabilities = append([]string(nil), resp.RequiredCapabilities...)
+	out.Body = append([]byte(nil), resp.Body...)
+	if resp.Headers != nil {
+		out.Headers = make(http.Header, len(resp.Headers))
+		for k, values := range resp.Headers {
+			out.Headers[k] = append([]string(nil), values...)
+		}
+	}
+	if resp.ExpectedVersion != nil {
+		v := *resp.ExpectedVersion
+		out.ExpectedVersion = &v
+	}
+	return &out
 }
 
 func spokeHasCapability(caps []string, want string) bool {
@@ -184,6 +256,21 @@ func spokeHasCapability(caps []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func spokeAllowsForwardMutation(caps []string) bool {
+	advertised := 0
+	for _, cap := range caps {
+		if strings.HasPrefix(cap, identityFingerprintPrefix) {
+			continue
+		}
+		advertised++
+		switch cap {
+		case "write", "beads", "runs":
+			return true
+		}
+	}
+	return advertised == 0
 }
 
 // Compile-time assertion that hubFederationProvider satisfies the resolver
