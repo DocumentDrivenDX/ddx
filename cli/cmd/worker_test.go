@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -233,9 +234,11 @@ func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
 	projectA := t.TempDir()
 	projectB := t.TempDir()
 
+	var globalCalled bool
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, http.MethodGet, r.Method)
 		require.Equal(t, "/api/agent/workers", r.URL.Path)
+		globalCalled = true
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
 			{"id": "worker-project-a", "state": "running", "project_root": projectA, "started_at": "2026-01-01T00:00:00Z"},
@@ -255,12 +258,66 @@ func TestWorkerStatusJSONHonorsProjectFilter(t *testing.T) {
 	assert.Equal(t, projectA, workers[0].ProjectRoot)
 	assert.NotContains(t, out, "worker-project-b")
 	assert.NotContains(t, out, projectB)
+	assert.True(t, globalCalled, "status should use the global aggregate endpoint and filter client-side")
 
 	textOut, err := executeCommand(factory.NewRootCommand(), "worker", "status", "--project", projectA)
 	require.NoError(t, err)
 	assert.Contains(t, textOut, "worker-project-a")
 	assert.NotContains(t, textOut, "worker-project-b")
 	assert.NotContains(t, textOut, projectB)
+}
+
+func TestWorkerStatusJSON_ExcludesStaleStartupReconcileProjects(t *testing.T) {
+	projectRoot := t.TempDir()
+	stalePQueue := filepath.Join(t.TempDir(), "pqueue")
+	staleTablespec := filepath.Join(t.TempDir(), "tablespec")
+
+	var globalCalled bool
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, http.MethodGet, r.Method)
+		require.Equal(t, "/api/agent/workers", r.URL.Path)
+		globalCalled = true
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+			{
+				"id":           "worker-stale-pqueue",
+				"state":        "exited",
+				"project_root": stalePQueue,
+				"started_at":   "2026-01-01T00:00:00Z",
+			},
+			{
+				"id":           "worker-stale-tablespec",
+				"state":        "exited",
+				"project_root": staleTablespec,
+				"started_at":   "2026-01-01T00:00:00Z",
+			},
+			{
+				"id":           "worker-active",
+				"state":        "running",
+				"project_root": projectRoot,
+				"started_at":   "2026-01-01T00:00:00Z",
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+	t.Setenv("DDX_SERVER_URL", srv.URL)
+
+	factory := NewCommandFactory(projectRoot)
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "worker", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var workers []workerRecord
+	require.NoError(t, json.Unmarshal([]byte(out), &workers))
+	require.Len(t, workers, 1)
+	assert.Equal(t, "worker-active", workers[0].ID)
+	assert.Equal(t, projectRoot, workers[0].ProjectRoot)
+	assert.NotContains(t, out, "worker-stale-pqueue")
+	assert.NotContains(t, out, "worker-stale-tablespec")
+	assert.NotContains(t, out, stalePQueue)
+	assert.NotContains(t, out, staleTablespec)
+	assert.True(t, globalCalled, "status should use the global aggregate endpoint and filter client-side")
 }
 
 func reserveLocalTCPAddr(t *testing.T) string {
