@@ -93,13 +93,11 @@ adapters may link directly to the source checkout.
 
 ## Manifest Contract
 
-`library/package.yaml` declares package-local skill sources:
+`library/package.yaml` declares package-local skill sources for the built-in
+DDx bootstrap package:
 
 ```yaml
-install:
-  root:
-    source: .
-    target: .ddx/plugins/ddx
+materialize:
   skills:
     - source: skills/
       target: .agents/skills/

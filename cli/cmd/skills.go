@@ -30,8 +30,8 @@ Examples:
   ddx skills check .claude/skills
   ddx skills check .agents/skills/helix
 
-Use .ddx/plugins/<name> only when explicitly validating a local development
-overlay or a legacy compatibility install. Marketplace plugin payloads live in
+Use .ddx/plugins/<name> only for a local development overlay or legacy compatibility.
+Marketplace plugin payloads live in
 the shared XDG cache and are exposed to harnesses through generated adapters.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()

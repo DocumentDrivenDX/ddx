@@ -89,7 +89,7 @@ The fixture lives at `cli/internal/server/frontend/e2e/fixtures/` and contains:
 - `.ddx/beads.jsonl` — open, closed, and blocked beads so bead endpoints return
   non-empty data.
 - `.ddx/plugins/ddx/` — fixture-only local overlay source used for
-  local-overlay and legacy-compatibility coverage. Normal marketplace plugin
+  local overlay and legacy compatibility coverage. Normal marketplace plugin
   installs write `.ddx/plugins.lock.yaml`, cache payloads under XDG, and expose
   skills through generated adapters under `.agents/skills/` and
   `.claude/skills/`.
@@ -107,8 +107,8 @@ the repository's own `.ddx/`. Typical extensions:
 - More beads → append JSONL records to `.ddx/beads.jsonl`.
 - New personas, prompts, or templates → prefer generated adapter fixture data
   under `.agents/skills/` or `.claude/skills/`. Add files under
-  `.ddx/plugins/ddx/{personas,prompts,templates}/` only for local-overlay or
-  legacy-compatibility coverage when a spec needs it.
+  `.ddx/plugins/ddx/{personas,prompts,templates}/` only for local overlay or
+  legacy compatibility coverage when a spec needs it.
 - New docs for the document graph → add Markdown under `docs/`.
 
 Keep additions minimal and self-contained; the fixture is the only supported
