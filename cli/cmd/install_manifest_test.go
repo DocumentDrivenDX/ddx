@@ -110,6 +110,25 @@ install:
 	assert.True(t, os.IsNotExist(statErr), "no plugin tree should be written under $HOME on rejection")
 }
 
+func TestInstallResourcePathIsRetired(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	factory := NewCommandFactory(workDir)
+	_, err := executeCommand(factory.NewRootCommand(), "install", "persona/strict-code-reviewer")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "ddx install has been retired")
+
+	_, err = executeCommand(factory.NewRootCommand(), "plugin", "install", "persona/strict-code-reviewer")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "individual resource installs are retired")
+
+	legacyPayloadDir := filepath.Join(workDir, ddxroot.DirName, "plugins", "ddx")
+	_, statErr := os.Stat(legacyPayloadDir)
+	assert.True(t, os.IsNotExist(statErr), "resource install must not recreate the legacy ddx project payload")
+}
+
 func TestInstallLocalPreservesExistingProjectPluginDirUnlessForced(t *testing.T) {
 	workDir := t.TempDir()
 	homeDir := t.TempDir()

@@ -109,8 +109,7 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	}
 
 	if registry.IsResourcePath(name) {
-		// Individual resource install (e.g. "persona/strict-code-reviewer")
-		fmt.Fprintf(out, "Installing resource %s...\n", name)
+		cmd.SilenceUsage = true
 		entry, err := registry.InstallResource(name)
 		if err != nil {
 			return fmt.Errorf("install resource: %w", err)

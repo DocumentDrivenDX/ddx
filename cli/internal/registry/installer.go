@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 )
 
 // InstallPackage downloads the source release tarball and copies declared
@@ -275,8 +273,8 @@ func installMappings(srcDir string, mappings []InstallMapping) ([]string, error)
 	return written, nil
 }
 
-// InstallResource installs a single resource file (e.g. "persona/strict-code-reviewer")
-// from the ddx-library GitHub repo into the local .ddx/plugins/ddx/<type>/ directory.
+// InstallResource is the retired pre-plugin resource installer. Resource
+// payloads now come from marketplace plugin caches plus generated adapters.
 func InstallResource(resourcePath string) (InstalledEntry, error) {
 	entry := InstalledEntry{
 		Name:        resourcePath,
@@ -286,32 +284,7 @@ func InstallResource(resourcePath string) (InstalledEntry, error) {
 		InstalledAt: time.Now(),
 	}
 
-	// resourcePath is like "persona/strict-code-reviewer"
-	parts := strings.SplitN(resourcePath, "/", 2)
-	if len(parts) != 2 {
-		return entry, fmt.Errorf("invalid resource path %q: expected <type>/<name>", resourcePath)
-	}
-	resourceType, resourceName := parts[0], parts[1]
-
-	// Determine target directory relative to cwd.
-	target := ddxroot.JoinRelative("plugins", "ddx", resourceType+"s")
-	if err := os.MkdirAll(target, 0755); err != nil {
-		return entry, fmt.Errorf("creating target directory %s: %w", target, err)
-	}
-
-	// Fetch raw file from GitHub.
-	rawURL := fmt.Sprintf(
-		"https://raw.githubusercontent.com/easel/ddx-library/main/%ss/%s.md",
-		resourceType, resourceName,
-	)
-
-	destFile := filepath.Join(target, resourceName+".md")
-	if err := downloadFile(rawURL, destFile); err != nil {
-		return entry, fmt.Errorf("downloading %s: %w", rawURL, err)
-	}
-
-	entry.Files = append(entry.Files, destFile)
-	return entry, nil
+	return entry, fmt.Errorf("individual resource installs are retired; install a marketplace plugin with 'ddx plugin install <name>' and run 'ddx plugin sync'")
 }
 
 // UninstallPackage removes files recorded in the entry.

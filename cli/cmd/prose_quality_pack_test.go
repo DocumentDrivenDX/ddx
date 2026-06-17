@@ -90,8 +90,8 @@ func TestProseQualityStylePack_FullLibraryManifestCoversPackagedPaths(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if builtin.Install.Root == nil || builtin.Install.Root.Source != "." {
-		t.Fatalf("built-in ddx package is not package-rooted: %+v", builtin.Install.Root)
+	if builtin.Install.Root != nil {
+		t.Fatalf("built-in ddx package must not advertise a project payload root: %+v", builtin.Install.Root)
 	}
 
 	manifest, issues, err := registry.LoadPackageManifest(filepath.Join(root, "library"))
@@ -101,11 +101,8 @@ func TestProseQualityStylePack_FullLibraryManifestCoversPackagedPaths(t *testing
 	if len(issues) > 0 {
 		t.Fatalf("library manifest validation issues: %+v", issues)
 	}
-	// The canonical library/package.yaml is package-rooted: install.root.source
-	// is "." relative to the library/ package root. Resolving the rule paths
-	// therefore goes through library/<source>.
-	if manifest.Install.Root == nil || manifest.Install.Root.Source != "." {
-		t.Fatalf("library manifest does not ship the package root: %+v", manifest.Install.Root)
+	if manifest.Install.Root != nil {
+		t.Fatalf("library manifest must not advertise a project payload root: %+v", manifest.Install.Root)
 	}
 
 	settings, err := docprose.DefaultSettings()
@@ -113,7 +110,7 @@ func TestProseQualityStylePack_FullLibraryManifestCoversPackagedPaths(t *testing
 		t.Fatal(err)
 	}
 	for _, rule := range settings.StylePack.Rules {
-		path := filepath.Join(root, "library", manifest.Install.Root.Source, "checks", "prose-quality", "styles", filepath.FromSlash(rule.File))
+		path := filepath.Join(root, "library", "checks", "prose-quality", "styles", filepath.FromSlash(rule.File))
 		if _, err := os.Stat(path); err != nil {
 			t.Fatalf("style file %s is outside the default library install root: %v", path, err)
 		}

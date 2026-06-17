@@ -314,7 +314,8 @@ func TestLegacyInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
 // canonical library/package.yaml declares package-local skill sources
 // (i.e. source: skills/) so the embedded default-package install copies
 // the DDx skill out of library/skills/ rather than out of a checked-in
-// .agents/skills mirror.
+// .agents/skills mirror. It must not declare a root payload target; the
+// built-in DDx package is cache-only plus generated adapters.
 func TestDefaultDDxPackageManifestUsesPackageLocalSkillSource(t *testing.T) {
 	manifestPath := filepath.Join("..", "..", "..", "library", "package.yaml")
 	pkg, issues, err := LoadPackageManifest(filepath.Dir(manifestPath))
@@ -322,11 +323,19 @@ func TestDefaultDDxPackageManifestUsesPackageLocalSkillSource(t *testing.T) {
 	require.Empty(t, issues, "library/package.yaml must have no schema issues")
 	require.NotNil(t, pkg)
 
+	assert.Nil(t, pkg.Install.Root, "library/package.yaml must not advertise a DDx project payload root")
 	require.NotEmpty(t, pkg.Install.Skills, "library/package.yaml must declare install.skills mappings")
 	for _, m := range pkg.Install.Skills {
 		assert.Equal(t, "skills/", m.Source,
 			"library/package.yaml install.skills[*].source must be package-local 'skills/', got %q", m.Source)
 	}
+}
+
+func TestInstallResourceIsRetired(t *testing.T) {
+	entry, err := InstallResource("persona/strict-code-reviewer")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "individual resource installs are retired")
+	assert.Empty(t, entry.Files)
 }
 
 // TestDefaultPackageEmbedCopyIncludesDDxSkill proves the embedded

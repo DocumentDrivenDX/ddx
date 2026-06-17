@@ -12,12 +12,6 @@ keywords:
   - default
   - skills
 install:
-  root:
-    source: .
-    # Legacy/local-overlay compatibility metadata only.
-    # Built-in DDx resolves through the embedded default-plugin cache and
-    # generated adapters, not a copied project payload tree.
-    target: .ddx/plugins/ddx
   skills:
     - source: skills/
       target: .agents/skills/
