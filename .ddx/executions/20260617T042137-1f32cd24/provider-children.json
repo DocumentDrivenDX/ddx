@@ -3,7 +3,7 @@
   "bead_id": "ddx-2fa4ec4c",
   "trigger": "running_phase_non_route_provider_child",
   "active_route": "codex",
-  "scanned_at": "2026-06-17T04:41:28.757265017Z",
+  "scanned_at": "2026-06-17T04:43:30.757263767Z",
   "reaped": [
     {
       "pid": 1959791,
@@ -15,6 +15,22 @@
     },
     {
       "pid": 1974504,
+      "provider": "gemini",
+      "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1981780,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 1,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 1981854,
       "provider": "gemini",
       "command": "node /home/erik/.local/share/mise/installs/node/22.21.1/bin/gemini",
       "age_seconds": 1,
