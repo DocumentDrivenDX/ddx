@@ -1,9 +1,8 @@
 {
   "attempt_id": "20260617T042137-1f32cd24",
   "bead_id": "ddx-2fa4ec4c",
-  "trigger": "running_phase_non_route_provider_child",
-  "active_route": "codex",
-  "scanned_at": "2026-06-17T04:48:56.757263893Z",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-06-17T04:49:42.877019623Z",
   "reaped": [
     {
       "pid": 1959791,
