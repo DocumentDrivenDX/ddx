@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
 
 // documentWriteWriteFile is a test seam so refusal paths can be exercised

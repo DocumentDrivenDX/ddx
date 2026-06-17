@@ -112,7 +112,7 @@ ddx:
 
 Updated content.
 `
-	doc, err := mut.DocumentWrite(ctx, testFeaturePath, updated)
+	doc, err := mut.DocumentWrite(ctx, testFeaturePath, updated, nil)
 	if err != nil {
 		t.Fatalf("DocumentWrite: %v", err)
 	}
@@ -182,7 +182,7 @@ ddx:
 
 Updated B.
 `
-	doc, err := mut.DocumentWrite(ctxB, testFeaturePath, updatedB)
+	doc, err := mut.DocumentWrite(ctxB, testFeaturePath, updatedB, nil)
 	if err != nil {
 		t.Fatalf("DocumentWrite(projB): %v", err)
 	}
@@ -262,7 +262,7 @@ ddx:
 
 Refused content.
 `
-	if doc, err := mut.DocumentWrite(ctx, testFeaturePath, updated); err == nil {
+	if doc, err := mut.DocumentWrite(ctx, testFeaturePath, updated, nil); err == nil {
 		t.Fatalf("DocumentWrite unexpectedly succeeded: %+v", doc)
 	}
 
