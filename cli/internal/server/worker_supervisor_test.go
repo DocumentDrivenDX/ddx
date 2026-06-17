@@ -117,6 +117,19 @@ func (f *fakeWorkerController) seedLiveManaged(id, projectRoot string, startedAt
 	f.live[id] = true
 }
 
+func (f *fakeWorkerController) seedTerminalManaged(id, projectRoot, state string, startedAt time.Time) {
+	f.records[id] = &WorkerRecord{
+		ID:          id,
+		Kind:        "work",
+		State:       state,
+		Status:      state,
+		ProjectRoot: projectRoot,
+		StartedAt:   startedAt,
+		Managed:     true,
+	}
+	f.live[id] = false
+}
+
 // TestWorkerSupervisorReconcileStartsAndStopsToDesiredCount proves reconcile
 // starts missing server-managed workers and stops the newest excess workers to
 // match desired_count (AC2).
@@ -280,6 +293,32 @@ func TestWorkerSupervisorRestartDisabledAndPaused(t *testing.T) {
 		assert.Empty(t, res.Started)
 		assert.Contains(t, res.RestartSkipped, "dirty project root")
 	})
+}
+
+func TestWorkerSupervisorFreshSupervisorBackfillsTerminalDiskWorker(t *testing.T) {
+	for _, state := range []string{"stopped", "reaped"} {
+		t.Run(state, func(t *testing.T) {
+			root := t.TempDir()
+			clock := time.Date(2026, 6, 17, 12, 0, 0, 0, time.UTC)
+			fake := newFakeWorkerController(func() time.Time { return clock })
+			fake.seedTerminalManaged("worker-"+state, root, state, clock.Add(-time.Minute))
+			sup := NewWorkerSupervisor(root, fake)
+			sup.clock = func() time.Time { return clock }
+
+			require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+				DesiredCount: 1,
+				DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+				Restart:      WorkerRestartPolicy{Enabled: false},
+			}))
+
+			res, err := sup.Reconcile()
+			require.NoError(t, err)
+			require.Len(t, res.Started, 1, "fresh supervisors should not let prior terminal disk records consume desired slots")
+			assert.Empty(t, res.Restarted)
+			assert.Empty(t, res.RestartSkipped)
+			assert.Equal(t, state, fake.records["worker-"+state].State)
+		})
+	}
 }
 
 // TestWorkerSupervisorMarksStaleRunningRecordsStopped proves a disk status

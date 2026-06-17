@@ -215,6 +215,7 @@ type WorkerManager struct {
 	// Without this, concurrent exits can each see a partial worker set and
 	// over-provision beyond desired_count.
 	desiredReconcileMu sync.Mutex
+	desiredSupervisor  *WorkerSupervisor
 	// BeadWorkerFactory, when non-nil, is called by runWorker to create the
 	// ExecuteBeadWorker instead of building one from the real agent runner.
 	// Override in tests to inject a fake executor.
@@ -3056,8 +3057,10 @@ func (m *WorkerManager) reconcileDesiredWorkersOnly() (ReconcileResult, error) {
 	m.desiredReconcileMu.Lock()
 	defer m.desiredReconcileMu.Unlock()
 
-	sup := NewWorkerSupervisor(m.projectRoot, m)
-	return sup.Reconcile()
+	if m.desiredSupervisor == nil {
+		m.desiredSupervisor = NewWorkerSupervisor(m.projectRoot, m)
+	}
+	return m.desiredSupervisor.Reconcile()
 }
 
 func (m *WorkerManager) provisionDesiredWorkersBeforeStaleSweep() (ReconcileResult, error) {
