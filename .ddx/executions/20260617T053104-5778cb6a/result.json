@@ -1,0 +1,60 @@
+{
+  "bead_id": "ddx-bf1d19cd",
+  "attempt_id": "20260617T053104-5778cb6a",
+  "base_rev": "da7e68632550b87178bd3b0f968b0d23566c5053",
+  "result_rev": "98f431eb9bf3ca53fd89ddda4d31c6191260e43f",
+  "implementation_rev": "98f431eb9bf3ca53fd89ddda4d31c6191260e43f",
+  "landed_branch": "main",
+  "outcome": "preserved",
+  "status": "land_conflict",
+  "detail": "merge conflict",
+  "orchestrator_status": "land_conflict",
+  "reason": "merge conflict",
+  "preserve_ref": "refs/ddx/iterations/ddx-bf1d19cd/20260617T053104-5778cb6a-db57fd0f4d4a",
+  "candidate_ref": "refs/ddx/iterations/20260617T053104-5778cb6a/0",
+  "required_exec_summary": "skipped",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260617T053104-5778cb6a",
+      "result_rev": "98f431eb9bf3ca53fd89ddda4d31c6191260e43f",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-771c8dcd",
+  "duration_ms": 830809,
+  "tokens": 8603927,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260617T053104-5778cb6a",
+  "prompt_file": ".ddx/executions/20260617T053104-5778cb6a/prompt.md",
+  "manifest_file": ".ddx/executions/20260617T053104-5778cb6a/manifest.json",
+  "result_file": ".ddx/executions/20260617T053104-5778cb6a/result.json",
+  "usage_file": ".ddx/executions/20260617T053104-5778cb6a/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-17T05:31:11.343715136Z",
+  "finished_at": "2026-06-17T05:45:02.152881051Z"
+}
