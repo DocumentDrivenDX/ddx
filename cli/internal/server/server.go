@@ -89,6 +89,8 @@ var startupDesiredWorkerReconcileLog io.Writer = os.Stderr
 
 var skipStartupDesiredWorkerReconcileForTestBinary = true
 
+var ensureSelfSignedCertHook = ensureSelfSignedCert
+
 var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
 	manager := startupManager
 	if projectRoot != startupRoot {
@@ -342,15 +344,15 @@ func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	}
 	defer release()
 	s.installSingletonReleaseOnSignal(release)
+	s.writeAddrFile("https")
 	if certFile == "" || keyFile == "" {
 		var err error
 		tlsDir := ddxroot.JoinProject(s.WorkingDir, "server", "tls")
-		certFile, keyFile, err = ensureSelfSignedCert(tlsDir)
+		certFile, keyFile, err = ensureSelfSignedCertHook(tlsDir)
 		if err != nil {
 			return fmt.Errorf("generating self-signed cert: %w", err)
 		}
 	}
-	s.writeAddrFile("https")
 	s.reconcileDesiredWorkersAfterStartup()
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
