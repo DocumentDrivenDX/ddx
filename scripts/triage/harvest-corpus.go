@@ -5,7 +5,7 @@
 // Usage:
 //
 //	go run ./scripts/triage/harvest-corpus.go \
-//	  --output library/prompts/triage/eval-corpus.jsonl
+//	  --output docs/triage/eval-corpus.jsonl
 //
 // The script reads .ddx/beads.jsonl from this repository and, when present,
 // ../agent/.ddx/beads.jsonl. It never invokes an agent and never performs
@@ -114,7 +114,7 @@ type evalBead struct {
 func main() {
 	var output string
 	var legacyOut string
-	flag.StringVar(&output, "output", "library/prompts/triage/eval-corpus.jsonl", "output JSONL path")
+	flag.StringVar(&output, "output", "docs/triage/eval-corpus.jsonl", "output JSONL path")
 	flag.StringVar(&legacyOut, "out", "", "deprecated alias for --output")
 	flag.Parse()
 	if legacyOut != "" {

@@ -1,8 +1,6 @@
 package docprose
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -66,18 +64,14 @@ func TestProseCheckerVocabularyPreservation(t *testing.T) {
 }
 
 func TestDefaultAssetLayout(t *testing.T) {
-	root, err := defaultAssetRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
 	for _, path := range []string{
-		filepath.Join(root, "check.yaml"),
-		filepath.Join(root, "rules", "technical.yaml"),
-		filepath.Join(root, "rules", "planning.yaml"),
-		filepath.Join(root, "rules", "public.yaml"),
-		filepath.Join(root, "vocabulary", "default.yaml"),
+		"check.yaml",
+		"rules/technical.yaml",
+		"rules/planning.yaml",
+		"rules/public.yaml",
+		"vocabulary/default.yaml",
 	} {
-		if _, err := os.Stat(path); err != nil {
+		if _, err := readDefaultAsset(path); err != nil {
 			t.Fatalf("expected asset %s: %v", path, err)
 		}
 	}

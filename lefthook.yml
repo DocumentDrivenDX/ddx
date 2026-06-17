@@ -360,6 +360,7 @@ pre-commit:
       name: "Guard test-engineer persona (ddx-482fad2f)"
       glob: "library/personas/test-engineer.md"
       run: |
+        [ -f library/personas/test-engineer.md ] || exit 0
         if grep -q "Mock all external dependencies" library/personas/test-engineer.md; then
           echo "ERROR: 'Mock all external dependencies' is forbidden in the test-engineer persona (see ddx-482fad2f)"
           exit 1

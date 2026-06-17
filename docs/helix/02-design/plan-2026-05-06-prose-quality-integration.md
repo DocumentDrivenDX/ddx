@@ -63,8 +63,8 @@ Replace the current embedded-rule YAML shape with Vale styles owned by DDx.
 
 Work:
 
-- Add `library/checks/prose-quality/styles/DDx/*.yml`.
-- Keep `library/checks/prose-quality/check.yaml` as DDx metadata: mode,
+- Add `cli/internal/docprose/assets/prose-quality/styles/DDx/*.yml`.
+- Keep `cli/internal/docprose/assets/prose-quality/check.yaml` as DDx metadata: mode,
   policy, includes, excludes, pinned Vale version, and rule-pack version.
 - Define initial DDx Vale rules:
   - unsupported broad claim
@@ -348,7 +348,7 @@ Acceptance:
 |---:|---|---|---|---|
 | 0 | `try: define and enforce bead-level execution hints` | Implement TD-037 parsing, lint, evidence, and metrics slices needed before hard difficulty hints are relied on. | `triage.estimated_difficulty=hard` | none |
 | 1 | `doctor: validate pinned Vale prose checker` | `cli/cmd/doctor.go`, doctor tests, constants for Vale version. | none | 0 |
-| 2 | `docprose: add DDx Vale style pack skeleton` | `library/checks/prose-quality/styles/DDx/`, metadata schema, no command wiring. | none | 1 |
+| 2 | `docprose: add DDx Vale style pack skeleton` | `cli/internal/docprose/assets/prose-quality/styles/DDx/`, metadata schema, no command wiring. | none | 1 |
 | 3 | `docprose: add corpus harness for normalized findings` | `cli/internal/docprose/testdata/corpus/`, corpus loader/tests, expected JSON schema. | `triage.estimated_difficulty=hard` for corpus design judgment | 2 |
 | 4 | `docprose: port initial rules to Vale styles` | Vale style files and corpus golden cases for unsupported claim, AI slop, filler, token cost. | `triage.estimated_difficulty=hard` for rule precision judgment | 3 |
 | 5 | `docprose: generate temporary Vale config` | config generation from DDx defaults/project config; no Vale execution yet. | none | 2 |

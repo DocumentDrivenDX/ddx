@@ -57,11 +57,11 @@ require Vale or any other external binary.
 
 ### Install behavior
 
-The DDx source package keeps the checker assets and rule/vocabulary tree under
-`library/checks/prose-quality/`, but those optional assets are not part of the
-minimal embedded DDx bootstrap package. The first supported surface should run
-from DDx source or from a registry/cache package without requiring Vale or
-copying the asset tree into every initialized project.
+The DDx bootstrap plugin source stays limited to `library/package.yaml` and
+`library/skills/ddx/`. The prose checker assets are CLI runtime assets under
+`cli/internal/docprose/assets/prose-quality/` and are embedded into the binary.
+They are not plugin payload, are not copied into initialized projects, and do
+not require installing HELIX or any other marketplace plugin.
 
 ### Optional runner path
 
@@ -93,29 +93,27 @@ instead of suppressing the scan.
 
 ## Prose Asset Layout
 
-The prose-quality assets belong in the DDx reusable-library package, not in a
-project-specific check scaffold and not in the minimal embedded bootstrap
-package described by ADR-027.
+The prose-quality assets are runtime assets owned by the CLI, not marketplace
+plugin payload and not project-specific check scaffolding.
 
-Proposed source layout:
+Source layout:
 
-- `library/checks/prose-quality/check.yaml`
-- `library/checks/prose-quality/rules/`
-- `library/checks/prose-quality/vocabulary/`
-- `library/checks/prose-quality/fixtures/`
+- `cli/internal/docprose/assets/prose-quality/check.yaml`
+- `cli/internal/docprose/assets/prose-quality/rules/`
+- `cli/internal/docprose/assets/prose-quality/styles/DDx/`
+- `cli/internal/docprose/assets/prose-quality/vocabulary/`
 
-Resolved cache layout when the DDx library package is materialized:
-
-- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/check.yaml`
-- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/rules/`
-- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/vocabulary/`
-- `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/fixtures/`
+At runtime, `docprose.DefaultSettings()` reads the embedded asset filesystem.
+The optional Vale runner materializes the packaged DDx style directory into a
+temporary execution directory for that invocation, then removes it with the rest
+of the scratch config. No cache package or project checkout receives a copy.
 
 `.ddx/plugins/ddx` is reserved for explicit local development overlays and
 legacy compatibility. Normal `ddx init` / `ddx plugin sync` bootstrap must not
-copy the default plugin payload into the project repository. The embedded DDx
-bootstrap remains package metadata plus `skills/ddx/`; optional prose assets
-resolve from source or cache packages.
+copy the default plugin payload into the project repository. The DDx bootstrap
+plugin remains package metadata plus `skills/ddx/`; workflow assets such as
+HELIX prompts, personas, templates, checks, MCP definitions, and environments
+resolve from separate marketplace/cache plugins.
 
 Layout rules:
 

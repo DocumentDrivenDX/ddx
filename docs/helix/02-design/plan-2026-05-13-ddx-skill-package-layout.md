@@ -196,8 +196,9 @@ declared package root or fail with a clear error; it must not self-link
 4. Done: materialize project skill paths as cache-backed adapters, not payload
    copies.
 5. Done: move the canonical DDx skill source to `library/skills/ddx/`.
-6. Keep: sync `library/ -> cli/internal/registry/defaultplugin/library/` as a
-   generated embedded release fixture.
+6. Keep: sync the minimal `library/package.yaml` plus `library/skills/ddx/`
+   into `cli/internal/registry/defaultplugin/library/` as the generated
+   embedded release fixture.
 7. Remove only if compatibility allows: legacy generated embedded skill mirrors.
 8. Continue updating FEAT-011, FEAT-015, SD-011, command help, and AGENTS blocks
    when they describe copied bootstrap skill mirrors.

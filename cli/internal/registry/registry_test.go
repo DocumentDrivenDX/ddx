@@ -93,8 +93,9 @@ func TestDefaultPluginPackageDoesNotAdvertiseProjectPayloadInstallTarget(t *test
 	assert.Nil(t, pkg.Install.Root, "built-in ddx must not advertise a project payload root")
 }
 
-func TestBuiltinDDxPackageDoesNotEmbedOptionalLibraryAssets(t *testing.T) {
+func TestBuiltinDDxPackageDoesNotCarryOptionalLibraryAssets(t *testing.T) {
 	for _, rel := range []string{
+		".agents",
 		"artifacts",
 		"checks",
 		"environments",
@@ -107,6 +108,9 @@ func TestBuiltinDDxPackageDoesNotEmbedOptionalLibraryAssets(t *testing.T) {
 	} {
 		_, err := iofs.Stat(defaultplugin.FS(), rel)
 		assert.ErrorIs(t, err, iofs.ErrNotExist, "embedded built-in ddx package must not carry optional %s payload", rel)
+
+		_, err = os.Stat(filepath.Join("..", "..", "..", "library", filepath.FromSlash(rel)))
+		assert.ErrorIs(t, err, os.ErrNotExist, "source built-in ddx package must not carry optional %s payload", rel)
 	}
 }
 

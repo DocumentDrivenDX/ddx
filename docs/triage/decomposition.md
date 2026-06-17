@@ -135,12 +135,12 @@ acceptance. The hard AC map is the gate that prevents lossy decomposition.
 
 ## Regenerating the historical corpus
 
-The frozen eval slice lives in `library/prompts/triage/eval-corpus.jsonl`. To
+The frozen eval slice lives in `docs/triage/eval-corpus.jsonl`. To
 regenerate from live bead history:
 
 ```bash
 go run ./scripts/triage/harvest-corpus.go \
-  --output library/prompts/triage/eval-corpus.jsonl
+  --output docs/triage/eval-corpus.jsonl
 ```
 
 The harvest script reads `.ddx/beads.jsonl` from this repository and includes

@@ -26,16 +26,10 @@ func (t *TempValeConfig) Cleanup() {
 }
 
 // NewTempValeConfig generates a temporary Vale configuration from DDx settings.
-// StylesPath is pointed at the packaged DDx styles via a symlink so no copy is needed.
+// StylesPath is pointed at a temporary materialization of the packaged DDx styles.
 // Project vocabulary is rendered into Vale accept/reject files under Vocab/Project/.
 // The caller must call Cleanup() when done.
 func NewTempValeConfig(settings Settings) (*TempValeConfig, error) {
-	assetRoot, err := defaultAssetRoot()
-	if err != nil {
-		return nil, fmt.Errorf("resolve asset root: %w", err)
-	}
-	packagedDDxStyles := filepath.Join(assetRoot, "styles", "DDx")
-
 	dir, err := config.MkdirExecutionScratch("", "ddx-vale-")
 	if err != nil {
 		return nil, fmt.Errorf("create temp vale dir: %w", err)
@@ -47,10 +41,9 @@ func NewTempValeConfig(settings Settings) (*TempValeConfig, error) {
 		return nil, fmt.Errorf("create styles dir: %w", err)
 	}
 
-	// Symlink the packaged DDx style directory so we avoid copying rule files.
-	if err := os.Symlink(packagedDDxStyles, filepath.Join(stylesDir, "DDx")); err != nil {
+	if err := materializeDefaultAssetDir(filepath.Join("styles", "DDx"), filepath.Join(stylesDir, "DDx")); err != nil {
 		os.RemoveAll(dir)
-		return nil, fmt.Errorf("symlink DDx styles: %w", err)
+		return nil, fmt.Errorf("materialize DDx styles: %w", err)
 	}
 
 	vocabName := ""

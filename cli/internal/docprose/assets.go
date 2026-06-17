@@ -1,15 +1,19 @@
 package docprose
 
 import (
+	"embed"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"gopkg.in/yaml.v3"
 )
 
-const assetRootDir = "library/checks/prose-quality"
+const assetRootDir = "assets/prose-quality"
+
+//go:embed assets/prose-quality
+var defaultAssets embed.FS
 
 type defaultConfig struct {
 	Mode       string     `yaml:"mode"`
@@ -62,22 +66,8 @@ type Vocabulary struct {
 	Reject      []string `yaml:"reject"`
 }
 
-func defaultAssetRoot() (string, error) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		return "", fmt.Errorf("locate docprose assets: runtime caller unavailable")
-	}
-	dir := filepath.Dir(file)
-	root := filepath.Clean(filepath.Join(dir, "..", "..", ".."))
-	return filepath.Join(root, assetRootDir), nil
-}
-
 func loadDefaultConfig() (defaultConfig, error) {
-	root, err := defaultAssetRoot()
-	if err != nil {
-		return defaultConfig{}, err
-	}
-	data, err := os.ReadFile(filepath.Join(root, "check.yaml"))
+	data, err := readDefaultAsset("check.yaml")
 	if err != nil {
 		return defaultConfig{}, fmt.Errorf("read default config: %w", err)
 	}
@@ -89,11 +79,7 @@ func loadDefaultConfig() (defaultConfig, error) {
 }
 
 func loadRulePack(mode string) ([]ruleSpec, error) {
-	root, err := defaultAssetRoot()
-	if err != nil {
-		return nil, err
-	}
-	data, err := os.ReadFile(filepath.Join(root, "rules", mode+".yaml"))
+	data, err := readDefaultAsset(filepath.Join("rules", mode+".yaml"))
 	if err != nil {
 		return nil, fmt.Errorf("read %s rules: %w", mode, err)
 	}
@@ -108,11 +94,7 @@ func loadRulePack(mode string) ([]ruleSpec, error) {
 }
 
 func loadDefaultVocabulary() (Vocabulary, error) {
-	root, err := defaultAssetRoot()
-	if err != nil {
-		return Vocabulary{}, err
-	}
-	data, err := os.ReadFile(filepath.Join(root, "vocabulary", "default.yaml"))
+	data, err := readDefaultAsset(filepath.Join("vocabulary", "default.yaml"))
 	if err != nil {
 		return Vocabulary{}, fmt.Errorf("read default vocabulary: %w", err)
 	}
@@ -121,4 +103,30 @@ func loadDefaultVocabulary() (Vocabulary, error) {
 		return Vocabulary{}, fmt.Errorf("parse default vocabulary: %w", err)
 	}
 	return vocab, nil
+}
+
+func readDefaultAsset(rel string) ([]byte, error) {
+	return defaultAssets.ReadFile(filepath.ToSlash(filepath.Join(assetRootDir, rel)))
+}
+
+func materializeDefaultAssetDir(rel, dst string) error {
+	srcRoot := filepath.ToSlash(filepath.Join(assetRootDir, rel))
+	return fs.WalkDir(defaultAssets, srcRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		sub, err := filepath.Rel(filepath.FromSlash(srcRoot), filepath.FromSlash(path))
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, sub)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := defaultAssets.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
 }
