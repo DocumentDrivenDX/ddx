@@ -1,0 +1,143 @@
+{
+  "attempt_id": "20260617T065941-9febfe0f",
+  "bead_id": "ddx-d72c06dd",
+  "base_rev": "e1533d5d86e390f88554a519a60b5882300b3a59",
+  "created_at": "2026-06-17T07:00:08.624668413Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d72c06dd",
+    "title": "federation: forward documentWrite to project owner",
+    "description": "PROBLEM\nHub-mode document saves for spoke-owned projects have no owner-targeted documentWrite forwarding path. After local documentWrite gains an expectedHash optimistic-concurrency contract, the same mutation also needs to forward spoke-owned project writes to the owning spoke instead of creating or overwriting a hub-local file.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/graphql/resolver_mutation_docs.go:34 defines DocumentWrite as a local path/content mutation with no project-owner forwarding semantics.\n- cli/internal/server/graphql/resolver_mutation_docs.go:55 writes content directly with os.WriteFile, so hub-mode requests are not routed to the owning project.\n- cli/internal/server/graphql/schema.graphql:3263 exposes documentWrite(path, content) without forwarding metadata; sibling bead ddx-3c399bec defines the local expectedHash/version contract this bead must preserve across federation.\n- cli/internal/server/graphql/resolver_federation_workers.go and cli/internal/server/federation_hub.go contain the existing project identity / owner routing surface used by hub-to-spoke operations; documentWrite must use the same registered project owner source rather than inferring ownership from local paths.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:356 requires spec/document edits to be project-scoped, path-confined, and owner-targeted in hub-mode.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:353 defines TC-019 federated document write coverage.\n\nPROPOSED FIX\n- Build on ddx-3c399bec: documentWrite accepts path, content, and expectedHash; this bead must not invent a second version token.\n- For hub-mode requests targeting a spoke-owned registered project, resolve the project owner from the same project identity / federation registry used by existing hub-to-spoke worker operations, then forward documentWrite to that owner.\n- Include forwarding origin metadata such as originServerID and forwarded=true on the internal request so the spoke can reject recursive forwarding loops and execute the write locally.\n- Preserve path confinement on the spoke using ResolveDocumentPath and preserve expectedHash conflict semantics from ddx-3c399bec; stale expectedHash must return a deterministic conflict without writing content.\n- Ensure successful forwarded writes persist on the owning spoke and do not create or overwrite a hub-local file for the spoke project.\n\nNON-SCOPE\nDo not build a full collaborative editor or arbitrary filesystem browser. Keep the workflow scoped to registered project documents, especially docs/helix/**. Do not redesign the federation protocol beyond the minimum documentWrite forwarding metadata. Do not implement frontend Playwright coverage in this bead. Do not reimplement the local expectedHash contract assigned to ddx-3c399bec.",
+    "acceptance": "1. Go test TestFederatedDocumentWrite_ForwardsToOwner proves hub documentWrite(path, content, expectedHash) for a spoke-owned registered project persists on the owning spoke and does not create or overwrite a hub-local file.\n2. Go test TestFederatedDocumentWrite_PreservesExpectedHashConflict proves stale expectedHash failures are returned from the owning spoke without overwriting spoke content.\n3. Go test TestFederatedDocumentWrite_RejectsForwardingLoop proves originServerID/forwarded metadata prevents recursive hub-spoke forwarding.\n4. Go test TestFederatedDocumentWrite_UsesRegisteredProjectOwner proves forwarding chooses the owner from the federation/project registry rather than from a filesystem path heuristic.\n5. cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/federation/... passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-aa88732d",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "area:docs",
+      "kind:feature",
+      "plan:server-operator-workbench",
+      "parent:ddx-d5dfa702"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T044903-a2e1 runtime=9m23s pid=2026637 reason=stop",
+          "created_at": "2026-06-17T04:58:26.053273708Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T045904-7591 runtime=3m14s pid=2078993 reason=stop",
+          "created_at": "2026-06-17T05:02:19.324783593Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T050255-62fb runtime=14m11s pid=2156993 reason=stop",
+          "created_at": "2026-06-17T05:17:06.448290949Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-17T05:17:06.983849331Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "worker-20260617T052131-833f",
+          "body": "{\"accepted_fingerprint\":\"a23b11056a471ff3f9a7640bb19be1fc67de6bfb7b5bf023644b3fac497d6015\",\"decision\":\"park\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: The feature is cohesive, but it is not executable as written: `documentWrite` currently takes only `path` and `content`, writes locally in `resolver_mutation_docs.go`, and the bead never names the explicit optimistic-concurrency token or project-ownership source needed to preserve stale-write behavior in hub mode.\",\"fingerprint\":\"a23b11056a471ff3f9a7640bb19be1fc67de6bfb7b5bf023644b3fac497d6015\",\"intake_outcome\":\"operator_required\",\"operator_override\":false,\"policy_mode\":\"block\",\"prompt_fingerprint\":\"0edcd8d652c3e570bed5ff12a85e4fe87796b71351a3abaa581ed8c28e6aeb53\",\"reason\":\"ambiguous_scope\",\"rule_fingerprint\":\"a23b11056a471ff3f9a7640bb19be1fc67de6bfb7b5bf023644b3fac497d6015\",\"rule_id\":\"pre_claim_intake.operator_required\",\"suggested_action\":\"review intake result and accept, rewrite, split, block, or cancel\"}",
+          "created_at": "2026-06-17T05:26:17.342600154Z",
+          "kind": "intake.blocked",
+          "source": "ddx work",
+          "summary": "operator_required"
+        },
+        {
+          "actor": "",
+          "body": "{\"accepted_fingerprint\":\"a23b11056a471ff3f9a7640bb19be1fc67de6bfb7b5bf023644b3fac497d6015\",\"accepted_prompt_fingerprint\":\"0edcd8d652c3e570bed5ff12a85e4fe87796b71351a3abaa581ed8c28e6aeb53\",\"from_status\":\"proposed\",\"operator_required\":true,\"prompt_fingerprint\":\"00f5dc4a60fcb862c58db674ea45124ccdfa71ab49c784d79fd055db3e3c51f6\",\"reason\":\"set lifecycle status\",\"source\":\"ddx bead update\",\"to_status\":\"open\"}",
+          "created_at": "2026-06-17T05:27:49.268787267Z",
+          "kind": "triaged",
+          "source": "ddx bead update",
+          "summary": "operator accepted proposed bead"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T055216-bff3 runtime=17m16s pid=2637647 reason=stop",
+          "created_at": "2026-06-17T06:09:32.30469516Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260617T061017-e61a",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-d72c06dd\",\"fingerprint\":\"e1d16dbd83e71d27af0d07988178003fee2b56a748c2f9ca006409a64aa7bb57\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"e1d16dbd83e71d27af0d07988178003fee2b56a748c2f9ca006409a64aa7bb57\"}",
+          "created_at": "2026-06-17T06:13:05.970427735Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T061017-e61a state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-17T06:15:11.507964166Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T061511-00f9 runtime=3m35s pid=2887858 reason=stop",
+          "created_at": "2026-06-17T06:18:46.41794291Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T062149-17a6 runtime=9s pid=2931047 reason=stop",
+          "created_at": "2026-06-17T06:21:58.367062149Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "worker-20260617T062919-90be",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness route unavailable: lifecycle dispatch: project root mutation rejected for bead ddx-d72c06dd (changed existing dirty paths: cli/cmd/worker.go)\",\"fingerprint\":\"855c231f2f48766bc7673943626d15dc982557592b1813436c215b0ed543548b\",\"policy_mode\":\"warn-only\",\"reason\":\"system_unready\",\"rule_id\":\"pre_claim_intake.system_unready\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\",\"warning_fingerprint\":\"855c231f2f48766bc7673943626d15dc982557592b1813436c215b0ed543548b\"}",
+          "created_at": "2026-06-17T06:32:22.268458591Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "system_unready"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T062919-90be state=failed reason=worker-exit error=signal: terminated",
+          "created_at": "2026-06-17T06:33:13.871872438Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260617T065941-9febfe0f",
+    "prompt": ".ddx/executions/20260617T065941-9febfe0f/prompt.md",
+    "manifest": ".ddx/executions/20260617T065941-9febfe0f/manifest.json",
+    "result": ".ddx/executions/20260617T065941-9febfe0f/result.json",
+    "checks": ".ddx/executions/20260617T065941-9febfe0f/checks.json",
+    "usage": ".ddx/executions/20260617T065941-9febfe0f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d72c06dd-20260617T065941-9febfe0f"
+  },
+  "prompt_sha": "db11b7e5e0a107553429eb7dfb12b647659bb2a809c61a0109c906177e132c77"
+}
