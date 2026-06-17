@@ -1,0 +1,9 @@
+status: open
+orchestrator_action: decompose
+reason: "Step 0 size check required decomposition: the parent bead has eleven acceptance criteria spanning documentation, agent prompt/reference text, prompt snapshots, lifecycle implementation, and multiple test paths. Decomposition alone is the required successful outcome for this pass."
+children:
+  - ddx-e7a9db2e
+  - ddx-919bb1a1
+  - ddx-ef2c9652
+  - ddx-11f01241
+  - ddx-78a50c99
