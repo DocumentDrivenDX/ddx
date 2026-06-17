@@ -1422,9 +1422,10 @@ type ComplexityRoot struct {
 	}
 
 	WorkerDispatchResult struct {
-		ID    func(childComplexity int) int
-		Kind  func(childComplexity int) int
-		State func(childComplexity int) int
+		ID      func(childComplexity int) int
+		Kind    func(childComplexity int) int
+		State   func(childComplexity int) int
+		Workers func(childComplexity int) int
 	}
 
 	WorkerEdge struct {
@@ -7963,6 +7964,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkerDispatchResult.State(childComplexity), true
+	case "WorkerDispatchResult.workers":
+		if e.ComplexityRoot.WorkerDispatchResult.Workers == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerDispatchResult.Workers(childComplexity), true
 
 	case "WorkerEdge.cursor":
 		if e.ComplexityRoot.WorkerEdge.Cursor == nil {
@@ -26583,6 +26590,8 @@ func (ec *executionContext) fieldContext_Mutation_workerDispatch(ctx context.Con
 				return ec.fieldContext_WorkerDispatchResult_state(ctx, field)
 			case "kind":
 				return ec.fieldContext_WorkerDispatchResult_kind(ctx, field)
+			case "workers":
+				return ec.fieldContext_WorkerDispatchResult_workers(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WorkerDispatchResult", field.Name)
 		},
@@ -26632,6 +26641,8 @@ func (ec *executionContext) fieldContext_Mutation_startWorker(ctx context.Contex
 				return ec.fieldContext_WorkerDispatchResult_state(ctx, field)
 			case "kind":
 				return ec.fieldContext_WorkerDispatchResult_kind(ctx, field)
+			case "workers":
+				return ec.fieldContext_WorkerDispatchResult_workers(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type WorkerDispatchResult", field.Name)
 		},
@@ -42755,6 +42766,46 @@ func (ec *executionContext) fieldContext_WorkerDispatchResult_kind(_ context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _WorkerDispatchResult_workers(ctx context.Context, field graphql.CollectedField, obj *WorkerDispatchResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerDispatchResult_workers,
+		func(ctx context.Context) (any, error) {
+			if obj.Workers == nil {
+				return []*WorkerLifecycleResult{}, nil
+			}
+			return obj.Workers, nil
+		},
+		nil,
+		ec.marshalNWorkerLifecycleResult2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResultᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerDispatchResult_workers(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerDispatchResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_WorkerLifecycleResult_id(ctx, field)
+			case "state":
+				return ec.fieldContext_WorkerLifecycleResult_state(ctx, field)
+			case "kind":
+				return ec.fieldContext_WorkerLifecycleResult_kind(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type WorkerLifecycleResult", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _WorkerEdge_node(ctx context.Context, field graphql.CollectedField, obj *WorkerEdge) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -45727,7 +45778,7 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "harness", "provider", "model", "profile", "effort", "labelFilter", "mode", "idleInterval", "requestTimeout"}
+	fieldsInOrder := [...]string{"projectId", "count", "harness", "provider", "model", "profile", "effort", "labelFilter", "mode", "idleInterval", "requestTimeout"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -45741,6 +45792,13 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 				return it, err
 			}
 			it.ProjectID = data
+		case "count":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("count"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Count = data
 		case "harness":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("harness"))
 			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
@@ -56138,6 +56196,11 @@ func (ec *executionContext) _WorkerDispatchResult(ctx context.Context, sel ast.S
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "workers":
+			out.Values[i] = ec._WorkerDispatchResult_workers(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -59306,6 +59369,22 @@ func (ec *executionContext) marshalNWorkerLifecycleEvent2ᚖgithubᚗcomᚋDocum
 
 func (ec *executionContext) marshalNWorkerLifecycleResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResult(ctx context.Context, sel ast.SelectionSet, v WorkerLifecycleResult) graphql.Marshaler {
 	return ec._WorkerLifecycleResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNWorkerLifecycleResult2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResultᚄ(ctx context.Context, sel ast.SelectionSet, v []*WorkerLifecycleResult) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNWorkerLifecycleResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResult(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) marshalNWorkerLifecycleResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐWorkerLifecycleResult(ctx context.Context, sel ast.SelectionSet, v *WorkerLifecycleResult) graphql.Marshaler {

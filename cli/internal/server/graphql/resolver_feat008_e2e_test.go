@@ -101,7 +101,16 @@ func (c *capturingActionDispatcher) DispatchWorker(ctx context.Context, kind str
 		_ = json.Unmarshal([]byte(*args), &rec.args)
 	}
 	c.calls = append(c.calls, rec)
-	return &WorkerDispatchResult{ID: "worker-graphql-e2e", State: "queued", Kind: kind}, nil
+	return &WorkerDispatchResult{
+		ID:    "worker-graphql-e2e",
+		State: "queued",
+		Kind:  kind,
+		Workers: []*WorkerLifecycleResult{{
+			ID:    "worker-graphql-e2e",
+			State: "queued",
+			Kind:  kind,
+		}},
+	}, nil
 }
 
 func (c *capturingActionDispatcher) DispatchPlugin(ctx context.Context, projectRoot string, name string, action string, scope string) (*PluginDispatchResult, error) {
@@ -110,6 +119,30 @@ func (c *capturingActionDispatcher) DispatchPlugin(ctx context.Context, projectR
 
 func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
 	return &WorkerLifecycleResult{ID: id, State: "stopped", Kind: "work"}, nil
+}
+
+func intPtr(v int) *int { return &v }
+
+func TestStartWorker_ForwardsCount(t *testing.T) {
+	projectRoot := t.TempDir()
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"`+"\n"), 0o644))
+
+	dispatcher := &capturingActionDispatcher{}
+	mr := &mutationResolver{Resolver: &Resolver{
+		WorkingDir: projectRoot,
+		Actions:    dispatcher,
+	}}
+
+	res, err := mr.StartWorker(context.Background(), StartWorkerInput{
+		ProjectID: "",
+		Count:     intPtr(2),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, dispatcher.calls, 1)
+	assert.Equal(t, "2", dispatcher.calls[0].args["count"])
 }
 
 // TestReviewRetryThresholdFromConfigGraphQL is the SD-024 Stage 1 configuration

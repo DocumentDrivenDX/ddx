@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -61,10 +62,16 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	}
 
 	var spec executeloop.ExecuteLoopSpec
+	count := 1
 	if rawArgs != nil && *rawArgs != "" {
 		if err := rejectLegacyExecuteLoopWorkerArgs([]byte(*rawArgs)); err != nil {
 			return nil, err
 		}
+		parsedCount, err := workerDispatchCount([]byte(*rawArgs))
+		if err != nil {
+			return nil, err
+		}
+		count = parsedCount
 		if err := json.Unmarshal([]byte(*rawArgs), &spec); err != nil {
 			return nil, fmt.Errorf("invalid worker args JSON: %w", err)
 		}
@@ -84,8 +91,8 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		}
 		if wc.MaxCount != nil && *wc.MaxCount >= 0 {
 			running := a.countRunningDrainWorkers(projectRoot)
-			if running >= *wc.MaxCount {
-				return nil, fmt.Errorf("workers.max_count cap reached: %d running (limit %d)", running, *wc.MaxCount)
+			if running+count > *wc.MaxCount {
+				return nil, fmt.Errorf("workers.max_count cap reached: %d running + %d requested exceeds limit %d", running, count, *wc.MaxCount)
 			}
 		}
 	}
@@ -103,15 +110,60 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	if err != nil {
 		return nil, err
 	}
-	record, err := a.manager.StartExecuteLoop(workerSpec)
-	if err != nil {
-		return nil, err
+	workers := make([]*ddxgraphql.WorkerLifecycleResult, 0, count)
+	startedIDs := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		record, err := a.manager.StartExecuteLoop(workerSpec)
+		if err != nil {
+			for _, id := range startedIDs {
+				_ = a.manager.Stop(id)
+			}
+			return nil, err
+		}
+		startedIDs = append(startedIDs, record.ID)
+		workers = append(workers, &ddxgraphql.WorkerLifecycleResult{
+			ID:    record.ID,
+			State: record.State,
+			Kind:  record.Kind,
+		})
 	}
+	first := workers[0]
 	return &ddxgraphql.WorkerDispatchResult{
-		ID:    record.ID,
-		State: record.State,
-		Kind:  record.Kind,
+		ID:      first.ID,
+		State:   first.State,
+		Kind:    first.Kind,
+		Workers: workers,
 	}, nil
+}
+
+func workerDispatchCount(raw []byte) (int, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return 1, fmt.Errorf("invalid worker args JSON: %w", err)
+	}
+	value, ok := fields["count"]
+	if !ok || len(value) == 0 || string(value) == "null" {
+		return 1, nil
+	}
+	var n int
+	if err := json.Unmarshal(value, &n); err == nil {
+		if n < 1 {
+			return 0, fmt.Errorf("count must be >= 1")
+		}
+		return n, nil
+	}
+	var s string
+	if err := json.Unmarshal(value, &s); err != nil {
+		return 0, fmt.Errorf("count must be an integer")
+	}
+	parsed, err := strconv.Atoi(s)
+	if err != nil {
+		return 0, fmt.Errorf("count must be an integer")
+	}
+	if parsed < 1 {
+		return 0, fmt.Errorf("count must be >= 1")
+	}
+	return parsed, nil
 }
 
 func rejectLegacyExecuteLoopWorkerArgs(raw []byte) error {

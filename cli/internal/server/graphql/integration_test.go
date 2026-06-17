@@ -136,6 +136,11 @@ func (testActionDispatcher) DispatchWorker(ctx context.Context, kind string, pro
 		ID:    "queued-worker-" + kind,
 		State: "queued",
 		Kind:  kind,
+		Workers: []*ddxgraphql.WorkerLifecycleResult{{
+			ID:    "queued-worker-" + kind,
+			State: "queued",
+			Kind:  kind,
+		}},
 	}, nil
 }
 

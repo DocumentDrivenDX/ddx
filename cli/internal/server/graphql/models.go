@@ -2339,6 +2339,8 @@ type StaleReason struct {
 type StartWorkerInput struct {
 	// Project identifier
 	ProjectID string `json:"projectId"`
+	// Number of workers to start. Defaults to 1.
+	Count *int `json:"count,omitempty"`
 	// Optional harness override
 	Harness *string `json:"harness,omitempty"`
 	// Optional provider override
@@ -2477,6 +2479,8 @@ type WorkerDispatchResult struct {
 	State string `json:"state"`
 	// Worker kind
 	Kind string `json:"kind"`
+	// Every worker started by this dispatch, including id/state/kind.
+	Workers []*WorkerLifecycleResult `json:"workers"`
 }
 
 // WorkerEdge is one edge in a WorkerConnection
