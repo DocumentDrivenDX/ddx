@@ -1654,3 +1654,4 @@
 {"event":"acquire","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2900824,"acquired_at":"2026-06-17T00:35:26.608036546Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2900824,"acquired_at":"2026-06-17T00:35:26.608036546Z","released_at":"2026-06-17T00:35:26.636731607Z","duration_ms":28}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2900824,"acquired_at":"2026-06-17T00:35:25.947625811Z","released_at":"2026-06-17T00:35:26.636932232Z","duration_ms":689}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2900849,"acquired_at":"2026-06-17T00:37:00.677944825Z"}
