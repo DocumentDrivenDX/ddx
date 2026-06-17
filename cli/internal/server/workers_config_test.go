@@ -194,6 +194,62 @@ func TestStartWorker_EnforcesMaxCount(t *testing.T) {
 	}
 }
 
+func TestStartWorker_EmitsAuditEvent(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+	defer m.StopWatchdog()
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				<-ctx.Done()
+				return agent.ExecuteBeadReport{BeadID: beadID, Status: agent.ExecuteBeadStatusExecutionFailed, Detail: "canceled"}, ctx.Err()
+			}),
+		}
+	}
+
+	raw := `{"mode":"watch","idle_interval":"30s"}`
+	adapter := &workerDispatchAdapter{manager: m}
+	result, err := adapter.DispatchWorker(context.Background(), "work", root, &raw)
+	if err != nil {
+		t.Fatalf("dispatch worker: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = m.Stop(result.ID)
+	})
+
+	started, err := m.Show(result.ID)
+	if err != nil {
+		t.Fatalf("show started worker: %v", err)
+	}
+	requireLifecycleEvent(t, started.Lifecycle, "start", "local-operator", "kind=work")
+
+	if _, err := adapter.StopWorker(context.Background(), result.ID); err != nil {
+		t.Fatalf("stop worker: %v", err)
+	}
+	final := waitForWorkerExit(t, m, result.ID, 5*time.Second)
+	requireLifecycleEvent(t, final.Lifecycle, "stop", "local-operator", "reason=stop")
+}
+
+func requireLifecycleEvent(t *testing.T, events []WorkerLifecycleEvent, action, actor, detailContains string) {
+	t.Helper()
+	for _, event := range events {
+		if event.Action != action {
+			continue
+		}
+		if actor != "" && event.Actor != actor {
+			t.Fatalf("lifecycle %q actor: want %q, got %q", action, actor, event.Actor)
+		}
+		if detailContains != "" && !strings.Contains(event.Detail, detailContains) {
+			t.Fatalf("lifecycle %q detail should contain %q, got %q", action, detailContains, event.Detail)
+		}
+		return
+	}
+	t.Fatalf("missing lifecycle event %q in %#v", action, events)
+}
+
 // TestCountRunningDrainWorkersFiltersByProjectAndKind verifies the helper
 // only counts work workers in state=running for the target
 // projectRoot — not other kinds, other projects, or stopped workers.

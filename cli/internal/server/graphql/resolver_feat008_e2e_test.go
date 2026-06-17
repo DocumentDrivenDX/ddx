@@ -145,6 +145,43 @@ func TestStartWorker_ForwardsCount(t *testing.T) {
 	assert.Equal(t, "2", dispatcher.calls[0].args["count"])
 }
 
+func TestGraphQLStartWorkerFlowsConfigToWorkerDispatch(t *testing.T) {
+	projectRoot := t.TempDir()
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(`version: "1.0"`+"\n"), 0o644))
+
+	dispatcher := &capturingActionDispatcher{}
+	mr := &mutationResolver{Resolver: &Resolver{
+		WorkingDir: projectRoot,
+		Actions:    dispatcher,
+	}}
+
+	res, err := mr.StartWorker(context.Background(), StartWorkerInput{
+		ProjectID: "",
+		Harness:   strPtr("claude"),
+		Provider:  strPtr("anthropic"),
+		Model:     strPtr("opus-4.7"),
+		Profile:   strPtr("cheap"),
+		Effort:    strPtr("low"),
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	require.Len(t, dispatcher.calls, 1)
+
+	got := dispatcher.calls[0]
+	assert.Equal(t, "work", got.kind)
+	assert.Equal(t, projectRoot, got.projectRoot)
+	assert.Equal(t, "claude", got.args["harness"])
+	assert.Equal(t, "anthropic", got.args["provider"])
+	assert.Equal(t, "opus-4.7", got.args["model"])
+	assert.Equal(t, "cheap", got.args["profile"])
+	assert.Equal(t, "low", got.args["effort"])
+	assert.Equal(t, "watch", got.args["mode"])
+	assert.Equal(t, "30s", got.args["idle_interval"])
+	assert.NotContains(t, got.args, "count", "omitted count must preserve adapter default of one worker")
+}
+
 // TestReviewRetryThresholdFromConfigGraphQL is the SD-024 Stage 1 configuration
 // wiring proof that the GraphQL StartWorker resolver flows configuration through
 // config.LoadAndResolve.
