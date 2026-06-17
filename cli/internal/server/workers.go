@@ -1911,6 +1911,16 @@ func releaseWorkerClaims(projectRoot, workerID, primaryBeadID string, now time.T
 	}
 
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+	return releaseWorkerClaimsWithStore(store, workerID, primaryBeadID, now, event)
+}
+
+func releaseWorkerClaimsWithStore(store *bead.Store, workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
+	workerID = strings.TrimSpace(workerID)
+	primaryBeadID = strings.TrimSpace(primaryBeadID)
+	if store == nil || workerID == "" {
+		return nil
+	}
+
 	beads, err := store.ReadAll(context.Background())
 	if err != nil {
 		return nil
@@ -2860,6 +2870,23 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		return
 	}
 	now := time.Now().UTC()
+	stores := map[string]*bead.Store{}
+	storeForProject := func(projectRoot string) *bead.Store {
+		projectRoot = strings.TrimSpace(projectRoot)
+		if projectRoot == "" {
+			projectRoot = m.projectRoot
+		}
+		canonical := canonicalizePath(projectRoot)
+		if canonical == "" {
+			canonical = projectRoot
+		}
+		if store, ok := stores[canonical]; ok {
+			return store
+		}
+		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
+		stores[canonical] = store
+		return store
+	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -2875,7 +2902,7 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 				projectRoot = m.projectRoot
 			}
 			body := fmt.Sprintf("worker=%s state=%s reason=terminal-worker-claim", rec.ID, rec.State)
-			released := releaseWorkerClaims(projectRoot, rec.ID, "", now, bead.BeadEvent{
+			released := releaseWorkerClaimsWithStore(storeForProject(projectRoot), rec.ID, "", now, bead.BeadEvent{
 				Kind:      "bead.reaped",
 				Summary:   "terminal-worker-claim",
 				Body:      body,
@@ -2922,7 +2949,7 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		}
 
 		body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
-		releaseWorkerClaims(projectRoot, rec.ID, beadID, now, bead.BeadEvent{
+		releaseWorkerClaimsWithStore(storeForProject(projectRoot), rec.ID, beadID, now, bead.BeadEvent{
 			Kind:      "bead.reaped",
 			Summary:   "server-restart",
 			Body:      body,
