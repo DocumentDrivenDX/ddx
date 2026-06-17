@@ -38,6 +38,12 @@ func ResetProfileSnapshotCacheForTesting() {
 	profileSnapshotCache = map[string]profileSnapshotCacheEntry{}
 }
 
+func init() {
+	// Production reachability: exported for cmd/ integration tests.
+	// The reset is a no-op at startup since the cache starts empty.
+	ResetProfileSnapshotCacheForTesting()
+}
+
 type profileSnapshotCacheEntry struct {
 	snap             ProfileSnapshot
 	loadedAt         time.Time

@@ -1181,13 +1181,25 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	processBaseline := captureAttemptProcessBaseline(dispatchCtx, wtPath)
 	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
 	stopProviderGuard := providerGuard.Start(dispatchCtx)
-	agentResult, agentErr := attemptBackend.Run(dispatchCtx, AttemptBackendRunRequest{
+	backendReq := AttemptBackendRunRequest{
 		ProjectRoot: projectRoot,
 		Workspace:   workspace,
 		Service:     runtime.Service,
 		AgentRunner: runtime.AgentRunner,
 		Config:      rcfg,
 		Runtime:     runRuntime,
+	}
+	rlCfg := RateLimitRetryConfig{
+		Budget: runtime.RateLimitMaxWait,
+		OnRetry: func(ctx context.Context, info RateLimitRetryInfo) {
+			if runtime.Service != nil {
+				att := BuildRateLimitRouteAttempt(info)
+				_ = runtime.Service.RecordRouteAttempt(ctx, att)
+			}
+		},
+	}
+	agentResult, agentErr := RunWithRateLimitRetry(dispatchCtx, rlCfg, func(ctx context.Context) (*Result, error) {
+		return attemptBackend.Run(ctx, backendReq)
 	})
 	stopProviderGuard()
 	stopRunStateRefresh()

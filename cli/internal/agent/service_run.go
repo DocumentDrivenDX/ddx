@@ -50,12 +50,6 @@ func init() {
 	SetServiceRunFactory(nil)
 }
 
-// ResolveServiceFromWorkDir returns a service instance for the workdir,
-// honoring any test override installed via SetServiceRunFactory.
-func ResolveServiceFromWorkDir(workDir string) (agentlib.FizeauService, error) {
-	return resolveService(workDir)
-}
-
 // ResolveServiceFromWorkDirCtx returns a context-scoped service instance for
 // the workdir, honoring any test override installed via SetServiceRunFactory.
 // Production callers with request/attempt lifetimes should prefer this helper
