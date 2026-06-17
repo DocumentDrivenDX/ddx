@@ -239,7 +239,8 @@ type AggregateSummarySessions struct {
 type Artifact struct {
 	// Globally unique artifact identifier
 	ID string `json:"id"`
-	// File path relative to the project root
+	// File path relative to the project root, or a stable virtual path for
+	// cache-backed plugin artifacts.
 	Path string `json:"path"`
 	// Human-readable title
 	Title string `json:"title"`
@@ -261,6 +262,9 @@ type Artifact struct {
 	Content *string `json:"content,omitempty"`
 	// Matched artifact type definitions for the artifact's path prefix.
 	TypeDefinitions []*ArtifactTypeDefinition `json:"typeDefinitions"`
+	// DiskPath is the optional absolute backing path for artifacts that are not
+	// stored under the project root, such as cache-backed plugin payloads.
+	DiskPath string `json:"-"`
 }
 
 func (Artifact) IsNode() {}
