@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,8 +26,9 @@ import (
 // spokes and a real (in-process) FanOutClient pointed at httptest spoke
 // servers.
 type stubFederation struct {
-	spokes []federation.SpokeRecord
-	client *federation.FanOutClient
+	spokes              []federation.SpokeRecord
+	client              *federation.FanOutClient
+	coordinatorIdentity string
 }
 
 func (s *stubFederation) Spokes() []federation.SpokeRecord {
@@ -44,7 +46,41 @@ func (s *stubFederation) ForwardMutation(ctx context.Context, req *federation.Fo
 	if target == nil {
 		return nil, federation.ErrForwardMutationMissingOwner
 	}
-	resp, err := s.client.ForwardMutation(ctx, target, req.Body, req.Headers)
+	if target.Status == federation.StatusOffline {
+		return nil, federation.ErrForwardMutationOffline
+	}
+	if target.Status == federation.StatusStale {
+		return nil, federation.ErrForwardMutationStale
+	}
+	if !hasWriteCapability(target.Capabilities) {
+		return nil, federation.ErrForwardMutationReadOnly
+	}
+	headers := make(map[string]string, len(req.Headers)+5)
+	for k, v := range req.Headers {
+		headers[k] = v
+	}
+	if req.OriginIdentity != "" {
+		headers["X-DDx-Origin-Identity"] = req.OriginIdentity
+	}
+	if s.coordinatorIdentity != "" {
+		headers["X-DDx-Coordinator-Identity"] = s.coordinatorIdentity
+	}
+	if len(req.ForwardingPath) > 0 {
+		headers["X-DDx-Forwarding-Path"] = strings.Join(req.ForwardingPath, " -> ")
+	}
+	if req.RequestID != "" {
+		headers["X-DDx-Request-ID"] = req.RequestID
+	}
+	if req.IdempotencyKey != "" {
+		headers["X-DDx-Idempotency-Key"] = req.IdempotencyKey
+	}
+	if req.TargetProjectID != "" {
+		headers["X-DDx-Target-Project-ID"] = req.TargetProjectID
+	}
+	if req.ExpectedVersion != nil && *req.ExpectedVersion != "" {
+		headers["X-DDx-Expected-Version"] = *req.ExpectedVersion
+	}
+	resp, err := s.client.ForwardMutation(ctx, target, req.Body, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -67,6 +103,15 @@ func (s *stubFederation) ForwardMutation(ctx context.Context, req *federation.Fo
 		Headers:              resp.Header.Clone(),
 		Body:                 body,
 	}, nil
+}
+
+func hasWriteCapability(capabilities []string) bool {
+	for _, capability := range capabilities {
+		if strings.TrimSpace(capability) == "write" {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *stubFederation) spoke(nodeID string) *federation.SpokeRecord {
@@ -111,7 +156,10 @@ func newGQLHandlerWithFederation(t *testing.T, fed ddxgraphql.FederationProvider
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
 	gqlSrv.AddTransport(transport.POST{})
-	return gqlSrv
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r = r.WithContext(ddxgraphql.WithHTTPRequest(r.Context(), r))
+		gqlSrv.ServeHTTP(w, r)
+	})
 }
 
 // TestFederation_QueryShape_TwoHealthySpokes exercises all four federated

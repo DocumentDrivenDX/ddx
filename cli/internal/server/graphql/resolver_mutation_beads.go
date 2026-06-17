@@ -207,8 +207,25 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 		return nil, fmt.Errorf("working directory not configured")
 	}
 
-	store := r.beadStore(ctx)
+	projectID, projectRoot, remote := beadLifecycleProjectPathFromSnapshot(ctx, r.Resolver, id)
+	if remote {
+		if forwarded, handled, err := r.forwardBeadLifecycleMutation(ctx, projectID, "beadReopen", "beadReopen", map[string]any{
+			"id": id,
+		}); err != nil {
+			return nil, err
+		} else if handled {
+			return beadLifecycleSetProjectID(forwarded, projectID), nil
+		}
+	}
+
+	store := projectBeadStore(projectRoot)
 	if err := store.Reopen(id, "graphql bead reopen", ""); err != nil {
+		return nil, err
+	}
+	if err := r.appendBeadLifecycleAuditEvent(ctx, store, id, "reopen", "graphql:beadReopen", map[string]string{
+		"action": "reopen",
+		"reason": "graphql bead reopen",
+	}); err != nil {
 		return nil, err
 	}
 
@@ -216,7 +233,7 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 	if err != nil {
 		return nil, err
 	}
-	return beadModelFromBead(b), nil
+	return beadLifecycleSetProjectID(beadModelFromBead(b), projectID), nil
 }
 
 // BeadApprove is the resolver for the beadApprove mutation.
@@ -226,10 +243,22 @@ func (r *mutationResolver) BeadApprove(ctx context.Context, id string, note stri
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if strings.TrimSpace(note) == "" {
-		return nil, fmt.Errorf("note is required")
+		return nil, beadLifecycleValidationError("BEAD_APPROVE_NOTE_REQUIRED", "note is required")
 	}
 
-	store := r.beadStore(ctx)
+	projectID, projectRoot, remote := beadLifecycleProjectPathFromSnapshot(ctx, r.Resolver, id)
+	if remote {
+		if forwarded, handled, err := r.forwardBeadLifecycleMutation(ctx, projectID, "beadApprove", "beadApprove", map[string]any{
+			"id":   id,
+			"note": note,
+		}); err != nil {
+			return nil, err
+		} else if handled {
+			return beadLifecycleSetProjectID(forwarded, projectID), nil
+		}
+	}
+
+	store := projectBeadStore(projectRoot)
 	if err := store.TransitionLifecycle(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
 		ManualReopen: true,
 		Reason:       "graphql bead approve",
@@ -239,12 +268,9 @@ func (r *mutationResolver) BeadApprove(ctx context.Context, id string, note stri
 		return nil, err
 	}
 
-	if err := store.AppendEvent(id, bead.BeadEvent{
-		Kind:    "human-resolution",
-		Summary: "approve",
-		Body:    note,
-		Actor:   "operator",
-		Source:  "graphql",
+	if err := r.appendBeadLifecycleAuditEvent(ctx, store, id, "approve", "graphql:beadApprove", map[string]string{
+		"action": "approve",
+		"note":   note,
 	}); err != nil {
 		return nil, err
 	}
@@ -253,7 +279,7 @@ func (r *mutationResolver) BeadApprove(ctx context.Context, id string, note stri
 	if err != nil {
 		return nil, err
 	}
-	return beadModelFromBead(b), nil
+	return beadLifecycleSetProjectID(beadModelFromBead(b), projectID), nil
 }
 
 // BeadCancel is the resolver for the beadCancel mutation.
@@ -263,10 +289,22 @@ func (r *mutationResolver) BeadCancel(ctx context.Context, id string, reason str
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if strings.TrimSpace(reason) == "" {
-		return nil, fmt.Errorf("reason is required")
+		return nil, beadLifecycleValidationError("BEAD_CANCEL_REASON_REQUIRED", "reason is required")
 	}
 
-	store := r.beadStore(ctx)
+	projectID, projectRoot, remote := beadLifecycleProjectPathFromSnapshot(ctx, r.Resolver, id)
+	if remote {
+		if forwarded, handled, err := r.forwardBeadLifecycleMutation(ctx, projectID, "beadCancel", "beadCancel", map[string]any{
+			"id":     id,
+			"reason": reason,
+		}); err != nil {
+			return nil, err
+		} else if handled {
+			return beadLifecycleSetProjectID(forwarded, projectID), nil
+		}
+	}
+
+	store := projectBeadStore(projectRoot)
 	if err := store.TransitionLifecycle(id, bead.StatusCancelled, bead.LifecycleTransitionOptions{
 		Reason: reason,
 		Actor:  "operator",
@@ -275,12 +313,9 @@ func (r *mutationResolver) BeadCancel(ctx context.Context, id string, reason str
 		return nil, err
 	}
 
-	if err := store.AppendEvent(id, bead.BeadEvent{
-		Kind:    "human-resolution",
-		Summary: "cancel",
-		Body:    reason,
-		Actor:   "operator",
-		Source:  "graphql",
+	if err := r.appendBeadLifecycleAuditEvent(ctx, store, id, "cancel", "graphql:beadCancel", map[string]string{
+		"action": "cancel",
+		"reason": reason,
 	}); err != nil {
 		return nil, err
 	}
@@ -289,7 +324,7 @@ func (r *mutationResolver) BeadCancel(ctx context.Context, id string, reason str
 	if err != nil {
 		return nil, err
 	}
-	return beadModelFromBead(b), nil
+	return beadLifecycleSetProjectID(beadModelFromBead(b), projectID), nil
 }
 
 // BeadBlock is the resolver for the beadBlock mutation.
@@ -299,10 +334,22 @@ func (r *mutationResolver) BeadBlock(ctx context.Context, id string, externalBlo
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if strings.TrimSpace(externalBlockerReason) == "" {
-		return nil, fmt.Errorf("externalBlockerReason is required")
+		return nil, beadLifecycleValidationError("BEAD_BLOCK_EXTERNAL_BLOCKER_REASON_REQUIRED", "externalBlockerReason is required")
 	}
 
-	store := r.beadStore(ctx)
+	projectID, projectRoot, remote := beadLifecycleProjectPathFromSnapshot(ctx, r.Resolver, id)
+	if remote {
+		if forwarded, handled, err := r.forwardBeadLifecycleMutation(ctx, projectID, "beadBlock", "beadBlock", map[string]any{
+			"id":                    id,
+			"externalBlockerReason": externalBlockerReason,
+		}); err != nil {
+			return nil, err
+		} else if handled {
+			return beadLifecycleSetProjectID(forwarded, projectID), nil
+		}
+	}
+
+	store := projectBeadStore(projectRoot)
 	if err := store.TransitionLifecycle(id, bead.StatusBlocked, bead.LifecycleTransitionOptions{
 		ExternalBlockerReason: externalBlockerReason,
 		Reason:                "graphql bead block",
@@ -312,9 +359,16 @@ func (r *mutationResolver) BeadBlock(ctx context.Context, id string, externalBlo
 		return nil, err
 	}
 
+	if err := r.appendBeadLifecycleAuditEvent(ctx, store, id, "block", "graphql:beadBlock", map[string]string{
+		"action":                  "block",
+		"external_blocker_reason": externalBlockerReason,
+	}); err != nil {
+		return nil, err
+	}
+
 	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	return beadModelFromBead(b), nil
+	return beadLifecycleSetProjectID(beadModelFromBead(b), projectID), nil
 }
