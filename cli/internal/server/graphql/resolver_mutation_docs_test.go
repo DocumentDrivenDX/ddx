@@ -2,7 +2,9 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +13,9 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
+	"github.com/DocumentDrivenDX/ddx/internal/federation"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -341,6 +345,225 @@ Updated B.
 	if !staleContains(staleB, testFeatureID) {
 		t.Fatalf("projB should refresh only its own graph, got %+v", staleB)
 	}
+}
+
+// docWriteFederation is a test-only FederationProvider that routes
+// documentWrite mutations to a spoke resolver, capturing the forwarded request
+// so tests can assert on origin/target metadata.
+type docWriteFederation struct {
+	spokes        []federation.SpokeRecord
+	spokeResolver *mutationResolver
+	lastReq       *federation.ForwardMutationRequest
+}
+
+func (f *docWriteFederation) Spokes() []federation.SpokeRecord {
+	out := make([]federation.SpokeRecord, len(f.spokes))
+	copy(out, f.spokes)
+	return out
+}
+
+func (f *docWriteFederation) FanOut(_ context.Context, _ *federation.FanOutRequest) (*federation.FanOutResult, error) {
+	return &federation.FanOutResult{}, nil
+}
+
+func (f *docWriteFederation) ForwardMutation(_ context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
+	f.lastReq = req
+
+	registry := federation.NewRegistry()
+	registry.Spokes = append(registry.Spokes, f.spokes...)
+	owner, err := federation.RouteMutationToProjectOwner(registry, req.TargetProjectID)
+	if err != nil || owner == nil || owner.NodeID != req.TargetNodeID {
+		return nil, federation.ErrForwardMutationMissingOwner
+	}
+	if owner.Status == federation.StatusOffline {
+		return nil, federation.ErrForwardMutationOffline
+	}
+	if owner.Status == federation.StatusStale {
+		return nil, federation.ErrForwardMutationStale
+	}
+	if !hasWriteCapability(owner.Capabilities) {
+		return nil, federation.ErrForwardMutationReadOnly
+	}
+
+	var envelope struct {
+		Query     string                     `json:"query"`
+		Variables map[string]json.RawMessage `json:"variables"`
+	}
+	if err := json.Unmarshal(req.Body, &envelope); err != nil {
+		return nil, err
+	}
+	var path, content string
+	var expectedHash *string
+	if raw, ok := envelope.Variables["path"]; ok {
+		_ = json.Unmarshal(raw, &path)
+	}
+	if raw, ok := envelope.Variables["content"]; ok {
+		_ = json.Unmarshal(raw, &content)
+	}
+	if raw, ok := envelope.Variables["expectedHash"]; ok {
+		var h string
+		if err := json.Unmarshal(raw, &h); err == nil && h != "" {
+			expectedHash = &h
+		}
+	}
+
+	doc, err := f.spokeResolver.DocumentWrite(context.Background(), path, content, expectedHash)
+	if err != nil {
+		body, _ := json.Marshal(map[string]any{"errors": []map[string]any{{"message": err.Error()}}})
+		return &federation.ForwardMutationResponse{
+			OriginIdentity:  req.OriginIdentity,
+			ForwardingPath:  append([]string(nil), req.ForwardingPath...),
+			RequestID:       req.RequestID,
+			IdempotencyKey:  req.IdempotencyKey,
+			TargetNodeID:    req.TargetNodeID,
+			TargetProjectID: req.TargetProjectID,
+			ExpectedVersion: req.ExpectedVersion,
+			StatusCode:      http.StatusInternalServerError,
+			Body:            body,
+		}, nil
+	}
+	body, err := json.Marshal(map[string]any{"data": map[string]any{"documentWrite": doc}})
+	if err != nil {
+		return nil, err
+	}
+	return &federation.ForwardMutationResponse{
+		OriginIdentity:  req.OriginIdentity,
+		ForwardingPath:  append([]string(nil), req.ForwardingPath...),
+		RequestID:       req.RequestID,
+		IdempotencyKey:  req.IdempotencyKey,
+		TargetNodeID:    req.TargetNodeID,
+		TargetProjectID: req.TargetProjectID,
+		ExpectedVersion: req.ExpectedVersion,
+		StatusCode:      http.StatusOK,
+		Headers:         http.Header{"Content-Type": []string{"application/json"}},
+		Body:            body,
+	}, nil
+}
+
+func newDocWriteHubState(hubRoot string) *mutationTestStateProvider {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return &mutationTestStateProvider{
+		node: NodeStateSnapshot{ID: "hub-node", Name: "hub-node"},
+		projects: []*Project{{
+			ID:           "proj-a",
+			Name:         "proj-a",
+			Path:         hubRoot,
+			RegisteredAt: now,
+			LastSeen:     now,
+		}},
+	}
+}
+
+func newDocWriteSpokeState(spokeRoot string) *mutationTestStateProvider {
+	now := time.Now().UTC().Format(time.RFC3339)
+	return &mutationTestStateProvider{
+		node: NodeStateSnapshot{ID: "spoke-node", Name: "spoke-node"},
+		projects: []*Project{{
+			ID:           "proj-a",
+			Name:         "proj-a",
+			Path:         spokeRoot,
+			RegisteredAt: now,
+			LastSeen:     now,
+		}},
+	}
+}
+
+func newDocWriteFederation(spokeResolver *mutationResolver) *docWriteFederation {
+	return &docWriteFederation{
+		spokes: []federation.SpokeRecord{{
+			NodeID:       "spoke-node",
+			Name:         "spoke-a",
+			ProjectIDs:   []string{"proj-a"},
+			Capabilities: []string{"read", "write"},
+			Status:       federation.StatusActive,
+		}},
+		spokeResolver: spokeResolver,
+	}
+}
+
+func TestFederatedDocumentWrite_ForwardsToOwner(t *testing.T) {
+	const initialContent = `---
+ddx:
+  id: helix.feat026
+  depends_on:
+    - helix.prd
+---
+# Federation
+
+Original content.
+`
+	hubRoot := t.TempDir()
+	spokeRoot := setupDocumentProject(t, initialContent)
+
+	spokeResolver := &mutationResolver{&Resolver{
+		State:      newDocWriteSpokeState(spokeRoot),
+		WorkingDir: spokeRoot,
+		NodeID:     "spoke-node",
+	}}
+	fed := newDocWriteFederation(spokeResolver)
+
+	hubResolver := &mutationResolver{&Resolver{
+		State:      newDocWriteHubState(hubRoot),
+		WorkingDir: hubRoot,
+		Federation: fed,
+		NodeID:     "hub-node",
+	}}
+
+	ctx := WithWorkingDir(context.Background(), hubRoot)
+	newContent := "# Updated\n\nNew content from hub.\n"
+	doc, err := hubResolver.DocumentWrite(ctx, testFeaturePath, newContent, nil)
+	require.NoError(t, err)
+	require.NotNil(t, doc)
+
+	// Hub local filesystem must NOT have been written.
+	_, statErr := os.Stat(filepath.Join(hubRoot, testFeaturePath))
+	require.True(t, os.IsNotExist(statErr), "hub must not write spoke-owned documents locally")
+
+	// Spoke filesystem must have the new content.
+	spokeBytes, err := os.ReadFile(filepath.Join(spokeRoot, testFeaturePath))
+	require.NoError(t, err)
+	require.Equal(t, newContent, string(spokeBytes))
+}
+
+func TestFederatedDocumentWrite_PreservesOriginAndTargetMetadata(t *testing.T) {
+	const initialContent = `---
+ddx:
+  id: helix.feat026
+  depends_on:
+    - helix.prd
+---
+# Federation
+
+Original content.
+`
+	hubRoot := t.TempDir()
+	spokeRoot := setupDocumentProject(t, initialContent)
+
+	spokeResolver := &mutationResolver{&Resolver{
+		State:      newDocWriteSpokeState(spokeRoot),
+		WorkingDir: spokeRoot,
+		NodeID:     "spoke-node",
+	}}
+	fed := newDocWriteFederation(spokeResolver)
+
+	hubResolver := &mutationResolver{&Resolver{
+		State:      newDocWriteHubState(hubRoot),
+		WorkingDir: hubRoot,
+		Federation: fed,
+		NodeID:     "hub-node",
+	}}
+
+	ctx := WithWorkingDir(context.Background(), hubRoot)
+	_, err := hubResolver.DocumentWrite(ctx, testFeaturePath, "# Updated\n", nil)
+	require.NoError(t, err)
+
+	req := fed.lastReq
+	require.NotNil(t, req, "ForwardMutation must have been called")
+	require.Equal(t, "hub-node", req.OriginIdentity, "origin identity must be the hub node ID")
+	require.Equal(t, "spoke-node", req.TargetNodeID, "target node ID must be the spoke")
+	require.Equal(t, "proj-a", req.TargetProjectID, "target project ID must be proj-a")
+	require.Contains(t, req.ForwardingPath, "hub-node", "forwarding path must include origin")
+	require.Contains(t, req.ForwardingPath, "spoke-node", "forwarding path must include target")
 }
 
 func TestDocumentWrite_ConflictDoesNotRefreshGraph(t *testing.T) {
