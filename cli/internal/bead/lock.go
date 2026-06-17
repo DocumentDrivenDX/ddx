@@ -13,6 +13,8 @@ import (
 // and can be forcibly broken. Default: 2 hours.
 var StaleLockAge = 2 * time.Hour
 
+const lockPollInterval = 10 * time.Millisecond
+
 // LockSample carries timing metrics for one Store.WithLock acquire/release cycle.
 type LockSample struct {
 	LockDir string
@@ -79,7 +81,7 @@ func acquireDirLock(dir, lockDir string, wait time.Duration) error {
 			}
 			return fmt.Errorf("bead: lock timeout (owner pid: %s)", owner)
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(lockPollInterval)
 	}
 }
 

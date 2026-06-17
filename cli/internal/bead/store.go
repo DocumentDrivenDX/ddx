@@ -986,25 +986,20 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 //
 // Deprecated: use TouchClaimHeartbeat.
 func (s *Store) Heartbeat(id string) error {
-	if err := s.WithLock(func() error {
-		beads, _, err := s.readAllLatestRaw()
-		if err != nil {
-			return err
-		}
-		for _, b := range beads {
-			if b.ID != id {
-				continue
-			}
-			if b.Status != StatusInProgress {
-				return fmt.Errorf("bead: cannot heartbeat %s from status %s", id, b.Status)
-			}
-			return s.TouchClaimHeartbeat(id)
-		}
-		return fmt.Errorf("bead: not found: %s", id)
-	}); err != nil {
+	beads, err := s.ReadAll(context.Background())
+	if err != nil {
 		return err
 	}
-	return nil
+	for _, b := range beads {
+		if b.ID != id {
+			continue
+		}
+		if b.Status != StatusInProgress {
+			return fmt.Errorf("bead: cannot heartbeat %s from status %s", id, b.Status)
+		}
+		return s.TouchClaimHeartbeat(id)
+	}
+	return fmt.Errorf("bead: not found: %s", id)
 }
 
 // claimLeaseIsStale returns true if the external claim lease is absent or

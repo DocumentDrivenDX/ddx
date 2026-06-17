@@ -1941,6 +1941,20 @@ func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
 
+	var (
+		mu      sync.Mutex
+		samples []LockSample
+	)
+	prevSink := LockMetricsSink
+	LockMetricsSink = func(sample LockSample) {
+		mu.Lock()
+		samples = append(samples, sample)
+		mu.Unlock()
+	}
+	t.Cleanup(func() {
+		LockMetricsSink = prevSink
+	})
+
 	before, err := os.ReadFile(s.File)
 	require.NoError(t, err)
 	require.NoError(t, s.Heartbeat(b.ID))
@@ -1951,6 +1965,9 @@ func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	leasePath := claimLivenessPath(s.Dir, b.ID)
 	_, err = os.Stat(leasePath)
 	require.NoError(t, err, "heartbeat must be recorded in the external lease file")
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Empty(t, samples, "heartbeat must not take the tracker lock")
 }
 
 func TestWorkerClaimLeaseDoesNotMutateTracker(t *testing.T) {
