@@ -214,9 +214,12 @@ wording, which remains only as an implementation detail for older hooks.
 
 - Canonical DDx skill source lives in `library/skills/ddx/` and is owned by the
   default `ddx` plugin package. This is the single source of truth.
-- The binary embeds the entire default package library via `//go:embed` at
-  `cli/internal/registry/defaultplugin/library/`, so the skill ships offline
-  without separate download.
+- The binary embeds the minimal default package bootstrap via `//go:embed` at
+  `cli/internal/registry/defaultplugin/library/`: package metadata plus the
+  `skills/ddx/` tree required for offline init and worker discovery. Optional
+  reusable-library assets such as prompts, personas, templates, checks, tools,
+  MCP examples, and environment templates resolve through registry/cache
+  packages instead of being embedded in the binary.
 - `ddx init` materializes the built-in default package into the shared XDG
   plugin cache when needed, then creates generated adapters at
   `.agents/skills/ddx/` and `.claude/skills/ddx/`. These adapters are local

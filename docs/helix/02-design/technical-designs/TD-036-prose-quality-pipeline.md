@@ -57,9 +57,11 @@ require Vale or any other external binary.
 
 ### Install behavior
 
-The default DDx plugin should ship the embedded checker assets and their
-rules/vocabulary/fixture tree. It should not require the user to install Vale
-for the first supported surface to run.
+The DDx source package keeps the checker assets and rule/vocabulary tree under
+`library/checks/prose-quality/`, but those optional assets are not part of the
+minimal embedded DDx bootstrap package. The first supported surface should run
+from DDx source or from a registry/cache package without requiring Vale or
+copying the asset tree into every initialized project.
 
 ### Optional runner path
 
@@ -89,10 +91,11 @@ default even when the runner is optional: the user still gets findings,
 and missing-tool state is surfaced separately as an execution diagnostic
 instead of suppressing the scan.
 
-## Default Plugin Asset Layout
+## Prose Asset Layout
 
-The prose-quality assets belong in the default DDx plugin, not in a
-project-specific check scaffold.
+The prose-quality assets belong in the DDx reusable-library package, not in a
+project-specific check scaffold and not in the minimal embedded bootstrap
+package described by ADR-027.
 
 Proposed source layout:
 
@@ -101,7 +104,7 @@ Proposed source layout:
 - `library/checks/prose-quality/vocabulary/`
 - `library/checks/prose-quality/fixtures/`
 
-Resolved default-plugin layout:
+Resolved cache layout when the DDx library package is materialized:
 
 - `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/check.yaml`
 - `${XDG_DATA_HOME}/ddx/cache/plugins/ddx/<version>/checks/prose-quality/rules/`
@@ -110,7 +113,9 @@ Resolved default-plugin layout:
 
 `.ddx/plugins/ddx` is reserved for explicit local development overlays and
 legacy compatibility. Normal `ddx init` / `ddx plugin sync` bootstrap must not
-copy the default plugin payload into the project repository.
+copy the default plugin payload into the project repository. The embedded DDx
+bootstrap remains package metadata plus `skills/ddx/`; optional prose assets
+resolve from source or cache packages.
 
 Layout rules:
 
