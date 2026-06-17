@@ -241,9 +241,10 @@ The readiness assessment result is one of:
 - `too_large_decomposed` — DDx created child, sibling, or replacement beads,
   mapped every parent AC to generated ACs or an explicit operator-required /
   `non_scope` marker, and closed the oversized bead as
-  `completed-by-decomposition` when the split is lossless. The queue advances
-  through the generated executable work. Lossy splits or those requiring
-  operator judgment move the parent to `status=proposed`.
+  `completed-by-decomposition` when the split is lossless. Generated children
+  carry `Parent` metadata only and must not depend on the decomposed parent.
+  The queue advances through the generated executable work. Lossy splits or
+  those requiring operator judgment move the parent to `status=proposed`.
 - `ambiguous_requires_operator` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
   DDx moves the bead to `status=proposed` and does not claim it.
@@ -291,8 +292,10 @@ worktree/depth context, the layer-3 worker must invoke the same orchestrator
 decomposition path used by `BeadReadinessHook`. This is machine-actionable
 work: DDx files child, sibling, or replacement beads, records the AC map, and
 closes the oversized bead as `completed-by-decomposition` when the split is
-lossless. Only lossy or ambiguous splits require operator attention and move the
-bead to `status=proposed`.
+lossless. Generated children carry `Parent` metadata only and must not depend
+on the decomposed parent. Only lossy or ambiguous splits require operator
+attention and move the bead to `status=proposed`. Historical open
+`execution-eligible=false` containers are legacy backfill cases only.
 The operator is not required merely because the implementer could not split
 from inside the attempted execution.
 

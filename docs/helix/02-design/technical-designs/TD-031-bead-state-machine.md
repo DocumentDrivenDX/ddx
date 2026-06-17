@@ -113,7 +113,7 @@ Both paths append an event (`lifecycle_reconciled` for reconcile-close, implicit
   condition. At child-depth cap, the decomposer MUST try a sibling or replacement
   split under the nearest safe parent/root. Only a failed or lossy
   sibling/replacement split may map to `status=proposed`.
-- Every bead excluded from ordinary `ddx work` execution MUST have an explainable durable reason using existing mechanisms: dependency edge, `proposed` status, external `blocked` status, `execution-eligible=false`, `superseded-by`, epic/parent queue mode, or an active retry cooldown. Labels, events, and `extra` fields may explain that reason but do not control lifecycle.
+- Every bead excluded from ordinary `ddx work` execution MUST have an explainable durable reason using existing mechanisms: dependency edge, `proposed` status, external `blocked` status, legacy-backfill `execution-eligible=false`, `superseded-by`, epic/parent queue mode, or an active retry cooldown. Labels, events, and `extra` fields may explain that reason but do not control lifecycle.
 - `extra` is not a general rule namespace. Only fields explicitly specified by
   TD-027 or this TD may affect queue eligibility, retry/recovery thresholds, or
   worker selection. Optional telemetry in `extra` may improve auditability, but
@@ -168,7 +168,7 @@ within the selected policy and any numeric power bounds DDx sends.
 | unjustified no_changes | `in_progress → open` | add `triage:no-changes-unjustified` | `no_changes_unjustified` | record rationale absence/detail |
 | legacy no_changes investigation (work too large) | `in_progress → closed` (`completed-by-decomposition`) when children or sibling/replacement beads can be filed losslessly; `in_progress → proposed` only if decomposition is lossy or no executable split can be generated | add `decomposed` when children/replacements exist | legacy `no_changes_needs_investigation` + `triage-decomposed` + `closed-completed-by-decomposition` | `extra.last-rationale`, `extra.children` or `extra.superseded-by`, AC mapping |
 | legacy no_changes investigation (non-decomposition reason) | `in_progress → open` for retriable, verifiable, or recoverable uncertainty; `in_progress → proposed` only when evidence proves operator judgment is required | optional explanatory triage labels only | legacy `no_changes_needs_investigation` + recovery decision | `extra.last-rationale`; no retry cooldown |
-| parent/epic/decomposed container | `in_progress → closed` (`completed-by-decomposition`) for a new lossless decomposition; `in_progress → open` with `execution-eligible=false` for legacy backfill containers only | add `decomposed` when children exist | `no_changes_decomposed` or `triage-decomposed` + `closed-completed-by-decomposition` for new lossless cases | `extra.children` lists child IDs + AC mapping |
+| parent/epic/decomposed container | `in_progress → closed` (`completed-by-decomposition`) for a new lossless decomposition; `in_progress → open` with `execution-eligible=false` for legacy backfill containers only | add `decomposed` when children exist; generated children carry `Parent` metadata only and must not depend on the decomposed parent | `no_changes_decomposed` or `triage-decomposed` + `closed-completed-by-decomposition` for new lossless cases | `extra.children` lists child IDs + AC mapping |
 | external blocker | `in_progress → blocked` (hard) or `in_progress → open` (soft) | add `blocked-on-upstream:<id>` as explanatory label when useful | `no_changes_blocked` | `extra.last-rationale` names the external blocker |
 | superseded work | no terminal success; leave open if visible history needed | (none) | structured superseded event if appended | `extra.superseded-by` names the replacement |
 | transient infra/quota/transport | `in_progress → open` | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `work-retry-after` for retryable time-based condition only |
@@ -196,14 +196,15 @@ operator-attention transition:
    `extra.consecutive_ladder_exhaustions`.
 2. **Child decomposition**: if the bead can be split under itself, create 2-5
    executable child beads, map every parent AC to child ACs or explicit
-   `non_scope`, add dependency edges, add `decomposed`, append
+   `non_scope`, file the children with `Parent` metadata only, do not add a
+   dependency edge back to the decomposed parent, add `decomposed`, append
    `decompose-applied`, and close the parent as `completed-by-decomposition`.
 3. **Sibling/replacement decomposition**: if child depth is exhausted but the
    work is still decomposable, create executable sibling or replacement beads
    under the nearest safe parent/root, record `extra.superseded-by` on the
-   oversized bead when a replacement owns the remaining work, add dependency
-   edges so the queue advances through the replacement work, and close the
-   oversized bead as `completed-by-decomposition`.
+   oversized bead when a replacement owns the remaining work, add the required
+   dependency or supersession edges for the generated follow-up work, and
+   close the oversized bead as `completed-by-decomposition`.
 4. **Final escape**: move to `status=proposed` only when reframe,
    child decomposition, and sibling/replacement decomposition all fail, would
    drop explicit scope, or require operator judgment. The event body MUST record
@@ -272,7 +273,7 @@ Bead readiness assessment is the canonical pre-claim decision for actionability 
 - `in_progress → open` when releasing stale claims.
 - `open → open` when readiness applies a validated replacement rewrite or metadata-only safe improvement before implementation. The bead remains execution-ready unless a later readiness decision parks it.
 - `open → blocked` when triage decides a bead has an external recheckable blocker.
-- `open → open` when readiness decomposes a parent and adds dependency edges to children; the parent is dependency-waiting but remains `open`.
+- `open → closed` when readiness decomposes a parent losslessly; generated children carry `Parent` metadata only and must not depend on the decomposed parent.
 - `open → proposed` only when readiness finds ambiguity or decomposition loss
   that cannot be safely rewritten, decomposed into children, or decomposed into
   sibling/replacement work. Decomposition depth overflow alone stays on the

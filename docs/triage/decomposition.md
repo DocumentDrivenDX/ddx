@@ -19,8 +19,10 @@ and prior attempt history to classify it as:
   proceeds to Claim after the mutation.
 - **too_large_decomposed** — multiple independent deliverables; the gate files
   child beads, records the AC map, and closes the parent as
-  `completed-by-decomposition` when the split is lossless. Lossy splits or
-  those requiring operator judgment move the parent to `status=proposed`.
+  `completed-by-decomposition` when the split is lossless. Generated children
+  carry `Parent` metadata only and must not depend on the decomposed parent.
+  Lossy splits or those requiring operator judgment move the parent to
+  `status=proposed`.
 - **ambiguous_requires_operator** — needs human clarification; the gate moves
   the bead to `status=proposed`.
 
@@ -69,7 +71,9 @@ When the gate decomposes a bead losslessly:
 2. The parent is closed as `completed-by-decomposition` immediately after
    children are filed; it does not remain `status=open` with child dependency
    edges.
-3. The parent receives a `kind:triage-decomposed` event whose JSON body lists
+3. Generated children carry `Parent` metadata only and must not depend on the
+   decomposed parent.
+4. The parent receives a `kind:triage-decomposed` event whose JSON body lists
    the `child_ids`, the splitter's `rationale`, and an `ac_map`.
 
 **Historical note:** Decomposed beads that predate this rule may remain

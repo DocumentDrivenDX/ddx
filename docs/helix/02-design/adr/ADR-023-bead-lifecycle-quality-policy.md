@@ -209,7 +209,10 @@ If readiness finds the bead too broad, it decomposes before claim. Every parent 
 must map to at least one child AC or be explicitly marked `operator_required` or
 `non_scope`; token-overlap metrics are heuristics, not proof of preservation.
 The parent is closed as `completed-by-decomposition` when decomposition succeeds
-losslessly, or moves to `status=proposed` when the split would be lossy.
+losslessly, generated children carry `Parent` metadata only and must not depend
+on the decomposed parent, and historical open `execution-eligible=false`
+containers are legacy backfill cases only. The parent moves to
+`status=proposed` when the split would be lossy.
 
 When BLOCK mode stops dispatch, the operator-facing output must be actionable.
 It prints:

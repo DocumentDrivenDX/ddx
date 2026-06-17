@@ -317,6 +317,136 @@ Update docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md §2 t
 	}
 }
 
+// TestDocumentation_DecompositionContractClosesParent guards the governed docs
+// against reintroducing the old open-parent decomposition contract. The new
+// normative rule is: lossless decomposition closes the parent as
+// completed-by-decomposition; generated children carry Parent metadata only and
+// must not depend on the decomposed parent. Historical open
+// execution-eligible=false containers are allowed only as legacy/backfill
+// cases.
+func TestDocumentation_DecompositionContractClosesParent(t *testing.T) {
+	type docCheck struct {
+		path      string
+		required  []string
+		forbidden []string
+	}
+
+	checks := []docCheck{
+		{
+			path: "docs/triage/decomposition.md",
+			required: []string{
+				"completed-by-decomposition",
+				"Generated children carry `Parent` metadata only",
+				"must not depend on the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+		{
+			path: "docs/beads.md",
+			required: []string{
+				"completed-by-decomposition",
+				"Generated children carry `Parent` metadata only",
+				"must not depend on the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+		{
+			path: "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+			required: []string{
+				"completed-by-decomposition",
+				"generated children carry `Parent` metadata only",
+				"must not depend on the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+		{
+			path: "docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md",
+			required: []string{
+				"completed-by-decomposition",
+				"populates `Parent` metadata for the generated children",
+				"does not add a dependency edge back to the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+		{
+			path: "docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md",
+			required: []string{
+				"completed-by-decomposition",
+				"generated children carry `Parent` metadata only",
+				"must not depend on the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+		{
+			path: "docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md",
+			required: []string{
+				"completed-by-decomposition",
+				"generated children carry `Parent` metadata only",
+				"must not depend on the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+		{
+			path: "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+			required: []string{
+				"completed-by-decomposition",
+				"Generated children carry `Parent` metadata only",
+				"must not depend on the decomposed parent",
+			},
+			forbidden: []string{
+				"dependency-waiting but remains `open`",
+				"open → open when readiness decomposes a parent and adds dependency edges to children",
+			},
+		},
+	}
+
+	for _, check := range checks {
+		check := check
+		t.Run(filepath.Base(check.path), func(t *testing.T) {
+			path := filepath.Join(repoRoot(t), check.path)
+			data, err := os.ReadFile(path)
+			require.NoError(t, err, "read doc at %s", path)
+			text := string(data)
+			normalized := strings.Join(strings.Fields(text), " ")
+
+			for _, frag := range check.required {
+				if !strings.Contains(normalized, frag) {
+					t.Fatalf("%s is missing required fragment %q", check.path, frag)
+				}
+			}
+			for _, frag := range check.forbidden {
+				if strings.Contains(normalized, frag) {
+					t.Fatalf("%s still contains forbidden open-parent decomposition language %q", check.path, frag)
+				}
+			}
+
+			if strings.Contains(normalized, "execution-eligible=false") {
+				if !strings.Contains(normalized, "legacy") || !strings.Contains(normalized, "backfill") {
+					t.Fatalf("%s mentions execution-eligible=false outside legacy/backfill context", check.path)
+				}
+			}
+		})
+	}
+}
+
 // TestSchemaCompatRoundTripPreservesLabelsAndEvents is the ADR-004
 // compatibility guard. It loads a bd-export fixture that includes labels,
 // dependencies, and events (the latter via Extra), runs it through DDx's
