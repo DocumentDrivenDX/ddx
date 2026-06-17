@@ -194,7 +194,6 @@ func New(addr, workingDir string) *Server {
 	state.workingDir = workingDir
 
 	workers := NewWorkerManager(workingDir)
-	workers.ReconcileStaleWorkers()
 	beadHub := bead.NewWatcherHub(250 * time.Millisecond)
 	csrfStore, err := ddxgraphql.NewStaticCSRFTokenStore()
 	if err != nil {
