@@ -10,7 +10,7 @@ this blocker note + a ready integration point.
 ## To finish the hero in a follow-up
 
 1. Set `OPENROUTER_API_KEY` in your shell (or this project's `.env`).
-2. Install the skill: `ddx install nano-banana-pro-openrouter` (or invoke
+2. Install the skill: `ddx plugin install nano-banana-pro-openrouter` (or invoke
    it via the Claude skill harness if running inside Claude Code).
 3. Use the prompt below to generate variants (≥ 2K, pick the strongest).
 4. Save the chosen image at `website/static/hero/landing.webp` (preferred

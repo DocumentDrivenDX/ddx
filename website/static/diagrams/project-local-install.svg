@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 380" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13">
-  <title>Project-local install model</title>
-  <desc>ddx init and ddx install only write under the project root: .ddx/plugins, .agents/skills, .claude/skills. The only global ddx artifact is ddx-server.</desc>
+  <title>Project-local plugin intent with shared cache</title>
+  <desc>ddx init and ddx plugin install record project intent, resolve payloads into the shared XDG cache, and generate agent adapters under .agents/skills and .claude/skills.</desc>
 
-  <text x="390" y="32" text-anchor="middle" font-weight="700" font-size="16">Project-local install model</text>
-  <text x="390" y="52" text-anchor="middle" fill="#555" font-size="12">ddx init / ddx install only touch &lt;projectRoot&gt;</text>
+  <text x="390" y="32" text-anchor="middle" font-weight="700" font-size="16">Project-local intent, shared plugin cache</text>
+  <text x="390" y="52" text-anchor="middle" fill="#555" font-size="12">ddx init / ddx plugin install avoid vendoring marketplace payloads</text>
 
   <!-- Project root box -->
   <rect x="40" y="80" width="500" height="270" rx="10" fill="#eaf6ee" stroke="#35a35f" stroke-width="2"/>
@@ -11,24 +11,21 @@
 
   <g font-family="ui-monospace, SFMono-Regular, monospace" font-size="13" fill="#1c5a31">
     <text x="80" y="140">.ddx/</text>
-    <text x="100" y="160">plugins/</text>
-    <text x="120" y="180">ddx/         <tspan fill="#555">← default plugin</tspan></text>
-    <text x="120" y="200">helix/       <tspan fill="#555">← installed workflow</tspan></text>
-    <text x="120" y="220">…</text>
-    <text x="100" y="240">config.yaml  <tspan fill="#555">← persona bindings, providers</tspan></text>
+    <text x="100" y="160">plugins.lock.yaml  <tspan fill="#555">← pinned plugin intent</tspan></text>
+    <text x="100" y="190">config.yaml         <tspan fill="#555">← persona bindings, providers</tspan></text>
 
-    <text x="80" y="270">.agents/skills/  <tspan fill="#555">← real files (not symlinks)</tspan></text>
-    <text x="80" y="296">.claude/skills/  <tspan fill="#555">← real files (not symlinks)</tspan></text>
+    <text x="80" y="246">.agents/skills/  <tspan fill="#555">← generated adapters</tspan></text>
+    <text x="80" y="272">.claude/skills/  <tspan fill="#555">← generated adapters</tspan></text>
 
     <text x="80" y="326">src/, package.json, …  <tspan fill="#555">← your code</tspan></text>
   </g>
 
   <!-- Global box -->
   <rect x="580" y="80" width="170" height="120" rx="10" fill="#e9f1fb" stroke="#4878c6" stroke-width="2"/>
-  <text x="665" y="108" text-anchor="middle" font-weight="700" fill="#1f3a68">global</text>
-  <text x="665" y="128" text-anchor="middle" font-size="12" fill="#1f3a68">(only artifact)</text>
-  <text x="665" y="160" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" fill="#1f3a68">ddx-server</text>
-  <text x="665" y="182" text-anchor="middle" font-size="11" fill="#1f3a68">long-running daemon</text>
+  <text x="665" y="108" text-anchor="middle" font-weight="700" fill="#1f3a68">shared cache</text>
+  <text x="665" y="132" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" fill="#1f3a68">XDG_DATA_HOME</text>
+  <text x="665" y="154" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, monospace" font-size="11" fill="#1f3a68">/ddx/cache/plugins</text>
+  <text x="665" y="182" text-anchor="middle" font-size="11" fill="#1f3a68">immutable payloads</text>
 
   <!-- Anti box -->
   <rect x="580" y="220" width="170" height="130" rx="10" fill="#fbeaea" stroke="#b3361b" stroke-width="2" stroke-dasharray="4,3"/>
@@ -37,6 +34,6 @@
     <text x="665" y="276">~/.ddx/...</text>
     <text x="665" y="296">~/.claude/skills/*</text>
     <text x="665" y="316">ddx install --global</text>
+    <text x="665" y="336">.ddx/plugins/helix</text>
   </g>
-  <text x="665" y="340" text-anchor="middle" font-size="11" fill="#7a1c0d">no shared mutable state</text>
 </svg>

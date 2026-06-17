@@ -20,4 +20,4 @@ WORKDIR /home/tester
 RUN curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
 
 # Pre-install helix plugin for testing
-RUN ddx install helix || true
+RUN ddx plugin install helix || true

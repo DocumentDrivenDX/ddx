@@ -90,7 +90,7 @@ test.describe('DDx Microsite', () => {
   test('getting started page', async ({ page }) => {
     await page.goto('/docs/getting-started/')
     await expect(page.locator('article').getByText('ddx init').first()).toBeVisible()
-    await expect(page.locator('article').getByText('ddx install helix').first()).toBeVisible()
+    await expect(page.locator('article').getByText('ddx plugin install helix').first()).toBeVisible()
     await page.addStyleTag({ content: '.asciinema-container { display: none !important; }' })
     await page.waitForTimeout(500)
     await expect(page.locator('article')).toHaveScreenshot('getting-started.png')

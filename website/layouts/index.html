@@ -55,7 +55,7 @@
         <div class="ddx-home-hero__install">
           <pre class="ddx-home-install-block"><code>brew install ddx
 ddx init
-ddx install helix
+ddx plugin install helix
 ddx work</code></pre>
           <p class="ddx-home-install-caption">HELIX is the opinionated workflow that runs on top of DDx — phases, gates, and bounded actions for teams that want a methodology out of the box.</p>
         </div>
@@ -149,7 +149,7 @@ ddx work</code></pre>
             <span class="ddx-home-card__number">02</span>
             <div>
               <h3>Project-Local by Default</h3>
-              <p>Every plugin, persona, and bead lives under the project root. No global state, no machine-wide side effects, no surprises.</p>
+              <p>Plugin intent, generated adapters, and beads are project-local. Shared payloads live in the DDx cache so repos do not vendor workflow assets.</p>
             </div>
           </article>
           <article class="ddx-home-card">
@@ -177,7 +177,7 @@ ddx work</code></pre>
             <span class="ddx-home-card__number">06</span>
             <div>
               <h3>Shared Library, Not Silos</h3>
-              <p>Patterns, prompts, and personas are installed from the shared library registry. What works in one repo is one <code>ddx install</code> away in the next.</p>
+              <p>Patterns, prompts, and personas resolve from marketplace plugins. What works in one repo is one <code>ddx plugin install</code> away in the next.</p>
             </div>
           </article>
         </div>
@@ -223,7 +223,7 @@ ddx work</code></pre>
              data-cols="100" data-rows="28">
         </div>
         <noscript>
-          <img src="{{ relURL "demos/07-quickstart.gif" }}" alt="DDx helix quickstart demo: ddx init, install helix, create beads, ddx work drains the queue" class="ddx-home-demo__fallback" />
+          <img src="{{ relURL "demos/07-quickstart.gif" }}" alt="DDx helix quickstart demo: ddx init, install the HELIX plugin, create beads, ddx work drains the queue" class="ddx-home-demo__fallback" />
         </noscript>
         <script>
           (function() {
