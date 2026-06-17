@@ -2168,3 +2168,6 @@
 {"event":"acquire","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2260767,"acquired_at":"2026-06-17T05:27:08.177227539Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":2260767,"acquired_at":"2026-06-17T05:27:08.177227539Z","released_at":"2026-06-17T05:27:08.207883615Z","duration_ms":30}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":2260767,"acquired_at":"2026-06-17T05:27:07.718168474Z","released_at":"2026-06-17T05:27:08.208307733Z","duration_ms":490}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2353207,"acquired_at":"2026-06-17T05:31:04.271340372Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":2353207,"acquired_at":"2026-06-17T05:31:04.271340372Z","released_at":"2026-06-17T05:31:04.279055338Z","duration_ms":7}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":2353207,"acquired_at":"2026-06-17T05:31:04.284438548Z"}
