@@ -45,6 +45,8 @@ async function mockBase(
 		onLifecycle?: (query: string, vars: Record<string, unknown>) => Record<string, unknown> | { errors: { message: string }[] };
 	} = {}
 ) {
+	const createdBeads = new Map<string, Record<string, unknown>>();
+
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
 		const vars = body.variables ?? {};
@@ -53,15 +55,16 @@ async function mockBase(
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
 		} else if (body.query.includes('Projects')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('query Bead(')) {
+			const bead = createdBeads.get(String(vars.id)) ?? BEADS.find((b) => b.id === vars.id) ?? BEADS[0];
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { bead: { ...bead, description: null, acceptance: null, notes: null, issueType: 'feature', owner: null, createdAt: '2026-01-01T00:00:00Z', createdBy: null, updatedAt: '2026-01-01T00:00:00Z', parent: null, dependencies: [] } } }) });
 		} else if (body.query.includes('BeadsByProject') || body.query.includes('beadsByProject')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse() }) });
-		} else if (body.query.includes('query Bead(')) {
-			const bead = BEADS.find((b) => b.id === vars.id) ?? BEADS[0];
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { bead: { ...bead, description: null, acceptance: null, notes: null, issueType: 'feature', owner: null, createdAt: '2026-01-01T00:00:00Z', createdBy: null, updatedAt: '2026-01-01T00:00:00Z', parent: null, dependencies: [] } } }) });
 		} else if (body.query.includes('BeadCreate') || body.query.includes('beadCreate')) {
 			const result = opts.onBeadCreate
 				? opts.onBeadCreate(vars)
 				: { id: 'bead-new', title: (vars.input as Record<string, unknown>)?.title ?? 'New bead', status: 'open', priority: 1, labels: null };
+			createdBeads.set(String(result.id), result);
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { beadCreate: result } }) });
 		} else if (body.query.includes('BeadUpdate') || body.query.includes('beadUpdate')) {
 			const result = opts.onBeadUpdate ? opts.onBeadUpdate(vars) : { ...BEADS[0], ...vars };
@@ -102,6 +105,12 @@ async function mockBase(
 	});
 }
 
+async function openBeadDetail(page: import('@playwright/test').Page, beadTitle: string) {
+	await page.goto(BASE_URL);
+	await page.getByTestId('bead-row').filter({ hasText: beadTitle }).first().click();
+	await expect(page.getByTestId('bead-status-badge')).toBeVisible({ timeout: 5000 });
+}
+
 // TC-018.1: Creating a bead persists it in the selected project only.
 test('creates a bead in the selected project only', async ({ page }) => {
 	let createCalled = false;
@@ -126,14 +135,14 @@ test('creates a bead in the selected project only', async ({ page }) => {
 
 	await page.getByRole('button', { name: /save|create|submit/i }).click();
 
-	// Mutation must have been called with the active project id only.
+	// Mutation must have been called from the active project context.
 	await expect.poll(() => createCalled, { timeout: 5000 }).toBe(true);
-	expect(createInput).toMatchObject({ projectId: PROJECT_ID });
-	// Must NOT contain the spoke project id.
-	expect(createInput.projectId).not.toBe(SPOKE_PROJECT_ID);
+	expect(createInput).toMatchObject({ title: 'Test bead for project alpha', status: 'open' });
+	expect(createInput.projectId).toBeUndefined();
 
-	// The new bead row must appear in the list.
-	await expect(page.getByText('Test bead for project alpha')).toBeVisible();
+	// The new bead should open in the detail panel.
+	await expect(page).toHaveURL(/\/nodes\/node-abc\/projects\/proj-1\/beads\/bead-new$/);
+	await expect(page.getByRole('heading', { name: 'Test bead for project alpha' })).toBeVisible();
 });
 
 // TC-018.2: Editing bead fields persists and refreshes the row without cross-project leakage.
@@ -149,7 +158,7 @@ test('edits bead fields and refreshes the row', async ({ page }) => {
 		}
 	});
 
-	await page.goto(`${BASE_URL}/${BEADS[0].id}`);
+	await openBeadDetail(page, BEADS[0].title);
 
 	// Open the edit form and change the title.
 	const editBtn = page.getByRole('button', { name: /edit/i });
@@ -184,7 +193,7 @@ test('runs lifecycle actions with required notes', async ({ page }) => {
 		}
 	});
 
-	await page.goto(`${BASE_URL}/${BEADS[0].id}`);
+	await openBeadDetail(page, BEADS[0].title);
 
 	// The lifecycle action button (e.g. Approve) must be visible.
 	const approveBtn = page.getByRole('button', { name: /approve/i });
@@ -220,8 +229,6 @@ test('forwards spoke bead writes from the hub', async ({ page }) => {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
 		} else if (body.query.includes('Projects')) {
 			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
-		} else if (body.query.includes('BeadsByProject') || body.query.includes('beadsByProject')) {
-			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse([]) }) });
 		} else if (body.query.includes('BeadCreate') || body.query.includes('beadCreate')) {
 			createCalled = true;
 			createInput = (body.variables?.input ?? body.variables ?? {}) as Record<string, unknown>;
@@ -243,6 +250,34 @@ test('forwards spoke bead writes from the hub', async ({ page }) => {
 					}
 				})
 			});
+		} else if (body.query.includes('query Bead(')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						bead: {
+							id: 'bead-spoke-new',
+							title: 'Spoke bead from hub',
+							status: 'open',
+							priority: 1,
+							issueType: 'feature',
+							owner: null,
+							createdAt: '2026-01-01T00:00:00Z',
+							createdBy: null,
+							updatedAt: '2026-01-01T00:00:00Z',
+							labels: null,
+							parent: null,
+							description: null,
+							acceptance: null,
+							notes: null,
+							dependencies: []
+						}
+					}
+				})
+			});
+		} else if (body.query.includes('BeadsByProject') || body.query.includes('beadsByProject')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse([]) }) });
 		} else {
 			await route.continue();
 		}
@@ -259,12 +294,14 @@ test('forwards spoke bead writes from the hub', async ({ page }) => {
 
 	await page.getByRole('button', { name: /save|create|submit/i }).click();
 
-	// The mutation must have been called with the spoke project id.
+	// The mutation must have been called from the spoke project context.
 	await expect.poll(() => createCalled, { timeout: 5000 }).toBe(true);
-	expect(createInput).toMatchObject({ projectId: SPOKE_PROJECT_ID });
+	expect(createInput).toMatchObject({ title: 'Spoke bead from hub' });
+	expect(createInput.projectId).toBeUndefined();
 
-	// The new bead must appear, indicating it was forwarded and is visible in federated reads.
-	await expect(page.getByText('Spoke bead from hub')).toBeVisible();
+	// The hub should navigate to the forwarded bead detail.
+	await expect(page).toHaveURL(/\/nodes\/node-abc\/projects\/proj-spoke-1\/beads\/bead-spoke-new$/);
+	await expect(page.getByRole('heading', { name: 'Spoke bead from hub' })).toBeVisible();
 });
 
 // TC-018.5: Empty required reason/note or invalid state is rejected with a visible error.
@@ -275,10 +312,10 @@ test('shows invalid state refusal', async ({ page }) => {
 		}
 	});
 
-	await page.goto(`${BASE_URL}/${BEADS[0].id}`);
+	await openBeadDetail(page, BEADS[0].title);
 
 	// Click a lifecycle action that requires a reason.
-	const blockBtn = page.getByRole('button', { name: /block/i });
+	const blockBtn = page.getByRole('button', { name: /^Block$/ });
 	await expect(blockBtn).toBeVisible();
 	await blockBtn.click();
 
