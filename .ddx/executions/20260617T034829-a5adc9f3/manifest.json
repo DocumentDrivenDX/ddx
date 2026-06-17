@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260617T034829-a5adc9f3",
+  "bead_id": "ddx-0188567e",
+  "base_rev": "265a446d08e35f6b5b1fbf0e2618c16efb364178",
+  "created_at": "2026-06-17T03:48:36.898050167Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0188567e",
+    "title": "server: route bead queue mutations through federation owner forwarding",
+    "description": "PROBLEM\nOperators must be able to modify bead queues for any project from the web UI, including spoke-owned projects when using a hub.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/graphql/resolver_mutation_beads.go:12 returns a bead store rooted only at the per-request working directory.\n- cli/internal/server/graphql/resolver_mutation_beads.go:68 creates beads through that local store.\n- cli/internal/server/graphql/resolver_mutation_beads.go:112 updates beads through that local store.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:353 requires bead queue mutations to be project-scoped and owner-targeted in hub-mode.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:340 defines TC-018 for cross-project bead queue mutations, including federated writes.\n\nPROPOSED FIX\n- Route beadCreate, beadUpdate, beadApprove, beadBlock, beadCancel, beadReopen, and dependency mutations when present through local project context or federation owner forwarding.\n- Preserve local project isolation for standalone and same-node targets.\n- Preserve lifecycle events and include origin/forwarding audit metadata for forwarded writes.\n- Return typed errors for stale state, missing required reasons/notes, non-owned targets, and offline/read_only spokes.\n\nNON-SCOPE\nDo not add new lifecycle states or dependency-edit UI beyond already exposed mutation surfaces.",
+    "acceptance": "1. Go test `TestFederatedBeadCreate_ForwardsToOwner` proves hub beadCreate for a spoke project persists on the spoke and not locally.\n2. Go test `TestFederatedBeadUpdate_ForwardsToOwner` proves edits are forwarded and returned in hub federated reads.\n3. Go test `TestFederatedBeadLifecycle_ForwardsAuditMetadata` proves approve/block/cancel/reopen preserve lifecycle events plus origin/forwarding metadata.\n4. Go test `TestBeadMutation_ProjectIsolation` proves local project A writes do not leak into project B.\n5. Playwright `beads-queue-mutations.spec.ts` includes create, edit, lifecycle, federated write, and invalid-state refusal scenarios.\n6. `cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/bead/... ./internal/federation/...` passes.\n7. `cd cli/internal/server/frontend \u0026\u0026 bunx playwright test e2e/beads-queue-mutations.spec.ts` passes once UI wiring lands.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-d5dfa702",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "area:beads",
+      "kind:feature",
+      "plan:server-operator-workbench"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T033137-dc6f runtime=1m56s pid=1231738 reason=stop",
+          "created_at": "2026-06-17T03:33:33.901941233Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        }
+      ],
+      "spec-id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-06-08-SERVER-OPERATOR-WORKBENCH",
+      "path": "docs/helix/06-iterate/server-operator-workbench-plan-2026-06-08.md",
+      "title": "Server Operator Workbench Plan"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260617T034829-a5adc9f3",
+    "prompt": ".ddx/executions/20260617T034829-a5adc9f3/prompt.md",
+    "manifest": ".ddx/executions/20260617T034829-a5adc9f3/manifest.json",
+    "result": ".ddx/executions/20260617T034829-a5adc9f3/result.json",
+    "checks": ".ddx/executions/20260617T034829-a5adc9f3/checks.json",
+    "usage": ".ddx/executions/20260617T034829-a5adc9f3/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-0188567e-20260617T034829-a5adc9f3"
+  },
+  "prompt_sha": "63bbf98a04515a4699432aa817b9361243bde0373d20604f959bd6ce212f0ad1"
+}
