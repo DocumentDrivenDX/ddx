@@ -462,11 +462,18 @@ func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
 	var errs []error
 	add := func(path string) {
 		path = strings.TrimSpace(path)
-		if path == "" || seen[path] {
+		if path == "" {
 			return
 		}
-		seen[path] = true
-		candidates = append(candidates, path)
+		canonical := canonicalizePath(path)
+		if canonical == "" {
+			canonical = path
+		}
+		if seen[canonical] {
+			return
+		}
+		seen[canonical] = true
+		candidates = append(candidates, canonical)
 	}
 	add(s.WorkingDir)
 	if s.state != nil {
@@ -1017,7 +1024,7 @@ func (s *Server) workerManagerForRequest(r *http.Request) *WorkerManager {
 }
 
 func (s *Server) workerManagerForProjectRoot(dir string) *WorkerManager {
-	if dir == "" || dir == s.WorkingDir {
+	if dir == "" || sameCanonicalPath(dir, s.WorkingDir) {
 		return s.workers
 	}
 	m := NewWorkerManager(dir)
@@ -2746,7 +2753,7 @@ func (s *Server) handleAgentWorkers(w http.ResponseWriter, r *http.Request) {
 
 	for _, proj := range projects {
 		var m *WorkerManager
-		if proj.Path == s.WorkingDir {
+		if sameCanonicalPath(proj.Path, s.WorkingDir) {
 			m = s.workers
 		} else {
 			m = NewWorkerManager(proj.Path)
@@ -2861,6 +2868,11 @@ func (s *Server) resolveRequestedProject(requested string) string {
 	if entry, ok := s.state.GetProjectByPath(requested); ok {
 		return entry.Path
 	}
+	if canonical := canonicalizePath(requested); canonical != "" {
+		if entry, ok := s.state.GetProjectByPath(canonical); ok {
+			return entry.Path
+		}
+	}
 	// Name (basename) match — only unambiguous if exactly one project has that name.
 	projects := s.state.GetProjects()
 	var matches []string
@@ -2936,6 +2948,9 @@ func (s *Server) handleSetWorkerDesiredState(w http.ResponseWriter, r *http.Requ
 	projectRoot := input.ProjectRoot
 	if projectRoot == "" {
 		projectRoot = s.workingDirForRequest(r)
+	}
+	if canonical := canonicalizePath(projectRoot); canonical != "" {
+		projectRoot = canonical
 	}
 	if s.state != nil {
 		s.state.RegisterProject(projectRoot)
@@ -3116,7 +3131,7 @@ func (s *Server) resolveWorkerManager(projectKey string) (*WorkerManager, bool) 
 	if !ok {
 		return nil, false
 	}
-	if entry.Path == s.WorkingDir {
+	if sameCanonicalPath(entry.Path, s.WorkingDir) {
 		return s.workers, true
 	}
 	// Return a read-only manager for the registered project (no live workers)
@@ -5628,7 +5643,7 @@ func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) mcpWorkerManager(workingDir string) *WorkerManager {
-	if workingDir == s.WorkingDir {
+	if sameCanonicalPath(workingDir, s.WorkingDir) {
 		return s.workers
 	}
 	return NewWorkerManager(workingDir)

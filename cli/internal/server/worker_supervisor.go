@@ -95,6 +95,9 @@ type WorkerSupervisor struct {
 
 // NewWorkerSupervisor builds a supervisor for projectRoot driving ctrl.
 func NewWorkerSupervisor(projectRoot string, ctrl workerController) *WorkerSupervisor {
+	if canonical := canonicalizePath(projectRoot); canonical != "" {
+		projectRoot = canonical
+	}
 	return &WorkerSupervisor{
 		projectRoot: projectRoot,
 		ctrl:        ctrl,
@@ -169,7 +172,7 @@ func (s *WorkerSupervisor) Reconcile() (ReconcileResult, error) {
 		if _, ok := s.managed[r.ID]; ok {
 			continue
 		}
-		if !r.Managed || r.ProjectRoot != s.projectRoot || isTerminalWorkerState(r.State) {
+		if !r.Managed || !sameCanonicalPath(r.ProjectRoot, s.projectRoot) || isTerminalWorkerState(r.State) {
 			continue
 		}
 		if !s.ctrl.HasLiveWorker(r.ID) {

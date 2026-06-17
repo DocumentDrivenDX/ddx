@@ -441,6 +441,12 @@ func canonicalizePath(path string) string {
 	return resolved
 }
 
+func sameCanonicalPath(a, b string) bool {
+	ca := canonicalizePath(strings.TrimSpace(a))
+	cb := canonicalizePath(strings.TrimSpace(b))
+	return ca != "" && cb != "" && ca == cb
+}
+
 // resolvedProjectPath canonicalizes path and, if it sits inside a linked git
 // worktree, returns the primary worktree root instead. Returns "" only if
 // filepath.Abs itself fails (practically impossible).

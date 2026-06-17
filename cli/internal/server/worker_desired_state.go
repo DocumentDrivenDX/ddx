@@ -116,11 +116,16 @@ func SaveWorkerDesiredState(projectRoot string, state *WorkerDesiredState) error
 	if state == nil {
 		return fmt.Errorf("worker desired state is nil")
 	}
+	if canonical := canonicalizePath(projectRoot); canonical != "" {
+		projectRoot = canonical
+	}
 	if state.Version == 0 {
 		state.Version = WorkerDesiredStateVersion
 	}
 	if state.ProjectRoot == "" {
 		state.ProjectRoot = projectRoot
+	} else if canonical := canonicalizePath(state.ProjectRoot); canonical != "" {
+		state.ProjectRoot = canonical
 	}
 	state.UpdatedAt = time.Now().UTC()
 	if err := state.Validate(); err != nil {

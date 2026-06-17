@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/spf13/cobra"
 )
 
@@ -66,7 +67,7 @@ func (f *CommandFactory) newWorkerStatusCommand() *cobra.Command {
 			if project != "" {
 				filtered = filtered[:0]
 				for _, w := range workers {
-					if w.ProjectRoot == project {
+					if workerstatus.SamePath(w.ProjectRoot, project) {
 						filtered = append(filtered, w)
 					}
 				}

@@ -206,7 +206,7 @@ func (a *workerDispatchAdapter) countRunningDrainWorkers(projectRoot string) int
 	}
 	count := 0
 	for _, rec := range recs {
-		if rec.Kind == "work" && rec.State == "running" && rec.ProjectRoot == projectRoot {
+		if rec.Kind == "work" && rec.State == "running" && sameCanonicalPath(rec.ProjectRoot, projectRoot) {
 			count++
 		}
 	}

@@ -325,6 +325,9 @@ func (m *WorkerManager) MarkManaged(id string) error {
 }
 
 func NewWorkerManager(projectRoot string) *WorkerManager {
+	if canonical := canonicalizePath(projectRoot); canonical != "" {
+		projectRoot = canonical
+	}
 	m := &WorkerManager{
 		projectRoot:      projectRoot,
 		rootDir:          ddxroot.JoinProject(projectRoot, "workers"),
@@ -433,6 +436,9 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	effectiveRoot := spec.ProjectRoot
 	if effectiveRoot == "" {
 		effectiveRoot = m.projectRoot
+	}
+	if canonical := canonicalizePath(effectiveRoot); canonical != "" {
+		effectiveRoot = canonical
 	}
 	spec.ProjectRoot = effectiveRoot
 	spec.ApplyDefaults()
@@ -893,6 +899,9 @@ func (m *WorkerManager) StartPluginAction(spec PluginActionWorkerSpec, run Plugi
 	effectiveRoot := spec.ProjectRoot
 	if effectiveRoot == "" {
 		effectiveRoot = m.projectRoot
+	}
+	if canonical := canonicalizePath(effectiveRoot); canonical != "" {
+		effectiveRoot = canonical
 	}
 
 	if err := os.MkdirAll(m.rootDir, 0o755); err != nil {
@@ -2983,7 +2992,7 @@ func (m *WorkerManager) fastLiveManagedWorkerCount(projectRoot string) int {
 		if root == "" {
 			root = m.projectRoot
 		}
-		if rec.Managed && root == projectRoot && !isTerminalWorkerState(rec.State) {
+		if rec.Managed && sameCanonicalPath(root, projectRoot) && !isTerminalWorkerState(rec.State) {
 			count++
 			seen[id] = true
 		}
@@ -3006,7 +3015,7 @@ func (m *WorkerManager) fastLiveManagedWorkerCount(projectRoot string) int {
 		if root == "" {
 			root = m.projectRoot
 		}
-		if root != projectRoot {
+		if !sameCanonicalPath(root, projectRoot) {
 			continue
 		}
 		if rec.PID > 0 && isPIDAlive(rec.PID) {

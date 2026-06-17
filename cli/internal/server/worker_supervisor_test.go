@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -333,6 +335,32 @@ func TestWorkerSupervisorAdoptsLiveManagedWorkersBeforeStarting(t *testing.T) {
 	assert.Empty(t, res.Stopped)
 	_, adopted := sup.managed["already-running"]
 	assert.True(t, adopted, "supervisor must adopt the live managed worker")
+	assert.Equal(t, workerStateRunning, fake.records["already-running"].State)
+}
+
+func TestWorkerSupervisorAdoptsLiveManagedWorkersWithCanonicalRootAlias(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "real")
+	alias := filepath.Join(parent, "alias")
+	require.NoError(t, os.Mkdir(root, 0o755))
+	require.NoError(t, os.Symlink(root, alias))
+	clock := time.Date(2026, 6, 15, 12, 0, 0, 0, time.UTC)
+	fake := newFakeWorkerController(func() time.Time { return clock })
+	fake.seedLiveManaged("already-running", alias, clock.Add(-time.Minute))
+	sup := NewWorkerSupervisor(root, fake)
+	sup.clock = func() time.Time { return clock }
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 1,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+	}))
+
+	res, err := sup.Reconcile()
+	require.NoError(t, err)
+	assert.Empty(t, res.Started, "canonical aliases must count as the same project")
+	assert.Empty(t, res.Stopped)
+	_, adopted := sup.managed["already-running"]
+	assert.True(t, adopted, "supervisor must adopt the alias-root worker")
 	assert.Equal(t, workerStateRunning, fake.records["already-running"].State)
 }
 

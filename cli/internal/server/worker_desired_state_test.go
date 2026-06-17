@@ -2,6 +2,7 @@ package server
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -54,6 +55,23 @@ func TestWorkerDesiredStateRoundTrip(t *testing.T) {
 	assert.Equal(t, want.DefaultSpec, got.DefaultSpec)
 	assert.Equal(t, want.Restart, got.Restart)
 	assert.WithinDuration(t, want.UpdatedAt, got.UpdatedAt, time.Second)
+}
+
+func TestWorkerDesiredStateSaveCanonicalizesProjectRoot(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real")
+	aliasRoot := filepath.Join(parent, "alias")
+	require.NoError(t, os.Mkdir(realRoot, 0o755))
+	require.NoError(t, os.Symlink(realRoot, aliasRoot))
+
+	state := &WorkerDesiredState{DesiredCount: 1}
+	require.NoError(t, SaveWorkerDesiredState(aliasRoot, state))
+
+	assert.Equal(t, realRoot, state.ProjectRoot)
+	got, err := LoadWorkerDesiredState(realRoot)
+	require.NoError(t, err)
+	assert.Equal(t, realRoot, got.ProjectRoot)
+	assert.Equal(t, 1, got.DesiredCount)
 }
 
 func TestWorkerDesiredStateValidate(t *testing.T) {

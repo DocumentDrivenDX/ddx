@@ -324,7 +324,7 @@ func (s *ServerState) GetWorkersGraphQL(projectID string) []*ddxgraphql.Worker {
 		if err := json.Unmarshal(data, &rec); err != nil {
 			continue
 		}
-		if expectedPath != "" && rec.ProjectRoot != expectedPath {
+		if expectedPath != "" && !sameCanonicalPath(rec.ProjectRoot, expectedPath) {
 			continue
 		}
 		out = append(out, workerFromRecord(rec))
