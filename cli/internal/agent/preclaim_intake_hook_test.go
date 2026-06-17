@@ -951,6 +951,19 @@ func TestPreClaimReadiness_DecodesFractionalScore(t *testing.T) {
 	assert.Equal(t, "single slice", got.Detail)
 }
 
+func TestPreClaimReadiness_DecodesBooleanTractability(t *testing.T) {
+	payload := `{"classification":"ready","tractability":true,"score":8,"rationale":"single slice","readiness_checks":[]}`
+
+	var out preClaimReadinessClassificationPromptResult
+	require.NoError(t, json.Unmarshal([]byte(payload), &out))
+	assert.Equal(t, "tractable", out.Tractability.String())
+
+	got, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "single slice", got.Detail)
+}
+
 func TestPreClaimReadinessCheck_VerdictAcceptsBoolStringAbsent(t *testing.T) {
 	// buildEntry returns a readiness_checks entry with the given raw JSON for
 	// the verdict field, or omits the field entirely when verdictJSON is "".

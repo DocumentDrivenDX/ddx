@@ -81,7 +81,7 @@ type preClaimReadinessPromptResult struct {
 
 type preClaimReadinessClassificationPromptResult struct {
 	Classification    string                                 `json:"classification"`
-	Tractability      string                                 `json:"tractability,omitempty"`
+	Tractability      readinessTractability                  `json:"tractability,omitempty"`
 	Score             preClaimReadinessScore                 `json:"score,omitempty"`
 	Rationale         string                                 `json:"rationale,omitempty"`
 	Detail            string                                 `json:"detail,omitempty"`
@@ -99,6 +99,37 @@ type preClaimReadinessCheck struct {
 	Verdict                readinessVerdict `json:"verdict,omitempty"`
 	Evidence               string           `json:"evidence,omitempty"`
 	CheckableBeforeAttempt bool             `json:"checkable_before_attempt,omitempty"`
+}
+
+// readinessTractability is documented as a string enum, but some models emit
+// a boolean when they interpret the field as "is this tractable?". Accept both
+// shapes so intake can continue while the prompt keeps the canonical contract.
+type readinessTractability string
+
+func (t *readinessTractability) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		*t = ""
+		return nil
+	}
+	switch trimmed {
+	case "true":
+		*t = "tractable"
+		return nil
+	case "false":
+		*t = "unknown"
+		return nil
+	}
+	var value string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return fmt.Errorf("tractability must be a string enum or boolean: %w", err)
+	}
+	*t = readinessTractability(strings.ToLower(strings.TrimSpace(value)))
+	return nil
+}
+
+func (t readinessTractability) String() string {
+	return string(t)
 }
 
 // readinessVerdict is the verdict reported for a single readiness check.
@@ -691,6 +722,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Canonical schema: " + readinessChecksSchemaPath + ". Treat it as the source of truth for readiness_checks[].verdict and for forward-compatible extra fields.\n")
 	sb.WriteString("readiness_checks[].verdict may be a JSON bool, string, null, or omitted; match the schema and the Go decoder contract exactly.\n")
 	sb.WriteString("Return exactly one JSON object matching the readiness schema with classification, tractability, score, rationale, difficulty, readiness_checks, suggested_fixes, rewrite, suggested_child_beads, and waivers_applied.\n")
+	sb.WriteString("tractability MUST be a string enum: tractable, too_large, ambiguous, blocked, or unknown. Do not emit a boolean for tractability.\n")
 	sb.WriteString("readiness_checks MUST be a JSON array; it may be empty, and every entry MUST be an object with reason, verdict, evidence, and checkable_before_attempt. It must not be an object or string.\n")
 	sb.WriteString("suggested_fixes MUST be a JSON array; use a flat string list for prompt-quality suggestions, or an empty array when none apply.\n")
 	sb.WriteString("suggested_child_beads MUST be a JSON array of objects. When a child includes acceptance, prefer a JSON string array of numbered criteria; the decoder tolerates a single string fallback, but do not rely on it.\n")
@@ -760,7 +792,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 	var probe struct {
 		Classification  string                                 `json:"classification"`
 		Outcome         string                                 `json:"outcome"`
-		Tractability    string                                 `json:"tractability"`
+		Tractability    readinessTractability                  `json:"tractability"`
 		Rationale       string                                 `json:"rationale"`
 		Score           preClaimReadinessScore                 `json:"score"`
 		Difficulty      preClaimReadinessDifficulty            `json:"difficulty"`
@@ -774,7 +806,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 		return decodeCanonicalReadinessPayloadWithMode(payload, qualityMode)
 	}
 	if probe.Classification != "" {
-		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score.Present, normalizeReadinessEstimatedDifficulty(probe.Difficulty.EstimatedDifficulty) != "", probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
+		if isReadinessClassificationPayload(probe.Classification, probe.Tractability.String(), probe.Rationale, probe.Score.Present, normalizeReadinessEstimatedDifficulty(probe.Difficulty.EstimatedDifficulty) != "", probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
 			return decodeReadinessClassificationPayloadWithMode(payload, qualityMode)
 		}
 		return decodeLegacyIntakePayload(payload)
