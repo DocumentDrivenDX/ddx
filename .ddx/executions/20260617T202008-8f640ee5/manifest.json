@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260617T202008-8f640ee5",
+  "bead_id": "ddx-11f01241",
+  "base_rev": "d124e8e613cb8f0f76af6e3cdd689b471df42762",
+  "created_at": "2026-06-17T20:20:15.932379471Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-11f01241",
+    "title": "agent: close parent after post-attempt decomposition",
+    "description": "PROBLEM\nThe post-attempt recovery/decomposer path applies the same park-open decomposition pattern as pre-claim intake. A successful lossless post-attempt split should close the decomposed parent while leaving generated children work-ready; it should not strand an open execution-ineligible parent.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/recovery_decompose.go:130-133 documents that a successful decomposition creates child beads, sets `execution-eligible=false`, and emits `decompose-applied`.\n- cli/internal/agent/recovery_decompose.go:207-210 updates the parent extra metadata to `execution-eligible=false` after child creation instead of closing the parent through the lifecycle/store API.\n- cli/internal/agent/execute_bead_intake_decompose_test.go currently covers post-attempt too-large no_changes decomposition with old open/ineligible expectations.\n- cli/internal/agent/recovery_decompose_test.go:20-22 says the post-ladder decomposer creates child beads and sets parent `execution-eligible=false`, locking in the old lifecycle.\n\nPROPOSED FIX\n- Update `runDecomposer` in cli/internal/agent/recovery_decompose.go so successful lossless decomposition closes the parent through the lifecycle/store API after child beads are created.\n- Preserve durable `decompose-applied` evidence with generated child IDs and cost/route fields already recorded by the path.\n- Clear parent claim metadata and heartbeat fields on the closed parent.\n- Ensure post-attempt generated children use `Parent=\u003cdecomposed-id\u003e` as hierarchy metadata only and are not blocked by a dependency on the decomposed parent.\n- Update post-attempt and post-ladder tests to assert close semantics, child readiness, and `decompose-applied` child ID evidence.\n\nNON-SCOPE\n- Do not change pre-claim intake decomposition or auto-epic decomposition in this bead; those are separate children under ddx-e9542e0d.\n- Do not implement ddx-130cf9ab's broader doctor/back-edge repair work.\n- Do not redesign historical `dead_intermediate_close` behavior for already-open containers.\n\nPARENT AND DEPS\nParent: ddx-e9542e0d.\nDeps: No deps.",
+    "acceptance": "1. `runDecomposer` in `cli/internal/agent/recovery_decompose.go` closes the decomposed parent through the lifecycle/store API after generated child beads are created.\n2. `decompose-applied` evidence still includes generated child IDs and existing cost/route metadata.\n3. Parent claim metadata and heartbeat fields are cleared on the closed decomposed parent.\n4. `TestPostAttemptTooLargeNoChanges_ClosesParentAndLeavesChildrenReady` proves post-attempt orchestrator decomposition closes the parent and generated children remain ready through the `Parent` field when they have no explicit deps.\n5. `TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge_ClosesParent` proves the post-ladder decomposer path closes the parent and records `decompose-applied` with child IDs.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run 'PostAttemptTooLargeNoChanges|PostLadderExhaustion_TriggersDecompose|DecomposeDoesNotSelfDep|parent_ancestor_in_deps' -count=1` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-e9542e0d",
+    "labels": [
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:decomposition",
+      "kind:bug",
+      "kind:correctness",
+      "phase:iterate",
+      "prevention",
+      "related:ddx-130cf9ab",
+      "spec:FEAT-010",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260617T202008-8f640ee5",
+    "prompt": ".ddx/executions/20260617T202008-8f640ee5/prompt.md",
+    "manifest": ".ddx/executions/20260617T202008-8f640ee5/manifest.json",
+    "result": ".ddx/executions/20260617T202008-8f640ee5/result.json",
+    "checks": ".ddx/executions/20260617T202008-8f640ee5/checks.json",
+    "usage": ".ddx/executions/20260617T202008-8f640ee5/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-11f01241-20260617T202008-8f640ee5"
+  },
+  "prompt_sha": "0b8c2db614b9f87b3efc5dd291041ba9f4bcbb963a7f44f5cbf80b8b1a09d7c3"
+}
