@@ -50,7 +50,7 @@ removed surfaces. Use the `ddx plugin` namespace for plugin lifecycle work.
 ## Package Layout
 
 A plugin should keep source assets in normal repository paths and declare the
-agent-facing install mappings in `package.yaml`:
+agent-facing generated-adapter mappings in `package.yaml`:
 
 ```yaml
 name: my-plugin
@@ -58,10 +58,8 @@ version: 1.0.0
 description: A workflow plugin for DDx
 type: workflow
 source: https://github.com/you/my-plugin
-install:
-  root:
-    source: "."
-    target: ".ddx/plugins/my-plugin" # local-overlay target only
+api_version: "1"
+materialize:
   skills:
     - source: "skills/"
       target: ".agents/skills/"
@@ -69,9 +67,11 @@ install:
       target: ".claude/skills/"
 ```
 
-For registry installs, `install.root` describes the package root to cache; it
-does not cause a project-local payload copy. For local overlays, DDx links
-`.ddx/plugins/<name>` and the skill adapters directly to the checkout.
+For registry installs, DDx caches the complete package payload outside the
+project and applies `materialize.skills` to create local agent adapters.
+`install.root` is reserved for legacy packages and explicit local development
+overlays; it is not the marketplace install contract. For local overlays, DDx
+links `.ddx/plugins/<name>` and the skill adapters directly to the checkout.
 
 ## Skill References
 

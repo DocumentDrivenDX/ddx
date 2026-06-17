@@ -32,6 +32,14 @@ func TestFrontendReadmeDescribesCacheBackedFixtureTopology(t *testing.T) {
 	assert.Contains(t, readme, ".claude/skills/")
 }
 
+func TestWebsitePluginsDocsUseMaterializeForMarketplaceExample(t *testing.T) {
+	docs := readRepoFile(t, filepath.Join("..", "..", "website", "content", "docs", "plugins.md"))
+
+	assert.Contains(t, docs, "materialize:")
+	assert.Contains(t, docs, "For registry installs, DDx caches the complete package payload outside the\nproject and applies `materialize.skills`")
+	assert.NotContains(t, docs, "install:\n  root:\n    source: \".\"\n    target: \".ddx/plugins/my-plugin\"")
+}
+
 func TestDocsMentionProjectPayloadOnlyForLocalOverlayOrLegacyCompatibility(t *testing.T) {
 	paths := []string{
 		filepath.Join("skills.go"),
