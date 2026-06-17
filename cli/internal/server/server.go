@@ -459,6 +459,7 @@ func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
 	}
 	seen := map[string]bool{}
 	var candidates []string
+	var errs []error
 	add := func(path string) {
 		path = strings.TrimSpace(path)
 		if path == "" || seen[path] {
@@ -473,9 +474,18 @@ func (s *Server) desiredWorkerProjectRoots() ([]string, []error) {
 			add(project.Path)
 		}
 	}
+	if s.workers != nil {
+		records, err := s.workers.List()
+		if err != nil {
+			errs = append(errs, fmt.Errorf("list worker records for startup reconcile: %w", err))
+		} else {
+			for _, rec := range records {
+				add(rec.ProjectRoot)
+			}
+		}
+	}
 
 	roots := make([]string, 0, len(candidates))
-	var errs []error
 	for _, projectRoot := range candidates {
 		info, err := os.Stat(projectRoot)
 		if err != nil {

@@ -41,6 +41,46 @@ func TestServerStartupReconcileDesiredWorkersAcrossRegisteredProjects(t *testing
 	assert.ElementsMatch(t, []string{rootA, rootB}, reconciled)
 }
 
+func TestServerStartupReconcileDiscoversProjectsFromWorkerRecords(t *testing.T) {
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	require.NoError(t, SaveWorkerDesiredState(rootA, &WorkerDesiredState{DesiredCount: 1}))
+	require.NoError(t, SaveWorkerDesiredState(rootB, &WorkerDesiredState{DesiredCount: 1}))
+
+	manager := NewWorkerManager(rootA)
+	require.NoError(t, os.MkdirAll(manager.rootDir, 0o755))
+	rec := WorkerRecord{
+		ID:          "worker-cross-project-stale",
+		Kind:        "work",
+		State:       workerStateRunning,
+		Status:      workerStateRunning,
+		Managed:     true,
+		ProjectRoot: rootB,
+		StartedAt:   time.Now().UTC().Add(-time.Minute),
+	}
+	recordDir := filepath.Join(manager.rootDir, rec.ID)
+	require.NoError(t, os.MkdirAll(recordDir, 0o755))
+	require.NoError(t, manager.writeRecord(recordDir, rec))
+
+	var reconciled []string
+	prev := startupDesiredWorkerReconcileProject
+	startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
+		reconciled = append(reconciled, projectRoot)
+		return ReconcileResult{}, nil
+	}
+	t.Cleanup(func() { startupDesiredWorkerReconcileProject = prev })
+
+	srv := &Server{
+		WorkingDir: rootA,
+		workers:    manager,
+	}
+
+	errs := srv.reconcileDesiredWorkersOnce()
+	require.Empty(t, errs)
+	assert.ElementsMatch(t, []string{rootA, rootB}, reconciled,
+		"startup reconcile must restore desired workers for projects present only in persisted worker records")
+}
+
 func TestServerStartupReconcileReportsInvalidDesiredState(t *testing.T) {
 	root := t.TempDir()
 	desiredPath := workerDesiredStatePath(root)
