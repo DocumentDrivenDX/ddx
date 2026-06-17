@@ -256,6 +256,58 @@ func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
+func TestIntake_RewriteRejectedWarnOnlyStillAttempts(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+	require.NoError(t, inner.Update(context.Background(), candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\nKeep dependency ddx-1234abcd in scope.\n\nNON-SCOPE\nDo not drop this guardrail."
+		b.Acceptance = "1. Keep the existing behavior."
+	}))
+
+	var eventSink bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rewrite-rejected",
+				ResultRev: "rewrite-rejected",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:      true,
+		EventSink: &eventSink,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "tighten prompt",
+				Rewrite: PreClaimIntakeRewrite{
+					ChangedFields: []string{"description"},
+					Description:   "PROBLEM\nThis rewrite drops the durable dependency anchor.",
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "rewrite-rejected warn-only intake must still claim")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
+	assert.Contains(t, eventSink.String(), "rewrite_rejected")
+
+	got, err := inner.Get(context.Background(), candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
 func TestReadinessDifficultyDoesNotPersistBeadMetadata(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
