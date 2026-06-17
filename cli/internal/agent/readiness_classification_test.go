@@ -337,19 +337,23 @@ func TestPreClaimReadiness_DecodesSafelyRefinableClassificationAsNeedsRefine(t *
 }
 
 func TestPreClaimIntakeRefinableAliasFollowsNeedsRefinePolicy(t *testing.T) {
-	payload := `{"classification":"refinable","rationale":"tighten acceptance","readiness_checks":[]}`
+	for _, classification := range []string{"refine", "refinable"} {
+		t.Run(classification, func(t *testing.T) {
+			payload := `{"classification":"` + classification + `","rationale":"tighten acceptance","readiness_checks":[]}`
 
-	warnOnly, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.Outcome)
-	assert.Empty(t, warnOnly.SystemReason)
-	assert.Contains(t, warnOnly.Detail, "tighten acceptance")
+			warnOnly, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+			require.NoError(t, err)
+			assert.Equal(t, PreClaimIntakeActionableAtomic, warnOnly.Outcome)
+			assert.Empty(t, warnOnly.SystemReason)
+			assert.Contains(t, warnOnly.Detail, "tighten acceptance")
 
-	blocking, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeBlock)
-	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.Outcome)
-	assert.Empty(t, blocking.SystemReason)
-	assert.Contains(t, blocking.Detail, "tighten acceptance")
+			blocking, err := decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeBlock)
+			require.NoError(t, err)
+			assert.Equal(t, PreClaimIntakeOperatorRequired, blocking.Outcome)
+			assert.Empty(t, blocking.SystemReason)
+			assert.Contains(t, blocking.Detail, "tighten acceptance")
+		})
+	}
 }
 
 func TestPreClaimReadiness_DecodesSplitClassificationAsNeedsSplit(t *testing.T) {

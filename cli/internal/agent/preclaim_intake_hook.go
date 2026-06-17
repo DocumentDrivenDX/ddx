@@ -791,6 +791,7 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 		ReadinessClassificationNeedsSplit,
 		ReadinessClassificationOperatorRequired,
 		"ambiguous",
+		"refine",
 		"refinable",
 		"safely_refinable",
 		"split":
