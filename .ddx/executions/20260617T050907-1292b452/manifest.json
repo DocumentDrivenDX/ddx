@@ -1,0 +1,55 @@
+{
+  "attempt_id": "20260617T050907-1292b452",
+  "bead_id": "ddx-d72c06dd",
+  "base_rev": "1f2beb8feb0a276fefc07abe812540ac37c0e9a7",
+  "created_at": "2026-06-17T05:09:34.969759313Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d72c06dd",
+    "title": "federation: forward documentWrite to project owner",
+    "description": "PROBLEM\nHub-mode document saves for spoke-owned projects have no owner-targeted documentWrite forwarding path, so a hub can only resolve local behavior instead of persisting the edit on the owning spoke.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/graphql/resolver_mutation_docs.go:34 defines DocumentWrite as a local path/content mutation with no project-owner forwarding semantics.\n- cli/internal/server/graphql/resolver_mutation_docs.go:55 writes content directly with os.WriteFile, so hub-mode requests are not routed to the owning project.\n- cli/internal/server/graphql/schema.graphql:3263 exposes documentWrite(path, content) without owner/forwarding metadata or expected version input needed for safe federation.\n- docs/helix/01-frame/features/FEAT-021-dashboard-ui.md:356 requires spec/document edits to be project-scoped, path-confined, and owner-targeted in hub-mode.\n- docs/helix/03-test/test-plans/TP-002-server-web-ui.md:353 defines TC-019 federated document write coverage.\n\nPROPOSED FIX\n- Route hub-to-spoke documentWrite mutations through owner-targeted forwarding when the target project is owned by a spoke.\n- Include origin/forwarding metadata so the spoke can distinguish forwarded hub requests from direct local writes and avoid loops.\n- Preserve the same path confinement and expected-hash conflict semantics on the spoke-side write path.\n- Ensure the forwarded write persists on the spoke and does not create or overwrite a hub-local file for the spoke project.\n\nNON-SCOPE\nDo not build a full collaborative editor or arbitrary filesystem browser. Keep the primary workflow scoped to project documents, especially docs/helix/**. Do not redesign the federation protocol beyond the minimum documentWrite forwarding metadata. Do not implement frontend Playwright coverage in this bead. Parent bead: ddx-d5dfa702.",
+    "acceptance": "1. Go test TestFederatedDocumentWrite_ForwardsToOwner proves hub saves for spoke projects persist on the spoke and not locally.\n2. Go test TestFederatedDocumentWrite_PreservesExpectedHashConflict proves stale expected-hash failures are returned from the owning spoke without overwriting spoke content.\n3. Go test TestFederatedDocumentWrite_RejectsForwardingLoop proves origin/forwarding metadata prevents recursive hub-spoke forwarding.\n4. cd cli \u0026\u0026 go test -short ./internal/server/graphql/... ./internal/federation/... passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-aa88732d",
+    "labels": [
+      "phase:iterate",
+      "area:server",
+      "area:federation",
+      "area:docs",
+      "kind:feature",
+      "plan:server-operator-workbench",
+      "parent:ddx-d5dfa702"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T044903-a2e1 runtime=9m23s pid=2026637 reason=stop",
+          "created_at": "2026-06-17T04:58:26.053273708Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        },
+        {
+          "actor": "ddx",
+          "body": "worker=worker-20260617T045904-7591 runtime=3m14s pid=2078993 reason=stop",
+          "created_at": "2026-06-17T05:02:19.324783593Z",
+          "kind": "bead.stopped",
+          "source": "server-workers",
+          "summary": "stop"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260617T050907-1292b452",
+    "prompt": ".ddx/executions/20260617T050907-1292b452/prompt.md",
+    "manifest": ".ddx/executions/20260617T050907-1292b452/manifest.json",
+    "result": ".ddx/executions/20260617T050907-1292b452/result.json",
+    "checks": ".ddx/executions/20260617T050907-1292b452/checks.json",
+    "usage": ".ddx/executions/20260617T050907-1292b452/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d72c06dd-20260617T050907-1292b452"
+  },
+  "prompt_sha": "a42280d657a1655860de312fce0581ad946c184e6948178de113a6bb649afe89"
+}
