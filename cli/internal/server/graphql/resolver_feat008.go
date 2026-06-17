@@ -91,6 +91,11 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	if r.Actions == nil {
 		return nil, fmt.Errorf("work worker dispatcher is not configured")
 	}
+	if target, err := r.workerForwardTargetByProjectID(input.ProjectID); err != nil {
+		return nil, err
+	} else if target != nil {
+		return r.forwardStartWorker(ctx, target, input)
+	}
 	projectRoot := r.projectRoot(ctx, input.ProjectID)
 
 	overrides := config.CLIOverrides{}
@@ -165,6 +170,11 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 func (r *mutationResolver) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
 	if r.Actions == nil {
 		return nil, fmt.Errorf("work worker dispatcher is not configured")
+	}
+	if projectID, target, err := r.workerForwardTargetByWorkerID(id); err != nil {
+		return nil, err
+	} else if target != nil {
+		return r.forwardStopWorker(ctx, target, projectID, id)
 	}
 	return r.Actions.StopWorker(ctx, id)
 }

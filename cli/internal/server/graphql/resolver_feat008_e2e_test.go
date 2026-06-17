@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
+	"github.com/DocumentDrivenDX/ddx/internal/federation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -86,7 +89,8 @@ func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, im
 // DispatchWorker so the test can assert that StartWorker resolved its
 // arguments through .ddx/config.yaml + CLIOverrides before dispatch.
 type capturingActionDispatcher struct {
-	calls []capturedDispatch
+	calls     []capturedDispatch
+	stopCalls []string
 }
 
 type capturedDispatch struct {
@@ -118,6 +122,7 @@ func (c *capturingActionDispatcher) DispatchPlugin(ctx context.Context, projectR
 }
 
 func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (*WorkerLifecycleResult, error) {
+	c.stopCalls = append(c.stopCalls, id)
 	return &WorkerLifecycleResult{ID: id, State: "stopped", Kind: "work"}, nil
 }
 
@@ -180,6 +185,225 @@ func TestGraphQLStartWorkerFlowsConfigToWorkerDispatch(t *testing.T) {
 	assert.Equal(t, "watch", got.args["mode"])
 	assert.Equal(t, "30s", got.args["idle_interval"])
 	assert.NotContains(t, got.args, "count", "omitted count must preserve adapter default of one worker")
+}
+
+type workerForwardStateProvider struct {
+	*mutationTestStateProvider
+	workers map[string]*Worker
+}
+
+func (p *workerForwardStateProvider) GetWorkersGraphQL(projectID string) []*Worker {
+	out := make([]*Worker, 0, len(p.workers))
+	for _, worker := range p.workers {
+		if worker == nil {
+			continue
+		}
+		if projectID != "" {
+			proj, ok := p.GetProjectSnapshotByID(projectID)
+			if !ok || !sameWorkerProjectRoot(proj.Path, worker.ProjectRoot) {
+				continue
+			}
+		}
+		copyWorker := *worker
+		out = append(out, &copyWorker)
+	}
+	return out
+}
+
+func (p *workerForwardStateProvider) GetWorkerGraphQL(id string) (*Worker, bool) {
+	worker, ok := p.workers[id]
+	if !ok || worker == nil {
+		return nil, false
+	}
+	copyWorker := *worker
+	return &copyWorker, true
+}
+
+type workerMutationFederation struct {
+	spokes []federation.SpokeRecord
+	calls  []*federation.ForwardMutationRequest
+}
+
+func (m *workerMutationFederation) Spokes() []federation.SpokeRecord {
+	out := make([]federation.SpokeRecord, len(m.spokes))
+	copy(out, m.spokes)
+	return out
+}
+
+func (m *workerMutationFederation) FanOut(context.Context, *federation.FanOutRequest) (*federation.FanOutResult, error) {
+	return &federation.FanOutResult{}, nil
+}
+
+func (m *workerMutationFederation) ForwardMutation(_ context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
+	m.calls = append(m.calls, req)
+	registry := federation.NewRegistry()
+	for _, spoke := range m.spokes {
+		if err := registry.UpsertSpoke(spoke); err != nil {
+			return nil, err
+		}
+	}
+	owner, err := federation.RouteMutationToProjectOwner(registry, req.TargetProjectID)
+	if err != nil {
+		return nil, federation.ErrForwardMutationMissingOwner
+	}
+	if owner.NodeID != req.TargetNodeID {
+		return nil, federation.ErrForwardMutationBroadcastLike
+	}
+	if owner.Status == federation.StatusOffline {
+		return nil, federation.ErrForwardMutationOffline
+	}
+	if owner.Status == federation.StatusStale {
+		return nil, federation.ErrForwardMutationStale
+	}
+	if !hasWriteCapability(owner.Capabilities) {
+		return nil, federation.ErrForwardMutationReadOnly
+	}
+
+	var envelope struct {
+		Query     string          `json:"query"`
+		Variables json.RawMessage `json:"variables"`
+	}
+	if err := json.Unmarshal(req.Body, &envelope); err != nil {
+		return nil, err
+	}
+	var body map[string]any
+	switch {
+	case strings.Contains(envelope.Query, "startWorker"):
+		body = map[string]any{
+			"data": map[string]any{
+				"startWorker": map[string]any{
+					"id":    "worker-spoke-started",
+					"state": "queued",
+					"kind":  "work",
+					"workers": []map[string]any{{
+						"id":    "worker-spoke-started",
+						"state": "queued",
+						"kind":  "work",
+					}},
+				},
+			},
+		}
+	case strings.Contains(envelope.Query, "stopWorker"):
+		body = map[string]any{
+			"data": map[string]any{
+				"stopWorker": map[string]any{
+					"id":    "worker-spoke-running",
+					"state": "stopping",
+					"kind":  "work",
+				},
+			},
+		}
+	default:
+		return nil, fmt.Errorf("unexpected worker mutation: %s", envelope.Query)
+	}
+	rawBody, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	return &federation.ForwardMutationResponse{
+		OriginIdentity:  req.OriginIdentity,
+		ForwardingPath:  append([]string(nil), req.ForwardingPath...),
+		RequestID:       req.RequestID,
+		IdempotencyKey:  req.IdempotencyKey,
+		TargetNodeID:    req.TargetNodeID,
+		TargetProjectID: req.TargetProjectID,
+		StatusCode:      http.StatusOK,
+		Headers:         http.Header{"Content-Type": []string{"application/json"}},
+		Body:            rawBody,
+	}, nil
+}
+
+func newWorkerForwardResolver(t *testing.T, spokeStatus federation.SpokeStatus) (*mutationResolver, *capturingActionDispatcher, *workerMutationFederation, string) {
+	t.Helper()
+	localRoot := t.TempDir()
+	spokeRoot := t.TempDir()
+	dispatcher := &capturingActionDispatcher{}
+	fed := &workerMutationFederation{spokes: []federation.SpokeRecord{{
+		NodeID:       "spoke-node",
+		Name:         "Spoke Node",
+		URL:          "https://spoke.example.test",
+		Status:       spokeStatus,
+		ProjectIDs:   []string{"proj-spoke"},
+		Capabilities: []string{"write"},
+	}}}
+	state := &workerForwardStateProvider{
+		mutationTestStateProvider: &mutationTestStateProvider{
+			node: NodeStateSnapshot{ID: "hub-node", Name: "Hub Node"},
+			projects: []*Project{{
+				ID:   "proj-hub",
+				Name: "Hub Project",
+				Path: localRoot,
+			}, {
+				ID:   "proj-spoke",
+				Name: "Spoke Project",
+				Path: spokeRoot,
+			}},
+		},
+		workers: map[string]*Worker{
+			"worker-spoke-running": {
+				ID:          "worker-spoke-running",
+				Kind:        "work",
+				State:       "running",
+				ProjectRoot: spokeRoot,
+			},
+		},
+	}
+	resolver := &mutationResolver{Resolver: &Resolver{
+		State:      state,
+		WorkingDir: localRoot,
+		NodeID:     "hub-node",
+		Actions:    dispatcher,
+		Federation: fed,
+	}}
+	return resolver, dispatcher, fed, spokeRoot
+}
+
+func TestFederatedStartWorker_ForwardsToOwner(t *testing.T) {
+	resolver, dispatcher, fed, _ := newWorkerForwardResolver(t, federation.StatusActive)
+
+	result, err := resolver.StartWorker(context.Background(), StartWorkerInput{
+		ProjectID: "proj-spoke",
+		Count:     intPtr(1),
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "worker-spoke-started", result.ID)
+	require.Len(t, fed.calls, 1)
+	assert.Equal(t, "spoke-node", fed.calls[0].TargetNodeID)
+	assert.Equal(t, "proj-spoke", fed.calls[0].TargetProjectID)
+	assert.Contains(t, string(fed.calls[0].Body), "startWorker")
+	assert.Empty(t, dispatcher.calls, "hub must not dispatch spoke-owned startWorker locally")
+}
+
+func TestFederatedStopWorker_ForwardsToOwner(t *testing.T) {
+	resolver, dispatcher, fed, _ := newWorkerForwardResolver(t, federation.StatusActive)
+
+	result, err := resolver.StopWorker(context.Background(), "worker-spoke-running")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "worker-spoke-running", result.ID)
+	assert.Equal(t, "stopping", result.State)
+	require.Len(t, fed.calls, 1)
+	assert.Equal(t, "spoke-node", fed.calls[0].TargetNodeID)
+	assert.Equal(t, "proj-spoke", fed.calls[0].TargetProjectID)
+	assert.Contains(t, string(fed.calls[0].Body), "stopWorker")
+	assert.Empty(t, dispatcher.stopCalls, "hub must not stop spoke-owned worker locally")
+}
+
+func TestFederatedStartWorker_RejectsOfflineSpoke(t *testing.T) {
+	resolver, dispatcher, fed, _ := newWorkerForwardResolver(t, federation.StatusOffline)
+
+	result, err := resolver.StartWorker(context.Background(), StartWorkerInput{
+		ProjectID: "proj-spoke",
+	})
+
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "offline")
+	require.Len(t, fed.calls, 1)
+	assert.Empty(t, dispatcher.calls, "offline spoke target must not create a local worker row")
 }
 
 // TestReviewRetryThresholdFromConfigGraphQL is the SD-024 Stage 1 configuration

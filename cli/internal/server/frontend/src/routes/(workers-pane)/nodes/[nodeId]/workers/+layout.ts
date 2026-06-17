@@ -59,6 +59,17 @@ const FEDERATED_WORKERS_QUERY = gql`
 	}
 `
 
+const FEDERATION_NODES_QUERY = gql`
+	query FederationNodesForWorkerPane {
+		federationNodes {
+			nodeId
+			name
+			status
+			writeCapability
+		}
+	}
+`
+
 const PROJECTS_QUERY = gql`
 	query ProjectsForWorkerPane {
 		projects {
@@ -108,20 +119,28 @@ interface WorkersResult {
 	workers: WorkerConnection
 }
 
-interface FederatedWorkersResult {
-	federatedWorkers: WorkerConnection
-}
-
 interface ProjectNode {
 	id: string
 	name: string
 	path: string
+	nodeId?: string | null
 }
 
 interface ProjectsResult {
 	projects: {
 		edges: Array<{ node: ProjectNode }>
 	}
+}
+
+interface FederationNode {
+	nodeId: string
+	name: string
+	status: string
+	writeCapability: boolean
+}
+
+interface FederationNodesResult {
+	federationNodes: FederationNode[]
 }
 
 const EMPTY_CONNECTION: WorkerConnection = {
@@ -135,14 +154,24 @@ export const load: LayoutLoad = async ({ params, url, fetch }) => {
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 
 	if (scope === 'federation') {
-		const data = await client
-			.request<FederatedWorkersResult>(FEDERATED_WORKERS_QUERY, { first: 100 })
-			.catch(() => ({ federatedWorkers: EMPTY_CONNECTION }))
+		const [workersData, projectsData, nodesData] = await Promise.all([
+			client
+				.request<WorkersResult>(FEDERATED_WORKERS_QUERY, { first: 100 })
+				.catch(() => ({ workers: EMPTY_CONNECTION })),
+			client
+				.request<ProjectsResult>(PROJECTS_QUERY)
+				.catch(() => ({ projects: { edges: [] as Array<{ node: ProjectNode }> } })),
+			client
+				.request<FederationNodesResult>(FEDERATION_NODES_QUERY)
+				.catch(() => ({ federationNodes: [] as FederationNode[] }))
+		])
 		return {
 			nodeId: params.nodeId,
-			workers: data.federatedWorkers ?? EMPTY_CONNECTION,
+			workers: workersData.workers ?? EMPTY_CONNECTION,
 			scope: 'federation' as const,
-			projectsByPath: {} as Record<string, { id: string; name: string }>
+			projectsByPath: {} as Record<string, { id: string; name: string }>,
+			projects: projectsData.projects.edges.map(({ node }) => node),
+			federationNodes: nodesData.federationNodes
 		}
 	}
 
@@ -172,6 +201,8 @@ export const load: LayoutLoad = async ({ params, url, fetch }) => {
 		nodeId: params.nodeId,
 		workers: workersData.workers,
 		scope: 'local' as const,
-		projectsByPath
+		projectsByPath,
+		projects: [] as ProjectNode[],
+		federationNodes: [] as FederationNode[]
 	}
 }

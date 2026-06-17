@@ -2993,6 +2993,9 @@ func (m *WorkerManager) fastLiveManagedWorkerCount(projectRoot string) int {
 			root = m.projectRoot
 		}
 		if rec.Managed && sameCanonicalPath(root, projectRoot) && !isTerminalWorkerState(rec.State) {
+			if rec.PID > 0 && !isPIDAlive(rec.PID) {
+				continue
+			}
 			count++
 			seen[id] = true
 		}

@@ -347,26 +347,26 @@ Updated B.
 	}
 }
 
-// docWriteFederation is a test-only FederationProvider that routes
+// docWriteMetadataFederation is a test-only FederationProvider that routes
 // documentWrite mutations to a spoke resolver, capturing the forwarded request
 // so tests can assert on origin/target metadata.
-type docWriteFederation struct {
+type docWriteMetadataFederation struct {
 	spokes        []federation.SpokeRecord
 	spokeResolver *mutationResolver
 	lastReq       *federation.ForwardMutationRequest
 }
 
-func (f *docWriteFederation) Spokes() []federation.SpokeRecord {
+func (f *docWriteMetadataFederation) Spokes() []federation.SpokeRecord {
 	out := make([]federation.SpokeRecord, len(f.spokes))
 	copy(out, f.spokes)
 	return out
 }
 
-func (f *docWriteFederation) FanOut(_ context.Context, _ *federation.FanOutRequest) (*federation.FanOutResult, error) {
+func (f *docWriteMetadataFederation) FanOut(_ context.Context, _ *federation.FanOutRequest) (*federation.FanOutResult, error) {
 	return &federation.FanOutResult{}, nil
 }
 
-func (f *docWriteFederation) ForwardMutation(_ context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
+func (f *docWriteMetadataFederation) ForwardMutation(_ context.Context, req *federation.ForwardMutationRequest) (*federation.ForwardMutationResponse, error) {
 	f.lastReq = req
 
 	registry := federation.NewRegistry()
@@ -468,8 +468,8 @@ func newDocWriteSpokeState(spokeRoot string) *mutationTestStateProvider {
 	}
 }
 
-func newDocWriteFederation(spokeResolver *mutationResolver) *docWriteFederation {
-	return &docWriteFederation{
+func newDocWriteMetadataFederation(spokeResolver *mutationResolver) *docWriteMetadataFederation {
+	return &docWriteMetadataFederation{
 		spokes: []federation.SpokeRecord{{
 			NodeID:       "spoke-node",
 			Name:         "spoke-a",
@@ -481,7 +481,7 @@ func newDocWriteFederation(spokeResolver *mutationResolver) *docWriteFederation 
 	}
 }
 
-func TestFederatedDocumentWrite_ForwardsToOwner(t *testing.T) {
+func TestFederatedDocumentWrite_ForwardsToOwnerAndReturnsMetadata(t *testing.T) {
 	const initialContent = `---
 ddx:
   id: helix.feat026
@@ -500,7 +500,7 @@ Original content.
 		WorkingDir: spokeRoot,
 		NodeID:     "spoke-node",
 	}}
-	fed := newDocWriteFederation(spokeResolver)
+	fed := newDocWriteMetadataFederation(spokeResolver)
 
 	hubResolver := &mutationResolver{&Resolver{
 		State:      newDocWriteHubState(hubRoot),
@@ -544,7 +544,7 @@ Original content.
 		WorkingDir: spokeRoot,
 		NodeID:     "spoke-node",
 	}}
-	fed := newDocWriteFederation(spokeResolver)
+	fed := newDocWriteMetadataFederation(spokeResolver)
 
 	hubResolver := &mutationResolver{&Resolver{
 		State:      newDocWriteHubState(hubRoot),

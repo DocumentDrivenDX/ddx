@@ -121,98 +121,6 @@ func (r *mutationResolver) documentWriteForwardTarget(ctx context.Context) (stri
 	return projectID, owner, nil
 }
 
-const documentWriteForwardMutation = `mutation DocumentWrite($path: String!, $content: String!, $expectedHash: String) {
-  documentWrite(path: $path, content: $content, expectedHash: $expectedHash) {
-    id path title content dependsOn inputs dependents parkingLot
-  }
-}`
-
-type documentWriteForwardResponseEnvelope struct {
-	Data struct {
-		DocumentWrite *Document `json:"documentWrite,omitempty"`
-	} `json:"data"`
-	Errors []struct {
-		Message    string         `json:"message"`
-		Extensions map[string]any `json:"extensions,omitempty"`
-	} `json:"errors,omitempty"`
-}
-
-// forwardDocumentWrite routes a documentWrite mutation to the spoke that owns
-// the target project. The hub's origin identity is included in the request
-// headers (X-DDx-Origin-Server-ID) so the spoke can detect and reject
-// recursive forwarding loops.
-func (r *mutationResolver) forwardDocumentWrite(ctx context.Context, owner *federation.SpokeRecord, projectID, path, content string, expectedHash *string) (*Document, error) {
-	if r.Federation == nil {
-		return nil, federation.ErrForwardMutationMissingOwner
-	}
-
-	vars := map[string]any{
-		"path":    path,
-		"content": content,
-	}
-	if expectedHash != nil {
-		vars["expectedHash"] = *expectedHash
-	}
-
-	body, err := json.Marshal(map[string]any{
-		"query":     documentWriteForwardMutation,
-		"variables": vars,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("document write forward: encode request: %w", err)
-	}
-
-	originServerID := strings.TrimSpace(r.NodeID)
-	forwardPath := make([]string, 0, 2)
-	if originServerID != "" {
-		forwardPath = append(forwardPath, originServerID)
-	}
-	if ownerNodeID := strings.TrimSpace(owner.NodeID); ownerNodeID != "" {
-		forwardPath = append(forwardPath, ownerNodeID)
-	}
-
-	resp, err := r.Federation.ForwardMutation(ctx, &federation.ForwardMutationRequest{
-		OriginIdentity:       originServerID,
-		ForwardingPath:       forwardPath,
-		TargetNodeID:         strings.TrimSpace(owner.NodeID),
-		TargetProjectID:      strings.TrimSpace(projectID),
-		RequiredCapabilities: []string{"write"},
-		Body:                 body,
-		Headers: map[string]string{
-			"Content-Type":           "application/json",
-			"X-DDx-Origin-Server-ID": originServerID,
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if resp == nil {
-		return nil, fmt.Errorf("document write forward: empty response")
-	}
-	if resp.StatusCode != 0 && (resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices) {
-		return nil, fmt.Errorf("document write forward: spoke returned HTTP %d", resp.StatusCode)
-	}
-	if len(resp.Body) == 0 {
-		return nil, fmt.Errorf("document write forward: empty body")
-	}
-
-	var decoded documentWriteForwardResponseEnvelope
-	if err := json.Unmarshal(resp.Body, &decoded); err != nil {
-		return nil, fmt.Errorf("document write forward: decode response: %w", err)
-	}
-	if len(decoded.Errors) > 0 {
-		first := decoded.Errors[0]
-		if code, ok := first.Extensions["code"].(string); ok && code == "DOCUMENT_WRITE_CONFLICT" {
-			return nil, documentWriteConflictError()
-		}
-		return nil, fmt.Errorf("document write forward: %s", first.Message)
-	}
-	if decoded.Data.DocumentWrite == nil {
-		return nil, fmt.Errorf("document write forward: missing documentWrite payload")
-	}
-	return decoded.Data.DocumentWrite, nil
-}
-
 // DocumentWrite is the resolver for the documentWrite mutation.
 func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string, expectedHash *string) (*Document, error) {
 	if r.workingDir(ctx) == "" {
@@ -222,13 +130,14 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 		return nil, fmt.Errorf("path is required")
 	}
 
-	// Hub-mode: forward spoke-owned document writes to the owning spoke.
-	owner, projectID, forwardErr := r.documentWriteForwardTarget(r.workingDir(ctx))
-	if forwardErr != nil {
-		return nil, documentWriteForwardError(forwardErr)
-	}
-	if owner != nil {
-		return r.forwardDocumentWriteMutation(ctx, owner, projectID, path, content, expectedHash)
+	if !documentWriteIsForwarded(ctx) {
+		projectID, owner, forwardErr := r.documentWriteForwardTarget(ctx)
+		if forwardErr != nil {
+			return nil, documentWriteForwardError(forwardErr)
+		}
+		if owner != nil {
+			return r.forwardDocumentWriteMutation(ctx, owner, projectID, path, content, expectedHash)
+		}
 	}
 
 	libPath, err := r.libraryPath(ctx)
@@ -285,38 +194,6 @@ type documentWriteForwardResponse struct {
 	} `json:"errors,omitempty"`
 }
 
-// documentWriteForwardTarget returns the spoke that owns the current working
-// dir's project in hub mode, or nil when the write should be local.
-func (r *mutationResolver) documentWriteForwardTarget(workingDir string) (*federation.SpokeRecord, string, error) {
-	if r.Federation == nil || workingDir == "" {
-		return nil, "", nil
-	}
-	projectID, ok := r.projectIDForWorkingDir(workingDir)
-	if !ok || projectID == "" {
-		return nil, "", nil
-	}
-	registry := federation.NewRegistry()
-	registry.Spokes = append(registry.Spokes, r.Federation.Spokes()...)
-	owner, err := federation.RouteMutationToProjectOwner(registry, projectID)
-	if err != nil {
-		switch {
-		case strings.Contains(err.Error(), "multiple registered owners"):
-			return nil, projectID, federation.ErrForwardMutationBroadcastLike
-		case strings.Contains(err.Error(), "no registered spoke owns"):
-			return nil, projectID, federation.ErrForwardMutationMissingOwner
-		default:
-			return nil, projectID, err
-		}
-	}
-	if owner == nil || strings.TrimSpace(owner.NodeID) == "" {
-		return nil, projectID, nil
-	}
-	if strings.TrimSpace(owner.NodeID) == strings.TrimSpace(r.NodeID) {
-		return nil, projectID, nil
-	}
-	return owner, projectID, nil
-}
-
 // forwardDocumentWriteMutation forwards a documentWrite mutation to the spoke
 // that owns the target project, carrying origin identity, forwarding path,
 // request ID, idempotency key, target node/project IDs, and expected version.
@@ -365,7 +242,10 @@ func (r *mutationResolver) forwardDocumentWriteMutation(ctx context.Context, own
 		ExpectedVersion:      expectedHash,
 		RequiredCapabilities: []string{"write"},
 		Body:                 body,
-		Headers:              map[string]string{"Content-Type": "application/json"},
+		Headers: map[string]string{
+			"Content-Type":           "application/json",
+			"X-DDx-Origin-Server-ID": originIdentity,
+		},
 	})
 	if err != nil {
 		return nil, documentWriteForwardError(err)
