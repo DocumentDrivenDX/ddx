@@ -26,7 +26,7 @@ description: Valid test skill.
 	assert.Contains(t, output, "validated 1 skill files")
 }
 
-func TestSkillsCheckDefaultPathsIncludesShippedPluginSkills(t *testing.T) {
+func TestSkillsCheckDefaultPathsUsesGeneratedAdaptersNotPluginPayload(t *testing.T) {
 	dir := t.TempDir()
 	writeSkillFile(t, filepath.Join(dir, "skills", "plugin-foo", "SKILL.md"), `---
 name: plugin-foo
@@ -35,12 +35,20 @@ description: Valid test skill.
 
 # Plugin Foo
 `)
-	writeSkillFile(t, filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"), `---
+	writeSkillFile(t, filepath.Join(dir, ".agents", "skills", "human-writing-support", "SKILL.md"), `---
 name: human-writing-support
-description: Valid shipped skill.
+description: Valid generated adapter skill.
 ---
 
 # Human Writing Support
+`)
+	writeSkillFile(t, filepath.Join(dir, ddxroot.DirName, "plugins", "ddx", "skills", "broken-payload", "SKILL.md"), `---
+skill:
+  name: broken-payload
+  description: Project plugin payloads are not a default validation source.
+---
+
+# Broken Payload
 `)
 
 	rootCmd := NewCommandFactory(dir).NewRootCommand()

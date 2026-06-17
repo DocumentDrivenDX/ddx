@@ -85,15 +85,14 @@ Override the port with `DDX_E2E_PORT` if 4174 is taken.
 
 The fixture lives at `cli/internal/server/frontend/e2e/fixtures/` and contains:
 
-- `.ddx/config.yaml` — minimal DDx config whose `library.path` points at the
-  fixture's local overlay under `.ddx/plugins/ddx/`.
+- `.ddx/config.yaml` — minimal DDx config for the copied fixture workspace.
 - `.ddx/beads.jsonl` — open, closed, and blocked beads so bead endpoints return
   non-empty data.
-- `.ddx/plugins/ddx/` — local overlay source for the fixture's plugin package;
-  the server resolves it through cache/defaultplugin resolution and materializes
-  generated adapters under `.agents/skills/` and `.claude/skills/`. Use this
-  tree only when you are testing local-overlay or legacy-compatibility
-  behavior.
+- `.ddx/plugins/ddx/` — fixture-only local overlay source used for
+  local-overlay and legacy-compatibility coverage. Normal marketplace plugin
+  installs write `.ddx/plugins.lock.yaml`, cache payloads under XDG, and expose
+  skills through generated adapters under `.agents/skills/` and
+  `.claude/skills/`.
 - `docs/` — small docs library for the document graph endpoint.
 
 The fixture is treated as read-only: the harness copies it before boot, so test
@@ -106,9 +105,10 @@ When a new spec needs additional backend data, add it under
 the repository's own `.ddx/`. Typical extensions:
 
 - More beads → append JSONL records to `.ddx/beads.jsonl`.
-- New personas, prompts, or templates → add files under
-  `.ddx/plugins/ddx/{personas,prompts,templates}/` for local overlay or legacy
-  compatibility coverage when a spec needs it.
+- New personas, prompts, or templates → prefer generated adapter fixture data
+  under `.agents/skills/` or `.claude/skills/`. Add files under
+  `.ddx/plugins/ddx/{personas,prompts,templates}/` only for local-overlay or
+  legacy-compatibility coverage when a spec needs it.
 - New docs for the document graph → add Markdown under `docs/`.
 
 Keep additions minimal and self-contained; the fixture is the only supported

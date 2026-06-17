@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/spf13/cobra"
@@ -29,10 +28,11 @@ Examples:
   ddx skills check skills
   ddx skills check .agents/skills
   ddx skills check .claude/skills
-  ddx skills check .ddx/plugins/helix/skills
+  ddx skills check .agents/skills/helix
 
-Use .ddx/plugins/ddx only when validating a local development overlay or a
-legacy compatibility install.`,
+Use .ddx/plugins/<name> only when explicitly validating a local development
+overlay or a legacy compatibility install. Marketplace plugin payloads live in
+the shared XDG cache and are exposed to harnesses through generated adapters.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
@@ -80,7 +80,8 @@ func (f *CommandFactory) defaultSkillCheckPaths() []string {
 	candidates := []string{
 		filepath.Join(projectRoot, "skills"),
 		filepath.Join(projectRoot, ".agents", "skills"),
-		filepath.Join(projectRoot, ".claude", "skills"), ddxroot.JoinProject(projectRoot, "plugins", "ddx"), filepath.Join(projectRoot, "cli", "internal", "skills"),
+		filepath.Join(projectRoot, ".claude", "skills"),
+		filepath.Join(projectRoot, "cli", "internal", "skills"),
 	}
 
 	var paths []string

@@ -3017,9 +3017,7 @@ func (s *Server) handleReconcileWorkers(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	m := s.workerManagerForProjectRoot(wd)
-	m.ReconcileStaleWorkers()
-	sup := NewWorkerSupervisor(wd, m)
-	result, err := sup.Reconcile()
+	result, err := m.ReconcileDesiredWorkers()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -3038,9 +3036,7 @@ func (s *Server) handleCleanupWorkers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	m := s.workerManagerForProjectRoot(wd)
-	m.ReconcileStaleWorkers()
-	sup := NewWorkerSupervisor(wd, m)
-	result, err := sup.Reconcile()
+	result, err := m.ReconcileDesiredWorkers()
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return

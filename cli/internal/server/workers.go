@@ -210,6 +210,11 @@ type workerHandle struct {
 type WorkerManager struct {
 	projectRoot string
 	rootDir     string
+	// desiredReconcileMu serializes desired-state reconciliation across
+	// operator-triggered reconcile/cleanup calls and managed-worker finalizers.
+	// Without this, concurrent exits can each see a partial worker set and
+	// over-provision beyond desired_count.
+	desiredReconcileMu sync.Mutex
 	// BeadWorkerFactory, when non-nil, is called by runWorker to create the
 	// ExecuteBeadWorker instead of building one from the real agent runner.
 	// Override in tests to inject a fake executor.
@@ -881,7 +886,7 @@ func recoverManagedWorkerIndexLockAfterExit(projectRoot, workerID string, worker
 }
 
 func (m *WorkerManager) refillDesiredWorkersAfterManagedExit(id string) {
-	result, err := m.provisionDesiredWorkersBeforeStaleSweep()
+	result, err := m.reconcileDesiredWorkersOnly()
 	if err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "ddx-server: worker %s desired refill failed: %v\n", id, err)
 		return
@@ -3029,14 +3034,16 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 // ReconcileDesiredWorkers brings server-managed workers in line with the
 // persisted desired state for this manager's project.
 func (m *WorkerManager) ReconcileDesiredWorkers() (ReconcileResult, error) {
-	result, err := m.provisionDesiredWorkersBeforeStaleSweep()
-	if err != nil {
-		return result, err
-	}
 	m.ReconcileStaleWorkers()
+	return m.reconcileDesiredWorkersOnly()
+}
+
+func (m *WorkerManager) reconcileDesiredWorkersOnly() (ReconcileResult, error) {
+	m.desiredReconcileMu.Lock()
+	defer m.desiredReconcileMu.Unlock()
+
 	sup := NewWorkerSupervisor(m.projectRoot, m)
-	full, err := sup.Reconcile()
-	return mergeReconcileResults(result, full), err
+	return sup.Reconcile()
 }
 
 func (m *WorkerManager) provisionDesiredWorkersBeforeStaleSweep() (ReconcileResult, error) {

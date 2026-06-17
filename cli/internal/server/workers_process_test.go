@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -331,6 +332,50 @@ func TestManagedExternalWorkerExitRefillsDesiredCount(t *testing.T) {
 
 	require.NoError(t, m.Stop(replacement.ID))
 	waitForProcessGroupEmpty(t, replacement.PGID)
+}
+
+func TestManagedExternalWorkerConcurrentExitRefillDoesNotOverProvision(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	binDir := t.TempDir()
+	workerPath := filepath.Join(binDir, "ddx-worker")
+	writeSleepingWorkerScript(t, workerPath)
+
+	m := NewWorkerManager(root)
+	m.workerBinaryPath = workerPath
+	m.WatchdogKillGrace = 100 * time.Millisecond
+	defer m.StopAll()
+
+	require.NoError(t, SaveWorkerDesiredState(root, &WorkerDesiredState{
+		DesiredCount: 3,
+		DefaultSpec:  WorkerDefaultSpec{Mode: "watch", IdleInterval: "30s"},
+		Restart:      WorkerRestartPolicy{Enabled: true},
+	}))
+
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			m.refillDesiredWorkersAfterManagedExit("worker-concurrent-" + strconv.Itoa(i))
+		}(i)
+	}
+	wg.Wait()
+
+	var live []WorkerRecord
+	require.Eventually(t, func() bool {
+		live = live[:0]
+		records, err := m.List()
+		require.NoError(t, err)
+		for _, rec := range records {
+			if rec.Managed && rec.ProjectRoot == root && rec.State == workerStateRunning && rec.PID > 0 && isPIDAlive(rec.PID) {
+				live = append(live, rec)
+			}
+		}
+		return len(live) == 3
+	}, 5*time.Second, 50*time.Millisecond)
+	require.Len(t, live, 3, "concurrent desired refills must satisfy but not exceed desired_count")
 }
 
 func TestWorkerRestartPreservesDesiredCount(t *testing.T) {

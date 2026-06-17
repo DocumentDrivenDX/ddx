@@ -307,8 +307,7 @@ func (a *workerStateManagerAdapter) ReconcileWorkers(projectRoot string) (*ddxgr
 	if a == nil || a.manager == nil {
 		return nil, fmt.Errorf("worker state manager is not configured")
 	}
-	sup := NewWorkerSupervisor(projectRoot, a.manager)
-	result, err := sup.Reconcile()
+	result, err := a.manager.ReconcileDesiredWorkers()
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}
