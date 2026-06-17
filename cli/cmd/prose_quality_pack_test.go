@@ -83,15 +83,15 @@ func TestProseQualityStylePack_PackagedPathsExist(t *testing.T) {
 	}
 }
 
-func TestProseQualityStylePack_ShipsThroughDefaultLibrary(t *testing.T) {
+func TestProseQualityStylePack_FullLibraryManifestCoversPackagedPaths(t *testing.T) {
 	root := repoRootForProseQualityTest(t)
 
 	builtin, err := registry.BuiltinRegistry().Find("ddx")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if builtin.Install.Root == nil || builtin.Install.Root.Source != "library" {
-		t.Fatalf("built-in ddx package does not ship the library root: %+v", builtin.Install.Root)
+	if builtin.Install.Root == nil || builtin.Install.Root.Source != "." {
+		t.Fatalf("built-in ddx package is not package-rooted: %+v", builtin.Install.Root)
 	}
 
 	manifest, issues, err := registry.LoadPackageManifest(filepath.Join(root, "library"))

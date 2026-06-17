@@ -89,13 +89,12 @@ func (f *CommandFactory) runPromptsList(cmd *cobra.Command, args []string) error
 }
 
 // runPromptsShow implements the prompts show command
-func runPromptsShow(cmd *cobra.Command, args []string) error {
+func (f *CommandFactory) runPromptsShow(cmd *cobra.Command, args []string) error {
 	promptName := args[0]
 
-	// Get working directory from command factory context
-	workingDir := "."
-	if factory, ok := cmd.Context().Value("factory").(*CommandFactory); ok {
-		workingDir = factory.WorkingDir
+	workingDir := f.WorkingDir
+	if workingDir == "" {
+		workingDir = "."
 	}
 
 	libPath, err := resolveCommandLibraryPath(workingDir)

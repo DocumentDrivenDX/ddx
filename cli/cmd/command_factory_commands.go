@@ -250,7 +250,7 @@ func (f *CommandFactory) newPromptsShowCommand() *cobra.Command {
 		Short: "Show a specific prompt",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPromptsShow(cmd, args)
+			return f.runPromptsShow(cmd, args)
 		},
 	}
 }

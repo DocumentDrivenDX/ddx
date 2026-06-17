@@ -23,6 +23,23 @@ func newBeadTestRoot(t *testing.T, workingDir string) *CommandFactory {
 	return NewCommandFactory(workingDir)
 }
 
+func TestNewBeadTestRootKeepsBareInTreeStoreHermetic(t *testing.T) {
+	workingDir := t.TempDir()
+	xdgHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgHome)
+
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Hermetic bead root", "--type", "task")
+	require.NoError(t, err)
+	require.NotEmpty(t, strings.TrimSpace(createOut))
+
+	assert.FileExists(t, filepath.Join(workingDir, ddxroot.DirName, "beads.jsonl"))
+	assert.NoDirExists(t, filepath.Join(xdgHome, "ddx"),
+		"bead command fixtures must not fall back to XDG state when DDX_BEAD_DIR=.ddx")
+}
+
 func TestBeadCommandsCRUDLifecycle(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
