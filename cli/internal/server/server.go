@@ -91,6 +91,33 @@ var skipStartupDesiredWorkerReconcileForTestBinary = true
 
 var ensureSelfSignedCertHook = ensureSelfSignedCert
 
+var orphanHomeStateWarnWriter io.Writer = os.Stderr
+var orphanHomeStateDirFn = os.UserHomeDir
+
+// checkOrphanHomeState warns when ~/.ddx/server or ~/.ddx/tsnet exist but the
+// active project state root resolved elsewhere (XDG or in-tree). Stale home
+// state is never read by the new server path helpers and can confuse TLS and
+// tsnet trust debugging.
+func checkOrphanHomeState(workingDir string) {
+	home, err := orphanHomeStateDirFn()
+	if err != nil {
+		return
+	}
+	activeRoot := ddxroot.Path(context.Background(), workingDir)
+	homeStateRoot := ddxroot.JoinHome(home)
+	if filepath.Clean(activeRoot) == filepath.Clean(homeStateRoot) {
+		return
+	}
+	for _, sub := range []string{"server", "tsnet"} {
+		orphan := ddxroot.JoinHome(home, sub)
+		if info, statErr := os.Stat(orphan); statErr == nil && info.IsDir() {
+			fmt.Fprintf(orphanHomeStateWarnWriter,
+				"ddx-server: warning: orphaned home state at %s (active state root: %s); this directory is no longer used and can be safely removed\n",
+				orphan, activeRoot)
+		}
+	}
+}
+
 var startupDesiredWorkerReconcileProject = func(projectRoot, startupRoot string, startupManager *WorkerManager) (ReconcileResult, error) {
 	manager := startupManager
 	if !sameCanonicalPath(projectRoot, startupRoot) {
@@ -224,6 +251,7 @@ func New(addr, workingDir string) *Server {
 	state.RegisterProject(workingDir)
 	_ = state.save()
 
+	checkOrphanHomeState(workingDir)
 	s.routes()
 	return s
 }
