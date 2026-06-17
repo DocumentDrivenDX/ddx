@@ -1,11 +1,15 @@
-# go-production-reachability — installed for the ddx project itself.
-# Source: library/checks/go-production-reachability/check.yaml
+# production-reachability — installed for the ddx project itself.
 #
 # This project opts in to the Go reachability check: every bead-merge that
 # touches *.go files runs the check across the cli/ Go module, ensuring new
 # functions/methods are wired into the production call graph reachable from
 # main(). Backfill of existing unwired symbols is tracked under REACH-BACKFILL
-# (ddx-83440482) — until that lands, this check may surface known violations.
+# (ddx-83440482). Until that lands, this check gates only violations in files
+# changed by the candidate diff.
+#
+# Keep this check self-contained. The built-in ddx plugin is a minimal
+# cache-backed bootstrap package, so project checks must not depend on
+# library/checks/* payloads being copied into the repository.
 
 name: production-reachability
 when: pre_merge
@@ -13,7 +17,51 @@ applies_to:
   paths:
     - "*.go"
 command: |
-  cd library/checks/go-production-reachability && \
-    go run . \
-      --module-dir=cli \
-      --packages=./...
+  set -eu
+  output="$EVIDENCE_DIR/$CHECK_NAME-output.txt"
+  ranges="$EVIDENCE_DIR/$CHECK_NAME-ranges.txt"
+  violations="$EVIDENCE_DIR/$CHECK_NAME-violations.txt"
+  result="$EVIDENCE_DIR/$CHECK_NAME.json"
+  : > "$ranges"
+  : > "$violations"
+  git -C "$PROJECT_ROOT" diff -U0 "$DIFF_BASE" "$DIFF_HEAD" -- cli \
+    | awk '
+        /^\+\+\+ b\/cli\/.*\.go$/ {
+          file=$2
+          sub("^b/cli/", "", file)
+          next
+        }
+        /^@@ / && file != "" {
+          h=$0
+          sub(/^.* \+/, "", h)
+          sub(/ .*/, "", h)
+          split(h, parts, ",")
+          start=parts[1] + 0
+          len=parts[2] == "" ? 1 : parts[2] + 0
+          if (len > 0) {
+            print file " " start " " (start + len - 1)
+          }
+        }
+      ' > "$ranges"
+  if (cd "$PROJECT_ROOT/cli" && go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./...) > "$output" 2>&1; then
+    while IFS= read -r hit; do
+      file="${hit%%:*}"
+      rest="${hit#*:}"
+      line="${rest%%:*}"
+      while read -r rel start end; do
+        [ "$file" = "$rel" ] || continue
+        if [ "$line" -ge "$start" ] && [ "$line" -le "$end" ]; then
+          printf '%s\n' "$hit" >> "$violations"
+          break
+        fi
+      done < "$ranges"
+    done < "$output"
+    if [ -s "$violations" ]; then
+      count="$(wc -l < "$violations" | tr -d ' ')"
+      printf '{"status":"block","message":"deadcode reported %s unreachable symbols in changed lines; see %s"}\n' "$count" "$violations" > "$result"
+    else
+      printf '{"status":"pass","message":"deadcode reported no unreachable production symbols in changed lines"}\n' > "$result"
+    fi
+  else
+    printf '{"status":"error","message":"deadcode command failed; see %s"}\n' "$output" > "$result"
+  fi
