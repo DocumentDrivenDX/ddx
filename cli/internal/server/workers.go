@@ -1915,24 +1915,68 @@ func releaseWorkerClaims(projectRoot, workerID, primaryBeadID string, now time.T
 }
 
 func releaseWorkerClaimsWithStore(store *bead.Store, workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
+	return newWorkerClaimReleaser(store).release(workerID, primaryBeadID, now, event)
+}
+
+type workerClaimReleaser struct {
+	store       *bead.Store
+	beads       []bead.Bead
+	leases      map[string]bead.ClaimLeaseRecord
+	leaseFound  map[string]bool
+	loadAttempt bool
+	loadOK      bool
+}
+
+func newWorkerClaimReleaser(store *bead.Store) *workerClaimReleaser {
+	return &workerClaimReleaser{store: store}
+}
+
+func (r *workerClaimReleaser) load() bool {
+	if r == nil || r.store == nil {
+		return false
+	}
+	if r.loadAttempt {
+		return r.loadOK
+	}
+	r.loadAttempt = true
+	beads, err := r.store.ReadAll(context.Background())
+	if err != nil {
+		return false
+	}
+	r.beads = beads
+	r.leases = make(map[string]bead.ClaimLeaseRecord)
+	r.leaseFound = make(map[string]bool)
+	for i := range r.beads {
+		b := &r.beads[i]
+		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
+			continue
+		}
+		lease, found, err := r.store.ClaimLease(b.ID)
+		if err == nil && found {
+			r.leases[b.ID] = lease
+			r.leaseFound[b.ID] = true
+		}
+	}
+	r.loadOK = true
+	return true
+}
+
+func (r *workerClaimReleaser) release(workerID, primaryBeadID string, now time.Time, event bead.BeadEvent) []string {
 	workerID = strings.TrimSpace(workerID)
 	primaryBeadID = strings.TrimSpace(primaryBeadID)
-	if store == nil || workerID == "" {
-		return nil
-	}
-
-	beads, err := store.ReadAll(context.Background())
-	if err != nil {
+	if r == nil || r.store == nil || workerID == "" || !r.load() {
 		return nil
 	}
 
 	seen := make(map[string]struct{})
 	var released []string
-	for _, b := range beads {
+	for i := range r.beads {
+		b := &r.beads[i]
 		if b.Status != bead.StatusOpen && b.Status != bead.StatusInProgress {
 			continue
 		}
-		releaseAssignee, ok := workerReleaseAssignee(store, &b, workerID, primaryBeadID)
+		lease := r.leases[b.ID]
+		releaseAssignee, ok := workerReleaseAssigneeCached(b, workerID, primaryBeadID, strings.TrimSpace(lease.Owner), r.leaseFound[b.ID])
 		if !ok {
 			continue
 		}
@@ -1945,8 +1989,12 @@ func releaseWorkerClaimsWithStore(store *bead.Store, workerID, primaryBeadID str
 		if ev.CreatedAt.IsZero() {
 			ev.CreatedAt = now
 		}
-		_ = store.AppendEvent(b.ID, ev)
-		_ = store.Release(b.ID, releaseAssignee, bead.StatusOpen)
+		_ = r.store.AppendEvent(b.ID, ev)
+		_ = r.store.Release(b.ID, releaseAssignee, bead.StatusOpen)
+		b.Status = bead.StatusOpen
+		b.Owner = ""
+		delete(r.leases, b.ID)
+		delete(r.leaseFound, b.ID)
 		released = append(released, b.ID)
 	}
 	return released
@@ -1957,13 +2005,22 @@ func workerReleaseAssignee(store *bead.Store, b *bead.Bead, workerID, primaryBea
 	if workerID == "" || b == nil {
 		return "", false
 	}
-	trackerOwner := strings.TrimSpace(b.Owner)
 	leaseOwner := ""
 	leaseFound := false
 	if lease, found, err := store.ClaimLease(b.ID); err == nil && found {
 		leaseFound = true
 		leaseOwner = strings.TrimSpace(lease.Owner)
 	}
+	return workerReleaseAssigneeCached(b, workerID, primaryBeadID, leaseOwner, leaseFound)
+}
+
+func workerReleaseAssigneeCached(b *bead.Bead, workerID, primaryBeadID, leaseOwner string, leaseFound bool) (string, bool) {
+	workerID = strings.TrimSpace(workerID)
+	if workerID == "" || b == nil {
+		return "", false
+	}
+	trackerOwner := strings.TrimSpace(b.Owner)
+	leaseOwner = strings.TrimSpace(leaseOwner)
 	if trackerOwner == workerID || leaseOwner == workerID {
 		return workerID, true
 	}
@@ -2870,8 +2927,8 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		return
 	}
 	now := time.Now().UTC()
-	stores := map[string]*bead.Store{}
-	storeForProject := func(projectRoot string) *bead.Store {
+	releasers := map[string]*workerClaimReleaser{}
+	releaserForProject := func(projectRoot string) *workerClaimReleaser {
 		projectRoot = strings.TrimSpace(projectRoot)
 		if projectRoot == "" {
 			projectRoot = m.projectRoot
@@ -2880,12 +2937,12 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		if canonical == "" {
 			canonical = projectRoot
 		}
-		if store, ok := stores[canonical]; ok {
-			return store
+		if releaser, ok := releasers[canonical]; ok {
+			return releaser
 		}
-		store := bead.NewStore(ddxroot.JoinProject(projectRoot))
-		stores[canonical] = store
-		return store
+		releaser := newWorkerClaimReleaser(bead.NewStore(ddxroot.JoinProject(projectRoot)))
+		releasers[canonical] = releaser
+		return releaser
 	}
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -2902,7 +2959,7 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 				projectRoot = m.projectRoot
 			}
 			body := fmt.Sprintf("worker=%s state=%s reason=terminal-worker-claim", rec.ID, rec.State)
-			released := releaseWorkerClaimsWithStore(storeForProject(projectRoot), rec.ID, "", now, bead.BeadEvent{
+			released := releaserForProject(projectRoot).release(rec.ID, "", now, bead.BeadEvent{
 				Kind:      "bead.reaped",
 				Summary:   "terminal-worker-claim",
 				Body:      body,
@@ -2949,7 +3006,7 @@ func (m *WorkerManager) ReconcileStaleWorkers() {
 		}
 
 		body := fmt.Sprintf("worker=%s pid=%d reason=server-restart", rec.ID, rec.PID)
-		releaseWorkerClaimsWithStore(storeForProject(projectRoot), rec.ID, beadID, now, bead.BeadEvent{
+		releaserForProject(projectRoot).release(rec.ID, beadID, now, bead.BeadEvent{
 			Kind:      "bead.reaped",
 			Summary:   "server-restart",
 			Body:      body,
