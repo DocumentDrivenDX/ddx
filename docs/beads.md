@@ -41,6 +41,9 @@ ddx bead reap --apply   # close all candidates
 ### Dead-intermediate auto-close (RC-3)
 
 Beads with `execution-eligible=false` (i.e. structural intermediates/containers
-that were set non-executable by the decomposer) are also auto-closed when all their
-children reach terminal state. This is the RC-3 walk-up closure, which predates the
-epic auto-close feature. The event kind for this path is `dead_intermediate_close`.
+that were set non-executable by the decomposer under the prior lifecycle rule)
+are also auto-closed when all their children reach terminal state. This is the
+RC-3 walk-up closure for **legacy backfill cases only** — new lossless
+decompositions close the parent immediately as `completed-by-decomposition`
+rather than leaving it open with `execution-eligible=false`. The event kind for
+this legacy closure path is `dead_intermediate_close`.
