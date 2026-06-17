@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260617T204659-fd7801c9",
+  "bead_id": "ddx-ef2c9652",
+  "base_rev": "0c9be1e6cafb301d829b7b1e2d3c5238c3acd119",
+  "created_at": "2026-06-17T20:47:07.37679347Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ef2c9652",
+    "title": "agent: close parent after pre-claim decomposition",
+    "description": "PROBLEM\nThe pre-claim `too_large_decomposed` path creates child beads but keeps the decomposed parent open and execution-ineligible. That contradicts the lossless-decomposition lifecycle rule and risks leaving a half-owned parent while children should be ready work.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:2734-2743 logs successful pre-claim decomposition then releases the parent while explicitly documenting that the parent stays open until children close.\n- cli/internal/agent/execute_bead_loop.go:5248-5275 implements `applyPreClaimDecomposition` by setting `Extra[\"execution-eligible\"] = false` instead of closing the parent after children are created.\n- cli/internal/agent/execute_bead_intake_decompose_test.go:73-77 asserts the old open/ineligible behavior and does not prove children remain `ReadyExecution` through the `Parent` metadata field.\n\nPROPOSED FIX\n- Update `applyPreClaimDecomposition` in cli/internal/agent/execute_bead_loop.go so, after child beads are durably created, it closes the decomposed parent through the lifecycle/store API as completed by decomposition.\n- Preserve durable traceability by recording `triage-decomposed` with generated child IDs in the event body or extra evidence.\n- Clear parent claim metadata and heartbeat fields so a closed parent cannot remain half-owned.\n- Preserve child readiness semantics: each child may have `Parent=\u003cdecomposed-id\u003e` metadata, but generated children must not depend on the decomposed parent; child-to-child ordering deps remain allowed when explicitly generated.\n- Update/rename tests in cli/internal/agent/execute_bead_intake_decompose_test.go to prove the close and readiness behavior.\n\nNON-SCOPE\n- Do not change post-attempt decomposer or auto-epic decomposition behavior in this bead; those are separate children under ddx-e9542e0d.\n- Do not implement historical tracker cleanup or the broader ddx-130cf9ab parent/ancestor dependency repair slice.\n- Do not change intake classification semantics other than the lifecycle state applied after a successful lossless split.\n\nPARENT AND DEPS\nParent: ddx-e9542e0d.\nDeps: No deps.",
+    "acceptance": "1. `applyPreClaimDecomposition` in `cli/internal/agent/execute_bead_loop.go` closes the decomposed parent through the lifecycle/store API after child creation instead of leaving it open with `execution-eligible=false`.\n2. The pre-claim path still records a durable `triage-decomposed` event containing generated child IDs.\n3. Parent claim metadata and heartbeat fields are cleared on the closed decomposed parent.\n4. `TestIntake_TooLargeDecomposed_CreatesChildrenAndClosesParent` proves children are created, the parent is closed, `triage-decomposed` is recorded, and generated children with no explicit deps are in `ReadyExecution` despite `Parent=\u003cdecomposed-id\u003e`.\n5. `TestDecomposeDoesNotSelfDep` or equivalent asserts every generated child excludes the decomposed parent ID from `DepIDs()`.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run 'TooLargeDecomposed|DecomposeDoesNotSelfDep|parent_ancestor_in_deps' -count=1` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-e9542e0d",
+    "labels": [
+      "area:agent",
+      "area:bead-lifecycle",
+      "area:decomposition",
+      "kind:bug",
+      "kind:correctness",
+      "phase:iterate",
+      "prevention",
+      "related:ddx-130cf9ab",
+      "spec:FEAT-010",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260617T204659-fd7801c9",
+    "prompt": ".ddx/executions/20260617T204659-fd7801c9/prompt.md",
+    "manifest": ".ddx/executions/20260617T204659-fd7801c9/manifest.json",
+    "result": ".ddx/executions/20260617T204659-fd7801c9/result.json",
+    "checks": ".ddx/executions/20260617T204659-fd7801c9/checks.json",
+    "usage": ".ddx/executions/20260617T204659-fd7801c9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-ef2c9652-20260617T204659-fd7801c9"
+  },
+  "prompt_sha": "78714e96512893c498bc5587535641729eadf52c0bc99d85debc22a5b44e38f9"
+}
