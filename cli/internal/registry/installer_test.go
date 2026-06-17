@@ -310,29 +310,39 @@ func TestLegacyInstallPackageFromRemoteUsesSharedCore(t *testing.T) {
 	}
 }
 
-// TestDefaultDDxPackageManifestUsesPackageLocalSkillSource proves the
-// canonical library/package.yaml declares package-local skill sources
-// (i.e. source: skills/) so the embedded default-package install copies
-// the DDx skill out of library/skills/ rather than out of a checked-in
-// .agents/skills mirror. It must not declare a root payload target; the
-// built-in DDx package is cache-only plus generated adapters.
-func TestDefaultDDxPackageManifestUsesPackageLocalSkillSource(t *testing.T) {
-	manifestPath := filepath.Join("..", "..", "..", "library", "package.yaml")
-	pkg, issues, err := LoadPackageManifest(filepath.Dir(manifestPath))
-	require.NoError(t, err, "library/package.yaml must load cleanly")
-	require.Empty(t, issues, "library/package.yaml must have no schema issues")
-	require.NotNil(t, pkg)
+// TestDDxDefaultManifestIsBootstrapOnly proves the source and embedded default
+// ddx manifests advertise only the bootstrap skill package. HELIX-style workflow
+// assets must stay in separately versioned marketplace/cache packages instead
+// of being installed as part of the built-in ddx payload.
+func TestDDxDefaultManifestIsBootstrapOnly(t *testing.T) {
+	manifestRoots := []string{
+		filepath.Join("..", "..", "..", "library"),
+		filepath.Join("defaultplugin", "library"),
+		filepath.Join("defaultplugin"),
+	}
 
-	assert.Nil(t, pkg.Install.Root, "library/package.yaml must not advertise a DDx project payload root")
-	assert.Contains(t, pkg.Description, "bootstrap skill package")
-	assert.NotContains(t, pkg.Description, "prompts, personas")
-	assert.NotContains(t, pkg.Keywords, "prompts")
-	assert.NotContains(t, pkg.Keywords, "personas")
-	assert.NotContains(t, pkg.Keywords, "mcp")
-	require.NotEmpty(t, pkg.Install.Skills, "library/package.yaml must declare install.skills mappings")
-	for _, m := range pkg.Install.Skills {
-		assert.Equal(t, "skills/", m.Source,
-			"library/package.yaml install.skills[*].source must be package-local 'skills/', got %q", m.Source)
+	for _, root := range manifestRoots {
+		t.Run(filepath.ToSlash(root), func(t *testing.T) {
+			pkg, issues, err := LoadPackageManifest(root)
+			require.NoError(t, err, "%s/package.yaml must load cleanly", root)
+			require.Empty(t, issues, "%s/package.yaml must have no schema issues", root)
+			require.NotNil(t, pkg)
+
+			assert.Nil(t, pkg.Install.Root, "%s/package.yaml must not advertise a DDx project payload root", root)
+			assert.Nil(t, pkg.Install.Scripts, "%s/package.yaml must not install scripts as part of the bootstrap plugin", root)
+			assert.Empty(t, pkg.Install.Symlinks, "%s/package.yaml must not create non-skill symlinks", root)
+			assert.Empty(t, pkg.Install.Executable, "%s/package.yaml must not mark executables", root)
+			assert.Contains(t, pkg.Description, "bootstrap skill package")
+			assert.NotContains(t, pkg.Description, "prompts, personas")
+			for _, forbidden := range []string{"prompts", "personas", "templates", "checks", "tools", "mcp", "workflows", "helix"} {
+				assert.NotContains(t, pkg.Keywords, forbidden, "%s/package.yaml must not advertise %q", root, forbidden)
+			}
+			require.NotEmpty(t, pkg.Install.Skills, "%s/package.yaml must declare install.skills mappings", root)
+			for _, m := range pkg.Install.Skills {
+				assert.Equal(t, "skills/", m.Source,
+					"%s/package.yaml install.skills[*].source must be package-local 'skills/', got %q", root, m.Source)
+			}
+		})
 	}
 }
 

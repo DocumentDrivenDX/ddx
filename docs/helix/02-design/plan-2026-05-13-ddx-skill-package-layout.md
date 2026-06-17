@@ -9,16 +9,15 @@ ddx:
 # DDx Skill Package Layout
 
 Date: 2026-05-13
-Status: Accepted; partially implemented
+Status: Accepted; implemented for cache-backed adapters; remaining cleanup tracked
 
 ## Summary
 
-The DDx skill tree should be content owned by the default `ddx` plugin package,
-not a parallel bootstrap tree with checked-in mirrors. `ddx init`, `ddx update`,
-and `ddx plugin install ddx` should all install the same package layout through
-the same package installer.
+The DDx skill tree is content owned by the default `ddx` bootstrap package, not
+a parallel tree of checked-in project payloads. `ddx init`, `ddx update`, and
+`ddx plugin install ddx` install through the same package/cache topology.
 
-As of 2026-06-16, the forward behavior is cache-backed and npx-like:
+As of 2026-06-17, the forward behavior is cache-backed and npx-like:
 `ddx init` and `ddx plugin sync` materialize the built-in `ddx` package into
 the shared XDG plugin cache and expose generated adapters in
 `.agents/skills/ddx` and `.claude/skills/ddx`. Marketplace plugins such as
@@ -27,27 +26,33 @@ HELIX use the same generated-adapter shape from `.ddx/plugins.lock.yaml` plus
 payloads and generated agent adapters are not part of the forward repository
 state.
 
+Because HELIX is a marketplace plugin, the built-in `ddx` plugin must stay
+minimal. It exists to bootstrap DDx worker discovery and operator commands
+offline; it must not become the home for HELIX prompts, personas, workflow
+templates, checks, MCP server definitions, or other workflow assets. Those
+assets belong in separately versioned marketplace/cache packages and are
+resolved by lockfile intent plus the shared cache, similar to how `npx` resolves
+package code without vendoring it into each project.
+
 Development installs may use symlink overlays for live editing, but those
 overlays are project-local. DDx must not restore home-directory skill installs;
 the only expected home binary is `~/.local/bin/ddx`.
 
-## Current Problems
+## Remaining Gaps
 
-- `skills/ddx/` is the editable source, but `cli/internal/skills/ddx/`,
-  `.agents/skills/ddx/`, `.claude/skills/ddx/`, and `.ddx/skills/ddx/` are
-  full copied mirrors.
-- `cli/Makefile copy-skills` syncs the top-level skill tree into embedded and
-  project-local copies, so editing behavior depends on remembering which mirror
-  is canonical.
-- `ddx init` installs shipped skills through a direct bootstrap path using
-  `skills.SkillFiles`, then separately installs the default `ddx` plugin
-  package.
-- `ddx update` refreshes shipped skills through the same direct embedded-skill
-  path rather than the package installer.
-- `ddx plugin install ddx --local .` is unsafe in the current repo layout
-  because local install prefers `<pluginRoot>/.agents/skills` before
-  `<pluginRoot>/skills`; pointed at the repo root, that can target the
-  destination skill tree instead of the intended source.
+- The release build still keeps a generated embedded copy under
+  `cli/internal/skills/ddx` for compatibility. That copy must remain generated
+  from `library/skills/ddx`, not edited as source.
+- `cli/Makefile copy-skills` and `sync-embedded-default-plugin` must remain
+  deterministic: they may sync source into embedded release fixtures, but they
+  must not recreate project-local payload copies.
+- The root and embedded `package.yaml` manifests must stay minimal:
+  `install.skills` only. No `install.root` payload should be advertised for
+  normal installs.
+- `ddx plugin install ddx --local .` must continue to resolve safely to the
+  package root or fail before it can self-link `.agents/skills/ddx`.
+- Docs and command help must describe `.ddx/plugins/<name>` only as legacy or
+  local-overlay state, never as the expected registry install layout.
 
 ## Target Layout
 
@@ -102,11 +107,11 @@ install:
       target: .claude/skills/
 ```
 
-For marketplace installs, `install.root` is legacy/local-overlay metadata. The
-forward install writes project intent to the plugin lock, stores payloads in
-the shared XDG cache, and materializes only generated adapters into the
-project worktree. The full payload tree is not copied to `.ddx/plugins/<name>/`
-for normal registry installs.
+The built-in `ddx` manifest must not declare `install.root`. It is a bootstrap
+skill package, not a full workflow payload. Normal installs write project intent
+to the plugin lock, store payloads in the shared XDG cache, and materialize only
+generated adapters into the project worktree. The full payload tree is not
+copied to `.ddx/plugins/<name>/` for registry installs.
 
 The installer must honor `install.skills[*].source` relative to the package
 root. Skill discovery must not hard-code `.agents/skills` as the primary source
@@ -138,9 +143,9 @@ All three paths must share the same core install implementation:
 Remote installs write the package payload to the shared XDG cache and generated
 adapters to the project. Embedded installs do the same using the baked-in
 default package as the source and do not create `.ddx/plugins/ddx` or a normal
-project plugin-lock entry for `ddx`. Local installs create developer overlays:
-`.ddx/plugins/<name>` and plugin-owned skill outputs are links to the local
-checkout. Local overlays do not mutate recorded plugin pins and do not
+project plugin-lock entry for `ddx`. Local installs may create developer
+overlays: `.ddx/plugins/<name>` and plugin-owned skill outputs are links to the
+local checkout. Local overlays do not mutate recorded plugin pins and do not
 auto-commit.
 
 ## Init And Update Contract
@@ -155,11 +160,12 @@ longer maintains `.ddx/skills/ddx` as a bootstrap-only mirror.
 `ddx update` / the forward replacement for shipped-content refresh uses the
 same package installer path as `ddx init`.
 
-Remove these direct bootstrap mechanisms after replacement tests exist:
+Do not restore these direct bootstrap mechanisms:
 
 - `skills.Install(skills.SkillFiles, ...)` calls from `ddx init` and update;
 - `registerBootstrapDDxSkills`;
-- `cli/internal/skills/ddx` as a distinct embedded source;
+- `cli/internal/skills/ddx` as an editable source distinct from generated
+  release fixtures;
 - `skills/ddx` as the top-level canonical source;
 - checked-in `.agents/skills/ddx`, `.claude/skills/ddx`, and `.ddx/skills/ddx`
   mirrors.
@@ -182,24 +188,29 @@ declared package root or fail with a clear error; it must not self-link
 
 ## Migration Sequence
 
-1. Add embedded default-plugin package support for `library/`.
-2. Teach the installer to honor `install.skills[*].source` for remote,
+1. Done: add embedded default-plugin package support for `library/`.
+2. Done: teach the installer to honor `install.skills[*].source` for remote,
    embedded, and local installs.
-3. Change `ddx init` to install `ddx` through the embedded package installer.
-4. Change shipped-content refresh/update to use the same package installer.
-5. Move `skills/ddx/` to `library/skills/ddx/`.
-6. Replace `copy-skills` with a default-package embed sync:
-   `library/ -> cli/internal/registry/defaultplugin/library/`.
-7. Remove the checked-in skill mirrors after tests prove install outputs are
-   produced by init/local install.
-8. Update FEAT-011, FEAT-015, SD-011, and any command help or AGENTS blocks that
-   describe copied bootstrap skill mirrors.
+3. Done: change `ddx init` to install `ddx` through the embedded package
+   installer.
+4. Done: materialize project skill paths as cache-backed adapters, not payload
+   copies.
+5. Done: move the canonical DDx skill source to `library/skills/ddx/`.
+6. Keep: sync `library/ -> cli/internal/registry/defaultplugin/library/` as a
+   generated embedded release fixture.
+7. Remove only if compatibility allows: legacy generated embedded skill mirrors.
+8. Continue updating FEAT-011, FEAT-015, SD-011, command help, and AGENTS blocks
+   when they describe copied bootstrap skill mirrors.
 
 ## Required Tests
 
 - `TestInitInstallsDDxPluginPackage`: `ddx init` creates cache-backed
   `.agents/skills/ddx` and `.claude/skills/ddx` adapters through the package
   installer and does not create `.ddx/plugins/ddx`.
+- `TestDDxDefaultManifestIsBootstrapOnly`: root and embedded
+  `library/package.yaml` expose only `install.skills` and do not advertise
+  HELIX-style prompts, personas, templates, checks, tools, MCP servers, or
+  `install.root`.
 - `TestPluginInstallLocalDDxLibrarySymlinksSkills`: `ddx plugin install ddx
   --local library --force` creates project-local symlinks to
   `library/skills/ddx`.
