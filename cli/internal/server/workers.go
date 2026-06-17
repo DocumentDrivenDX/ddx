@@ -680,7 +680,7 @@ func setEnvValue(env []string, key, value string) []string {
 }
 
 func externalWorkerArgs(id, projectRoot string, spec ExecuteLoopWorkerSpec) []string {
-	args := []string{"work", "--project", projectRoot, "--server-managed-worker-id", id, "--no-self-refresh"}
+	args := []string{"work", "--project", projectRoot, "--server-managed-worker-id", id}
 	switch spec.Mode {
 	case executeloop.ModeOnce:
 		args = append(args, "--once")
