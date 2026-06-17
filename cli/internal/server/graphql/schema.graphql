@@ -3310,7 +3310,7 @@ type Mutation {
     externalBlockerReason: String!
   ): Bead!
 
-  """Write or update a document in the library (maps to PUT /api/docs/{id})"""
+  """Write or update a document in the library and return the freshly re-read document; use docGraph/docStale for deterministic follow-up refreshes (maps to PUT /api/docs/{id})"""
   documentWrite(
     """Document path relative to the library root"""
     path: String!,
