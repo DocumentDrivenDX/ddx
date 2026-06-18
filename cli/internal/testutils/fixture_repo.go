@@ -5,6 +5,8 @@
 package testutils
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -22,9 +24,10 @@ import (
 const fixtureRepoBaseName = "ddxfixture"
 
 // NewFixtureRepo builds a clean ddx-initialized git repo for the given profile
-// (minimal, standard, multi-project, federated) and returns its path. The repo
-// is created under t.TempDir() so it is removed automatically when the test
-// finishes (the auto-clean promised in scripts/build-fixture-repo.md).
+// (minimal, standard, multi-project, federated) and returns its path. Each
+// profile is built once per process into a cached template, then copied into a
+// fresh t.TempDir() root so every caller still gets an isolated repo that is
+// removed automatically when the test finishes.
 //
 // For minimal/standard the returned path is the project root; for
 // multi-project/federated it is the parent dir whose sub-projects live
@@ -33,19 +36,89 @@ const fixtureRepoBaseName = "ddxfixture"
 // The ddx binary used for seeding is resolved via DDxBinary. Global and system
 // git config are neutralized for the seeding subprocess so a developer box's
 // commit.gpgsign (which points at a host-specific signer) does not break the
-// fixture's own commits; repo-local commit.gpgsign is additionally disabled on
-// each created project so subsequent ddx commits in the test never attempt to
-// sign.
+// fixture's own commits; repo-local commit.gpgsign is disabled in the cached
+// template so subsequent ddx commits in the test never attempt to sign.
 func NewFixtureRepo(t *testing.T, profile string) string {
 	t.Helper()
 
-	bin := DDxBinary(t)
+	template := fixtureRepoTemplate(t, profile)
 	dest := filepath.Join(t.TempDir(), fixtureRepoBaseName)
+	if err := copyDir(template, dest); err != nil {
+		t.Fatalf("copy fixture repo template (profile=%s): %v", profile, err)
+	}
+	return dest
+}
+
+type fixtureRepoCacheState struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+var (
+	fixtureRepoCacheMu           sync.Mutex
+	fixtureRepoCache             = map[string]*fixtureRepoCacheState{}
+	fixtureRepoCacheRootOnce     sync.Once
+	fixtureRepoCacheRootPath     string
+	fixtureRepoCacheRootErr      error
+	fixtureRepoCacheRootOverride string
+	buildFixtureRepoTemplateFn   = buildFixtureRepoTemplate
+)
+
+func fixtureRepoTemplate(t *testing.T, profile string) string {
+	t.Helper()
+
+	root, err := fixtureRepoCacheRoot()
+	if err != nil {
+		t.Fatalf("resolve fixture repo cache root: %v", err)
+	}
+	state := fixtureRepoCacheStateFor(root, profile)
+	state.once.Do(func() {
+		state.path = filepath.Join(root, profile)
+		if err := os.RemoveAll(state.path); err != nil {
+			state.err = err
+			return
+		}
+		state.err = buildFixtureRepoTemplateFn(t, state.path, profile)
+	})
+	if state.err != nil {
+		t.Fatalf("build fixture repo template (profile=%s): %v", profile, state.err)
+	}
+	return state.path
+}
+
+func fixtureRepoCacheStateFor(root, profile string) *fixtureRepoCacheState {
+	key := root + "\x00" + profile
+
+	fixtureRepoCacheMu.Lock()
+	defer fixtureRepoCacheMu.Unlock()
+	if state, ok := fixtureRepoCache[key]; ok {
+		return state
+	}
+	state := &fixtureRepoCacheState{}
+	fixtureRepoCache[key] = state
+	return state
+}
+
+func fixtureRepoCacheRoot() (string, error) {
+	if fixtureRepoCacheRootOverride != "" {
+		return fixtureRepoCacheRootOverride, nil
+	}
+	fixtureRepoCacheRootOnce.Do(func() {
+		fixtureRepoCacheRootPath, fixtureRepoCacheRootErr = os.MkdirTemp("", "ddx-fixture-repo-cache-*")
+	})
+	return fixtureRepoCacheRootPath, fixtureRepoCacheRootErr
+}
+
+func buildFixtureRepoTemplate(t *testing.T, dest, profile string) error {
+	t.Helper()
+
+	bin := DDxBinary(t)
 	script := filepath.Join(repoRoot(t), "scripts", "build-fixture-repo.sh")
 
 	emptyGlobalCfg := filepath.Join(t.TempDir(), "gitconfig-global")
 	if err := os.WriteFile(emptyGlobalCfg, nil, 0o644); err != nil {
-		t.Fatalf("write neutral global git config: %v", err)
+		return fmt.Errorf("write neutral global git config: %w", err)
 	}
 
 	cmd := exec.Command("bash", script, dest, "--profile", profile)
@@ -55,18 +128,82 @@ func NewFixtureRepo(t *testing.T, profile string) string {
 		"GIT_CONFIG_SYSTEM=/dev/null",
 	)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build-fixture-repo.sh failed (profile=%s): %v\n%s", profile, err, out)
+		return fmt.Errorf("build-fixture-repo.sh failed (profile=%s): %w\n%s", profile, err, out)
 	}
 
 	for _, dir := range fixtureProjectDirs(dest, profile) {
 		gc := exec.Command("git", "-C", dir, "config", "commit.gpgsign", "false")
 		gc.Env = append(os.Environ(), "GIT_CONFIG_SYSTEM=/dev/null")
 		if out, err := gc.CombinedOutput(); err != nil {
-			t.Fatalf("disable commit.gpgsign in %s: %v\n%s", dir, err, out)
+			return fmt.Errorf("disable commit.gpgsign in %s: %w\n%s", dir, err, out)
 		}
 	}
 
-	return dest
+	return nil
+}
+
+func copyDir(src, dst string) error {
+	info, err := os.Lstat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("copy source %s is not a directory", src)
+	}
+	return copyPath(src, dst, info)
+}
+
+func copyPath(src, dst string, info os.FileInfo) error {
+	mode := info.Mode()
+	switch {
+	case mode&os.ModeSymlink != 0:
+		target, err := os.Readlink(src)
+		if err != nil {
+			return err
+		}
+		return os.Symlink(target, dst)
+	case mode.IsDir():
+		if err := os.MkdirAll(dst, mode.Perm()); err != nil {
+			return err
+		}
+		entries, err := os.ReadDir(src)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			childSrc := filepath.Join(src, entry.Name())
+			childInfo, err := os.Lstat(childSrc)
+			if err != nil {
+				return err
+			}
+			if err := copyPath(childSrc, filepath.Join(dst, entry.Name()), childInfo); err != nil {
+				return err
+			}
+		}
+		return nil
+	case mode.IsRegular():
+		return copyFile(src, dst, mode)
+	default:
+		return fmt.Errorf("unsupported file mode copying %s: %s", src, mode)
+	}
+}
+
+func copyFile(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode.Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // fixtureProjectDirs returns the per-project git roots created for a profile,
