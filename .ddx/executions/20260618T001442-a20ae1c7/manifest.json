@@ -1,0 +1,44 @@
+{
+  "attempt_id": "20260618T001442-a20ae1c7",
+  "bead_id": "ddx-6b4ce894",
+  "base_rev": "64c5cd9312fb4ec801f95215b9736daa5869526e",
+  "created_at": "2026-06-18T00:14:49.959837951Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6b4ce894",
+    "title": "test-scrub: add a per-process profile cache to testutils.NewFixtureRepo",
+    "description": "PROBLEM/ROOT CAUSE: testutils.NewFixtureRepo wraps scripts/build-fixture-repo.sh with no cache; once adoption rises (S5) each test rebuilds the same profile, paying full build cost repeatedly.\n\nPROPOSED FIX: Build each profile once per `go test` process (sync.Once keyed by profile) into a cache dir, then clone/`cp -r` per test (auto-cleaned via t.Cleanup). Keep the public NewFixtureRepo signature.\n\nNON-SCOPE: keep the public signature; consumers still get an isolated repo.",
+    "acceptance": "1. scripts/build-fixture-repo.sh runs at most once per profile per package run (assert via build-count hook or elapsed).\n2. Existing NewFixtureRepo consumers still get an isolated, correct repo — coverage preserved.\n3. cd cli \u0026\u0026 go test ./internal/testutils/... ./cmd/ green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "kind:test",
+      "test-suite-scrub",
+      "phase:iterate",
+      "needs-care"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T234602-fbe3 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-18T00:04:59.091433242Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260618T001442-a20ae1c7",
+    "prompt": ".ddx/executions/20260618T001442-a20ae1c7/prompt.md",
+    "manifest": ".ddx/executions/20260618T001442-a20ae1c7/manifest.json",
+    "result": ".ddx/executions/20260618T001442-a20ae1c7/result.json",
+    "checks": ".ddx/executions/20260618T001442-a20ae1c7/checks.json",
+    "usage": ".ddx/executions/20260618T001442-a20ae1c7/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T001442-a20ae1c7"
+  },
+  "prompt_sha": "aad0e91f0170b5419315b715053780555d0fac7c9862172524d2c56e1cde0afb"
+}

@@ -1,0 +1,27 @@
+{
+  "attempt_id": "20260618T001442-a20ae1c7",
+  "bead_id": "ddx-6b4ce894",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T001442-a20ae1c7",
+  "trigger": "",
+  "started_at": "2026-06-18T00:26:01.499165762Z",
+  "finished_at": "2026-06-18T00:26:01.532938967Z",
+  "scanned": 100,
+  "candidates": [
+    {
+      "pid": 314009,
+      "ppid": 4081376,
+      "pgid": 314009,
+      "cwd": "/Users/erik/Projects/ddx",
+      "command": "/bin/zsh -lc sleep 240; ddx work status --json; git -C /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T001442-a20ae1c7 status --short --branch; git -C /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T001442-a20ae1c7 log --oneline -6; ps -eo pid,ppid,etime,stat,command | rg '241814|256763|ddx-6b4ce894|execute-bead-wt-ddx-6b4ce894|go test|lefthook|git commit|git add'"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 314009,
+      "ppid": 4081376,
+      "pgid": 314009,
+      "cwd": "/Users/erik/Projects/ddx",
+      "command": "/bin/zsh -lc sleep 240; ddx work status --json; git -C /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T001442-a20ae1c7 status --short --branch; git -C /Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T001442-a20ae1c7 log --oneline -6; ps -eo pid,ppid,etime,stat,command | rg '241814|256763|ddx-6b4ce894|execute-bead-wt-ddx-6b4ce894|go test|lefthook|git commit|git add'"
+    }
+  ]
+}
