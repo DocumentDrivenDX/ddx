@@ -1,0 +1,58 @@
+{
+  "bead_id": "ddx-33bf24cf",
+  "attempt_id": "20260617T235256-ba59649a",
+  "base_rev": "76aa5e40e84e618f21bff25a6619c8cd46948b12",
+  "result_rev": "8269a27f822193a8e636f23de5023b3bc071f39e",
+  "implementation_rev": "8269a27f822193a8e636f23de5023b3bc071f39e",
+  "landed_rev": "8269a27f822193a8e636f23de5023b3bc071f39e",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260617T235256-ba59649a/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260617T235256-ba59649a",
+      "result_rev": "8269a27f822193a8e636f23de5023b3bc071f39e",
+      "implementer_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "requested_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "actual_route": {
+        "harness": "codex",
+        "model": "gpt-5.4-mini"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "codex",
+  "model": "gpt-5.4-mini",
+  "session_id": "eb-185db8ea",
+  "duration_ms": 500528,
+  "tokens": 3376904,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260617T235256-ba59649a",
+  "prompt_file": ".ddx/executions/20260617T235256-ba59649a/prompt.md",
+  "manifest_file": ".ddx/executions/20260617T235256-ba59649a/manifest.json",
+  "result_file": ".ddx/executions/20260617T235256-ba59649a/result.json",
+  "usage_file": ".ddx/executions/20260617T235256-ba59649a/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-17T23:53:04.679196246Z",
+  "finished_at": "2026-06-18T00:01:25.207621179Z"
+}
