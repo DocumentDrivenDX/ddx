@@ -1,0 +1,100 @@
+{
+  "attempt_id": "20260618T003123-b0e24bdf",
+  "bead_id": "ddx-6b4ce894",
+  "base_rev": "21d9aeb9dae80fa4e45150c27e07ab8cb4ef5e16",
+  "created_at": "2026-06-18T00:31:33.402161088Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6b4ce894",
+    "title": "test-scrub: add a per-process profile cache to testutils.NewFixtureRepo",
+    "description": "PROBLEM/ROOT CAUSE: testutils.NewFixtureRepo wraps scripts/build-fixture-repo.sh with no cache; once adoption rises (S5) each test rebuilds the same profile, paying full build cost repeatedly.\n\nPROPOSED FIX: Build each profile once per `go test` process (sync.Once keyed by profile) into a cache dir, then clone/`cp -r` per test (auto-cleaned via t.Cleanup). Keep the public NewFixtureRepo signature.\n\nNON-SCOPE: keep the public signature; consumers still get an isolated repo.",
+    "acceptance": "1. scripts/build-fixture-repo.sh runs at most once per profile per package run (assert via build-count hook or elapsed).\n2. Existing NewFixtureRepo consumers still get an isolated, correct repo — coverage preserved.\n3. cd cli \u0026\u0026 go test ./internal/testutils/... ./cmd/ green.\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "area:test",
+      "kind:test",
+      "test-suite-scrub",
+      "phase:iterate",
+      "needs-care"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260617T234602-fbe3 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-18T00:04:59.091433242Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-18T00:26:01.687890266Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini reason=explicit_pin_discovery_unavailable"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260618T001442-a20ae1c7\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"explicit_pin_discovery_unavailable\",\"input_tokens\":3961542,\"output_tokens\":39350,\"total_tokens\":4000892,\"cost_usd\":0,\"duration_ms\":671572,\"exit_code\":0}",
+          "created_at": "2026-06-18T00:26:01.737993758Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=4000892 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "worker-20260618T001002-5a4a",
+          "body": "name=production-reachability\nstatus=block\nmessage=deadcode reported 1 unreachable symbols in changed lines; see /Users/erik/Projects/ddx/.ddx/executions/20260618T001442-a20ae1c7/checks/production-reachability-violations.txt",
+          "created_at": "2026-06-18T00:26:08.364415307Z",
+          "kind": "checks-blocked",
+          "source": "ddx work",
+          "summary": "pre-merge check \"production-reachability\" returned block"
+        },
+        {
+          "actor": "worker-20260618T001002-5a4a",
+          "body": "check_name=production-reachability\nstatus=block\nexit_code=0\nattempt_id=20260618T001442-a20ae1c7\nbase_rev=64c5cd9312fb4ec801f95215b9736daa5869526e\nresult_rev=49ee6cc7ba529d258af478a6943d1fb6fd362ae8\nevidence_dir=/Users/erik/Projects/ddx/.ddx/executions/20260618T001442-a20ae1c7/checks\nmessage=deadcode reported 1 unreachable symbols in changed lines; see /Users/erik/Projects/ddx/.ddx/executions/20260618T001442-a20ae1c7/checks/production-reachability-violations.txt\noutput=deadcode reported 1 unreachable symbols in changed lines; see /Users/erik/Projects/ddx/.ddx/executions/20260618T001442-a20ae1c7/checks/production-reachability-violations.txt",
+          "created_at": "2026-06-18T00:26:08.364415307Z",
+          "kind": "pre_merge_check_failed",
+          "source": "ddx work",
+          "summary": "pre-merge checks blocked check=production-reachability status=block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260618T001442-a20ae1c7\",\"bead_id\":\"ddx-6b4ce894\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-18T00:26:08.514017505Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "worker-20260618T001002-5a4a",
+          "body": "{\"base_rev\":\"64c5cd9312fb4ec801f95215b9736daa5869526e\",\"classification\":\"recoverable\",\"detail\":\"pre-merge checks blocked: production-reachability: DDx validation: the implementation commit was rewritten after the first commit (4 commit events; first 25bd3fb9aa5d, final implementation_rev 49ee6cc7ba52). The execute-bead contract requires exactly one commit with no post-commit amend/rebase. Detected by DDx, not an implementation failure; rerun the bead in a fresh attempt.\",\"rationale\":\"The attempt produced implementation work but DDx post-run validation rejected the attempt because the implementation commit was rewritten after the first commit, violating the execute-bead one-commit/no-amend contract. The report explicitly says this was detected by DDx and is not an implementation failure; retry the same bead in a fresh attempt.\",\"recommended_action\":\"release_claim_retry\",\"result_rev\":\"49ee6cc7ba529d258af478a6943d1fb6fd362ae8\",\"session_id\":\"eb-f3e735dd\",\"status\":\"post_run_check_failed\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}",
+          "created_at": "2026-06-18T00:26:46.53520071Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx work",
+          "summary": "recoverable: release_claim_retry"
+        },
+        {
+          "actor": "worker-20260618T001002-5a4a",
+          "body": "pre-merge checks blocked: production-reachability: DDx validation: the implementation commit was rewritten after the first commit (4 commit events; first 25bd3fb9aa5d, final implementation_rev 49ee6cc7ba52). The execute-bead contract requires exactly one commit with no post-commit amend/rebase. Detected by DDx, not an implementation failure; rerun the bead in a fresh attempt.\npowerClass=standard\ndecision_audit={\"failure_class\":\"recoverable\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"profile\":\"default\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\npreserve_ref=refs/ddx/iterations/ddx-6b4ce894/20260618T002608Z-64c5cd9312fb\nresult_rev=49ee6cc7ba529d258af478a6943d1fb6fd362ae8\nbase_rev=64c5cd9312fb4ec801f95215b9736daa5869526e\noutcome_reason=recoverable",
+          "created_at": "2026-06-18T00:26:46.586565454Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "post_run_check_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260618T003123-b0e24bdf",
+    "prompt": ".ddx/executions/20260618T003123-b0e24bdf/prompt.md",
+    "manifest": ".ddx/executions/20260618T003123-b0e24bdf/manifest.json",
+    "result": ".ddx/executions/20260618T003123-b0e24bdf/result.json",
+    "checks": ".ddx/executions/20260618T003123-b0e24bdf/checks.json",
+    "usage": ".ddx/executions/20260618T003123-b0e24bdf/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-6b4ce894-20260618T003123-b0e24bdf"
+  },
+  "prompt_sha": "0f358dd5db61304129297a74a77798994ab0a6a46b5424178640247cd1677d3d"
+}

@@ -1,0 +1,4 @@
+internal/testutils/fixture_repo.go:74:6: unreachable func: fixtureProjectDirs
+internal/testutils/fixture_repo.go:95:6: unreachable func: DDxBinary
+internal/testutils/fixture_repo.go:113:6: unreachable func: BuildDDxBinary
+internal/testutils/fixture_repo.go:160:6: unreachable func: repoRoot
