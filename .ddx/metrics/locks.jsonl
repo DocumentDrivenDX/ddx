@@ -3321,3 +3321,12 @@
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":241814,"acquired_at":"2026-06-18T00:46:46.570162133Z","released_at":"2026-06-18T00:46:46.669692981Z","duration_ms":99}
 {"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":241814,"acquired_at":"2026-06-18T00:46:46.487385738Z","released_at":"2026-06-18T00:46:46.669902023Z","duration_ms":182}
 {"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":241814,"acquired_at":"2026-06-18T00:46:46.678561812Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.read-tree","holder_pid":241814,"acquired_at":"2026-06-18T00:46:47.294278107Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.read-tree","holder_pid":241814,"acquired_at":"2026-06-18T00:46:47.294278107Z","released_at":"2026-06-18T00:46:47.326593182Z","duration_ms":32}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":241814,"acquired_at":"2026-06-18T00:46:46.678561812Z","released_at":"2026-06-18T00:46:47.326856557Z","duration_ms":648}
+{"event":"acquire","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.242421991Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"durable_audit","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.242421991Z","released_at":"2026-06-18T01:01:28.242776622Z"}
+{"event":"acquire","lock_name":"index.lock","operation":"index.add","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.326542849Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.326542849Z","released_at":"2026-06-18T01:01:28.369182267Z","duration_ms":42}
+{"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.386773685Z"}
+{"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.386773685Z","released_at":"2026-06-18T01:01:28.497445943Z","duration_ms":110}
