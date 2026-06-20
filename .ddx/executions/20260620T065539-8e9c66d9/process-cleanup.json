@@ -1,0 +1,84 @@
+{
+  "attempt_id": "20260620T065539-8e9c66d9",
+  "bead_id": "ddx-3807cabb",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+  "trigger": "",
+  "started_at": "2026-06-20T06:59:59.378446519Z",
+  "finished_at": "2026-06-20T07:00:00.144750664Z",
+  "scanned": 88,
+  "candidates": [
+    {
+      "pid": 1590187,
+      "ppid": 1590186,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "git -c core.useBuiltinFSMonitor=false ls-files --others --exclude-standard"
+    },
+    {
+      "pid": 1590186,
+      "ppid": 1590132,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/bin/bash /home/erik/.claude/statusline-command.sh"
+    },
+    {
+      "pid": 1590132,
+      "ppid": 1590131,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/bin/bash /home/erik/.claude/statusline-command.sh"
+    },
+    {
+      "pid": 1590131,
+      "ppid": 1583292,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/bin/sh -c ~/.claude/statusline-command.sh"
+    },
+    {
+      "pid": 1583292,
+      "ppid": 1580212,
+      "pgid": 1583292,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3522760636\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3522760636\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"86a2d17936d0807a2f86a562c80f72de\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-3522760636/stop-hook-payload.json\\\"\"}]}]}} --model sonnet"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1590187,
+      "ppid": 1590186,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "git -c core.useBuiltinFSMonitor=false ls-files --others --exclude-standard"
+    },
+    {
+      "pid": 1590186,
+      "ppid": 1590132,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/bin/bash /home/erik/.claude/statusline-command.sh"
+    },
+    {
+      "pid": 1590132,
+      "ppid": 1590131,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/bin/bash /home/erik/.claude/statusline-command.sh"
+    },
+    {
+      "pid": 1590131,
+      "ppid": 1583292,
+      "pgid": 1590131,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9",
+      "command": "/bin/sh -c ~/.claude/statusline-command.sh"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 1583292,
+      "ppid": 1580212,
+      "pgid": 1583292,
+      "command": "[claude] \u003cdefunct\u003e"
+    }
+  ]
+}

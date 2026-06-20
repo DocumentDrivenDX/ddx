@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260620T065539-8e9c66d9",
+  "bead_id": "ddx-3807cabb",
+  "base_rev": "3c70bf3b9bb01e8ef385d7ecd9d18a020ac71d4e",
+  "created_at": "2026-06-20T06:56:03.438732034Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3807cabb",
+    "title": "docs: reconcile spec inconsistencies surfaced by 2026-06-19 doc/impl alignment audit",
+    "description": "PROBLEM\nA 2026-06-19 doc/impl alignment audit surfaced several internal inconsistencies in docs/helix that are pure documentation defects (no code change). They are bundled here because each is a small, independently verifiable doc edit.\n\nROOT CAUSE WITH FILE:LINE\n1. Triplicate TDs: docs/helix/02-design/technical-designs/TD-035-artifact-search.md, TD-038-artifact-search.md, and TD-039-artifact-search.md are three near-identical \"Artifact Search Semantics\" designs (same title, same depends_on [TD-026, TD-029]), all produced by the closed bead ddx-23cbcb4b from non-idempotent execution attempts each grabbing a fresh TD number. None is cross-referenced elsewhere.\n2. docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md:11 has a self-contradictory status: '**Status:** Proposed (Accepted after operator review)'.\n3. docs/helix/01-frame/features/FEAT-006-agent-service.md:18 cites the upstream contract as CONTRACT-003-fizeau-service.md, while audit docs (docs/helix/02-design/contract-003-audit-2026-04-29.md, AR-2026-05-02-fictional-upstream-deps.md) name it CONTRACT-003-ddx-agent-service.md.\n4. FEAT status vocabulary across the 26 docs/helix/01-frame/features/FEAT-*.md is internally inconsistent: 'Frame' vs 'Framing' (two spellings of one state) and 'Complete' vs 'Implemented' (used interchangeably).\n5. A TD-030 design doc cites '/tmp/ddx-axon-backend-plan.md' as load-bearing background, violating CLAUDE.md (no /tmp/ plan citations; they do not survive between machines).\n\nPROPOSED FIX\nMake each edit; no code changes.\n\nNON-SCOPE\nDo not change the canonical FEAT Status enum to match HELIX's [Draft|Specified|Approved] (DDx intentionally tracks build progress); only make the existing vocabulary self-consistent. Do not touch implementation.",
+    "acceptance": "1. Exactly one artifact-search TD remains under docs/helix/02-design/technical-designs/ (the most complete of TD-035/038/039 canonicalized); the other two are deleted; no surviving doc references the deleted IDs (grep clean).\n2. ADR-023:11 Status resolves to a single unambiguous state.\n3. FEAT-006:18 and the two audit docs agree on one CONTRACT-003 filename.\n4. 'Frame'/'Framing' collapsed to one spelling and 'Complete'/'Implemented' collapsed to one term across all FEAT-*.md; grep shows no remaining variant.\n5. The TD-030 '/tmp/...-plan.md' citation is removed or replaced with an in-repo reference (no '/tmp/' path remains in docs/helix/02-design/).\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:iterate",
+      "area:docs",
+      "kind:chore"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260620T045154-b8ab state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-20T06:51:25.05309047Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260620T065539-8e9c66d9",
+    "prompt": ".ddx/executions/20260620T065539-8e9c66d9/prompt.md",
+    "manifest": ".ddx/executions/20260620T065539-8e9c66d9/manifest.json",
+    "result": ".ddx/executions/20260620T065539-8e9c66d9/result.json",
+    "checks": ".ddx/executions/20260620T065539-8e9c66d9/checks.json",
+    "usage": ".ddx/executions/20260620T065539-8e9c66d9/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-3807cabb-20260620T065539-8e9c66d9"
+  },
+  "prompt_sha": "f6e1c2bfdb15d37376ee131d3a4fe581c577b0c376f3c3fe16e479f25db18234"
+}
