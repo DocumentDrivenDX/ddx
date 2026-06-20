@@ -1,0 +1,60 @@
+{
+  "bead_id": "ddx-b5f09750",
+  "attempt_id": "20260620T045637-edfdb70c",
+  "base_rev": "1de47d47d8dd445fc61b4c1393da1e926aef9878",
+  "result_rev": "f11c094ca549dc8e93433694d81cd23c553db34e",
+  "implementation_rev": "f11c094ca549dc8e93433694d81cd23c553db34e",
+  "landed_rev": "f11c094ca549dc8e93433694d81cd23c553db34e",
+  "landed_branch": "main",
+  "outcome": "merged",
+  "status": "success",
+  "detail": "success",
+  "orchestrator_status": "success",
+  "candidate_ref": "refs/ddx/iterations/20260620T045637-edfdb70c/0",
+  "cycle_trace": [
+    {
+      "cycle_index": 0,
+      "attempt_id": "20260620T045637-edfdb70c",
+      "result_rev": "f11c094ca549dc8e93433694d81cd23c553db34e",
+      "implementer_route": {
+        "harness": "claude-tui",
+        "model": "sonnet-4.6"
+      },
+      "requested_route": {
+        "harness": "claude-tui",
+        "model": "sonnet-4.6"
+      },
+      "actual_route": {
+        "harness": "claude-tui",
+        "model": "sonnet-4.6"
+      },
+      "review_result": {},
+      "final_decision": "success",
+      "failure_class": "none",
+      "retry_action": "close",
+      "escalation_count": 0,
+      "review_status": "skipped",
+      "review_skip_reason": "review_not_configured",
+      "review_classification": "review_skipped",
+      "land_status": "landed",
+      "reconcile_status": "not_applicable"
+    }
+  ],
+  "harness": "claude-tui",
+  "model": "sonnet-4.6",
+  "predicted_power": 8,
+  "predicted_cost_usd_per_1k_tokens": 0.009,
+  "predicted_cost_source": "subscription",
+  "session_id": "eb-91ca5d52",
+  "duration_ms": 500734,
+  "exit_code": 0,
+  "project_root": "/Users/erik/Projects/ddx",
+  "execution_dir": ".ddx/executions/20260620T045637-edfdb70c",
+  "prompt_file": ".ddx/executions/20260620T045637-edfdb70c/prompt.md",
+  "manifest_file": ".ddx/executions/20260620T045637-edfdb70c/manifest.json",
+  "result_file": ".ddx/executions/20260620T045637-edfdb70c/result.json",
+  "usage_file": ".ddx/executions/20260620T045637-edfdb70c/usage.json",
+  "rate_limit_budget": 300000000000,
+  "started_at": "2026-06-20T04:57:03.007438982Z",
+  "finished_at": "2026-06-20T05:05:23.741632977Z"
+}
