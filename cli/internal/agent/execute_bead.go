@@ -94,6 +94,12 @@ type ExecuteBeadResult struct {
 	// mixed commit + no_changes rationale is rejected.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 
+	// DiscoveredSubtasks carries sub-task hints that the worker surfaced by
+	// writing discovered_subtasks.json to the execution bundle dir. FEAT-006
+	// §384-426. The supervisor or workflow tool (HELIX) decides whether to file
+	// beads from these hints; the orchestrator never creates beads automatically.
+	DiscoveredSubtasks []DiscoveredSubtask `json:"discovered_subtasks,omitempty"`
+
 	// NoEvidencePaths names worktree paths that remained dirty when the agent
 	// exited without creating a commit or no_changes_rationale.txt. It helps
 	// operators diagnose silent commit failures before the worktree is cleaned up.
@@ -141,6 +147,16 @@ type ExecuteBeadResult struct {
 
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
+}
+
+// DiscoveredSubtask is a lightweight work hint that a worker surfaces via
+// discovered_subtasks.json in the execution bundle dir. FEAT-006 §404-426.
+// The supervisor decides whether, when, and at what priority to file beads.
+type DiscoveredSubtask struct {
+	Title       string   `json:"title"`
+	Description string   `json:"description,omitempty"`
+	Labels      []string `json:"labels,omitempty"`
+	Priority    string   `json:"priority,omitempty"`
 }
 
 // ExecutionCycleRouteFacts captures the implementer-side routing facts for
@@ -1505,6 +1521,13 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		rationaleText = strings.TrimSpace(string(data))
 		if rationaleText != "" {
 			res.NoChangesRationale = rationaleText
+		}
+	}
+	subtasksFile := filepath.Join(wtPath, artifacts.DirRel, "discovered_subtasks.json")
+	if data, readErr := os.ReadFile(subtasksFile); readErr == nil {
+		var subtasks []DiscoveredSubtask
+		if jsonErr := json.Unmarshal(data, &subtasks); jsonErr == nil && len(subtasks) > 0 {
+			res.DiscoveredSubtasks = subtasks
 		}
 	}
 	mixedCommitAndRationale := resultRev != baseRev && rationaleText != ""
