@@ -7,7 +7,7 @@ ddx:
 # Feature: Prose Quality Support
 
 **ID:** FEAT-027
-**Status:** Implemented
+**Status:** Complete
 **Priority:** P2
 **Owner:** DDx Team
 

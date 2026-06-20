@@ -8,7 +8,7 @@ ddx:
 ---
 # ADR-023: Bead Lifecycle Quality Policy
 
-**Status:** Proposed (Accepted after operator review)
+**Status:** Accepted
 **Date:** 2026-05-04
 **Authors:** bead `ddx-9210f95a`
 

@@ -10,7 +10,7 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Implemented (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`)
+**Status:** Complete (root `ddx` skill with nested workflow skills in package-owned `library/skills/ddx/` and package installer outputs at `.agents/skills/ddx/` and `.claude/skills/ddx/`)
 **Priority:** P1
 **Owner:** DDx Team
 

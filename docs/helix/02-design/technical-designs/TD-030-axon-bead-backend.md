@@ -18,12 +18,11 @@ store as a pluggable storage backend behind the
 
 ## Background
 
-Source plan: `/tmp/ddx-axon-backend-plan.md`. That document captured the
-field-by-field schema mapping, operation mapping, migration plan, the
-GraphQL-vs-gRPC wire-transport pivot, and the open questions that fed
-the operator review. The locked decisions from that review are baked
-into this TD; the deferred-default decisions are adopted as v1 policy
-below. This TD does not relitigate those decisions — it polishes them
+This TD consolidates the field-by-field schema mapping, operation mapping,
+migration plan, the GraphQL-vs-gRPC wire-transport pivot, and the open
+questions from a prior operator review. The locked decisions from that review
+are baked into this TD; the deferred-default decisions are adopted as v1
+policy below. This TD does not relitigate those decisions — it polishes them
 into an implementable design.
 
 Cross-repo coordination is tracked in bead `axon-82b6f7b2`
@@ -529,7 +528,6 @@ beads gate which DDx phase.
 
 ## References
 
-- Background plan: `/tmp/ddx-axon-backend-plan.md`
 - Cross-repo coordination tracker: `axon-82b6f7b2`
 - ADR-004: Bead-Backed Runtime Storage
 - ADR-006: Tailscale tsnet Authentication
