@@ -97,6 +97,7 @@ type Document struct {
 	Review     ReviewMetadata
 	ParkingLot bool
 	Prompt     string
+	MediaType  string
 	Dependents []string
 	ExecDef    *DocExecDef
 
@@ -684,6 +685,10 @@ func ParseDocument(path string) (*Document, error) {
 		review.Deps = map[string]string{}
 	}
 
+	mediaType := frontmatter.Doc.MediaType
+	if mediaType == "" {
+		mediaType = "text/markdown"
+	}
 	doc := &Document{
 		ID:            frontmatter.Doc.ID,
 		Title:         extractTitle([]byte(body)),
@@ -693,6 +698,7 @@ func ParseDocument(path string) (*Document, error) {
 		Review:        review,
 		ParkingLot:    frontmatter.Doc.ParkingLot,
 		Prompt:        frontmatter.Doc.Prompt,
+		MediaType:     mediaType,
 		ExecDef:       frontmatter.Doc.Exec,
 		body:          body,
 		bodyLinkTexts: extractBodyLinks(body),

@@ -629,6 +629,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newTryCommand())
 	rootCmd.AddCommand(f.newTriesCommand())
 	rootCmd.AddCommand(f.newSyncCommand())
+	rootCmd.AddCommand(f.newAdrLegacyCommand())
 
 	// Add prompts command group
 	promptsCmd := &cobra.Command{
