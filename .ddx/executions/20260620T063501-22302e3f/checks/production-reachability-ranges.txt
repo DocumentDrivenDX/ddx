@@ -1,0 +1,11 @@
+cmd/artifact.go 34 34
+cmd/artifact.go 112 168
+cmd/artifact_list_test.go 1 93
+cmd/command_factory.go 632 632
+cmd/doc.go 50 50
+cmd/doc.go 170 304
+cmd/doc_list_test.go 1 110
+internal/docgraph/docgraph.go 100 100
+internal/docgraph/docgraph.go 688 691
+internal/docgraph/docgraph.go 701 701
+internal/docgraph/frontmatter.go 22 22

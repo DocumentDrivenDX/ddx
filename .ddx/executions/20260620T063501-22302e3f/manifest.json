@@ -1,0 +1,32 @@
+{
+  "attempt_id": "20260620T063501-22302e3f",
+  "bead_id": "ddx-d442daf1",
+  "base_rev": "6853695791bae04cbef945edaf83c3d56f084f35",
+  "created_at": "2026-06-20T06:35:08.245704263Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d442daf1",
+    "title": "FEAT-005: add ddx doc list --type / ddx artifact list --media-type CLI subcommands",
+    "description": "PROBLEM\nFEAT-005's legacy-\u003enew migration table maps 'ddx adr list' -\u003e 'ddx doc list --type ADR', but neither 'ddx doc list' nor 'ddx artifact list' exists, leaving the documented CLI migration path incomplete. The frontend /artifacts route and documents GraphQL resolver already provide listing/search (closed beads ddx-fbf57b89, ddx-5fb3b7cf, etc.), but the CLI surface FEAT-005 promises is missing.\n\nROOT CAUSE WITH FILE:LINE\ndocs/helix/01-frame/features/FEAT-005-artifacts.md:266 documents 'ddx doc list --type \u003cprefix\u003e' / 'ddx artifact list --media-type \u003ctype\u003e'; the migration table (~:373/:377) maps 'ddx adr list' -\u003e 'ddx doc list --type ADR'. cli/cmd/doc.go has no 'list' subcommand (subcommands: graph/stale/stamp/show/deps/dependents/history/diff/changed/audit/migrate/prose/validate), and cli/cmd/artifact.go:39 exposes only 'regenerate'. No open bead tracks the CLI listing commands (2026-06-19 audit).\n\nPROPOSED FIX\nAdd 'ddx doc list' (with --type \u003cprefix\u003e filter) and 'ddx artifact list' (with --media-type \u003ctype\u003e filter), reading from the same document/artifact graph the server resolver uses, with --json output. Wire the legacy 'ddx adr list'-style aliases to redirect per the FEAT-005 migration table.\n\nNON-SCOPE\nDo not change the frontend /artifacts route or the documents GraphQL resolver. Do not add search beyond the documented --type/--media-type filters (full-text search is ddx-4a7eed8c).",
+    "acceptance": "1. 'ddx doc list --type ADR --json' lists ADR documents from the doc graph; TestDocListByType covers it against a fixture repo.\n2. 'ddx artifact list --media-type \u003ctype\u003e --json' lists artifacts filtered by media-type; TestArtifactListByMediaType covers it.\n3. The legacy 'ddx adr list' migration path documented in FEAT-005 resolves (redirect or alias) to 'ddx doc list --type ADR'.\n4. cd cli \u0026\u0026 go test ./cmd/... green.\n5. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:build",
+      "area:cli",
+      "area:artifacts",
+      "kind:feature",
+      "spec:FEAT-005"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260620T063501-22302e3f",
+    "prompt": ".ddx/executions/20260620T063501-22302e3f/prompt.md",
+    "manifest": ".ddx/executions/20260620T063501-22302e3f/manifest.json",
+    "result": ".ddx/executions/20260620T063501-22302e3f/result.json",
+    "checks": ".ddx/executions/20260620T063501-22302e3f/checks.json",
+    "usage": ".ddx/executions/20260620T063501-22302e3f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-d442daf1-20260620T063501-22302e3f"
+  },
+  "prompt_sha": "4fb8bab6b47b1582f841a7741a37b35a585935df6f09cbe38c968c4ebf7f0134"
+}
