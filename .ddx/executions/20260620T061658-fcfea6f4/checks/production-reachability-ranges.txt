@@ -1,0 +1,4 @@
+internal/agent/execute_bead.go 97 102
+internal/agent/execute_bead.go 152 161
+internal/agent/execute_bead.go 1526 1532
+internal/agent/execute_bead_discovered_subtasks_test.go 1 83
