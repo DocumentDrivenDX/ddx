@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 	"github.com/stretchr/testify/assert"
@@ -81,5 +82,91 @@ func TestRunsCommandLogHistory(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(histOut), &records))
 		require.Len(t, records, 1)
 		assert.Equal(t, "runs-hist-def@1", records[0].DefinitionID)
+	})
+}
+
+func TestRunsCommandMetrics(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	t.Setenv("DDX_BEAD_DIR", "")
+
+	dir := testutils.NewFixtureRepo(t, "minimal")
+	execRoot := filepath.Join(dir, ddxroot.DirName, "executions")
+
+	writeExecResult(t, execRoot, "20260601T100000-met0001", map[string]any{
+		"bead_id":     "ddx-m1",
+		"harness":     "claude",
+		"model":       "sonnet",
+		"outcome":     "task_succeeded",
+		"duration_ms": 120000,
+		"tokens":      800,
+		"cost_usd":    0.4,
+	})
+	writeExecResult(t, execRoot, "20260601T110000-met0002", map[string]any{
+		"bead_id":     "ddx-m1",
+		"harness":     "claude",
+		"model":       "sonnet",
+		"outcome":     "task_failed",
+		"duration_ms": 60000,
+		"tokens":      400,
+		"cost_usd":    0.2,
+	})
+	writeExecResult(t, execRoot, "20260601T120000-met0003", map[string]any{
+		"bead_id":     "ddx-m2",
+		"harness":     "claude",
+		"model":       "opus",
+		"outcome":     "task_succeeded",
+		"duration_ms": 200000,
+		"tokens":      1000,
+		"cost_usd":    0.8,
+	})
+
+	// Seed beads.jsonl with titles for the fixture beads.
+	beadsPath := filepath.Join(dir, ddxroot.DirName, "beads.jsonl")
+	beadLines := `{"id":"ddx-m1","title":"Metrics bead one","status":"closed","priority":2,"issue_type":"task","created_at":"2026-06-01T00:00:00Z","updated_at":"2026-06-01T00:00:00Z"}` + "\n" +
+		`{"id":"ddx-m2","title":"Metrics bead two","status":"closed","priority":2,"issue_type":"task","created_at":"2026-06-01T00:00:00Z","updated_at":"2026-06-01T00:00:00Z"}` + "\n"
+	existing, _ := os.ReadFile(beadsPath)
+	require.NoError(t, os.WriteFile(beadsPath, append(existing, []byte(beadLines)...), 0o644))
+
+	t.Run("help_exits_zero", func(t *testing.T) {
+		rootCmd := NewCommandFactory(dir).NewRootCommand()
+		out, err := executeCommand(rootCmd, "runs", "metrics", "--help")
+		require.NoError(t, err)
+		assert.Contains(t, out, "metrics")
+	})
+
+	t.Run("json_output_aggregates_by_bead", func(t *testing.T) {
+		rootCmd := NewCommandFactory(dir).NewRootCommand()
+		out, err := executeCommand(rootCmd, "runs", "metrics", "--json")
+		require.NoError(t, err)
+
+		var rows []beadMetricsRow
+		require.NoError(t, json.Unmarshal([]byte(out), &rows))
+
+		byID := map[string]beadMetricsRow{}
+		for _, r := range rows {
+			byID[r.BeadID] = r
+		}
+
+		require.Contains(t, byID, "ddx-m1")
+		assert.Equal(t, 2, byID["ddx-m1"].AttemptCount)
+		assert.Equal(t, 1200, byID["ddx-m1"].TotalTokens)
+		assert.InDelta(t, 0.6, byID["ddx-m1"].TotalCostUSD, 0.0001)
+		assert.Equal(t, "Metrics bead one", byID["ddx-m1"].Title)
+
+		require.Contains(t, byID, "ddx-m2")
+		assert.Equal(t, 1, byID["ddx-m2"].AttemptCount)
+		assert.Equal(t, 1000, byID["ddx-m2"].TotalTokens)
+		assert.InDelta(t, 0.8, byID["ddx-m2"].TotalCostUSD, 0.0001)
+		assert.Equal(t, "Metrics bead two", byID["ddx-m2"].Title)
+	})
+
+	t.Run("table_output_has_header_columns", func(t *testing.T) {
+		rootCmd := NewCommandFactory(dir).NewRootCommand()
+		out, err := executeCommand(rootCmd, "runs", "metrics")
+		require.NoError(t, err)
+		header := strings.SplitN(out, "\n", 2)[0]
+		for _, col := range []string{"BEAD_ID", "ATTEMPTS", "TOTAL_TOKENS", "TOTAL_COST_USD"} {
+			assert.Contains(t, header, col)
+		}
 	})
 }

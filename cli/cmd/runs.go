@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/spf13/cobra"
 )
@@ -19,6 +20,7 @@ func (f *CommandFactory) newRunsCommand() *cobra.Command {
 
 	cmd.AddCommand(f.newRunsLogCommand())
 	cmd.AddCommand(f.newRunsHistoryCommand())
+	cmd.AddCommand(f.newRunsMetricsCommand())
 	return cmd
 }
 
@@ -38,6 +40,61 @@ func (f *CommandFactory) newRunsLogCommand() *cobra.Command {
 	cmd.Flags().String("since", "", "Show commits since date (e.g., '1 week ago')")
 	cmd.Flags().String("author", "", "Filter by author")
 	cmd.Flags().String("grep", "", "Filter by commit message")
+	return cmd
+}
+
+func (f *CommandFactory) newRunsMetricsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "metrics",
+		Short: "Token, cost, and attempt summaries across all runs",
+		Long: `Scan .ddx/executions/*/result.json and aggregate per-bead token, cost,
+attempt, and duration metrics. Consolidates token/cost/usage per FEAT-001 §77-78
+and FEAT-014. One row per bead_id with recorded execution evidence.`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jsonOut, _ := cmd.Flags().GetBool("json")
+
+			workspaceRoot := f.beadWorkspaceRoot()
+			if workspaceRoot == "" {
+				workspaceRoot = f.WorkingDir
+			}
+
+			summaries, err := scanBeadMetrics(workspaceRoot)
+			if err != nil {
+				return err
+			}
+
+			titleByID := map[string]string{}
+			if store := f.beadStore(); store != nil {
+				if all, err := store.List("", "", nil); err == nil {
+					for _, b := range all {
+						titleByID[b.ID] = b.Title
+					}
+				}
+			}
+
+			rows := make([]beadMetricsRow, 0, len(summaries))
+			for id, s := range summaries {
+				rows = append(rows, beadMetricsRow{
+					BeadID:        id,
+					Title:         titleByID[id],
+					AttemptCount:  s.AttemptCount,
+					TotalTokens:   s.TotalTokens,
+					TotalCostUSD:  s.TotalCostUSD,
+					AvgDurationMS: s.AvgDurationMS,
+				})
+			}
+			sort.Slice(rows, func(i, j int) bool { return rows[i].BeadID < rows[j].BeadID })
+
+			if jsonOut {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(rows)
+			}
+			return renderBeadMetricsTable(cmd, rows)
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output JSON")
 	return cmd
 }
 
