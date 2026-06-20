@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/blob"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 )
@@ -45,6 +46,10 @@ type Store struct {
 	LockDir    string
 	LockWait   time.Duration
 	backend    RawBackend // nil means use built-in JSONL
+	// Blobs is the store used for byte-blob sidecar writes (e.g.
+	// externalized bead events under attachments/). Defaults to a
+	// LocalFSBlob rooted at Dir, set by NewStore. FEAT-028 §BlobStore.
+	Blobs blob.Store
 }
 
 // Compile-time check: *Store satisfies the high-level Backend interface
@@ -108,6 +113,7 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 		Dir:        dir,
 		Prefix:     prefix,
 		LockWait:   parseDurationOr("DDX_BEAD_LOCK_TIMEOUT", 10*time.Second),
+		Blobs:      blob.NewLocalFS(dir),
 	}
 	for _, opt := range opts {
 		if opt != nil {

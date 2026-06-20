@@ -332,6 +332,9 @@ func MirrorOrLog(req MirrorRequest) {
 var mirrorIndexMu sync.Mutex
 
 // AppendMirrorIndex appends one entry to .ddx/executions/mirror-index.jsonl.
+// These writes are append-only streams, deferred to a StreamStore abstraction
+// by FEAT-028 (BlobStore handles random-access blobs only; stream/log appends
+// are out of scope for this bead and will be addressed when StreamStore lands).
 func AppendMirrorIndex(projectRoot string, entry *MirrorIndexEntry) error {
 	if entry == nil {
 		return nil

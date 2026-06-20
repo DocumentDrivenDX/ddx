@@ -4,12 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/blob"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/testutils"
@@ -825,4 +828,73 @@ func stringContains(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// trackingBlobStore records Put calls and returns an error when a key contains
+// the configured failOn substring. Used by TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure
+// to verify the FEAT-028 multi-blob write discipline.
+type trackingBlobStore struct {
+	mu     sync.Mutex
+	puts   []blob.Key
+	failOn string
+}
+
+func (s *trackingBlobStore) Put(_ context.Context, key blob.Key, _ io.Reader) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.puts = append(s.puts, key)
+	if s.failOn != "" && strings.Contains(string(key), s.failOn) {
+		return fmt.Errorf("injected Put failure for %q", key)
+	}
+	return nil
+}
+func (s *trackingBlobStore) Get(_ context.Context, _ blob.Key) (io.ReadCloser, error) {
+	return nil, blob.ErrNotFound
+}
+func (s *trackingBlobStore) Stat(_ context.Context, _ blob.Key) (blob.Info, error) {
+	return blob.Info{}, blob.ErrNotFound
+}
+func (s *trackingBlobStore) List(_ context.Context, _ blob.Key) ([]blob.Key, error) {
+	return nil, nil
+}
+func (s *trackingBlobStore) Delete(_ context.Context, _ blob.Key) error { return nil }
+func (s *trackingBlobStore) putKeys() []blob.Key {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]blob.Key{}, s.puts...)
+}
+
+// TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure enforces the
+// FEAT-028 multi-blob write discipline: when the non-manifest prompt.md Put
+// fails, manifest.json must never be written to the BlobStore.
+func TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure(t *testing.T) {
+	const beadID = "ddx-manifest-discipline"
+
+	projectRoot := setupArtifactTestProjectRoot(t)
+	tracking := &trackingBlobStore{failOn: "prompt.md"}
+
+	gitOps := &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     "1111000000000001",
+		resultRev:   "1111000000000001",
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
+		},
+	}
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: &artifactTestAgentRunner{},
+		Blobs:       tracking,
+	}, gitOps)
+
+	if err == nil {
+		t.Fatal("expected error from injected prompt.md Put failure, got nil")
+	}
+
+	for _, k := range tracking.putKeys() {
+		if strings.Contains(string(k), "manifest.json") {
+			t.Errorf("FEAT-028 multi-blob write discipline violated: manifest.json was Put despite prompt.md failure (all puts: %v)", tracking.putKeys())
+		}
+	}
 }

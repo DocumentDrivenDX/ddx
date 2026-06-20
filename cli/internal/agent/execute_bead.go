@@ -20,6 +20,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
+	"github.com/DocumentDrivenDX/ddx/internal/blob"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -294,6 +295,12 @@ type ExecuteBeadRuntime struct {
 	// and attempt after the agent commits, writing ac-check.json to the
 	// attempt dir under wtPath. When nil, ac-check is skipped.
 	ACCheckRunner func(ctx context.Context, beadID, attemptID, wtPath string) (*accheck.Output, error)
+	// Blobs is the BlobStore used to write per-attempt execution-evidence files
+	// (prompt.md, manifest.json, result.json, usage.json) under
+	// .ddx/executions/<attempt-id>/. When nil, defaults to a LocalFSBlob
+	// rooted at <wtPath>/.ddx/. Callers may inject a MemoryBlob for tests.
+	// FEAT-028 §BlobStore.
+	Blobs blob.Store
 }
 
 type onRouteResolvedKeyType struct{}
@@ -978,6 +985,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		return nil, fmt.Errorf("attempt backend %s did not return a workspace", attemptBackend.Name())
 	}
 	wtPath := workspace.WorkDir
+	// FEAT-028: BlobStore for per-attempt evidence writes under wtPath/.ddx/.
+	wtBlobStore := runtime.Blobs
+	if wtBlobStore == nil {
+		wtBlobStore = evidenceBlobStore(wtPath)
+	}
+	// rootBlobStore is used only for the worktree-lost recovery path, writing
+	// evidence directly under projectRoot/.ddx/ when the worktree has vanished.
+	rootBlobStore := evidenceBlobStore(projectRoot)
+	_ = rootBlobStore // consumed below only on worktree-lost recovery path
 	if err := excludeCleanupMetadataFromWorktreeGit(wtPath); err != nil {
 		_ = attemptBackend.Cleanup(ctx, workspace)
 		return nil, fmt.Errorf("excluding execute-bead cleanup metadata: %w", err)
@@ -1070,7 +1086,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 		populateWorkerStatus(res)
-		_ = writeArtifactJSON(filepath.Join(wtBundleDir, "result.json"), res)
+		_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res)
 		// The deferred publish will copy from wtPath to projectRoot before cleanup.
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
@@ -1330,21 +1346,22 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.AttemptDiagnostics = buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr, gitOps)
 		}
 		populateWorkerStatus(res)
-		// Check if wtPath is gone BEFORE writeArtifactJSON — that call uses
+		// Check if wtPath is gone BEFORE blobPutJSON — LocalFSBlob.Put uses
 		// os.MkdirAll internally and would recreate the directory, making a
 		// subsequent os.Stat check fail to detect the vanished worktree.
 		_, wtStatErr := os.Stat(wtPath)
-		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res)
 		// Fallback: when the worktree was gone before the write above, write
 		// evidence directly to projectRoot so the diagnostic files are recoverable.
 		if os.IsNotExist(wtStatErr) {
-			recoveryDir := filepath.Join(projectRoot, artifacts.DirRel)
-			_ = os.MkdirAll(recoveryDir, 0o755)
-			_ = writeArtifactJSON(filepath.Join(recoveryDir, "result.json"), res)
+			// rootBlobStore is rooted at projectRoot/.ddx/; LocalFSBlob.Put creates
+			// the parent directory, so no explicit os.MkdirAll is needed.
+			_ = blobPutJSON(ctx, rootBlobStore, evidenceKey(attemptID, "result.json"), res)
 			// Stubs for prompt.md and manifest.json that were lost with the worktree.
-			_ = os.WriteFile(filepath.Join(recoveryDir, "prompt.md"),
-				[]byte("# Evidence Recovery\nWorktree was lost before prompt could be preserved.\n"), 0o644)
-			_ = writeArtifactJSON(filepath.Join(recoveryDir, "manifest.json"), map[string]string{
+			// Multi-blob write discipline: result first, manifest last (FEAT-028).
+			_ = blobPutBytes(ctx, rootBlobStore, evidenceKey(attemptID, "prompt.md"),
+				[]byte("# Evidence Recovery\nWorktree was lost before prompt could be preserved.\n"))
+			_ = blobPutJSON(ctx, rootBlobStore, evidenceKey(attemptID, "manifest.json"), map[string]string{
 				"attempt_id": attemptID, "bead_id": beadID, "status": "worktree_lost",
 			})
 		}
@@ -1368,7 +1385,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			OutputTokens: outputTokens,
 			CostUSD:      costUSD,
 		}
-		if writeErr := writeArtifactJSON(artifacts.UsageAbs, usage); writeErr == nil {
+		if writeErr := blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "usage.json"), usage); writeErr == nil {
 			usageFileRel = artifacts.UsageRel
 		}
 	}
@@ -1423,7 +1440,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				Outcome:                     prelimOutcome,
 			}
 			populateWorkerStatus(prelimRes)
-			_ = writeArtifactJSON(artifacts.ResultAbs, prelimRes)
+			_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), prelimRes)
 
 			// Render the commit message from the tracked artifact file.
 			commitMsg, msgErr := BuildCommitMessageFromResultFile(artifacts.ResultAbs)
@@ -1540,7 +1557,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.FailureMode = ""
 		res.Status = ExecuteBeadStatusPreservedNeedsReview
 		res.Detail = ExecuteBeadStatusDetail(res.Status, OperatorCancelReason, "")
-		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		_ = blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res)
 		if err := publishAttemptResult(res); err != nil {
 			return res, fmt.Errorf("publishing attempt result: %w", err)
 		}
@@ -1605,7 +1622,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if err := applyWorkerCandidateCycle(ctx, projectRoot, wtPath, runtime, res); err != nil {
 		return nil, fmt.Errorf("recording candidate cycle state: %w", err)
 	}
-	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
+	if err := blobPutJSON(ctx, wtBlobStore, evidenceKey(attemptID, "result.json"), res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
 	}
 
@@ -1805,11 +1822,22 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		return nil, nil, err
 	}
 
+	// Use the injected BlobStore when available; fall back to LocalFSBlob rooted
+	// at the worktree's .ddx/ directory. FEAT-028 §BlobStore.
+	blobs := runtime.Blobs
+	if blobs == nil {
+		blobs = evidenceBlobStore(wtPath)
+	}
+	ctx := context.Background()
+
 	promptContent, promptSource, err := buildPrompt(projectRoot, b, refs, artifacts, baseRev, runtime.PromptFile, rcfg.Harness(), rcfg.ContextBudget())
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := os.WriteFile(artifacts.PromptAbs, promptContent, 0o644); err != nil {
+	// FEAT-028 multi-blob write discipline: non-manifest blobs are written first;
+	// manifest.json is written last so any reader that sees it can also read the
+	// blobs it references.
+	if err := blobPutBytes(ctx, blobs, evidenceKey(attemptID, "prompt.md"), promptContent); err != nil {
 		return nil, nil, fmt.Errorf("writing execute-bead prompt artifact: %w", err)
 	}
 
@@ -1849,7 +1877,8 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 		},
 		PromptSHA: promptSHA(promptContent),
 	}
-	if err := writeArtifactJSON(artifacts.ManifestAbs, manifest); err != nil {
+	// Manifest written last — FEAT-028 multi-blob write discipline.
+	if err := blobPutJSON(ctx, blobs, evidenceKey(attemptID, "manifest.json"), manifest); err != nil {
 		return nil, nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
 	}
 	artifacts.PromptSHA = manifest.PromptSHA
