@@ -1,0 +1,83 @@
+{
+  "attempt_id": "20260620T054111-896ec06f",
+  "bead_id": "ddx-8e54a916",
+  "base_rev": "478a392ee7d6a3f1028d664e5391d3225ae9b21c",
+  "created_at": "2026-06-20T05:41:18.29068139Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8e54a916",
+    "title": "FEAT-028: define BlobStore interface in cli/internal/blob/ + migrate attachments \u0026 execution evidence",
+    "description": "PROBLEM\nFEAT-028 (Storage Abstractions, Status: In Progress, P1) names the BlobStore interface as the \"first concrete deliverable,\" but no implementation exists.\n\nROOT CAUSE WITH FILE:LINE\ndocs/helix/01-frame/features/FEAT-028-storage-abstractions.md:71-89 (\"In Scope (v1)\") mandates a new cli/internal/blob/ package defining a BlobStore interface, plus migration of two call-site clusters behind it. The package cli/internal/blob/ does not exist (verified: 'ls cli/internal/blob' -\u003e ENOENT). Externalized bead attachments still write directly via cli/internal/bead/attachments.go, and per-attempt execution evidence still writes directly via cli/internal/agent/execute_bead*.go under .ddx/executions/\u003crun-id\u003e/. No open bead tracks this work (2026-06-19 doc/impl alignment audit).\n\nPROPOSED FIX\nCreate cli/internal/blob/ with the BlobStore interface (methods, error semantics, key conventions, content-addressed vs caller-keyed — exactly as decided in FEAT-028 In-Scope v1), provide LocalFSBlob and MemoryBlob implementations, and migrate (1) externalized bead attachments (attachments.go) and (2) per-attempt execution-evidence writers behind it.\n\nNON-SCOPE\ncli/internal/agent/executions_mirror.go stays direct-FS (StreamStore, deferred). Do not migrate cli/internal/registry/. No GC/quota. Do not define EntityStore/StreamStore/ConfigStore (follow-up beads).\n\nDEP NOTE: no deps; orthogonal to the axon Backend epic (TD-027) which abstracts the bead store, not blob state.",
+    "acceptance": "1. cli/internal/blob/blob.go defines a BlobStore interface with documented error semantics and key conventions matching FEAT-028 In-Scope v1.\n2. LocalFSBlob and MemoryBlob implementations exist with a shared TestBlobStoreConformance covering both.\n3. cli/internal/bead/attachments.go writes externalized attachments through BlobStore; existing attachment tests stay green.\n4. Per-attempt execution-evidence writers in cli/internal/agent/execute_bead*.go route through BlobStore; on-disk .ddx/executions/\u003crun-id\u003e/ layout unchanged.\n5. cli/internal/agent/executions_mirror.go is unchanged (direct FS) with a comment citing the FEAT-028 StreamStore deferral.\n6. cd cli \u0026\u0026 go test ./internal/blob/... ./internal/bead/... ./internal/agent/... green.\n7. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:build",
+      "area:storage",
+      "kind:feature",
+      "spec:FEAT-028"
+    ],
+    "metadata": {
+      "events": [
+        {
+          "actor": "ddx-watchdog",
+          "body": "worker=worker-20260619T141659-1e59 runtime=13h39m0s stalled=13h39m0s pid=1128 reason=watchdog",
+          "created_at": "2026-06-20T03:55:59.912761193Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "watchdog"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-06-20T03:56:01.270554985Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260620T035614-a42c state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-20T04:00:51.774609884Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx-server",
+          "body": "worker=worker-20260620T040555-3bd3 state=failed reason=worker-exit error=signal: killed",
+          "created_at": "2026-06-20T04:12:03.878775229Z",
+          "kind": "bead.reaped",
+          "source": "server-workers",
+          "summary": "worker-exit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-8e54a916\",\"estimated_difficulty\":\"medium\",\"rejected_route_pins\":null,\"requested_power_class\":\"standard\",\"requested_profile\":\"default\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"readiness\"}",
+          "created_at": "2026-06-20T04:16:51.967325061Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=readiness difficulty=medium powerClass=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "worker-20260620T041205-3fc9",
+          "body": "execution_failed\npowerClass=standard\ndecision_audit={\"failure_class\":\"timeout\",\"retry_action\":\"retry\",\"escalation_count\":0,\"requested_route\":{\"profile\":\"default\",\"routing_intent_source\":\"readiness\",\"estimated_difficulty\":\"medium\",\"inferred_power_class\":\"standard\",\"requested_power_class\":\"standard\"},\"actual_route\":{\"route_reason\":\"readiness\"},\"review_status\":\"skipped\",\"review_skip_reason\":\"review_not_configured\",\"review_classification\":\"review_skipped\",\"land_status\":\"not_landed\",\"reconcile_status\":\"not_applicable\"}\noutcome_reason=timeout",
+          "created_at": "2026-06-20T04:16:52.055794551Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "execution_failed"
+        }
+      ]
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260620T054111-896ec06f",
+    "prompt": ".ddx/executions/20260620T054111-896ec06f/prompt.md",
+    "manifest": ".ddx/executions/20260620T054111-896ec06f/manifest.json",
+    "result": ".ddx/executions/20260620T054111-896ec06f/result.json",
+    "checks": ".ddx/executions/20260620T054111-896ec06f/checks.json",
+    "usage": ".ddx/executions/20260620T054111-896ec06f/usage.json",
+    "worktree": "Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f"
+  },
+  "prompt_sha": "8af430b60c5aae2101e17b8de687fe38c486ede5725146f688231ae346f02f35"
+}

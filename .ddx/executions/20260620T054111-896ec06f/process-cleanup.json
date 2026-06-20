@@ -1,0 +1,210 @@
+{
+  "attempt_id": "20260620T054111-896ec06f",
+  "bead_id": "ddx-8e54a916",
+  "worktree": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+  "trigger": "",
+  "started_at": "2026-06-20T06:14:00.024985768Z",
+  "finished_at": "2026-06-20T06:14:00.785295691Z",
+  "scanned": 100,
+  "candidates": [
+    {
+      "pid": 1192733,
+      "ppid": 1192514,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3433505683/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build3433505683/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 1192514,
+      "ppid": 1192496,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli",
+      "command": "/home/linuxbrew/.linuxbrew/bin/go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 1192496,
+      "ppid": 1192495,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/agent/execute_bead.go ./internal/agent/execute_bead_artifacts_test.go ./internal/agent/execute_bead_blob.go ./internal/agent/executions_mirror.go ./internal/bead/attachments.go ./internal/bead/store.go ./internal/blob/blob.go ./internal/blob/conformance_test.go ./internal/blob/localfs.go ./internal/blob/memory.go"
+    },
+    {
+      "pid": 1192495,
+      "ppid": 1191115,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/agent/execute_bead.go ./internal/agent/execute_bead_artifacts_test.go ./internal/agent/execute_bead_blob.go ./internal/agent/executions_mirror.go ./internal/bead/attachments.go ./internal/bead/store.go ./internal/blob/blob.go ./internal/blob/conformance_test.go ./internal/blob/localfs.go ./internal/blob/memory.go"
+    },
+    {
+      "pid": 1191115,
+      "ppid": 1191109,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 1191109,
+      "ppid": 1191068,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/sh /Users/erik/Projects/ddx/.git/hooks/pre-commit"
+    },
+    {
+      "pid": 1213327,
+      "ppid": 1212040,
+      "pgid": 1212040,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "sleep 2"
+    },
+    {
+      "pid": 1212984,
+      "ppid": 1212970,
+      "pgid": 1212970,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "ugrep -G --ignore-files --hidden -I --exclude-dir=.git --exclude-dir=.svn --exclude-dir=.hg --exclude-dir=.bzr --exclude-dir=.jj --exclude-dir=.sl -E --line-buffered summary:|PASS|FAIL|error|feat\\(|master|HEAD"
+    },
+    {
+      "pid": 1212983,
+      "ppid": 1212970,
+      "pgid": 1212970,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "tail -f /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output"
+    },
+    {
+      "pid": 1191068,
+      "ppid": 1191057,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "git commit -m feat(storage): define BlobStore interface and migrate attachment/evidence writes [ddx-8e54a916] - Add cli/internal/blob/ with Store interface, LocalFSBlob (atomic Put via temp+fsync+rename using os.CreateTemp for concurrent-safe unique temps), MemoryBlob, and shared conformance test suite covering all operations. - Wire bead.Store.Blobs (blob.Store) into NewStore; readEventsAttachment and writeEventsAttachment route through BlobStore; on-disk paths unchanged. - Add ExecuteBeadRuntime.Blobs (injectable, defaults to LocalFSBlob); all per-attempt evidence writes (prompt.md, manifest.json, result.json, usage.json) in execute_bead.go route through wtBlobStore / rootBlobStore. - Multi-blob write discipline: non-manifest blobs written first, manifest written last; enforced by TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure. - executions_mirror.go unchanged; AppendMirrorIndex doc comment cites FEAT-028 StreamStore deferral. Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e"
+    },
+    {
+      "pid": 1212970,
+      "ppid": 872583,
+      "pgid": 1212970,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781934098793-t6ynwk.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'tail -f /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output 2\u003e\u00261 | grep -E --line-buffered \"summary:|PASS|FAIL|error|feat\\(|master|HEAD\"' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-205f-cwd"
+    },
+    {
+      "pid": 1212040,
+      "ppid": 872583,
+      "pgid": 1212040,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781934098793-t6ynwk.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until [ $(wc -l \u003c /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output) -gt 35 ]; do sleep 2; done; echo \"output updated: $(wc -l \u003c /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output) lines\"' \u0026\u0026 pwd -P \u003e| /tmp/claude-a734-cwd"
+    },
+    {
+      "pid": 1191057,
+      "ppid": 872583,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781934098793-t6ynwk.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'git commit -m \"$(cat \u003c\u003c'\"'\"'EOF'\"'\"' feat(storage): define BlobStore interface and migrate attachment/evidence writes [ddx-8e54a916] - Add cli/internal/blob/ with Store interface, LocalFSBlob (atomic Put via temp+fsync+rename using os.CreateTemp for concurrent-safe unique temps), MemoryBlob, and shared conformance test suite covering all operations. - Wire bead.Store.Blobs (blob.Store) into NewStore; readEventsAttachment and writeEventsAttachment route through BlobStore; on-disk paths unchanged. - Add ExecuteBeadRuntime.Blobs (injectable, defaults to LocalFSBlob); all per-attempt evidence writes (prompt.md, manifest.json, result.json, usage.json) in execute_bead.go route through wtBlobStore / rootBlobStore. - Multi-blob write discipline: non-manifest blobs written first, manifest written last; enforced by TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure. - executions_mirror.go unchanged; AppendMirrorIndex doc comment cites FEAT-028 StreamStore deferral. Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e EOF )\"' \u0026\u0026 pwd -P \u003e| /tmp/claude-da81-cwd"
+    },
+    {
+      "pid": 872583,
+      "ppid": 406427,
+      "pgid": 872583,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/home/erik/.local/bin/claude --permission-mode bypassPermissions --settings {\"hooks\":{\"PostToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3810921553\\\"/tool-$(date +%s%N)-post.json\"}]}],\"PreToolUse\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"cat \\u003e \\\"/tmp/claude-tui-hooks-3810921553\\\"/tool-$(date +%s%N)-pre.json\"}]}],\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"p=$(cat); t=$(printf '%s' \\\"$p\\\" | sed -n 's/.*\\\"transcript_path\\\"[ ]*:[ ]*\\\"\\\\([^\\\"]*\\\\)\\\".*/\\\\1/p'); printf '{\\\"nonce\\\":\\\"df30c995e7b8a222d0fc33cd5dd3f3be\\\",\\\"transcript_path\\\":\\\"%s\\\"}' \\\"$t\\\" \\u003e \\\"/tmp/claude-tui-hooks-3810921553/stop-hook-payload.json\\\"\"}]}]}} --model sonnet"
+    }
+  ],
+  "killed": [
+    {
+      "pid": 1192733,
+      "ppid": 1192514,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli/internal/agent",
+      "command": "/home/erik/.cache/fleet-tmp/go/go-build3433505683/b001/agent.test -test.testlogfile=/home/erik/.cache/fleet-tmp/go/go-build3433505683/b001/testlog.txt -test.paniconexit0 -test.short=true -test.timeout=30m0s"
+    },
+    {
+      "pid": 1192514,
+      "ppid": 1192496,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli",
+      "command": "/home/linuxbrew/.linuxbrew/bin/go test -short -race -timeout 30m ./internal/agent"
+    },
+    {
+      "pid": 1192496,
+      "ppid": 1192495,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli",
+      "command": "sh ../scripts/lefthook-go-test.sh ./internal/agent/execute_bead.go ./internal/agent/execute_bead_artifacts_test.go ./internal/agent/execute_bead_blob.go ./internal/agent/executions_mirror.go ./internal/bead/attachments.go ./internal/bead/store.go ./internal/blob/blob.go ./internal/blob/conformance_test.go ./internal/blob/localfs.go ./internal/blob/memory.go"
+    },
+    {
+      "pid": 1192495,
+      "ppid": 1191115,
+      "pgid": 1192495,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/cli",
+      "command": "sh -c sh ../scripts/lefthook-go-test.sh ./internal/agent/execute_bead.go ./internal/agent/execute_bead_artifacts_test.go ./internal/agent/execute_bead_blob.go ./internal/agent/executions_mirror.go ./internal/bead/attachments.go ./internal/bead/store.go ./internal/blob/blob.go ./internal/blob/conformance_test.go ./internal/blob/localfs.go ./internal/blob/memory.go"
+    },
+    {
+      "pid": 1191115,
+      "ppid": 1191109,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "lefthook run pre-commit"
+    },
+    {
+      "pid": 1191109,
+      "ppid": 1191068,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/sh /Users/erik/Projects/ddx/.git/hooks/pre-commit"
+    },
+    {
+      "pid": 1213327,
+      "ppid": 1212040,
+      "pgid": 1212040,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "sleep 2"
+    },
+    {
+      "pid": 1212984,
+      "ppid": 1212970,
+      "pgid": 1212970,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "ugrep -G --ignore-files --hidden -I --exclude-dir=.git --exclude-dir=.svn --exclude-dir=.hg --exclude-dir=.bzr --exclude-dir=.jj --exclude-dir=.sl -E --line-buffered summary:|PASS|FAIL|error|feat\\(|master|HEAD"
+    },
+    {
+      "pid": 1212983,
+      "ppid": 1212970,
+      "pgid": 1212970,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "tail -f /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output"
+    },
+    {
+      "pid": 1191068,
+      "ppid": 1191057,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "git commit -m feat(storage): define BlobStore interface and migrate attachment/evidence writes [ddx-8e54a916] - Add cli/internal/blob/ with Store interface, LocalFSBlob (atomic Put via temp+fsync+rename using os.CreateTemp for concurrent-safe unique temps), MemoryBlob, and shared conformance test suite covering all operations. - Wire bead.Store.Blobs (blob.Store) into NewStore; readEventsAttachment and writeEventsAttachment route through BlobStore; on-disk paths unchanged. - Add ExecuteBeadRuntime.Blobs (injectable, defaults to LocalFSBlob); all per-attempt evidence writes (prompt.md, manifest.json, result.json, usage.json) in execute_bead.go route through wtBlobStore / rootBlobStore. - Multi-blob write discipline: non-manifest blobs written first, manifest written last; enforced by TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure. - executions_mirror.go unchanged; AppendMirrorIndex doc comment cites FEAT-028 StreamStore deferral. Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e"
+    },
+    {
+      "pid": 1212970,
+      "ppid": 872583,
+      "pgid": 1212970,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781934098793-t6ynwk.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'tail -f /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output 2\u003e\u00261 | grep -E --line-buffered \"summary:|PASS|FAIL|error|feat\\(|master|HEAD\"' \u003c /dev/null \u0026\u0026 pwd -P \u003e| /tmp/claude-205f-cwd"
+    },
+    {
+      "pid": 1212040,
+      "ppid": 872583,
+      "pgid": 1212040,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781934098793-t6ynwk.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'until [ $(wc -l \u003c /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output) -gt 35 ]; do sleep 2; done; echo \"output updated: $(wc -l \u003c /tmp/claude-501/-Users-erik-Projects--ddx-exec-wt--execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f/715d522a-5068-4399-84eb-0e8f93e4db82/tasks/b97ltntvm.output) lines\"' \u0026\u0026 pwd -P \u003e| /tmp/claude-a734-cwd"
+    },
+    {
+      "pid": 1191057,
+      "ppid": 872583,
+      "pgid": 1191057,
+      "cwd": "/Users/erik/Projects/.ddx-exec-wt/.execute-bead-wt-ddx-8e54a916-20260620T054111-896ec06f",
+      "command": "/bin/zsh -c source /home/erik/.claude/shell-snapshots/snapshot-zsh-1781934098793-t6ynwk.sh 2\u003e/dev/null || true \u0026\u0026 setopt NO_EXTENDED_GLOB NO_BARE_GLOB_QUAL 2\u003e/dev/null || true \u0026\u0026 eval 'git commit -m \"$(cat \u003c\u003c'\"'\"'EOF'\"'\"' feat(storage): define BlobStore interface and migrate attachment/evidence writes [ddx-8e54a916] - Add cli/internal/blob/ with Store interface, LocalFSBlob (atomic Put via temp+fsync+rename using os.CreateTemp for concurrent-safe unique temps), MemoryBlob, and shared conformance test suite covering all operations. - Wire bead.Store.Blobs (blob.Store) into NewStore; readEventsAttachment and writeEventsAttachment route through BlobStore; on-disk paths unchanged. - Add ExecuteBeadRuntime.Blobs (injectable, defaults to LocalFSBlob); all per-attempt evidence writes (prompt.md, manifest.json, result.json, usage.json) in execute_bead.go route through wtBlobStore / rootBlobStore. - Multi-blob write discipline: non-manifest blobs written first, manifest written last; enforced by TestPrepareArtifacts_ManifestNotWrittenOnPromptPutFailure. - executions_mirror.go unchanged; AppendMirrorIndex doc comment cites FEAT-028 StreamStore deferral. Co-Authored-By: Claude Sonnet 4.6 \u003cnoreply@anthropic.com\u003e EOF )\"' \u0026\u0026 pwd -P \u003e| /tmp/claude-da81-cwd"
+    }
+  ],
+  "still_alive": [
+    {
+      "pid": 872583,
+      "ppid": 406427,
+      "pgid": 872583,
+      "command": "[claude] \u003cdefunct\u003e"
+    }
+  ]
+}
