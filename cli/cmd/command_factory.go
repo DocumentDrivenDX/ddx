@@ -623,6 +623,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
 	rootCmd.AddCommand(f.newRunCommand())
+	rootCmd.AddCommand(f.newRunsCommand())
 	rootCmd.AddCommand(f.newWorkCommand())
 	rootCmd.AddCommand(f.newWorkerCommand())
 	rootCmd.AddCommand(f.newTryCommand())
