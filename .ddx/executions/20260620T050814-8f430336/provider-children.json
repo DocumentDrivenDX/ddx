@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260620T050814-8f430336",
+  "bead_id": "ddx-331be3ca",
+  "trigger": "attempt_ended",
+  "scanned_at": "2026-06-20T05:17:56.111287172Z",
+  "reaped": [
+    {
+      "pid": 547693,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 21,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 641379,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 647629,
+      "provider": "codex",
+      "command": "/home/linuxbrew/.linuxbrew/bin/codex --no-alt-screen",
+      "age_seconds": 0,
+      "action": "terminated",
+      "reason": "running_phase_non_route_provider_child"
+    },
+    {
+      "pid": 548943,
+      "provider": "claude",
+      "command": "[claude] \u003cdefunct\u003e",
+      "age_seconds": 561,
+      "action": "terminated",
+      "reason": "defunct_provider_child"
+    }
+  ]
+}
