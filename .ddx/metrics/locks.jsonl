@@ -3330,3 +3330,6 @@
 {"event":"release","lock_name":"index.lock","operation":"index.add","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.326542849Z","released_at":"2026-06-18T01:01:28.369182267Z","duration_ms":42}
 {"event":"acquire","lock_name":"index.lock","operation":"index.commit","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.386773685Z"}
 {"event":"release","lock_name":"index.lock","operation":"index.commit","holder_pid":241814,"acquired_at":"2026-06-18T01:01:28.386773685Z","released_at":"2026-06-18T01:01:28.497445943Z","duration_ms":110}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1128,"acquired_at":"2026-06-20T03:54:57.797832603Z"}
+{"event":"release","lock_name":"tracker.lock","operation":"pre_dispatch_commits","holder_pid":1128,"acquired_at":"2026-06-20T03:54:57.797832603Z","released_at":"2026-06-20T03:54:57.818375424Z","duration_ms":20}
+{"event":"acquire","lock_name":"tracker.lock","operation":"pre_dispatch_checkpoint","holder_pid":1128,"acquired_at":"2026-06-20T03:54:57.824180957Z"}
