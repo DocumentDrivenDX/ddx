@@ -33,7 +33,7 @@ jobs:
     env:
       GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
       with:
         fetch-depth: 0  # Full history for comprehensive scanning
     
@@ -76,7 +76,7 @@ jobs:
       run:
         working-directory: cli
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -152,7 +152,7 @@ jobs:
     name: Static Analysis Security Testing
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     
     - name: Set up Go
       uses: actions/setup-go@v5
