@@ -98,7 +98,7 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 		return nil
 	}
 
-	statusArgs := []string{"status", "--short", "--untracked-files=all", "--"}
+	statusArgs := []string{"status", "--short", "--untracked-files=all", "--ignored", "--"}
 	statusArgs = append(statusArgs, managedPathspecs...)
 	statusOut, err := runDurableAuditGit(gitDir, statusArgs...)
 	if err != nil {
@@ -109,7 +109,7 @@ func commitDurableAuditOutputsLocked(projectRoot, attemptID string) error {
 		return nil
 	}
 
-	addArgs := []string{"add", "-A", "--"}
+	addArgs := []string{"add", "-f", "-A", "--"}
 	addArgs = append(addArgs, dirtyPaths...)
 	addOut, err := runDurableAuditGitWithIndexLockRecovery(gitDir, addArgs...)
 	if err != nil {

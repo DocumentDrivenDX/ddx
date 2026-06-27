@@ -36,6 +36,65 @@ func TestDirtyDurableAuditPathsPreservesLeadingDotForTrackedFiles(t *testing.T) 
 	}, dirtyDurableAuditPaths(status))
 }
 
+func TestCommitDurableAuditOutputsForceStagesIgnoredManagedPaths(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	// Commit initial state with .gitignore that ignores DDx-managed audit dirs.
+	gitignore := ".ddx/metrics/\n.ddx/attachments/\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(gitignore), 0o644))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed with ignore rules")
+
+	// Write managed audit files that are now ignored by .gitignore.
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("{\"attempt_id\":\"test\"}\n"), 0o644))
+	attDir := filepath.Join(ddxDir, "attachments", "ddx-test")
+	require.NoError(t, os.MkdirAll(attDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(attDir, "events.jsonl"), []byte("{\"event\":\"close\"}\n"), 0o644))
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260627T000000-force-stage"))
+
+	// Managed ignored files must be committed (status clean).
+	metricsStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", ".ddx/metrics/attempts.jsonl")
+	assert.Empty(t, metricsStatus, "managed ignored metrics file must be committed")
+	attStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", ".ddx/attachments")
+	assert.Empty(t, attStatus, "managed ignored attachments must be committed")
+
+	subject := runGitInteg(t, projectRoot, "log", "-1", "--pretty=%s")
+	assert.Equal(t, "chore: update tracker (execute-bead 20260627T000000-force-stage)", subject)
+}
+
+func TestCommitDurableAuditOutputsDoesNotForceStageUnmanagedIgnoredFiles(t *testing.T) {
+	projectRoot := newDurableAuditProject(t)
+	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
+
+	// .gitignore ignores both a managed path and an unmanaged path.
+	gitignore := ".ddx/metrics/\nunmanaged-ignored.txt\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(gitignore), 0o644))
+	runGitInteg(t, projectRoot, "add", ".")
+	runGitInteg(t, projectRoot, "commit", "-m", "chore: seed with ignore rules")
+
+	// Create the ignored managed file and an unrelated ignored file.
+	metricsDir := filepath.Join(ddxDir, "metrics")
+	require.NoError(t, os.MkdirAll(metricsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(metricsDir, "attempts.jsonl"), []byte("{\"attempt_id\":\"test\"}\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "unmanaged-ignored.txt"), []byte("secret\n"), 0o644))
+
+	require.NoError(t, CommitDurableAuditOutputs(projectRoot, "20260627T000001-no-unmanaged"))
+
+	// The managed file must be committed.
+	managedStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", ".ddx/metrics/attempts.jsonl")
+	assert.Empty(t, managedStatus, "managed ignored file must be committed")
+
+	// The unmanaged file must NOT be staged or committed.
+	unmanagedStatus := runGitInteg(t, projectRoot, "status", "--short", "--ignored", "--", "unmanaged-ignored.txt")
+	assert.NotEmpty(t, unmanagedStatus, "unmanaged ignored file must remain uncommitted")
+	headFiles := runGitInteg(t, projectRoot, "show", "--name-only", "--pretty=format:", "HEAD")
+	assert.NotContains(t, headFiles, "unmanaged-ignored.txt", "unmanaged ignored file must not appear in the commit")
+}
+
 func TestCommitDurableAuditOutputsPreservesLeadingDotForUnstagedTrackedPaths(t *testing.T) {
 	projectRoot := newDurableAuditProject(t)
 	ddxDir := filepath.Join(projectRoot, ddxroot.DirName)
