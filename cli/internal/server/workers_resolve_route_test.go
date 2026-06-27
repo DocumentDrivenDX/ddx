@@ -143,6 +143,10 @@ library:
     branch: "main"
 `), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(""), 0o644))
+
+	skillPath := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(skillPath), 0o755))
+	require.NoError(t, os.WriteFile(skillPath, []byte("---\nname: bead-lifecycle\ndescription: test fixture marker\n---\n"), 0o644))
 	return root
 }
 
