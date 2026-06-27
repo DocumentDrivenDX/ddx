@@ -118,6 +118,9 @@ func applyLivenessRecord(worker *LiveWorker, rec LivenessRecord) {
 	if len(worker.ProviderChildren) == 0 && len(rec.ProviderChildren) > 0 {
 		worker.ProviderChildren = rec.ProviderChildren
 	}
+	if worker.StaleMonitorShells == 0 && rec.StaleMonitorShells > 0 {
+		worker.StaleMonitorShells = rec.StaleMonitorShells
+	}
 	if worker.LastActivityAt.IsZero() && !rec.LastActivityAt.IsZero() {
 		worker.LastActivityAt = rec.LastActivityAt.UTC()
 	}

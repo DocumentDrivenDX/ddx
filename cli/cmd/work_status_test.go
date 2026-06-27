@@ -749,3 +749,49 @@ func TestWorkStatusMarksNodeWrappedGeminiNonRoute(t *testing.T) {
 	assert.Contains(t, out, "non_route")
 	assert.Contains(t, out, "diagnostic")
 }
+
+// TestWorkStatusSurfacesStaleAttemptChildren proves that `ddx work status --json`
+// includes stale_monitor_shells counts from the liveness sidecar, so an operator
+// can detect that the monitor shell guard has cleaned self-matching pgrep loops
+// during the active attempt.
+func TestWorkStatusSurfacesStaleAttemptChildren(t *testing.T) {
+	projectRoot := t.TempDir()
+	procStartedAt := time.Now().Add(-2 * time.Minute).UTC()
+	const pid = 4488
+
+	scannerWorkers := []workerstatus.LiveWorker{{
+		PID:         pid,
+		Command:     "ddx work --watch --project " + projectRoot,
+		ProjectRoot: projectRoot,
+		StartedAt:   procStartedAt,
+		Age:         "2m",
+		AgeSeconds:  120,
+	}}
+	require.NoError(t, workerstatus.WriteLiveness(projectRoot, "worker-stale-monitors", workerstatus.LivenessRecord{
+		WorkerID:           "worker-stale-monitors",
+		ProjectRoot:        projectRoot,
+		CurrentBead:        "ddx-sm000001",
+		AttemptID:          "20260614T023220-stale01",
+		Phase:              "running",
+		PID:                pid,
+		StartedAt:          procStartedAt,
+		StaleMonitorShells: 2,
+		LastActivityAt:     time.Now().UTC(),
+	}))
+
+	factory := NewCommandFactory(projectRoot)
+	factory.workerScannerOverride = fixedScanner{workers: scannerWorkers}
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "work", "status", "--project", projectRoot, "--json")
+	require.NoError(t, err)
+
+	var report WorkStatusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+	require.Len(t, report.Workers, 1)
+	w := report.Workers[0]
+	assert.Equal(t, 2, w.StaleMonitorShells,
+		"stale_monitor_shells must be surfaced in work status JSON; got %s", out)
+	assert.Contains(t, out, "stale_monitor_shells",
+		"JSON must include stale_monitor_shells key")
+}
