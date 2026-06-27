@@ -195,6 +195,50 @@ func TestWorkFocusRecommendsWorkerForDeepReadyQueue(t *testing.T) {
 		"worker recommendation must suggest 'ddx work' for deep ready queue")
 }
 
+// TestWorkFocusDirtyProjectRootSuppressesWorkerRecommendation verifies that a
+// dirty tracked project root suppresses the worker-start suggestion and
+// surfaces the dirty paths in an operator-visible field.
+func TestWorkFocusDirtyProjectRootSuppressesWorkerRecommendation(t *testing.T) {
+	var beads []*bead.Bead
+	for i := 0; i < 4; i++ {
+		beads = append(beads, &bead.Bead{
+			ID:    "ddx-focus-dirty-" + string(rune('a'+i)),
+			Title: "Dirty queue bead",
+		})
+	}
+
+	env := setupWorkFocusEnv(t, beads...)
+	env.CreateFile("README.md", "# tracked README\n")
+	env.CreateFile("src/main.go", "package main\n\nfunc main() {}\n")
+	gitAddAndCommit(t, env.Dir, "seed tracked root files", "README.md", "src/main.go")
+	env.CreateFile("README.md", "# tracked README\n\nlocal edit\n")
+	env.CreateFile("src/main.go", "package main\n\nfunc main() { println(\"dirty\") }\n")
+
+	root := NewCommandFactory(env.Dir).NewRootCommand()
+	out, err := executeCommand(root, "work", "focus", "--json")
+	require.NoError(t, err)
+
+	var report WorkFocusReport
+	require.NoError(t, json.Unmarshal([]byte(out), &report))
+
+	assert.Equal(t, 4, report.ReadySummary.Count)
+	assert.Equal(t, "deep", report.ReadySummary.Depth)
+	assert.NotContains(t, report.WorkerRecommendation, "consider running: ddx work")
+	assert.NotContains(t, report.WorkerRecommendation, "run 'ddx work' to process.")
+	assert.Contains(t, report.WorkerRecommendation, "resolve/commit/stash")
+	assert.Contains(t, report.WorkerRecommendation, "README.md")
+	assert.Contains(t, report.WorkerRecommendation, "src/main.go")
+
+	require.NotEmpty(t, report.Unknowns, "dirty tracked paths must be visible to operators")
+	var foundDirty bool
+	for _, u := range report.Unknowns {
+		if strings.Contains(u, "README.md") && strings.Contains(u, "src/main.go") {
+			foundDirty = true
+		}
+	}
+	assert.True(t, foundDirty, "unknowns must include the dirty tracked paths")
+}
+
 // TestWorkFocusEmptyQueueExitsSuccessfully verifies AC1: ddx work focus is
 // read-only and exits successfully on an empty queue.
 func TestWorkFocusEmptyQueueExitsSuccessfully(t *testing.T) {

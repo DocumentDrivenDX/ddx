@@ -3,10 +3,12 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/activework"
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
@@ -144,6 +146,10 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 		Depth: workerReadyDepthLabel(readyCount),
 	}
 
+	// Surface the canonical project-root dirty state so focus suppresses
+	// the worker-start recommendation when autonomous work would churn.
+	dirtyTrackedPaths := normalizeWorkFocusDirtyPaths(agent.CanonicalRootDirtyPaths(projectRoot))
+
 	// Observe in_progress beads as a capacity signal.
 	inProgressBeads, err := store.List(bead.StatusInProgress, "", nil)
 	if err != nil {
@@ -162,12 +168,19 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 
 	// Conservative worker recommendation. Treat fresh active work as the
 	// capacity signal rather than the raw lifecycle count.
-	workerRec := buildWorkerRecommendation(readyCount, activeWork.Count)
+	workerRec := buildWorkerRecommendation(readyCount, activeWork.Count, dirtyTrackedPaths)
 
 	// Unknowns: worker process liveness is not verifiable from the bead store
 	// alone; only add the hazard when we have in-progress beads but the only
-	// active evidence is a claim heartbeat.
+	// active evidence is a claim heartbeat. Project-root dirtiness is also
+	// reported here so operators can see why worker-start is suppressed.
 	var unknowns []string
+	if len(dirtyTrackedPaths) > 0 {
+		unknowns = append(unknowns, fmt.Sprintf(
+			"project root has uncommitted tracked changes: %s",
+			strings.Join(dirtyTrackedPaths, ", "),
+		))
+	}
 	hasNonClaimActive := false
 	for _, rec := range activeWork.Records {
 		if rec.Source != "claim" {
@@ -194,8 +207,15 @@ func buildWorkFocusReport(store *bead.Store, projectRoot string) (WorkFocusRepor
 }
 
 // buildWorkerRecommendation returns a conservative recommendation string.
-// It suggests another worker only when ready depth is high and capacity is observable.
-func buildWorkerRecommendation(readyCount, activeCount int) string {
+// It suggests another worker only when ready depth is high, capacity is
+// observable, and the project root is clean.
+func buildWorkerRecommendation(readyCount, activeCount int, dirtyTrackedPaths []string) string {
+	if len(dirtyTrackedPaths) > 0 {
+		return fmt.Sprintf(
+			"Project root has uncommitted tracked changes (%s); resolve/commit/stash them before starting a worker.",
+			strings.Join(dirtyTrackedPaths, ", "),
+		)
+	}
 	switch {
 	case readyCount == 0:
 		return "Queue is empty; no worker action needed."
@@ -215,6 +235,30 @@ func buildWorkerRecommendation(readyCount, activeCount int) string {
 			readyCount,
 		)
 	}
+}
+
+func normalizeWorkFocusDirtyPaths(paths []string) []string {
+	if len(paths) == 0 {
+		return nil
+	}
+	uniq := make(map[string]struct{}, len(paths))
+	normalized := make([]string, 0, len(paths))
+	for _, path := range paths {
+		path = strings.TrimSpace(path)
+		if path == "" {
+			continue
+		}
+		if _, ok := uniq[path]; ok {
+			continue
+		}
+		uniq[path] = struct{}{}
+		normalized = append(normalized, path)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	sort.Strings(normalized)
+	return normalized
 }
 
 func (f *CommandFactory) newWorkFocusCommand() *cobra.Command {
