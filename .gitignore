@@ -431,6 +431,7 @@ cli/internal/agent/.ddx/
 .ddx/hooks/
 .ddx/run-state.json
 .ddx/run-state/
+.ddx/dirty-root-guard.json
 .ddx/exec-runs.d/
 .ddx/tsnet/
 .helix-logs/

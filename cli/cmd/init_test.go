@@ -675,6 +675,7 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, ".ddx/server/", ".ddx/server/ must be ignored")
 	assert.Contains(t, content, ".ddx/run-state.json", ".ddx/run-state.json must be ignored")
 	assert.Contains(t, content, ".ddx/run-state/", ".ddx/run-state/ must be ignored")
+	assert.Contains(t, content, ".ddx/dirty-root-guard.json", ".ddx/dirty-root-guard.json must be ignored")
 	assert.Contains(t, content, ".ddx/executions/*/embedded/", "embedded runtime state must be ignored")
 
 	// Execution evidence must be explicitly un-ignored
@@ -682,6 +683,7 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, "!.ddx/executions/*/prompt.md", "prompt.md must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/manifest.json", "manifest.json must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/result.json", "result.json must be un-ignored")
+	assert.Contains(t, content, "!.ddx/executions/*/checks.json", "checks.json must be un-ignored")
 	assert.Contains(t, content, "!.ddx/executions/*/usage.json", "usage.json must be un-ignored")
 
 	// Verify with git check-ignore that a concrete evidence file is NOT ignored
@@ -709,6 +711,11 @@ func TestInitGitignoreRules(t *testing.T) {
 	err = checkIgnoreUsage.Run()
 	// exit code 1 means NOT ignored — that's what we want
 	assert.Error(t, err, ".ddx/executions/abc123/usage.json must NOT be ignored by git")
+
+	checkIgnoreDirtyRootGuard := exec.Command("git", "check-ignore", "-q", ".ddx/dirty-root-guard.json")
+	checkIgnoreDirtyRootGuard.Dir = te.Dir
+	err = checkIgnoreDirtyRootGuard.Run()
+	assert.NoError(t, err, ".ddx/dirty-root-guard.json must be ignored by git")
 }
 
 func TestInitGitignoreRunStateMigration(t *testing.T) {
