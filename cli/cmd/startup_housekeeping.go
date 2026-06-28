@@ -39,6 +39,8 @@ type executionRetentionPolicy struct {
 type startupHousekeepingReport struct {
 	ProjectRoot string
 	TempRoot    string
+	runStates   []agent.RunState
+	registered  map[string]struct{}
 
 	StaleWorktrees     int64
 	StaleWorkerDirs    int64
@@ -60,6 +62,7 @@ type startupHousekeepingRunner struct {
 	workerDirMaxAge time.Duration
 	now             func() time.Time
 	retentionPolicy executionRetentionPolicy
+	processCleanup  startupProcessCleanupFunc
 }
 
 func newStartupHousekeepingRunner(projectRoot string) *startupHousekeepingRunner {
@@ -69,6 +72,7 @@ func newStartupHousekeepingRunner(projectRoot string) *startupHousekeepingRunner
 		worktreeMaxAge:  worktreeReapMaxAgeFromEnv(),
 		workerDirMaxAge: defaultWorkerDirStaleAge,
 		retentionPolicy: resolveExecutionRetentionPolicy(projectRoot),
+		processCleanup:  defaultStartupProcessCleanup,
 	}
 }
 
@@ -83,7 +87,7 @@ func (r *startupHousekeepingRunner) Cleanup(ctx context.Context) (agent.Executio
 			TempRoot:    r.tempRoot,
 		}, err
 	}
-	return agent.ExecutionCleanupSummary{
+	summary := agent.ExecutionCleanupSummary{
 		ProjectRoot:                 report.ProjectRoot,
 		TempRoot:                    report.TempRoot,
 		RemovedRegisteredWorktrees:  report.RemovedRegisteredWorktrees,
@@ -91,7 +95,17 @@ func (r *startupHousekeepingRunner) Cleanup(ctx context.Context) (agent.Executio
 		RemovedWorkerDirs:           report.RemovedWorkerDirs,
 		RemovedEvidenceDirs:         report.ArchivedExecutionDirs + report.DeletedExecutionDirs,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), report.Warnings...),
-	}, nil
+	}
+	if r.processCleanup != nil {
+		now := time.Now().UTC()
+		if r.now != nil {
+			now = r.now()
+		}
+		if procErr := r.processCleanup(ctx, report.ProjectRoot, report.TempRoot, &summary, report.runStates, report.registered, now); procErr != nil {
+			return summary, procErr
+		}
+	}
+	return summary, nil
 }
 
 func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (startupHousekeepingReport, error) {
@@ -114,6 +128,7 @@ func (r *startupHousekeepingRunner) scan(ctx context.Context, apply bool) (start
 	if err != nil {
 		return report, err
 	}
+	report.runStates = append([]agent.RunState(nil), runStates...)
 	if err := r.scanWorktrees(ctx, now, runStates, apply, &report); err != nil {
 		return report, err
 	}
@@ -149,6 +164,7 @@ func (r *startupHousekeepingRunner) scanWorktrees(ctx context.Context, now time.
 			registered[filepath.Clean(path)] = struct{}{}
 		}
 	}
+	report.registered = registered
 
 	for _, entry := range entries {
 		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), agent.ExecuteBeadWtPrefix) {

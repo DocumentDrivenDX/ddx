@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -36,6 +37,23 @@ func (f *fakeExecutionCleanupAttemptProcessKiller) KillGroup(pgid int) error {
 	}
 	f.killed = append(f.killed, pgid)
 	return nil
+}
+
+type cleanupProcessSidecarProbe struct {
+	sidecarAttempts map[string]struct{}
+}
+
+func (p cleanupProcessSidecarProbe) IsLive(meta ExecutionCleanupMetadata, runState *RunState, now time.Time) (bool, string) {
+	live, reason := defaultExecutionCleanupLivenessProbe{}.IsLive(meta, runState, now)
+	if live {
+		return true, reason
+	}
+	if meta.AttemptID != "" {
+		if _, ok := p.sidecarAttempts[meta.AttemptID]; ok {
+			return true, "live worker sidecar"
+		}
+	}
+	return false, reason
 }
 
 func TestExecutionCleanupManager_DryRunReportsStaleAttemptDescendantProcesses(t *testing.T) {
@@ -344,4 +362,111 @@ func TestExecutionCleanupManager_DetectsNonHarnessDescendantByOwnershipEvidence(
 	for _, f := range summary.ProcessFindings {
 		assert.NotEqual(t, 8001, f.PID, "harness-named process outside DDx worktree must not be reported")
 	}
+}
+
+func TestWorkStartupCleanup_PreservesUnsafeAttemptProcessesAndEmitsObservation(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	now := time.Date(2026, 6, 28, 12, 0, 0, 0, time.UTC)
+
+	liveRunStatePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-live-runstate-20260628T120000-feedface")
+	liveSidecarPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-live-sidecar-20260628T120000-c0ffee00")
+	registeredPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-registered-20260628T120000-baadf00d")
+	foreignPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-foreign-20260628T120000-deadbeef")
+	uncertainPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-uncertain-20260628T120000-1234abcd")
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-20260628T120000-00112233")
+
+	writeExecutionCleanupCandidate(t, liveRunStatePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-live-runstate",
+		AttemptID:    "20260628T120000-feedface",
+		WorktreePath: liveRunStatePath,
+	}, nil)
+	writeExecutionCleanupCandidate(t, liveSidecarPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-live-sidecar",
+		AttemptID:    "20260628T120000-c0ffee00",
+		WorktreePath: liveSidecarPath,
+	}, nil)
+	writeExecutionCleanupCandidate(t, registeredPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-registered",
+		AttemptID:    "20260628T120000-baadf00d",
+		WorktreePath: registeredPath,
+	}, nil)
+	writeExecutionCleanupCandidate(t, foreignPath, ExecutionCleanupMetadata{
+		ProjectRoot:  "/non-temp/foreign-project",
+		BeadID:       "ddx-foreign",
+		AttemptID:    "20260628T120000-deadbeef",
+		WorktreePath: foreignPath,
+	}, nil)
+	writeExecutionCleanupCandidateWithoutMetadata(t, uncertainPath, nil)
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-stale",
+		AttemptID:    "20260628T120000-00112233",
+		WorktreePath: stalePath,
+	}, nil)
+
+	killer := &fakeExecutionCleanupAttemptProcessKiller{}
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{worktrees: []string{registeredPath}})
+	mgr.TempRoot = tempRoot
+	mgr.Now = func() time.Time { return now }
+	mgr.attemptProcessScanner = fakeExecutionCleanupAttemptProcessScanner{
+		processes: []executionCleanupAttemptProcess{
+			{PID: 1001, PPID: 1, PGID: 1001, Command: "sh -lc cargo test", Cwd: stalePath, Worktree: stalePath, StartedAt: now.Add(-2 * time.Hour)},
+			{PID: 2001, PPID: 1, PGID: 2001, Command: "bash -lc sleep 60", Cwd: liveRunStatePath, Worktree: liveRunStatePath, StartedAt: now.Add(-10 * time.Minute)},
+			{PID: 3001, PPID: 1, PGID: 3001, Command: "python -m http.server", Cwd: liveSidecarPath, Worktree: liveSidecarPath, StartedAt: now.Add(-10 * time.Minute)},
+			{PID: 4001, PPID: 1, PGID: 4001, Command: "node server.js", Cwd: registeredPath, Worktree: registeredPath, StartedAt: now.Add(-10 * time.Minute)},
+			{PID: 5001, PPID: 1, PGID: 5001, Command: "ruby task.rb", Cwd: foreignPath, Worktree: foreignPath, StartedAt: now.Add(-10 * time.Minute)},
+			{PID: 6001, PPID: 1, PGID: 6001, Command: "perl worker.pl", Cwd: uncertainPath, Worktree: uncertainPath, StartedAt: now.Add(-10 * time.Minute)},
+		},
+	}
+	mgr.attemptProcessKiller = killer
+
+	summary := ExecutionCleanupSummary{ProjectRoot: projectRoot, TempRoot: tempRoot}
+	runStates := []RunState{
+		{
+			BeadID:       "ddx-live-runstate",
+			AttemptID:    "20260628T120000-feedface",
+			StartedAt:    now.Add(-5 * time.Minute),
+			WorktreePath: liveRunStatePath,
+			PID:          9999,
+		},
+	}
+
+	err := mgr.CleanupAttemptProcesses(context.Background(), &summary, runStates, map[string]struct{}{filepath.Clean(registeredPath): {}}, cleanupProcessSidecarProbe{
+		sidecarAttempts: map[string]struct{}{
+			"20260628T120000-c0ffee00": {},
+		},
+	}, now)
+	require.NoError(t, err)
+
+	require.Len(t, summary.ProcessFindings, 1)
+	finding := summary.ProcessFindings[0]
+	assert.Equal(t, stalePath, finding.Worktree)
+	assert.True(t, finding.WouldKill)
+	assert.True(t, finding.Terminated)
+	assert.Equal(t, []int{1001}, killer.killed)
+
+	require.NotEmpty(t, summary.Observations)
+	assert.True(t, hasObservationClass(summary.Observations, "reaped_stale_attempt_process"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_registered_worktree_process"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_foreign_project_process"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_uncertain_attempt_process"))
+
+	var sawLiveRunState, sawLiveSidecar bool
+	for _, obs := range summary.Observations {
+		if obs.Class != "preserved_live_attempt_process" {
+			continue
+		}
+		if strings.Contains(obs.Message, "matched live run-state") {
+			sawLiveRunState = true
+		}
+		if strings.Contains(obs.Message, "live worker sidecar") {
+			sawLiveSidecar = true
+		}
+	}
+	assert.True(t, sawLiveRunState, "live run-state must be preserved")
+	assert.True(t, sawLiveSidecar, "live worker sidecar must be preserved")
 }

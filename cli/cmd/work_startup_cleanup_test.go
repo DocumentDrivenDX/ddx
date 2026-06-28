@@ -3,14 +3,19 @@ package cmd
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/ddxroot"
 	"github.com/DocumentDrivenDX/ddx/internal/workerstatus"
 	"github.com/stretchr/testify/assert"
@@ -112,6 +117,130 @@ func TestWorkStartup_ReapsStaleWorkerDirs(t *testing.T) {
 	assert.NoDirExists(t, filepath.Join(workersDir, deadWorkerID))
 	assert.NoDirExists(t, filepath.Join(workersDir, staleWorkerID))
 	assert.DirExists(t, filepath.Join(workersDir, freshWorkerID))
+}
+
+func TestWorkStartupCleanup_ReapsStaleAttemptDescendantProcessesBeforeClaim(t *testing.T) {
+	projectRoot, _ := setupWorkStartupCleanupProject(t)
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "ddx-startup-claim",
+		Title: "startup cleanup claim",
+	}))
+
+	var cleanupCalls int32
+	runner := newStartupHousekeepingRunner(projectRoot)
+	runner.processCleanup = func(ctx context.Context, projectRoot, tempRoot string, summary *agent.ExecutionCleanupSummary, runStates []agent.RunState, registered map[string]struct{}, now time.Time) error {
+		atomic.AddInt32(&cleanupCalls, 1)
+		summary.ProcessFindings = append(summary.ProcessFindings, agent.ExecutionCleanupProcessFinding{
+			PID:         101,
+			PGID:        101,
+			Worktree:    filepath.Join(tempRoot, "ddx-stale"),
+			StaleReason: "stale liveness",
+			WouldKill:   true,
+			Terminated:  true,
+		})
+		summary.Observations = append(summary.Observations, agent.ExecutionCleanupObservation{
+			Path:    filepath.Join(tempRoot, "ddx-stale"),
+			Class:   "reaped_stale_attempt_process",
+			Message: "stale liveness",
+		})
+		return nil
+	}
+
+	claimGuard := &startupCleanupClaimGuardStore{
+		Store:        store,
+		t:            t,
+		cleanupCalls: &cleanupCalls,
+	}
+	worker := &agent.ExecuteBeadWorker{
+		Store: claimGuard,
+		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			return agent.ExecuteBeadReport{
+				BeadID: beadID,
+				Status: agent.ExecuteBeadStatusExecutionFailed,
+				Detail: "test failure",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker-startup"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{
+		ProjectRoot:   projectRoot,
+		CleanupRunner: runner,
+		CleanupLog:    io.Discard,
+		Once:          true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.GreaterOrEqual(t, atomic.LoadInt32(&cleanupCalls), int32(1))
+}
+
+func TestWorkStartupCleanup_UsesCleanupLockForProcessReaping(t *testing.T) {
+	projectRoot, _ := setupWorkStartupCleanupProject(t)
+	store := bead.NewStore(filepath.Join(projectRoot, ddxroot.DirName))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "ddx-lock-1",
+		Title: "lock one",
+	}))
+	require.NoError(t, store.Create(context.Background(), &bead.Bead{
+		ID:    "ddx-lock-2",
+		Title: "lock two",
+	}))
+
+	blocker := &blockingStartupProcessCleanup{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	runner := newStartupHousekeepingRunner(projectRoot)
+	runner.processCleanup = blocker.Run
+
+	newWorker := func() *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: store,
+			Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusExecutionFailed,
+					Detail: "test failure",
+				}, nil
+			}),
+		}
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker-lock"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	var wg sync.WaitGroup
+	errs := make(chan error, 2)
+	runWorker := func() {
+		defer wg.Done()
+		_, err := newWorker().Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{
+			ProjectRoot:   projectRoot,
+			CleanupRunner: runner,
+			CleanupLog:    io.Discard,
+			Once:          true,
+		})
+		errs <- err
+	}
+
+	wg.Add(2)
+	go runWorker()
+	<-blocker.started
+	go runWorker()
+
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&blocker.calls) >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&blocker.maxActive))
+	time.Sleep(100 * time.Millisecond)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&blocker.calls), "second worker must skip the process pass while the cleanup lock is held")
+
+	close(blocker.release)
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
 }
 
 func TestExecutionsRetention_ArchivesOldEvidence(t *testing.T) {
@@ -245,4 +374,57 @@ func startLongLivedProcess(t *testing.T) *exec.Cmd {
 		_, _ = cmd.Process.Wait()
 	})
 	return cmd
+}
+
+type startupCleanupClaimGuardStore struct {
+	*bead.Store
+	t            *testing.T
+	cleanupCalls *int32
+	readyCalls   int32
+}
+
+func (s *startupCleanupClaimGuardStore) ReadyExecution() ([]bead.Bead, error) {
+	s.t.Helper()
+	if atomic.AddInt32(&s.readyCalls, 1) == 1 && atomic.LoadInt32(s.cleanupCalls) == 0 {
+		s.t.Fatalf("cleanup must run before the first ready claim")
+	}
+	return s.Store.ReadyExecution()
+}
+
+type blockingStartupProcessCleanup struct {
+	started   chan struct{}
+	release   chan struct{}
+	calls     int32
+	active    int32
+	maxActive int32
+}
+
+func (r *blockingStartupProcessCleanup) Run(ctx context.Context, projectRoot, tempRoot string, summary *agent.ExecutionCleanupSummary, runStates []agent.RunState, registered map[string]struct{}, now time.Time) error {
+	_ = projectRoot
+	_ = tempRoot
+	_ = summary
+	_ = runStates
+	_ = registered
+	_ = now
+	atomic.AddInt32(&r.calls, 1)
+	active := atomic.AddInt32(&r.active, 1)
+	for {
+		prev := atomic.LoadInt32(&r.maxActive)
+		if active <= prev || atomic.CompareAndSwapInt32(&r.maxActive, prev, active) {
+			break
+		}
+	}
+	if r.started != nil {
+		select {
+		case <-r.started:
+		default:
+			close(r.started)
+		}
+	}
+	select {
+	case <-ctx.Done():
+	case <-r.release:
+	}
+	atomic.AddInt32(&r.active, -1)
+	return nil
 }

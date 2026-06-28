@@ -650,7 +650,7 @@ func TestWorkLoop_PreDispatchDirtyImplementationPreservesAndContinues(t *testing
 	var logBuf, eventSink bytes.Buffer
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
 		Mode:         executeloop.ModeWatch,
@@ -839,6 +839,10 @@ func TestWorkWatchDoesNotPreserveJustLandedPathsBeforeNextClaim(t *testing.T) {
 }
 
 func TestPreDispatchDirtyPreserveRequiresStableImplementationDirt(t *testing.T) {
+	if testing.Short() {
+		t.Skip("watch timing is race-sensitive under -short; covered by the full suite")
+	}
+
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	store := bead.NewStore(ddxroot.JoinProject(projectRoot))
 

@@ -215,6 +215,14 @@ func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata
 	return false, "stale liveness"
 }
 
+// DefaultExecutionCleanupLiveness applies the same conservative liveness rules
+// as the default cleanup probe. Callers that need to layer extra policy on top
+// of the stock DDx rules can use this helper as the first check in a custom
+// probe.
+func DefaultExecutionCleanupLiveness(meta ExecutionCleanupMetadata, runState *RunState, now time.Time) (bool, string) {
+	return defaultExecutionCleanupLivenessProbe{}.IsLive(meta, runState, now)
+}
+
 // ExecutionCleanupManager owns conservative reclamation of DDx temp execution
 // resources for one project.
 type ExecutionCleanupManager struct {
@@ -329,10 +337,8 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		}
 	}
 
-	if len(runStates) > 0 || len(registered) > 0 {
-		if err := m.cleanupStaleAttemptProcessGroups(ctx, &summary, runStates, registered, probe, now()); err != nil {
-			return summary, err
-		}
+	if err := m.cleanupStaleAttemptProcessGroups(ctx, &summary, runStates, registered, probe, now()); err != nil {
+		return summary, err
 	}
 
 	entries, err := os.ReadDir(summary.TempRoot)

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -54,6 +55,32 @@ func newExecutionCleanupAttemptProcessKiller() executionCleanupAttemptProcessKil
 	return executionCleanupAttemptProcessKillerFunc(killProcessGroup)
 }
 
+// CleanupAttemptProcesses reaps stale attempt-descendant process groups using
+// the same conservative classifier as Cleanup(), but without scanning temp
+// dirs, evidence dirs, or scratch roots.
+func (m *ExecutionCleanupManager) CleanupAttemptProcesses(
+	ctx context.Context,
+	summary *ExecutionCleanupSummary,
+	runStates []RunState,
+	registered map[string]struct{},
+	probe ExecutionCleanupLivenessProbe,
+	now time.Time,
+) error {
+	if m == nil || summary == nil {
+		return nil
+	}
+	if probe == nil {
+		probe = defaultExecutionCleanupLivenessProbe{}
+	}
+	if summary.ProjectRoot == "" {
+		summary.ProjectRoot = m.ProjectRoot
+	}
+	if summary.TempRoot == "" {
+		summary.TempRoot = m.tempRoot()
+	}
+	return m.cleanupStaleAttemptProcessGroups(ctx, summary, runStates, registered, probe, now)
+}
+
 func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
 	ctx context.Context,
 	summary *ExecutionCleanupSummary,
@@ -91,9 +118,19 @@ func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
 			summary.ProcessFindings = append(summary.ProcessFindings, ExecutionCleanupProcessFinding{
 				StaleReason: err.Error(),
 			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    m.ProjectRoot,
+				Class:   "attempt_process_cleanup_unavailable",
+				Message: err.Error(),
+			})
 			return nil
 		}
 		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+			Path:    m.ProjectRoot,
+			Class:   "attempt_process_census",
+			Message: err.Error(),
+		})
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 			Path:    m.ProjectRoot,
 			Class:   "attempt_process_census",
 			Message: err.Error(),
@@ -114,12 +151,26 @@ func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
 				Class:   "attempt_process_classify",
 				Message: err.Error(),
 			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    m.ProjectRoot,
+				Class:   "preserved_uncertain_attempt_process",
+				Message: err.Error(),
+			})
 			continue
 		}
 		if !stale {
 			continue
 		}
 		finding.WouldKill = true
+		observation := ExecutionCleanupObservation{
+			Path:    finding.Worktree,
+			Message: finding.StaleReason,
+		}
+		if m.DryRun {
+			observation.Class = "would_reap_stale_attempt_process"
+		} else {
+			observation.Class = "reaped_stale_attempt_process"
+		}
 		if !m.DryRun {
 			killer := m.attemptProcessKiller
 			if killer == nil {
@@ -132,13 +183,17 @@ func (m *ExecutionCleanupManager) cleanupStaleAttemptProcessGroups(
 						Class:   "attempt_process_kill",
 						Message: killErr.Error(),
 					})
+					observation.Class = "cannot_reap_stale_attempt_process"
+					observation.Message = killErr.Error()
 					summary.ProcessFindings = append(summary.ProcessFindings, finding)
+					summary.Observations = append(summary.Observations, observation)
 					continue
 				}
 			}
 			finding.Terminated = true
 		}
 		summary.ProcessFindings = append(summary.ProcessFindings, finding)
+		summary.Observations = append(summary.Observations, observation)
 	}
 	return nil
 }
@@ -176,10 +231,20 @@ func (m *ExecutionCleanupManager) classifyExecutionCleanupAttemptProcessGroup(
 			if _, ok := registered[filepath.Clean(proc.Worktree)]; ok {
 				// Registered worktrees are active project state and are preserved
 				// even when the run-state file has already gone stale.
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    proc.Worktree,
+					Class:   "preserved_registered_worktree_process",
+					Message: "registered worktree is still active",
+				})
 				continue
 			}
 			if meta.ProjectRoot != "" && !sameCleanPath(meta.ProjectRoot, m.ProjectRoot) {
 				if !m.canReclaimForeignTestOwnedPath(meta.ProjectRoot, proc.Worktree) {
+					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+						Path:    proc.Worktree,
+						Class:   "preserved_foreign_project_process",
+						Message: fmt.Sprintf("foreign project_root=%s does not match manager project_root=%s", meta.ProjectRoot, m.ProjectRoot),
+					})
 					continue
 				}
 				candidateRunStates = m.runStatesForMetadata(meta, runStates, summary)
@@ -189,10 +254,20 @@ func (m *ExecutionCleanupManager) classifyExecutionCleanupAttemptProcessGroup(
 			if _, ok := registered[filepath.Clean(proc.Worktree)]; ok {
 				// Registered worktree without metadata stays conservative and
 				// does not get reaped from the process census alone.
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    proc.Worktree,
+					Class:   "preserved_registered_missing_metadata_process",
+					Message: "registered worktree without cleanup metadata",
+				})
 				continue
 			}
 			matchedRunState = matchingRunStateForMeta(runStates, ExecutionCleanupMetadata{WorktreePath: proc.Worktree})
 			if matchedRunState == nil {
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    proc.Worktree,
+					Class:   "preserved_uncertain_attempt_process",
+					Message: "no live run-state or cleanup metadata matched",
+				})
 				continue
 			}
 			meta = candidateCycleMetadataFromRunState(*matchedRunState)
@@ -203,11 +278,21 @@ func (m *ExecutionCleanupManager) classifyExecutionCleanupAttemptProcessGroup(
 				Class:   "attempt_process_metadata_read",
 				Message: err.Error(),
 			})
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    proc.Worktree,
+				Class:   "preserved_uncertain_attempt_process",
+				Message: err.Error(),
+			})
 			continue
 		}
 
 		live, reason := probe.IsLive(meta, matchedRunState, now)
 		if live {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    proc.Worktree,
+				Class:   "preserved_live_attempt_process",
+				Message: reason,
+			})
 			return ExecutionCleanupProcessFinding{}, false, nil
 		}
 
