@@ -449,7 +449,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return reportFromResult(res), nil
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-			targetBead, _ := store.Get(context.Background(), beadID)
+			targetBead, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
+				if store == nil {
+					return nil
+				}
+				return bead.NewStoreWithCollection(store.Dir, store.Collection)
+			}, nil)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
@@ -506,7 +514,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	executor := f.tryExecutorOverride
 	if executor == nil {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			targetBead, err := store.Get(context.Background(), beadID)
+			targetBead, err := resolveAttemptBead(ctx, beadID, store, func() attemptBeadReader {
+				if store == nil {
+					return nil
+				}
+				return bead.NewStoreWithCollection(store.Dir, store.Collection)
+			}, nil)
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}

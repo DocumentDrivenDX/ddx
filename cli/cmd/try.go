@@ -315,9 +315,14 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			singleAttempt := func(ctx context.Context, execBeadID string, requestMinPower int) (agent.ExecuteBeadReport, error) {
 				requestProfile := profile
 				var routingNote string
-				targetBead := target
-				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
-					targetBead = b
+				targetBead, err := resolveAttemptBead(ctx, execBeadID, store, func() attemptBeadReader {
+					if store == nil {
+						return nil
+					}
+					return bead.NewStoreWithCollection(store.Dir, store.Collection)
+				}, target)
+				if err != nil {
+					return agent.ExecuteBeadReport{}, err
 				}
 				routingIntent := resolveCommandExecutionHint(ctx, targetBead, noRoutingFlags, hasProjectRoutingConfig)
 				inferredPolicy := routingIntent.InferredPowerClass
@@ -440,6 +445,14 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 						}
 					}
 					targetBead := target
+					if loaded, loadErr := resolveAttemptBead(ctx, execBeadID, store, func() attemptBeadReader {
+						if store == nil {
+							return nil
+						}
+						return bead.NewStoreWithCollection(store.Dir, store.Collection)
+					}, target); loadErr == nil {
+						targetBead = loaded
+					}
 					landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 						ctx, projectRoot, targetBead, res,
 						func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },

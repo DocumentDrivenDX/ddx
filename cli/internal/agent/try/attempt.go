@@ -201,6 +201,31 @@ type Outcome struct {
 	StoreErr    error
 }
 
+type beadContextKey struct{}
+
+// ContextWithBead stores the bead snapshot on ctx so downstream executor
+// callbacks can reuse the claimed bead without reloading it from the tracker.
+func ContextWithBead(ctx context.Context, b bead.Bead) context.Context {
+	if ctx == nil || b.ID == "" {
+		return ctx
+	}
+	snapshot := b
+	return context.WithValue(ctx, beadContextKey{}, &snapshot)
+}
+
+// BeadFromContext retrieves a bead snapshot previously stored with
+// ContextWithBead.
+func BeadFromContext(ctx context.Context) (*bead.Bead, bool) {
+	if ctx == nil {
+		return nil, false
+	}
+	b, ok := ctx.Value(beadContextKey{}).(*bead.Bead)
+	if !ok || b == nil {
+		return nil, false
+	}
+	return b, true
+}
+
 // ParkingOutcome carries the structured instructions for outcomes that must
 // be parked instead of retried immediately.
 type ParkingOutcome struct {
@@ -223,6 +248,7 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 	if opts.Executor == nil {
 		return Outcome{}, fmt.Errorf("try attempt: executor is required")
 	}
+	ctx = ContextWithBead(ctx, opts.Bead)
 	rateCfg := resolveRateLimitRetryConfig(opts)
 	var (
 		report Report
