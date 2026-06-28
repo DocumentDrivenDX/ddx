@@ -1,0 +1,2 @@
+status: open
+reason: cd cli && go test ./internal/agent/... ./cmd/... -count=1 times out at the default 10m package timeout in cli/internal/agent, with the run still active in TestPreClaimOriginEqualNoOp when the timeout fires; the land-coordination target slice passes in isolation, so this looks like a separate package-runtime issue to retry on a faster or less contended run.
