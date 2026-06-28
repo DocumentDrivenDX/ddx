@@ -1,2 +1,0 @@
-status: open
-reason: `go test ./...` still fails in unrelated packages outside this bead's scope. Isolated repros remain red for `cmd/TestTry_ForceClaimEmitsAuditEvent`, `internal/agent/TestMixedCommitCooldown`, `internal/agent/TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt`, and `internal/bead/TestInjectPayloadStorage` / `TestInjectReviewFindingFullLifecycle`.

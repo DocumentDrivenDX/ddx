@@ -1,2 +1,0 @@
-status: blocked
-reason: external blocker - cli/internal/bead/store.go still exposes the legacy variadic ReadAll, ReadAllFiltered, Get, and Apply surface, while the requested compile-time proof requires *Store to satisfy ctx-first BeadInitializer, BeadReader, and BeadLifecycle interfaces. Making that proof compile would require a broader Store API migration and caller sweep outside this bead's allowed scope.

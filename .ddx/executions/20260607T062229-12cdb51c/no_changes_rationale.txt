@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./internal/bead ./internal/agent -run 'TestBeadDoctor|TestExecuteLoop|TestPostLadder|TestDecompositionDepDirection|TestMixedCommitCooldown' && go test ./cmd -run 'TestBeadDoctorDetectsParentAncestorBackEdge'

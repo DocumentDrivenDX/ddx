@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./internal/agent/ -run IsolatedWorktree -count=1 -timeout 120s

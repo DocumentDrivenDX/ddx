@@ -1,2 +1,0 @@
-status: open
-reason: lefthook run pre-commit did not complete; it remained stuck in `go test -short -race -timeout 30m ././internal/agent` long after the targeted `TestExecuteBeadStatus` check had passed

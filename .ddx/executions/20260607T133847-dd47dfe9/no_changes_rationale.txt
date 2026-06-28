@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli/internal/server/frontend && bun run test:e2e` is red in unrelated frontend specs (`e2e/scale-fixture.spec.ts` and `e2e/screenshots.spec.ts`) that are outside this bead's routing scope, so I cannot truthfully claim the full-suite acceptance gate from this worktree.

@@ -1,2 +1,0 @@
-status: blocked
-reason: `lefthook run pre-commit` fails in `go test -short -race -timeout 30m ././cmd` with broad cmd-suite failures unrelated to the binary-sharing refactor (for example `TestAcRun_PassExitsZero`, `TestBeadCommandsCRUDLifecycle`, and `TestWorkPlan_CLI_TextOutput`).

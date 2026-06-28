@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test ./...` fails on unrelated repository-wide tests before this bead can satisfy its acceptance gate; current failures include `TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget` in `internal/bead`, `TestIntegration_ConcurrentTryDistinctBeads_LocalClone` in `internal/integration`, `TestGraphQLWorkers`, and `TestServerStateBeadSnapshotLatencyBudget` in `internal/server`.

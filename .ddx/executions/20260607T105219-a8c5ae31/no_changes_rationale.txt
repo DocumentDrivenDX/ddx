@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test -short ./internal/server/...` is red in this worktree on unrelated existing server tests (for example TestListBeadsAllProjects, TestProcessMetricsEndpoints, worker prune/stop/watchdog cases, and graphql metrics lookups). The two new orphan-home warning tests pass in isolation, but the required package-wide gate does not.

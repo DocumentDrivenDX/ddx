@@ -1,3 +1,0 @@
-status: blocked
-reason: external blocker
-details: lefthook run pre-commit fails on unrelated repo-level tests outside the bead scope, including cmd/TestWorkZeroConfigSemanticRetryUsesNextViablePowerFloor and internal/bead/TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget.

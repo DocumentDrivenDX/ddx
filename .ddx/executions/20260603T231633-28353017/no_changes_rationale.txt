@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./cmd/... -run "TestInstallGlobal_WritesGlobalTreeAndLinksAgentTier|TestInstallGlobal_WritesGlobalTierAndAgentLinks|TestInstallGlobal_WritesGlobalTreeAndAgentLinks|TestInstallProject_InTreeMode|TestInstallProject_ConventionMode|TestUpdateGlobal_UpdatesGlobalNotProject|TestUpdate_RespectsConventionVsInTreeMode" -v

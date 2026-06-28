@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./internal/bead -run 'TestBeadDoctorRepairsParentAncestorBackEdge|TestBeadDoctorDetectsParentAncestorBackEdge' -count=1 && go test ./internal/agent -run 'TestWorkHaltsOnParentBackEdge' -count=1 && lefthook run pre-commit

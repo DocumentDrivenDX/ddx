@@ -1,2 +1,0 @@
-status: open
-reason: `go test ./...` is failing in unrelated performance suites in this environment (`cli/internal/bead/store_perf_test.go` and `cli/internal/server/graphql_bead_lookup_perf_test.go`), so AC #3 cannot be verified here without a cleaner or faster host.

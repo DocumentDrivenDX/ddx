@@ -1,2 +1,0 @@
-status: blocked
-reason: go test ./internal/agent/... is red on an unrelated existing regression in TestLand_MergeRequired_IndexCleanAfterMerge (tracked.txt and .ddx/executions/20260508T000000-7e659c95/manifest.json remain staged after merge landing), so AC 3 and AC 4 cannot be completed in this pass without fixing a separate land-path bug.

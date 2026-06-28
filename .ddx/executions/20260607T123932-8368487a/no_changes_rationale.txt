@@ -1,2 +1,0 @@
-status: blocked
-reason: lefthook run pre-commit is red on the staged cmd package. `go test -short -race -timeout 30m ./cmd` fails across many pre-existing fixture-dependent tests unrelated to the shared-binary helper change (for example TestBeadCommandsCRUDLifecycle, TestWorkPlan_CLI_TextOutput, and multiple work_* tests). The workerprobe package passes, but the cmd suite must be green before commit per bead instructions.

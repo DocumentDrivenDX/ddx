@@ -1,1 +1,0 @@
-verification_command: bash -c 'set -e; cd cli && go test ./internal/agent -run TestPreClaimWarnSameFingerprintEscalatesAfterThreshold -v | grep -q "PASS.*TestPreClaimWarnSameFingerprintEscalatesAfterThreshold"; echo "All AC satisfied"'

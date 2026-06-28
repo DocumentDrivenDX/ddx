@@ -1,4 +1,0 @@
-status: open
-reason: decomposed into child beads; this parent is too large for a single execution pass
-orchestrator_action: decompose
-child_ids: ddx-b85090ae, ddx-1bcb9827, ddx-f9bb7327, ddx-0836dde5, ddx-4173d55c, ddx-e5511c6b

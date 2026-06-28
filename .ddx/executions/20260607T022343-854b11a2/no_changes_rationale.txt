@@ -1,2 +1,0 @@
-status: open
-reason: retryable pre-commit failure from pre-existing internal/bead performance test TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget under current load; rerun lefthook run pre-commit after load drops

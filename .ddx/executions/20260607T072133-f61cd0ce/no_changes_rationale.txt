@@ -1,2 +1,0 @@
-status: blocked
-reason: `cd cli && go test ./...` fails in unrelated packages outside this bead's scope. Current blockers include `cli/internal/agent` (`TestIntegration_WorkInterruptDuringScriptHarnessNoChangesDoesNotDirtyTracker`), `cli/internal/bead` (`TestPerformance_BeadStoreConcurrentClaimReadyHeartbeatUnderBudget`), and `cli/internal/server` (`TestServerStateBeadSnapshotLatencyBudget`, `TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel`).
