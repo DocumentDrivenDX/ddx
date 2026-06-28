@@ -90,6 +90,36 @@ type ExecutionCleanupObservation struct {
 	Inodes  int64  `json:"inodes,omitempty"`
 }
 
+// ExecutionCleanupProcessFact captures one process observed during the
+// execution cleanup census.
+type ExecutionCleanupProcessFact struct {
+	PID       int       `json:"pid"`
+	PPID      int       `json:"ppid,omitempty"`
+	PGID      int       `json:"pgid,omitempty"`
+	Command   string    `json:"command,omitempty"`
+	Cwd       string    `json:"cwd,omitempty"`
+	Worktree  string    `json:"worktree,omitempty"`
+	StartedAt time.Time `json:"started_at,omitempty"`
+}
+
+// ExecutionCleanupProcessFinding records one stale or unavailable process
+// group observed while scanning for leaked attempt descendants.
+type ExecutionCleanupProcessFinding struct {
+	PID         int                           `json:"pid,omitempty"`
+	PPID        int                           `json:"ppid,omitempty"`
+	PGID        int                           `json:"pgid,omitempty"`
+	BeadID      string                        `json:"bead_id,omitempty"`
+	AttemptID   string                        `json:"attempt_id,omitempty"`
+	Command     string                        `json:"command,omitempty"`
+	Cwd         string                        `json:"cwd,omitempty"`
+	Worktree    string                        `json:"worktree,omitempty"`
+	StartedAt   time.Time                     `json:"started_at,omitempty"`
+	StaleReason string                        `json:"stale_reason,omitempty"`
+	WouldKill   bool                          `json:"would_kill,omitempty"`
+	Terminated  bool                          `json:"terminated,omitempty"`
+	Members     []ExecutionCleanupProcessFact `json:"members,omitempty"`
+}
+
 // ExecutionCleanupWarning records a non-blocking issue encountered while the
 // manager was scanning or reclaiming execution resources.
 type ExecutionCleanupWarning struct {
@@ -132,9 +162,10 @@ type ExecutionCleanupSummary struct {
 	ScratchBytesReclaimed  int64 `json:"scratch_bytes_reclaimed"`
 	ScratchInodesReclaimed int64 `json:"scratch_inodes_reclaimed"`
 
-	Warnings     []ExecutionCleanupWarning     `json:"warnings,omitempty"`
-	Issues       []ExecutionCleanupIssue       `json:"issues,omitempty"`
-	Observations []ExecutionCleanupObservation `json:"observations,omitempty"`
+	Warnings        []ExecutionCleanupWarning        `json:"warnings,omitempty"`
+	Issues          []ExecutionCleanupIssue          `json:"issues,omitempty"`
+	Observations    []ExecutionCleanupObservation    `json:"observations,omitempty"`
+	ProcessFindings []ExecutionCleanupProcessFinding `json:"process_findings,omitempty"`
 }
 
 // ExecutionCleanupLivenessProbe decides whether a cleanup candidate should be
@@ -187,15 +218,17 @@ func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata
 // ExecutionCleanupManager owns conservative reclamation of DDx temp execution
 // resources for one project.
 type ExecutionCleanupManager struct {
-	ProjectRoot     string
-	TempRoot        string
-	ScratchRoots    []string
-	ScratchPrefixes []string
-	ScratchMinAge   time.Duration
-	GitOps          GitOps
-	DryRun          bool
-	Now             func() time.Time
-	Probe           ExecutionCleanupLivenessProbe
+	ProjectRoot           string
+	TempRoot              string
+	ScratchRoots          []string
+	ScratchPrefixes       []string
+	ScratchMinAge         time.Duration
+	GitOps                GitOps
+	DryRun                bool
+	Now                   func() time.Time
+	Probe                 ExecutionCleanupLivenessProbe
+	attemptProcessScanner executionCleanupAttemptProcessScanner
+	attemptProcessKiller  executionCleanupAttemptProcessKiller
 	// RetainDays controls how many days of evidence dirs under
 	// .ddx/executions/ to retain. 0 disables the prune; default is 90.
 	RetainDays int
@@ -205,12 +238,14 @@ type ExecutionCleanupManager struct {
 // DDx temp worktree root and the default liveness probe.
 func NewExecutionCleanupManager(projectRoot string, gitOps GitOps) *ExecutionCleanupManager {
 	return &ExecutionCleanupManager{
-		ProjectRoot: projectRoot,
-		TempRoot:    executionCleanupTempRoot(projectRoot),
-		RetainDays:  executionCleanupRetainDays(projectRoot),
-		GitOps:      gitOps,
-		Now:         time.Now,
-		Probe:       defaultExecutionCleanupLivenessProbe{},
+		ProjectRoot:           projectRoot,
+		TempRoot:              executionCleanupTempRoot(projectRoot),
+		RetainDays:            executionCleanupRetainDays(projectRoot),
+		GitOps:                gitOps,
+		Now:                   time.Now,
+		Probe:                 defaultExecutionCleanupLivenessProbe{},
+		attemptProcessScanner: newExecutionCleanupAttemptProcessScanner(),
+		attemptProcessKiller:  newExecutionCleanupAttemptProcessKiller(),
 	}
 }
 
@@ -290,6 +325,12 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	}
 	if ctx != nil {
 		if err := ctx.Err(); err != nil {
+			return summary, err
+		}
+	}
+
+	if len(runStates) > 0 || len(registered) > 0 {
+		if err := m.cleanupStaleAttemptProcessGroups(ctx, &summary, runStates, registered, probe, now()); err != nil {
 			return summary, err
 		}
 	}
